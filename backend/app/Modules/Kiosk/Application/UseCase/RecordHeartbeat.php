@@ -67,7 +67,7 @@ use Throwable;
  * adaptador del puerto devuelve `null` si la configuracion no se puede leer, y
  * sin huella la pantalla se abre sin codigo (decision 7 de la ficha).
  *
- * ## Y desde la tarea 3.12, la ventana de actualizacion (RF-KI-07)
+ * ## La ventana de actualizacion (RF-KI-07)
  *
  * `update_window` viaja por el mismo canal y por el mismo motivo. Aqui no se
  * decide nada con ella: el servidor no sabe si la tablet tiene una version
@@ -76,7 +76,7 @@ use Throwable;
  * tres datos. Y es una ventana de permiso, no de bloqueo: fuera de ella el
  * quiosco sigue fichando y encolando (regla dura 19).
  *
- * ## Y desde la tarea 3.5, los dos ajustes de la pantalla de fichaje
+ * ## Los dos ajustes de la pantalla de fichaje
  *
  * `break_clocking_enabled` (RF-AT-12) y `clock_skew_tolerance_seconds`
  * (RF-AT-10) viajan por el mismo canal y por el mismo motivo: es el unico
@@ -97,7 +97,7 @@ use Throwable;
  * `audit_log` —cambia que token puede registrar fichajes—, pero eso ocurre en
  * `Identity`, en su propia transaccion; el latido en si sigue sin asiento.
  *
- * ## Y desde la 2.2.1, la version minima de la PWA (RF-KI-07, RF-PA-07)
+ * ## La version minima de la PWA (RF-KI-07, RF-PA-07)
  *
  * `minimum_app_version` es el nucleo `X.Y.Z` de la version desplegada
  * ({@see AppVersionPolicy}): una tablet que va por detras lo sabe en el latido
@@ -106,7 +106,7 @@ use Throwable;
  * SemVer o si es un build `-dev`, el campo se omite y la tablet sigue con su
  * cadencia normal de actualizacion.
  *
- * ## Y desde la 2.2.1, la zona horaria del centro (RF-KI-07, RF-AT-05)
+ * ## La zona horaria del centro (RF-KI-07, RF-AT-05)
  *
  * `site_time_zone` es el nombre IANA de `sites.timezone` del centro de la
  * instalacion (hay uno, ADR-040), que llega por {@see InstallationSiteProvider}

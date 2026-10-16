@@ -26,12 +26,12 @@ use DateTimeImmutable;
  *
  * ## Solo los aceptados
  *
- * Un rechazo no entra aqui, y el anti-rebote lo dice desde la tarea 1.4: si un
- * `rejected_debounce` reiniciara la ventana bastaria con pasar la tarjeta cada
- * cincuenta segundos para prolongarla indefinidamente. Que el tipo solo pueda
- * llevar una {@see ClockingAction} —donde no hay ningun caso de rechazo— es lo
- * que hace imposible construir el estado equivocado, en vez de confiar en que
- * el adaptador se acuerde de filtrar.
+ * Un rechazo no entra aqui, y el anti-rebote lo dice: si un `rejected_debounce`
+ * reiniciara la ventana bastaria con pasar la tarjeta cada cincuenta segundos
+ * para prolongarla indefinidamente. Que el tipo solo pueda llevar una
+ * {@see ClockingAction} —donde no hay ningun caso de rechazo— es lo que
+ * hace imposible construir el estado equivocado, en vez de confiar en que el
+ * adaptador se acuerde de filtrar.
  *
  * **No conoce el reloj** (regla dura 2): `occurredAt` es el momento real del
  * escaneo (regla dura 9), nunca la hora de recepcion.

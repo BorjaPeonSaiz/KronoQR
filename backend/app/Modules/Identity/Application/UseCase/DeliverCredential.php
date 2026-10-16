@@ -80,11 +80,11 @@ final readonly class DeliverCredential
                 'employee_uuid' => $employeeUuid,
                 'delivered_by_user_id' => $command->deliveredByUserId,
             ],
-            // CADENA PRIMERO, DESPUES LA FILA (ADR-046 §1.2). Hasta la 2.2.0 se
-            // escribia la tarjeta y despues el asiento, al reves que la baja,
-            // que toma la cadena y revoca tarjetas: una entrega y una baja
-            // simultaneas cerraban un ciclo. Dentro se relee la credencial: lo
-            // leido fuera solo sirvio para el `404` y para la traza.
+            // CADENA PRIMERO, DESPUES LA FILA (ADR-046 §1.2), el mismo orden
+            // que la baja, que toma la cadena y revoca tarjetas: en el orden
+            // contrario, una entrega y una baja simultaneas cerrarian un ciclo.
+            // Dentro se relee la credencial: lo leido fuera solo sirvio para el
+            // `404` y para la traza.
             fn (): CredentialView => $this->serialized->withChainLock(function () use (
                 $command,
                 $credential,

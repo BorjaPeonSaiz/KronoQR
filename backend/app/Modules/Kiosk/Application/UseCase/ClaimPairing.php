@@ -45,7 +45,7 @@ use Psr\Log\LoggerInterface;
  *    y ademas un comprobador de `pairing_id`.
  * 3. **Un suelo de tiempo.** {@see ConstantTimeFloor}, el mismo objeto y el mismo
  *    umbral que usa la resolucion de credenciales del fichaje: los dos caminos
- *    tienen la misma obligacion y desde la tarea 5.6 ya no pueden divergir.
+ *    tienen la misma obligacion y no pueden divergir.
  *
  * **Lo que NO se promete** es que `Pending` y `Paired` tarden lo mismo que un
  * rechazo, y prometerlo seria mentir: emitir un token escribe en `audit_log`. El

@@ -11,8 +11,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use DateTimeImmutable;
 
 /**
- * Sonda `backup.last_good_copy` de `product:doctor` (RF-PD-13, RNF-D-02, RL-12;
- * V3-PL-07 de la verificacion final de la 2.2.0).
+ * Sonda `backup.last_good_copy` de `product:doctor` (RF-PD-13, RNF-D-02, RL-12).
  *
  * ## Que faltaba
  *

@@ -34,11 +34,10 @@ final readonly class ImportReport
          * Avisos que son **del fichero entero**, no de una linea: hoy, las
          * cabeceras que el importador no reconoce.
          *
-         * **Aqui y no repetidos en cada fila**, que es donde estaban antes de la
-         * revision de la 5.5. Una cabecera con tres columnas desconocidas y
-         * cuarenta filas producia ciento veinte mensajes identicos que
-         * sepultaban los rechazos de verdad — justo el ruido que el aviso existe
-         * para evitar.
+         * **Aqui y no repetidos en cada fila**: una cabecera con tres columnas
+         * desconocidas y cuarenta filas produciria ciento veinte mensajes
+         * identicos que sepultarian los rechazos de verdad — justo el ruido
+         * que el aviso existe para evitar.
          */
         public array $warnings = [],
     ) {}

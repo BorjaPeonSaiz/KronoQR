@@ -161,7 +161,7 @@ final readonly class AddShiftEntryHandler
 
     /**
      * **La elegibilidad se vuelve a mirar con la cadena de `audit_log` ya
-     * tomada** (RN-14, ADR-046; revision del bloque 17).
+     * tomada** (RN-14, ADR-046).
      *
      * La instantanea de arriba se leyo sin candado: una baja que confirmara
      * entre esa lectura y este punto, con un cese anterior a la jornada, dejaria

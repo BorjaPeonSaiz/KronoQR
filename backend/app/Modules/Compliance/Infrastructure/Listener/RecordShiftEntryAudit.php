@@ -134,10 +134,10 @@ final readonly class RecordShiftEntryAudit
      * tocar (ADR-027).
      *
      * **Una accion de `audit_log` por cada accion de RF-PA-04**, no una sola
-     * `shift_entry.modified` para las cuatro. El catalogo de `AuditAction` ya las
-     * tenia desde la tarea 1.14 y sus valores coinciden con los del enum del
-     * dominio a proposito: aqui se traduce, no se inventa el nombre. Colapsarlas
-     * haria indistinguible ante Inspeccion un alta retroactiva de una anulacion.
+     * `shift_entry.modified` para las cuatro. El catalogo de `AuditAction` ya
+     * las tiene y sus valores coinciden con los del enum del dominio a
+     * proposito: aqui se traduce, no se inventa el nombre. Colapsarlas haria
+     * indistinguible ante Inspeccion un alta retroactiva de una anulacion.
      *
      * **`reason_text` NO entra en el payload, y `reason_code` si.** El codigo es
      * un valor de un catalogo cerrado y es lo que hace la consulta «cuantas

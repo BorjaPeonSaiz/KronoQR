@@ -81,7 +81,7 @@ final readonly class LogScheduledCommandFailure
     /**
      * El cierre que `Event::onFailure()` exige, ya atado a su tarea.
      *
-     * Escribe por el canal `scheduler` (V4-BE-1), no por el de por defecto:
+     * Escribe por el canal `scheduler`, no por el de por defecto:
      * este cierre corre en `schedule:finish`, cuya salida de error Laravel
      * tira a `/dev/null`, y por `stderr` el apunte no llegaba al log del
      * contenedor. Ver {@see ContainerLogChannel}.

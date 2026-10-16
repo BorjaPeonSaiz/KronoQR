@@ -44,7 +44,7 @@ function pinClaimMigrationsStepsBefore(string $migration): int
     $applied = DB::connection(pinClaimMigrationsConnection())->table('migrations')
         ->orderBy('id')
         ->pluck('migration')
-        ->map(static fn (mixed $name): string => (string) $name) // @phpstan-ignore-line cast.string (`pluck` devuelve `mixed`; la columna es `varchar` y el nombre de una migracion siempre es texto)
+        ->map(static fn (mixed $name): string => is_string($name) ? $name : throw new UnexpectedValueException('migrations.migration no es texto'))
         ->values()
         ->all();
 

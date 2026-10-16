@@ -128,10 +128,6 @@ it('rechaza con 1 y sin escribir lo que no se puede revisar', function (string $
         default => acuseDePurgaAsiento($site, '2024-10-08', 3),
     };
 
-    if ($caso === 'responsable inactivo') {
-        DB::table('users')->where('id', $responsable->id)->update(['is_active' => false]);
-    }
-
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => $caso === 'motivo corto' ? 'porque si' : RECONCILE_ACKNOWLEDGE_MOTIVO,
@@ -144,7 +140,6 @@ it('rechaza con 1 y sin escribir lo que no se puede revisar', function (string $
 })->with([
     'otro asiento' => ['otro asiento', 'no es una purga del registro horario'],
     'purga admisible' => ['admisible', 'es una purga admisible'],
-    'responsable inactivo' => ['responsable inactivo', 'no es una cuenta de gestión activa'],
     'motivo corto' => ['motivo corto', 'al menos 10 caracteres'],
 ])->group('RL-04', 'RS-07');
 
@@ -293,3 +288,33 @@ it('no deja el motivo de la revision en el log tecnico ni en las trazas', functi
         });
     });
 })->group('RF-PD-15', 'RL-04', 'RS-07');
+
+it('sale con 2 y sin asiento si quien firma no es una cuenta activa de administracion o RRHH', function (?UserRole $rol, bool $conMotivo): void {
+    // Decision del propietario del 16-10-2026, que cambia la D7: la revision
+    // la firma administracion o RRHH, como la correccion de la zona del centro.
+    // Tambien en la vista previa: una cuenta que no puede firmar no ve que
+    // firmaria.
+    $site = WorkforceFixtures::site();
+    $purga = acuseDePurgaAsiento($site, '2024-10-08', 3);
+    $cuenta = ManagementUsers::withRole($rol ?? UserRole::ADMIN);
+
+    if ($rol === null) {
+        DB::table('users')->where('id', $cuenta->id)->update(['is_active' => false]);
+    }
+
+    $resultado = acuseDePurgaOrden([
+        '--acknowledge' => (string) $purga,
+        ...($conMotivo ? ['--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO] : []),
+        '--responsible' => (string) $cuenta->id,
+    ]);
+
+    expect($resultado['code'])->toBe(2, $resultado['output'])
+        ->and($resultado['output'])->toContain('con rol de administración o de RRHH')
+        ->and(acuseDePurgaRevisiones())->toBe(0);
+})->with([
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO, true],
+    'auditor' => [UserRole::AUDITOR, true],
+    'empleado' => [UserRole::EMPLEADO, true],
+    'administracion dada de baja' => [null, true],
+    'auditor en la vista previa' => [UserRole::AUDITOR, false],
+])->group('RL-04', 'RS-07');

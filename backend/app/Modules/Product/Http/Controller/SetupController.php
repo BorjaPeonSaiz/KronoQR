@@ -53,11 +53,11 @@ final class SetupController extends Controller
      * Es todo lo que el panel necesita para decidir a donde lleva, y es todo lo
      * que se puede publicar sin autenticar.
      *
-     * **El detalle esta en `GET /api/v1/setup/steps`**, que si exige sesion. La
-     * separacion es una correccion de la revision de la 5.5: la lista de pasos es
-     * un inventario de la postura de la instalacion —dice si hay un administrador
-     * **sin segundo factor**, si no hay licencia y si no hay ningun quiosco— y
-     * ninguna de esas tres cosas hace falta para redirigir un navegador.
+     * **El detalle esta en `GET /api/v1/setup/steps`**, que si exige sesion.
+     * Van separados porque la lista de pasos es un inventario de la postura de
+     * la instalacion —dice si hay un administrador **sin segundo factor**, si
+     * no hay licencia y si no hay ningun quiosco— y ninguna de esas tres
+     * cosas hace falta para redirigir un navegador.
      *
      * **Dos rutas y no una que cambie de forma segun quien pregunte.** Se valoro
      * resolver el guard a mano en esta misma ruta y añadir el detalle si el token

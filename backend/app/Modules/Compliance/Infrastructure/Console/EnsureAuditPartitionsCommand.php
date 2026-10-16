@@ -25,13 +25,13 @@ use Illuminate\Support\Facades\Log;
  * que no admitia la traza.
  *
  * **Corre sobre la conexion de la aplicacion** (ADR-042). Crear una particion es
- * DDL y el rol de la aplicacion no tiene DDL desde la tarea 1.14 (regla dura 6),
- * ni debe tener ninguna credencial que pueda alterar el registro. La particion
- * la crea la funcion `audit_log_create_partition` de la base, con los permisos
- * del propietario y solo para el año en curso o el siguiente. **Si la funcion
- * falta** —la migracion 2026_09_29_100000 no se ha aplicado—, el comando falla
- * con un mensaje propio, deja la metrica `audit_log_partition_ready` a 0 para
- * que suenen las alertas y NO busca otra credencial.
+ * DDL y el rol de la aplicacion no tiene DDL (regla dura 6), ni debe tener
+ * ninguna credencial que pueda alterar el registro. La particion la crea la
+ * funcion `audit_log_create_partition` de la base, con los permisos del
+ * propietario y solo para el año en curso o el siguiente. **Si la funcion
+ * falta** —la migracion 2026_09_29_100000 no se ha aplicado—, el comando
+ * falla con un mensaje propio, deja la metrica `audit_log_partition_ready` a 0
+ * para que suenen las alertas y NO busca otra credencial.
  */
 final class EnsureAuditPartitionsCommand extends Command
 {

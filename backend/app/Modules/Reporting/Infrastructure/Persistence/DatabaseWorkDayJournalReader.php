@@ -29,11 +29,11 @@ use Psr\Log\LoggerInterface;
  * jornadas y preguntar por cada una— es el problema N+1 en la pantalla que mas
  * abre quien lleva un turno.
  *
- * Con la tarea 2.5 hay una quinta, las incidencias, y **solo cuando se piden**:
- * el panel las incrusta en el detalle (RF-PA-05) y el portal del empleado no. Y
- * con la 3.5 las marcas de pausa de cada tramo ({@see clockingMarks()}),
- * agrupadas por tramo y solo si el rango trajo alguno: desde la 2.2.0 son dos
- * consultas, la cadena de versiones y sus escaneos (hallazgo DB2).
+ * Hay una quinta, las incidencias, y **solo cuando se piden**: el panel las
+ * incrusta en el detalle (RF-PA-05) y el portal del empleado no. Y las marcas
+ * de pausa de cada tramo ({@see clockingMarks()}), agrupadas por tramo y solo
+ * si el rango trajo alguno: dos consultas, la cadena de versiones y sus
+ * escaneos.
  *
  * **Todo el detalle de un mes se sirve por indices** (RNF-P-02), y lo vigila
  * `tests/Integration/Reporting/WorkDayJournalIndexUsageTest.php`. Los tres
@@ -44,8 +44,8 @@ use Psr\Log\LoggerInterface;
  * va por `scan_events_shift_entry_id_occurred_at_index`, y la subida por la
  * cadena de versiones por `shift_entries_superseded_by_id_unique`; los dos de
  * `2026_10_08_100000_index_work_day_journal_lookups` (el segundo, unico desde
- * `2026_10_14_100200`; hallazgos DB1 y DB2: antes
- * eran unos 270 buffers por tramo y dos `Seq Scan` por consulta).
+ * `2026_10_14_100200`). Sin ellos son unos 270 buffers por tramo y dos
+ * `Seq Scan` por consulta.
  *
  * ## Vigente y no vigente
  *
@@ -282,17 +282,16 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      * FILTER (...)` ordenado por `occurred_at` toma el primero que abre y el
      * ultimo que cierra.
      *
-     * **Iba en una sola consulta hasta la 2.2.0, y por eso dejo de ir** (hallazgo
-     * DB2). PostgreSQL estima una consulta recursiva a ciegas —diez veces las
-     * filas del termino inicial, multiplicadas por lo que crea que devuelve cada
-     * paso—: con un mes de treinta tramos calculaba miles de filas de estirpe y,
-     * con esa cifra, unia `scan_events` con `Hash Join` y `Seq Scan` de la tabla
-     * entera aunque existiera el indice. Forzar el bucle anidado con `LATERAL`
-     * cambiaba el recorrido por el indice pero inflaba el coste estimado hasta
-     * encender el compilador JIT, que tardaba mas que el recorrido. Con la
-     * estirpe como `VALUES`, el planificador sabe cuantas filas son —las de
-     * verdad, un par por tramo— y va por
-     * `scan_events_shift_entry_id_occurred_at_index`.
+     * **Por que no va en una sola consulta recursiva.** PostgreSQL estima una
+     * consulta recursiva a ciegas —diez veces las filas del termino inicial,
+     * multiplicadas por lo que crea que devuelve cada paso—: con un mes de
+     * treinta tramos calculaba miles de filas de estirpe y, con esa cifra, unia
+     * `scan_events` con `Hash Join` y `Seq Scan` de la tabla entera aunque
+     * existiera el indice. Forzar el bucle anidado con `LATERAL` cambiaba el
+     * recorrido por el indice pero inflaba el coste estimado hasta encender el
+     * compilador JIT, que tardaba mas que el recorrido. Con la estirpe como
+     * `VALUES`, el planificador sabe cuantas filas son —las de verdad, un par
+     * por tramo— y va por `scan_events_shift_entry_id_occurred_at_index`.
      *
      * **Dos consultas para todo el rango, agrupadas por tramo**, no una por fila:
      * el detalle de un mes pasa de cuatro `SELECT` a seis (siete con

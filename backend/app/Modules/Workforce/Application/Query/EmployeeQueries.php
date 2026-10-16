@@ -16,12 +16,11 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * Lecturas de plantilla.
  *
  * **Por que existe si envuelve al repositorio casi sin anadir nada.** Porque es
- * donde vive el alcance por departamento de RF-ID-03 desde la tarea 2.1: un
- * responsable solo puede ver a los empleados de los departamentos que dirige, y
- * ese filtro tiene que aplicarse en un unico sitio del lado del servidor. Si los
- * controladores consultaran el repositorio directamente, ese filtro habria que
- * anadirlo en cada uno y bastaria olvidarlo en uno para que el ambito no
- * existiera.
+ * donde vive el alcance por departamento de RF-ID-03: un responsable solo puede
+ * ver a los empleados de los departamentos que dirige, y ese filtro tiene que
+ * aplicarse en un unico sitio del lado del servidor. Si los controladores
+ * consultaran el repositorio directamente, ese filtro habria que anadirlo en
+ * cada uno y bastaria olvidarlo en uno para que el ambito no existiera.
  *
  * **El alcance entra como parametro y no se resuelve aqui.** Quien esta
  * autenticado lo sabe la capa HTTP; esta capa no puede preguntarselo al

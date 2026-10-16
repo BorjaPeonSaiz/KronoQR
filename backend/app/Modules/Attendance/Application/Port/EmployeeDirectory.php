@@ -35,7 +35,7 @@ interface EmployeeDirectory
      *
      * Lo usa el aviso de fichaje descartado por PIN para atribuirlo a quien
      * puede fichar. **Una sola consulta cuya forma no depende de que el codigo
-     * exista** (F5 del dictamen del bloque 18): el aviso rellena hasta el suelo
+     * exista**: el aviso rellena hasta el suelo
      * de tiempo constante y no puede hacer trabajo de mas con un codigo real.
      */
     public function findByCode(string $employeeCode): ?EmployeeSnapshot;

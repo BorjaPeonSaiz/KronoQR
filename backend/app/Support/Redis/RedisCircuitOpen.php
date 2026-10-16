@@ -8,7 +8,7 @@ use RedisException;
 use Throwable;
 
 /**
- * Thrown instead of connecting while the Redis circuit is open (R3-CH-01).
+ * Thrown instead of connecting while the Redis circuit is open.
  *
  * It extends `RedisException` on purpose: everything that already degrades when
  * Redis does not answer —the `resilient` cache, the `failover-after-commit`

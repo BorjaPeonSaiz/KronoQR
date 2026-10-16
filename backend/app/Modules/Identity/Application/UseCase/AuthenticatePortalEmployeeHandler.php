@@ -234,7 +234,7 @@ final readonly class AuthenticatePortalEmployeeHandler
 
     /**
      * Un fallo mas para el origen; si con el se abre el bloqueo, su rastro. El
-     * asiento de `audit_log` solo por debajo del techo por hora (dictamen B1):
+     * asiento de `audit_log` solo por debajo del techo por hora:
      * por encima, el bloqueo se aplica igual y queda el log y la metrica.
      */
     private function recordOriginFailure(RequestOrigin $origin): void

@@ -57,12 +57,12 @@ final class ReadinessController extends Controller
          *
          * EL COMPONENTE Y LA CLASE DE LA EXCEPCION, NUNCA SU MENSAJE. Aqui se
          * registraba `$exception->getMessage()`, y el de una conexion de PDO
-         * lleva host, puerto y usuario de base de datos. Desde la tarea 3.1 esta
-         * linea no se queda en el fichero del servidor: se empuja a Loki y se
-         * conserva 90 dias (RL-11). `database` + `QueryException` responde la
-         * misma pregunta —«que esta caido y de que tipo es el fallo»— sin
-         * publicar la topologia de la instalacion cada pocos segundos mientras
-         * dura la averia. El mensaje entero sigue en el log de PostgreSQL y en el
+         * lleva host, puerto y usuario de base de datos. Esta linea no se queda
+         * en el fichero del servidor: se empuja a Loki y se conserva 90 dias
+         * (RL-11). `database` + `QueryException` responde la misma pregunta
+         * —«que esta caido y de que tipo es el fallo»— sin publicar la
+         * topologia de la instalacion cada pocos segundos mientras dura la
+         * averia. El mensaje entero sigue en el log de PostgreSQL y en el
          * paquete de diagnostico (RF-PD-09).
          *
          * Datos personales aqui no hay ninguno y no puede haberlos (regla dura 21).

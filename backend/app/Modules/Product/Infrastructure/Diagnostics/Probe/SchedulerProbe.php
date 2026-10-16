@@ -11,8 +11,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use DateTimeImmutable;
 
 /**
- * Sonda `scheduler.heartbeat` de `product:doctor` (RF-PD-13; V3-PL-07 de la
- * verificacion final de la 2.2.0).
+ * Sonda `scheduler.heartbeat` de `product:doctor` (RF-PD-13).
  *
  * ## El latido que ya existia
  *

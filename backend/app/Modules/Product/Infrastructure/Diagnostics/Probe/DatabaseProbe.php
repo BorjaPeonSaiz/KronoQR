@@ -23,7 +23,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
  *
  * `database.work_record_privileges` es su hermana para el registro horario y el
  * perfil de cumplimiento (ADR-057): avisa si el mismo usuario ha recuperado
- * privilegios que las migraciones del bloque 6 de la 2.2.1 le retiraron.
+ * privilegios que las migraciones de ADR-057 le retiraron.
  *
  * ## Si la base de datos no responde, se dice una vez y se para
  *
@@ -114,7 +114,7 @@ final readonly class DatabaseProbe implements DoctorProbe
     /**
      * `database.work_record_privileges` (ADR-057 §1 a §3 y §7, RL-04, RS-07).
      *
-     * Con la migracion del bloque 7 aplicada mira tambien sus guardas: los
+     * Con la migracion de las guardas aplicada (ADR-057 §2 y §3) mira tambien: los
      * *triggers* de `shift_entries` e `incidents` (que existan y que ninguno
      * este desactivado), la funcion de purga `SECURITY DEFINER` con
      * `search_path`, y que la aplicacion no tenga `DELETE` sobre el registro.
@@ -145,7 +145,7 @@ final readonly class DatabaseProbe implements DoctorProbe
         $guardIssues = self::strings($privileges['guard_issues'] ?? null);
         $user = is_string($privileges['database_user'] ?? null) ? $privileges['database_user'] : '?';
 
-        // Las guardas del bloque 7 (ADR-057 §2 y §3): un *trigger* que falta o
+        // Las guardas del registro (ADR-057 §2 y §3): un *trigger* que falta o
         // esta desactivado, o una funcion de purga que ya no es `SECURITY
         // DEFINER` con su `search_path`. Se dice antes que lo que sobra y en el
         // mismo aviso, porque las dos cosas se arreglan igual: con `update.sh`

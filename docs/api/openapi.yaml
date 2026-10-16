@@ -3251,15 +3251,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          description: |
-            Solo con `format=pdf`: el motor de composicion de PDF no esta
-            disponible en esta instalacion (falta Chromium, o no arranca). La
-            salida es descargar el mismo registro en CSV, que no depende de el.
-            `problem+json` y nunca un `500` opaco.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/PdfRenderingUnavailable'
 
   /api/v1/employees:
     get:
@@ -6401,18 +6393,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          description: |
-            Solo con `format=pdf`: el motor de composicion de PDF no esta
-            disponible en esta instalacion (falta Chromium, o no arranca).
-
-            Se responde `503` con `problem+json` y **no un `500` opaco**: no hay
-            nada que corregir en la peticion, la salida es descargar el mismo
-            informe en CSV o en XLSX, y quien administra la instalacion tiene en
-            el `detail` el motivo. Los otros dos formatos no dependen de el.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/PdfRenderingUnavailable'
 
   /api/v1/reports/payroll-export:
     get:
@@ -6983,15 +6964,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          description: |
-            Solo con `format=pdf`: el motor de composicion de PDF no esta
-            disponible en esta instalacion (falta Chromium, o no arranca). La
-            salida es descargar el mismo cuadro en CSV o en XLSX, que no
-            dependen de el. `problem+json` y nunca un `500` opaco.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/PdfRenderingUnavailable'
 
   /api/v1/reports/legal-export:
     get:
@@ -7475,8 +7448,9 @@ paths:
 
         **El orden es el de trabajo, no el de creacion**: primero la severidad
         —`high`, `medium`, `low`— y dentro de ella la mas reciente primero. Se
-        resuelve sobre el indice parcial `incidents_open_by_assignee`, no
-        ordenando el historico entero.
+        resuelve sobre el indice `incidents_status_urgency_index` (estado,
+        severidad, deteccion e `id`), que da el filtro y el orden sin ordenar
+        el historico entero, con cualquier `status`.
 
         **El alcance por departamento de RF-ID-03 entra en la consulta**, no
         filtra despues: un `responsable_departamento` recibe una pagina que solo
@@ -11933,6 +11907,50 @@ components:
                 title: Demasiadas peticiones
                 status: 429
                 detail: Reintenta pasados unos segundos.
+
+    PdfRenderingUnavailable:
+      description: |
+        Solo con `format=pdf`: el documento no se puede componer en PDF ahora.
+        **La salida es el mismo documento en CSV** (o en XLSX donde exista),
+        que no pasa por el motor de PDF: el registro siempre se puede
+        descargar (RL-05). `problem+json` y nunca un `500` opaco. Dos causas,
+        cada una con su `type`:
+
+        - `urn:kronoqr:problem:service-unavailable` — el motor de composicion
+          no esta disponible en esta instalacion (falta Chromium, no arranca, o
+          Redis no responde para repartir turnos). Lo arregla quien administra
+          el servidor; el `detail` dice que falta. Sin `Retry-After`.
+        - `urn:kronoqr:problem:pdf-rendering-busy` — el motor esta, pero todas
+          sus composiciones simultaneas estan ocupadas
+          (`REPORTING_PDF_MAX_CONCURRENT`; cada una es un Chromium). Se ha
+          esperado unos segundos (`REPORTING_PDF_WAIT_SECONDS`) a que quedara
+          un hueco. Reintentar pasado `Retry-After` tiene sentido.
+      headers:
+        Retry-After:
+          description: |
+            Solo con `urn:kronoqr:problem:pdf-rendering-busy`. Segundos que
+            conviene esperar antes de volver a pedir el PDF.
+          schema:
+            type: integer
+            minimum: 1
+          example: 3
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            motor-ausente:
+              value:
+                type: 'urn:kronoqr:problem:service-unavailable'
+                title: Servicio no disponible
+                status: 503
+                detail: El motor de composicion de PDF no ha podido generar el documento. Comprueba que Chromium esta instalado y es ejecutable por el usuario de la aplicacion.
+            motor-ocupado:
+              value:
+                type: 'urn:kronoqr:problem:pdf-rendering-busy'
+                title: Motor de PDF ocupado
+                status: 503
+                detail: El motor de PDF no tiene ahora ningun hueco libre. Vuelve en unos segundos o descarga el mismo documento en CSV, que no pasa por el motor de PDF.
 
     PortalLoginThrottled:
       description: |

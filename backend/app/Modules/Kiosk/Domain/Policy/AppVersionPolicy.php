@@ -8,8 +8,7 @@ use App\Modules\Kiosk\Domain\ValueObject\AppVersion;
 use App\Modules\Kiosk\Domain\ValueObject\AppVersionStanding;
 
 /**
- * Cuando esta desfasada la aplicacion de un quiosco (RF-KI-07, RF-PA-07;
- * bloque 1 de la 2.2.1).
+ * Cuando esta desfasada la aplicacion de un quiosco (RF-KI-07, RF-PA-07).
  *
  * ## La version minima es la del servidor
  *

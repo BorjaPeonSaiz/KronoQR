@@ -12,8 +12,7 @@ use App\Modules\Shared\Domain\ValueObject\KioskAppVersionEntry;
 use Throwable;
 
 /**
- * Sonda `kiosk.app_version` de `product:doctor` (**RF-PD-13**, RF-KI-07;
- * bloque 1 de la 2.2.1).
+ * Sonda `kiosk.app_version` de `product:doctor` (**RF-PD-13**, RF-KI-07).
  *
  * ## Que responde
  *

@@ -7,7 +7,7 @@ namespace App\Support\Database;
 use App\Support\Resilience\CircuitBreaker;
 
 /**
- * The PostgreSQL circuit (R3-CH-02): see {@see CircuitBreaker} for the
+ * The PostgreSQL circuit: see {@see CircuitBreaker} for the
  * mechanism.
  *
  * ONE circuit for every `pgsql` connection of the installation —`pgsql`,

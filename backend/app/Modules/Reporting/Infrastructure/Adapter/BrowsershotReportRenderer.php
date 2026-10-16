@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Adapter;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use Illuminate\Support\Facades\Log;
+use Spatie\Browsershot\Browsershot;
 use Spatie\LaravelPdf\Enums\Format;
 use Spatie\LaravelPdf\PdfBuilder;
 use Throwable;
@@ -51,11 +52,30 @@ use Throwable;
  * **El motivo tecnico se registra** —una sola linea, sin ningun dato del
  * informe (regla dura 21)— porque quien administra el servidor necesita saber
  * que le falta un paquete, y el `problem+json` no lleva la traza.
+ *
+ * ## Etiquetado por documento
+ *
+ * Puppeteer genera PDF etiquetado por omision, y en una tabla larga el arbol de
+ * estructura es casi todo el peso: un año del registro propio (1464 tramos, 36
+ * paginas) lleva 27 916 elementos `StructElem` —un `TD` y un `NonStruct` por
+ * celda— sin comprimir, 4,2 de sus 4,5 MiB; sin etiquetar pesaria 0,34 MiB.
+ * (Medido en el bloque 23 de la 2.2.1.)
+ *
+ * - **El registro propio del portal sale etiquetado siempre** (`$alwaysTagged`):
+ *   es el unico documento sellado de la persona y el CSV no lleva sello ni
+ *   huella, asi que no tiene alternativa accesible equivalente (doc 01 §6.5).
+ * - **Los informes de gestion** (periodo y cuadro de impacto) tienen CSV y XLSX
+ *   con el mismo dato y salen sin etiquetar de serie;
+ *   `REPORTING_PDF_TAGGED` los etiqueta tambien.
  */
 final readonly class BrowsershotReportRenderer implements ReportDocumentRenderer
 {
-    public function renderPdf(string $html, string $footerHtml): string
+    public function __construct(private bool $tagManagementReports = false) {}
+
+    public function renderPdf(string $html, string $footerHtml, bool $alwaysTagged = false): string
     {
+        $tagged = $alwaysTagged || $this->tagManagementReports;
+
         try {
             return (new PdfBuilder)
                 ->dontCache()
@@ -69,6 +89,11 @@ final readonly class BrowsershotReportRenderer implements ReportDocumentRenderer
                 // El pie va por aqui y no dentro del cuerpo: es la unica forma de
                 // que Chromium lo repita en TODAS las paginas. Ver el puerto.
                 ->footerHtml($footerHtml)
+                // Explicito en los dos sentidos: Browsershot solo sabe pedirlo
+                // a `true`, y callarse es heredar el `true` de Puppeteer.
+                ->withBrowsershot(static function (Browsershot $browsershot) use ($tagged): void {
+                    $browsershot->setOption('tagged', $tagged);
+                })
                 ->generatePdfContent();
         } catch (Throwable $failure) {
             Log::error('reporting.pdf_engine_unavailable', [

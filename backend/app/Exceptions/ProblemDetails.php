@@ -85,6 +85,17 @@ final class ProblemDetails
     public const string TYPE_NOT_READY = 'urn:kronoqr:problem:not-ready';
 
     /**
+     * Todas las composiciones de PDF simultaneas estan ocupadas
+     * (`reporting.pdf.max_concurrent`).
+     *
+     * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean `503`
+     * en las mismas rutas: aquel dice «a esta instalacion le falta el motor,
+     * avisa a quien administra» y este «el motor esta, pero ocupado: reintenta
+     * pasado `Retry-After` o descargalo ya en CSV».
+     */
+    public const string TYPE_PDF_RENDERING_BUSY = 'urn:kronoqr:problem:pdf-rendering-busy';
+
+    /**
      * Peticion mal formada.
      *
      * **No es lo mismo que `TYPE_VALIDATION_FAILED` y la diferencia importa en
@@ -216,7 +227,7 @@ final class ProblemDetails
      * siguiente: el generico —un correo ya usado por otra persona— se corrige
      * en el formulario sin perder lo escrito, y este dice «la ficha ya no se
      * puede tocar: recargala». Distinguirlos por el `detail` es lo que el
-     * `type` existe para evitar (revision del bloque 17 de la 2.2.0).
+     * `type` existe para evitar.
      */
     public const string TYPE_EMPLOYEE_TERMINATED = 'urn:kronoqr:problem:employee-terminated';
 
@@ -267,9 +278,9 @@ final class ProblemDetails
     public const string TYPE_LOW_CONTRAST_ACCENT = 'urn:kronoqr:problem:low-contrast-accent';
 
     /*
-     * LOS ERRORES QUE PRODUCE EL FRAMEWORK Y NO UN CASO DE USO (F4a-1, CH4).
+     * LOS ERRORES QUE PRODUCE EL FRAMEWORK Y NO UN CASO DE USO.
      *
-     * Hasta la 2.2.0 salian como `application/json {"message": ...}` —o, con
+     * Sin esto saldrian como `application/json {"message": ...}` —o, con
      * `APP_DEBUG=true`, con la traza, el SQL y datos de la plantilla—, y el
      * contrato promete `problem+json` para TODA respuesta de error. Tipos
      * propios y no uno generico porque al cliente le cambia la accion: un `405`
@@ -517,8 +528,7 @@ final class ProblemDetails
     }
 
     /**
-     * Los tres `409` de la correccion de tramos, cada uno con su `type`
-     * (tarea 5.11b, segunda vuelta de `revisor-codigo`).
+     * Los tres `409` de la correccion de tramos, cada uno con su `type`.
      *
      * **Por que tres metodos y no un `conflict($detail, $type)`.** Porque el
      * segundo parametro lo acabaria rellenando quien pasara por aqui con prisa,
@@ -784,7 +794,25 @@ final class ProblemDetails
     }
 
     /**
-     * La base de datos no responde (R3-CH-02): `503` con `Retry-After`.
+     * El motor de PDF esta ocupado: `503` con `Retry-After`.
+     * {@see self::TYPE_PDF_RENDERING_BUSY}
+     *
+     * El `detail` dice la salida, que es la que exige RL-05: el mismo registro
+     * en CSV no pasa por el motor y se descarga ya.
+     */
+    public static function pdfRenderingBusy(string $detail, int $retryAfterSeconds): JsonResponse
+    {
+        return self::response(
+            self::TYPE_PDF_RENDERING_BUSY,
+            'Motor de PDF ocupado',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            $detail,
+            headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+        );
+    }
+
+    /**
+     * La base de datos no responde: `503` con `Retry-After`.
      *
      * Mismo tipo que {@see self::serviceUnavailable()} —a quien lo recibe le
      * toca lo mismo: no es culpa suya, reintentar mas tarde— y con

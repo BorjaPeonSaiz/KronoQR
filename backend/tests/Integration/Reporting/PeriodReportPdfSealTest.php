@@ -12,7 +12,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
 use App\Modules\Reporting\Http\Response\PeriodReportPdf;
-use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDigest;
 use Illuminate\Support\Facades\App;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
@@ -219,5 +219,27 @@ it('deja fuera de la huella el idioma del documento', function (): void {
 it('usa el motor real y no el doble de las pruebas de feature', function (): void {
     // Control: sin esto, las dos primeras pruebas pasarian igual con un doble
     // enlazado por otra prueba de la suite, y no estarian comprobando ningun PDF.
-    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(BrowsershotReportRenderer::class);
+    // El puerto es el tope de Chromium simultaneos delante de Browsershot
+    // (bloque 23 de la 2.2.1); el doble de feature lo sustituiria entero.
+    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class);
 })->group('RF-IN-04');
+
+it('sale sin etiquetar de serie y etiquetado con REPORTING_PDF_TAGGED', function (): void {
+    // Los informes de gestion tienen el mismo dato en CSV y XLSX: de serie no
+    // cargan con el arbol de estructura, que en una tabla larga multiplica el
+    // peso por trece (bloque 23 de la 2.2.1). La configuracion lo enciende. El
+    // registro propio del portal sale etiquetado siempre: lo afirma
+    // `MyWorkDaysExportYearVolumeTest`.
+    $informe = informeSellable();
+    $huella = PeriodReportDigest::of($informe)->toText();
+
+    config()->set('reporting.pdf.tagged', false);
+    $sinEtiquetar = pdfSellado($informe, 'Marta Ibáñez', $huella);
+
+    config()->set('reporting.pdf.tagged', true);
+    $etiquetado = pdfSellado($informe, 'Marta Ibáñez', $huella);
+
+    expect($sinEtiquetar)->toStartWith('%PDF-')
+        ->and($sinEtiquetar)->not->toContain('/StructTreeRoot')
+        ->and($etiquetado)->toContain('/StructTreeRoot');
+})->group('RF-IN-04')->skip(! hayChromium(), 'Chromium no esta instalado en este contenedor.');

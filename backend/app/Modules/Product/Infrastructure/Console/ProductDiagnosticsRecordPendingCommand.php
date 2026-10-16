@@ -42,7 +42,7 @@ final class ProductDiagnosticsRecordPendingCommand extends Command
         $result = $recordPending->handle();
 
         // Sin pendientes, en silencio: corre cada cinco minutos y su salida va
-        // al log del contenedor (V4-BE-1). Una linea por pasada sin nada que
+        // al log del contenedor. Una linea por pasada sin nada que
         // hacer seria ruido; el exito silencioso no deja apunte.
         if ($result['recorded'] === 0 && $result['remaining'] === 0) {
             return self::SUCCESS;

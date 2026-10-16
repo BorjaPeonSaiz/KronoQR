@@ -12,11 +12,11 @@ use Illuminate\Database\ConnectionInterface;
  * Cuantas incidencias abiertas alcanza una cuenta (RF-PR-05, RF-ID-03).
  *
  * **Lee `incidents` por SQL, que es de `Compliance`.** Es la misma licencia
- * acotada que ya se toma {@see DatabaseComplianceIncidentLinks} desde la tarea
- * 3.4: `Reporting` es un modelo de lectura y su fuente es la base de datos, no el
- * agregado del otro modulo (doc 02 §1.6, ADR-025). Lo que se lee son dos
- * columnas y un `COUNT`; ninguna regla de `Compliance` se reimplementa aqui, y
- * «abierta» es el mismo `status` que enseña la bandeja.
+ * acotada que ya se toma {@see DatabaseComplianceIncidentLinks}: `Reporting` es
+ * un modelo de lectura y su fuente es la base de datos, no el agregado del otro
+ * modulo (doc 02 §1.6, ADR-025). Lo que se lee son dos columnas y un `COUNT`;
+ * ninguna regla de `Compliance` se reimplementa aqui, y «abierta» es el mismo
+ * `status` que enseña la bandeja.
  *
  * **Por el alcance y no por `assigned_to_user_id`**: son las incidencias de las
  * personas que ese responsable ve en su bandeja. Contar las asignadas daria otro

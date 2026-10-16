@@ -21,11 +21,9 @@ use DateTimeImmutable;
  * Cae en la misma familia del bloque D que un umbral de calculo, y por el mismo
  * motivo: alguien puede mover horas de un dia a otro sin tocar un solo fichaje.
  *
- * **Es deuda saldada, no funcionalidad nueva.** `UpdateSiteHandler` afirmaba en
- * su docblock desde la tarea 1.6 que el cambio «queda auditado por el oyente de
- * `Compliance`» y no publicaba ningun evento: no habia ni oyente ni asiento. La
- * tarea 5.5 lo arregla porque necesita auditar el alta del centro y no podia
- * dejar la modificacion sin auditar al lado.
+ * El alta y la modificacion del centro lo publican las dos: auditar el alta y
+ * dejar sin auditar la modificacion, que es la que cambia la zona, seria peor
+ * que no auditar ninguna.
  *
  * ## Un evento y dos hechos
  *

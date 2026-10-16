@@ -2272,6 +2272,29 @@ un ZIP con toda la instalación y solo la genera el administrador.
 | `REPORTING_EXPORT_STALE_AFTER` | — | Segundos tras los que una generación interrumpida —paraste los contenedores, se reinició el trabajador de cola— se da por fallida y deja pedir otra | `3600` | **Nunca por debajo de lo que tarda tu informe más grande**: darías por muerta una generación que sigue escribiendo | No |
 | `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | — | Descargas por minuto y por dirección IP en la ruta de descarga. Va aparte del resto porque esa ruta se abre **sin sesión**, con el enlace de un solo uso | `30` | Casi nunca | No |
 
+### 6.26 Documentos PDF
+
+Los PDF —el registro propio que descarga cada persona desde el portal, el
+informe por periodo y el cuadro de impacto— los compone un navegador Chromium
+dentro del servidor, y **cada documento en curso es un Chromium**: el de un año
+entero del registro propio llega a unos 700 MB de memoria en su pico. Estos
+parámetros ponen un tope a cuántos se componen a la vez. **El CSV queda fuera
+del tope de PDF**: con el tope lleno, quien pide un PDF recibe el aviso de
+reintentar en unos segundos o descargar lo mismo en CSV.
+
+**El registro propio del portal sale siempre etiquetado** —con la estructura que
+leen los lectores de pantalla—, sea cual sea la configuración: es el único
+documento sellado de cada persona y el CSV no lleva sello ni huella. Un año
+entero pesa unos 4,5 MB. Los informes de gestión (periodo y cuadro de impacto)
+tienen el mismo dato en CSV y XLSX y salen sin etiquetar de serie.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `REPORTING_PDF_MAX_CONCURRENT` | — | Cuántos PDF de informes se componen a la vez: registro propio del portal, informe por periodo y cuadro de impacto, también los generados en segundo plano. Las tarjetas y la hoja de instrucciones no cuentan aquí | `2` | Súbelo solo si el servidor tiene memoria libre para otro Chromium (unos 700 MB por documento grande) y ves avisos de «motor de PDF ocupado» en horas punta | No |
+| `REPORTING_PDF_WAIT_SECONDS` | — | Cuántos segundos espera una descarga a que quede un hueco antes de responder que el motor está ocupado | `3` | Casi nunca. Hay una persona mirando la pantalla: subirlo solo alarga la espera | No |
+| `REPORTING_PDF_QUEUED_WAIT_SECONDS` | — | Lo mismo para un PDF generado en segundo plano, que no tiene a nadie esperando | `300` | Casi nunca. Si un informe en segundo plano falla con el motor ocupado, súbelo o sube el tope | No |
+| `REPORTING_PDF_TAGGED` | — | Genera **etiquetados** también los PDF de los informes de gestión (periodo y cuadro de impacto), con la estructura que leen los lectores de pantalla. El registro propio del portal ya sale etiquetado siempre | `false` | Si alguien de gestión usa lector de pantalla y necesita esos informes en PDF y no en CSV o XLSX. **Multiplica el peso del documento** —en una tabla larga, por trece— y alarga su composición | No |
+
 ---
 
 ← [Instalación](instalacion.md) · [Operación](operacion.md) · [Obligaciones legales](obligaciones-legales.md)

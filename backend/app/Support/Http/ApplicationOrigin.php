@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Support\Http;
 
 /**
- * El origen web de la instalacion, derivado de `APP_URL`, para CORS (RS-09,
- * hallazgo R4-SC-08 de la 2.2.0; ver `config/cors.php`).
+ * El origen web de la instalacion, derivado de `APP_URL`, para CORS (RS-09;
+ * ver `config/cors.php`).
  *
  * Un origen es esquema + host + puerto, y se compara como cadena exacta con la
  * cabecera `Origin` del navegador. Por eso se normaliza como la escribe el

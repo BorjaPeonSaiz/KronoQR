@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\View;
  *
  * El Anexo B del doc 01 exige CSV **y PDF** para el historico personal: el CSV
  * cubre la portabilidad del RGPD y el PDF es lo que una persona presenta ante
- * un tercero. Hasta la 2.2.0 solo existia el CSV.
+ * un tercero.
  *
  * ## Reutiliza las plantillas y el sello del informe por periodo
  *
@@ -66,6 +66,9 @@ final readonly class PersonalRecordPdfWriter
         return $this->renderer->renderPdf(
             $this->body($journal, $holderName, $digest, $generatedAt),
             $this->footer($journal, $holderName, $digest, $generatedAt),
+            // Etiquetado siempre: es el unico documento sellado de la persona y el
+            // CSV no lleva sello ni huella (doc 01 §6.5).
+            alwaysTagged: true,
         );
     }
 

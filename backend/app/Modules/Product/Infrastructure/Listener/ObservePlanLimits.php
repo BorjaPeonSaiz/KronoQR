@@ -63,9 +63,9 @@ use Throwable;
  * evaluacion se difiere al `afterCommit` del lote entero, **todas** las filas
  * veian el recuento final y ninguna se reconocia como el cruce del umbral.
  *
- * Desde la 3.8 (H-04) las altas que vienen de una importacion se ignoran aqui y
- * el conteo lo dispara `EmployeesImported`, una sola vez, con el numero de altas
- * ya confirmadas. El sintoma que esto evitaba no era un bloqueo —los quioscos
+ * Las altas que vienen de una importacion se ignoran aqui y el conteo lo
+ * dispara `EmployeesImported`, una sola vez, con el numero de altas ya
+ * confirmadas. El sintoma que esto evita no es un bloqueo —los quioscos
  * encolan, regla dura 19— sino «el quiosco va lento» mientras RRHH importa.
  *
  * ## La rotacion no cuenta

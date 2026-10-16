@@ -15,10 +15,9 @@ use Illuminate\Foundation\Http\FormRequest;
  *
  * ## `format` es un enumerado de dos valores, y eso es el contrato
  *
- * `csv` desde la tarea 1.11 y `pdf` desde la 2.2.0 (PR19; el Anexo B del doc 01
- * exige los dos). El PDF llego como **otro valor del mismo enumerado**, es decir
- * un cambio aditivo que no rompe a ningun cliente (ADR-012): el portal que ya
- * escribia `?format=csv` no ha tenido que cambiar la URL.
+ * `csv` y `pdf` (el Anexo B del doc 01 exige los dos). Un formato nuevo es
+ * **otro valor del mismo enumerado**, un cambio aditivo que no rompe a ningun
+ * cliente (ADR-012): quien escribe `?format=csv` no cambia la URL.
  *
  * **Se valida y no se ignora**: `?format=xlsx` devuelve `422` con el campo
  * señalado, en lugar de servir un CSV a quien pidio otra cosa. Sin XLSX a
@@ -26,7 +25,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * seguir calculando sobre la hoja; para el historico personal de una persona no
  * aporta nada sobre CSV y es un formato propietario—.
  *
- * **En blanco, el ultimo año** (V3-PO-2): sin `from` se toman los 366 dias que
+ * **En blanco, el ultimo año**: sin `from` se toman los 366 dias que
  * terminan en `to`, no el mes de `/me/workdays`.
  *
  * **El mismo rango y el mismo limite para los dos formatos.** El techo de 366
@@ -81,8 +80,8 @@ final class ExportMyWorkDaysRequest extends FormRequest
             to: $this->isoDate('to'),
             // Descargar lo propio tampoco es divulgar a un tercero (RS-05).
             selfService: true,
-            // En blanco se descarga el ultimo año y no el mes de la pantalla
-            // (V3-PO-2): quien descarga quiere su historico.
+            // En blanco se descarga el ultimo año y no el mes de la pantalla:
+            // quien descarga quiere su historico.
             defaultDays: ReadEmployeeWorkDays::EXPORT_DEFAULT_DAYS,
         );
     }

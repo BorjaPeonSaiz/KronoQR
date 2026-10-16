@@ -55,6 +55,7 @@ use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Product\Domain\Exception\UnknownSetupStep;
 use App\Modules\Product\Http\Middleware\RecordSupportAccess;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
+use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
@@ -946,12 +947,33 @@ return Application::configure(basePath: dirname(__DIR__))
          * producto. Asi la ausencia de Chromium degrada UN FORMATO y no la
          * exportacion, que es el mismo criterio de la regla dura 15.
          *
-         * EL `detail` VA AL CLIENTE, y aqui si puede: es un estado de la
+         * EL `detail` VA A LA GESTION, y aqui si puede: es un estado de la
          * instalacion que ve una cuenta de gestion ya autenticada, no un oraculo
          * sobre credenciales ajenas (regla dura 17). Sin datos personales.
+         *
+         * EL PORTAL (`/me/export`, PR19) RECIBE UNO GENERICO: lo pide cualquier
+         * persona de la plantilla, a veces desde internet (ADR-050), y que al
+         * servidor le falte Chromium o Redis no es asunto suyo. Lo suyo es la
+         * salida: el mismo registro en CSV.
          */
-        $exceptions->render(static fn (ReportRenderingUnavailable $exception): mixed => ProblemDetails::serviceUnavailable(
+        $exceptions->render(static fn (ReportRenderingUnavailable $exception, Request $request): mixed => ProblemDetails::serviceUnavailable(
+            $request->is('api/v1/me/*')
+                ? 'El PDF no se puede generar ahora. Descarga el mismo registro en CSV.'
+                : $exception->getMessage(),
+        ));
+
+        /*
+         * El motor de PDF esta, pero todos sus huecos estan ocupados
+         * (`reporting.pdf.max_concurrent`). `503` con `Retry-After` y su propio
+         * `type`, con la salida en el `detail`: el CSV no pasa por el motor
+         * (RL-05). No se informa: es capacidad, no un fallo, y ya deja su
+         * linea `reporting.pdf_rendering_busy` en el log.
+         */
+        $exceptions->dontReport(ReportRenderingBusy::class);
+
+        $exceptions->render(static fn (ReportRenderingBusy $exception): mixed => ProblemDetails::pdfRenderingBusy(
             $exception->getMessage(),
+            $exception->retryAfterSeconds,
         ));
 
         /*

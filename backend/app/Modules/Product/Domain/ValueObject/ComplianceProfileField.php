@@ -52,7 +52,7 @@ enum ComplianceProfileField: string
     /** RN-17: dia en que empieza la semana del perfil, ISO-8601. */
     case WeekStartsOn = 'week_starts_on';
 
-    /** RF-GP-04: festivos del centro. Los aplica el informe por periodo desde la tarea 3.10. */
+    /** RF-GP-04: festivos del centro. Los aplica el informe por periodo. */
     case HolidayCalendar = 'holiday_calendar';
 
     /** RL-02: años que se conserva el registro horario antes de poder purgarlo. */
@@ -117,11 +117,10 @@ enum ComplianceProfileField: string
      * La regla del **perfil de cumplimiento** cuyo umbral fija este campo, o
      * `null` si el campo no gobierna ninguna regla: el nombre del convenio, los
      * años de retencion y los festivos. Los festivos **si tienen consumidor**
-     * desde la tarea 3.10 —el informe por periodo no los cuenta como absentismo
-     * (RF-GP-04)—, pero no son el umbral de ninguna de las cuatro reglas del
-     * perfil, asi que aqui siguen en `null` y {@see self::affectsIncidentDetection()}
-     * sigue siendo `false` para ellos: ningun festivo abre ni cierra una
-     * incidencia.
+     * —el informe por periodo no los cuenta como absentismo (RF-GP-04)—,
+     * pero no son el umbral de ninguna de las cuatro reglas del perfil, asi que
+     * aqui siguen en `null` y {@see self::affectsIncidentDetection()} sigue
+     * siendo `false` para ellos: ningun festivo abre ni cierra una incidencia.
      *
      * Es el vocabulario de `Shared`, que es el unico que este modulo comparte con
      * `Attendance` y con `Reporting` (doc 02 §1.6). Sirve para saber si la regla
@@ -222,8 +221,8 @@ enum ComplianceProfileField: string
      * regla; este lo lee una regla que si se evalua.
      *
      * Recibe la suspension por el mismo motivo que
-     * {@see self::affectsIncidentDetection()}: desde la tarea 3.5 la respuesta
-     * depende de un ajuste del hotel, y el dominio no lo consulta.
+     * {@see self::affectsIncidentDetection()}: la respuesta depende de un
+     * ajuste del hotel, y el dominio no lo consulta.
      */
     public function governsSuspendedRule(ComplianceRuleSuspension $suspension): bool
     {

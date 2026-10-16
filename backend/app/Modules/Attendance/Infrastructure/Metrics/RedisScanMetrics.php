@@ -20,8 +20,8 @@ use Throwable;
  * cambio de turno (RNF-P-06): un fichero reescrito en cada fichaje seria una
  * escritura de disco por escaneo y una carrera entre procesos PHP. `HINCRBY` es
  * atomico, cuesta microsegundos y ya hay Redis en el stack. `/metrics` las
- * publica desde la tarea 3.1, con `MetricCatalogue` y `MetricsCatalogueTest`
- * contra el doc 02 §8.2.
+ * publica con `MetricCatalogue` y `MetricsCatalogueTest` contra el doc 02
+ * §8.2.
  *
  * **Los cubos del histograma estan elegidos alrededor del objetivo, no
  * repartidos por igual.** RNF-P-01 pide p95 < 150 ms para el fichaje, asi que

@@ -15,15 +15,12 @@ use RuntimeException;
  * Los umbrales **legales** del centro, leidos de `compliance_profiles`
  * (RF-PD-07, regla dura 14, ADR-025).
  *
- * **Por que existe ya, si la tarea que lo declara es la 5.2.** Por lo mismo que
- * {@see DbOperationalSettingsProvider} existe desde la 1.4: sin el, la deteccion
- * de RN-10, RN-11 y RN-12 (tarea 2.6) no tendria de donde sacar sus tres
- * umbrales, y la unica alternativa seria escribir 12 h, 9 h y 6 h como
- * constantes en PHP — que es exactamente lo que la regla dura 14 y ADR-017
- * prohiben. Lo que la 5.2 anade encima es la **edicion desde el panel**, la
- * auditoria de ese cambio (`calculation_setting.changed`) y los tres campos que
- * faltaban del perfil —jornada semanal, inicio de semana y festivos—; la lectura,
- * que es lo que el nucleo necesita, es esto y no cambia de forma.
+ * Por lo mismo que {@see DbOperationalSettingsProvider}: sin el, la deteccion de
+ * RN-10, RN-11 y RN-12 no tendria de donde sacar sus tres umbrales, y la unica
+ * alternativa seria escribir 12 h, 9 h y 6 h como constantes en PHP — que es
+ * exactamente lo que la regla dura 14 y ADR-017 prohiben. La **edicion desde el
+ * panel** y su auditoria (`calculation_setting.changed`) van por otro camino;
+ * la lectura, que es lo que el nucleo necesita, es esto.
  *
  * ## La cascada, que aqui son dos escalones y no tres
  *
@@ -154,12 +151,12 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
      * **Tolerante, y esto no es una comodidad: es lo que impide que un festivo
      * mal escrito apague dos reglas legales.** Este metodo esta en el camino de
      * la pasada nocturna de deteccion, que resuelve la politica una sola vez
-     * antes del bucle y sin `try`. Antes de la revision de la 5.2, un
-     * `'["navidad"]'` escrito a mano pasaba el filtro de aqui —que solo miraba
-     * que fueran cadenas— y estallaba dentro del objeto de valor: la pasada moria
-     * entera y RN-10 y RN-11 dejaban de evaluarse en toda la instalacion, y la
-     * purga por retencion caia con ella. Lo que se pierde ahora es la fecha mala,
-     * que hoy no la lee ninguna regla; lo que no se pierde es el resto del perfil.
+     * antes del bucle y sin `try`. Un `'["navidad"]'` escrito a mano que pasara
+     * un filtro que solo mirase que fueran cadenas estallaria dentro del objeto
+     * de valor: la pasada moriria entera, RN-10 y RN-11 dejarian de evaluarse
+     * en toda la instalacion y la purga por retencion caeria con ella. Lo que
+     * se pierde es la fecha mala, que no la lee ninguna regla; lo que no se
+     * pierde es el resto del perfil.
      *
      * **El descarte no es silencioso**: deja un `warning` con el identificador
      * del perfil y cuantas entradas se descartaron. Ni las fechas ni el nombre

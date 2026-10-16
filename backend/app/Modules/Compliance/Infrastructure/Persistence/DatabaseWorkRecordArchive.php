@@ -23,8 +23,8 @@ use Illuminate\Database\ConnectionInterface;
  * 2. `incidents` — cuelgan del tramo y de la jornada.
  * 3. `scan_events` — cuelgan del tramo; los que no llegaron a producir ninguno
  *    (rechazos, duplicados) envejecen por `LEAST(occurred_at, recorded_at)`:
- *    `occurred_at` lo pone la tablet, y uno de 2099 no se purgaria nunca (N1
- *    del dictamen del bloque 18); `recorded_at` lo pone el servidor.
+ *    `occurred_at` lo pone la tablet, y uno de 2099 no se purgaria nunca;
+ *    `recorded_at` lo pone el servidor.
  * 3b. `discarded_scan_reports` — los avisos de fichaje descartado (RN-22,
  *    ADR-047): no cuelgan de nada y envejecen igual que los escaneos sin tramo.
  * 4. `shift_entries` — el registro legal en si.

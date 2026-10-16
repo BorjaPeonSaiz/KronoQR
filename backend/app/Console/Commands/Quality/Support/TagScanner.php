@@ -28,12 +28,12 @@ final class TagScanner
      * nombre en la linea siguiente a la del parentesis.
      *
      * Cada delimitador cierra SOLO con el suyo (`(?|…)` reinicia la numeracion,
-     * asi que las tres ramas llenan el mismo `name`). Hasta la 2.2.1 la clase
-     * era `[\'"]…[^\'"]*…[\'"]`: no reconocia la plantilla con acento grave de
-     * las pruebas generadas en un `for`, ni una cadena con comillas del otro
-     * tipo dentro, y esas pruebas heredaban el nombre del `test('…')` anterior
-     * del fichero (V1-QA-1). La interpolacion `${…}` se deja tal cual: el nombre
-     * de la matriz dice que la prueba se repite por variante.
+     * asi que las tres ramas llenan el mismo `name`). Una sola clase de
+     * comillas no reconoceria la plantilla con acento grave de las pruebas
+     * generadas en un `for`, ni una cadena con comillas del otro tipo dentro, y
+     * esas pruebas heredarian el nombre del `test('…')` anterior del fichero.
+     * La interpolacion `${…}` se deja tal cual: el nombre de la matriz dice
+     * que la prueba se repite por variante.
      */
     private const string DECLARATION = '/\b(?:it|test|describe)\s*\(\s*(?|\'(?<name>[^\'\n]*)\'|"(?<name>[^"\n]*)"|`(?<name>[^`\n]*)`)/u';
 

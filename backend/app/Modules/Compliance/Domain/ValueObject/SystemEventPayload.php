@@ -69,8 +69,7 @@ final readonly class SystemEventPayload
         ],
         'system.restored_from_backup' => [
             'required' => ['backup_file', 'backup_taken_at', 'failed_step', 'reason', 'from_version', 'to_version'],
-            // Desde la 2.2.0 (ADR-049, condiciones C14–C16 del dictamen del
-            // bloque 20): como se comprobo la integridad de la copia y del WAL.
+            // ADR-049: como se comprobo la integridad de la copia y del WAL.
             // OPCIONALES a proposito: una copia de la 2.1.0 no tiene cabecera
             // KQE1 (ni `kqe_created` ni `kid`), y el asiento de una
             // restauracion sin WAL no lleva `wal_integrity` ni `legacy_wal`.

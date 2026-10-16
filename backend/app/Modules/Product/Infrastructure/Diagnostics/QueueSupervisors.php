@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
 /**
- * Si hay un supervisor de la cola en marcha (RF-PD-13; V3-PL-07 y V4-PL-3 de
- * la verificacion final de la 2.2.0).
+ * Si hay un supervisor de la cola en marcha (RF-PD-13).
  *
  * Mirar la cola no basta: con la cola vacia, «nadie consume» y «se consume al
  * ritmo que llega» son indistinguibles, y `queue.worker` decia «hay alguien

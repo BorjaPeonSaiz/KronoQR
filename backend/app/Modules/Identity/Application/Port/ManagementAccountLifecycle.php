@@ -19,9 +19,9 @@ use DateTimeImmutable;
  *
  * **Todo se identifica por el `uuid` publico**, nunca por la clave interna ni
  * por el correo: es el unico identificador que puede viajar a un evento de
- * dominio y de ahi a `audit_log` (regla dura 21). Desde la 2.2.0 esto **se
- * alcanza por HTTP** (`/management-accounts/{uuid}/*`), y por eso la busqueda
- * por correo quedo reducida a un unico metodo que solo usa la consola.
+ * dominio y de ahi a `audit_log` (regla dura 21). Esto **se alcanza por HTTP**
+ * (`/management-accounts/{uuid}/*`), y por eso la busqueda por correo es un
+ * unico metodo que solo usa la consola.
  *
  * **Los metodos de escritura se llaman con la fila ya bloqueada** por
  * {@see self::lockAccount()}, dentro de la transaccion que abre el caso de uso

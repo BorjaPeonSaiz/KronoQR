@@ -15,12 +15,11 @@ use DateTimeImmutable;
  *
  * ## Por que un objeto y no un instante suelto
  *
- * Hasta la tarea 5.12 {@see RecordHeartbeat} devolvia solo la hora del servidor.
- * Ahora el latido tambien acusa recibo de los errores que la tablet adjunto, y
- * los dos datos tienen que viajar juntos: `client_errors_accepted` es lo que la
- * PWA usa para vaciar de su buffer **solo lo confirmado** (`acknowledge(n)`), de
- * modo que lo que no se pudo guardar vuelve en el latido siguiente en vez de
- * perderse (decision 7 de la ficha).
+ * {@see RecordHeartbeat} devuelve la hora del servidor y acusa recibo de los
+ * errores que la tablet adjunto, y los dos datos tienen que viajar juntos:
+ * `client_errors_accepted` es lo que la PWA usa para vaciar de su buffer **solo
+ * lo confirmado** (`acknowledge(n)`), de modo que lo que no se pudo guardar
+ * vuelve en el latido siguiente en vez de perderse (decision 7 de la ficha).
  *
  * ## `clientErrorsAccepted` es un prefijo, no un total
  *

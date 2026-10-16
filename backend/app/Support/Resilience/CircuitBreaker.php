@@ -12,7 +12,7 @@ use Throwable;
 
 /**
  * Remembers, for a short while and across requests, that a dependency is down
- * (R3-CH-01, R3-CH-02, RNF-D-03, hard rules 15 and 19).
+ * (RNF-D-03, hard rules 15 and 19).
  *
  * ## Why it exists
  *

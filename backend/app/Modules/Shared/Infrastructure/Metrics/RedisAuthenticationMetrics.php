@@ -21,8 +21,8 @@ use Throwable;
  * modulos que la frontera del §1.6 no concede—: quien incrementa este contador
  * es una peticion HTTP de un proceso que termina, y un contador en memoria de un
  * proceso que termina no lo lee nadie. `HINCRBY` es atomico y cuesta
- * microsegundos. `/metrics` lo publica desde la tarea 3.1, con
- * `MetricCatalogue` y `MetricsCatalogueTest` contra el doc 02 §8.2.
+ * microsegundos. `/metrics` lo publica con `MetricCatalogue` y
+ * `MetricsCatalogueTest` contra el doc 02 §8.2.
  *
  * **El nombre lleva el prefijo `kronoqr_` y las demas series de la instalacion
  * no.** Es deliberado y viene de fuera: las reglas de alerta de A09 estan

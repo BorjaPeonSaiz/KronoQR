@@ -862,6 +862,7 @@ work_record_reconciliation_entries_checked{scope}        gauge
 work_record_reconciliation_reviewed_purges{scope,explains_deletions} gauge
 worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
+reporting_pdf_rendering_rejected_total{reason}           counter
 installation_setting_changes_total{affects_worked_hours} counter
 compliance_profile_changes_total{effect}                 counter
 license_limit_exceeded_total{limit}                      counter

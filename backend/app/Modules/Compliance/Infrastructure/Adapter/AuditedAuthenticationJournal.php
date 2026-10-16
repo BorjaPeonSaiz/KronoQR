@@ -191,7 +191,7 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
 
         // El apunte va siempre, tambien por encima del techo de asientos: es lo
         // que deja ver el barrido entero aunque la cadena solo guarde los
-        // primeros (dictamen B1 de ADR-050).
+        // primeros (ADR-050).
         $this->write('auth.origin_locked', $channel, null, [
             'origin_hash' => $originHash ?? '',
             'failures' => $failures,

@@ -27,13 +27,13 @@ use Throwable;
  *
  * ## Que decide y que no
  *
- * - El idioma se acota a **los que la instalacion ofrece**, que desde la tarea
- *   5.8 son las claves `LOCALE_DEFAULT` y `LOCALE_AVAILABLE` de
- *   `installation_settings`: el cliente las cambia desde el panel, el cambio
- *   queda auditado y rige en la peticion siguiente, sin reiniciar nada (regla
- *   dura 13, RF-PD-01). Es la misma lista que publica `GET /api/v1/branding` y
- *   con la que el quiosco filtra su selector, asi que no puede haber dos
- *   opiniones sobre que idiomas ofrece la instalacion.
+ * - El idioma se acota a **los que la instalacion ofrece**, que son las claves
+ *   `LOCALE_DEFAULT` y `LOCALE_AVAILABLE` de `installation_settings`: el
+ *   cliente las cambia desde el panel, el cambio queda auditado y rige en la
+ *   peticion siguiente, sin reiniciar nada (regla dura 13, RF-PD-01). Es la
+ *   misma lista que publica `GET /api/v1/branding` y con la que el quiosco
+ *   filtra su selector, asi que no puede haber dos opiniones sobre que idiomas
+ *   ofrece la instalacion.
  * - Sin cabecera, o sin ningun idioma en comun, se responde en el idioma por
  *   defecto de la instalacion.
  * - Los DOCUMENTOS no se negocian. Un CSV para la Inspeccion o el PDF de un
@@ -53,22 +53,21 @@ use Throwable;
  * ## Las dos SONDAS no consultan nada
  *
  * `GET /api/v1/health` y `GET /api/v1/ready` se resuelven con el idioma de
- * arranque y sin preguntar a nadie. `/health` es una sonda de VIDA y su regla,
- * desde la tarea 1.7, es que no toca dependencias: una sonda que consultara
- * PostgreSQL para elegir el idioma de una respuesta que no lleva texto haria que
- * Docker reiniciara el contenedor de PHP cuando lo que esta caido es PostgreSQL.
- * Que el idioma se resuelva **perezosamente**, y no en el constructor, es lo que
- * hace cierta esta frase: un `NegotiableLocales` inyectado se construiria en cada
- * peticion, sondas incluidas.
+ * arranque y sin preguntar a nadie. `/health` es una sonda de VIDA y su regla
+ * es que no toca dependencias: una sonda que consultara PostgreSQL para elegir
+ * el idioma de una respuesta que no lleva texto haria que Docker reiniciara el
+ * contenedor de PHP cuando lo que esta caido es PostgreSQL. Que el idioma se
+ * resuelva **perezosamente**, y no en el constructor, es lo que hace cierta
+ * esta frase: un `NegotiableLocales` inyectado se construiria en cada peticion,
+ * sondas incluidas.
  *
  * ## Por que el contrato vive en `App\Support` y no en `Shared`
  *
  * Porque esta clase esta fuera de los modulos y Deptrac no le deja nombrar
- * ningun tipo de `App\Modules\*` — frontera intacta desde la tarea 0.2. La
- * direccion admitida es la contraria: el adaptador de `Product` implementa
- * {@see NegotiableLocales} y el contenedor los une. Es la misma solucion, por la
- * misma razon, que usa `LicenseStateProbe` para el estado de licencia de
- * `/health`.
+ * ningun tipo de `App\Modules\*`. La direccion admitida es la contraria: el
+ * adaptador de `Product` implementa {@see NegotiableLocales} y el contenedor
+ * los une. Es la misma solucion, por la misma razon, que usa
+ * `LicenseStateProbe` para el estado de licencia de `/health`.
  *
  * El idioma de la instalacion se captura ANTES de tocar nada porque
  * `Application::setLocale()` tambien escribe `config('app.locale')`: una vez

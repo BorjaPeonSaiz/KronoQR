@@ -12,7 +12,7 @@ namespace App\Modules\Shared\Infrastructure\Console;
  * id es un entero positivo escrito tal cual, sin signo ni decimales, o no es un
  * id. Lo usan las acciones de consola que firman un asiento
  * (`compliance:reconcile-work-record --acknowledge`,
- * `workforce:correct-site-timezone`).
+ * `workforce:correct-site-timezone`, `compliance:apply-retention --responsible`).
  */
 final class ConsoleIds
 {

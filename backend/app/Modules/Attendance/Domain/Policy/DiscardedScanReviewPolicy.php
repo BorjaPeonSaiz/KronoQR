@@ -11,8 +11,7 @@ use DateTimeZone;
 use InvalidArgumentException;
 
 /**
- * **¿Abre incidencia este aviso de fichaje descartado?** (RN-22, ADR-047, F6 del
- * dictamen del bloque 18).
+ * **¿Abre incidencia este aviso de fichaje descartado?** (RN-22, ADR-047).
  *
  * El aviso se guarda siempre; la incidencia `discarded_scan` solo se abre si su
  * `occurred_at` —que lo pone la tablet— cae en una **ventana creible**. Sin ella,

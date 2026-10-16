@@ -16,7 +16,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * uno, la primera correccion de la consulta habria llegado solo a una.
  *
  * **Los roles los decide quien llama.** La revision de la purga admite
- * cualquier cuenta de gestion activa (decision D7 del bloque 5 de la 2.2.1) y
+ * cualquier cuenta de gestion activa y
  * pasa la lista vacia; la correccion de la zona exige los roles que pueden
  * modificar el centro por la API, para que la consola no sea la via por la que
  * alguien hace lo que el panel le niega.

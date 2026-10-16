@@ -24,10 +24,10 @@ use Illuminate\Http\JsonResponse;
  * `application/problem+json`, para que un fallo no dependa de que cada
  * controlador se acuerde de darle forma.
  *
- * **Y dos desenlaces de exito** desde la tarea 2.1 (RS-06): `200` con la sesion,
- * o `202` con la sesion **pendiente** de segundo factor. Lo unico que hace este
- * controlador con esa distincion es elegir codigo y recurso; quien decide si hay
- * reto es el caso de uso.
+ * **Y dos desenlaces de exito** (RS-06): `200` con la sesion, o `202` con la
+ * sesion **pendiente** de segundo factor. Lo unico que hace este controlador
+ * con esa distincion es elegir codigo y recurso; quien decide si hay reto es el
+ * caso de uso.
  */
 final class LoginController extends Controller
 {

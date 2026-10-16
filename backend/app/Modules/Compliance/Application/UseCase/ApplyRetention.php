@@ -8,6 +8,7 @@ use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\Command\RetentionRunCommand;
 use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
 use App\Modules\Compliance\Application\Exception\RetentionNotConfirmed;
+use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditPartitionArchive;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
@@ -26,6 +27,8 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -83,10 +86,17 @@ final readonly class ApplyRetention
         private RetentionTelemetry $telemetry,
         private ConnectionInterface $connection,
         private Clock $clock,
+        private ResponsibleAccounts $accounts,
+        private SerializedLedgerWrite $ledgerWrite,
     ) {}
 
     public function handle(RetentionRunCommand $command): RetentionOutcome
     {
+        // Primera comprobacion de la cuenta, en los dos modos y antes de
+        // planificar: una simulacion con un responsable que no vale no sirve de
+        // ensayo de nada. La segunda va con la cadena tomada, antes del asiento.
+        $this->assertResponsible($command);
+
         $now = $this->clock->now();
         $plan = $this->planner->handle($now);
 
@@ -261,8 +271,11 @@ final readonly class ApplyRetention
             $rows = array_sum(array_map(static fn (RetentionTally $tally): int => $tally->rows, $tallies));
 
             if ($rows === 0) {
-                // No ha pasado nada y no hay nada que auditar. Mismo criterio que
-                // una incidencia que ya estaba abierta.
+                // No ha pasado nada y no hay nada que auditar, como una incidencia
+                // que ya estaba abierta. La cuenta se vuelve a comprobar igual:
+                // lo que sigue es soltar particiones.
+                $this->assertResponsible($command);
+
                 return $tallies;
             }
 
@@ -272,35 +285,50 @@ final readonly class ApplyRetention
                 $counts[$tally->dataset] = $tally->rows;
             }
 
-            $this->audit->handle(new RecordAuditEntryCommand(
-                actor: $this->actorFor($command),
-                // La accion con la que se apunta la purga del registro de
-                // jornada: filas vencidas borradas de las tablas del registro,
-                // que no es soltar una particion
-                // (`retention.partition_dropped`). El payload lleva el alcance,
-                // la fecha de corte, el umbral aplicado y el recuento por tabla.
-                action: AuditAction::RetentionPurgeExecuted,
-                subject: AuditSubject::of('retention'),
-                payload: AuditPayload::of([
-                    'scope' => RetentionScope::WorkRecords->value,
-                    'cutoff_date' => $plan->workRecordCutoff->format('Y-m-d'),
-                    // El umbral con el que se decidio, porque puede cambiar
-                    // (RF-PD-07) y sin el la purga no se puede releer.
-                    'retention_years' => $plan->policy->legalRecordYears,
-                    // El suelo legal y la jurisdiccion con los que se decidio
-                    // (RL-02, ADR-057 enmienda del 10-10-2026): la conciliacion
-                    // los relee y solo pueden endurecer su juicio del asiento.
-                    'retention_floor_years' => $plan->policy->legalRecordFloorYears,
-                    'jurisdiction' => $plan->policy->jurisdiction,
-                    'site_id' => $plan->policy->siteId,
-                    'rows' => $rows,
-                    'tables' => $counts,
-                    'confirmation' => $plan->confirmationToken(),
-                ]),
-            ));
+            // Con la cadena tomada, la cuenta que firma no puede darse de baja
+            // hasta que esto confirme. Si ya no esta activa, la excepcion deshace
+            // tambien el borrado de arriba: sin asiento no hay purga.
+            $this->ledgerWrite->withChainLock(function () use ($command, $plan, $rows, $counts): void {
+                $this->recordWorkRecordPurge($command, $plan, $rows, $counts);
+            });
 
             return $tallies;
         });
+    }
+
+    /**
+     * @param  array<string, int>  $counts
+     */
+    private function recordWorkRecordPurge(RetentionRunCommand $command, RetentionReport $plan, int $rows, array $counts): void
+    {
+        $this->assertResponsible($command);
+
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actorFor($command),
+            // La accion con la que se apunta la purga del registro de
+            // jornada: filas vencidas borradas de las tablas del registro,
+            // que no es soltar una particion
+            // (`retention.partition_dropped`). El payload lleva el alcance,
+            // la fecha de corte, el umbral aplicado y el recuento por tabla.
+            action: AuditAction::RetentionPurgeExecuted,
+            subject: AuditSubject::of('retention'),
+            payload: AuditPayload::of([
+                'scope' => RetentionScope::WorkRecords->value,
+                'cutoff_date' => $plan->workRecordCutoff->format('Y-m-d'),
+                // El umbral con el que se decidio, porque puede cambiar
+                // (RF-PD-07) y sin el la purga no se puede releer.
+                'retention_years' => $plan->policy->legalRecordYears,
+                // El suelo legal y la jurisdiccion con los que se decidio
+                // (RL-02, ADR-057 enmienda del 10-10-2026): la conciliacion
+                // los relee y solo pueden endurecer su juicio del asiento.
+                'retention_floor_years' => $plan->policy->legalRecordFloorYears,
+                'jurisdiction' => $plan->policy->jurisdiction,
+                'site_id' => $plan->policy->siteId,
+                'rows' => $rows,
+                'tables' => $counts,
+                'confirmation' => $plan->confirmationToken(),
+            ]),
+        ));
     }
 
     /**
@@ -314,6 +342,11 @@ final readonly class ApplyRetention
         $tallies = [];
 
         foreach ($anchors as $anchor) {
+            // Soltar una particion es irreversible: la cuenta se comprueba otra
+            // vez justo antes. Sin tomar la cadena: el sellado va por otra
+            // conexion, con el rol de mantenimiento, y se bloquearia contra ella.
+            $this->assertResponsible($command);
+
             // La transaccion del rol de mantenimiento vive dentro del adaptador:
             // sellar y soltar son un solo acto (ADR-027).
             $this->partitions->sealAndDrop($anchor);
@@ -395,6 +428,21 @@ final readonly class ApplyRetention
         $this->metrics->recordRun($report, $now);
 
         return new RetentionOutcome($report, $path);
+    }
+
+    /**
+     * @throws RetentionResponsibleNotActive
+     */
+    private function assertResponsible(RetentionRunCommand $command): void
+    {
+        if ($command->responsibleUserId === null) {
+            return;
+        }
+
+        // Sin roles: quien puede responder de una purga lo decide el propietario.
+        if (! $this->accounts->isActiveManagementAccount($command->responsibleUserId)) {
+            throw new RetentionResponsibleNotActive($command->responsibleUserId);
+        }
     }
 
     /**

@@ -72,12 +72,15 @@ final class PurgeReviewRejected extends ComplianceDomainException
         );
     }
 
+    /** La clave del rechazo por cuenta: la consola la distingue para salir con 2. */
+    public const string RESPONSIBLE_NOT_ACTIVE = 'work-record-review.responsible_inactive';
+
     public static function responsibleNotActive(int $userId): self
     {
         return new self(
-            'work-record-review.responsible_inactive',
+            self::RESPONSIBLE_NOT_ACTIVE,
             ['id' => $userId],
-            'Account '.$userId.' is not an active management account.',
+            'Account '.$userId.' is not an active management account allowed to sign this review.',
         );
     }
 }

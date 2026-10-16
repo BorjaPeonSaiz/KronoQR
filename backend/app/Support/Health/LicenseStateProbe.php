@@ -13,10 +13,10 @@ use Throwable;
  *
  * ## Por que no lee la tabla `license`
  *
- * Porque `/health` es una **sonda de vida** y su regla, desde la tarea 1.7, es
- * que no toca dependencias: una sonda de vida que consulta PostgreSQL hace que
- * Docker reinicie el contenedor de PHP cuando lo que esta caido es PostgreSQL,
- * se pierden las conexiones sanas y el diagnostico apunta al sitio equivocado.
+ * Porque `/health` es una **sonda de vida** y su regla es que no toca
+ * dependencias: una sonda de vida que consulta PostgreSQL hace que Docker
+ * reinicie el contenedor de PHP cuando lo que esta caido es PostgreSQL, se
+ * pierden las conexiones sanas y el diagnostico apunta al sitio equivocado.
  * Añadir el estado de licencia no puede costar esa propiedad.
  *
  * Asi que se lee **solo de la cache y sin recalcular nada**. La escribe
@@ -39,10 +39,10 @@ use Throwable;
  *
  * Porque su unico consumidor es `HealthController`, que esta fuera de los
  * modulos y **no puede depender de ninguno** (Deptrac: `AppFramework` no alcanza
- * `App\Modules\*`, y esa frontera esta intacta desde la tarea 0.2). La direccion
- * que si esta admitida es la contraria —un modulo alcanza el armazon, como hace
- * todo `Product/Http`—, asi que la constante de la clave vive aqui y es
- * `LicensedFeatureGate` quien la importa para escribir.
+ * `App\Modules\*`). La direccion que si esta admitida es la contraria —un
+ * modulo alcanza el armazon, como hace todo `Product/Http`—, asi que la
+ * constante de la clave vive aqui y es `LicensedFeatureGate` quien la importa
+ * para escribir.
  *
  * Es tambien el sitio correcto por contenido: junto a `DependencyProbe`, que es
  * lo que responde `GET /api/v1/ready`.

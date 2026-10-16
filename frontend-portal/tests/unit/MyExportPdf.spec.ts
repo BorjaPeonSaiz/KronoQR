@@ -108,6 +108,58 @@ describe('MyExportView, elegir CSV o PDF (RF-ID-05, RL-05)', () => {
     expect(wrapper.find('[data-test="pdf-unavailable"]').exists()).toBe(false)
   })
 
+  it('un 503 pdf-rendering-busy dice cuantos segundos esperar y ofrece el CSV, sin el aviso de motor ausente', async () => {
+    stubFetch((url) =>
+      url.includes('format=pdf')
+        ? new Response(
+            JSON.stringify({
+              type: 'urn:kronoqr:problem:pdf-rendering-busy',
+              title: 'Ocupado',
+              status: 503,
+            }),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '7' },
+            },
+          )
+        : csvResponse(),
+    )
+
+    const wrapper = await mountView(MyExportView)
+
+    await wrapper.findAll('input[type="radio"]')[1]?.setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const notice = wrapper.find('[data-test="pdf-busy"]')
+
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('Inténtalo de nuevo en 7 segundos')
+    expect(notice.text()).toContain('descarga el CSV')
+    expect(wrapper.find('[data-test="pdf-unavailable"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="use-csv"]').trigger('click')
+    await settle()
+
+    expect(downloadedNames).toEqual(['mi-registro-horario-2026-03-01_2026-03-31.csv'])
+    expect(wrapper.find('[data-test="pdf-busy"]').exists()).toBe(false)
+  })
+
+  it('un 503 pdf-rendering-busy sin Retry-After omite la cifra', async () => {
+    stubFetch(() => problemResponse(503, 'urn:kronoqr:problem:pdf-rendering-busy'))
+
+    const wrapper = await mountView(MyExportView)
+
+    await wrapper.findAll('input[type="radio"]')[1]?.setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const text = wrapper.find('[data-test="pdf-busy"]').text()
+
+    expect(text).toContain(es.myExport.pdfBusy.messageNoWait)
+    expect(text).not.toMatch(/\d+ segundos/)
+  })
+
   it.each([401, 403, 422, 429])(
     'un %s del PDF se explica con el aviso generico, no con el del PDF no disponible',
     async (status) => {

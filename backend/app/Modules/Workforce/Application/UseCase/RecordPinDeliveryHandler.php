@@ -34,9 +34,8 @@ use App\Modules\Workforce\Domain\Exception\PinNotIssued;
  * entrega registrada sin traza no sirve para lo unico que se le pide.
  *
  * **Bajo el candado de la cadena** (ADR-046 §1.2): la escritura de la ficha y el
- * asiento van dentro de `withChainLock()`, en el orden cadena → `employees`.
- * Hasta la 2.2.0 se escribia la fila y despues el asiento, al reves que la baja.
- * La escritura toma `FOR KEY SHARE` sobre `users` por
+ * asiento van dentro de `withChainLock()`, en el orden cadena → `employees`,
+ * el mismo que la baja. La escritura toma `FOR KEY SHARE` sobre `users` por
  * `pin_delivered_by_user_id`, que es compatible con todo lo que se escribe en
  * `users` (ningun caso de uso cambia su clave).
  *

@@ -21,10 +21,10 @@ use Illuminate\Cache\RateLimiter;
  *
  * ## Dos contadores con la misma clase, y no uno
  *
- * Desde la tarea 2.1 esta clase sirve tambien al **segundo factor** (RS-06), con
- * otro prefijo y otras dos claves de configuracion: el enlace contextual esta en
- * `IdentityServiceProvider`. Se parametriza en lugar de duplicar la clase porque
- * lo que cambia son tres cadenas, no el comportamiento.
+ * Esta clase sirve tambien al **segundo factor** (RS-06), con otro prefijo y
+ * otras dos claves de configuracion: el enlace contextual esta en
+ * `IdentityServiceProvider`. Se parametriza en lugar de duplicar la clase
+ * porque lo que cambia son tres cadenas, no el comportamiento.
  *
  * **Que sean dos contadores y no uno si importa.** Compartirlo tendria dos
  * efectos malos a la vez: gastar el cupo probando codigos dejaria a alguien sin

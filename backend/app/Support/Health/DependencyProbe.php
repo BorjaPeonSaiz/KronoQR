@@ -44,7 +44,7 @@ use Throwable;
  * sin decir cual—, asi que seguir preguntando solo anade latencia a una
  * instalacion que ya esta en problemas.
  *
- * ## A time budget per dependency that includes DNS (R3-CH-02)
+ * ## A time budget per dependency that includes DNS
  *
  * Before the real query, each dependency's host must resolve and accept a TCP
  * connection within {@see self::BUDGET_SECONDS}, checked by
@@ -73,7 +73,7 @@ final readonly class DependencyProbe
 {
     /**
      * Seconds each dependency gets to resolve its host and accept a TCP
-     * connection before `/ready` gives up on it (R3-CH-02). With both checks
+     * connection before `/ready` gives up on it. With both checks
      * failing at the limit the probe still answers in under three seconds.
      */
     public const float BUDGET_SECONDS = 2.0;

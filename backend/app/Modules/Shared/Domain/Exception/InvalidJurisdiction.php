@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * El codigo no tiene la forma ISO 3166 que el producto lee como jurisdiccion
- * (RF-PD-07, RL-02, ADR-057 enmienda del 10-10-2026, decision D5 del bloque 5).
+ * (RF-PD-07, RL-02, ADR-057 enmienda del 10-10-2026).
  *
  * **No normaliza a proposito.** `es`, ` ES` o `ESP` no son `ES` mal escrito:
  * son una fila que el `CHECK` `compliance_profiles_chk_jurisdiction_format`

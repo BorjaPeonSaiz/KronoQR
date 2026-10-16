@@ -28,7 +28,7 @@ use DateTimeImmutable;
  * registro legal algo que nadie ha validado. Lo que hace es guardar el aviso y
  * su atribucion; la incidencia `discarded_scan` la abre la revision diaria.
  *
- * ## Atribuir sin abrir un oraculo (RS-03, F5 del dictamen del bloque 18)
+ * ## Atribuir sin abrir un oraculo (RS-03)
  *
  * Por tarjeta, con el mismo resolutor que `POST /api/v1/scan`; por PIN, con una
  * sola busqueda por codigo de forma fija ({@see DiscardedScanAttributionPolicy}).
@@ -99,13 +99,12 @@ final readonly class ReportDiscardedScans
                 $this->metrics->discardedScanReported($command->deviceUuid, $attribution->isAttributed());
             }
 
-            // El suelo DESPUES de escribir y propio del caso de uso (N2 del
-            // dictamen del bloque 18): el doble del suelo del resolutor, que ya
-            // rellena sus rechazos hasta el suyo. Con el mismo suelo no se
-            // rellenaba nada y una tarjeta vigente volvia antes que una retirada;
-            // con el doble, todo camino —tarjeta vigente, retirada o falsa,
-            // codigo, INSERT incluido— tarda lo mismo. Lo fija
-            // `AttendanceServiceProvider`.
+            // El suelo DESPUES de escribir y propio del caso de uso: el doble
+            // del suelo del resolutor, que ya rellena sus rechazos hasta el
+            // suyo. Con el mismo suelo no se rellenaba nada y una tarjeta
+            // vigente volvia antes que una retirada; con el doble, todo camino
+            // —tarjeta vigente, retirada o falsa, codigo, INSERT incluido—
+            // tarda lo mismo. Lo fija `AttendanceServiceProvider`.
             $this->floor->padTo($startedAt);
 
             $acknowledged[] = $report->scanId;

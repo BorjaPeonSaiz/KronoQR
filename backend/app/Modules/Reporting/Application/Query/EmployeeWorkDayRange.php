@@ -46,11 +46,11 @@ final readonly class EmployeeWorkDayRange
          *
          * El panel y la pantalla del portal abren el mes
          * ({@see ReadEmployeeWorkDays::DEFAULT_DAYS}); la descarga del historico
-         * propio, el ultimo año ({@see ReadEmployeeWorkDays::EXPORT_DEFAULT_DAYS},
-         * V3-PO-2). Lo declara la peticion por lo mismo que `$selfService`: es
-         * la ruta la que sabe para que se pide el rango, y el caso de uso solo lo
-         * resuelve en la zona del centro. El techo no cambia: lo sigue poniendo
-         * `DateRange`.
+         * propio, el ultimo año
+         * ({@see ReadEmployeeWorkDays::EXPORT_DEFAULT_DAYS}). Lo declara la peticion
+         * por lo mismo que `$selfService`: es la ruta la que sabe para que se
+         * pide el rango, y el caso de uso solo lo resuelve en la zona del
+         * centro. El techo no cambia: lo sigue poniendo `DateRange`.
          */
         public int $defaultDays = ReadEmployeeWorkDays::DEFAULT_DAYS,
     ) {}

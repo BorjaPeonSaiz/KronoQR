@@ -11,7 +11,7 @@ use Laravel\Horizon\HorizonApplicationServiceProvider;
 
 /**
  * Cierra el panel de Horizon y sus 21 rutas `horizon/api/*` a TODO el mundo
- * (regla dura 18, hallazgo T1 de la verificacion de la 2.1.0).
+ * (regla dura 18).
  *
  * **El panel no forma parte del producto.** Los administradores del cliente no
  * lo usan —el estado de las colas se ve por las metricas de `/metrics` y las

@@ -23,12 +23,12 @@ use App\Modules\Workforce\Domain\Model\EmploymentContract;
  *
  * ## Por que el `responsable_departamento` no entra, teniendo alcance
  *
- * Desde la tarea 2.1 tiene alcance propio (RF-ID-03) y ve a su gente en
- * `GET /employees`. El contrato es otra cosa: son las condiciones laborales
- * pactadas —horas, tipo de jornada, computo anual— y el Anexo B situa la gestion
- * de plantilla en `rrhh+`. Ademas le falta el ambito: `employees:*` no esta en
- * su token (§7.3), solo `employees:read`, asi que ni siquiera pasa del
- * middleware. Las dos comprobaciones dicen lo mismo, que es como tiene que ser.
+ * Tiene alcance propio (RF-ID-03) y ve a su gente en `GET /employees`. El
+ * contrato es otra cosa: son las condiciones laborales pactadas —horas, tipo
+ * de jornada, computo anual— y el Anexo B situa la gestion de plantilla en
+ * `rrhh+`. Ademas le falta el ambito: `employees:*` no esta en su token
+ * (§7.3), solo `employees:read`, asi que ni siquiera pasa del middleware. Las
+ * dos comprobaciones dicen lo mismo, que es como tiene que ser.
  *
  * El `auditor` tampoco: audita lo que quedo escrito y lo suyo es
  * `GET /reports/legal-export`.

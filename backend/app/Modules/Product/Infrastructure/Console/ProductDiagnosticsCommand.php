@@ -117,7 +117,7 @@ final class ProductDiagnosticsCommand extends Command
 
     /**
      * Deja el fichero en el disco por {@see DeliverDiagnosticsBundle}, que es
-     * quien ordena temporal, pendiente y renombrado (V4-PL-1, ADR-020). Aqui
+     * quien ordena temporal, pendiente y renombrado (ADR-020). Aqui
      * solo se dice que paso.
      */
     private function deliver(DeliverDiagnosticsBundle $delivery, DiagnosticsBundle $bundle): ?string
@@ -313,12 +313,10 @@ final class ProductDiagnosticsCommand extends Command
      *
      * ## Aqui Y en la pasada horaria
      *
-     * Hasta la 2.1.0 solo se hacia aqui, porque una tarea que borrase ficheros
-     * del cliente por su cuenta parecia una sorpresa, y el ultimo paquete
-     * desaparecia de todas formas al recrear el contenedor. Con el volumen
-     * persistente (ADR-045 §g, C4) ya no desaparece, y por eso la pasada horaria
-     * de `product:export-all --purge` barre tambien. Aqui se conserva porque es
-     * el momento en que alguien esta mirando, y lo dice en la salida. Los dos
+     * Con el volumen persistente (ADR-045 §g, C4) el ultimo paquete no
+     * desaparece al recrear el contenedor, y por eso la pasada horaria de
+     * `product:export-all --purge` barre tambien. Aqui se conserva porque es el
+     * momento en que alguien esta mirando, y lo dice en la salida. Los dos
      * pasan por el mismo caso de uso: patron exacto, un nivel, sin enlaces.
      *
      * ## Por que hay que borrarlos

@@ -19,6 +19,7 @@ use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\OpenIncidentCount;
 use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
+use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PersonalRecordHolderDirectory;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
@@ -63,6 +64,7 @@ use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
 use App\Modules\Reporting\Http\Policy\ReportExportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\FilesystemReportExportStorage;
 use App\Modules\Reporting\Infrastructure\Adapter\LaravelReportingEventPublisher;
 use App\Modules\Reporting\Infrastructure\Adapter\QueuedReportExportDispatcher;
@@ -77,7 +79,9 @@ use App\Modules\Reporting\Infrastructure\Console\WeeklySummaryCommand;
 use App\Modules\Reporting\Infrastructure\Export\ConfigurablePayrollDocumentWriter;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportCriteriaNarrator;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportPdfWriter;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
+use App\Modules\Reporting\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisQueuedJobFailureMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
@@ -106,6 +110,8 @@ use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWeeklySummaryRecipi
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayCompletionReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
@@ -118,6 +124,7 @@ use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -125,6 +132,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Psr\Log\LoggerInterface;
 
 /**
  * Modulo Reporting — proyecciones, consultas de lectura y exportaciones
@@ -174,10 +182,9 @@ final class ReportingServiceProvider extends ServiceProvider
          *
          * Fichero para el colector *textfile* de `node-exporter`, como las de
          * credenciales y las de la cadena de auditoria, y por el mismo motivo:
-         * `/metrics` existe desde la tarea 3.1 (`MetricCatalogue` y
-         * `MetricsCatalogueTest` contra el doc 02 §8.2), pero estas series no
-         * pasan por ahi: quien las produce es un comando programado que corre
-         * y termina.
+         * `/metrics` existe (`MetricCatalogue` y `MetricsCatalogueTest` contra
+         * el doc 02 §8.2), pero estas series no pasan por ahi: quien las
+         * produce es un comando programado que corre y termina.
          */
         $this->app->bind(PresenceMetrics::class, TextfilePresenceMetrics::class);
 
@@ -478,7 +485,20 @@ final class ReportingServiceProvider extends ServiceProvider
      */
     private function registerPeriodReportExport(): void
     {
-        $this->app->bind(ReportDocumentRenderer::class, BrowsershotReportRenderer::class);
+        $this->app->bind(
+            BrowsershotReportRenderer::class,
+            static fn (): BrowsershotReportRenderer => new BrowsershotReportRenderer(Config::boolean('reporting.pdf.tagged')),
+        );
+
+        // Las descargas, detras del tope de Chromium simultaneos con espera corta.
+        // El informe en diferido tiene su propio camino, mas abajo.
+        $this->app->bind(
+            ReportDocumentRenderer::class,
+            static fn (Application $app): ConcurrencyLimitedReportRenderer => self::limitedRenderer(
+                $app,
+                Config::integer('reporting.pdf.wait_seconds'),
+            ),
+        );
         $this->app->bind(ReportIssuerDirectory::class, DatabaseReportIssuerDirectory::class);
 
         // El titular del registro propio, para el PDF del portal (PR19). Misma
@@ -490,6 +510,7 @@ final class ReportingServiceProvider extends ServiceProvider
         // *textfile*, como sus hermanas: `HINCRBY` es atomico y dos procesos PHP
         // no pueden pisarse reescribiendo el mismo fichero.
         $this->app->bind(ReportExportMetrics::class, RedisReportExportMetrics::class);
+        $this->app->bind(PdfRenderingMetrics::class, RedisPdfRenderingMetrics::class);
 
         /*
          * Los criterios de inclusion ya traducidos (RF-IN-06, RF-IN-07).
@@ -560,6 +581,16 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(ReportExportQueue::class, QueuedReportExportDispatcher::class);
         $this->app->bind(ReportingEventPublisher::class, LaravelReportingEventPublisher::class);
         $this->app->bind(ReportExportDocumentWriter::class, PeriodReportDocumentWriters::class);
+
+        // El PDF en diferido pasa por el mismo tope, pero un trabajo de cola puede
+        // esperar su hueco mucho mas que una persona delante de la pantalla.
+        $this->app->when(PeriodReportDocumentWriters::class)
+            ->needs(PeriodReportPdfWriter::class)
+            ->give(static fn (Application $app): PeriodReportPdfWriter => new PeriodReportPdfWriter(
+                self::limitedRenderer($app, Config::integer('reporting.pdf.queued_wait_seconds')),
+                $app->make(BrandingProvider::class),
+                $app->make(BrandingLogoReader::class),
+            ));
         $this->app->bind(PayrollDocumentWriter::class, ConfigurablePayrollDocumentWriter::class);
         $this->app->bind(ReportExportRecipients::class, DatabaseReportExportRecipients::class);
 
@@ -666,13 +697,13 @@ final class ReportingServiceProvider extends ServiceProvider
      * garantiza que el fichero y la pantalla digan lo mismo (criterios, festivos,
      * zona horaria y asiento de divulgacion incluidos).
      *
-     * **Dos consumidores desde la tarea 3.12** y por eso hay un enlace con
-     * nombre ({@see self::DEFERRED_PERIOD_REPORT}) y no una llamada suelta: la
-     * generacion en diferido (RF-IN-06) y el resumen semanal (RF-PR-05). Los dos
-     * corren sin nadie delante, asi que los techos de la respuesta sincrona no
-     * les aplican y el que si importa es el del servidor. Con dos copias de esta
-     * composicion, el dia que cambiara un colaborador una de ellas se quedaria
-     * atras en silencio.
+     * **Dos consumidores**, y por eso hay un enlace con nombre
+     * ({@see self::DEFERRED_PERIOD_REPORT}) y no una llamada suelta: la
+     * generacion en diferido (RF-IN-06) y el resumen semanal (RF-PR-05). Los
+     * dos corren sin nadie delante, asi que los techos de la respuesta sincrona
+     * no les aplican y el que si importa es el del servidor. Con dos copias de
+     * esta composicion, el dia que cambiara un colaborador una de ellas se
+     * quedaria atras en silencio.
      */
     private function deferredPeriodReport(Application $app): GeneratePeriodReport
     {
@@ -768,5 +799,21 @@ final class ReportingServiceProvider extends ServiceProvider
         Event::listen(EmployeeClockedIn::class, [BroadcastPresenceChange::class, 'clockedIn']);
         Event::listen(EmployeeClockedOut::class, [BroadcastPresenceChange::class, 'clockedOut']);
         Event::listen(ShiftCorrected::class, [BroadcastPresenceChange::class, 'corrected']);
+    }
+
+    /**
+     * El motor de PDF detras del tope de composiciones simultaneas
+     * (`reporting.pdf.max_concurrent`), con la espera que toque a quien lo pide.
+     */
+    private static function limitedRenderer(Application $app, int $waitSeconds): ConcurrencyLimitedReportRenderer
+    {
+        return new ConcurrencyLimitedReportRenderer(
+            $app->make(BrowsershotReportRenderer::class),
+            $app->make(Redis::class),
+            $app->make(LoggerInterface::class),
+            $app->make(PdfRenderingMetrics::class),
+            Config::integer('reporting.pdf.max_concurrent'),
+            $waitSeconds,
+        );
     }
 }

@@ -60,9 +60,9 @@ final readonly class DiscardedScan
 
     /**
      * Lo que va tras `urn:kronoqr:problem:` si es un problema del catalogo del
-     * producto, o `other`; vacio si no traia ninguno (F9 del dictamen del bloque
-     * 18). El `context` de la incidencia solo admite cadenas de 64: aqui no
-     * entra nada que no sea un identificador corto de este producto.
+     * producto, o `other`; vacio si no traia ninguno. El `context` de la
+     * incidencia solo admite cadenas de 64: aqui no entra nada que no sea un
+     * identificador corto de este producto.
      */
     public function problem(): string
     {

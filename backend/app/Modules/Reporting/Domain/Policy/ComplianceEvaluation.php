@@ -79,7 +79,7 @@ final readonly class ComplianceEvaluation
      * @param  CompliancePolicy  $policy  los cuatro umbrales del perfil del centro, ya
      *                                    resueltos (regla dura 14)
      * @param  ComplianceRuleSuspension  $suspension  que reglas no abren incidencia en esta
-     *                                                instalacion. Desde la tarea 3.5 depende de
+     *                                                instalacion. Depende de
      *                                                `ATTENDANCE_BREAK_CLOCKING`, asi que la
      *                                                inyecta `ReadComplianceSummary`, que es quien
      *                                                alcanza los ajustes: el evaluador no pregunta

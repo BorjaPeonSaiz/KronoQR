@@ -7,8 +7,7 @@ namespace App\Modules\Identity\Domain\Policy;
 use InvalidArgumentException;
 
 /**
- * **Techo de asientos `auth.origin_locked` por hora** (ADR-050 §2, dictamen de
- * seguridad B1).
+ * **Techo de asientos `auth.origin_locked` por hora** (ADR-050 §2).
  *
  * Cada asiento de `audit_log` pasa por el candado global de la cadena de hash
  * (ADR-010), el mismo por el que pasa cada fichaje. El bloqueo por origen lo

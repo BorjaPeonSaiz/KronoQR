@@ -119,13 +119,13 @@ enum AuditAction: string
      * como en los demas `auth.*` (ADR-039) y en el `payload` solo
      * `{channel, failures, seconds, ip_hash}`. Escrito despues de responder,
      * como `auth.lockout_started`, y con un techo por hora: por encima, el
-     * bloqueo se aplica y solo queda el log tecnico (dictamen B1).
+     * bloqueo se aplica y solo queda el log tecnico.
      */
     case OriginLocked = 'auth.origin_locked';
 
     /**
      * Alguien ha levantado a mano un bloqueo por origen
-     * (`identity:origin-unlock`, dictamen M3 de ADR-050).
+     * (`identity:origin-unlock`, ADR-050).
      *
      * En el `payload` el `ip_hash` del origen, **nunca la IP**: el comando corre
      * en el servidor y la columna `ip` no tiene nada que decir.
@@ -142,13 +142,11 @@ enum AuditAction: string
     /**
      * Se ha dado de baja una cuenta de gestion (`identity:deactivate-user`).
      *
-     * **Es el asiento que faltaba y que dejaba RS-06 a medias.** Hasta la tarea
-     * 3.8, `users.is_active` se consultaba al autenticar pero nada lo ponia a
-     * `false`: una cuenta de `rrhh` solo se podia retirar editando la fila a mano
-     * en PostgreSQL, es decir, sin dejar ninguna traza dentro del producto. La
-     * pregunta «¿cuando dejo de tener acceso quien se fue del hotel, y quien lo
-     * decidio?» no tenia respuesta, y es la primera que se hace cuando aparece
-     * una correccion de jornada firmada por alguien que ya no trabaja aqui.
+     * **Sin el, RS-06 queda a medias.** Retirar una cuenta editando la fila a
+     * mano no deja traza dentro del producto, y la pregunta «¿cuando dejo de
+     * tener acceso quien se fue del hotel, y quien lo decidio?» se quedaria
+     * sin respuesta, y es la primera que se hace cuando aparece una correccion
+     * de jornada firmada por alguien que ya no trabaja aqui.
      *
      * Lleva el motivo y el `uuid` publico de la cuenta. Nunca el nombre ni el
      * correo (regla dura 21).

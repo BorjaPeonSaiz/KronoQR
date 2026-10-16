@@ -22,6 +22,7 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use OpenTelemetry\API\Trace\SpanKind;
 use Throwable;
 
@@ -36,8 +37,9 @@ use Throwable;
  * pendiente y la publica como revisada, que es lo que dispara su propia alerta:
  * una revision, legitima o no, nunca pasa en silencio.
  *
- * **El orden de los pasos.** El motivo y el responsable se comprueban fuera del
- * candado: no dependen de la cadena. Todo lo demas —que el asiento sea una
+ * **El orden de los pasos.** El motivo y el responsable —cuenta activa con rol
+ * admin o rrhh— se comprueban fuera del candado, y el responsable otra vez
+ * dentro, antes del asiento. Todo lo demas —que el asiento sea una
  * purga, que no sea admisible y que no este ya revisado— se comprueba **dentro**
  * de `SerializedLedgerWrite::withChainLock`, en el orden de candados de siempre,
  * para que dos consolas a la vez no escriban dos revisiones de la misma purga.
@@ -47,6 +49,15 @@ use Throwable;
  */
 final readonly class ReviewOutOfBoundsPurge
 {
+    /**
+     * Quien puede firmar una revision: administracion o RRHH, como la correccion
+     * de la zona del centro. Decision del propietario del 16-10-2026, que cambia
+     * la D7 de la 2.2.1 (antes valia cualquier cuenta de gestion activa).
+     *
+     * @var list<UserRole>
+     */
+    public const array RESPONSIBLE_ROLES = [UserRole::ADMIN, UserRole::RRHH];
+
     public function __construct(
         private PurgeReviewLedger $ledger,
         private ResponsibleAccounts $accounts,
@@ -63,8 +74,12 @@ final readonly class ReviewOutOfBoundsPurge
      *
      * @throws PurgeReviewRejected
      */
-    public function preview(int $purgeAuditEntryId): PurgeReviewPreview
+    public function preview(int $purgeAuditEntryId, ?int $responsibleUserId = null): PurgeReviewPreview
     {
+        if ($responsibleUserId !== null) {
+            $this->assertResponsible($responsibleUserId);
+        }
+
         $assessment = $this->assess($purgeAuditEntryId);
 
         return new PurgeReviewPreview(
@@ -111,12 +126,14 @@ final readonly class ReviewOutOfBoundsPurge
         // 1. Fuera del candado: no dependen de la cadena.
         $reason = PurgeReviewReason::fromText($command->reason);
 
-        if (! $this->accounts->isActiveManagementAccount($command->responsibleUserId)) {
-            throw PurgeReviewRejected::responsibleNotActive($command->responsibleUserId);
-        }
+        $this->assertResponsible($command->responsibleUserId);
 
         // 2-5. Dentro del candado de la cadena.
         return $this->ledgerWrite->withChainLock(function () use ($command, $reason): PurgeReviewOutcome {
+            // Otra vez con la cadena tomada: la cuenta no puede darse de baja ni
+            // perder el rol hasta que el asiento confirme.
+            $this->assertResponsible($command->responsibleUserId);
+
             $assessment = $this->assess($command->purgeAuditEntryId);
             $purge = $assessment['purge'];
 
@@ -149,6 +166,16 @@ final readonly class ReviewOutOfBoundsPurge
                 floorYears: $assessment['floor'],
             );
         });
+    }
+
+    /**
+     * @throws PurgeReviewRejected
+     */
+    private function assertResponsible(int $userId): void
+    {
+        if (! $this->accounts->isActiveManagementAccount($userId, self::RESPONSIBLE_ROLES)) {
+            throw PurgeReviewRejected::responsibleNotActive($userId);
+        }
     }
 
     /**

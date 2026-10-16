@@ -27,12 +27,12 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Y NORMALIZADO con la funcion del dominio, no con una copia
  *
- * `digest` es sensible a mayusculas. Antes de la revision de la 5.5, un
- * `12345678z` guardado y un `12345678Z` en el fichero eran dos huellas distintas:
- * la busqueda no encontraba a nadie y la reimportacion **creaba una segunda
- * ficha de la misma persona**, con su registro horario partido en dos. La forma
- * canonica la decide {@see ImportedEmployee::normaliseNationalId()} y aqui se
- * invoca; dos implementaciones serian dos oportunidades de que se separen.
+ * `digest` es sensible a mayusculas: sin normalizar, un `12345678z` guardado y
+ * un `12345678Z` en el fichero serian dos huellas distintas, la busqueda no
+ * encontraria a nadie y la reimportacion **crearia una segunda ficha de la
+ * misma persona**, con su registro horario partido en dos. La forma canonica la
+ * decide {@see ImportedEmployee::normaliseNationalId()} y aqui se invoca; dos
+ * implementaciones serian dos oportunidades de que se separen.
  *
  * ## Los departamentos se traen de una vez
  *

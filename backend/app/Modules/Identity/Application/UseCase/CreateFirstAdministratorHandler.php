@@ -110,15 +110,15 @@ final readonly class CreateFirstAdministratorHandler
      * La comprobacion y la escritura, **dentro de la misma transaccion y detras
      * de un candado**.
      *
-     * ## El hueco que esto cierra
+     * ## Por que dentro y con candado
      *
-     * Hasta la revision de la 5.5, la comprobacion vivia fuera de la transaccion:
-     * dos peticiones simultaneas con correos distintos la pasaban las dos —no hay
-     * ninguna cuenta todavia— y creaban **dos administradores**. En el unico
-     * endpoint publico de escritura del producto, eso no es una carrera teorica:
-     * es una segunda cuenta con acceso total a la instalacion, creada por quien
-     * pasara por ahi en el mismo segundo. El `UNIQUE` de `users.email` no lo
-     * impedia, porque los correos son distintos — que es justo el caso.
+     * Con la comprobacion fuera de la transaccion, dos peticiones simultaneas
+     * con correos distintos la pasarian las dos —no hay ninguna cuenta
+     * todavia— y crearian **dos administradores**. En el unico endpoint
+     * publico de escritura del producto, eso no es una carrera teorica: es una
+     * segunda cuenta con acceso total a la instalacion, creada por quien pasara
+     * por ahi en el mismo segundo. El `UNIQUE` de `users.email` no lo impide,
+     * porque los correos son distintos — que es justo el caso.
      *
      * ## Candado consultivo y no un indice
      *

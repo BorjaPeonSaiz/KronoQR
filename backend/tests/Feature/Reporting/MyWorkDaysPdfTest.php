@@ -322,7 +322,10 @@ it('responde 503 con problem+json sin Chromium, y el CSV sigue saliendo', functi
     Api::as($contexto['token'])
         ->get('/api/v1/me/export', ['format' => 'pdf'])
         ->assertValidResponse(503)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:service-unavailable');
+        ->assertJsonPath('type', 'urn:kronoqr:problem:service-unavailable')
+        // Generico en el portal: el estado del servidor no es asunto de la
+        // plantilla; la salida, si.
+        ->assertJsonPath('detail', 'El PDF no se puede generar ahora. Descarga el mismo registro en CSV.');
 
     Api::as($contexto['token'])
         ->get('/api/v1/me/export', ['format' => 'csv'])

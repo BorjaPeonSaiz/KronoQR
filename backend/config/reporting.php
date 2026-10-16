@@ -258,4 +258,47 @@ return [
          */
         'download_rate_limit_per_minute' => (int) env('REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT', 30),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Motor de PDF (Chromium) de los informes y del registro propio
+    |--------------------------------------------------------------------------
+    |
+    | Cada PDF arranca un Chromium: un año del registro propio llega a unos
+    | 700 MiB de memoria en su pico (medido en el bloque 23 de la 2.2.1). El
+    | limite por tasa de cada ruta no acota cuantos corren A LA VEZ; esto si,
+    | para todas las rutas que componen PDF con este motor y para el informe en
+    | diferido. El CSV queda fuera de este tope (RL-05).
+    */
+    'pdf' => [
+        /*
+         * Composiciones de PDF simultaneas en toda la instalacion. La que llega
+         * con todas ocupadas espera `wait_seconds` y, si no se libera ninguna,
+         * recibe `503` con `Retry-After` y la salida escrita: pedirlo en CSV.
+         * Subelo solo si el servidor tiene memoria para un Chromium mas.
+         */
+        'max_concurrent' => (int) env('REPORTING_PDF_MAX_CONCURRENT', 2),
+
+        /*
+         * Segundos que una descarga espera un hueco antes del `503`. Corto: es
+         * una peticion con alguien mirando la pantalla, y un PDF tarda de uno a
+         * cuatro segundos en salir.
+         */
+        'wait_seconds' => (int) env('REPORTING_PDF_WAIT_SECONDS', 3),
+
+        /*
+         * Lo mismo para el informe en diferido, que no tiene a nadie esperando
+         * y si un trabajo de cola con media hora de margen.
+         */
+        'queued_wait_seconds' => (int) env('REPORTING_PDF_QUEUED_WAIT_SECONDS', 300),
+
+        /*
+         * PDF etiquetado (estructura para lectores de pantalla) de los INFORMES
+         * DE GESTION: periodo y cuadro de impacto, que tienen el mismo dato en
+         * CSV y XLSX. Apagado de serie: en una tabla larga multiplica el peso
+         * por trece. El registro propio del portal sale etiquetado SIEMPRE, con
+         * o sin esto: es el unico documento sellado de la persona (doc 01 §6.5).
+         */
+        'tagged' => (bool) env('REPORTING_PDF_TAGGED', false),
+    ],
 ];

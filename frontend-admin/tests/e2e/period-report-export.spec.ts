@@ -120,3 +120,32 @@ test(
     await expect(page.getByTestId('export-csv')).toBeEnabled()
   },
 )
+
+test(
+  'con el motor de PDF ocupado se avisa con el tiempo de espera y se ofrece el CSV',
+  { tag: ['@RF-IN-04'] },
+  async ({ page }) => {
+    const api = await stubManagementApi(page, { exportOutcome: 'pdfBusy' })
+    await logIn(page)
+    await generateMarchReport(page)
+
+    await page.getByTestId('export-pdf').click()
+
+    const notice = page.getByTestId('pdf-busy')
+
+    await expect(notice).toContainText('Inténtalo de nuevo en 15 segundos')
+    await expect(notice).toContainText('descarga el CSV')
+
+    const download = page.waitForEvent('download')
+
+    await notice.getByTestId('pdf-busy-use-csv').click()
+    await download
+
+    const formats = api.requests
+      .filter((it) => it.path === '/api/v1/reports/period/export')
+      .map((it) => new URLSearchParams(it.query).get('format'))
+
+    expect(formats).toEqual(['pdf', 'csv'])
+    await expect(notice).toHaveCount(0)
+  },
+)

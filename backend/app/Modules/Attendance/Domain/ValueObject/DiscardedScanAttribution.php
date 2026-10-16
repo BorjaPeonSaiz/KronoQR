@@ -18,8 +18,8 @@ use InvalidArgumentException;
  *
  * Por tarjeta lleva ademas la **emision** de la credencial (`credentials.
  * issued_at`): es la cota inferior con la que la revision diaria descarta un
- * `occurred_at` anterior a que la tarjeta existiera (F6 del dictamen del bloque
- * 18). El constructor privado hace imposibles los estados incoherentes, el mismo
+ * `occurred_at` anterior a que la tarjeta existiera. El constructor privado
+ * hace imposibles los estados incoherentes, el mismo
  * `CHECK discarded_scan_reports_chk_attribution` escrito en PHP.
  */
 final readonly class DiscardedScanAttribution

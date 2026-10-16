@@ -13,7 +13,7 @@ use Throwable;
 /**
  * La transaccion de un alta, una modificacion o una importacion de la
  * plantilla, **reintentada una vez si PostgreSQL la elige para romper un ciclo**
- * (ADR-046 §1.3, caso conocido; revision del bloque 17).
+ * (ADR-046 §1.3, caso conocido).
  *
  * ## El ciclo que el orden de candados no evita
  *
@@ -41,9 +41,8 @@ use Throwable;
  * el error en `Illuminate\Database\DeadlockException`: un `PDOException` que no
  * es `QueryException` y cuyo codigo es `0`. Lo que dice que fue un `40P01` o un
  * `40001` es el SQLSTATE de la excepcion original, que va en `getPrevious()`.
- * Por eso se recorre la cadena de causas (revision del bloque 17, segunda
- * pasada: la primera version solo atrapaba `QueryException` y el segundo cruce
- * salia como `500`).
+ * Por eso se recorre la cadena de causas: atrapar solo `QueryException`
+ * dejaria salir el segundo cruce como `500`.
  *
  * ## Solo en la transaccion de fuera
  *

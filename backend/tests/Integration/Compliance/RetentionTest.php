@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Application\Command\RetentionRunCommand;
 use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
+use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\RetentionPolicyProvider;
 use App\Modules\Compliance\Application\Support\RetentionTelemetry;
@@ -28,7 +29,10 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -276,7 +280,7 @@ function retentionToken(): string
  * El REPARTO DE ROLES no se prueba aqui sino en «solo el rol de mantenimiento
  * puede soltar una particion», que es declarativo y ademas lo intenta de verdad.
  */
-function retentionUsing(ConnectionInterface $connection, string $now): ApplyRetention
+function retentionUsing(ConnectionInterface $connection, string $now, ?ResponsibleAccounts $accounts = null): ApplyRetention
 {
     $clock = FrozenTime::at($now);
 
@@ -299,6 +303,8 @@ function retentionUsing(ConnectionInterface $connection, string $now): ApplyRete
         new RetentionTelemetry(app(LoggerInterface::class)),
         $connection,
         $clock,
+        $accounts ?? new DatabaseResponsibleAccounts($connection),
+        new ChainLockedWrite($connection),
     );
 }
 
@@ -606,6 +612,61 @@ it('suelta la particion vencida con su ancla sellada y deja la cadena verificabl
         $migrator->rollBack();
     }
 })->group('RL-02', 'RS-07');
+
+it('no suelta ninguna particion si la cuenta responsable deja de estar activa antes', function (int $preguntasActiva): void {
+    // Sin filas del registro que purgar y con una particion vencida: soltarla
+    // es irreversible, asi que la cuenta se vuelve a comprobar sin la purga del
+    // registro de por medio (bloque 23 de la 2.2.1). La primera pregunta es la
+    // de la orden; la segunda, la de la purga vacia del registro; la tercera,
+    // la de justo antes de soltar la particion.
+    retentionPaths();
+    WorkforceFixtures::site('Hotel de particiones con responsable', 'Europe/Madrid');
+
+    $migrator = DB::connection('pgsql_migrator');
+    $migrator->beginTransaction();
+
+    try {
+        foreach (AuditLogSchema::createPartitionStatements(2031) as $statement) {
+            $migrator->statement($statement);
+        }
+
+        $trail = new DatabaseAuditTrail($migrator);
+
+        foreach ([1, 2, 3] as $n) {
+            auditEntryAt($trail, '2026-03-0'.$n.' 08:00:00', $n);
+        }
+
+        auditEntryAt($trail, '2027-03-04 08:00:00', 4);
+
+        $cuentas = new class($preguntasActiva) implements ResponsibleAccounts
+        {
+            private int $preguntas = 0;
+
+            public function __construct(private readonly int $activaDurante) {}
+
+            public function isActiveManagementAccount(int $userId, array $roles = []): bool
+            {
+                return ++$this->preguntas <= $this->activaDurante;
+            }
+        };
+
+        $retention = retentionUsing($migrator, PARTITION_NOW, $cuentas);
+        $token = $retention->handle(RetentionRunCommand::simulate())->confirmationToken();
+        $antes = $migrator->table('audit_log')->count();
+
+        expect(fn (): mixed => $retention->handle(RetentionRunCommand::execute($token, 7)))
+            ->toThrow(RetentionResponsibleNotActive::class);
+
+        expect((new DatabaseAuditPartitionArchive($migrator))->attachedYears())->toBe([2026, 2027, 2031])
+            ->and($migrator->table(AuditLogSchema::ANCHORS_TABLE)->count())->toBe(0)
+            ->and($migrator->table('audit_log')->count())->toBe($antes);
+    } finally {
+        $migrator->rollBack();
+    }
+})->with([
+    'baja antes de la purga vacia del registro' => [1],
+    'baja justo antes de soltar la particion' => [2],
+])->group('RF-PR-03', 'RL-04', 'RS-07');
 
 it('aborta sin soltar nada cuando la cadena de la particion no verifica', function (): void {
     retentionPaths();

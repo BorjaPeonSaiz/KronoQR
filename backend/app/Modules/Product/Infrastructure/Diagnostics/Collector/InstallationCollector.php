@@ -74,7 +74,7 @@ final readonly class InstallationCollector implements DiagnosticsCollector
     public function collect(DiagnosticsOptions $options): array
     {
         // Ajustes guardados, centro, perfil y volumen leen la base; version,
-        // entorno y huso no. Cada parte cae por separado (V4-PL-1): con
+        // entorno y huso no. Cada parte cae por separado: con
         // PostgreSQL caido, la version que corre es la primera pregunta de la
         // incidencia, y perderla con el resto de la seccion era perder lo unico
         // que no dependia de la base.

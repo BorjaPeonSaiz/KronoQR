@@ -7,7 +7,7 @@ namespace App\Support\Redis;
 use App\Support\Resilience\CircuitBreaker;
 
 /**
- * The Redis circuit (R3-CH-01): see {@see CircuitBreaker} for the mechanism.
+ * The Redis circuit: see {@see CircuitBreaker} for the mechanism.
  *
  * While open, {@see CircuitBreakingPhpRedisConnector} fails every connection at
  * once with {@see RedisCircuitOpen}, a `RedisException`, so the existing

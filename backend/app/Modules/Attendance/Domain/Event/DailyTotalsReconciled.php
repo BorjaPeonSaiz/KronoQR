@@ -47,9 +47,9 @@ final readonly class DailyTotalsReconciled implements DomainEvent
          * habia fila: la jornada existia en `shift_entries` y no en la
          * proyeccion.
          *
-         * Los seis y no dos desde la tarea 3.6: este asiento es la unica copia
-         * de la fila mala que queda, y con el total y el numero de tramos no se
-         * puede reconstruir una que decia «turno abierto» sobre uno cerrado.
+         * Los seis y no dos: este asiento es la unica copia de la fila mala que
+         * queda, y con el total y el numero de tramos no se puede reconstruir
+         * una que decia «turno abierto» sobre uno cerrado.
          */
         public ?DailyTotalsSnapshot $before,
         /** Lo que dicen los tramos vigentes, que es lo que se ha escrito. */

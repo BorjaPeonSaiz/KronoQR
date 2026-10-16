@@ -11,7 +11,7 @@ use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
-use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordDigest;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordLayout;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordPdfWriter;
@@ -150,7 +150,9 @@ it('compone un PDF de verdad, y el sello forma parte del documento', function ()
 it('usa el motor real y no el doble de las pruebas de feature', function (): void {
     // Control: sin esto, el caso anterior pasaria con un doble enlazado por otra
     // prueba de la suite y no estaria comprobando ningun PDF.
-    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(BrowsershotReportRenderer::class);
+    // El puerto es el tope de Chromium simultaneos delante de Browsershot
+    // (bloque 23 de la 2.2.1); el doble de feature lo sustituiria entero.
+    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class);
 })->group('RF-ID-05');
 
 it('repite en cada pagina el sello con fecha local, persona, periodo y huella', function (): void {

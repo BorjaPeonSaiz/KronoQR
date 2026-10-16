@@ -13,9 +13,9 @@ use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
  * `php artisan identity:deactivate-user` — da de baja una cuenta de gestion
  * (RS-05, RS-06, RL-16, RF-ID-10).
  *
- * **Por que existe, si ya esta el panel.** Desde la 2.2.0 la baja se hace desde
- * el panel (`POST /api/v1/management-accounts/{uuid}/deactivate`); esto queda
- * para cuando el panel no esta disponible, y pasa por el **mismo** caso de uso:
+ * **Por que existe, si ya esta el panel.** La baja se hace desde el panel
+ * (`POST /api/v1/management-accounts/{uuid}/deactivate`); esto queda para
+ * cuando el panel no esta disponible, y pasa por el **mismo** caso de uso:
  * tampoco da de baja la ultima cuenta `admin` activa, porque es una invariante
  * de la instalacion y no una regla de pantalla.
  *

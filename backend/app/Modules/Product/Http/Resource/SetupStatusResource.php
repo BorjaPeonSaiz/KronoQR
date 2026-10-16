@@ -40,8 +40,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * Ninguna de las tres hace falta para lo unico que el panel necesita decidir sin
  * credenciales —si lleva al asistente o a la pantalla de acceso—, y las tres son
- * utiles para quien esta mirando si merece la pena insistir. **Es una correccion
- * de la revision de la 5.5**: antes viajaban siempre.
+ * utiles para quien esta mirando si merece la pena insistir.
  *
  * Con el asistente ya cerrado la lista viaja **vacia** incluso para el
  * administrador: terminada la puesta en marcha, el inventario de lo que se

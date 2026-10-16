@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * "Can I open a TCP connection to this host and port?", answered within a hard
- * time budget that INCLUDES the name resolution (R3-CH-01, R3-CH-02).
+ * time budget that INCLUDES the name resolution.
  *
  * ## Why the DNS needs its own limit
  *

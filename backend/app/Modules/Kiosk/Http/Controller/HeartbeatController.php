@@ -23,8 +23,8 @@ use Illuminate\Http\JsonResponse;
  * dejaria al quiosco reintentando el latido justo cuando la instalacion ya tiene
  * un problema, y ademas apagaria la unica senal que dice que la tablet sigue viva.
  *
- * Lo mismo vale para los `client_errors` que el latido trae desde la tarea 5.12
- * (RF-PD-15): si el historico no los pudo guardar, la respuesta sale igual con
+ * Lo mismo vale para los `client_errors` que trae el latido (RF-PD-15): si el
+ * historico no los pudo guardar, la respuesta sale igual con
  * `client_errors_accepted: 0` y la tablet los reintenta en el latido siguiente.
  * **Reportar un error nunca puede costar un fichaje** (regla dura 19).
  */

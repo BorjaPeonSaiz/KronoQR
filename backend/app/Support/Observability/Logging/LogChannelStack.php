@@ -94,7 +94,7 @@ final class LogChannelStack
     }
 
     /**
-     * La pila del canal `scheduler` (V4-BE-1): la misma que la del producto,
+     * La pila del canal `scheduler`: la misma que la del producto,
      * con `stderr` cambiado por el log del contenedor.
      *
      * `schedule:finish` corre con su salida de error tirada a `/dev/null`, asi

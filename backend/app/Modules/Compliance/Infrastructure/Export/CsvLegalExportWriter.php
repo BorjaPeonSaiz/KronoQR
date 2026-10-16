@@ -69,10 +69,9 @@ use Throwable;
  * incrustados obligaria a tocar el repositorio para vender a un cliente que
  * trabaja en ingles.
  *
- * **Desde la tarea 5.8 el nombre sale de `installation_settings` y no del
- * `.env`**, asi que el documento que se le entrega a la Inspeccion lleva el
- * nombre que el cliente ve en su panel. Antes eran dos sitios y podian decir
- * cosas distintas.
+ * **El nombre sale de `installation_settings` y no del `.env`**, asi que el
+ * documento que se le entrega a la Inspeccion lleva el nombre que el cliente ve
+ * en su panel: un solo sitio, que no puede contradecirse.
  *
  * ## Escribe a fichero, y por eso devuelve el recuento
  *

@@ -30,7 +30,7 @@ enum RetentionScope: string
 {
     /**
      * Tramos, totales diarios, correcciones, escaneos e incidencias (RL-02), y
-     * desde la 2.2.0 los avisos de fichaje descartado (RN-22, ADR-047), que
+     * los avisos de fichaje descartado (RN-22, ADR-047), que
      * envejecen con `scan_events`.
      */
     case WorkRecords = 'work_records';

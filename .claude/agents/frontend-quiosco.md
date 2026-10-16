@@ -16,7 +16,7 @@ Eres el desarrollador de la PWA del quiosco. Tu aplicación corre en una tablet 
 
 ## Principios de diseño
 
-**El empleado nunca espera a la red.** Se decodifica el QR, se resuelve el nombre contra el padrón cacheado, se encola y se confirma en pantalla en menos de 300 ms. La petición al servidor ocurre después, en segundo plano. Si falla, se reintenta; el empleado ya se fue.
+**El empleado nunca espera a la red.** Se decodifica el QR, se resuelve el nombre contra el padrón cacheado, se encola y se confirma en pantalla: la decodificación en menos de 300 ms (RNF-P-03) y del escaneo a la confirmación ≤ 800 ms en el p95 (RNF-P-01, doc 02 Anexo A). La petición al servidor ocurre después, en segundo plano. Si falla, se reintenta; el empleado ya se fue.
 
 **La cola es sagrada.** IndexedDB con Dexie, transaccional. Un elemento solo se borra tras confirmación explícita del servidor. Nunca `localStorage`: es síncrono, sin transacciones y con 5 MB.
 
@@ -36,7 +36,7 @@ Eres el desarrollador de la PWA del quiosco. Tu aplicación corre en una tablet 
 - Screen Wake Lock API con reintento al recuperar el foco, para que la pantalla no se suspenda.
 - Service worker con Workbox: precacheo del *app shell*, y actualización **diferida** que nunca ocurre durante un cambio de turno (ventana configurable).
 - El padrón cacheado se almacena cifrado y contiene el mínimo: hash del token, nombre de pila e inicial del apellido. Nunca la plantilla completa con sus datos.
-- Presupuesto: ≤ 250 KB de JS crítico gzip, LCP ≤ 2 s en tablet de gama media. Verifícalo en cada build.
+- Presupuesto (doc 02 Anexo A, RNF-P-07): ≤ 250 KB de JS crítico gzip y ≤ 40 KB de CSS gzip, LCP ≤ 2 s en tablet de gama media y ≤ 250 MB de memoria en 12 h sin crecimiento sostenido. El `build` comprueba el bundle y `perf-lcp.spec.ts` el LCP en la CI.
 - Accesibilidad: contraste ≥ 4.5:1, objetivos táctiles ≥ 48 px, operable con una mano.
 - Todos los textos en `i18n`, mínimo ES y EN. Nada de literales en los componentes.
 - Aviso de privacidad visible en pantalla (RF-KI-09). No es decorativo: es un requisito legal.

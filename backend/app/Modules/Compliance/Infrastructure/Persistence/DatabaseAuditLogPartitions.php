@@ -20,10 +20,10 @@ use Illuminate\Database\QueryException;
  * puede mentir.
  *
  * **Crear una particion es DDL, y la aplicacion no lo hace** (ADR-042). El rol
- * de la aplicacion no tiene DDL desde la tarea 1.14 y no debe tener ninguna
- * credencial que pueda alterar el registro, asi que `create()` pide la particion
- * a la funcion `audit_log_create_partition`: `SECURITY DEFINER`, propiedad del
- * rol de migracion y ejecutable solo por el rol de la aplicacion, que crea la
+ * de la aplicacion no tiene DDL y no debe tener ninguna credencial que pueda
+ * alterar el registro, asi que `create()` pide la particion a la funcion
+ * `audit_log_create_partition`: `SECURITY DEFINER`, propiedad del rol de
+ * migracion y ejecutable solo por el rol de la aplicacion, que crea la
  * particion del año en curso o del siguiente con los mismos permisos que las
  * demas ({@see AuditLogSchema::createFunctionStatements()}). Este adaptador
  * corre, por tanto, sobre la conexion de la aplicacion, igual que todo el

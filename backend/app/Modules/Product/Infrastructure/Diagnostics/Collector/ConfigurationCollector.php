@@ -55,7 +55,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
     public function collect(DiagnosticsOptions $options): array
     {
         // El `.env` filtrado no depende de la base; los ajustes guardados si.
-        // Con PostgreSQL caido (V4-PL-1) sale el primero y las cuatro claves
+        // Con PostgreSQL caido sale el primero y las cuatro claves
         // que dependen de los segundos dicen `unavailable`.
         $resolved = SectionPart::of($this->settings->handle(...));
         $env = DiagnosticsConfigurationAllowlist::apply($this->environment);

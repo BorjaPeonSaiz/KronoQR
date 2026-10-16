@@ -108,6 +108,20 @@ export function isApiError(value: unknown): value is ApiError {
   return value instanceof ApiError
 }
 
+/** `type` del `503` de las exportaciones en PDF cuando hay demasiados PDF simultaneos (con `Retry-After`). */
+export const PDF_RENDERING_BUSY_TYPE = 'urn:kronoqr:problem:pdf-rendering-busy'
+
+/**
+ * Si el fallo es el `503` «el motor de PDF esta ocupado». Se distingue del motor
+ * ausente (`service-unavailable`), que no se arregla esperando: aqui basta
+ * reintentar tras `retryAfterSeconds` o llevarse el CSV.
+ */
+export function isPdfRenderingBusy(error: unknown): boolean {
+  return (
+    isApiError(error) && error.status === 503 && error.problem?.type === PDF_RENDERING_BUSY_TYPE
+  )
+}
+
 /** Valor admitido en una cadena de consulta. `undefined` no se serializa. */
 export type QueryValue = string | number | boolean | undefined
 

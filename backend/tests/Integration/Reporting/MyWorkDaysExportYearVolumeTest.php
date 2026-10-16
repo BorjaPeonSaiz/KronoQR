@@ -43,7 +43,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * - **El PDF, contra los 10 s**, que es la frontera a partir de la cual
  *   RNF-P-05 obligaria a generarlo en diferido. Medido el 13-10-2026 en el
  *   entorno de desarrollo: 3,9 s aislado y 6,9 s con otra suite corriendo a la
- *   vez. Afirmar 5 s seria una prueba que falla segun la carga de la maquina;
+ *   vez; el 16-10-2026, 3,3 s aislado (2,9 en Chromium) con un pico de
+ *   ~690 MiB de memoria proporcional de Chromium. Afirmar 5 s seria una prueba
+ *   que falla segun la carga de la maquina;
  *   afirmar 10 s es la que avisa el dia que la descarga en blanco deba dejar
  *   de ser sincrona.
  *
@@ -206,6 +208,9 @@ it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupu
     // El riesgo de PR19: Chromium compone el documento entero antes de devolver
     // los bytes. Se mide con el motor real, no con el doble de feature.
     App::setLocale('es');
+    // Con el etiquetado de los informes de gestion apagado: el registro propio
+    // tiene que salir etiquetado igual.
+    config()->set('reporting.pdf.tagged', false);
     $contexto = anoCompletoDeTramos();
 
     $descarga = descargarAnoEnBlanco($contexto['token'], ['format' => 'pdf']);
@@ -226,10 +231,14 @@ it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupu
         // Un año de tramos ocupa varias paginas: si saliera una sola, el
         // documento se habria cortado.
         ->and($paginas)->toBeGreaterThan(10)
-        // Un PDF que se descarga desde datos moviles y se envia por correo: por
-        // debajo de 5 MiB para un año entero. Medido en el bloque 8 de la 2.2.1:
-        // 4,5 MiB con 4 tramos al dia (margen ~10 %). No sale de ningun requisito:
-        // el peso del PDF anual queda como riesgo de PR19 en el bloque 23.
-        ->and($bytes)->toBeLessThan(5 * 1_048_576)
+        // ETIQUETADO SIEMPRE (doc 01 §6.5): es el unico documento sellado de la
+        // persona y el CSV no lleva sello ni huella, asi que la estructura para
+        // lectores de pantalla no es opcional aqui, diga lo que diga
+        // `reporting.pdf.tagged`.
+        ->and($descarga['body'])->toContain('/StructTreeRoot')
+        // Y pesa: 4,5 MiB con 4 tramos al dia (4616 KiB medidos en el bloque 23
+        // de la 2.2.1), casi todo arbol de estructura. El techo de 5,5 MiB deja
+        // ~20 % de margen y avisa si la plantilla engorda.
+        ->and($bytes)->toBeLessThan((int) (5.5 * 1_048_576))
         ->and($descarga['seconds'])->toBeLessThan(MY_WORK_DAYS_EXPORT_YEAR_SYNC_LIMIT_SECONDS);
 })->group('RF-ID-05', 'RL-05', 'RNF-P-05')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');

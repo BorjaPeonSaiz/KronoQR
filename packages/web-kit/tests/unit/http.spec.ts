@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   isApiError,
+  isPdfRenderingBusy,
   request,
   requestBlob,
   requestJson,
@@ -304,5 +305,17 @@ describe('cliente HTTP', () => {
     await request('/api/v1/setup/steps/license', { method: 'PUT', body: { state: 'skipped' } })
 
     expect((spy.mock.calls[0]?.[1] as RequestInit).method).toBe('PUT')
+  })
+})
+
+describe('isPdfRenderingBusy', () => {
+  const problem = (status: number, type: string) =>
+    new ApiError({ kind: 'unavailable', status, problem: { type, title: 'x', status } })
+
+  it('distingue el tope de PDF simultaneos del motor ausente', () => {
+    expect(isPdfRenderingBusy(problem(503, 'urn:kronoqr:problem:pdf-rendering-busy'))).toBe(true)
+    expect(isPdfRenderingBusy(problem(503, 'urn:kronoqr:problem:service-unavailable'))).toBe(false)
+    expect(isPdfRenderingBusy(problem(429, 'urn:kronoqr:problem:pdf-rendering-busy'))).toBe(false)
+    expect(isPdfRenderingBusy(new Error('x'))).toBe(false)
   })
 })

@@ -8,18 +8,17 @@ use Illuminate\Console\Command;
 
 /**
  * `php artisan backup:wal-metrics` — mide cada minuto cuanto WAL esta sin
- * archivar (RNF-D-02, RL-12; bloque 20 de la 2.2.0, hallazgo R5-DV-01).
+ * archivar (RNF-D-02, RL-12).
  *
  * ## Por que existe
  *
- * Hasta la 2.1.0 la edad del ultimo WAL archivado la publicaba `backup.sh` al
- * terminar la copia de las 03:15: una foto al dia, no una serie. Si el
- * archivado se paraba a las 10:00, la alerta no lo veia hasta la madrugada
- * siguiente, y el RPO de 15 minutos prometido era una afirmacion sin medida.
- * Lo que mide `infra/scripts/wal-metrics.sh` es la exposicion real —cuanto
- * lleva sin protegerse el dato mas antiguo no archivado, incluido el segmento
- * en curso— y la escribe en `BACKUP_PATH/metrics/kronoqr_wal.prom` para
- * `node-exporter`.
+ * Una foto al dia —la edad del ultimo WAL archivado al terminar la copia de
+ * las 03:15— no es una serie: si el archivado se parara a las 10:00, la
+ * alerta no lo veria hasta la madrugada siguiente, y el RPO de 15 minutos
+ * prometido seria una afirmacion sin medida. Lo que mide
+ * `infra/scripts/wal-metrics.sh` es la exposicion real —cuanto lleva sin
+ * protegerse el dato mas antiguo no archivado, incluido el segmento en curso—
+ * y la escribe en `BACKUP_PATH/metrics/kronoqr_wal.prom` para `node-exporter`.
  *
  * ## Delgado a proposito, como `backup:run`
  *

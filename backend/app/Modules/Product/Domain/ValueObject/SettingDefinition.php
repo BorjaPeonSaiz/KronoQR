@@ -92,7 +92,7 @@ final readonly class SettingDefinition
         public bool $allowsLabels = false,
         /**
          * La cadena es una direccion `https` con servidor y sin credenciales en
-         * la autoridad (`PRIVACY_POLICY_URL`, F15 del dictamen del bloque 18).
+         * la autoridad (`PRIVACY_POLICY_URL`).
          * El patron ya acota los caracteres; esto lo comprueba ademas
          * `parse_url`, que es lo que de verdad decide como se lee la direccion.
          */
@@ -143,7 +143,7 @@ final readonly class SettingDefinition
     /**
      * Una direccion **`https`**, opcional (vacia = «sin configurar»), con
      * nombre de servidor y sin usuario ni contraseña en la autoridad
-     * (`PRIVACY_POLICY_URL`, RF-KI-09, F15 del dictamen del bloque 18).
+     * (`PRIVACY_POLICY_URL`, RF-KI-09).
      *
      * Solo ASCII imprimible y sin barra invertida: un dominio internacional va
      * en punycode, y lo que no se pueda leer igual en el QR y en la pantalla no

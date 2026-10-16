@@ -72,17 +72,16 @@ use Spatie\LaravelPdf\PdfBuilder;
  * remota convertiria la impresion de tarjetas en algo que depende de la red del
  * cliente.
  *
- * ## La marca es configuracion, y desde la 5.8 sale de la instalacion
+ * ## La marca es configuracion de la instalacion
  *
  * Nombre, logotipo y color de acento llegan por los puertos
  * {@see BrandingProvider} y {@see BrandingLogoReader} (RF-PD-08, regla dura 13):
  * son filas de `installation_settings` que el cliente edita desde el panel, con
- * auditoria y sin reiniciar nada. **Ya no se lee `config('branding.*')`**, que
- * era una variable de entorno y obligaba a reiniciar para cambiar un color.
+ * auditoria y sin reiniciar nada. **No se lee `config('branding.*')`**, que es
+ * una variable de entorno y obligaria a reiniciar para cambiar un color.
  *
- * La plantilla no se entero del cambio, y ese era el objetivo desde la fase 1:
- * nacio recibiendo la marca desde fuera precisamente para que la fuente pudiera
- * cambiar sin reescribirla.
+ * La plantilla recibe la marca desde fuera precisamente para que la fuente
+ * pueda cambiar sin reescribirla.
  *
  * **El logotipo puede faltar y no pasa nada**: una tarjeta sin logotipo se
  * imprime igual. Lo que no puede es faltar el color, y por eso el catalogo

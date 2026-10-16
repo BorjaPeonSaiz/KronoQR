@@ -63,7 +63,7 @@ final readonly class MetricsController
     {
         // The store is asked FIRST and once: if it does not answer, its series
         // are not even attempted, and `kronoqr_metrics_store_up 0` says why
-        // they are missing (R3-CH-01).
+        // they are missing.
         $storeUp = $this->store->isUp();
 
         $families = [

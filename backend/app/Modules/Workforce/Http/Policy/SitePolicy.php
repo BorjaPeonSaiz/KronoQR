@@ -6,14 +6,14 @@ namespace App\Modules\Workforce\Http\Policy;
 
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
+use App\Modules\Workforce\Application\Support\SiteMaintainers;
 
 /**
  * Quien puede ver, crear y modificar el centro de la instalacion (ADR-040).
  *
  * Sin `viewAny`: no hay lista, y no la habra.
  *
- * ## `create` existe desde la tarea 5.5, y es de `admin` y de nadie mas
+ * ## `create` es de `admin` y de nadie mas
  *
  * Crear el centro es la puesta en marcha (`POST /api/v1/setup/site`) y ocurre
  * **una vez en la vida de la instalacion**: fija la zona horaria con la que se
@@ -38,15 +38,14 @@ final class SitePolicy
     }
 
     /**
-     * Los mismos que pueden responder de la correccion de la zona por consola
-     * (RN-23): la lista vive en el caso de uso para que la consola nunca
-     * permita lo que la API niega.
+     * Los mismos que corrigen la zona por consola (RN-23): una sola lista para
+     * que la consola nunca permita lo que la API niega.
      *
      * @return list<UserRole>
      */
     private static function writers(): array
     {
-        return CorrectSiteTimezoneHandler::RESPONSIBLE_ROLES;
+        return SiteMaintainers::ROLES;
     }
 
     public function view(ManagementActor $actor): bool

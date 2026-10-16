@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AdoptionDashboardView from '@/features/reports/AdoptionDashboardView.vue'
 import type { AdoptionIndicator, AdoptionOriginShare, AdoptionReport } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import es from '@/shared/i18n/locales/es.json'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 vi.mock('@/shared/ui/ChartWithTable.vue', () => ({
@@ -478,5 +479,47 @@ describe('cuadro de impacto y adopción', () => {
 
     expect(wrapper.find('[data-test="baseline-not-declared"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="baseline-declared"]').exists()).toBe(false)
+  })
+
+  it('503 pdf-rendering-busy en el PDF: aviso propio con Retry-After y salida en CSV y XLSX', async () => {
+    const fetchSpy = stubFetch((input) => {
+      const url = String(input)
+
+      if (url.includes('/reports/adoption/export')) {
+        return url.includes('format=pdf')
+          ? new Response(
+              JSON.stringify({
+                type: 'urn:kronoqr:problem:pdf-rendering-busy',
+                title: 'Ocupado',
+                status: 503,
+              }),
+              {
+                status: 503,
+                headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '7' },
+              },
+            )
+          : new Response('contenido-de-prueba', {
+              status: 200,
+              headers: { 'Content-Type': 'text/csv' },
+            })
+      }
+
+      return url.includes('/reports/adoption') ? jsonResponse(report()) : jsonResponse({}, 404)
+    })
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:kq', revokeObjectURL: () => {} })
+
+    const wrapper = await mountView(AdoptionDashboardView)
+    await settle()
+
+    await wrapper.find('[data-test="export-pdf"]').trigger('click')
+    await settle()
+
+    const message = es.reports.pdfBusy.message.replace('{seconds}', '7')
+
+    expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(message)
+    expect(wrapper.find('[data-test="pdf-busy-use-xlsx"]').exists()).toBe(true)
+    expect(announcement.value).toBe(message)
+    expect(fetchSpy).toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })

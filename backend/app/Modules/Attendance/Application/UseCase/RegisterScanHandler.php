@@ -156,8 +156,8 @@ use RuntimeException;
  *   umbral de la instalacion, deja el fichaje marcado para validacion humana
  *   (RN-15, {@see ReviewPolicy}); el fichaje se acepta siempre. Nunca se pierde
  *   una jornada por un problema tecnico ajeno al empleado. La incidencia
- *   `clock_skew` que consume esa marca la abre la pasada nocturna desde la tarea
- *   2.6 (ADR-032), y la tarea 3.5 le anadio el aviso en la tablet.
+ *   `clock_skew` que consume esa marca la abre la pasada nocturna (ADR-032), y
+ *   la tablet avisa.
  * - **No distingue causas de rechazo hacia fuera** (regla dura 17, RS-03). Las
  *   cuatro —prefijo, clave, firma, credencial revocada— y la quinta —empleado no
  *   activo, RN-14— recorren exactamente el mismo camino y escriben la misma
@@ -397,11 +397,11 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * solo con la persona **de baja**: una suspendida no tiene instante con el
      * que comparar. La retirada es la recepcion del escaneo.
      *
-     * La cota inferior es el **alta** de la persona (F2 del dictamen del bloque
-     * 18): aqui la tarjeta resolvio y su emision no viaja, y el alta es anterior
-     * a cualquier tarjeta suya. Sin alta registrada o sin zona del centro no se
-     * afirma nada. Es una carrera de microsegundos con la baja: la consulta de
-     * la zona solo la paga ese camino.
+     * La cota inferior es el **alta** de la persona: aqui la tarjeta resolvio y
+     * su emision no viaja, y el alta es anterior a cualquier tarjeta suya. Sin
+     * alta registrada o sin zona del centro no se afirma nada. Es una carrera
+     * de microsegundos con la baja: la consulta de la zona solo la paga ese
+     * camino.
      */
     private function offboardedBeforeScanning(
         RegisterScanCommand $command,
@@ -797,8 +797,8 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * bandeja de FICHAJES que validar, y una tarjeta que no resuelve no describe
      * el fichaje de nadie. El fichaje irreconciliable si: ahi hubo una persona
      * pasando su tarjeta y lo unico que falta es decidir que tramo describe.
-     * Y desde la 2.2.0 la tarjeta **autentica** usada antes de su retirada
-     * (RN-20): tambien describe el fichaje de alguien, el de su titular.
+     * Y la tarjeta **autentica** usada antes de su retirada (RN-20): tambien
+     * describe el fichaje de alguien, el de su titular.
      *
      * **Que lee la revision diaria.** Para el desfase de reloj (RN-15), la marca.
      * Para RN-18, `result = 'rejected_out_of_order'` **y** la marca: el resultado
@@ -891,7 +891,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         }
 
         // Un rechazo de verdad se reconstruye SIN buscar a nadie (RS-03, regla
-        // dura 17, F1 del dictamen del bloque 18). Desde RN-20 la fila de una
+        // dura 17). Desde RN-20 la fila de una
         // tarjeta autentica retirada lleva a su titular; buscarlo aqui costaria
         // dos consultas que el reenvio de una firma falsa no paga, despues del
         // suelo y sin relleno: un oraculo de «esta tarjeta era de alguien». El

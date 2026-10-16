@@ -87,9 +87,7 @@ it('no deja los topes en la sesion tras una migracion real del migrador', functi
     $connection = DB::connection($name);
 
     /** @var list<string> $applied */
-    $applied = $connection->table('migrations')->orderBy('id')->pluck('migration')->map(
-        static fn (mixed $migration): string => (string) $migration // @phpstan-ignore-line cast.string (`pluck` devuelve `mixed`; la columna es `varchar` y el nombre de una migracion siempre es texto)
-    )->values()->all();
+    $applied = $connection->table('migrations')->orderBy('id')->pluck('migration')->map(static fn (mixed $name): string => is_string($name) ? $name : throw new UnexpectedValueException('migrations.migration no es texto'))->values()->all();
     $position = array_search(MIGRATION_LOCK_LIMITS_REAL, $applied, true);
 
     expect($position)->toBeInt(MIGRATION_LOCK_LIMITS_REAL.' no esta aplicada.');
@@ -149,8 +147,8 @@ it('se niega a validar una restriccion dentro de una transaccion', function (): 
     $migration = new LockLimitedMigration;
 
     expect(static fn () => DB::transaction(static fn () => $migration->validate('incidents', 'incidents_chk_type')))
-        ->toThrow(LogicException::class, '$withinTransaction = false')
-        ->and(static fn () => DB::transaction(static fn () => $migration->lockWaitOnly(static fn (): bool => true)))
+        ->toThrow(LogicException::class, '$withinTransaction = false');
+    expect(static fn () => DB::transaction(static fn () => $migration->lockWaitOnly(static fn (): null => null)))
         ->toThrow(LogicException::class, '$withinTransaction = false');
 })->group('RNF-D-04');
 

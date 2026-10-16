@@ -24,6 +24,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -42,6 +43,7 @@ import PeriodReportTable from './PeriodReportTable.vue'
 import { generatePeriodReport, type PeriodReportQuery } from './periodReport.api'
 import { downloadPeriodReport, type PeriodReportFormat } from './periodReportExport.api'
 import ReportExportsPanel from './ReportExportsPanel.vue'
+import PdfBusyNotice from './PdfBusyNotice.vue'
 import {
   reportExceedsSynchronousBudget,
   requestReportExport,
@@ -112,6 +114,9 @@ const generatedQuery = ref<PeriodReportQuery | null>(null)
 /** Formato que se esta descargando ahora mismo, o `null` si ninguno. */
 const downloading = ref<PeriodReportFormat | null>(null)
 const downloadError = ref<unknown>(null)
+/** El motor de PDF esta ocupado: se ofrecen CSV y XLSX, que no lo usan. */
+const pdfBusy = ref(false)
+const pdfBusyRetryAfter = ref<number | null>(null)
 
 const queryClient = useQueryClient()
 
@@ -256,6 +261,8 @@ async function download(format: PeriodReportFormat): Promise<void> {
 
   downloading.value = format
   downloadError.value = null
+  pdfBusy.value = false
+  pdfBusyRetryAfter.value = null
   oversizedQuery.value = null
   oversizedFixedFormat.value = null
   backgroundRequested.value = null
@@ -267,6 +274,12 @@ async function download(format: PeriodReportFormat): Promise<void> {
     downloadDocument(downloaded.document)
     announce(t('reports.period.export.done', { format: format.toUpperCase() }))
   } catch (caught) {
+    if (format === 'pdf' && isPdfRenderingBusy(caught)) {
+      pdfBusy.value = true
+      pdfBusyRetryAfter.value = isApiError(caught) ? caught.retryAfterSeconds : null
+      return
+    }
+
     downloadError.value = caught
     announce(t('reports.period.export.failed'))
 
@@ -478,6 +491,14 @@ const fieldClass =
         :error="downloadError"
         :field-labels="fieldLabels"
         class="mt-3"
+      />
+
+      <PdfBusyNotice
+        v-if="pdfBusy"
+        :retry-after-seconds="pdfBusyRetryAfter"
+        :formats="['csv', 'xlsx']"
+        :disabled="downloading !== null"
+        @use="(format) => download(format as PeriodReportFormat)"
       />
 
       <!-- RF-IN-06: la descarga que se acaba de pedir no cabe en el acto.

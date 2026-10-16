@@ -32,7 +32,7 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
  *   se exige el montaje: el entorno de desarrollo monta el codigo entero.
  * - `files.retention_reports` — el directorio de los informes de retencion se
  *   puede escribir, y no esta dentro de `storage/app`. Desde `horizon` es al
- *   reves (2.2.0, A3-R2): NO se tiene que poder escribir, porque ni la
+ *   reves: NO se tiene que poder escribir, porque ni la
  *   propuesta ni la purga corren alli ({@see RuntimeService}).
  * - `files.class_roots` — las raices de clase no coinciden ni se solapan, ni son
  *   `storage/app`, ni estan dentro de `BACKUP_PATH`. **Falla**: con dos raices
@@ -185,7 +185,7 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
         $writable = is_writable($path);
 
         if (! $this->service->writesRetentionReports()) {
-            // `horizon` (2.2.0, bloque 20, A3-R2): ni la propuesta ni la purga
+            // `horizon`: ni la propuesta ni la purga
             // corren ahi, asi que NO debe poder escribir el informe que defiende
             // una purga. Escribible en produccion es el docker-compose.yml de la
             // 2.1.0 todavia en uso.
@@ -248,7 +248,7 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
 
         if ($outside !== []) {
             // En produccion es FALLO, igual que `files.storage_volume`: una raiz
-            // fuera del volumen compartido es R3-PL-01 otra vez —lo que escribe
+            // fuera del volumen compartido parte los ficheros —lo que escribe
             // `horizon` no lo ve `app`—. Fuera de produccion, aviso.
             return new DoctorFinding(
                 'files.class_roots',

@@ -132,8 +132,13 @@ management account that authorises the purge.)
 
 **What happens, in order:**
 
-1. The phrase is checked. If it does not match what would be purged **now**, it
-   goes no further: a report from three months ago cannot be executed.
+1. `--responsible` is checked: it must be the id (a positive integer) of an
+   **active management account**. If it is not —letters, an account that does
+   not exist or one that has been deactivated—, the command exits with code `2`
+   without simulating or deleting anything. It is checked again before dropping
+   each partition and before the audit entry. Then the phrase is checked. If it
+   does not match what would be purged **now**, it goes no further: a report
+   from three months ago cannot be executed.
 2. **The chain is verified** for every audit partition that was going to be
    dropped. If one does not verify, **it aborts without deleting anything**.
 3. The expired working-time record is purged, with its entry in `audit_log` in
@@ -873,7 +878,7 @@ stopped running):
 | `DiscrepanciaEntreRegistroYAuditoria` | Any | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has written to the time record outside the application. Preserve the evidence (§2 of that runbook) before touching anything, and do not generate legal exports of the period until it is cleared up |
 | `ConciliacionDelRegistroAusente` | > 26 h without reconciling | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive and run `compliance:reconcile-work-record` by hand |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 days without the full reconciliation | High | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Run `compliance:reconcile-work-record --full` by hand. After installing or updating it does not fire until a Sunday has gone by |
-| `PurgaFueraDeLimitesRevisada` | The number of reviewed purges rises compared with a day earlier | Medium | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has marked an out-of-bounds purge as reviewed with `--acknowledge`. Check the `retention.purge_reviewed` entry in `audit_log` (who answers for it and the reason) and that it matches an incident already investigated; if nobody recognises it, handle it as `DiscrepanciaEntreRegistroYAuditoria`. It clears itself after a day |
+| `PurgaFueraDeLimitesRevisada` | The number of reviewed purges rises compared with a day earlier | Medium | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has marked an out-of-bounds purge as reviewed with `--acknowledge`. Check the `retention.purge_reviewed` entry in `audit_log` (who answers for it —an active administration or HR account, the only ones that can sign it— and the reason) and that it matches an incident already investigated; if nobody recognises it, handle it as `DiscrepanciaEntreRegistroYAuditoria`. It clears itself after a day |
 | `PurgaRevisadaQueExplicaBorrados` | The number of reviewed purges that explain deletions (`explains_deletions="true"`) rises compared with a day earlier | Critical (integrity) | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | An `--acknowledge` review makes earlier deletions up to the cut-off stop showing as discrepancies. Verify today with the person who signed (`responsible`) that they did it, check who had shell access to the server, and that a matching report exists. If nobody recognises it, it may be a forged purge + review pair: handle it as an integrity incident |
 | `ParticionDeAuditoriaAusente` | The current year's partition is missing | Critical | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | **Clock-ins are down**: run `compliance:ensure-audit-partitions` now |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |

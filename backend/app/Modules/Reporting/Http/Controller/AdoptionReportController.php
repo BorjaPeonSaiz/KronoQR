@@ -39,9 +39,7 @@ use Illuminate\Support\Facades\Config;
  *      lugar de en una llamada de soporte.
  *
  * Se comprueba la licencia **antes** de construir la consulta, para que una
- * instalacion sin la funcionalidad no llegue siquiera a tocar la base de datos. Es
- * ademas la **primera consumidora** de `ImpactDashboard`, que estaba en el catalogo
- * desde la tarea 5.3 sin que nada la mirara.
+ * instalacion sin la funcionalidad no llegue siquiera a tocar la base de datos.
  *
  * **Esto no es el registro legal.** El fichaje, la consulta de jornadas, el portal
  * del empleado y la exportacion para la Inspeccion no se degradan jamas (RL-06,

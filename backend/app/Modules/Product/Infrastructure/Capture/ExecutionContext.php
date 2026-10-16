@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Capture;
 
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use Closure;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskFailed;
@@ -91,7 +92,7 @@ final class ExecutionContext
      * Los oyentes, en el unico sitio donde se puede leer entero cual abre y cual
      * cierra. Los registra `ProductServiceProvider::registerErrorCapture()`.
      *
-     * @return array<class-string, callable(object): void>
+     * @return array<class-string, Closure(object): void>
      */
     public function listeners(): array
     {

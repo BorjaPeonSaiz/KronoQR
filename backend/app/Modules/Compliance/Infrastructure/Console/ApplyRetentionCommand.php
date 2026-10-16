@@ -7,12 +7,14 @@ namespace App\Modules\Compliance\Infrastructure\Console;
 use App\Modules\Compliance\Application\Command\RetentionRunCommand;
 use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
 use App\Modules\Compliance\Application\Exception\RetentionNotConfirmed;
+use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
 use App\Modules\Compliance\Application\UseCase\ApplyRetention;
 use App\Modules\Compliance\Application\UseCase\RetentionOutcome;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
@@ -45,13 +47,16 @@ use Illuminate\Support\Facades\Config;
  * cadena de auditoria que no verifica, una frase que no corresponde o la falta de
  * centro de trabajo. Un fallo aqui nunca deja el sistema a medias: lo destructivo
  * va detras de todas las comprobaciones.
+ * `2` si `--responsible` no es un id entero positivo o nombra una cuenta que no
+ * existe o no esta activa, tanto al simular como al ejecutar: no se simula ni se
+ * borra nada.
  */
 final class ApplyRetentionCommand extends Command
 {
     protected $signature = 'compliance:apply-retention
         {--dry-run : Simula y no borra nada. Es el modo por defecto}
         {--confirm= : Frase que imprime la simulacion. Sin ella NO se borra nada}
-        {--responsible= : Id de la cuenta de gestion que autoriza la purga, para el asiento}
+        {--responsible= : Id de la cuenta de gestion activa que autoriza la purga, para el asiento}
         {--batch= : Filas por sentencia de borrado. Por defecto compliance.retention.batch_size}';
 
     protected $description = 'Propone la purga por retencion y, con confirmacion explicita, la ejecuta (RF-PR-03)';
@@ -65,12 +70,27 @@ final class ApplyRetentionCommand extends Command
         // ha pedido es simular. Ante dos senales contrarias, la que no borra.
         $simulate = $confirmation === '' || $this->option('dry-run') === true;
 
+        // `--responsible` firma el asiento: `12abc` no es la cuenta 12, es un
+        // error de quien teclea. Sale con 2 sin simular ni borrar nada.
+        $responsibleOption = $this->stringOption('responsible');
+        $responsible = $responsibleOption === '' ? null : ConsoleIds::positive($responsibleOption);
+
+        if ($responsibleOption !== '' && $responsible === null) {
+            $this->error($this->text('retention.invalid_responsible', ['value' => $responsibleOption]));
+
+            return self::INVALID;
+        }
+
         $order = $simulate
-            ? RetentionRunCommand::simulate($batchSize)
-            : RetentionRunCommand::execute($confirmation, $this->responsibleUserId(), $batchSize);
+            ? RetentionRunCommand::simulate($batchSize, $responsible)
+            : RetentionRunCommand::execute($confirmation, $responsible, $batchSize);
 
         try {
             $outcome = $retention->handle($order);
+        } catch (RetentionResponsibleNotActive $notActive) {
+            $this->error($this->text('retention.responsible_not_active', ['id' => (string) $notActive->userId]));
+
+            return self::INVALID;
         } catch (RetentionNotConfirmed|AuditPartitionNotPurgeable|InstallationSiteMissing $stopped) {
             $this->error($stopped->getMessage());
 
@@ -146,9 +166,9 @@ final class ApplyRetentionCommand extends Command
      *
      * **Por SQLSTATE, no por el texto.** El mensaje de `QueryException` incluye
      * la sentencia entera, que nombra siempre la funcion de purga: buscar su
-     * nombre en el mensaje era verdadero en cualquier fallo de la purga, y el
-     * operador recibia «revisa los relojes» ante un bloqueo o un perfil que
-     * falta (revision del bloque 7).
+     * nombre en el mensaje seria verdadero en cualquier fallo de la purga, y el
+     * operador recibiria «revisa los relojes» ante un bloqueo o un perfil que
+     * falta.
      *
      * - `42501` con el texto del rechazo del corte: la funcion de ADR-057 §3
      *   calcula su corte con el reloj de PostgreSQL y el plazo **mas largo de
@@ -203,13 +223,6 @@ final class ApplyRetentionCommand extends Command
         $batch = (int) $this->stringOption('batch');
 
         return $batch > 0 ? $batch : Config::integer('compliance.retention.batch_size', 1000);
-    }
-
-    private function responsibleUserId(): ?int
-    {
-        $responsible = (int) $this->stringOption('responsible');
-
-        return $responsible > 0 ? $responsible : null;
     }
 
     private function stringOption(string $name): string

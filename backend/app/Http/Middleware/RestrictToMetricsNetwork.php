@@ -15,12 +15,12 @@ use Symfony\Component\HttpFoundation\Response;
  * ## Es la segunda guarda, no la primera
  *
  * Nginx ya rechaza con `403` lo que no cae en `METRICS_ALLOW_CIDR`, con un
- * bloque `geo` que existe desde la Fase 0
- * (`infra/docker/nginx/templates/kronoqr.conf.template`). Esto no lo sustituye:
- * lo duplica dentro de la aplicacion **para que una plantilla de Nginx mal
- * editada no deje las series a la vista**. Es la unica ruta del producto en la
- * que una errata de configuracion del borde publica datos de operacion de un
- * hotel —quioscos, ritmo de fichaje, errores— sin que nadie se entere.
+ * bloque `geo` (`infra/docker/nginx/templates/kronoqr.conf.template`). Esto no
+ * lo sustituye: lo duplica dentro de la aplicacion **para que una plantilla de
+ * Nginx mal editada no deje las series a la vista**. Es la unica ruta del
+ * producto en la que una errata de configuracion del borde publica datos de
+ * operacion de un hotel —quioscos, ritmo de fichaje, errores— sin que nadie
+ * se entere.
  *
  * ## Es una cuestion de RED, no de identidad
  *

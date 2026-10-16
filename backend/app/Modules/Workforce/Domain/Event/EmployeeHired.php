@@ -28,10 +28,10 @@ use DateTimeImmutable;
  * por operacion y no por persona espere al evento del lote. Lo usa el observador
  * de los limites del plan (ADR-028): una importacion
  * de trescientas personas tiene que dejar **un** asiento de exceso y no
- * trescientos, todos bajo el candado global de `audit_log` (ADR-010, H-04 de la
- * revision de la 3.8). El valor por defecto es `false` —«no vengo de un lote»—
- * porque es el seguro: un alta que se olvidara de declararlo dejaria su asiento
- * de mas, nunca uno de menos.
+ * trescientos, todos bajo el candado global de `audit_log` (ADR-010). El valor
+ * por defecto es `false` —«no vengo de un lote»— porque es el seguro: un
+ * alta que se olvidara de declararlo dejaria su asiento de mas, nunca uno de
+ * menos.
  */
 final readonly class EmployeeHired implements DomainEvent
 {

@@ -28,12 +28,10 @@ use App\Modules\Identity\Domain\Event\TwoFactorReset;
  * Compliance`, asi que `Identity` publica su evento y este listener lo traduce al
  * vocabulario cerrado de {@see AuditAction}.
  *
- * **Desde la tarea 3.8 sella tambien la baja de la cuenta y la sustitucion de su
- * contrasena** (`user.deactivated` y `user.password_reset`, hallazgo H-03 de la
- * revision interna ASVS de 2026-09). Son el resto del ciclo de vida que esta
- * clase contaba a medias: sabia decir quien recibio un rol y quien perdio su
- * segundo factor, pero no quien dejo de tener acceso, cuando ni por orden de
- * quien.
+ * **Sella tambien la baja de la cuenta y la sustitucion de su contrasena**
+ * (`user.deactivated` y `user.password_reset`): sin ellas se sabria quien
+ * recibio un rol y quien perdio su segundo factor, pero no quien dejo de tener
+ * acceso, cuando ni por orden de quien.
  *
  * **Por que un listener nuevo y no un metodo mas en el de credenciales.** Porque
  * las acciones de aqui **no son todas de la misma familia del bloque D**: el
@@ -113,7 +111,7 @@ final readonly class RecordManagementAccountLifecycle
             actor: $this->actor($event->actorUuid),
             action: AuditAction::ManagementPasswordReset,
             subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
-            // El uuid y el motivo (obligatorio desde la 2.2.0, RF-ID-10). La
+            // El uuid y el motivo (obligatorio, RF-ID-10). La
             // contrasena, su longitud y cualquier derivado suyo se quedan fuera
             // del payload a proposito.
             payload: AuditPayload::of([

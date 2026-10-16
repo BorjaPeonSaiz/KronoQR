@@ -20,7 +20,7 @@ use DateTimeImmutable;
  *   despues, la tarjeta ya no valia. Un reloj de tablet adelantado que pone el
  *   `occurred_at` despues de la retirada cae del mismo lado: no se puede afirmar
  *   que el fichaje fuera anterior.
- * - **Emision: limite cerrado** (F2 del dictamen del bloque 18). El `occurred_at`
+ * - **Emision: limite cerrado**. El `occurred_at`
  *   lo pone la tablet: sin cota inferior, quien tuviera la tarjeta podria pedir
  *   una incidencia por cada dia que eligiera. Antes de existir, la tarjeta no
  *   pudo usarse.

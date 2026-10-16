@@ -53,9 +53,9 @@ final readonly class ServiceInspector
     ];
 
     /**
-     * La migracion que pone las guardas del registro (ADR-057 §2 y §3, bloque 7
-     * de la 2.2.1): *triggers*, funcion de purga y sin `DELETE`. Sin ella
-     * aplicada no hay guardas que vigilar.
+     * La migracion que pone las guardas del registro (ADR-057 §2 y §3):
+     * *triggers*, funcion de purga y sin `DELETE`. Sin ella aplicada no hay
+     * guardas que vigilar.
      */
     public const string WORK_RECORD_GUARD_MIGRATION = '2026_10_14_100000_work_record_trigger_and_purge_function';
 
@@ -322,8 +322,7 @@ final readonly class ServiceInspector
     }
 
     /**
-     * Las guardas del registro que pone la migracion del bloque 7 (ADR-057 §2 y
-     * §3), mirando lo mismo que `update.sh` y `doctor.sh`
+     * Las guardas del registro (ADR-057 §2 y §3), mirando lo mismo que `update.sh` y `doctor.sh`
      * (`infra/scripts/lib/work-record-privileges.sh`):
      *
      * - que existan los cinco *triggers* de {@see self::WORK_RECORD_GUARD_TRIGGERS};

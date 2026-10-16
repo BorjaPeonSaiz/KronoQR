@@ -10,7 +10,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
-import { isApiError } from '@kronoqr/web-kit/http'
+import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
@@ -30,6 +30,15 @@ const FORMATS: readonly ExportFormat[] = ['csv', 'pdf']
 const format = ref<ExportFormat>('csv')
 /** El servidor no pudo generar el PDF (`503`): se ofrece el CSV en su lugar. */
 const pdfUnavailable = ref(false)
+/** El motor de PDF esta ocupado (tope de PDF simultaneos): reintentar o usar el CSV. */
+const pdfBusy = ref(false)
+const retryAfterSeconds = ref<number | null>(null)
+
+const busyMessage = computed(() =>
+  retryAfterSeconds.value === null
+    ? t('myExport.pdfBusy.messageNoWait')
+    : t('myExport.pdfBusy.message', { seconds: retryAfterSeconds.value }),
+)
 
 const inverted = computed(() => isInvertedRange(range.value))
 const tooWide = computed(() => exceedsMaxRange(range.value))
@@ -57,6 +66,8 @@ async function submit(): Promise<void> {
   error.value = null
   done.value = false
   pdfUnavailable.value = false
+  pdfBusy.value = false
+  retryAfterSeconds.value = null
 
   try {
     const document_ = await exportMyWorkDays(range.value, format.value)
@@ -66,8 +77,14 @@ async function submit(): Promise<void> {
     announce(t('myExport.announce.done'))
   } catch (caught) {
     if (format.value === 'pdf' && isApiError(caught) && caught.status === 503) {
-      pdfUnavailable.value = true
-      announce(t('myExport.pdfUnavailable.title'))
+      if (isPdfRenderingBusy(caught)) {
+        pdfBusy.value = true
+        retryAfterSeconds.value = caught.retryAfterSeconds
+        announce(busyMessage.value)
+      } else {
+        pdfUnavailable.value = true
+        announce(t('myExport.pdfUnavailable.title'))
+      }
     } else {
       error.value = caught
     }
@@ -164,6 +181,24 @@ async function submit(): Promise<void> {
         {{ submitting ? t('myExport.downloading') : t(`myExport.download.${format}`) }}
       </button>
     </form>
+
+    <div
+      v-if="pdfBusy"
+      role="alert"
+      data-test="pdf-busy"
+      class="mt-4 max-w-prose rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      <p class="font-semibold">{{ busyMessage }}</p>
+      <button
+        type="button"
+        data-test="use-csv"
+        :disabled="submitting"
+        class="mt-3 min-h-12 max-w-full break-words rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-lg font-semibold text-kq-text"
+        @click="retryWithCsv"
+      >
+        {{ t('myExport.pdfUnavailable.useCsv') }}
+      </button>
+    </div>
 
     <div
       v-if="pdfUnavailable"
