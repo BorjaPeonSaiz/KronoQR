@@ -29,6 +29,8 @@ use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -299,6 +301,8 @@ function retentionUsing(ConnectionInterface $connection, string $now): ApplyRete
         new RetentionTelemetry(app(LoggerInterface::class)),
         $connection,
         $clock,
+        new DatabaseResponsibleAccounts($connection),
+        new ChainLockedWrite($connection),
     );
 }
 

@@ -6,6 +6,7 @@ use App\Modules\Compliance\Application\Port\WorkRecordArchive;
 use App\Modules\Compliance\Application\UseCase\PlanRetention;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -325,3 +326,104 @@ it('explica cada fallo de la purga por su SQLSTATE, no por el nombre de la funci
         'PostgreSQL ha rechazado el corte',
     ],
 ])->group('RL-02', 'RF-PR-03');
+
+// --- `--responsible`: un id de verdad y una cuenta activa (bloque 23 de la 2.2.1) ---
+
+/**
+ * Una entrada vencida y otra vigente, y el reloj en hoy. Devuelve el estado de
+ * partida para afirmar despues que no ha cambiado nada.
+ *
+ * @return array{counts: array<string, int>, audit: int}
+ */
+function applyRetentionResponsibleScenario(): array
+{
+    $dates = applyRetentionDates();
+    FrozenTime::at($dates['today'].' 04:00:00');
+
+    applyRetentionEntry($dates['expired']);
+    applyRetentionEntry($dates['cutoff']);
+
+    return ['counts' => applyRetentionCounts(), 'audit' => DB::table('audit_log')->count()];
+}
+
+it('sale con 2 sin simular ni purgar si --responsible no es un id', function (string $valor, bool $simular): void {
+    $antes = applyRetentionResponsibleScenario();
+    $orden = $simular ? ['--dry-run' => true] : ['--confirm' => applyRetentionToken()];
+
+    $exit = Artisan::call('compliance:apply-retention', [...$orden, '--responsible' => $valor]);
+    $salida = Artisan::output();
+
+    // `12abc` ya no es la cuenta 12: antes el `(int)` lo dejaba pasar.
+    expect($exit)->toBe(2, $salida)
+        ->and($salida)->toContain('entero positivo')
+        ->and(applyRetentionCounts())->toBe($antes['counts'])
+        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+})->with([
+    'con letras detras, al ejecutar' => ['12abc', false],
+    'con letras detras, al simular' => ['12abc', true],
+    'negativo' => ['-3', false],
+    'cero' => ['0', false],
+    'decimal' => ['1.5', false],
+])->group('RF-PR-03', 'RL-04');
+
+it('sale con 2 sin simular ni purgar si --responsible nombra una cuenta que no existe', function (bool $simular): void {
+    $antes = applyRetentionResponsibleScenario();
+    $orden = $simular ? ['--dry-run' => true] : ['--confirm' => applyRetentionToken()];
+    $inexistente = ManagementUsers::withRole(UserRole::ADMIN)->id + 1000;
+
+    $exit = Artisan::call('compliance:apply-retention', [...$orden, '--responsible' => (string) $inexistente]);
+
+    $salida = Artisan::output();
+
+    expect($exit)->toBe(2, $salida)
+        ->and($salida)->toContain('no existe o no está activa')
+        ->and(applyRetentionCounts())->toBe($antes['counts'])
+        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+})->with([
+    'al ejecutar' => [false],
+    'al simular' => [true],
+])->group('RF-PR-03', 'RL-04');
+
+it('sale con 2 sin purgar si --responsible es una cuenta dada de baja', function (): void {
+    $antes = applyRetentionResponsibleScenario();
+    $baja = ManagementUsers::withRole(UserRole::ADMIN);
+    DB::table('users')->where('id', $baja->id)->update(['is_active' => false]);
+
+    $exit = Artisan::call('compliance:apply-retention', [
+        '--confirm' => applyRetentionToken(),
+        '--responsible' => (string) $baja->id,
+    ]);
+
+    expect($exit)->toBe(2, Artisan::output())
+        ->and(applyRetentionCounts())->toBe($antes['counts'])
+        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+})->group('RF-PR-03', 'RL-04');
+
+it('deshace la purga si la cuenta deja de estar activa entre la simulacion y el asiento', function (): void {
+    // La segunda comprobacion va con la cadena de auditoria tomada, justo antes
+    // del asiento: si la cuenta se dio de baja entre medias, no hay asiento y,
+    // por tanto, tampoco borrado (regla dura 6).
+    $antes = applyRetentionResponsibleScenario();
+    $responsable = ManagementUsers::withRole(UserRole::ADMIN);
+
+    app()->instance(ResponsibleAccounts::class, new class implements ResponsibleAccounts
+    {
+        private int $preguntas = 0;
+
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
+        {
+            // Activa en la primera comprobacion; dada de baja en la segunda.
+            return ++$this->preguntas === 1;
+        }
+    });
+
+    $exit = Artisan::call('compliance:apply-retention', [
+        '--confirm' => applyRetentionToken(),
+        '--responsible' => (string) $responsable->id,
+    ]);
+
+    expect($exit)->toBe(2, Artisan::output())
+        ->and(applyRetentionCounts())->toBe($antes['counts'])
+        ->and(DB::table('audit_log')->where('action', 'retention.purge_executed')->count())->toBe(0)
+        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+})->group('RF-PR-03', 'RL-04', 'RS-07');

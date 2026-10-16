@@ -31,9 +31,13 @@ final readonly class RetentionRunCommand
         public int $batchSize,
     ) {}
 
-    public static function simulate(int $batchSize = 1000): self
+    /**
+     * `$responsibleUserId` solo para comprobar ya en la simulacion que la cuenta
+     * existe y esta activa: la simulacion no escribe asiento.
+     */
+    public static function simulate(int $batchSize = 1000, ?int $responsibleUserId = null): self
     {
-        return new self(RetentionMode::Simulation, null, null, $batchSize);
+        return new self(RetentionMode::Simulation, null, $responsibleUserId, $batchSize);
     }
 
     public static function execute(string $confirmation, ?int $responsibleUserId, int $batchSize = 1000): self
