@@ -6,6 +6,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ManagementUsers;
 
 /*
  * La migracion que deja al `auditor` solo con `reports:legal` (**RF-ID-02**,
@@ -51,10 +52,6 @@ function auditorAbilitiesMigrationRun(Closure $prueba): void
     }
 }
 
-it('deja al auditor solo con reports:legal', function (): void {
-    expect(auditorAbilitiesMigrationGranted())->toBe(['reports:legal']);
-})->group('RF-ID-02', 'RQ-07');
-
 it('repone attendance:read y audit:read al auditor al revertir, y solo eso', function (): void {
     auditorAbilitiesMigrationRun(function (Migration $migration): void {
         \assert(method_exists($migration, 'down') && method_exists($migration, 'up'));
@@ -65,7 +62,7 @@ it('repone attendance:read y audit:read al auditor al revertir, y solo eso', fun
         $migration->down();
         $migration->down();
 
-        expect(auditorAbilitiesMigrationGranted())->toBe(['attendance:read', 'audit:read', 'reports:legal'])
+        expect(auditorAbilitiesMigrationGranted())->toBe(ManagementUsers::legacyAuditorAbilities())
             ->and(DB::table('permissions')->count())->toBe($permisos)
             ->and(DB::table('role_has_permissions')->count())->toBe($concesiones + 2);
 

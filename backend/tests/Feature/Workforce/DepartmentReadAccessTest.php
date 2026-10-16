@@ -99,7 +99,7 @@ it('no deja leer el catalogo al auditor, ni con un token anterior a la 2.2.1', f
     $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
     $plainText = $token === 'actual'
         ? ManagementUsers::tokenFor($auditor)
-        : $auditor->createToken('Pruebas', ['attendance:read', 'audit:read', 'reports:legal'])->plainTextToken;
+        : ManagementUsers::legacyAuditorTokenFor($auditor);
 
     // act / assert
     Api::as($plainText)->get('/api/v1/departments')
@@ -168,8 +168,9 @@ it('no deja crear ni renombrar al responsable ni al auditor', function (UserRole
 ])->group('RF-ID-03', 'RF-GP-01', 'RQ-07', 'RS-05');
 
 it('no deja leer el catalogo a ningun acceso de soporte', function (SupportScope $scope): void {
-    // `read_only` lleva `employees:read`, asi que su AMBITO alcanza la ruta: el `403` lo pone `DepartmentPolicy`. `diagnostics` y
-    // `configuration` ni siquiera pasan del middleware.
+    // `read_only` lleva `employees:read`, asi que su AMBITO alcanza la ruta:
+    // el `403` lo pone `DepartmentPolicy`. `diagnostics` y `configuration` ni
+    // siquiera pasan del middleware.
 
     // arrange
     [$cocina] = departamentosDelCatalogo();

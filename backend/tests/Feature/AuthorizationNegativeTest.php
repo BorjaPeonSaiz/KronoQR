@@ -535,20 +535,6 @@ function endpointsDeniedToAuditor(): array
     ];
 }
 
-/**
- * Los ambitos con los que se emitia el token de un `auditor` hasta la 2.2.1.
- *
- * Un token de sesion conserva sus ambitos hasta que caduca (12 h), asi que el
- * dia del despliegue habra auditores con este token en la mano. Lo que les cierra
- * la puerta entonces son las policies, por rol.
- *
- * @return list<string>
- */
-function ambitosDelAuditorAntesDeLa221(): array
-{
-    return ['attendance:read', 'audit:read', 'reports:legal'];
-}
-
 it('deniega a un auditor todo salvo la exportacion para la Inspeccion', function (string $method, string $uri, array $body): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
@@ -559,9 +545,7 @@ it('deniega lo mismo a un auditor con un token emitido antes de la 2.2.1', funct
     // El token conserva `attendance:read`, que abre el middleware de la
     // presencia, el cumplimiento, las jornadas y —hasta esta version— el
     // catalogo de departamentos. El `403` lo tiene que poner la policy.
-    $token = ManagementUsers::withRole(UserRole::AUDITOR)
-        ->createToken('Pruebas', ambitosDelAuditorAntesDeLa221())
-        ->plainTextToken;
+    $token = ManagementUsers::legacyAuditorTokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(endpointsDeniedToAuditor())->group('RS-05', 'RQ-07', 'RF-ID-02');

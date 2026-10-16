@@ -155,7 +155,7 @@ it('niega el canal a un auditor, tambien con un token que aun tenga el ambito', 
 
     $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
     $actual = ManagementUsers::tokenFor($auditor);
-    $anterior = $auditor->createToken('Pruebas', ['attendance:read', 'audit:read', 'reports:legal'])->plainTextToken;
+    $anterior = ManagementUsers::legacyAuditorTokenFor($auditor);
 
     autorizarCanal($actual, 'presence.all')->assertStatus(403);
 

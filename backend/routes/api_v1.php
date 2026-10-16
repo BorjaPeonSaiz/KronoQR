@@ -1405,8 +1405,9 @@ Route::middleware([
         ->name('absences.void');
 
     // La LECTURA de departamentos no esta aqui: vive en su propio grupo, mas
-    // abajo, porque la leen los cuatro roles de gestion y este grupo exige
-    // `employees:*`.
+    // abajo, porque la abre `employees:read` —`admin`, `rrhh` y el
+    // `responsable_departamento`; el `auditor` no desde la 2.2.1, doc 02 §7.3,
+    // notas 8 y 9— y este grupo exige `employees:*`.
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
     Route::patch('/departments/{id}', [DepartmentController::class, 'update'])
         ->whereNumber('id')

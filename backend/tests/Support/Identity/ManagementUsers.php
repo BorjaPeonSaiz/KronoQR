@@ -69,6 +69,28 @@ final class ManagementUsers
     }
 
     /**
+     * Los ambitos con los que se emitia el token de un `auditor` hasta la 2.2.1
+     * (RF-ID-02, bloque 25; doc 02 §7.3, nota 9).
+     *
+     * Un token de sesion conserva sus ambitos hasta que caduca (12 h), asi que el
+     * dia del despliegue habra auditores con este token en la mano. Lo que les
+     * cierra la puerta entonces son las policies, por rol. Escrito una vez aqui
+     * para que las pruebas de ese caso y la de la migracion digan lo mismo.
+     *
+     * @return list<string>
+     */
+    public static function legacyAuditorAbilities(): array
+    {
+        return ['attendance:read', 'audit:read', 'reports:legal'];
+    }
+
+    /** Token de un `auditor` emitido con los ambitos anteriores a la 2.2.1. */
+    public static function legacyAuditorTokenFor(User $user): string
+    {
+        return $user->createToken('Pruebas', self::legacyAuditorAbilities())->plainTextToken;
+    }
+
+    /**
      * Token de **quiosco**: el que llevaria una tablet (RF-ID-04).
      *
      * Cuelga de una cuenta con rol `kiosk` en lugar de un dispositivo porque los

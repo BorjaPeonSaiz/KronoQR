@@ -28,10 +28,10 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
  * ## `presence.all` no es para todos
  *
  * Solo lo alcanzan las cuentas **sin restriccion de alcance** que leen la
- * presencia —`admin` y `rrhh`; el `auditor` la tiene vedada por su policy—. Un `responsable_departamento` se suscribe a un
- * `presence.department.{id}` por cada departamento que dirige y **nunca** al
- * global: dejarle entrar ahi seria darle en tiempo real justo lo que RF-ID-03 le
- * niega en el listado.
+ * presencia —`admin` y `rrhh`; el `auditor` la tiene vedada por su policy—.
+ * Un `responsable_departamento` se suscribe a un `presence.department.{id}`
+ * por cada departamento que dirige y **nunca** al global: dejarle entrar ahi
+ * seria darle en tiempo real justo lo que RF-ID-03 le niega en el listado.
  *
  * ## Son canales PRIVADOS del protocolo, no «presence channels»
  *

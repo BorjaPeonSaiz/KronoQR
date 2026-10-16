@@ -37,9 +37,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * ## El `auditor` tampoco, teniendo un ambito de informes
  *
  * Lleva `reports:legal` —el estrecho, que abre la exportacion para la Inspeccion,
- * y desde la 2.2.1 su unico ambito (RF-ID-02)— y no la familia. Es coherente con el resto del modulo: **auditar es mirar lo que
- * quedo escrito**, y este cuadro no es registro, es una medida de como va el
- * producto.
+ * y desde la 2.2.1 su unico ambito (RF-ID-02)— y no la familia. Es coherente
+ * con el resto del modulo: **auditar es mirar lo que quedo escrito**, y este
+ * cuadro no es registro, es una medida de como va el producto.
  *
  * ## La policy es la mitad de la autorizacion
  *
