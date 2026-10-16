@@ -14,18 +14,7 @@ import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
-
-const STORAGE_MESSAGE =
-  'Los datos del registro no se guardan en el navegador: son datos personales y el equipo puede ser compartido. `localStorage` sobrevive al cierre de la pestana y `sessionStorage` es una copia en el equipo; guarda el estado en memoria (Pinia, TanStack Query) y vuelve a pedirlo al servidor. La unica excepcion admitida es un fichero declarado en `eslint.config.js` (cache de marca, token de sesion, marca de recarga) y no lleva datos personales.'
-
-/** @param {string[]} names */
-const storageGlobals = (names) => names.map((name) => ({ name, message: STORAGE_MESSAGE }))
-
-/** `window.x`, `globalThis.x` y `self.x`, con punto o con corchetes. */
-const storageProperties = (names) =>
-  ['window', 'globalThis', 'self'].flatMap((object) =>
-    names.map((property) => ({ object, property, message: STORAGE_MESSAGE })),
-  )
+import { noBrowserStorage } from '@kronoqr/web-kit/eslint/no-browser-storage'
 
 export default defineConfigWithVueTs(
   {
@@ -93,59 +82,6 @@ export default defineConfigWithVueTs(
     },
   },
   {
-    // Los datos del registro no se guardan en el navegador (RGPD, regla de
-    // minimizacion): lo que el panel muestra son datos personales de terceros
-    // y el equipo puede ser compartido. `localStorage` sobrevive al cierre de
-    // la pestana y del navegador; `sessionStorage` muere con la pestana pero
-    // tambien es una copia en disco/memoria del equipo, asi que solo se admite
-    // en los ficheros de la lista de excepciones, uno por uno.
-    //
-    // Solo sobre `src/**`: las pruebas lo leen para comprobar que NO queda nada.
-    name: 'kronoqr/sin-almacenamiento-del-navegador',
-    files: ['src/**/*.{ts,mts,tsx,vue,js,mjs}'],
-    rules: {
-      'no-restricted-globals': ['error', ...storageGlobals(['localStorage', 'sessionStorage'])],
-      'no-restricted-properties': [
-        'error',
-        ...storageProperties(['localStorage', 'sessionStorage']),
-      ],
-    },
-  },
-  {
-    // Excepcion 1 (MB4): la cache de la ultima marca valida, que se pinta en
-    // el primer fotograma. Es un dato de marca del cliente, nunca personal. Vive
-    // en web-kit (`brandingState.ts`), que se lintea con su propia config; la
-    // excepcion se declara tambien aqui por si el fichero se copia a `src/`.
-    // Solo `localStorage`: `sessionStorage` sigue prohibido.
-    name: 'kronoqr/excepcion-cache-de-marca',
-    files: ['**/brandingState.ts'],
-    rules: {
-      'no-restricted-globals': ['error', ...storageGlobals(['sessionStorage'])],
-      'no-restricted-properties': ['error', ...storageProperties(['sessionStorage'])],
-    },
-  },
-  {
-    // Excepcion 2: marca tecnica por pestana contra el bucle de recarga tras
-    // un fallo de carga de chunk. Solo un booleano con hora, sin datos
-    // personales. Cubre `sessionStorage`; `localStorage` sigue prohibido.
-    name: 'kronoqr/excepcion-marca-de-recarga',
-    files: ['src/router/chunkLoadRecovery.ts'],
-    rules: {
-      'no-restricted-globals': ['error', ...storageGlobals(['localStorage'])],
-      'no-restricted-properties': ['error', ...storageProperties(['localStorage'])],
-    },
-  },
-  {
-    // Excepcion 3: el token de sesion, por pestana (no sobrevive al cierre) y
-    // sin datos personales (ver el comentario de cabecera del fichero).
-    name: 'kronoqr/excepcion-token-de-sesion',
-    files: ['src/features/auth/session.store.ts'],
-    rules: {
-      'no-restricted-globals': ['error', ...storageGlobals(['localStorage'])],
-      'no-restricted-properties': ['error', ...storageProperties(['localStorage'])],
-    },
-  },
-  {
     name: 'kronoqr/node-scripts',
     files: ['scripts/**/*.mjs', 'eslint.config.js'],
     languageOptions: {
@@ -161,5 +97,23 @@ export default defineConfigWithVueTs(
   noBareStrings(),
   // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
+  // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
+  // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
+  ...noBrowserStorage({
+    exceptions: [
+      {
+        file: 'src/features/auth/session.store.ts',
+        allow: ['sessionStorage'],
+        reason:
+          'Token y caducidad de la sesion de gestion, solo en esta pestana (muere al cerrarla); el usuario no se persiste y el PIN nunca entra (cabecera del fichero).',
+      },
+      {
+        file: 'src/router/chunkLoadRecovery.ts',
+        allow: ['sessionStorage'],
+        reason:
+          'Marca tecnica por pestana contra el bucle de recarga tras un fallo de carga de chunk: un booleano con hora, sin datos personales.',
+      },
+    ],
+  }),
   skipFormatting,
 )

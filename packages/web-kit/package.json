@@ -12,6 +12,7 @@
   "exports": {
     "./package.json": "./package.json",
     "./eslint/identifier-language": "./eslint/identifier-language.js",
+    "./eslint/no-browser-storage": "./eslint/no-browser-storage.js",
     "./eslint/no-bare-strings": "./eslint/no-bare-strings.js",
     "./eslint/no-literal-colors": "./eslint/no-literal-colors.js",
     "./theme.css": "./src/theme.css",
