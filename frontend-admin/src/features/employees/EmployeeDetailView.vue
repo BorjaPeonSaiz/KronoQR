@@ -15,6 +15,7 @@ import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/we
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import { RouterLink } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ATTENDANCE_READ } from '@/features/auth/abilities'
@@ -42,6 +43,7 @@ import {
 const props = defineProps<{ uuid: string }>()
 
 const { t, locale } = useI18n()
+const { locales: offered, multilingual } = useOfferedLocales()
 const queryClient = useQueryClient()
 const session = useSessionStore()
 
@@ -613,7 +615,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.email') }}</dt>
             <dd>{{ employee.email ?? t('employees.fields.emailAbsent') }}</dd>
           </div>
-          <div>
+          <div v-if="multilingual">
             <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.locale') }}</dt>
             <dd>{{ employee.locale }}</dd>
           </div>
@@ -693,10 +695,11 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
               <option value="suspended">{{ t('employees.status.suspended') }}</option>
             </select>
           </FormField>
-          <FormField v-slot="field" :label="t('employees.fields.locale')">
+          <FormField v-if="multilingual" v-slot="field" :label="t('employees.fields.locale')">
             <select :id="field.id" v-model="form.locale" :class="inputClass">
-              <option value="es">{{ t('common.locales.es') }}</option>
-              <option value="en">{{ t('common.locales.en') }}</option>
+              <option v-for="option in offered" :key="option" :value="option">
+                {{ t(`common.locales.${option}`) }}
+              </option>
             </select>
           </FormField>
 

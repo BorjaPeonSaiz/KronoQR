@@ -125,3 +125,21 @@ describe('branding.store', () => {
     expect(useBrandingStore().current).toEqual(PRODUCT_BRANDING)
   })
 })
+
+describe('branding.store · idiomas ofrecidos', () => {
+  it('de serie ofrece solo español: no hay nada que elegir', () => {
+    expect(useBrandingStore().current.locales).toEqual({ default: 'es', available: ['es'] })
+  })
+
+  it('load() recoge los dos idiomas cuando la instalacion activa el ingles', async () => {
+    stubFetch(() =>
+      jsonResponse({ ...HOTEL_BRANDING, locales: { default: 'es', available: ['es', 'en'] } }),
+    )
+
+    const store = useBrandingStore()
+
+    await store.load()
+
+    expect(store.current.locales.available).toEqual(['es', 'en'])
+  })
+})

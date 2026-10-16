@@ -18,7 +18,7 @@ import { registerAuthGuard } from './router/guards'
 import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
-import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
+import { createAppI18n, resolveAppLocale } from './shared/i18n'
 
 const app = createApp(App)
 
@@ -36,7 +36,6 @@ const pinia = createPinia()
 app.use(pinia)
 
 const router = createAppRouter()
-const i18n = createAppI18n(resolveLocale(navigator.languages))
 const session = useSessionStore(pinia)
 
 // La marca de la instalacion (RF-PD-08, tarea 5.8): se pinta lo que ya haya
@@ -46,6 +45,19 @@ const session = useSessionStore(pinia)
 const branding = useBrandingStore(pinia)
 branding.apply()
 void branding.load()
+
+// Idioma de la interfaz (bloque 26): con un solo idioma ofrecido, ese; con varios,
+// el de la persona, el del navegador o el por defecto de la instalacion. Se
+// calcula con la marca que ya haya (la cacheada o la del producto) y se
+// recalcula al llegar la del servidor y al entrar o salir una persona.
+function currentLocale() {
+  return resolveAppLocale({
+    policy: branding.current.locales,
+    personal: session.user?.locale ?? null,
+    browser: navigator.languages,
+  })
+}
+const i18n = createAppI18n(currentLocale())
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
@@ -88,11 +100,9 @@ syncDocumentLang(() => i18n.global.locale.value)
 // El idioma del panel es el de la persona que entra, no el del navegador de la
 // tablet en la que se ha dejado la sesion abierta.
 watch(
-  () => session.user?.locale,
-  (userLocale) => {
-    if (isSupportedLocale(userLocale)) {
-      i18n.global.locale.value = userLocale
-    }
+  () => [branding.current.locales, session.user?.locale] as const,
+  () => {
+    i18n.global.locale.value = currentLocale()
   },
 )
 

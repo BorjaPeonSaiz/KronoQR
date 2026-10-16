@@ -17,6 +17,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import { RouterLink } from 'vue-router'
 import TwoFactorEnrolPanel from '@/features/auth/TwoFactorEnrolPanel.vue'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -28,6 +29,7 @@ import { useSetupStore } from '../setup.store'
 const DEVICE_NAME = 'Panel de gestion'
 
 const { t, locale } = useI18n()
+const { multilingual } = useOfferedLocales()
 const session = useSessionStore()
 const setup = useSetupStore()
 
@@ -54,9 +56,10 @@ async function submit(): Promise<void> {
       name: name.value,
       email: email.value,
       password: password.value,
-      // El idioma del propio asistente: es el que tendra esta cuenta al
-      // entrar por primera vez al panel.
-      locale: locale.value,
+      // Con varios idiomas ofrecidos, el del propio asistente: es el que tendra
+      // esta cuenta al entrar por primera vez. Con uno solo no se envia y el
+      // servidor aplica el de la instalacion.
+      ...(multilingual.value ? { locale: locale.value } : {}),
       device_name: DEVICE_NAME,
     })
 

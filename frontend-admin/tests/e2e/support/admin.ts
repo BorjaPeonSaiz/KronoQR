@@ -250,8 +250,19 @@ export const PRODUCT_BRANDING: Branding = {
   application_name: 'KronoQR',
   accent_color: null,
   logo_url: null,
-  locales: { default: 'es', available: ['es', 'en'] },
+  locales: { default: 'es', available: ['es'] },
   privacy_notice: { controller_name: null, policy_url: null },
+}
+
+/**
+ * La instalacion que ha activado el ingles (`LOCALE_AVAILABLE = [es, en]`,
+ * bloque 26 de la 2.2.1): ofrece selector de idioma en las fichas y la hoja de
+ * instrucciones en los dos idiomas. Es el unico caso en que el panel sigue el
+ * idioma del navegador o el de la persona.
+ */
+export const BILINGUAL_BRANDING: Branding = {
+  ...PRODUCT_BRANDING,
+  locales: { default: 'es', available: ['es', 'en'] },
 }
 
 /** La huella que lleva la URL del logotipo de ejemplo (`?v=`, contrato). */
@@ -1620,7 +1631,7 @@ export interface ManagementApiOptions {
   readonly setupStatus?: SetupStatus
   /**
    * Lo que devuelve `GET /api/v1/branding` (RF-PD-08, tarea 5.8), publica y
-   * sin sesion. Por omision, `PRODUCT_BRANDING`: la instalacion recien
+   * sin sesion. Por omision, `PRODUCT_BRANDING` (solo espanol): la instalacion recien
    * instalada, sin nada configurado. `PATCH /api/v1/settings` la actualiza en
    * el acto cuando cambia alguna de las tres claves `BRANDING_*`, para que
    * `BrandingView` pueda comprobar que la cabecera se refresca tras guardar.
@@ -1630,7 +1641,7 @@ export interface ManagementApiOptions {
    * Los umbrales operativos (`ATTENDANCE_*`) y los idiomas (`LOCALE_*`) que
    * completan el catalogo de `GET/PATCH /api/v1/settings` (RF-PD-01, tarea
    * 5.13, `OperationalSettingsView`). Por omision, los valores de serie del
-   * producto (12, 60, 15, 120, `es`, `[es, en]`): una instalacion recien
+   * producto (12, 60, 15, 120, `es`, `[es]`): una instalacion recien
    * puesta en marcha, sin nada configurado. El doble los mantiene mutables y
    * los valida con el mismo rango que declara `SettingKey` en el backend, para
    * que la prueba de «validacion de rango» reciba un `422` de verdad.
@@ -2178,7 +2189,10 @@ export async function stubManagementApi(
   // `PATCH /api/v1/settings` la actualice exactamente como lo haria el
   // servidor y `GET /api/v1/branding` -que `branding.store.load()` vuelve a
   // pedir tras guardar- devuelva el cambio en el acto.
-  let branding: Branding = { ...(options.branding ?? PRODUCT_BRANDING) }
+  // Una cuenta en ingles solo tiene sentido en una instalacion que lo ofrece.
+  let branding: Branding = {
+    ...(options.branding ?? (options.locale === 'en' ? BILINGUAL_BRANDING : PRODUCT_BRANDING)),
+  }
   let logoPath = branding.logo_url === null ? '' : '/var/kronoqr/branding/logo.png'
 
   // El perfil de cumplimiento (RF-PD-07, tarea 5.2): mutable, para que
@@ -2191,7 +2205,7 @@ export async function stubManagementApi(
 
   // Los umbrales operativos y los idiomas (RF-PD-01, tarea 5.13): mutables,
   // con los mismos valores de serie y el mismo rango que `SettingKey` declara
-  // en el backend (12/1-24, 60/0-3600, 15/1-1440, 120/0-3600, `es`/`[es, en]`).
+  // en el backend (12/1-24, 60/0-3600, 15/1-1440, 120/0-3600, `es`/`[es]`).
   let attendanceMaxShiftHours = options.operationalSettings?.maxShiftHours ?? 12
   let attendanceDebounceSeconds = options.operationalSettings?.debounceSeconds ?? 60
   let attendanceMaxClockSkewMinutes = options.operationalSettings?.maxClockSkewMinutes ?? 15
@@ -2201,7 +2215,7 @@ export async function stubManagementApi(
   // F1: el margen de futuro del alta manual, 5/0-60 como en `SettingKey`.
   let attendanceFutureToleranceMinutes = 5
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
-  let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
+  let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
   let identityPinLength = '6'
   let attendanceBreakClocking = options.operationalSettings?.breakClocking ?? 'disabled'
@@ -2379,7 +2393,7 @@ export async function stubManagementApi(
           impact: 'presentation',
           affects_worked_hours: false,
           source:
-            JSON.stringify([...localeAvailable].sort()) === JSON.stringify(['en', 'es'])
+            JSON.stringify([...localeAvailable].sort()) === JSON.stringify(['es'])
               ? 'product_default'
               : 'installation',
           constraints: { allowed: ['es', 'en'] },
@@ -4108,7 +4122,7 @@ export async function stubManagementApi(
             status: 'active',
             hired_at: payload.hired_at,
             terminated_at: null,
-            locale: payload.locale,
+            locale: payload.locale ?? 'es',
             teleworking: payload.teleworking ?? false,
             pin_status: 'issued',
           }
