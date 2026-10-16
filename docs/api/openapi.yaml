@@ -98,11 +98,13 @@ info:
     **Idioma.** Los textos escritos para una persona —los mensajes de `errors`
     en un `422`, los criterios de un informe en `meta.criteria`— se negocian
     con la cabecera estandar `Accept-Language`, acotada a los idiomas que la
-    instalacion tiene activos (`APP_SUPPORTED_LOCALES`; regla dura 13); sin
-    cabecera, o sin idioma en comun, se responde en el de la instalacion
-    (`APP_LOCALE`). Los **documentos** (CSV, XLSX, PDF) no se negocian: salen
-    siempre en el idioma de la instalacion, porque los abrira un programa cuyo
-    idioma no es el del navegador que los descargo. Los clientes interpretan
+    instalacion tiene activos (`LOCALE_AVAILABLE` de la configuracion; regla
+    dura 13); sin cabecera, o sin idioma en comun, se responde en el de la
+    instalacion (`LOCALE_DEFAULT`). De serie solo esta activo el español
+    (`LOCALE_AVAILABLE = [es]`), asi que todo sale en español mientras el
+    cliente no active el ingles. Los **documentos** (CSV, XLSX, PDF) no se
+    negocian: salen siempre en el idioma de la instalacion, porque los abrira
+    un programa cuyo idioma no es el del navegador que los descargo. Los clientes interpretan
     `type` y las claves de `errors`, nunca el texto: el texto es para la
     persona.
   contact:
@@ -8383,7 +8385,7 @@ paths:
                     logo_url: null
                     locales:
                       default: es
-                      available: [es, en]
+                      available: [es]
                     privacy_notice:
                       controller_name: null
                       policy_url: null
@@ -14333,7 +14335,9 @@ components:
           type: string
           minLength: 2
           maxLength: 10
-          description: Idioma del panel para esta persona (ES y EN de serie).
+          description: |
+            Idioma del panel para esta persona. Traducciones incluidas: ES y
+            EN; activo de serie, solo ES (`LOCALE_AVAILABLE`).
           examples:
             - es
         roles:
@@ -14577,9 +14581,9 @@ components:
           minLength: 2
           maxLength: 10
           description: |
-            Idioma del panel para esta cuenta, uno de los activos en la
-            instalacion (`APP_SUPPORTED_LOCALES`). Sin el, el de la instalacion
-            (`APP_LOCALE`).
+            Idioma del panel para esta cuenta, uno de los idiomas activos de la
+            instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+            la lista es `422`.
           examples:
             - es
         actor_totp_code:
@@ -14842,6 +14846,9 @@ components:
           type: string
           minLength: 2
           maxLength: 10
+          description: |
+            Idioma de la persona. Al fijarse es uno de los idiomas activos de
+            la instalacion (`LOCALE_AVAILABLE`).
           examples:
             - es
         teleworking:
@@ -15049,7 +15056,10 @@ components:
           type: string
           minLength: 2
           maxLength: 10
-          default: es
+          description: |
+            Idioma de la persona, uno de los idiomas activos de la
+            instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+            la lista es `422`.
         teleworking:
           $ref: '#/components/schemas/Teleworking'
 
@@ -15090,6 +15100,10 @@ components:
           type: string
           minLength: 2
           maxLength: 10
+          description: |
+            Idioma de la persona, uno de los idiomas activos de la
+            instalacion (`LOCALE_AVAILABLE`). Sin el, no cambia. Fuera de la
+            lista es `422`.
         teleworking:
           $ref: '#/components/schemas/Teleworking'
 
@@ -15355,9 +15369,13 @@ components:
               items:
                 type: string
               description: |
-                Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`). El
-                selector del quiosco no enseña ninguno fuera de esta lista, y
-                el idioma por defecto esta siempre dentro de ella.
+                Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`); el
+                idioma por defecto esta siempre dentro de ella. De serie es
+                `[es]`. **Con un unico idioma**, las tres aplicaciones no
+                enseñan selector ni campo de idioma y no siguen el idioma del
+                navegador: todo sale en ese idioma. Con varios, el selector no
+                enseña ninguno fuera de esta lista, y sin eleccion guardada se
+                prueba el idioma del navegador y despues `default`.
 
     WebAppManifest:
       type: object
@@ -21667,8 +21685,10 @@ components:
           type: string
           minLength: 2
           maxLength: 10
-          default: es
-          description: Idioma del panel para esta cuenta.
+          description: |
+            Idioma del panel para esta cuenta, uno de los idiomas activos de la
+            instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+            la lista es `422`.
         device_name:
           type: string
           minLength: 1
