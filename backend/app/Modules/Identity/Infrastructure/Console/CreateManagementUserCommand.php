@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Console;
 
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Identity\Application\Command\CreateManagementAccountCommand;
 use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
 use App\Modules\Identity\Application\UseCase\CreateManagementAccountHandler;
@@ -37,7 +38,7 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
         {--name= : Nombre visible de la persona}
         {--email= : Correo, que es su identificador de acceso}
         {--role= : Rol del catalogo de RF-ID-02 (admin, rrhh, responsable_departamento, auditor)}
-        {--locale=es : Idioma del panel para esta cuenta}';
+        {--locale= : Idioma del panel para esta cuenta, uno de los activos; sin el, el de la instalacion}';
 
     protected $description = 'Crea una cuenta de gestion con su rol y una contrasena temporal (RF-ID-02, RF-ID-10).';
 
@@ -46,7 +47,9 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
         $name = $this->stringOption('name') ?? $this->asked('Nombre');
         $email = $this->stringOption('email') ?? $this->asked('Correo');
         $role = $this->stringOption('role') ?? $this->chosenRole();
-        $locale = $this->stringOption('locale') ?? 'es';
+        // Sin `--locale`, el de la instalacion (`LOCALE_DEFAULT`), y uno fuera de
+        // los activos se rechaza: el mismo criterio que el alta desde el panel.
+        $locale = $this->stringOption('locale') ?? ActiveLocale::defaultLocale();
 
         $validator = Validator::make(
             ['name' => $name, 'email' => $email, 'role' => $role, 'locale' => $locale],
@@ -57,7 +60,7 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
                     static fn (UserRole $case): string => $case->value,
                     UserRole::managementRoles(),
                 ))],
-                'locale' => ['required', 'string', 'min:2', 'max:10'],
+                'locale' => ['required', 'string', ActiveLocale::rule()],
             ],
         );
 

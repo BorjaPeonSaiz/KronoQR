@@ -264,27 +264,14 @@ final readonly class PlanEmployeeImport
 
         foreach ($this->locales->current()->available as $locale) {
             if (mb_strtolower($locale) === $wanted) {
-                return [self::withLocale($employee, $locale), []];
+                return [$employee->withLocale($locale), []];
             }
         }
 
         return [
-            self::withLocale($employee, null),
+            $employee->withLocale(null),
             [ImportMessage::of(ImportMessageCode::LOCALE_NOT_ACTIVE, 'locale')],
         ];
-    }
-
-    private static function withLocale(ImportedEmployee $employee, ?string $locale): ImportedEmployee
-    {
-        return new ImportedEmployee(
-            firstName: $employee->firstName,
-            lastName: $employee->lastName,
-            email: $employee->email,
-            nationalId: $employee->nationalId,
-            department: $employee->department,
-            hiredAt: $employee->hiredAt,
-            locale: $locale,
-        );
     }
 
     /**

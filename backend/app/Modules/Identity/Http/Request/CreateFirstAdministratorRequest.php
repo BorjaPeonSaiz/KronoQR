@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Identity\Application\Command\CreateFirstAdministratorCommand;
 use App\Modules\Identity\Http\Rule\ManagementPasswordPolicy;
-use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -67,7 +67,7 @@ final class CreateFirstAdministratorRequest extends FormRequest
             'password' => ['required', ...ManagementPasswordPolicy::rules()],
             // Uno de los idiomas activos de la instalacion; sin el, el de la
             // instalacion (`LOCALE_DEFAULT`). Fuera de la lista, 422.
-            'locale' => ['sometimes', 'string', 'in:'.implode(',', $this->availableLocales())],
+            'locale' => ['sometimes', 'string', ActiveLocale::rule()],
             'device_name' => ['sometimes', 'string', 'max:60'],
         ];
     }
@@ -80,18 +80,8 @@ final class CreateFirstAdministratorRequest extends FormRequest
             password: $this->string('password')->value(),
             locale: $this->has('locale')
                 ? $this->string('locale')->trim()->value()
-                : resolve(LocalePolicyProvider::class)->current()->default,
+                : ActiveLocale::defaultLocale(),
             deviceName: $this->string('device_name', 'Panel de gestion')->trim()->value(),
         );
-    }
-
-    /**
-     * Los idiomas activos de la instalacion (`LOCALE_AVAILABLE`, regla dura 13).
-     *
-     * @return list<string>
-     */
-    private function availableLocales(): array
-    {
-        return resolve(LocalePolicyProvider::class)->current()->available;
     }
 }

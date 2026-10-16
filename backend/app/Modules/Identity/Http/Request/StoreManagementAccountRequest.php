@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Identity\Application\Command\CreateManagementAccountCommand;
 use App\Modules\Identity\Application\Query\ManagementAccountView;
-use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -28,7 +28,7 @@ final class StoreManagementAccountRequest extends FormRequest
     }
 
     /**
-     * @return array<string, list<string>>
+     * @return array<string, list<mixed>>
      */
     public function rules(): array
     {
@@ -40,7 +40,7 @@ final class StoreManagementAccountRequest extends FormRequest
                 UserRole::managementRoles(),
             ))],
             // Uno de los idiomas activos en la instalacion (regla dura 13).
-            'locale' => ['sometimes', 'string', 'in:'.implode(',', $this->availableLocales())],
+            'locale' => ['sometimes', 'string', ActiveLocale::rule()],
             ...$this->actorProofRules(),
         ];
     }
@@ -53,17 +53,9 @@ final class StoreManagementAccountRequest extends FormRequest
             role: UserRole::from($this->string('role')->value()),
             locale: $this->has('locale')
                 ? $this->string('locale')->value()
-                : resolve(LocalePolicyProvider::class)->current()->default,
+                : ActiveLocale::defaultLocale(),
             actorUuid: $this->actorUuid(),
             proof: $this->actorProof(),
         );
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function availableLocales(): array
-    {
-        return resolve(LocalePolicyProvider::class)->current()->available;
     }
 }

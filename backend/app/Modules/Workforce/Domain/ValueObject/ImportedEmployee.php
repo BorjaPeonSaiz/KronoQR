@@ -140,4 +140,26 @@ final readonly class ImportedEmployee
     {
         return trim($this->firstName.' '.$this->lastName);
     }
+
+    /**
+     * La misma linea con otro idioma, o sin idioma (`null`).
+     *
+     * La usa el plan de importacion para normalizar el idioma a la forma de la
+     * lista activa (`EN` -> `en`) o para descartar uno que la instalacion no
+     * tiene activo (bloque 26 de la 2.2.1). Vive aqui, y no como una copia campo
+     * a campo en el caso de uso, para que un campo nuevo de la linea no se pierda
+     * por el camino sin que nadie lo note.
+     */
+    public function withLocale(?string $locale): self
+    {
+        return new self(
+            firstName: $this->firstName,
+            lastName: $this->lastName,
+            email: $this->email,
+            nationalId: $this->nationalId,
+            department: $this->department,
+            hiredAt: $this->hiredAt,
+            locale: $locale,
+        );
+    }
 }

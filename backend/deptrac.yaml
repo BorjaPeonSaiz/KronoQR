@@ -961,6 +961,12 @@ parameters:
       # laboral y no puede importar `Identity`. De solo lectura y solo sobre
       # EVENTOS, como las aristas de Compliance y Product sobre el mismo modulo.
       - WorkforceDomainEvent
+      # Bloque 26 de la 2.2.1. `identity:create-user` valida el idioma con la
+      # MISMA regla que los requests del panel (`App\Http\Rules\ActiveLocale`):
+      # dos criterios para lo mismo dejarian a una cuenta de consola con un
+      # idioma que la instalacion no ofrece. Es la direccion admitida —un modulo
+      # que alcanza el armazon—, la misma que ya usa `ProductInfrastructure`.
+      - AppFramework
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca

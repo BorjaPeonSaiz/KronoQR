@@ -9,7 +9,13 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Las instalaciones que ya estaban en uso conservan sus dos idiomas (**RF-KI-05**,
- * bloque 26 de la 2.2.1, decision del propietario de 16-10-2026).
+ * bloque 26 de la 2.2.1).
+ *
+ * **Propuesta del bloque 26, pendiente de validar por el propietario.** El
+ * español de serie si es decision suya; esta migracion es como se propone no
+ * cambiar nada a quien ya estaba en uso. Si la rechaza, se retira junto con los
+ * parrafos que la cuentan en `docs/cliente/configuracion.md` §2.3 y
+ * `operacion.md` §11 (y sus versiones en ingles).
  *
  * ## Por que hace falta
  *
@@ -100,12 +106,20 @@ return new class extends Migration
         }
     }
 
+    /**
+     * Al confirmar, no antes: `migrate` envuelve la migracion en una transaccion,
+     * y vaciar la cache dentro de ella dejaria a otra peticion repoblarla con lo
+     * de antes del `COMMIT` (la misma carrera que cierra
+     * `CachedSettingsRepository`). Fuera de una transaccion se ejecuta ya.
+     */
     private function forgetCachedSettings(): void
     {
-        try {
-            Cache::forget(self::CACHE_KEY);
-        } catch (Throwable) {
-            // Sin cache disponible: el TTL de cinco minutos lo cura solo.
-        }
+        DB::afterCommit(static function (): void {
+            try {
+                Cache::forget(self::CACHE_KEY);
+            } catch (Throwable) {
+                // Sin cache disponible: el TTL de cinco minutos lo cura solo.
+            }
+        });
     }
 };

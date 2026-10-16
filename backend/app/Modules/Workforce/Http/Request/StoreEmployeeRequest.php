@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
-use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Domain\Model\Employee;
 use Illuminate\Foundation\Http\FormRequest;
@@ -28,7 +28,7 @@ final class StoreEmployeeRequest extends FormRequest
     }
 
     /**
-     * @return array<string, list<string>>
+     * @return array<string, list<mixed>>
      */
     public function rules(): array
     {
@@ -43,7 +43,7 @@ final class StoreEmployeeRequest extends FormRequest
             'hired_at' => ['required', 'date_format:Y-m-d'],
             // Uno de los idiomas activos de la instalacion; sin el, el de la
             // instalacion (`LOCALE_DEFAULT`). Fuera de la lista, 422.
-            'locale' => ['sometimes', 'string', 'in:'.implode(',', $this->availableLocales())],
+            'locale' => ['sometimes', 'string', ActiveLocale::rule()],
             // Informativo (RF-GP-01). Sin el, `false`.
             'teleworking' => ['sometimes', 'boolean'],
         ];
@@ -60,19 +60,9 @@ final class StoreEmployeeRequest extends FormRequest
             hiredAt: $this->string('hired_at')->value(),
             locale: $this->has('locale')
                 ? $this->string('locale')->value()
-                : resolve(LocalePolicyProvider::class)->current()->default,
+                : ActiveLocale::defaultLocale(),
             teleworking: $this->boolean('teleworking'),
         );
-    }
-
-    /**
-     * Los idiomas activos de la instalacion (`LOCALE_AVAILABLE`, regla dura 13).
-     *
-     * @return list<string>
-     */
-    private function availableLocales(): array
-    {
-        return resolve(LocalePolicyProvider::class)->current()->available;
     }
 
     private function optionalString(string $key): ?string
