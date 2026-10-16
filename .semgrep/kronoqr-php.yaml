@@ -71,6 +71,22 @@ rules:
     patterns:
       - pattern-regex: '@phpstan-ignore(-next-line|-line)?[ \t]+[A-Za-z][A-Za-z0-9_.,: \t]*$'
 
+  # `@phpstan-ignore-line` y `-next-line` no leen el identificador: lo que les
+  # sigue es comentario y suprimen CUALQUIER error de la linea. Solo vale
+  # `@phpstan-ignore <id> (motivo)`, que suprime ese error y ninguno mas.
+  - id: kronoqr-phpstan-ignore-line
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      @phpstan-ignore-line y @phpstan-ignore-next-line suprimen cualquier error
+      de la linea aunque lleven identificador. Usa
+      @phpstan-ignore identificador.del.error (motivo) en su lugar.
+    paths:
+      include:
+        - /backend/**/*.php
+    patterns:
+      - pattern-regex: '@phpstan-ignore-(next-)?line\b'
+
   # --------------------------------------------------------------------------
   # Regla dura 21 y ADR-048 (H9 del dictamen de seguridad del bloque 19): nunca
   # nombres, correos ni telefonos en el CONTEXTO de una linea del log tecnico.

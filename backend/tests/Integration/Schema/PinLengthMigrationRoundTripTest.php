@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Workforce\WorkforceFixtures;
+use UnexpectedValueException;
 
 /*
  * `employees.pin_length` (RF-ID-09, ADR-050): la migracion vuelve atras y se
@@ -36,7 +37,7 @@ function pinLengthRoundTripSteps(): int
     $applied = DB::connection(pinLengthRoundTripConnection())->table('migrations')
         ->orderBy('id')
         ->pluck('migration')
-        ->map(static fn (mixed $name): string => (string) $name) // @phpstan-ignore-line cast.string (`pluck` devuelve `mixed`; la columna es `varchar` y el nombre de una migracion siempre es texto)
+        ->map(static fn (mixed $name): string => is_string($name) ? $name : throw new UnexpectedValueException('migrations.migration no es texto'))
         ->values()
         ->all();
 

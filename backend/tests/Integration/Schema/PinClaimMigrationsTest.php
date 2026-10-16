@@ -8,6 +8,7 @@ use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Compliance\IncidentFixtures;
 use Tests\Support\Database\CommittedDatabase;
+use UnexpectedValueException;
 
 /*
  * Las tres migraciones de RN-19, deshechas y reaplicadas, y sus dos `down()`
@@ -44,7 +45,7 @@ function pinClaimMigrationsStepsBefore(string $migration): int
     $applied = DB::connection(pinClaimMigrationsConnection())->table('migrations')
         ->orderBy('id')
         ->pluck('migration')
-        ->map(static fn (mixed $name): string => (string) $name) // @phpstan-ignore-line cast.string (`pluck` devuelve `mixed`; la columna es `varchar` y el nombre de una migracion siempre es texto)
+        ->map(static fn (mixed $name): string => is_string($name) ? $name : throw new UnexpectedValueException('migrations.migration no es texto'))
         ->values()
         ->all();
 

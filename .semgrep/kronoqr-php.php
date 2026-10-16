@@ -40,5 +40,14 @@ final class LogContextFixture
 
         // ok: kronoqr-log-con-datos-de-persona
         Log::info('product.error_history_resanitized', ['rows' => 2, 'merged' => 1]);
+
+        // ruleid: kronoqr-phpstan-ignore-line
+        $a = (string) $employee; // @phpstan-ignore-line cast.string (motivo)
+
+        // ruleid: kronoqr-phpstan-ignore-line
+        // @phpstan-ignore-next-line cast.string (motivo)
+
+        // ok: kronoqr-phpstan-ignore-line
+        $b = (string) $user; // @phpstan-ignore cast.string (motivo)
     }
 }

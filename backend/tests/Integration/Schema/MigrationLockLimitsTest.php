@@ -6,6 +6,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\LockLimitedMigration;
+use UnexpectedValueException;
 
 /*
  * `LimitsMigrationLocks`: los topes de una migracion no sobreviven a la
@@ -87,9 +88,7 @@ it('no deja los topes en la sesion tras una migracion real del migrador', functi
     $connection = DB::connection($name);
 
     /** @var list<string> $applied */
-    $applied = $connection->table('migrations')->orderBy('id')->pluck('migration')->map(
-        static fn (mixed $migration): string => (string) $migration // @phpstan-ignore-line cast.string (`pluck` devuelve `mixed`; la columna es `varchar` y el nombre de una migracion siempre es texto)
-    )->values()->all();
+    $applied = $connection->table('migrations')->orderBy('id')->pluck('migration')->map(static fn (mixed $name): string => is_string($name) ? $name : throw new UnexpectedValueException('migrations.migration no es texto'))->values()->all();
     $position = array_search(MIGRATION_LOCK_LIMITS_REAL, $applied, true);
 
     expect($position)->toBeInt(MIGRATION_LOCK_LIMITS_REAL.' no esta aplicada.');
