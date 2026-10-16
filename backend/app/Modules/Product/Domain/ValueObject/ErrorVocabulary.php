@@ -2895,6 +2895,7 @@ final readonly class ErrorVocabulary
         'watcher',
         'web',
         'webcrypto',
+        'webmanifest',
         'wednesday',
         'week',
         'weekly',

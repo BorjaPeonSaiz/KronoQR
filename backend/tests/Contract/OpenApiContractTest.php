@@ -253,6 +253,7 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // gracias a la huella del contenido que lleva su URL.
         '/api/v1/branding',
         '/api/v1/branding/logo',
+        '/api/v1/branding/manifest.webmanifest',
         // Tarea 5.9: el paquete de diagnostico (RF-PD-09, RL-19, ADR-020). Es
         // el UNICO canal por el que informacion del cliente llega al fabricante,
         // y por eso tiene ambito propio `diagnostics:*`: es lo que se le concede

@@ -337,6 +337,7 @@ function authorizationMatrixPublicRoutes(): array
     return [
         'GET api/v1/branding',
         'GET api/v1/branding/logo',
+        'GET api/v1/branding/manifest.webmanifest',
         'GET api/v1/health',
         'GET api/v1/ready',
         'GET api/v1/reports/exports/{uuid}/download',
