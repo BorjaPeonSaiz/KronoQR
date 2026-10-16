@@ -103,6 +103,9 @@ enum ImportMessageCode: string
     /** Un aviso no impide la linea; un error si. */
     public function isWarning(): bool
     {
-        return \in_array($this, [self::HIRED_AT_NOT_UPDATED, self::UNKNOWN_COLUMN, self::LOCALE_NOT_ACTIVE], true);
+        return match ($this) {
+            self::HIRED_AT_NOT_UPDATED, self::UNKNOWN_COLUMN, self::LOCALE_NOT_ACTIVE => true,
+            default => false,
+        };
     }
 }
