@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseOverview;
 use App\Modules\Product\Domain\ValueObject\PlanLimit;
 use App\Modules\Product\Domain\ValueObject\PlanUsage;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * La foto completa de la licencia para quien la administra: estado, plan,
@@ -38,6 +39,11 @@ final readonly class DescribeLicenseHandler
     ) {}
 
     public function handle(): LicenseOverview
+    {
+        return UseCaseInstrumentation::run('product.describe_license', fn (): LicenseOverview => $this->doHandle());
+    }
+
+    private function doHandle(): LicenseOverview
     {
         $status = $this->status->handle(touch: true);
         $license = $status->license;

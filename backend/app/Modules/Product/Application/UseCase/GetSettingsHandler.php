@@ -7,6 +7,7 @@ namespace App\Modules\Product\Application\UseCase;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
 use App\Modules\Product\Application\Port\SettingsRepository;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * La configuracion de la instalacion, resuelta (**RF-PD-01**).
@@ -40,6 +41,11 @@ final readonly class GetSettingsHandler
     ) {}
 
     public function handle(): ResolvedSettings
+    {
+        return UseCaseInstrumentation::run('product.get_settings', fn (): ResolvedSettings => $this->doHandle());
+    }
+
+    private function doHandle(): ResolvedSettings
     {
         $settings = ResolvedSettings::resolve($this->settings->storedValues());
 

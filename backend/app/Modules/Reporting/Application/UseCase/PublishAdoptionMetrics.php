@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\AdoptionMetrics;
 use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateInterval;
 use DateTimeZone;
 
@@ -46,6 +47,11 @@ final readonly class PublishAdoptionMetrics
     ) {}
 
     public function handle(): bool
+    {
+        return UseCaseInstrumentation::run('reporting.publish_adoption_metrics', fn (): bool => $this->doHandle());
+    }
+
+    private function doHandle(): bool
     {
         $site = $this->installation->installationSite();
 

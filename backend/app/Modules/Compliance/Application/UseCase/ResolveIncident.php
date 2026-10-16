@@ -19,6 +19,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -83,6 +84,11 @@ final readonly class ResolveIncident
      * @throws IncidentAlreadyClosed cuando ya estaba cerrada
      */
     public function handle(ResolveIncidentCommand $command): IncidentBoardRow
+    {
+        return UseCaseInstrumentation::run('compliance.resolve_incident', fn (): IncidentBoardRow => $this->doHandle($command));
+    }
+
+    private function doHandle(ResolveIncidentCommand $command): IncidentBoardRow
     {
         $row = $this->board->row($command->incidentId);
 

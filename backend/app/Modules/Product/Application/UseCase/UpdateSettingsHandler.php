@@ -17,6 +17,7 @@ use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Product\Domain\ValueObject\SettingValue;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -121,6 +122,11 @@ final readonly class UpdateSettingsHandler
      * @throws LowContrastAccentColor cuando un acento nuevo no llega a 4,5:1 sobre las superficies claras y no viene confirmado (MB2)
      */
     public function handle(UpdateSettingsCommand $command): ResolvedSettings
+    {
+        return UseCaseInstrumentation::run('product.update_settings', fn (): ResolvedSettings => $this->doHandle($command));
+    }
+
+    private function doHandle(UpdateSettingsCommand $command): ResolvedSettings
     {
         $requested = [];
 

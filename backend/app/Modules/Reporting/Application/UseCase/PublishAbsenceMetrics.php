@@ -9,6 +9,7 @@ use App\Modules\Reporting\Application\Port\AbsenceMetrics;
 use App\Modules\Reporting\Domain\ValueObject\AbsenceCategory;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeZone;
 
@@ -64,6 +65,14 @@ final readonly class PublishAbsenceMetrics
      * @return bool `false` si todavia no hay centro de trabajo.
      */
     public function handle(): bool
+    {
+        return UseCaseInstrumentation::run('reporting.publish_absence_metrics', fn (): bool => $this->doHandle());
+    }
+
+    /**
+     * @return bool `false` si todavia no hay centro de trabajo.
+     */
+    private function doHandle(): bool
     {
         $site = $this->installation->installationSite();
 

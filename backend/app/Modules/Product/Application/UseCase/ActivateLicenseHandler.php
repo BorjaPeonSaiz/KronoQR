@@ -14,6 +14,7 @@ use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -63,6 +64,11 @@ final readonly class ActivateLicenseHandler
      * @throws InvalidLicenseKey si verifica pero la carga util no sirve
      */
     public function handle(ActivateLicenseCommand $command): LicenseStatus
+    {
+        return UseCaseInstrumentation::run('product.activate_license', fn (): LicenseStatus => $this->doHandle($command));
+    }
+
+    private function doHandle(ActivateLicenseCommand $command): LicenseStatus
     {
         // Se normaliza antes de verificar: una clave copiada de un correo llega
         // con espacios y con saltos de linea, y rechazarla por eso seria

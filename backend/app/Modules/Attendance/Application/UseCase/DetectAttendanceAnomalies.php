@@ -32,6 +32,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
@@ -99,6 +100,11 @@ final readonly class DetectAttendanceAnomalies
     ) {}
 
     public function handle(DetectAnomaliesCommand $command): AnomalyScanResult
+    {
+        return UseCaseInstrumentation::run('attendance.detect_attendance_anomalies', fn (): AnomalyScanResult => $this->doHandle($command));
+    }
+
+    private function doHandle(DetectAnomaliesCommand $command): AnomalyScanResult
     {
         $site = $this->sites->installationSite();
 

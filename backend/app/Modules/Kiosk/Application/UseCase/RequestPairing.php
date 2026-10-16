@@ -12,6 +12,7 @@ use App\Modules\Kiosk\Application\Port\PairingRequests;
 use App\Modules\Kiosk\Application\Port\PairingSecrets;
 use App\Modules\Kiosk\Application\Query\PairingTicket;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -96,6 +97,11 @@ final readonly class RequestPairing
      * @throws PairingCodeSpaceExhausted si no queda ningun codigo libre que sortear
      */
     public function handle(RequestPairingCommand $command): PairingTicket
+    {
+        return UseCaseInstrumentation::run('kiosk.request_pairing', fn (): PairingTicket => $this->doHandle($command));
+    }
+
+    private function doHandle(RequestPairingCommand $command): PairingTicket
     {
         $now = $this->clock->now();
 

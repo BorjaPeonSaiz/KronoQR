@@ -11,6 +11,7 @@ use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -68,6 +69,11 @@ final readonly class GenerateLegalExport
     ) {}
 
     public function handle(GenerateLegalExportCommand $command): LegalExport
+    {
+        return UseCaseInstrumentation::run('compliance.generate_legal_export', fn (): LegalExport => $this->doHandle($command));
+    }
+
+    private function doHandle(GenerateLegalExportCommand $command): LegalExport
     {
         $manifest = new LegalExportManifest(
             generatedAt: $this->clock->now(),
