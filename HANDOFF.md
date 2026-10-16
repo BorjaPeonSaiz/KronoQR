@@ -60,7 +60,21 @@ teléfono para el código 2FA) y el enlace al vídeo van en el formulario de ent
 `README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
-**Siguiente acción: la 2.2.1, bloques 18 a 26 y 24, encadenados** por orden del propietario del 15-10-2026 (tarde): un PR por bloque mientras todo esté en verde; si algo sale rojo y no se arregla en el bloque, parar. **B17 a B20 integrados** (#161, #162, #167, #168; `main` `3ee0eb9a`; ver «Pendiente», bloques 18 a 20). B17 (#161: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
+**Siguiente acción: publicar la 2.2.1 (bloque final del plan) y después volver a verificar con `docs/plan-verificacion-kronoqr.md`**. Lo ordenó el propietario el 16-10-2026, en cuanto se integre el B24.
+
+**B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
+- B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
+- B22 (#170): índices y adopción.
+- B23 (#171): documentación, dependencias, PDF etiquetado solo en el registro personal, embudo de PDF con 503 `pdf-rendering-busy`, y revisión de la purga solo por admin o rrhh.
+- B25 (#174): el auditor solo ve Inspección. La migración retira sus ámbitos `attendance:read` y `audit:read`.
+- B26 (#175): español de serie. `LOCALE_AVAILABLE=['es']`, regla `ActiveLocale` y `resolveUiLocale` en web-kit.
+  - La migración `preserve_locales_on_existing_installations` deja `[es,en]` en las instalaciones ya en uso; el propietario la aceptó el 16-10.
+  - `SettingLimitsTest` fija los límites del catálogo; sin esa prueba, tocar `SettingKey` hundía el MSI de la mutación.
+- B24: `UseCaseInstrumentation::run` y la métrica `use_case_duration_seconds{use_case,outcome}`.
+  - 65 casos de uso medidos y 61 excepciones con motivo cerrado.
+  - `UseCaseInstrumentationTest` lleva un tope `MAX_EXCEPTIONS` que solo baja.
+
+**Pendiente del demo:** recrear Loki para que use `retention-guard`. B17 (#161: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
 (B8 a B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
 
