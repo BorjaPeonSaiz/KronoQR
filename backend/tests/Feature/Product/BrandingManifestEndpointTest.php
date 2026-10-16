@@ -120,8 +120,8 @@ it('sirve el manifiesto de serie, sin autenticar, cuando no hay marca', function
     ]);
 })->group('RF-PD-01', 'RF-PD-08');
 
-it('publica el nombre, el color y el logotipo PNG cuadrado de 512 de la marca', function (): void {
-    $bytes = FixedLogo::pngOfSize(512, 512);
+it('publica el nombre, el color y el logotipo PNG cuadrado con su tamaño real', function (int $side): void {
+    $bytes = FixedLogo::pngOfSize($side, $side);
 
     manifiestoGuardarMarca(
         ['BRANDING_APP_NAME' => 'Hotel Marina', 'BRANDING_ACCENT_COLOR' => '#0f5c8c'],
@@ -137,13 +137,14 @@ it('publica el nombre, el color y el logotipo PNG cuadrado de 512 de la marca', 
         // Lo que es comportamiento del quiosco no se mueve con la marca.
         ->and($response->json('id'))->toBe('/kiosk/')
         ->and($response->json('background_color'))->toBe('#0f172a')
-        // La misma URL con huella que publica `GET /api/v1/branding`.
+        // La misma URL con huella que publica `GET /api/v1/branding`, en una
+        // sola entrada y con el tamaño que mide de verdad: declararla a 192 o a
+        // 512 sin medirlo hace que Chromium avise de un manifiesto incoherente.
         ->and($response->json('icons'))->toBe([
-            ['src' => $logoUrl, 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
-            ['src' => $logoUrl, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => $logoUrl, 'sizes' => $side.'x'.$side, 'type' => 'image/png', 'purpose' => 'any'],
         ])
         ->and(Api::guest()->get('/api/v1/branding')->json('logo_url'))->toBe($logoUrl);
-})->group('RF-PD-01', 'RF-PD-08');
+})->with(['512 px' => 512, '1024 px' => 1024])->group('RF-PD-01', 'RF-PD-08');
 
 it('mantiene los iconos de serie si el logotipo no sirve de icono', function (string $logoName, string $bytes): void {
     // Sin rasterizar nada: un SVG, un PNG pequeño o uno no cuadrado deformarian

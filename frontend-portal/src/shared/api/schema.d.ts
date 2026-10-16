@@ -4310,7 +4310,10 @@ export interface paths {
          *     - `icons`: **el logotipo de la marca solo si es un PNG cuadrado de al
          *       menos 512 px de lado**, que es lo que Android necesita para ofrecer la
          *       instalacion; se publica la misma URL con huella que
-         *       `GET /api/v1/branding` (`logo_url`), declarada a 192 y a 512. En
+         *       `GET /api/v1/branding` (`logo_url`), en **una sola entrada con su
+         *       tamaño real** (de `512x512` a `2048x2048`): declararla a un tamaño
+         *       que no tiene hace que el navegador avise de un manifiesto
+         *       incoherente, y el de 512 o mas ya lo reduce el navegador. En
          *       cualquier otro caso —SVG, PNG pequeño o no cuadrado, sin logotipo, o
          *       sin la marca blanca en el plan— los iconos de serie del quiosco,
          *       incluido el `maskable`. **El servidor no rasteriza nada.**
@@ -8064,8 +8067,11 @@ export interface components {
          */
         WebAppManifestIcon: {
             src: string;
-            /** @enum {string} */
-            sizes: "192x192" | "512x512";
+            /**
+             * @description Tamaño real del fichero, `ANCHOxALTO`. Los de serie son `192x192` y
+             *     `512x512`; el del logotipo, su lado real, cuadrado y de al menos 512.
+             */
+            sizes: string;
             /** @constant */
             type: "image/png";
             /** @enum {string} */

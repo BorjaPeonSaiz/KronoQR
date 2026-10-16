@@ -19,6 +19,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * y el contrato los fija. **`id` no cambia nunca con la marca**: si cambiara, la
  * tablet trataria el quiosco rebautizado como otra aplicacion.
  *
+ * Por lo mismo, **la ruta del quiosco la pone aqui**: los iconos de serie llegan
+ * relativos (`icons/icon-192.png`) y se les antepone `KIOSK_PATH`, el mismo que
+ * `scope`. El logotipo de la marca ya llega absoluto y pasa tal cual.
+ *
  * La descripcion es un texto de usuario y va en i18n, en el idioma por defecto
  * de la instalacion, que es el que declara `lang`.
  *
@@ -62,7 +66,7 @@ final class KioskManifestResource extends JsonResource
             'background_color' => self::BACKGROUND_COLOR,
             'icons' => array_map(
                 static fn (KioskManifestIcon $icon): array => [
-                    'src' => $icon->src,
+                    'src' => $icon->kioskAsset ? self::KIOSK_PATH.$icon->src : $icon->src,
                     'sizes' => $icon->sizes,
                     'type' => 'image/png',
                     'purpose' => $icon->purpose,
