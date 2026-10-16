@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\ValueObject;
 
+use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
+
 /**
  * Lo que un escaneo **hace con la jornada**: las cuatro acciones de fichaje de
  * RF-AT-02, RF-AT-03 y RF-AT-12 (ADR-024).
@@ -11,7 +13,7 @@ namespace App\Modules\Attendance\Domain\ValueObject;
  * ## Por que vive en el dominio
  *
  * Una regla del dominio razona sobre `clock_in` frente a `break_start`:
- * {@see \App\Modules\Attendance\Domain\Policy\ScanIntentPolicy}, y ademas el
+ * {@see ScanIntentPolicy}, y ademas el
  * anti-rebote de RF-AT-06 necesita saber **que fue** el escaneo vecino para no
  * tragarse una vuelta de pausa.
  *
