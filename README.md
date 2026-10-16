@@ -2,7 +2,7 @@
 
 **Control de presencia y registro horario con valor legal para hoteles, mediante tarjeta QR y tablet‑quiosco.**
 
-![Versión](https://img.shields.io/badge/versión-2.2.0-1f6feb)
+![Versión](https://img.shields.io/badge/versión-2.2.1-1f6feb)
 ![PHP](https://img.shields.io/badge/PHP-8.4-777bb4)
 ![Laravel](https://img.shields.io/badge/Laravel-13-ff2d20)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
@@ -288,7 +288,7 @@ No existe instalador de Windows (ADR‑022): en infraestructuras Windows se inst
 #### Procedimiento resumido
 
 ```bash
-tar xzf kronoqr-2.2.0.tar.gz && cd kronoqr-2.2.0
+tar xzf kronoqr-2.2.1.tar.gz && cd kronoqr-2.2.1
 
 # 1. Certificado TLS, legible por el borde sin privilegios (uid 101)
 cp /ruta/certificado.crt certs/tls.crt && cp /ruta/clave.key certs/tls.key
