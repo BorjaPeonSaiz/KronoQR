@@ -180,10 +180,9 @@ final class ReportingServiceProvider extends ServiceProvider
          *
          * Fichero para el colector *textfile* de `node-exporter`, como las de
          * credenciales y las de la cadena de auditoria, y por el mismo motivo:
-         * `/metrics` existe desde la tarea 3.1 (`MetricCatalogue` y
-         * `MetricsCatalogueTest` contra el doc 02 §8.2), pero estas series no
-         * pasan por ahi: quien las produce es un comando programado que corre
-         * y termina.
+         * `/metrics` existe (`MetricCatalogue` y `MetricsCatalogueTest` contra
+         * el doc 02 §8.2), pero estas series no pasan por ahi: quien las
+         * produce es un comando programado que corre y termina.
          */
         $this->app->bind(PresenceMetrics::class, TextfilePresenceMetrics::class);
 
@@ -695,13 +694,13 @@ final class ReportingServiceProvider extends ServiceProvider
      * garantiza que el fichero y la pantalla digan lo mismo (criterios, festivos,
      * zona horaria y asiento de divulgacion incluidos).
      *
-     * **Dos consumidores desde la tarea 3.12** y por eso hay un enlace con
-     * nombre ({@see self::DEFERRED_PERIOD_REPORT}) y no una llamada suelta: la
-     * generacion en diferido (RF-IN-06) y el resumen semanal (RF-PR-05). Los dos
-     * corren sin nadie delante, asi que los techos de la respuesta sincrona no
-     * les aplican y el que si importa es el del servidor. Con dos copias de esta
-     * composicion, el dia que cambiara un colaborador una de ellas se quedaria
-     * atras en silencio.
+     * **Dos consumidores**, y por eso hay un enlace con nombre
+     * ({@see self::DEFERRED_PERIOD_REPORT}) y no una llamada suelta: la
+     * generacion en diferido (RF-IN-06) y el resumen semanal (RF-PR-05). Los
+     * dos corren sin nadie delante, asi que los techos de la respuesta sincrona
+     * no les aplican y el que si importa es el del servidor. Con dos copias de
+     * esta composicion, el dia que cambiara un colaborador una de ellas se
+     * quedaria atras en silencio.
      */
     private function deferredPeriodReport(Application $app): GeneratePeriodReport
     {

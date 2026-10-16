@@ -166,9 +166,9 @@ final class ApplyRetentionCommand extends Command
      *
      * **Por SQLSTATE, no por el texto.** El mensaje de `QueryException` incluye
      * la sentencia entera, que nombra siempre la funcion de purga: buscar su
-     * nombre en el mensaje era verdadero en cualquier fallo de la purga, y el
-     * operador recibia «revisa los relojes» ante un bloqueo o un perfil que
-     * falta (revision del bloque 7).
+     * nombre en el mensaje seria verdadero en cualquier fallo de la purga, y el
+     * operador recibiria «revisa los relojes» ante un bloqueo o un perfil que
+     * falta.
      *
      * - `42501` con el texto del rechazo del corte: la funcion de ADR-057 §3
      *   calcula su corte con el reloj de PostgreSQL y el plazo **mas largo de

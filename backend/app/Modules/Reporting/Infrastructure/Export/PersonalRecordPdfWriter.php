@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\View;
  *
  * El Anexo B del doc 01 exige CSV **y PDF** para el historico personal: el CSV
  * cubre la portabilidad del RGPD y el PDF es lo que una persona presenta ante
- * un tercero. Hasta la 2.2.0 solo existia el CSV.
+ * un tercero.
  *
  * ## Reutiliza las plantillas y el sello del informe por periodo
  *

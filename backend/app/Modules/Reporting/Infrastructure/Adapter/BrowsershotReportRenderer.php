@@ -57,13 +57,12 @@ use Throwable;
  *
  * Puppeteer genera PDF etiquetado por omision, y en estos documentos el arbol
  * de estructura es casi todo el peso: un año del registro propio (1464 tramos,
- * 36 paginas) llevaba 27 916 elementos `StructElem` —un `TD` y un `NonStruct`
+ * 36 paginas) lleva 27 916 elementos `StructElem` —un `TD` y un `NonStruct`
  * por celda— sin comprimir, 4,2 de sus 4,5 MiB. Sin etiquetar pesa 0,34 MiB y
- * se compone en la mitad de tiempo (medido en el bloque 23 de la 2.2.1). El
- * texto sigue siendo seleccionable y buscable; lo que se pierde es la
- * estructura para lectores de pantalla, que el mismo dato ya tiene en la
- * pantalla del portal y del panel y en el CSV. Una instalacion que la necesite
- * en el PDF la enciende por configuracion.
+ * se compone en la mitad de tiempo. El texto sigue siendo seleccionable y
+ * buscable; lo que se pierde es la estructura para lectores de pantalla, que el
+ * mismo dato ya tiene en la pantalla del portal y del panel y en el CSV. Una
+ * instalacion que la necesite en el PDF la enciende por configuracion.
  */
 final readonly class BrowsershotReportRenderer implements ReportDocumentRenderer
 {
