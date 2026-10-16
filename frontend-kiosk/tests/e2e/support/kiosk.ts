@@ -317,8 +317,10 @@ export interface BrandingStubOptions {
   /**
    * `product`: la marca por defecto (`accent_color`/`logo_url` nulos). `hotel-marina`: el
    * ejemplo del contrato (`docs/api/openapi.yaml`), con acento y logotipo.
+   * `bilingual`: como `product` pero con espanol e ingles activados
+   * (`locales.available = [es, en]`, RF-KI-05): es la unica que enseña el selector.
    */
-  readonly variant?: 'product' | 'hotel-marina'
+  readonly variant?: 'product' | 'bilingual' | 'hotel-marina'
   /**
    * `privacy_notice` de la marca (RF-KI-09, RL-09): lo que el aviso de privacidad
    * enseña. Sin esto, los dos campos son `null` (aviso generico).
@@ -357,7 +359,10 @@ export async function stubBrandingApi(
           application_name: 'KronoQR',
           accent_color: null,
           logo_url: null,
-          locales: { default: 'es', available: ['es', 'en'] },
+          locales: {
+            default: 'es',
+            available: variant === 'bilingual' ? ['es', 'en'] : ['es'],
+          },
           privacy_notice: privacyNotice,
         }
 

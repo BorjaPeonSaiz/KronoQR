@@ -38,6 +38,7 @@ import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
+import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
@@ -340,6 +341,9 @@ onUnmounted(() => {
   heartbeat.stop()
   if (returnTimer !== null) clearTimeout(returnTimer)
 })
+
+// Idiomas de la instalacion segun la copia de la marca (RF-KI-05): sin copia, solo espanol.
+const localePolicy = readCachedLocalePolicy()
 </script>
 
 <template>
@@ -356,7 +360,7 @@ onUnmounted(() => {
         :pending-count="connectivity.pendingCount.value"
         :syncing="offline.syncing.value"
       />
-      <LanguageSelector />
+      <LanguageSelector :policy="localePolicy" />
     </header>
 
     <section class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-10">

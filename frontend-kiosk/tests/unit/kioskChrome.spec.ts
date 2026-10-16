@@ -1,9 +1,18 @@
 import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { createAppI18n, initialLocale, readStoredLocale } from '@/shared/i18n'
+
+const BRANDING_KEY = 'kronoqr.kiosk.branding'
+const RAW_BILINGUAL = {
+  application_name: 'KronoQR',
+  accent_color: null,
+  logo_url: null,
+  locales: { default: 'es', available: ['es', 'en'] },
+  privacy_notice: { controller_name: null, policy_url: null },
+}
 
 describe('indicador de estado de conexion', () => {
   it('dice que hay red', () => {
@@ -79,11 +88,17 @@ describe('indicador de estado de conexion', () => {
   })
 })
 
+const BILINGUAL = { default: 'es', available: ['es', 'en'] }
+const SPANISH_ONLY = { default: 'es', available: ['es'] }
+
 describe('selector de idioma', () => {
   beforeEach(() => localStorage.clear())
 
   it('ofrece los dos idiomas con objetivos tactiles de 48 px', () => {
-    const wrapper = mount(LanguageSelector, { global: { plugins: [createAppI18n('es')] } })
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: BILINGUAL },
+      global: { plugins: [createAppI18n('es')] },
+    })
     const buttons = wrapper.findAll('button')
 
     expect(buttons).toHaveLength(2)
@@ -94,7 +109,10 @@ describe('selector de idioma', () => {
 
   it('cambia el idioma y lo recuerda para la proxima vez', async () => {
     const i18n = createAppI18n('es')
-    const wrapper = mount(LanguageSelector, { global: { plugins: [i18n] } })
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: BILINGUAL },
+      global: { plugins: [i18n] },
+    })
 
     await wrapper.findAll('button')[1]?.trigger('click')
 
@@ -105,16 +123,19 @@ describe('selector de idioma', () => {
 
   it('la preferencia guardada gana a la del navegador', () => {
     localStorage.setItem('kronoqr.kiosk.locale', 'en')
-    expect(initialLocale(['es-ES'])).toBe('en')
+    expect(initialLocale(['es-ES'], localStorage, BILINGUAL)).toBe('en')
   })
 
   it('sin preferencia guardada, detecta la del navegador', () => {
-    expect(initialLocale(['en-GB', 'es-ES'])).toBe('en')
-    expect(initialLocale(['fr-FR'])).toBe('es')
+    expect(initialLocale(['en-GB', 'es-ES'], localStorage, BILINGUAL)).toBe('en')
+    expect(initialLocale(['fr-FR'], localStorage, BILINGUAL)).toBe('es')
   })
 
   it('marca cual esta activo para quien navega con lector de pantalla', () => {
-    const wrapper = mount(LanguageSelector, { global: { plugins: [createAppI18n('es')] } })
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: BILINGUAL },
+      global: { plugins: [createAppI18n('es')] },
+    })
     const buttons = wrapper.findAll('button')
 
     expect(buttons[0]?.attributes('aria-pressed')).toBe('true')
@@ -152,14 +173,74 @@ describe('selector de idioma', () => {
     await wrapper.setProps({ policy: { default: 'es', available: ['es'] } })
 
     expect(i18n.global.locale.value).toBe('es')
-    expect(readStoredLocale()).toBe('es')
+    expect(readStoredLocale()).toBeNull()
     expect(wrapper.find('[role="group"]').exists()).toBe(false)
   })
 
-  it('sin `policy`, ofrece los dos idiomas de siempre (pantallas sin marca todavia)', () => {
+  it('sin `policy` y sin copia de la marca, es el producto: solo espanol, sin selector (RF-KI-05)', () => {
+    const wrapper = mount(LanguageSelector, { global: { plugins: [createAppI18n('es')] } })
+
+    expect(wrapper.find('[role="group"]').exists()).toBe(false)
+  })
+
+  it('sin `policy`, usa la de la copia guardada de la marca (RF-KI-05)', () => {
+    localStorage.setItem(BRANDING_KEY, JSON.stringify(RAW_BILINGUAL))
     const wrapper = mount(LanguageSelector, { global: { plugins: [createAppI18n('es')] } })
 
     expect(wrapper.findAll('button')).toHaveLength(2)
+  })
+
+  it('cuando la marca abre un segundo idioma sin eleccion guardada, vuelve a seguir al navegador (RF-KI-05)', async () => {
+    const i18n = createAppI18n('es')
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: SPANISH_ONLY },
+      global: { plugins: [i18n] },
+    })
+    expect(i18n.global.locale.value).toBe('es')
+
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
+    await wrapper.setProps({ policy: BILINGUAL })
+
+    expect(i18n.global.locale.value).toBe('en')
+    expect(readStoredLocale()).toBeNull()
+    vi.restoreAllMocks()
+  })
+
+  it('con una eleccion guardada, abrir un segundo idioma no la pisa (RF-KI-05)', async () => {
+    localStorage.setItem('kronoqr.kiosk.locale', 'es')
+    const i18n = createAppI18n('es')
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: SPANISH_ONLY },
+      global: { plugins: [i18n] },
+    })
+
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
+    await wrapper.setProps({ policy: BILINGUAL })
+
+    expect(i18n.global.locale.value).toBe('es')
+    vi.restoreAllMocks()
+  })
+})
+
+describe('idioma inicial segun la politica de la instalacion (RF-KI-05)', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('con un solo idioma, ni el navegador ni la eleccion guardada lo cambian', () => {
+    localStorage.setItem('kronoqr.kiosk.locale', 'en')
+    expect(initialLocale(['en-GB'], localStorage, SPANISH_ONLY)).toBe('es')
+    expect(initialLocale(['en-GB'], null, SPANISH_ONLY)).toBe('es')
+  })
+
+  it('con dos idiomas, gana la eleccion guardada y despues el navegador', () => {
+    expect(initialLocale(['en-GB'], localStorage, BILINGUAL)).toBe('en')
+    localStorage.setItem('kronoqr.kiosk.locale', 'es')
+    expect(initialLocale(['en-GB'], localStorage, BILINGUAL)).toBe('es')
+  })
+
+  it('sin politica explicita lee la de la copia guardada, y sin copia es solo espanol', () => {
+    expect(initialLocale(['en-GB'])).toBe('es')
+    localStorage.setItem(BRANDING_KEY, JSON.stringify(RAW_BILINGUAL))
+    expect(initialLocale(['en-GB'])).toBe('en')
   })
 })
 

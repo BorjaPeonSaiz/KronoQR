@@ -47,6 +47,7 @@ import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/tel
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import { resolveTimeZone } from '@kronoqr/web-kit/datetime'
+import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'
 import type { QueueStats } from '@/features/offline/application/scanQueue'
@@ -462,6 +463,9 @@ onBeforeUnmount(() => {
   heartbeat?.stop()
   for (const unsubscribe of unsubscribes) unsubscribe()
 })
+
+// Idiomas de la instalacion segun la copia de la marca (RF-KI-05): sin copia, solo espanol.
+const localePolicy = readCachedLocalePolicy()
 </script>
 
 <template>
@@ -478,7 +482,7 @@ onBeforeUnmount(() => {
       <!-- El selector solo contiene botones: un click aqui SIEMPRE es un
            control real burbujeando hasta este `div` (revision de la 3.3). -->
       <div @click="noteInteraction">
-        <LanguageSelector />
+        <LanguageSelector :policy="localePolicy" />
       </div>
     </header>
 

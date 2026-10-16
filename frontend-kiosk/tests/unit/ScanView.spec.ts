@@ -88,10 +88,27 @@ describe('pantalla del quiosco', () => {
     wrapper.unmount()
   })
 
-  it('ofrece los dos idiomas (RF-KI-05)', () => {
+  it('ofrece los dos idiomas cuando la instalacion los activa (RF-KI-05)', () => {
+    localStorage.setItem(
+      'kronoqr.kiosk.branding',
+      JSON.stringify({
+        application_name: 'KronoQR',
+        accent_color: null,
+        logo_url: null,
+        locales: { default: 'es', available: ['es', 'en'] },
+        privacy_notice: { controller_name: null, policy_url: null },
+      }),
+    )
     const wrapper = render()
 
     expect(wrapper.find('[role="group"]').text()).toContain('English')
+    wrapper.unmount()
+  })
+
+  it('de serie solo ofrece espanol: no enseña el selector de idioma (RF-KI-05)', () => {
+    const wrapper = render()
+
+    expect(wrapper.find('[role="group"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
