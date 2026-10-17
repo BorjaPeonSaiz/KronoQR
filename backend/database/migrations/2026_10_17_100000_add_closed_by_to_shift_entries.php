@@ -31,13 +31,16 @@ use Illuminate\Support\Facades\DB;
  * ## Que hace esta
  *
  * - La columna, nula y sin valor por defecto: solo catalogo.
- * - Un *trigger* `BEFORE INSERT OR UPDATE` que pone `clock_out` cuando llega una
- *   salida sin cierre. Es la compatibilidad de la fase *expand* (ADR-058): la
- *   version anterior, que sigue sirviendo durante el despliegue, no escribe la
- *   columna, y lo que escribe —una salida sin mas— es exactamente una salida.
- *   Tambien lo que escriben las semillas y las pruebas con SQL directo. Se
- *   retira en la fase *contract*, cuando ninguna version en servicio deje de
- *   escribir la columna.
+ * - Un *trigger* `BEFORE INSERT OR UPDATE` que pone `clock_out` cuando un tramo
+ *   nace cerrado o se cierra sin cierre declarado (ADR-058 §4). Existe para lo
+ *   que escribe sin pasar por el dominio: las semillas, las pruebas y el SQL
+ *   directo; lo que escriben —una salida sin mas— es exactamente una salida. No
+ *   toca un tramo que ya estaba cerrado. Se retira en la fase *contract*.
+ *
+ * **El despliegue soportado migra en mantenimiento**, sin fichajes
+ * concurrentes (`update.sh`). Migrar con la version anterior atendiendo **no
+ * esta soportado**: las pausas que cerrara quedarian como `clock_out`, y
+ * corregir un tramo que el relleno aun no ha alcanzado daria `42501`.
  * - El *trigger* de transiciones de ADR-057 §2 aprende la columna: solo cambia
  *   al cerrar un tramo abierto, junto con la salida. Se reescribe sobre su
  *   definicion vigente (`pg_get_functiondef`) para no copiar aqui su cuerpo.
@@ -91,7 +94,16 @@ return new class extends Migration
             SET search_path = pg_catalog, pg_temp
             AS $kronoqr$
             BEGIN
-                IF NEW.clocked_out_at IS NOT NULL AND NEW.closed_by IS NULL THEN
+                IF NEW.clocked_out_at IS NULL OR NEW.closed_by IS NOT NULL THEN
+                    RETURN NEW;
+                END IF;
+
+                -- Solo al nacer el tramo o al cerrarlo: un tramo ya cerrado no
+                -- se rellena solo (eso lo hace el relleno por lotes, y la
+                -- guarda de transiciones no lo dejaria).
+                IF TG_OP = 'INSERT' THEN
+                    NEW.closed_by := 'clock_out';
+                ELSIF OLD.clocked_out_at IS NULL THEN
                     NEW.closed_by := 'clock_out';
                 END IF;
 

@@ -309,7 +309,7 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
 
 ### 3 bis. Tras actualizar a la 2.3.0: tramos escritos antes de la cota de continuación
 
-Desde la 2.3.0 ([ADR-058](../adr/ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md)),
+Desde la 2.3.0 (ADR-058),
 un tramo dado de alta o corregido a mano que empieza en un día civil distinto de
 su jornada solo se admite si **continúa una pausa**: el tramo anterior terminó en
 pausa (`closed_by`, que la actualización rellena desde los escaneos «Pausa»), su
@@ -326,9 +326,11 @@ nombres.
 en su propia transacción. Medido en desarrollo con 22 560 tramos cerrados y
 193 574 escaneos: **1 s en total, unos 90 ms por lote**. Una instalación de 100
 personas con cuatro años de registro (unos 200 000 tramos) tarda del orden de
-**10 s**; mientras dura un lote, las escrituras del fichaje en `shift_entries`
-esperan como mucho ese lote, y la cola offline del quiosco las reintenta si
-hiciera falta.
+**10 s**. Corre dentro de la ventana de mantenimiento de `update.sh`, sin
+fichajes concurrentes, que es el único despliegue soportado: con la versión
+anterior atendiendo, las pausas que cerrara quedarían como salidas. Si hubiera
+que deshacer la actualización, se restaura la copia (ADR-054): repetir el
+relleno no reproduce las pausas declaradas a mano.
 
 ```bash
 docker compose exec -T postgres psql -U fichaje_app -d fichaje <<'SQL'

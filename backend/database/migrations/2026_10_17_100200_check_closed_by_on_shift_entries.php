@@ -31,6 +31,9 @@ return new class extends Migration
         DB::transaction(function (): void {
             $this->limitLockWait();
 
+            // Idempotente: si el `VALIDATE` se interrumpe, el siguiente
+            // `migrate` vuelve a entrar aqui.
+            DB::statement('ALTER TABLE shift_entries DROP CONSTRAINT IF EXISTS '.self::CHECK);
             DB::statement('ALTER TABLE shift_entries ADD CONSTRAINT '.self::CHECK.' CHECK ('
                 ."(clocked_out_at IS NULL) = (closed_by IS NULL) AND (closed_by IS NULL OR closed_by IN ('clock_out', 'break_start'))"
                 .') NOT VALID');

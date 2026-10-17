@@ -342,6 +342,7 @@ it('rechaza mover a otro dia la entrada que abre la jornada', function (): void 
         // lo pinta junto a la hora de entrada— pero le permite ofrecer los dos
         // actos (anular aqui, dar de alta alla) en vez de un parrafo.
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'opening_moved')
         ->assertJsonPath('status', 422)
         ->assertJsonPath('errors.clocked_in_at.0', fn (string $mensaje): bool => str_contains($mensaje, 'anula'));
 })->group('RN-05', 'RF-AT-08', 'RF-PA-04');
@@ -516,6 +517,7 @@ it('rechaza anular un tramo intermedio si la vuelta de despues deja de continuar
         ->assertValidRequest()
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'next_entry_not_continued')
         ->assertJsonStructure(['errors' => ['clocked_in_at']]);
 
     expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
@@ -560,6 +562,7 @@ it('rechaza anular el tramo que abre la jornada si el siguiente empieza otro dia
         ->assertValidRequest()
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'opening_voided')
         ->assertJsonPath('errors.clocked_in_at.0', 'Este tramo abre la jornada del 2026-03-14 y el siguiente empieza '
             .'otro día: anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.');
 
@@ -677,6 +680,7 @@ it('rechaza colgar de una jornada un tramo de otro dia que no la continua, tambi
         ->assertValidRequest()
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'entry_not_continued')
         // El 17 queda mas alla del tope: la jornada del 14 solo llega al 15.
         ->assertJsonPath('errors.clocked_in_at.0', 'The working day of 2026-03-14 only continues until 2026-03-15 at '
             .'the latest: a shift starting later belongs to another working day. Record it on the working day it '

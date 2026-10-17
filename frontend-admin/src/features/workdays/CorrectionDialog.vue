@@ -48,6 +48,7 @@ import type {
   CorrectedShiftEntry,
   CorrectionReasonCode,
   CorrectShiftEntryRequest,
+  WorkDateChangeCause,
   WorkDayShiftEntry,
 } from '@/shared/api/types'
 import { addShiftEntry, correctShiftEntry, voidShiftEntry } from './corrections.api'
@@ -60,6 +61,9 @@ const OVERLAPPING_SHIFT_ENTRY_TYPE = 'urn:kronoqr:problem:overlapping-shift-entr
 
 /** El `422` de RN-05/ADR-035 (corregir la entrada movería la jornada a otro día). */
 const WORK_DATE_CHANGE_PROBLEM_TYPE = 'urn:kronoqr:problem:correction-would-change-work-date'
+
+/** La causa de ese `422` que tiene su propia pista: mover la apertura (ADR-058). */
+const OPENING_MOVED = 'opening_moved' satisfies WorkDateChangeCause
 
 type ConflictKind = 'superseded' | 'shiftAlreadyOpen' | 'overlap' | 'generic'
 
@@ -329,7 +333,7 @@ function isOpeningMoved(caught: ApiError): boolean {
     typeof problem === 'object' &&
     problem !== null &&
     'cause' in problem &&
-    problem.cause === 'opening_moved'
+    problem.cause === OPENING_MOVED
   )
 }
 

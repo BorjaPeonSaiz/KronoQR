@@ -782,3 +782,17 @@ it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->occurredAt)->toBe($instante)
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->auditEntryId)->toBe(5);
 })->group('RS-07', 'RL-04');
+
+it('trata como salida el cierre de un asiento anterior a la v2.1.0, que no apuntaba la accion', function (): void {
+    // Los cierres de la v2.0.0 y anteriores no llevan `action`: no existia la
+    // pausa, asi que fueron salidas (RN-05, ADR-058). Un `break_start` puesto a
+    // mano sobre ellos tiene que salir.
+    $salida = conciliacionSalidaAuditada();
+    $payload = $salida->payload;
+    unset($payload['action']);
+    $antigua = new AuditTrailEntry($salida->id, $salida->action, $payload);
+    $asiento = AuditedShiftEntry::fromTrail($antigua, false, conciliacionEntradaAuditada(), $antigua);
+
+    expect(conciliacionCompara(conciliacionFila(['closedBy' => 'clock_out']), $asiento))->toBeNull()
+        ->and(conciliacionCompara(conciliacionFila(['closedBy' => 'break_start']), $asiento)?->fields)->toBe(['closed_by']);
+})->group('RL-04', 'RS-07', 'RN-05');

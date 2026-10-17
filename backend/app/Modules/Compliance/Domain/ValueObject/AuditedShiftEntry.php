@@ -272,19 +272,33 @@ final readonly class AuditedShiftEntry
             return match ($marks->action) {
                 AuditAction::ShiftEntryCreated->value => ['known' => true, 'value' => null],
                 // La `action` del cierre es `clock_out` o `break_start`: lo que
-                // cerro el tramo (ADR-024).
-                AuditAction::ShiftEntryClosed->value => ['known' => true, 'value' => self::string($marks->payload, 'action')],
+                // cerro el tramo (ADR-024). Los cierres anteriores a la v2.1.0
+                // no la apuntaban porque no existia la pausa: fueron salidas.
+                // Tratarlos como desconocidos dejaria pasar un `break_start`
+                // puesto a mano sobre ellos.
+                AuditAction::ShiftEntryClosed->value => [
+                    'known' => true,
+                    'value' => self::string($marks->payload, 'action') ?? 'clock_out',
+                ],
                 default => $unknown,
             };
         }
 
-        $after = $marks->payload['after'] ?? null;
+        return self::closedByOfCorrection($marks->payload['after'] ?? null);
+    }
 
+    /**
+     * El `after.closed_by` de una correccion. Las anteriores a la 2.3.0 no lo
+     * apuntaban: en ellas no se sabe.
+     *
+     * @return array{known: bool, value: string|null}
+     */
+    private static function closedByOfCorrection(mixed $after): array
+    {
         return match (true) {
-            ! \is_array($after) || ! \array_key_exists('clocked_out_at', $after) => $unknown,
+            ! \is_array($after) || ! \array_key_exists('clocked_out_at', $after) => ['known' => false, 'value' => null],
             $after['clocked_out_at'] === null => ['known' => true, 'value' => null],
-            // Las correcciones anteriores a la 2.3.0 no lo apuntaban.
-            ! \array_key_exists('closed_by', $after) => $unknown,
+            ! \array_key_exists('closed_by', $after) => ['known' => false, 'value' => null],
             default => ['known' => true, 'value' => self::string($after, 'closed_by')],
         };
     }

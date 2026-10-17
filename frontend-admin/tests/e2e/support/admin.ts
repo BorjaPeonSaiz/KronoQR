@@ -1811,11 +1811,12 @@ async function validationProblem(
   type: string,
   title: string,
   errors: Record<string, string[]>,
+  extra: Record<string, unknown> = {},
 ): Promise<void> {
   await route.fulfill({
     status: 422,
     contentType: 'application/problem+json',
-    body: JSON.stringify({ type, title, status: 422, errors }),
+    body: JSON.stringify({ type, title, status: 422, errors, ...extra }),
   })
 }
 
@@ -2885,6 +2886,8 @@ export async function stubManagementApi(
                   'destino: son dos acciones, cada una con su motivo.',
               ],
             },
+            // ADR-058: el panel solo pinta su propia pista al mover la apertura.
+            { cause: 'opening_moved' },
           )
 
           return

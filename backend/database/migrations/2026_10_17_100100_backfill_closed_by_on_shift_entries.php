@@ -24,19 +24,22 @@ use Illuminate\Support\Facades\DB;
  * desactiva **dentro de su propia transaccion**: `DISABLE TRIGGER`, el
  * `UPDATE` de los ids del lote y `ENABLE TRIGGER`, y se confirma. El DDL es
  * transaccional en PostgreSQL: ninguna otra sesion llega a ver la guarda
- * desactivada, y el bloqueo de tabla que toma `DISABLE TRIGGER` (`SHARE ROW
- * EXCLUSIVE`, que para las escrituras) dura lo que un lote, no lo que la tabla.
- * Cada lote lleva los topes de `LimitsMigrationLocks` (3 s de espera, 30 s de
- * sentencia). La ventana medida esta en `docs/runbooks/actualizacion-cliente.md`.
+ * desactivada. Cada lote lleva los topes de `LimitsMigrationLocks` (3 s de
+ * espera, 30 s de sentencia) y se avanza con un cursor sobre `id`, sin volver a
+ * recorrer lo ya escrito. El despliegue soportado migra en mantenimiento, sin
+ * fichajes concurrentes; la ventana medida esta en
+ * `docs/runbooks/actualizacion-cliente.md` §3 bis.
  *
- * Es idempotente: cada lote coge filas cerradas con `closed_by` nulo, asi que
- * repetirla tras un fallo sigue donde se quedo. Lo que cierra la version nueva
- * entre una migracion y otra ya trae su cierre.
+ * El tamaño del lote es `database.closed_by_backfill_batch` (2000 de serie):
+ * configurable para que la prueba recorra mas de un lote.
  *
- * ## Reversible
+ * ## Vuelta atras
  *
  * `down()` no hace nada: el dato vive en la columna, que retira la migracion
- * anterior, y la siguiente vez que se aplique esta se vuelve a calcular igual.
+ * anterior. **La vuelta atras de una actualizacion es restaurar la copia**
+ * (ADR-054), no `migrate:rollback`: repetir este relleno despues de que alguien
+ * haya declarado pausas a mano (`ends_in_break`) **no las reproduce**, porque
+ * solo sabe leer los escaneos.
  */
 return new class extends Migration
 {
@@ -45,27 +48,30 @@ return new class extends Migration
     /** Cada lote es su propia transaccion. */
     public $withinTransaction = false;
 
-    /** Filas por lote: unos cientos de milisegundos con el linaje de cada una. */
-    private const int BATCH = 2000;
+    private const int DEFAULT_BATCH = 2000;
 
     public function up(): void
     {
+        $batch = max(1, config()->integer('database.closed_by_backfill_batch', self::DEFAULT_BATCH));
+        $lastId = 0;
+
         do {
-            $written = DB::transaction(function (): int {
+            [$written, $lastId] = DB::transaction(function () use ($batch, $lastId): array {
                 $this->limitLockWait();
 
                 /** @var list<int> $ids */
                 $ids = DB::table('shift_entries')
+                    ->where('id', '>', $lastId)
                     ->whereNotNull('clocked_out_at')
                     ->whereNull('closed_by')
                     ->orderBy('id')
-                    ->limit(self::BATCH)
+                    ->limit($batch)
                     ->pluck('id')
                     ->map(static fn (mixed $id): int => is_numeric($id) ? (int) $id : 0)
                     ->all();
 
                 if ($ids === []) {
-                    return 0;
+                    return [0, $lastId];
                 }
 
                 $placeholders = implode(', ', array_fill(0, \count($ids), '?'));
@@ -97,13 +103,15 @@ return new class extends Migration
                     SQL, [...$ids, ...$ids]);
                 DB::statement('ALTER TABLE shift_entries ENABLE TRIGGER shift_entries_guard_transition');
 
-                return \count($ids);
+                return [\count($ids), $ids[\count($ids) - 1]];
             });
-        } while ($written === self::BATCH);
+        } while ($written === $batch);
     }
 
     public function down(): void
     {
-        // Nada: ver la cabecera.
+        // Nada: la columna la retira la migracion anterior. Ver la cabecera:
+        // la vuelta atras es restaurar la copia (ADR-054), y repetir este
+        // relleno no reproduce las pausas declaradas a mano.
     }
 };

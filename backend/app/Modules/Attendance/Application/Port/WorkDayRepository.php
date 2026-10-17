@@ -155,8 +155,11 @@ interface WorkDayRepository
      *
      * Es la mitad de RN-05 que el agregado no puede ver (2.3.0): un tramo de
      * otro dia civil solo continua su jornada si entre la salida anterior y su
-     * entrada no se interpuso otra jornada. Lo usa
-     * `Application/Support/ContinuationAcrossWorkDays`.
+     * entrada no se interpuso otra jornada. Lo usan
+     * `Application/Support/ContinuationAcrossWorkDays` (alta, correccion y
+     * anulacion) y `RegisterScanHandler::breakStillOpenIn()`, que antes de tratar
+     * un escaneo como la vuelta de una pausa comprueba que ninguna otra jornada
+     * se interpuso desde que empezo.
      */
     public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool;
 }

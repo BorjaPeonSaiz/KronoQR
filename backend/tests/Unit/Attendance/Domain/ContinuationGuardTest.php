@@ -681,3 +681,39 @@ it('deja anular los tramos antiguos de una jornada que ya abria otro dia', funct
 
     expect(continuacionAnulacion($ultimo, 'shift-entry-2')->status()->value)->toBe('voided');
 })->group('RN-05', 'RF-PA-04', 'RN-13');
+
+// --- La pausa en curso que mira el quiosco (2.3.0) ---------------------------
+
+it('dice desde cuando hay una pausa en curso, y que no la hay en los demas casos', function (string $caso, ?string $esperada): void {
+    $ahora = Instants::inMadrid('2026-03-14 18:00');
+    $factoria = WorkDayFactory::new()->onWorkDate('2026-03-14');
+
+    $jornada = match ($caso) {
+        'sin tramos' => $factoria->build(),
+        'tramo abierto' => $factoria->withShift(ShiftEntryFactory::new()->openSinceInstant(Instants::inMadrid('2026-03-14 08:00')))->build(),
+        'ultimo cerrado en salida' => $factoria
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 08:00'), Instants::inMadrid('2026-03-14 10:00'))->endingInBreak())
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 11:00'), Instants::inMadrid('2026-03-14 14:00')))
+            ->build(),
+        'ultimo cerrado en pausa' => $factoria
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 08:00'), Instants::inMadrid('2026-03-14 10:00')))
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 11:00'), Instants::inMadrid('2026-03-14 14:00'))->endingInBreak())
+            ->build(),
+        // Un cierre posterior al escaneo no cuenta: se mira el ultimo anterior.
+        'cierre posterior que se ignora' => $factoria
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 08:00'), Instants::inMadrid('2026-03-14 14:00'))->endingInBreak())
+            ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-14 19:00'), Instants::inMadrid('2026-03-14 21:00')))
+            ->build(),
+        default => throw new LogicException($caso),
+    };
+
+    $resultado = $jornada->breakInProgressAt($ahora);
+
+    expect($resultado === null ? null : Instants::asMadridWallClock($resultado))->toBe($esperada);
+})->with([
+    'sin tramos' => ['sin tramos', null],
+    'tramo abierto' => ['tramo abierto', null],
+    'el ultimo cerrado termino en salida' => ['ultimo cerrado en salida', null],
+    'el ultimo cerrado termino en pausa' => ['ultimo cerrado en pausa', '2026-03-14 14:00'],
+    'un cierre posterior a $at se ignora' => ['cierre posterior que se ignora', '2026-03-14 14:00'],
+])->group('RN-05', 'RF-AT-12');
