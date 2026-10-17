@@ -784,3 +784,75 @@ describe('CorrectionDialog, modo «void»', () => {
     ])
   })
 })
+
+describe('CorrectionDialog, «Este tramo terminó en pausa» (@RN-05 @RF-PA-04)', () => {
+  it('solo aparece con hora de salida, y el alta lo manda', async () => {
+    const spy = stubFetch(() => jsonResponse(CORRECTED))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'add',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: undefined,
+        entry: undefined,
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-03-14')
+    await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-03-14T06:00')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-ends-in-break"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T14:00')
+    await settle(1)
+
+    expect(wrapper.text()).toContain(es.corrections.dialog.endsInBreakLabel)
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)[0]?.body).toMatchObject({ ends_in_break: true })
+  })
+
+  it('marcarla sola en una correccion basta para corregir y manda solo eso', async () => {
+    const spy = stubFetch(() => jsonResponse({ ...CORRECTED, action: 'modified', version: 2 }))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)).toEqual([
+      {
+        path: `/api/v1/shift-entries/${SHIFT_ENTRY_UUID}`,
+        method: 'PATCH',
+        body: { reason_code: 'AJUSTE_ACORDADO_CON_RRHH', reason_text: null, ends_in_break: true },
+      },
+    ])
+  })
+})

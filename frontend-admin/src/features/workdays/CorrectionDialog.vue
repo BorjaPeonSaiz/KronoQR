@@ -199,6 +199,19 @@ const clockOutChanged = computed(
   () => clockOutInput.value !== originalClockOut && !clockOutCleared.value,
 )
 
+/**
+ * Si el tramo terminó en pausa (`ends_in_break`, RN-05). Solo tiene sentido con
+ * hora de salida: sin ella el tramo no ha terminado, y la casilla no se enseña.
+ * Sin marcarla, el tramo que empiece al día civil siguiente no continúa la
+ * jornada.
+ */
+const originalEndsInBreak = props.mode === 'correct' && props.entry?.closed_by === 'break_start'
+const endsInBreak = ref(originalEndsInBreak)
+const showsEndsInBreak = computed(() => props.mode !== 'void' && clockOutInput.value !== '')
+const endsInBreakChanged = computed(
+  () => showsEndsInBreak.value && endsInBreak.value !== originalEndsInBreak,
+)
+
 function isNonexistentLocal(value: string): boolean {
   return value !== '' && zonedInputToUtcIso(value, props.timeZone) === null
 }
@@ -224,7 +237,10 @@ const canSubmit = computed(() => {
   }
 
   if (props.mode === 'correct') {
-    return (clockInChanged.value || clockOutChanged.value) && props.entry !== undefined
+    return (
+      (clockInChanged.value || clockOutChanged.value || endsInBreakChanged.value) &&
+      props.entry !== undefined
+    )
   }
 
   return props.entry !== undefined
@@ -438,6 +454,7 @@ async function submit(): Promise<void> {
         work_date: workDateInput.value,
         clocked_in_at: clockedInAt,
         clocked_out_at: clockedOutAt,
+        ends_in_break: clockedOutAt !== null && endsInBreak.value,
         reason_code: reason,
         reason_text: reasonTextPayload,
       })
@@ -462,6 +479,10 @@ async function submit(): Promise<void> {
         if (clockedOutAt !== null) {
           body.clocked_out_at = clockedOutAt
         }
+      }
+
+      if (endsInBreakChanged.value) {
+        body.ends_in_break = endsInBreak.value
       }
 
       result = await correctShiftEntry(props.entry.uuid, body)
@@ -595,6 +616,27 @@ const inputClass =
           :aria-invalid="field.invalid"
           data-test="dialog-clock-out"
         />
+      </FormField>
+
+      <FormField
+        v-if="showsEndsInBreak"
+        v-slot="field"
+        :label="t('corrections.dialog.endsInBreakLegend')"
+        :hint="t('corrections.dialog.endsInBreakHint')"
+        :errors="fieldErrors('ends_in_break')"
+      >
+        <label class="flex items-start gap-2">
+          <input
+            :id="field.id"
+            v-model="endsInBreak"
+            type="checkbox"
+            class="mt-1"
+            :aria-describedby="field.describedBy"
+            :aria-invalid="field.invalid"
+            data-test="dialog-ends-in-break"
+          />
+          <span>{{ t('corrections.dialog.endsInBreakLabel') }}</span>
+        </label>
       </FormField>
 
       <p v-if="mode === 'void'" class="text-kq-text-muted" data-test="dialog-void-summary">
