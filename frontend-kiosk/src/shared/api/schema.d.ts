@@ -16393,12 +16393,20 @@ export interface operations {
              *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de
              *       baja y `work_date` cae **fuera de su periodo de empleo** —despues
              *       de la fecha de cese o antes de la de alta— (RN-14), en
-             *       `errors.work_date`.
-             *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
-             *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
-             *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
-             *       dia a otro son dos actos separados y auditados —anular en origen,
-             *       dar de alta en destino—, y el `detail` del campo lo dice.
+             *       `errors.work_date`, o la persona esta de baja y una **marca** queda
+             *       a `min_rest_hours` o mas del final de su dia de cese (medianoche del
+             *       dia siguiente en la zona del centro; RN-05, RN-14), en
+             *       `errors.clocked_in_at` o `errors.clocked_out_at`.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
+             *       serian de **otra jornada** (RN-05, ADR-035): la hora de entrada
+             *       llevaria la jornada a otro dia civil, o el tramo empieza en un dia
+             *       civil distinto de `work_date` y **no continua** el tramo anterior
+             *       —su entrada queda a `min_rest_hours` o mas de la salida de aquel—,
+             *       la misma cota que la vuelta de una pausa en el quiosco. Va en
+             *       `errors.clocked_in_at`. Es `422` y no `409` porque no hay nada que
+             *       releer: mover horas de un dia a otro son dos actos separados y
+             *       auditados —anular en origen, dar de alta en destino—, y el
+             *       `detail` del campo lo dice.
              */
             422: {
                 headers: {
@@ -16484,12 +16492,21 @@ export interface operations {
              *       la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
              *       entrada o la salida resultantes son **futuras** (F1): mas alla del
              *       momento del servidor mas el margen
-             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
-             *     - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
-             *       entrada que abre la jornada al otro lado de la medianoche local
-             *       llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y
-             *       no `409` porque no hay nada que releer: son dos actos separados y
-             *       auditados —anular en origen, dar de alta en destino—.
+             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de baja y
+             *       una marca resultante queda a `min_rest_hours` o mas del final de su
+             *       dia de cese (medianoche del dia siguiente en la zona del centro;
+             *       RN-05, RN-14), en el campo de esa marca.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
+             *       serian de **otra jornada** (RN-05, ADR-035): mover la entrada que
+             *       abre la jornada al otro lado de la medianoche local, o dejar un
+             *       tramo que empieza en un dia civil distinto de `work_date` sin
+             *       **continuar** el anterior —su entrada a `min_rest_hours` o mas de
+             *       la salida de aquel—, la misma cota que la vuelta de una pausa en el
+             *       quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
+             *       la vuelta posterior al adelantar la salida: entonces en
+             *       `errors.clocked_out_at`. Es `422` y no `409` porque no hay nada que
+             *       releer: son dos actos separados y auditados —anular en origen, dar
+             *       de alta en destino—.
              */
             422: {
                 headers: {
