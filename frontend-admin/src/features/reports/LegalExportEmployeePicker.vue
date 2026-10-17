@@ -103,6 +103,9 @@ function clearResults(): void {
 
 function changeMode(next: SearchMode): void {
   mode.value = next
+  // Invalida la busqueda en curso: su respuesta se descarta y el boton se libera.
+  searchCounter++
+  searching.value = false
   // Un DNI tecleado no debe sobrevivir a un cambio de criterio.
   term.value = ''
   clearResults()

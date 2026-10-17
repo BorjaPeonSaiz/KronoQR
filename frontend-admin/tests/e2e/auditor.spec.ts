@@ -134,9 +134,14 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
     page.on('request', (request) => urls.push(request.url()))
 
     await page.getByLabel('Una persona').check()
-    await page.getByLabel('DNI/NIE', { exact: true }).first().check()
+    await page
+      .getByLabel('Documento de identidad (DNI, NIE, pasaporte)', { exact: true })
+      .first()
+      .check()
 
-    const field = page.getByRole('textbox', { name: 'DNI/NIE' })
+    const field = page.getByRole('textbox', {
+      name: 'Documento de identidad (DNI, NIE, pasaporte)',
+    })
 
     await field.fill(LEGAL_EXPORT_PERSON_NATIONAL_ID)
     await page.getByRole('button', { name: 'Buscar' }).click()

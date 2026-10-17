@@ -143,6 +143,34 @@ describe('buscador de la persona de la exportacion', () => {
     expect(wrapper.text()).toContain(picker.noneByNationalId)
   })
 
+  it('cambiar de criterio con una busqueda en curso descarta su respuesta y libera el boton', async () => {
+    let release: (response: Response) => void = () => undefined
+
+    stubFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
+    )
+    const wrapper = await mountPicker()
+
+    await wrapper.find('input[type="radio"][value="nationalId"]').setValue(true)
+    await typeTerm(wrapper, '00000000T')
+    await buttonWith(wrapper, picker.search).trigger('click')
+    await settle()
+
+    await wrapper.find('input[type="radio"][value="text"]').setValue(true)
+    await typeTerm(wrapper, 'amrani')
+
+    expect(buttonWith(wrapper, picker.search).attributes('disabled')).toBeUndefined()
+
+    release(jsonResponse({ data: [AMRANI], truncated: false }))
+    await settle()
+
+    expect(wrapper.text()).not.toContain('Amrani, Lucia')
+    expect(wrapper.find<HTMLInputElement>('input[type="text"]').element.value).toBe('amrani')
+  })
+
   it('al elegir enseña la pastilla «Se exportará», guarda el uuid y permite cambiar', async () => {
     stubFetch(() => jsonResponse({ data: [AMRANI], truncated: false }))
     const wrapper = await mountPicker()
