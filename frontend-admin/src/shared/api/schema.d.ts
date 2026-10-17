@@ -9385,6 +9385,15 @@ export interface components {
              *     la entrada.
              */
             clocked_out_at?: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Si el tramo **termino en pausa** (RN-05, 2.3.0). Solo con
+             *     `clocked_out_at`: `true` sin salida es `422` en `ends_in_break`. Sin
+             *     declararlo, el tramo termina en salida, y el que empiece al dia civil
+             *     siguiente no continua la jornada. Es lo mismo que el escaneo «Pausa»
+             *     del quiosco.
+             * @default false
+             */
+            ends_in_break: boolean;
             reason_code: components["schemas"]["CorrectionReasonCode"];
             reason_text?: components["schemas"]["CorrectionReasonText"] | null;
         };
@@ -9392,13 +9401,20 @@ export interface components {
          * CorrectShiftEntryRequest
          * @description Rectificacion de las marcas de un tramo vigente (RF-PA-04, RN-13).
          *
-         *     **Hay que enviar al menos una de las dos marcas.** Una peticion que solo
-         *     trae el motivo no corrige nada, y una correccion que no cambia nada es
-         *     una fila de auditoria que miente.
+         *     **Hay que enviar al menos una de las dos marcas, o `ends_in_break`.** Una
+         *     peticion que solo trae el motivo no corrige nada, y una correccion que no
+         *     cambia nada es una fila de auditoria que miente.
          */
         CorrectShiftEntryRequest: {
             clocked_in_at?: components["schemas"]["UtcTimestamp"];
             clocked_out_at?: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Si el tramo **termino en pausa** (RN-05, 2.3.0). Si falta, se conserva
+             *     como estaba (y un tramo abierto que se cierra termina en salida).
+             *     Cambiar solo esto es una correccion con version nueva. `true` en un
+             *     tramo que queda abierto es `422` en `ends_in_break`.
+             */
+            ends_in_break?: boolean;
             reason_code: components["schemas"]["CorrectionReasonCode"];
             reason_text?: components["schemas"]["CorrectionReasonText"] | null;
         };
@@ -16400,10 +16416,12 @@ export interface operations {
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
              *       serian de **otra jornada** (RN-05, ADR-035): la hora de entrada
              *       llevaria la jornada a otro dia civil, o el tramo empieza en un dia
-             *       civil distinto de `work_date` y **no continua** el tramo anterior
-             *       —su entrada queda a `min_rest_hours` o mas de la salida de aquel, o
-             *       entre medias hay un tramo vigente de otra jornada de la persona—,
-             *       la misma cota que la vuelta de una pausa en el quiosco. Va en
+             *       civil distinto de `work_date` y **no continua** el tramo anterior:
+             *       aquel no termino en pausa (`ends_in_break`), su entrada queda a
+             *       `min_rest_hours` o mas de la salida de aquel, cae despues del dia
+             *       siguiente a `work_date`, o entre medias hay un tramo vigente de otra
+             *       jornada de la persona. Son las mismas reglas que la vuelta de una
+             *       pausa en el quiosco. Va en
              *       `errors.clocked_in_at`. Es `422` y no `409` porque no hay nada que
              *       releer: mover horas de un dia a otro son dos actos separados y
              *       auditados —anular en origen, dar de alta en destino—, y el
@@ -16502,10 +16520,11 @@ export interface operations {
              *       serian de **otra jornada** (RN-05, ADR-035): mover la entrada que
              *       abre la jornada al otro lado de la medianoche local, o dejar un
              *       tramo que empieza en un dia civil distinto de `work_date` sin
-             *       **continuar** el anterior —su entrada a `min_rest_hours` o mas de
-             *       la salida de aquel, o detras de un tramo vigente de otra jornada de
-             *       la persona—, la misma cota que la vuelta de una pausa en el
-             *       quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
+             *       **continuar** el anterior —aquel no termino en pausa, su entrada a
+             *       `min_rest_hours` o mas de la salida de aquel, despues del dia
+             *       siguiente a `work_date`, o detras de un tramo vigente de otra
+             *       jornada de la persona—, las mismas reglas que la vuelta de una
+             *       pausa en el quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
              *       la vuelta posterior al adelantar la salida: entonces en
              *       `errors.clocked_out_at`. Es `422` y no `409` porque no hay nada que
              *       releer: son dos actos separados y auditados —anular en origen, dar
@@ -16590,9 +16609,10 @@ export interface operations {
              *       - es el que **abre** la jornada y el mas temprano de los que quedan
              *         empieza en un dia civil distinto de `work_date`;
              *       - el **siguiente** empieza en un dia civil distinto de `work_date`
-             *         y, medido contra el anterior que sigue vigente, quedaria a
-             *         `min_rest_hours` o mas de su salida, o detras de un tramo vigente
-             *         de otra jornada de la persona.
+             *         y, medido contra el anterior que sigue vigente, ya no lo continua:
+             *         aquel no termino en pausa, o quedaria a `min_rest_hours` o mas de
+             *         su salida, o detras de un tramo vigente de otra jornada de la
+             *         persona.
              *       Va en `errors.clocked_in_at`, que en la anulacion no es un campo
              *       del formulario: el panel enseña el mensaje tal cual. Anular el
              *       ultimo tramo, o uno cuyo siguiente es del dia de la jornada,

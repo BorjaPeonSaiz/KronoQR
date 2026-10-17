@@ -310,8 +310,10 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
 ### 3 bis. Tras actualizar a la 2.3.0: tramos escritos antes de la cota de continuación
 
 Desde la 2.3.0, un tramo dado de alta o corregido a mano que empieza en un día
-civil distinto de su jornada solo se admite si **continúa** el tramo anterior
-—su entrada queda a menos de `min_rest_hours` de la salida de aquel—, y a una
+civil distinto de su jornada solo se admite si **continúa una pausa**: el tramo
+anterior terminó en pausa (`closed_by`, que la actualización rellena desde los
+escaneos «Pausa»), su entrada queda a menos de `min_rest_hours` de la salida de
+aquel y cae, como mucho, el día siguiente, y a una
 persona de baja ninguna marca le puede quedar a `min_rest_hours` o más del final
 de su día de cese (RN-05, RN-14, RF-PA-04). La tercera consulta busca jornadas que hoy abre un tramo de otro día civil, lo que puede dejar la anulación del tramo que las abría en una versión anterior. Antes no se comprobaba, así que una
 instalación puede tener tramos escritos que hoy se rechazarían. **La
@@ -320,7 +322,8 @@ lectura, dicen si existen. Muestran `employee_uuid`, no nombres.
 
 ```bash
 docker compose exec -T postgres psql -U fichaje_app -d fichaje <<'SQL'
--- 1. Tramos de otro día civil que no continúan su jornada (RN-05).
+-- 1. Tramos de otro día civil que no continúan su jornada: el anterior no terminó
+--    en pausa, el hueco llega a la cota o cae después del día siguiente (RN-05).
 WITH perfil AS (
     SELECT s.id AS site_id, s.timezone, cp.min_rest_hours
     FROM sites s
@@ -331,12 +334,15 @@ WITH perfil AS (
     SELECT se.uuid, se.employee_id, se.site_id, se.work_date, se.clocked_in_at,
            LAG(se.clocked_out_at) OVER (
                PARTITION BY se.employee_id, se.work_date ORDER BY se.clocked_in_at
-           ) AS salida_anterior
+           ) AS salida_anterior,
+           LAG(se.closed_by) OVER (
+               PARTITION BY se.employee_id, se.work_date ORDER BY se.clocked_in_at
+           ) AS cierre_anterior
     FROM shift_entries se
     WHERE se.status NOT IN ('voided', 'superseded')
 )
 SELECT e.uuid AS employee_uuid, v.uuid AS shift_entry_uuid, v.work_date,
-       v.salida_anterior, v.clocked_in_at,
+       v.salida_anterior, v.cierre_anterior, v.clocked_in_at,
        round(extract(epoch FROM v.clocked_in_at - v.salida_anterior) / 3600, 2) AS horas_de_hueco,
        p.min_rest_hours
 FROM vigentes v
@@ -344,7 +350,9 @@ JOIN perfil p ON p.site_id = v.site_id
 JOIN employees e ON e.id = v.employee_id
 WHERE (v.clocked_in_at AT TIME ZONE p.timezone)::date <> v.work_date
   AND v.salida_anterior IS NOT NULL
-  AND v.clocked_in_at - v.salida_anterior >= make_interval(hours => p.min_rest_hours)
+  AND (v.cierre_anterior IS DISTINCT FROM 'break_start'
+       OR v.clocked_in_at - v.salida_anterior >= make_interval(hours => p.min_rest_hours)
+       OR (v.clocked_in_at AT TIME ZONE p.timezone)::date > v.work_date + 1)
 ORDER BY v.work_date, e.uuid;
 
 -- 2. Marcas de personas de baja más allá de la cota de su día de cese (RN-05, RN-14).
