@@ -121,7 +121,8 @@ return [
                     .'conservacion.',
                 'warning_guards' => 'Faltan o estan desactivadas protecciones del registro horario en la base de '
                     .'datos (:issues). Se sigue fichando con normalidad, pero con el usuario «:user» se podrian '
-                    .'reescribir, insertar ya cerrados o borrar fichajes e incidencias sin que el motor lo impida.',
+                    .'reescribir, insertar ya cerrados o borrar fichajes e incidencias, o cambiar la zona horaria del '
+                    .'centro con fichajes hechos, sin que el motor lo impida.',
                 'warning_unknown' => 'No se han podido consultar los permisos sobre el registro horario.',
             ],
             'audit_chain' => [

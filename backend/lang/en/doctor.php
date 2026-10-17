@@ -95,7 +95,8 @@ return [
                     .'application could rewrite clockings or lower the legal retention period.',
                 'warning_guards' => 'Work record protections in the database are missing or disabled (:issues). '
                     .'Clocking works as usual, but with user «:user» clockings and incidents could be rewritten, '
-                    .'inserted already closed or deleted without the database stopping it.',
+                    .'inserted already closed or deleted, or the site time zone changed after the first clocking, '
+                    .'without the database stopping it.',
                 'warning_unknown' => 'The privileges on the work record could not be read.',
             ],
             'audit_chain' => [

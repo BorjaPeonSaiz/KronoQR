@@ -6,7 +6,9 @@ namespace App\Modules\Workforce\Application\Port;
 
 use App\Modules\Workforce\Domain\Exception\SiteAlreadyConfigured;
 use App\Modules\Workforce\Domain\Exception\SiteNameAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Model\Site;
+use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
 
 /**
  * El centro de trabajo de la instalacion.
@@ -28,9 +30,28 @@ interface SiteRepository
     public function add(Site $site): Site;
 
     /**
+     * Guarda el nombre y la zona. **Con registro horario, la base de datos no
+     * deja cambiar la zona** (RN-23, ADR-056, *trigger* `sites_guard_timezone`):
+     * si el caso de uso no lo hubiera comprobado antes, sale igualmente
+     * {@see SiteTimezoneLocked} y no se guarda nada.
+     *
      * @throws SiteNameAlreadyTaken
+     * @throws SiteTimezoneLocked
      */
     public function save(Site $site): void;
+
+    /**
+     * Guarda la **correccion de consola** de la zona de un centro con registro
+     * horario (RN-23, ADR-056 §3): la unica puerta que la base de datos deja
+     * abierta, la funcion `site_correct_timezone`. Solo la llama
+     * `CorrectSiteTimezoneHandler`, despues de firmar la correccion
+     * (`SiteTimezoneLockBoundaryTest`).
+     *
+     * `$previous` es la zona sobre la que se decidio la correccion: si la del
+     * centro ya no es esa, la funcion se niega y no se guarda nada. Con la fila
+     * del centro bloqueada por quien llama, no puede ocurrir.
+     */
+    public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): void;
 
     /**
      * `null` solo antes de la puesta en marcha (RF-PD-03).

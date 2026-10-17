@@ -61,6 +61,37 @@ it('el SQL de update.sh da ok contra el esquema migrado', function (): void {
         ->and($values[0])->toBe('ok');
 })->group('RS-07', 'RL-04');
 
+it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da por buena sin su migracion', function (string $statement, string $expected): void {
+    // RN-23, bloque 2 de la 2.3.0: el trigger de `sites` y la funcion de la
+    // correccion de consola. En una transaccion del rol de migracion que se
+    // deshace, como la prueba de abajo.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement($statement);
+        $row = $migrator->selectOne($sql);
+
+        $migrator->table('migrations')->where('migration', '2026_10_18_120000_guard_site_timezone_in_database')->delete();
+        $without = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row) && is_object($without));
+
+    expect(array_values((array) $row)[0])->toBe($expected)
+        ->and(array_values((array) $without)[0])->toBe('ok');
+})->with([
+    'trigger desactivado' => ['ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone', 'trigger:sites_guard_timezone:DESACTIVADO'],
+    'trigger borrado' => ['DROP TRIGGER sites_guard_timezone ON sites', 'trigger:sites_guard_timezone:AUSENTE'],
+    'funcion sin SECURITY DEFINER' => ['ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER', 'site_correct_timezone:DEFINER'],
+    'funcion para PUBLIC' => ['GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC', 'site_correct_timezone:PUBLIC'],
+    'funcion borrada' => ['DROP FUNCTION public.site_correct_timezone(bigint, text, text)', 'site_correct_timezone:AUSENTE'],
+])->group('RS-07', 'RN-23');
+
 it('el SQL de update.sh detecta un privilegio que sobra', function (): void {
     // La otra mitad: un `ok` incondicional tambien pasaria la prueba anterior.
     // El GRANT va dentro de una transaccion del rol de migracion que se

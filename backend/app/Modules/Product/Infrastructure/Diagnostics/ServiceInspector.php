@@ -89,6 +89,16 @@ final readonly class ServiceInspector
         'sites',
     ];
 
+    /**
+     * La migracion que fija la zona del centro tambien en la base de datos
+     * (RN-23, ADR-056, bloque 2 de la 2.3.0): el *trigger* de `sites` y la
+     * funcion de la correccion de consola. Sin ella aplicada no se vigilan.
+     */
+    public const string SITE_TIMEZONE_GUARD_MIGRATION = '2026_10_18_120000_guard_site_timezone_in_database';
+
+    /** El *trigger* de esa migracion, el mismo que mira `infra/scripts/lib/work-record-privileges.sh`. */
+    public const string SITE_TIMEZONE_GUARD_TRIGGER = 'sites_guard_timezone';
+
     public function __construct(
         private ConnectionInterface $database,
         private Redis $redis,
@@ -303,6 +313,11 @@ final readonly class ServiceInspector
                 ->exists();
 
             $guards = $guarded ? $this->workRecordGuards() : ['excess' => [], 'issues' => []];
+
+            if ($guarded && $this->database->table('migrations')->where('migration', self::SITE_TIMEZONE_GUARD_MIGRATION)->exists()) {
+                $guards['issues'] = [...$guards['issues'], ...$this->siteTimezoneGuards()];
+            }
+
             $excess = [...$excess, ...$guards['excess']];
             sort($excess);
 
@@ -406,6 +421,65 @@ final readonly class ServiceInspector
             'excess' => array_values(array_filter(explode(',', $row->deletable))),
             'issues' => $issues,
         ];
+    }
+
+    /**
+     * Las guardas de la zona del centro (RN-23, ADR-056, migracion
+     * `2026_10_18_120000`), mirando lo mismo que `update.sh` y `doctor.sh`:
+     *
+     * - que exista {@see self::SITE_TIMEZONE_GUARD_TRIGGER} y que **ningun**
+     *   *trigger* no interno de `sites` este desactivado;
+     * - que `site_correct_timezone` siga siendo `SECURITY DEFINER` y con su
+     *   `search_path`: sin lo primero, la correccion de consola chocaria con el
+     *   *trigger*; sin lo segundo, una tabla temporal la desviaria.
+     *
+     * Solo lee el catalogo.
+     *
+     * @return list<string>
+     */
+    private function siteTimezoneGuards(): array
+    {
+        /** @var object{missing: bool, disabled: string, definer: bool|null, search_path: bool|null} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT
+                NOT EXISTS (
+                    SELECT 1 FROM pg_catalog.pg_trigger g
+                     WHERE g.tgrelid = 'public.sites'::regclass AND g.tgname = ? AND NOT g.tgisinternal
+                ) AS missing,
+                coalesce((
+                    SELECT string_agg(g.tgname, ',' ORDER BY g.tgname)
+                      FROM pg_catalog.pg_trigger g
+                     WHERE g.tgrelid = 'public.sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
+                ), '') AS disabled,
+                (SELECT p.prosecdef FROM pg_catalog.pg_proc p
+                  WHERE p.oid = to_regprocedure('public.site_correct_timezone(bigint, text, text)')) AS definer,
+                (SELECT coalesce(bool_or(setting LIKE 'search_path=%'), false)
+                   FROM pg_catalog.pg_proc p, unnest(p.proconfig) AS setting
+                  WHERE p.oid = to_regprocedure('public.site_correct_timezone(bigint, text, text)')) AS search_path
+            SQL,
+            [self::SITE_TIMEZONE_GUARD_TRIGGER],
+        );
+
+        $issues = $row->missing ? ['missing_trigger:'.self::SITE_TIMEZONE_GUARD_TRIGGER] : [];
+
+        foreach (array_filter(explode(',', $row->disabled)) as $trigger) {
+            $issues[] = 'disabled_trigger:'.$trigger;
+        }
+
+        if ($row->definer === null) {
+            $issues[] = 'site_timezone_function:missing';
+        } else {
+            if ($row->definer !== true) {
+                $issues[] = 'site_timezone_function:not_security_definer';
+            }
+
+            if ($row->search_path !== true) {
+                $issues[] = 'site_timezone_function:no_search_path';
+            }
+        }
+
+        return $issues;
     }
 
     /**

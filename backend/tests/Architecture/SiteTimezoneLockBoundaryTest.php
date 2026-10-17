@@ -91,6 +91,29 @@ it('solo CorrectSiteTimezoneHandler corrige la zona saltandose el bloqueo', func
         ->toBe(['Modules/Workforce/Application/UseCase/CorrectSiteTimezoneHandler.php']);
 })->group('RN-23');
 
+it('solo CorrectSiteTimezoneHandler guarda por la puerta de la correccion, y solo el repositorio llama a la funcion', function (): void {
+    // `saveTimezoneCorrection()` llama a `site_correct_timezone`, la funcion
+    // `SECURITY DEFINER` que salta el *trigger* `sites_guard_timezone`
+    // (bloque 2 de la 2.3.0). Un segundo sitio que la usara cambiaria la zona
+    // con registro horario sin motivo ni asiento.
+    expect(siteTimezoneCallersOf('saveTimezoneCorrection'))
+        ->toBe(['Modules/Workforce/Application/UseCase/CorrectSiteTimezoneHandler.php']);
+
+    // Quien la invoca: por la constante del repositorio o con un `SELECT`
+    // directo. `product:doctor` la nombra en el catalogo sin llamarla.
+    $funcion = [];
+
+    foreach (siteTimezoneSources() as $file => $source) {
+        $code = siteTimezoneCodeOf($source);
+
+        if (str_contains($code, 'CORRECTION_FUNCTION') || preg_match('/SELECT\s+(?:public\.)?site_correct_timezone\s*\(/i', $code) === 1) {
+            $funcion[] = $file;
+        }
+    }
+
+    expect($funcion)->toBe(['Modules/Workforce/Infrastructure/Persistence/EloquentSiteRepository.php']);
+})->group('RN-23');
+
 it('solo el fichaje y el alta manual leen la zona con el candado de escritura', function (): void {
     // `timezoneForRecording()` toma `FOR KEY SHARE`, que falla en una
     // transaccion de solo lectura: llamarla desde una consulta del registro

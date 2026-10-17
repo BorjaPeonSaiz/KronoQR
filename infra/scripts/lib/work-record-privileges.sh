@@ -10,7 +10,9 @@
 #
 # Es EXACTAMENTE lo que dejan las migraciones del bloque 6 (2026_10_13_100000 y
 # 2026_10_13_100100) y, desde el bloque 7, la 2026_10_14_100000 (ADR-057 §2/§3: el
-# trigger y la funcion de purga `SECURITY DEFINER`, y sin DELETE de tabla para el rol).
+# trigger y la funcion de purga `SECURITY DEFINER`, y sin DELETE de tabla para el rol) y, desde
+# la 2.3.0, la 2026_10_18_120000 (RN-23, ADR-056: el trigger de `sites` y la funcion
+# `SECURITY DEFINER` de la correccion de la zona).
 # La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) lo devuelve todo si
 # alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria.
 
@@ -28,6 +30,14 @@ readonly KQ_WORK_RECORD_MIGRATIONS_B6="'2026_10_13_100000_restrict_application_u
 readonly KQ_WORK_RECORD_MIGRATION_PURGE="'2026_10_14_100000_work_record_trigger_and_purge_function'"
 # La funcion de purga del bloque 7 (se busca por nombre: no depende de su firma).
 readonly KQ_WORK_RECORD_PURGE_FUNCTION="work_record_purge_batch"
+# La zona del centro fija tambien en la base (RN-23, ADR-056, bloque 2 de la 2.3.0): el
+# trigger de sites y la funcion SECURITY DEFINER de la correccion de consola. Se exigen
+# SOLO si su migracion esta aplicada, dentro del propio SQL (no cambia los estados b6/b7):
+# una 2.2.1 como destino no los tiene.
+readonly KQ_SITE_TIMEZONE_MIGRATION="'2026_10_18_120000_guard_site_timezone_in_database'"
+# shellcheck disable=SC2034 # lo usa doctor.sh, que carga este fichero.
+readonly KQ_SITE_TIMEZONE_FUNCTION="site_correct_timezone"
+readonly KQ_SITE_TIMEZONE_TRIGGER="sites_guard_timezone"
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
 # los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
@@ -78,9 +88,37 @@ work_record_privileges_stage() {
 # justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
 work_record_privileges_tampered() {
   case "$1" in
-  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"*) return 0 ;;
+  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"*) return 0 ;;
   esac
   return 1
+}
+
+# SQL de una funcion SECURITY DEFINER con EXECUTE solo para el rol: `funcion:AUSENTE`,
+# `funcion:EXECUTE` (el rol no la puede ejecutar), `funcion:PUBLIC` (PUBLIC si) y
+# `funcion:DEFINER` (perdio SECURITY DEFINER o su search_path). `$3` es una condicion SQL
+# que tiene que cumplirse para exigirla (`TRUE` si siempre).
+work_record_definer_function_sql() {
+  local role="$1" fn="$2" when="$3"
+  cat <<SQL
+  UNION ALL
+  SELECT '${fn}:' || CASE
+      WHEN NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace) THEN 'AUSENTE'
+      WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace
+                     AND NOT has_function_privilege('${role}', oid, 'EXECUTE')) THEN 'EXECUTE'
+      ELSE 'PUBLIC' END
+   WHERE (${when}) AND (
+         NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace)
+      OR EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace
+                   AND NOT has_function_privilege('${role}', oid, 'EXECUTE'))
+      OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                  WHERE p.proname = '${fn}' AND p.pronamespace = 'public'::regnamespace
+                    AND a.grantee = 0 AND a.privilege_type = 'EXECUTE'))
+  UNION ALL
+  SELECT '${fn}:DEFINER'
+   WHERE (${when})
+     AND EXISTS (SELECT 1 FROM pg_proc p WHERE p.proname = '${fn}' AND p.pronamespace = 'public'::regnamespace
+                   AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) AS c WHERE c LIKE 'search_path=%')))
+SQL
 }
 
 # Tabla:INSERT:UPDATE:DELETE del estado exigible (b7 si aun no se ha decidido: es el
@@ -129,21 +167,12 @@ work_record_privileges_sql() {
     sep2=", "
   done
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
+    # La funcion de purga: EXECUTE solo para el rol, y que siga SECURITY DEFINER con su
+    # search_path fijado.
     purge_sql="
-  UNION ALL
-  SELECT '${KQ_WORK_RECORD_PURGE_FUNCTION}:' || CASE
-      WHEN NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace) THEN 'AUSENTE'
-      WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace
-                     AND NOT has_function_privilege('${role}', oid, 'EXECUTE')) THEN 'EXECUTE'
-      ELSE 'PUBLIC' END
-   WHERE NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace)
-      OR EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace
-                   AND NOT has_function_privilege('${role}', oid, 'EXECUTE'))
-      OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-                  WHERE p.proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND p.pronamespace = 'public'::regnamespace
-                    AND a.grantee = 0 AND a.privilege_type = 'EXECUTE')"
-    # Triggers (ausente / desactivado) y funcion de purga (que siga SECURITY DEFINER con su
-    # search_path fijado). NUNCA se reparan solos: un trigger quitado lo quita un superusuario.
+$(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" TRUE)"
+    # Triggers (ausente / desactivado). NUNCA se reparan solos: un trigger quitado lo
+    # quita un superusuario.
     purge_sql="${purge_sql}
   UNION ALL
   SELECT 'trigger:' || k.name || ':AUSENTE'
@@ -152,11 +181,20 @@ work_record_privileges_sql() {
   UNION ALL
   SELECT 'trigger:' || g.tgname || ':DESACTIVADO'
     FROM pg_trigger g
-   WHERE g.tgrelid IN (SELECT tn::regclass FROM unnest(ARRAY[${trg_tables}]) AS tn) AND NOT g.tgisinternal AND g.tgenabled <> 'O'
+   WHERE g.tgrelid IN (SELECT tn::regclass FROM unnest(ARRAY[${trg_tables}]) AS tn) AND NOT g.tgisinternal AND g.tgenabled <> 'O'"
+    # La zona del centro (RN-23, ADR-056): con su migracion aplicada, el trigger de
+    # sites (y ninguno de sites desactivado) y la funcion de la correccion de consola.
+    local site_applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_SITE_TIMEZONE_MIGRATION})"
+    purge_sql="${purge_sql}
   UNION ALL
-  SELECT '${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER'
-   WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND p.pronamespace = 'public'::regnamespace
-                   AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) AS c WHERE c LIKE 'search_path=%')))"
+  SELECT 'trigger:${KQ_SITE_TIMEZONE_TRIGGER}:AUSENTE'
+   WHERE ${site_applied}
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = 'sites'::regclass AND g.tgname = '${KQ_SITE_TIMEZONE_TRIGGER}' AND NOT g.tgisinternal)
+  UNION ALL
+  SELECT 'trigger:' || g.tgname || ':DESACTIVADO'
+    FROM pg_trigger g
+   WHERE ${site_applied} AND g.tgrelid = 'sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
+$(work_record_definer_function_sql "${role}" "${KQ_SITE_TIMEZONE_FUNCTION}" "${site_applied}")"
   fi
 
   cat <<SQL
@@ -182,7 +220,8 @@ SQL
 # Las sentencias que dejan el estado esperado, tras un REVOKE ALL por tabla (que
 # retira tambien los privilegios de columna) para que sobre y falte se corrijan
 # igual. `down()` de las migraciones no se usa: devuelve el UPDATE de tabla. En el
-# estado b7 incluye la funcion de purga: nada para PUBLIC, EXECUTE para el rol. NUNCA
+# estado b7 incluye las funciones `SECURITY DEFINER` (la purga y, si existe, la correccion de la
+# zona del centro): nada para PUBLIC, EXECUTE para el rol. NUNCA
 # concede DELETE de tabla en b7: sale de la misma lista que la consulta de deriva.
 # Lee CFG_DB_USERNAME (el nombre ya validado por quien llama).
 work_record_privileges_repair_sql() {
@@ -206,6 +245,6 @@ work_record_privileges_repair_sql() {
   done
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
     # Por nombre, sin firma. Si la funcion no existe no hace nada y la deriva persiste.
-    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
+    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN ('${KQ_WORK_RECORD_PURGE_FUNCTION}', '${KQ_SITE_TIMEZONE_FUNCTION}') AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
   fi
 }

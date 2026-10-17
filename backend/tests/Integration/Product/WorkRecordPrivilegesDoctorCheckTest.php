@@ -231,6 +231,65 @@ it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde s
     ],
 ])->group('RF-PD-13', 'RS-07', 'RL-04');
 
+// --- La zona del centro, fija tambien en la base (RN-23, bloque 2 de la 2.3.0) ---
+
+it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde la forma', function (string $statement, array $expected): void {
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement($statement);
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe($expected);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->with([
+    'el trigger de sites desactivado' => [
+        'ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone',
+        ['disabled_trigger:sites_guard_timezone'],
+    ],
+    'el trigger de sites borrado' => [
+        'DROP TRIGGER sites_guard_timezone ON sites',
+        ['missing_trigger:sites_guard_timezone'],
+    ],
+    'la correccion sin SECURITY DEFINER' => [
+        'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER',
+        ['site_timezone_function:not_security_definer'],
+    ],
+    'la correccion sin search_path' => [
+        'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) RESET search_path',
+        ['site_timezone_function:no_search_path'],
+    ],
+    'la correccion borrada' => [
+        'DROP FUNCTION public.site_correct_timezone(bigint, text, text)',
+        ['site_timezone_function:missing'],
+    ],
+])->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('no mira la guarda de la zona mientras su migracion no este aplicada', function (): void {
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->table('migrations')->where('migration', ServiceInspector::SITE_TIMEZONE_GUARD_MIGRATION)->delete();
+        $migrator->statement('ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone');
+
+        $details = privilegiosRegistroDoctor($migrator)[0]->details;
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RN-23');
+
 it('avisa si la aplicacion recupera DELETE sobre el registro', function (): void {
     $migrator = privilegiosRegistroMigrador();
     $application = '"'.Config::string('database.roles.application').'"';

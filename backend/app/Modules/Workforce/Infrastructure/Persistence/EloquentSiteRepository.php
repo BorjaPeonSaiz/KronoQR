@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Infrastructure\Persistence;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Domain\Exception\SiteAlreadyConfigured;
 use App\Modules\Workforce\Domain\Exception\SiteNameAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Model\Site as SiteEntity;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
 use Illuminate\Database\QueryException;
@@ -19,9 +20,25 @@ use RuntimeException;
  * previa: entre el `SELECT` y el `INSERT` cabria otro alta, y el indice es lo
  * que hace imposible el segundo centro tambien bajo concurrencia. Aqui solo se
  * traduce su violacion a la excepcion del dominio.
+ *
+ * ## La zona, vigilada tambien por la base de datos (RN-23, ADR-056)
+ *
+ * Con registro horario, el *trigger* `sites_guard_timezone` rechaza con `42501`
+ * cualquier cambio de zona con la credencial del runtime. `save()` lo traduce a
+ * {@see SiteTimezoneLocked}: el caso de uso ya lo comprueba antes con la fila
+ * bloqueada, asi que solo se ve si alguien llega aqui sin pasar por el. La
+ * correccion de consola entra por la funcion `site_correct_timezone`
+ * ({@see self::saveTimezoneCorrection()}), la unica puerta que el *trigger* deja
+ * abierta (migracion `2026_10_18_120000`).
  */
 final readonly class EloquentSiteRepository implements SiteRepository
 {
+    /** Funcion `SECURITY DEFINER` de la correccion de consola. */
+    public const string CORRECTION_FUNCTION = 'site_correct_timezone';
+
+    /** Prefijo con que el *trigger* abre su mensaje: `sites_guard_timezone: <antes> -> <despues>:`. */
+    private const string GUARD_MARKER = 'sites_guard_timezone: ';
+
     public function add(SiteEntity $site): SiteEntity
     {
         try {
@@ -48,8 +65,24 @@ final readonly class EloquentSiteRepository implements SiteRepository
                 'timezone' => $site->timezone->identifier,
             ]);
         } catch (QueryException $exception) {
-            throw $this->translate($exception, $site->name);
+            throw $this->translate($exception, $site->name, $site->timezone->identifier);
         }
+    }
+
+    public function saveTimezoneCorrection(SiteEntity $corrected, SiteTimezone $previous): void
+    {
+        if ($corrected->id === null) {
+            throw new RuntimeException('No se puede corregir la zona de un centro que todavia no se ha guardado.');
+        }
+
+        // Los errores de la funcion (`P0002` si la zona de partida ya no es
+        // esa, `42501` si no hay registro horario) no se traducen: con la fila
+        // del centro bloqueada por el caso de uso y el recuento hecho dentro,
+        // ninguno puede ocurrir, y si ocurre es un defecto que tiene que verse.
+        Site::query()->getConnection()->select(
+            'SELECT public.'.self::CORRECTION_FUNCTION.'(?::bigint, ?::text, ?::text)',
+            [$corrected->id, $previous->identifier, $corrected->timezone->identifier],
+        );
     }
 
     public function installationSite(): ?SiteEntity
@@ -75,7 +108,7 @@ final readonly class EloquentSiteRepository implements SiteRepository
         );
     }
 
-    private function translate(QueryException $exception, string $name): QueryException|SiteAlreadyConfigured|SiteNameAlreadyTaken
+    private function translate(QueryException $exception, string $name, ?string $requestedTimezone = null): QueryException|SiteAlreadyConfigured|SiteNameAlreadyTaken|SiteTimezoneLocked
     {
         $message = $exception->getMessage();
 
@@ -83,8 +116,21 @@ final readonly class EloquentSiteRepository implements SiteRepository
             return SiteAlreadyConfigured::make();
         }
 
+        if ($requestedTimezone !== null && $exception->getCode() === '42501' && str_contains($message, self::GUARD_MARKER)) {
+            return SiteTimezoneLocked::because($this->lockedTimezone($message) ?? '?', $requestedTimezone);
+        }
+
         return str_contains($message, 'sites_name_unique')
             ? SiteNameAlreadyTaken::forName($name)
             : $exception;
+    }
+
+    /**
+     * La zona que el *trigger* defiende, del principio de su mensaje. Un nombre
+     * IANA no lleva espacios.
+     */
+    private function lockedTimezone(string $message): ?string
+    {
+        return preg_match('/'.preg_quote(self::GUARD_MARKER, '/').'(\S+) -> /', $message, $match) === 1 ? $match[1] : null;
     }
 }
