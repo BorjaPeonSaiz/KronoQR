@@ -1121,7 +1121,7 @@ services:
 
   grafana:
     profiles: [observability]
-    image: grafana/grafana:11.5.1
+    image: grafana/grafana:11.6.16
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD en el .env; install.sh lo genera}
@@ -1189,7 +1189,7 @@ services:
   # backend ni arranca, y el fichaje no depende de que este contenedor viva).
   tempo:
     profiles: [observability]
-    image: grafana/tempo:2.7.1
+    image: grafana/tempo:2.10.8
     entrypoint: ["/tempo"]
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
     depends_on:
