@@ -318,7 +318,9 @@ final readonly class PlanEmployeeImport
         $errors = [...$errors, ...$this->emailErrors($employee, $seenEmails, $repeated)];
 
         if ($employee->nationalId !== null && mb_strlen($employee->nationalId) < NationalId::MIN_LENGTH) {
-            // La misma cota que `POST /employees`. No se valida la FORMA de un
+            // `nationalId` ya llega normalizado (`ImportedEmployee`), asi que
+            // es la misma cota, medida igual, que `POST /employees` y la
+            // busqueda de la exportacion legal. No se valida la FORMA de un
             // DNI: el producto se vende a hoteles que contratan a personas con
             // NIE, pasaporte y documentos de otros paises, y un patron espanol
             // rechazaria a media plantilla de temporada.

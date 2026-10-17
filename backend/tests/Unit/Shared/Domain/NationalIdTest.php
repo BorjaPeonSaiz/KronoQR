@@ -59,16 +59,11 @@ it('dice si es mas corto que el minimo una vez normalizado', function (): void {
         ->and(NationalId::fromInput('1.2.3.4')?->isTooShort())->toBeFalse();
 })->group('RL-08', 'RF-IN-05');
 
-it('compara por la forma canonica', function (): void {
-    $a = NationalId::fromInput('12.345.678-z');
-    $b = NationalId::fromInput('12345678Z');
-    $c = NationalId::fromInput('12345678Y');
-
-    \assert($a instanceof NationalId && $b instanceof NationalId && $c instanceof NationalId);
-
-    expect($a->equals($b))->toBeTrue()
-        ->and($a->equals($c))->toBeFalse();
-})->group('RL-08');
+it('declara la longitud maxima de lo recibido, la del contrato', function (): void {
+    // El `maxLength` del alta y de la busqueda de la exportacion legal: una sola
+    // constante en lugar de un `max:32` escrito a mano en cada FormRequest.
+    expect(NationalId::MAX_LENGTH)->toBe(32);
+})->group('RL-08', 'RF-IN-05');
 
 it('no tiene representacion en texto ni en JSON', function (): void {
     // RL-08 y regla dura 21: el documento en claro no debe acabar en un log por

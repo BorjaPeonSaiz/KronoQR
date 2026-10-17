@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\Port\ManagementAccountFilter;
 use App\Modules\Identity\Application\Port\ManagementAccountPage;
 use App\Modules\Identity\Application\Port\ManagementAccountRecord;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\PersonNameSearch;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\Query\Builder;
@@ -32,8 +33,9 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Busqueda
  *
- * Las mismas reglas que la `q` de `GET /employees`: `ILIKE` con `unaccent()` a
- * los dos lados, `%`, `_` y `\` escapados y el termino siempre enlazado.
+ * Las mismas reglas que la `q` de `GET /employees`, con la misma expresion,
+ * {@see PersonNameSearch}: `ILIKE` con `unaccent()` a los dos lados, `%`, `_` y
+ * `\` escapados despues de normalizar y el termino siempre enlazado.
  *
  * ## Orden
  *
@@ -88,14 +90,11 @@ final readonly class EloquentManagementAccountDirectory implements ManagementAcc
         }
 
         if ($filter->search !== null && $filter->search !== '') {
-            $pattern = '%'.addcslashes($filter->search, '\\%_').'%';
+            // La condicion sale entre parentesis: se combina con `AND` con los
+            // demas filtros y el `OR` no se aplica al mismo nivel.
+            [$condition, $bindings] = PersonNameSearch::anyOf(['u.name', 'u.email::text'], $filter->search);
 
-            // El grupo anidado combina la busqueda con `AND` con los demas
-            // filtros; sin el, el `OR` se aplicaria al mismo nivel.
-            $query->where(static function (Builder $group) use ($pattern): void {
-                $group->whereRaw('unaccent(u.name) ILIKE unaccent(?)', [$pattern])
-                    ->orWhereRaw('unaccent(u.email::text) ILIKE unaccent(?)', [$pattern]);
-            });
+            $query->whereRaw($condition, $bindings);
         }
 
         return $query;

@@ -538,11 +538,12 @@ Route::get('/reports/legal-export', LegalExportController::class)
  * acceso del proxy, en el historial del navegador y en la cabecera `Referer`. No
  * crea nada; lo unico que escribe es su asiento de auditoria.
  *
- * DOS ZONAS DE LIMITE. La primera, `legal-export-search`, es la propia y la que
- * corta de verdad: pocas peticiones por cuenta, por minuto y por hora
- * (`config/compliance.php`), para que la ruta no sirva de directorio ni de
- * oraculo de DNI. La segunda es la de toda la gestion, que aporta el eje por
- * origen y el cupo comun: alternar de URL no devuelve presupuesto.
+ * `throttle:legal-export-search` Y NO `throttle:management`: una sola zona,
+ * con sus tres techos. Pocas peticiones por cuenta, por minuto y por hora, que
+ * son las que cortan de verdad para que la ruta no sirva de directorio ni de
+ * oraculo de DNI, y un eje por origen mas ancho como red de seguridad
+ * (`config/compliance.php`). Dos zonas a la vez eran dos sitios donde mirar
+ * por que una peticion recibio `429`.
  *
  * SIN `locale.installation`: no es un documento, es JSON para el panel.
  */
@@ -551,7 +552,6 @@ Route::post('/reports/legal-export/employees/search', LegalExportEmployeeSearchC
         'auth:sanctum',
         'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
         'throttle:legal-export-search',
-        'throttle:management',
     ])
     ->name('compliance.reports.legal-export.employees.search');
 

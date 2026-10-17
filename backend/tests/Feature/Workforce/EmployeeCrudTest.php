@@ -147,6 +147,38 @@ it('no almacena el documento de identidad en claro', function (): void {
     expect($row?->hash)->toBe(hash('sha256', '00000000T'));
 })->group('RL-08', 'RF-GP-01');
 
+it('mide el minimo del documento una vez normalizado, como la importacion', function (string $documento): void {
+    // `1-2-3` son cinco caracteres tecleados y tres de documento: con el `min:4`
+    // sobre lo recibido entraba y guardaba el digest de `123`, que la
+    // importacion y la busqueda de la exportacion legal rechazan.
+    $context = hrContext();
+
+    Api::as($context['token'])->post('/api/v1/employees', [
+        'first_name' => 'Lucia',
+        'last_name' => 'Ferrer',
+        'national_id' => $documento,
+        'hired_at' => '2026-08-14',
+    ])
+        ->assertValidResponse(422)
+        ->assertJsonValidationErrors(['national_id']);
+
+    expect(DB::table('employees')->where('last_name', 'Ferrer')->exists())->toBeFalse();
+})->with([
+    'tres digitos con guiones' => ['1-2-3'],
+    'tres digitos con puntos y espacios' => ['1. 2. 3'],
+])->group('RL-08', 'RF-GP-01');
+
+it('admite un documento de cuatro caracteres una vez normalizado', function (): void {
+    $context = hrContext();
+
+    Api::as($context['token'])->post('/api/v1/employees', [
+        'first_name' => 'Lucia',
+        'last_name' => 'Ferrer',
+        'national_id' => '1-2-3-4',
+        'hired_at' => '2026-08-14',
+    ])->assertValidResponse(201);
+})->group('RL-08', 'RF-GP-01');
+
 it('adscribe el alta al centro de la instalacion sin que nadie lo elija', function (): void {
     // Hay exactamente un centro (ADR-040): el alta no lo pide y el servidor
     // lo resuelve. Es el centro del que sale la zona horaria de RN-05.
@@ -340,6 +372,13 @@ it('no deja que los comodines de LIKE actuen como tales', function (string $q): 
     // La barra invertida es el caracter de escape de `LIKE` en PostgreSQL: si
     // no se escapara ella misma, un `q` de `\` dejaria un escape colgando.
     'barra invertida' => ['\\'],
+    // `unaccent()` convierte estos en `%`, `_` y `\` ASCII: escapados antes de
+    // normalizar, llegaban activos al `ILIKE` y casaban con la plantilla.
+    'porcentaje de ancho completo' => ['％'],
+    'subrayados de ancho completo' => ['＿＿＿'],
+    'porcentaje de ancho completo combinado' => ['％rani'],
+    'subrayado de ancho completo combinado' => ['Amran＿'],
+    'barra invertida de ancho completo' => ['＼'],
 ])->group('RF-GP-01');
 
 it('trata una busqueda vacia como si no se hubiera enviado', function (string $q): void {

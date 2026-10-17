@@ -120,8 +120,11 @@ it('los incluye tambien en la consulta que acota el alcance por bloque', functio
      * Se exceptuan los conjuntos NOMINALES —los que llevan el identificador de la
      * persona en el payload— porque esos se resuelven en la consulta (a) del
      * mismo apartado, que filtra por `employee_uuid` y no por nombre de conjunto.
+     *
+     * `legal_export_employee_search` (RF-IN-05) es nominal sin corte: devuelve
+     * como mucho diez personas y su asiento las enumera siempre, todas.
      */
-    $nominales = ['employee_workdays', 'incident_digest', 'incident'];
+    $nominales = ['employee_workdays', 'incident_digest', 'incident', 'legal_export_employee_search'];
 
     /*
      * Y los NOMINALES ACOTADOS, que son otra cosa y estan en las dos listas.

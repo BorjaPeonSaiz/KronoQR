@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
 use Symfony\Component\HttpFoundation\Response;
@@ -200,6 +201,52 @@ it('busca % y _ como los caracteres que son, no como comodines', function (): vo
         ->toBe([]);
 })->group('RF-IN-05');
 
+it('no deja que unaccent convierta en comodines los de ancho completo', function (string $termino): void {
+    // `unaccent.rules` traduce ％ (U+FF05), ﹪ (U+FE6A), ＿ (U+FF3F), ＼ (U+FF3C),
+    // ﹨ (U+FE68) y ∖ (U+2216) a `%`, `_` y `\` ASCII. Escapados antes de
+    // normalizar llegaban activos al `ILIKE`: `％＿＿` casaba con cualquier
+    // nombre de dos letras o mas y saltaba el minimo de tres caracteres.
+    $plantilla = plantillaDeLaBusquedaLegal();
+
+    buscarPersonaLegal($plantilla['token'], ['q' => $termino])
+        ->assertValidResponse(200)
+        ->assertExactJson(['data' => [], 'truncated' => false]);
+
+    $payload = asientosDeLaBusquedaLegal()[0]['payload'] ?? [];
+
+    expect($payload)->toMatchArray(['record_count' => 0])
+        ->and(array_key_exists('employee_uuids', $payload))->toBeFalse();
+})->with([
+    'tres porcentajes de ancho completo' => ['％％％'],
+    'tres subrayados de ancho completo' => ['＿＿＿'],
+    'una letra y dos subrayados' => ['a＿＿'],
+    'porcentajes alrededor de una letra' => ['％x％'],
+    'porcentaje pequeño' => ['﹪﹪﹪'],
+    'barras invertidas de ancho completo y pequeña' => ['＼﹨∖'],
+])->group('RF-IN-05', 'RS-05');
+
+it('encuentra con los apellidos delante del nombre, con coma o sin ella', function (string $termino): void {
+    // Es como nombra a la persona un requerimiento de la Inspeccion o una nomina.
+    $plantilla = plantillaDeLaBusquedaLegal();
+
+    expect(uuidsDeLaBusquedaLegal(buscarPersonaLegal($plantilla['token'], ['q' => $termino])->assertValidResponse(200)))
+        ->toEqualCanonicalizing([$plantilla['jose'], $plantilla['homonimo']]);
+})->with([
+    'con coma' => ['Pérez Amrani, José'],
+    'sin coma' => ['Pérez Amrani José'],
+    'con coma y sin espacio' => ['perez amrani,jose'],
+])->group('RF-IN-05');
+
+it('no convierte en un patron vacio un termino que solo son comas', function (): void {
+    // `,,,` tiene tres caracteres y pasa el minimo; sin la coma no queda nada, y
+    // un patron vacio casaria con la plantilla entera.
+    $plantilla = plantillaDeLaBusquedaLegal();
+
+    buscarPersonaLegal($plantilla['token'], ['q' => ',,,'])
+        ->assertValidResponse(200)
+        ->assertExactJson(['data' => [], 'truncated' => false]);
+})->group('RF-IN-05', 'RS-05');
+
 it('devuelve como mucho diez personas y avisa de que habia mas', function (): void {
     $site = WorkforceFixtures::site();
     $uuids = [];
@@ -296,6 +343,9 @@ it('rechaza con 422 lo que no es una busqueda valida', function (array $cuerpo, 
     'dos letras' => [['q' => 'am'], 'q'],
     'tres espacios' => [['q' => '   '], 'q'],
     'dos letras entre espacios' => [['q' => '  am  '], 'q'],
+    // `trim()` no los quita: sin el recorte Unicode serian tres caracteres.
+    'tres espacios ideograficos' => [['q' => "\u{3000}\u{3000}\u{3000}"], 'q'],
+    'dos letras entre espacios no separables' => [['q' => "\u{00A0}am\u{00A0}"], 'q'],
     'un termino de mas de cien' => [['q' => str_repeat('a', 101)], 'q'],
     'un termino que no es texto' => [['q' => ['amrani']], 'q'],
     'un documento que normalizado se queda corto' => [['national_id' => '1-2-3'], 'national_id'],
@@ -323,24 +373,54 @@ it('deja un asiento por busqueda con el criterio y el recuento, tambien sin resu
 
     $asientos = asientosDeLaBusquedaLegal();
 
-    // Exactamente estas cuatro claves y ninguna mas: ni el termino ni nada de
-    // la respuesta. Ordenadas, porque JSONB no conserva el orden.
+    // Exactamente estas cinco claves y ninguna mas: ni el termino ni nada de
+    // la respuesta salvo a quien se devolvio. Ordenadas, porque JSONB no
+    // conserva el orden.
     $primero = $asientos[0]['payload'] ?? [];
     ksort($primero);
+
+    // Las personas que vio, en el orden en que se le enseñaron: lo que RL-15
+    // obliga a poder contestar cuando una de ellas pregunta quien la consulto.
+    // Se piden fuera del techo: la quinta busqueda no deja de ser una mas.
+    $devueltas = uuidsDeLaBusquedaLegal(buscarPersonaLegal($plantilla['token'], ['q' => 'amrani'])->assertOk());
 
     expect($asientos)->toHaveCount(4)
         ->and($asientos[0]['actor_type'])->toBe('user')
         ->and($primero)->toBe([
             'criterion' => 'name_or_code',
             'dataset' => 'legal_export_employee_search',
+            'employee_uuids' => implode(',', $devueltas),
             'record_count' => 4,
             'truncated' => false,
         ])
-        ->and($asientos[1]['payload'])->toMatchArray(['criterion' => 'national_id', 'record_count' => 1, 'truncated' => false])
+        ->and($asientos[1]['payload'])->toMatchArray([
+            'criterion' => 'national_id',
+            'record_count' => 1,
+            'truncated' => false,
+            'employee_uuids' => $plantilla['jose'],
+        ])
         // Probar documentos hasta acertar es justo lo que el trail tiene que
-        // poder enseñar (ADR-037).
+        // poder enseñar (ADR-037). Sin nadie devuelto, sin la clave.
         ->and($asientos[2]['payload'])->toMatchArray(['criterion' => 'national_id', 'record_count' => 0, 'truncated' => false])
+        ->and($asientos[2]['payload'])->not->toHaveKey('employee_uuids')
         ->and($asientos[3]['payload'])->toMatchArray(['criterion' => 'name_or_code', 'record_count' => 4]);
+})->group('RF-IN-05', 'RS-05', 'RL-15');
+
+it('enumera en el asiento solo las diez personas devueltas, no la que sobra', function (): void {
+    $site = WorkforceFixtures::site();
+
+    foreach (range(1, 11) as $n) {
+        WorkforceFixtures::employee($site, null, 'active', sprintf('Persona %02d', $n), 'Repetido');
+    }
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
+    $devueltas = uuidsDeLaBusquedaLegal(buscarPersonaLegal($token, ['q' => 'repetido'])->assertOk());
+    $payload = asientosDeLaBusquedaLegal()[0]['payload'] ?? [];
+    $enElAsiento = explode(',', \is_string($payload['employee_uuids'] ?? null) ? $payload['employee_uuids'] : '');
+
+    // La undecima solo sirve para saber que habia mas: no se le enseño a nadie.
+    expect($devueltas)->toHaveCount(10)
+        ->and($enElAsiento)->toBe($devueltas);
 })->group('RF-IN-05', 'RS-05', 'RL-15');
 
 it('marca en el asiento que la lista se recorto', function (): void {
@@ -369,7 +449,9 @@ it('nunca escribe en el asiento el termino buscado', function (): void {
 
     expect(asientosDeLaBusquedaLegal())->toHaveCount(3);
 
-    foreach (['amrani', strtolower(LEGAL_EXPORT_EMPLOYEE_SEARCH_CODE), '12345678', '12.345.678', 'josé', $plantilla['jose']] as $prohibido) {
+    // El `uuid` de quien se devolvio si esta (`employee_uuids`); lo que no esta
+    // nunca es lo que se tecleo, ni el nombre de nadie.
+    foreach (['amrani', strtolower(LEGAL_EXPORT_EMPLOYEE_SEARCH_CODE), '12345678', '12.345.678', 'josé', 'jose', 'pérez', 'perez'] as $prohibido) {
         expect(mb_strtolower($crudo))->not->toContain($prohibido);
     }
 })->group('RF-IN-05', 'RS-05', 'RL-08');
@@ -413,7 +495,35 @@ it('aplica tambien el techo por hora, configurable', function (): void {
     buscarPersonaLegal($plantilla['token'], ['q' => 'amrani'])->assertStatus(429);
 })->group('RF-IN-05', 'RS-02');
 
-it('trae de serie diez por minuto y sesenta por hora', function (): void {
+it('aplica tambien el techo por origen, que suma todas las cuentas', function (): void {
+    $plantilla = plantillaDeLaBusquedaLegal();
+    config()->set('compliance.legal_export_search.per_ip_per_minute', 2);
+
+    $otra = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    buscarPersonaLegal($plantilla['token'], ['q' => 'amrani'])->assertOk();
+    buscarPersonaLegal($otra, ['q' => 'amrani'])->assertOk();
+    // Cada cuenta lleva una sola, pero las dos salen por la misma IP.
+    buscarPersonaLegal($otra, ['q' => 'amrani'])->assertStatus(429);
+})->group('RF-IN-05', 'RS-02');
+
+it('trae de serie diez por minuto y sesenta por hora por cuenta, y ciento veinte por origen', function (): void {
     expect(config('compliance.legal_export_search.per_minute'))->toBe(10)
-        ->and(config('compliance.legal_export_search.per_hour'))->toBe(60);
+        ->and(config('compliance.legal_export_search.per_hour'))->toBe(60)
+        ->and(config('compliance.legal_export_search.per_ip_per_minute'))->toBe(120);
+})->group('RF-IN-05', 'RS-02');
+
+it('lleva una sola zona de limite: la suya y no la de gestion', function (): void {
+    // Dos zonas eran dos sitios donde mirar por que una peticion recibio `429`;
+    // la propia ya trae el eje por origen.
+    $route = Route::getRoutes()->getByName('compliance.reports.legal-export.employees.search');
+
+    expect($route)->toBeInstanceOf(Illuminate\Routing\Route::class);
+
+    $throttles = array_values(array_filter(
+        $route instanceof Illuminate\Routing\Route ? $route->gatherMiddleware() : [],
+        static fn (mixed $middleware): bool => \is_string($middleware) && str_starts_with($middleware, 'throttle:'),
+    ));
+
+    expect($throttles)->toBe(['throttle:legal-export-search']);
 })->group('RF-IN-05', 'RS-02');

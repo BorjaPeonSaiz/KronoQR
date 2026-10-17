@@ -6,8 +6,10 @@ namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Http\Rules\ActiveLocale;
+use App\Modules\Shared\Domain\ValueObject\NationalId;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Domain\Model\Employee;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
@@ -38,8 +40,20 @@ final class StoreEmployeeRequest extends FormRequest
             'last_name' => ['required', 'string', 'max:150'],
             // Opcional de verdad: `nullable`, no `required_without` de nada.
             'email' => ['nullable', 'string', 'email:rfc', 'max:190'],
-            // El documento no se almacena: se hashea con pgcrypto (RL-08).
-            'national_id' => ['nullable', 'string', 'min:4', 'max:32'],
+            // El documento no se almacena: se hashea con pgcrypto (RL-08). El
+            // minimo se mide **normalizado**, como en la importacion y en la
+            // busqueda de la exportacion legal: `1-2-3` son tres caracteres de
+            // documento y no cinco. El maximo es el de lo recibido.
+            'national_id' => [
+                'nullable',
+                'string',
+                'max:'.NationalId::MAX_LENGTH,
+                static function (string $attribute, mixed $value, Closure $fail): void {
+                    if (\is_string($value) && NationalId::fromInput($value)?->isTooShort() === true) {
+                        $fail('validation.min.string')->translate(['min' => NationalId::MIN_LENGTH]);
+                    }
+                },
+            ],
             'hired_at' => ['required', 'date_format:Y-m-d'],
             // Uno de los idiomas activos de la instalacion; sin el, el de la
             // instalacion (`LOCALE_DEFAULT`). Fuera de la lista, 422.

@@ -6,11 +6,13 @@ namespace App\Modules\Compliance\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
+use App\Modules\Compliance\Domain\Exception\InvalidEmployeeSearch;
 use App\Modules\Compliance\Domain\ValueObject\EmployeeSearch;
 use App\Modules\Shared\Domain\ValueObject\NationalId;
-use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Validator;
+use LogicException;
 
 /**
  * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05, V21-3-PA-1).
@@ -29,12 +31,15 @@ use Illuminate\Support\Facades\Gate;
  * y {@see RejectsUnknownInput} para cualquier otro campo. Los tres casos son
  * `422`.
  *
- * ## Los minimos se comprueban sobre el valor que se va a usar
+ * ## Los minimos los mide el dominio, y solo el
  *
- * El termino se recorta antes de contar —tres espacios no son tres caracteres—
- * y el documento se normaliza antes de medir, con {@see NationalId}, igual que
- * lo hara la busqueda. `EmployeeSearch` vuelve a comprobarlo en el dominio; aqui
- * se hace para que el `422` señale el campo.
+ * Las reglas de aqui son las de forma —tipo, presencia y la longitud maxima de
+ * lo recibido, que son el `maxLength` del contrato—. Si pasan, {@see self::after()}
+ * construye el {@see EmployeeSearch}, que recorta el termino —tambien los
+ * espacios Unicode— y normaliza el documento antes de medirlos, y su
+ * {@see InvalidEmployeeSearch} se traduce en el `422` del campo. Asi la regla de
+ * longitud esta en un solo sitio del backend y el `422` sigue señalando el
+ * campo con el mensaje traducido de `validation.min.string`.
  *
  * **Ningun mensaje repite el valor recibido**: el cuerpo es un nombre o un DNI,
  * y un `422` se registra.
@@ -43,13 +48,15 @@ final class SearchLegalExportEmployeesRequest extends FormRequest
 {
     use RejectsUnknownInput;
 
+    private ?EmployeeSearch $search = null;
+
     public function authorize(): bool
     {
         return Gate::allows('searchEmployees', LegalExport::class);
     }
 
     /**
-     * @return array<string, list<mixed>>
+     * @return array<string, list<string>>
      */
     public function rules(): array
     {
@@ -59,37 +66,61 @@ final class SearchLegalExportEmployeesRequest extends FormRequest
                 'prohibits:national_id',
                 'string',
                 'max:'.EmployeeSearch::MAX_TEXT_LENGTH,
-                static function (string $attribute, mixed $value, Closure $fail): void {
-                    if (\is_string($value) && mb_strlen(trim($value)) < EmployeeSearch::MIN_TEXT_LENGTH) {
-                        $fail('validation.min.string')->translate(['min' => EmployeeSearch::MIN_TEXT_LENGTH]);
-                    }
-                },
             ],
             'national_id' => [
                 'required_without:q',
                 'prohibits:q',
                 'string',
-                'max:32',
-                static function (string $attribute, mixed $value, Closure $fail): void {
-                    if (! \is_string($value)) {
-                        return;
-                    }
-
-                    $normalised = NationalId::fromInput($value);
-
-                    if (! $normalised instanceof NationalId || $normalised->isTooShort()) {
-                        $fail('validation.min.string')->translate(['min' => NationalId::MIN_LENGTH]);
-                    }
-                },
+                'max:'.NationalId::MAX_LENGTH,
             ],
+        ];
+    }
+
+    /**
+     * @return list<callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                // Con la forma ya rota no hay criterio que construir, y un
+                // segundo error sobre el mismo campo solo confundiria.
+                if ($validator->errors()->isNotEmpty()) {
+                    return;
+                }
+
+                try {
+                    $this->search = $this->buildSearch();
+                } catch (InvalidEmployeeSearch $rejection) {
+                    // `validation.min.string` o `validation.max.string`, como
+                    // las reglas de Laravel: el mismo texto en los dos idiomas.
+                    $message = trans('validation.'.$rejection->bound.'.string', [
+                        'attribute' => $validator->getDisplayableAttribute($rejection->field),
+                        $rejection->bound => $rejection->limit,
+                    ]);
+
+                    $validator->errors()->add(
+                        $rejection->field,
+                        \is_string($message) ? $message : $rejection->getMessage(),
+                    );
+                }
+            },
         ];
     }
 
     public function toSearch(): EmployeeSearch
     {
+        return $this->search ?? throw new LogicException('El criterio de busqueda se construye al validar la peticion.');
+    }
+
+    /**
+     * @throws InvalidEmployeeSearch
+     */
+    private function buildSearch(): EmployeeSearch
+    {
         $nationalId = $this->input('national_id');
 
-        if (\is_string($nationalId) && $nationalId !== '') {
+        if (\is_string($nationalId)) {
             return EmployeeSearch::byNationalId($nationalId);
         }
 

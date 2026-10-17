@@ -180,6 +180,24 @@ it('busca por nombre sin distinguir mayusculas ni acentos', function (): void {
         ->and($respuesta->json('data.0.full_name'))->toBe('Monica Garcia');
 })->group('RF-PA-02');
 
+it('no deja que los comodines actuen, tampoco los que unaccent convierte', function (string $q): void {
+    // La misma expresion que `GET /employees` (`PersonNameSearch`): el escape
+    // va despues de `unaccent()`, que traduce ％ y ＿ al ASCII.
+    $escenario = escenarioDePresencia();
+
+    $respuesta = Api::as($escenario['token'])->get('/api/v1/attendance/live', ['q' => $q]);
+
+    $respuesta->assertValidResponse(200);
+
+    expect($respuesta->json('data'))->toBe([])
+        ->and($respuesta->json('meta.present_count'))->toBe(0)
+        ->and($respuesta->json('meta.absent_count'))->toBe(0);
+})->with([
+    'porcentaje' => ['%'],
+    'porcentaje de ancho completo' => ['％'],
+    'subrayados de ancho completo' => ['＿＿＿'],
+])->group('RF-PA-02');
+
 it('ordena por apellidos y nombre, con el mismo orden en cada sondeo', function (): void {
     // Un orden inestable haria que una fila saltara de sitio entre dos sondeos,
     // que en una lista que se refresca sola se lee como si hubiera cambiado algo.

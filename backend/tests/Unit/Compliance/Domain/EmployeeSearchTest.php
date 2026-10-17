@@ -38,7 +38,28 @@ it('rechaza un termino de menos de tres caracteres una vez recortado', function 
     'dos letras' => ['am'],
     'tres espacios' => ['   '],
     'dos letras entre espacios' => ['  am  '],
-])->group('RF-IN-05');
+    // `trim()` no quita los separadores Unicode: tres U+3000 contaban como
+    // tres caracteres y pasaban el minimo.
+    'tres espacios ideograficos' => ["\u{3000}\u{3000}\u{3000}"],
+    'dos letras entre espacios no separables' => ["\u{00A0}am\u{00A0}"],
+    'dos letras entre espacios estrechos' => ["\u{202F}am\u{2009}"],
+])->group('RF-IN-05', 'RS-05');
+
+it('recorta tambien los separadores Unicode, y solo de los extremos', function (): void {
+    expect(EmployeeSearch::byText("\u{3000}Pérez\u{00A0}Amrani\u{3000}")->text)->toBe("Pérez\u{00A0}Amrani");
+})->group('RF-IN-05');
+
+it('dice en el rechazo que cota fallo y cuanto vale, para traducir el 422', function (): void {
+    $corto = rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byText('am'));
+    $largo = rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byText(str_repeat('a', 101)));
+    $documento = rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byNationalId('1-2-3'));
+
+    \assert($corto instanceof InvalidEmployeeSearch && $largo instanceof InvalidEmployeeSearch && $documento instanceof InvalidEmployeeSearch);
+
+    expect([$corto->field, $corto->bound, $corto->limit])->toBe(['q', InvalidEmployeeSearch::MIN, EmployeeSearch::MIN_TEXT_LENGTH])
+        ->and([$largo->field, $largo->bound, $largo->limit])->toBe(['q', InvalidEmployeeSearch::MAX, EmployeeSearch::MAX_TEXT_LENGTH])
+        ->and([$documento->field, $documento->bound, $documento->limit])->toBe(['national_id', InvalidEmployeeSearch::MIN, 4]);
+})->group('RF-IN-05');
 
 it('rechaza un termino de mas de cien caracteres', function (): void {
     expect(EmployeeSearch::byText(str_repeat('a', 100))->text)->toHaveLength(100)

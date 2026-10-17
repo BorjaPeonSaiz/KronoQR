@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\UseCase;
 
 use App\Modules\Compliance\Application\Port\LegalExportEmployeeDirectory;
+use App\Modules\Compliance\Application\Port\LegalExportEmployeeMatch;
 use App\Modules\Compliance\Domain\ValueObject\EmployeeSearch;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
@@ -34,8 +35,12 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  *
  * `personal_data.accessed` con el dataset `legal_export_employee_search`, el
  * numero de personas **devueltas** y el contexto
- * `{criterion: name_or_code|national_id, truncated}`. Tres decisiones, las tres
- * de ADR-037:
+ * `{criterion: name_or_code|national_id, truncated, employee_uuids}`, donde
+ * `employee_uuids` son los `uuid` de las como mucho diez personas que se le
+ * enseñaron, separados por comas —como en `incident_digest` y
+ * `report_export.*`—, y no aparece si no hubo ninguna. Sin ellos el trail diria
+ * cuantas personas vio el auditor, pero no cuales, y esa es la pregunta que
+ * RL-15 obliga a contestar. Tres decisiones mas, las tres de ADR-037:
  *
  * - **Tambien sin resultados**, con recuento cero: probar documentos hasta
  *   acertar es justo lo que el trail tiene que poder enseñar.
@@ -91,9 +96,17 @@ final readonly class SearchLegalExportEmployees
             truncated: \count($found) > self::MAX_RESULTS,
         );
 
+        $uuids = array_map(
+            static fn (LegalExportEmployeeMatch $match): string => $match->uuid,
+            $result->matches,
+        );
+
         $this->disclosures->recordDisclosure(self::DATASET, $result->count(), [
             'criterion' => $search->criterion->value,
             'truncated' => $result->truncated,
+            // Las personas que vio, en el orden en que se le enseñaron. Sin
+            // resultados no hay clave, como en `report_export.*`.
+            ...($uuids === [] ? [] : ['employee_uuids' => implode(',', $uuids)]),
         ]);
 
         return $result;

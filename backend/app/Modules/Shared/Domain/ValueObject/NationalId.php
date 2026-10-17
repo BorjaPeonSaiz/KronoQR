@@ -12,13 +12,13 @@ namespace App\Modules\Shared\Domain\ValueObject;
  *
  * Nacio como `ImportedEmployee::normaliseNationalId()` para el alta masiva
  * (correccion de la revision de la 5.5) y desde entonces la llamaban tres sitios
- * de `Workforce`: el alta, la importacion y la busqueda del directorio. La
- * busqueda de la persona de la exportacion legal (RF-IN-05, V21-3-PA-1) es de
- * `Compliance`, que no puede importar de `Workforce` (doc 02 §1.6). Copiar la
- * funcion alli habria sido reabrir el fallo que esta clase existe para cerrar:
- * **dos normalizaciones que se separan**. Un hash no admite comparaciones
- * aproximadas, asi que `digest('12345678z')` y `digest('12345678Z')` son dos
- * personas para la base de datos; si el alta normalizara de una forma y la
+ * de `Workforce`: el alta, la importacion y la busqueda de duplicados de la
+ * importacion. La busqueda de la persona de la exportacion legal (RF-IN-05,
+ * V21-3-PA-1) es de `Compliance`, que no puede importar de `Workforce` (doc 02
+ * §1.6). Copiar la funcion alli habria sido reabrir el fallo que esta clase
+ * existe para cerrar: **dos normalizaciones que se separan**. Un hash no admite
+ * comparaciones aproximadas, asi que `digest('12345678z')` y
+ * `digest('12345678Z')` son dos personas para la base de datos; si el alta normalizara de una forma y la
  * busqueda de otra, el auditor no encontraria nunca a quien busca, y si lo
  * hicieran la importacion y el alta, la misma persona tendria dos fichas.
  *
@@ -33,7 +33,8 @@ namespace App\Modules\Shared\Domain\ValueObject;
  * No valida la letra de control ni el formato de un DNI o NIE: el producto se
  * vende fuera de España (ADR-017) y el documento puede ser un pasaporte. Declara
  * una longitud minima tras normalizar, la misma que el importador ya aplicaba,
- * para que quien la necesite no escriba otro `4` por su cuenta.
+ * y la maxima de lo recibido, para que quien las necesite no escriba otro `4`
+ * ni otro `32` por su cuenta.
  *
  * **Nunca se serializa ni se escribe en un log** (RL-08, regla dura 21): por eso
  * no implementa `Stringable` ni `JsonSerializable`, y `value` solo lo lee el
@@ -47,16 +48,23 @@ final readonly class NationalId
      */
     public const int MIN_LENGTH = 4;
 
+    /**
+     * Longitud maxima del documento **tal como se recibe**, antes de normalizar:
+     * el `maxLength` del contrato en el alta y en la busqueda de la exportacion
+     * legal. Por encima no es un documento de identidad.
+     */
+    public const int MAX_LENGTH = 32;
+
     private function __construct(public string $value) {}
 
     /**
      * El documento normalizado, o `null` si no queda nada al normalizar.
      *
      * **No rechaza los cortos**: la longitud minima la aplica quien decide que
-     * hacer con ellos —el importador lo señala en su linea, la busqueda responde
-     * `422`—, con {@see self::isTooShort()}. Si la aplicara aqui, el alta
-     * individual dejaria de guardar el digest de un documento que hasta hoy si
-     * guardaba, y eso es una regla de negocio que no le toca a esta clase.
+     * hacer con ellos —el importador lo señala en su linea, el alta y la
+     * busqueda responden `422`—, con {@see self::isTooShort()}. Lo que no se
+     * queda en nada al normalizar no es un documento: el alta lo trata como
+     * ausente y la busqueda lo rechaza, y esa diferencia es de quien llama.
      */
     public static function fromInput(string $raw): ?self
     {
@@ -88,10 +96,5 @@ final readonly class NationalId
         $normalised = str_replace([' ', '-', '.', "\u{00A0}"], '', mb_strtoupper(trim($raw)));
 
         return $normalised === '' ? null : $normalised;
-    }
-
-    public function equals(self $other): bool
-    {
-        return $this->value === $other->value;
     }
 }

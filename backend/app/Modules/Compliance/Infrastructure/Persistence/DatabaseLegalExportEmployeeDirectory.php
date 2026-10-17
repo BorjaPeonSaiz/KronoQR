@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\EmployeeSearch;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\NationalId;
 use App\Modules\Shared\Infrastructure\Persistence\NationalIdDigest;
+use App\Modules\Shared\Infrastructure\Persistence\PersonNameSearch;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Database\ConnectionInterface;
 use LogicException;
@@ -19,15 +20,21 @@ use LogicException;
  *
  * ## Por texto: subcadena sin acentos en el nombre, exacto en el codigo
  *
- * `unaccent(...) ILIKE unaccent(?)` sobre el nombre, los apellidos y el nombre
- * completo concatenado —quien busca escribe «Youssef Amrani» de corrido, y esa
- * cadena no esta en ninguna de las dos columnas por separado—. Es el mismo
- * tratamiento que `GET /employees` y la presencia en vivo.
+ * {@see PersonNameSearch} sobre el nombre, los apellidos y el nombre completo
+ * concatenado en los dos ordenes —quien busca escribe «Youssef Amrani» de
+ * corrido, y el requerimiento de la Inspeccion trae «Amrani, Youssef», y
+ * ninguna de las dos cadenas esta en una columna por separado—. Es el mismo
+ * tratamiento que `GET /employees` y la presencia en vivo, con el mismo escape
+ * de `%`, `_` y `\` hecho despues de `unaccent()`: sin eso, un `%%%` —o un
+ * `％％％` de ancho completo, que `unaccent()` convierte en el ASCII— casaria
+ * con la plantilla entera y la busqueda dejaria de tener el minimo de tres
+ * caracteres que RF-IN-05 le impone.
  *
- * **`%`, `_` y `\` se escapan**: sin eso, un `%%%` casaria con la plantilla
- * entera y la busqueda dejaria de tener el minimo de tres caracteres que
- * RF-IN-05 le impone. `unaccent()` no toca ninguno de los tres, asi que el
- * escape sigue en pie despues de normalizar.
+ * **La coma del orden «Apellidos, Nombre» se cambia por un espacio** antes de
+ * buscar, solo para el nombre: es como viene escrito el trabajador en un
+ * requerimiento y en una nomina. Si al quitarla el termino se queda por debajo
+ * de {@see EmployeeSearch::MIN_TEXT_LENGTH} —`",,,"` pasa el minimo del
+ * dominio—, el nombre no se busca: un patron vacio casaria con todos.
  *
  * El **codigo de empleado, exacto** y no por subcadena: es un identificador
  * opaco impreso en la tarjeta, y por prefijo serviria para recorrer la
@@ -115,16 +122,36 @@ final readonly class DatabaseLegalExportEmployeeDirectory implements LegalExport
             throw new LogicException('Una busqueda por texto sin texto no se puede construir.');
         }
 
-        $pattern = '%'.addcslashes($search->text, '\\%_').'%';
+        // El codigo, exacto y con el termino tal cual llego del dominio.
+        $where = 'WHERE e.employee_code = ?';
+        $bindings = [$search->text];
 
-        $where = <<<'SQL'
-            WHERE unaccent(e.first_name) ILIKE unaccent(?)
-               OR unaccent(e.last_name) ILIKE unaccent(?)
-               OR unaccent(e.first_name || ' ' || e.last_name) ILIKE unaccent(?)
-               OR e.employee_code = ?
-            SQL;
+        $name = $this->withoutListComma($search->text);
 
-        return [$where, [$pattern, $pattern, $pattern, $search->text]];
+        if (mb_strlen($name) >= EmployeeSearch::MIN_TEXT_LENGTH) {
+            [$byName, $nameBindings] = PersonNameSearch::anyOf([
+                'e.first_name',
+                'e.last_name',
+                "e.first_name || ' ' || e.last_name",
+                "e.last_name || ' ' || e.first_name",
+            ], $name);
+
+            $where .= ' OR '.$byName;
+            $bindings = [...$bindings, ...$nameBindings];
+        }
+
+        return [$where, $bindings];
+    }
+
+    /**
+     * «Pérez Amrani, José» → «Pérez Amrani José»: la coma, con los espacios
+     * que la rodeen, pasa a ser un solo espacio, y se recortan los extremos.
+     */
+    private function withoutListComma(string $text): string
+    {
+        $spaced = preg_replace('/[\p{Z}\s]*,[\p{Z}\s]*/u', ' ', $text) ?? '';
+
+        return preg_replace('/^[\p{Z}\s]+|[\p{Z}\s]+$/u', '', $spaced) ?? '';
     }
 
     private function hydrate(Row $row): LegalExportEmployeeMatch

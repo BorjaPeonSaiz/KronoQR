@@ -51,7 +51,11 @@ final readonly class EmployeeSearch
      */
     public static function byText(string $text): self
     {
-        $trimmed = trim($text);
+        // `trim()` solo quita los espacios ASCII: tres U+3000 (espacio
+        // ideografico) o tres U+00A0 contarian como tres caracteres y pasarian
+        // un minimo que no son. `\p{Z}` son todos los separadores Unicode. Una
+        // cadena que no es UTF-8 valido no casa con `/u` y se queda en nada.
+        $trimmed = preg_replace('/^[\p{Z}\s]+|[\p{Z}\s]+$/u', '', $text) ?? '';
         $length = mb_strlen($trimmed);
 
         if ($length < self::MIN_TEXT_LENGTH) {

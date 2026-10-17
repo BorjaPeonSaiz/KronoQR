@@ -591,8 +591,9 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * Zona propia de la busqueda de la persona de la exportacion legal
-     * (RF-IN-05, V21-3-PA-1, RS-05): **por cuenta**, por minuto y por hora.
+     * Zona propia, y unica, de la busqueda de la persona de la exportacion legal
+     * (RF-IN-05, V21-3-PA-1, RS-05): **por cuenta**, por minuto y por hora, y
+     * **por origen**, por minuto.
      *
      * **Por que no le basta `throttle:management`.** Aquella zona deja 120
      * peticiones por minuto, que para esta ruta son 1.200 personas por minuto
@@ -602,11 +603,17 @@ final class ComplianceServiceProvider extends ServiceProvider
      * corto es lo que impide usarla como el directorio que el `auditor` no tiene
      * (RF-ID-02) o como un oraculo de DNI.
      *
-     * **Por cuenta y no por origen**: en un hotel todo el personal comparte NAT,
-     * y la cuenta es el sujeto del abuso. La IP ya la cuenta la zona de gestion,
-     * que la ruta lleva tambien.
+     * **Los dos ejes de cuenta son los que cortan**: la cuenta es el sujeto del
+     * abuso. El **eje por origen** es la red de seguridad para cuando el actor
+     * no se puede resolver —detras de `auth:sanctum` no deberia pasar, pero el
+     * limitador no puede darlo por hecho— y por eso es **mas ancho**: en un
+     * hotel recepcion, direccion y RRHH salen por la misma IP publica, y un
+     * techo de cuenta en el origen haria que dos personas atendiendo el mismo
+     * requerimiento se cortaran entre si. Su valor por defecto es el de la zona
+     * de gestion, 120 por minuto, que es lo que esta ruta tenia por origen
+     * cuando llevaba las dos zonas.
      *
-     * Los dos techos son configuracion (regla dura 13) y se leen en cada
+     * Los tres techos son configuracion (regla dura 13) y se leen en cada
      * peticion, para que una prueba o un cambio de `.env` los vea sin reiniciar.
      */
     private function registerLegalExportSearchRateLimiter(): void
@@ -620,6 +627,8 @@ final class ComplianceServiceProvider extends ServiceProvider
                     ->by($subject.':minute'),
                 Limit::perHour(max(1, Config::integer('compliance.legal_export_search.per_hour', 60)))
                     ->by($subject.':hour'),
+                Limit::perMinute(max(1, Config::integer('compliance.legal_export_search.per_ip_per_minute', 120)))
+                    ->by('legal-export-search-ip:'.(string) $request->ip()),
             ];
         });
     }
