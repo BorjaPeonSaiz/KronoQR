@@ -69,17 +69,21 @@ actualizar README §3.1/§6.
 - **Criterio de salida:** 0 🔴/🟠 de seguridad y 0 🔴 del revisor.
 - **Quedan:** 12 🟠 del revisor, ninguno de seguridad en su propia escala, y muchos 🟡 de la 2.2.0 abiertos sin motivo escrito.
 
-**Siguiente acción:** el propietario decide qué entra en una 2.2.2. Lo propuesto está en el resumen («Qué hacer con esto»).
-- **Decisiones pendientes:**
-  - V21-3-PA-1: el auditor y el UUID;
-  - V21-6-KI-1: la actualización urgente a cualquier hora;
-  - V21-7-SC-2: ADR-037 frente al art. 9, con el DPO;
-  - V21-6-PL-02: la ventana de versiones;
-  - Q2: presupuestos de reloj;
-  - K6-1: hardware de referencia.
-- **Pendiente:** cerrar el doc 07 de la 2.2.1 (V21-4-SC-1).
-- **Demo `kronoqr.kodigolab.es`:** actualizarla a la 2.2.1 (tarea 8 del bloque final) y después las líneas de «versión desplegada» del README.
-- **Fuera de la 2.2.1:** las PR de Dependabot #172, #173 y #149.
+**Decisiones del propietario del 18-10-2026** (detalle en Engram, `kronoqr` «Decisiones del propietario 18-10-2026»):
+- **V21-3-PA-1: hecho.** «Haz que se exporte por el nombre o dni». La rama `feat/exportacion-legal-por-persona` trae `POST /reports/legal-export/employees/search` (RF-IN-05, ADR-037 enmendado el 18-10) y el buscador del panel:
+  - búsqueda por nombre (mínimo 3 caracteres después de `unaccent`; también «Apellidos, Nombre»), por código exacto o por documento exacto;
+  - como mucho 10 resultados;
+  - asiento por búsqueda con los `employee_uuids`, nunca el término;
+  - una zona de límite `legal-export-search` (cuenta e IP).
+  - `NationalId`/`NationalIdDigest` y `PersonNameSearch` en Shared: una sola normalización del documento y un solo escape de comodines en los cuatro buscadores por nombre.
+  - El alta mide ahora el documento normalizado.
+  - Revisado por `revisor-codigo` y `seguridad-cumplimiento`; todos sus hallazgos están corregidos.
+- **Aceptados, se dejan así:** V21-6-KI-1 (actualización urgente a cualquier hora), V21-7-SC-2 (detalle de baja sin asiento; conviene hablarlo con el DPO), V21-6-PL-02 (la primera versión pública es la 2.2.1), Q2 (presupuestos de reloj, si no son graves) y K6-1 (sin hardware de referencia).
+- **Doc 07:** el cierre de la 2.2.1 está integrado (#180). La fila nueva del oráculo por documento espera la **ratificación explícita** del propietario, igual que la de `sites.timezone`.
+- **Dependabot:** #172 y #179 integradas (sustituye a #173) con la CI completa en verde. **#149 (vite-plugin-pwa 2.0) aparcada:** cambia el service worker del quiosco y hay que probarla en la tablet real.
+- **Demo `kronoqr.kodigolab.es`:** la actualiza el propietario. Después hay que cambiar las líneas de «versión desplegada» del README.
+
+**Siguiente acción:** el propietario decide qué entra en una 2.2.2. Lo propuesto está en el resumen de la verificación («Qué hacer con esto»).
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
