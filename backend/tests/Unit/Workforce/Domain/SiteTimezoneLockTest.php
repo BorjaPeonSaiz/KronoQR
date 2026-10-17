@@ -84,6 +84,22 @@ it('no corrige a la misma zona: devuelve el mismo centro', function (): void {
     expect($site->correctTimezone(SiteTimezone::fromString('Europe/Madrid'), siteLockFirma()))->toBe($site);
 })->group('RN-23');
 
+it('no corrige con una firma que no habla de ningun tramo, aunque se cuele saltandose su fabrica', function (): void {
+    // `SiteTimezoneCorrection::of` ya lo niega; esto es la segunda linea, la
+    // del propio centro. Se construye por su constructor privado para probarla.
+    $firmaSinTramos = Closure::bind(
+        static fn (): SiteTimezoneCorrection => new SiteTimezoneCorrection('Se puso Madrid y era Canarias', 0, 7),
+        null,
+        SiteTimezoneCorrection::class,
+    )();
+
+    expect(fn (): Site => siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Atlantic/Canary'), $firmaSinTramos))
+        ->toThrow(InvalidArgumentException::class, 'only for a site with a work record')
+        // La misma zona no es una correccion y no llega a mirarla.
+        ->and(siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Europe/Madrid'), $firmaSinTramos)->timezone->identifier)
+        ->toBe('Europe/Madrid');
+})->group('RN-23');
+
 it('no se puede corregir la zona sin la firma de la correccion: la exige el tipo', function (): void {
     // V21-1-AR-5: que la firma no sea opcional lo dice la firma del metodo,
     // no una revision. Un segundo parametro anulable o con valor por defecto
