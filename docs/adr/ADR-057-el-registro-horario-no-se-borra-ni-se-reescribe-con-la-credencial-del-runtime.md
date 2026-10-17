@@ -235,9 +235,16 @@ Quien tenga la credencial del rol de migración es propietario de las tablas y d
 
 **No cambia ninguna decisión de este ADR: aplica su patrón a otra tabla.** La enmienda del 18-10-2026 de [ADR-056](ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md) lleva RN-23 al motor con el mismo diseño que §2 y §3:
 
-- un *trigger* (`sites_guard_timezone`) que rechaza con `42501` cambiar `sites.timezone` con tramos;
-- y una función `SECURITY DEFINER` (`site_correct_timezone`), propiedad del rol de migración, con `search_path` fijo y `EXECUTE` solo para la aplicación, como única puerta para la corrección de consola.
+- un *trigger* (`zz_sites_guard_timezone`) que rechaza con `42501` cambiar `sites.timezone` con tramos;
+- una función `SECURITY DEFINER` (`site_correct_timezone`), propiedad del rol de migración, con `search_path` fijo y `EXECUTE` solo para la aplicación, como única puerta para la corrección de consola;
+- y una traza solo-append (`site_timezone_changes`), propiedad del rol de migración, que solo escribe esa función y que la aplicación solo puede leer.
 
 §7 no cambia: la aplicación conserva `UPDATE (name, timezone)` sobre `sites`, porque el cambio de antes del primer fichaje lo necesita.
 
-**§4 gana una sexta clase, `site_timezone_differs_from_audit`.** Es la zona de `sites` distinta de la del último asiento `site.created` o `site.updated` del centro. Cubre lo que el *trigger* no impide: llamar a la función fuera de la orden de consola, que no escribe asiento, igual que `work_record_purge_batch` fuera de `compliance:apply-retention`, o un `UPDATE` sin tramos por fuera del producto. La alerta `DiscrepanciaEntreRegistroYAuditoria` ya suma todas las clases y no cambia. El runbook `discrepancia-registro-auditoria.md` §3 dice cómo se resuelve.
+**§4 gana una sexta clase, `site_timezone_differs_from_audit`.** Agrupa tres comprobaciones, y cada una sale con su campo:
+
+- `timezone`: la zona de `sites` no es la del último asiento `site.created` o `site.updated`;
+- `site_timezone_changes`: una fila de la traza no tiene su `site.updated` firmado;
+- `correction`: un `site.updated` cambia la zona después del primer tramo sin firma.
+
+Cubren lo que el *trigger* no impide: llamar a la función fuera de la orden de consola, que no escribe asiento (igual que `work_record_purge_batch` fuera de `compliance:apply-retention`), un `UPDATE` sin tramos por fuera del producto y un asiento de cambio que el panel no pudo escribir. Lo que no se puede cotejar —un centro sin asiento `site.*`, o filas de la traza de años cuya auditoría se purgó— se cuenta como no verificable (`work_record_reconciliation_unverifiable`) y no es discrepancia. El límite general de §4 vale también aquí: una fila acompañada de un asiento firmado falsificado cuadra. La alerta `DiscrepanciaEntreRegistroYAuditoria` ya suma todas las clases; solo cambia su texto. El runbook `discrepancia-registro-auditoria.md` §3 dice cómo se resuelve.
