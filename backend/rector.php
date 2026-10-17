@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Rector\CodeQuality\Rector\Identical\FlipTypeControlToUseExclusiveTypeRector;
 use Rector\Config\RectorConfig;
+use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
 use RectorLaravel\Rector\Class_\AnonymousMigrationsRector;
 use RectorLaravel\Set\LaravelSetList;
 
@@ -48,6 +49,14 @@ return RectorConfig::configure()
         // PHPStan vea sus metodos.
         AnonymousMigrationsRector::class => [
             __DIR__.'/tests/Support/Database/LockLimitedMigration.php',
+        ],
+
+        // `Site::correctTimezone()` recibe la firma de la correccion y no la
+        // lee: esta en la firma para que el compilador obligue a tenerla antes
+        // de corregir la zona con registro horario (RN-23, V21-1-AR-5, bloque 2
+        // de la 2.3.0). Quitarla es justo el defecto que se cerro.
+        RemoveUnusedPublicMethodParameterRector::class => [
+            __DIR__.'/app/Modules/Workforce/Domain/Model/Site.php',
         ],
     ])
     // El cache dentro del proyecto: el contenedor se recrea y /tmp se va con el.

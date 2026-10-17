@@ -165,7 +165,9 @@ final readonly class CorrectSiteTimezoneHandler
                     return $report;
                 }
 
-                $corrected = $current->correctTimezone($requested);
+                // La firma primero: sin ella el dominio no corrige (V21-1-AR-5).
+                $correction = SiteTimezoneCorrection::of($reason, $count, $command->responsibleUserId);
+                $corrected = $current->correctTimezone($requested, $correction);
 
                 // Por la funcion de la base de datos y no por `save()`: con
                 // registro horario, el *trigger* `sites_guard_timezone` niega
@@ -177,7 +179,7 @@ final readonly class CorrectSiteTimezoneHandler
                     name: $corrected->name,
                     timezone: $corrected->timezone->identifier,
                     previousTimezone: $current->timezone->identifier,
-                    correction: SiteTimezoneCorrection::of($reason, $count, $command->responsibleUserId),
+                    correction: $correction,
                     occurredAt: $this->clock->now(),
                 ));
 
