@@ -21,7 +21,6 @@ use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
-use App\Modules\Compliance\Domain\Exception\InvalidEmployeeSearch;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
@@ -1040,16 +1039,6 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (InvalidLegalExportRequest $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
-        ]));
-
-        /*
-         * La busqueda de la persona de la exportacion legal (RF-IN-05). El
-         * `FormRequest` la para antes con el mismo limite; esto cubre a quien
-         * construya el criterio por otro camino. El mensaje no lleva nunca el
-         * termino buscado (regla dura 21).
-         */
-        $exceptions->render(static fn (InvalidEmployeeSearch $exception): mixed => ProblemDetails::validationFailed([
-            $exception->field => [$exception->getMessage()],
         ]));
 
         /*
