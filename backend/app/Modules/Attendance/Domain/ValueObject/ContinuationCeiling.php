@@ -64,7 +64,8 @@ final readonly class ContinuationCeiling
      */
     public function continues(DateTimeImmutable $lastMark, DateTimeImmutable $start): bool
     {
-        return $start->getTimestamp() < $this->limitAfter($lastMark)->getTimestamp();
+        // Los objetos de fecha se comparan por instante, en cualquier zona.
+        return $start < $this->limitAfter($lastMark);
     }
 
     /** La cota en horas, para los mensajes: «12 h». */
