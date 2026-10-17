@@ -70,20 +70,26 @@ actualizar README §3.1/§6.
 - **Quedan:** 12 🟠 del revisor, ninguno de seguridad en su propia escala, y muchos 🟡 de la 2.2.0 abiertos sin motivo escrito.
 
 **Decisiones del propietario del 18-10-2026** (detalle en Engram, `kronoqr` «Decisiones del propietario 18-10-2026»):
-- **V21-3-PA-1: hecho.** «Haz que se exporte por el nombre o dni». La rama `feat/exportacion-legal-por-persona` trae `POST /reports/legal-export/employees/search` (RF-IN-05, ADR-037 enmendado el 18-10) y el buscador del panel:
-  - búsqueda por nombre (mínimo 3 caracteres después de `unaccent`; también «Apellidos, Nombre»), por código exacto o por documento exacto;
-  - como mucho 10 resultados;
-  - asiento por búsqueda con los `employee_uuids`, nunca el término;
-  - una zona de límite `legal-export-search` (cuenta e IP).
-  - `NationalId`/`NationalIdDigest` y `PersonNameSearch` en Shared: una sola normalización del documento y un solo escape de comodines en los cuatro buscadores por nombre.
-  - El alta mide ahora el documento normalizado.
-  - Revisado por `revisor-codigo` y `seguridad-cumplimiento`; todos sus hallazgos están corregidos.
-- **Aceptados, se dejan así:** V21-6-KI-1 (actualización urgente a cualquier hora), V21-7-SC-2 (detalle de baja sin asiento; conviene hablarlo con el DPO), V21-6-PL-02 (la primera versión pública es la 2.2.1), Q2 (presupuestos de reloj, si no son graves) y K6-1 (sin hardware de referencia).
-- **Doc 07:** el cierre de la 2.2.1 está integrado (#180). La fila nueva del oráculo por documento espera la **ratificación explícita** del propietario, igual que la de `sites.timezone`.
-- **Dependabot:** #172 y #179 integradas (sustituye a #173) con la CI completa en verde. **#149 (vite-plugin-pwa 2.0) aparcada:** cambia el service worker del quiosco y hay que probarla en la tablet real.
-- **Demo `kronoqr.kodigolab.es`:** la actualiza el propietario. Después hay que cambiar las líneas de «versión desplegada» del README.
+- **V21-3-PA-1: hecho (#181).** «Haz que se exporte por el nombre o dni»: `POST /reports/legal-export/employees/search` (RF-IN-05, ADR-037 enmendado el 18-10) y el buscador del panel.
+  - Búsqueda: por nombre (mínimo 3 caracteres después de `unaccent`; también «Apellidos, Nombre»), por código exacto o por documento exacto, con 10 resultados como máximo.
+  - Asiento por búsqueda con los `employee_uuids`, nunca el término; una zona de límite `legal-export-search` por cuenta e IP.
+  - `NationalId`/`NationalIdDigest` y `PersonNameSearch` en Shared; el alta mide el documento ya normalizado.
+- **Doc 07:** cierre de la 2.2.1 integrado (#180). El 18-10 el propietario ratificó la fila del oráculo por documento (D1) y el residuo de `sites.timezone` hasta su *trigger* (D2).
+- **Dependabot:** #172 y #179 integradas (la segunda sustituye a la #173). **#149 (`vite-plugin-pwa` 2.0) aparcada** hasta la tablet real: es el bloque 31.
+- **Demo `kronoqr.kodigolab.es`:** la actualiza el propietario; después, las líneas de «versión desplegada» del README.
 
-**Siguiente acción:** el propietario decide qué entra en una 2.2.2. Lo propuesto está en el resumen de la verificación («Qué hacer con esto»).
+**No habrá 2.2.2: todo va en la 2.3.0** (órdenes del 18-10-2026: «corregirlo todo», «junta también lo aplazado para la 2.3.0» y «absolutamente todo… perfecta y sin fallos»). Ficheros:
+- [docs/verificacion/2.2.1-pendientes-priorizados.md](docs/verificacion/2.2.1-pendientes-priorizados.md): unos 300 hallazgos abiertos, por urgencia;
+- [docs/verificacion/2.3.0-plan-correcciones.md](docs/verificacion/2.3.0-plan-correcciones.md): 35 bloques más el final, **aprobado el 18-10-2026** («hazlo como consideres mejor»).
+
+Lo que se aprobó con el plan:
+- D1-D21 con la recomendación de cada una. D15-D18 cambian ADR y ya tienen visto bueno: PIN tras la baja, readmisión en la misma ficha, baja programada con tarea diaria y servicio de copias propio.
+- D4 ampliada: todas las pruebas con presupuesto de reloj.
+- Bloque 34 activado: asiento en el detalle de una baja médica y franja sin recargas urgentes.
+- Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
+- La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
+
+**Siguiente acción:** cerrar el bloque 0 (rama `docs/plan-2.3.0`: plan, `2.3.0 *` en `infra/versions.txt` (`VERSION` sigue en 2.2.1 hasta la publicación, por las capturas), doc 07 y la línea D12 en el doc 02) y seguir con B1 en el orden del plan.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
