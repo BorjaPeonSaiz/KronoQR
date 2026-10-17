@@ -267,7 +267,7 @@ docker compose --env-file .env exec -T postgres \
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
                                  'incident_board','period_report','live_presence',
                                  'compliance_summary','absence_register','weekly_summary',
-                                 'payroll_export')
+                                 'payroll_export','legal_export_employee_search')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -288,6 +288,7 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `kiosk_roster` | Padrón que descarga una tablet | No (recuento y dispositivo) |
 | `credential_status` | Bandeja de credenciales | No (recuento y alcance) |
 | `incident_board` | Bandeja de incidencias | No (recuento y alcance) |
+| `legal_export_employee_search` | **Búsqueda de la persona de la exportación para la Inspección**, por nombre o DNI (RF-IN-05): hasta 10 personas con nombre, apellidos, departamento, situación y fechas de alta y cese. La hace también el `auditor`, que no tiene el directorio | No (recuento, `criterion` —`name_or_code` o `national_id`— y `truncated`). **Nunca el término buscado**: el asiento no dice a quién se buscó, solo cuántas personas vio y por qué criterio. Una búsqueda sin resultados también deja asiento, con recuento cero |
 | `incident_digest` | **Resumen que sale por correo** (RF-PR-01) | **Sí**: `employee_uuids` |
 | `weekly_summary` | **Resumen semanal que sale por correo** al responsable de departamento (RF-PR-05) | **Solo si el alcance tiene 50 personas o menos**: `employee_uuids`. Por encima, `employees` (recuento), `scope`, `manager_user_id` y `week_start`, sin lista: se resuelve por departamento con la consulta (b) |
 | `payroll_export` | **Fichero preparado para importar en el programa de nómina** (RF-IN-06): una fila por persona y periodo con horas trabajadas, contratadas, exceso y ausencias. **Sale de la instalación hacia otro sistema** | No (recuento, `format`, alcance). Lo escriben la descarga directa y la generación en diferido: en el segundo caso, el fichero y su enlace de un solo uso dejan además los asientos `report_export.*` (§4.2) |

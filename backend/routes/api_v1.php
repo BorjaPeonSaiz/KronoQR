@@ -13,6 +13,7 @@ use App\Modules\Attendance\Http\Controller\VoidShiftEntryController;
 use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
 use App\Modules\Compliance\Http\Controller\IncidentController;
 use App\Modules\Compliance\Http\Controller\LegalExportController;
+use App\Modules\Compliance\Http\Controller\LegalExportEmployeeSearchController;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Controller\CredentialController;
 use App\Modules\Identity\Http\Controller\CredentialStatusController;
@@ -522,6 +523,37 @@ Route::get('/reports/legal-export', LegalExportController::class)
         'locale.installation',
     ])
     ->name('compliance.reports.legal-export');
+
+/*
+ * POST /api/v1/reports/legal-export/employees/search — la persona de la
+ * exportacion para la Inspeccion, por su nombre o su DNI (RF-IN-05,
+ * V21-3-PA-1, ADR-037 enmienda del 18-10-2026).
+ *
+ * LOS MISMOS DOS AMBITOS Y LA MISMA POLICY QUE LA EXPORTACION: quien puede
+ * exportar a una persona puede elegirla. `reports:legal` o `reports:*`, y
+ * `LegalExportPolicy::searchEmployees()` con `admin`, `rrhh` y `auditor`. No se
+ * crea un ambito nuevo (doc 02 §7.3 nota 9).
+ *
+ * ES `POST` PARA QUE EL DNI NUNCA VAYA EN LA URL, que queda en los registros de
+ * acceso del proxy, en el historial del navegador y en la cabecera `Referer`. No
+ * crea nada; lo unico que escribe es su asiento de auditoria.
+ *
+ * DOS ZONAS DE LIMITE. La primera, `legal-export-search`, es la propia y la que
+ * corta de verdad: pocas peticiones por cuenta, por minuto y por hora
+ * (`config/compliance.php`), para que la ruta no sirva de directorio ni de
+ * oraculo de DNI. La segunda es la de toda la gestion, que aporta el eje por
+ * origen y el cupo comun: alternar de URL no devuelve presupuesto.
+ *
+ * SIN `locale.installation`: no es un documento, es JSON para el panel.
+ */
+Route::post('/reports/legal-export/employees/search', LegalExportEmployeeSearchController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
+        'throttle:legal-export-search',
+        'throttle:management',
+    ])
+    ->name('compliance.reports.legal-export.employees.search');
 
 /*
  * ---------------------------------------------------------------------------

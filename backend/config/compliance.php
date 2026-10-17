@@ -54,6 +54,21 @@ return [
     'legal_export_temp_retention_hours' => (int) env('COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS', 6),
 
     /*
+     * Techos POR CUENTA de la busqueda de la persona de la exportacion legal
+     * (`POST /reports/legal-export/employees/search`, RF-IN-05, V21-3-PA-1).
+     *
+     * Cortos a proposito: atender un requerimiento son unas pocas busquedas, y
+     * cada una devuelve hasta 10 personas o prueba un documento contra el hash.
+     * Con el techo general de gestion (120/min) la ruta serviria para recorrer
+     * la plantilla o para probar DNI hasta acertar. Ver
+     * `ComplianceServiceProvider::registerLegalExportSearchRateLimiter()`.
+     */
+    'legal_export_search' => [
+        'per_minute' => (int) env('COMPLIANCE_LEGAL_EXPORT_SEARCH_PER_MINUTE', 10),
+        'per_hour' => (int) env('COMPLIANCE_LEGAL_EXPORT_SEARCH_PER_HOUR', 60),
+    ],
+
+    /*
      * Ventana, en segundos, en la que las denegaciones por alcance del MISMO actor
      * sobre el MISMO conjunto de datos se agrupan en un solo asiento de
      * `audit_log` (RF-ID-03, RS-05, ADR-010, ADR-037).

@@ -189,6 +189,9 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/reports/adoption/export',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
+        // V21-3-PA-1: la persona de esa exportacion, por su nombre o su DNI.
+        // `POST` para que el DNI no vaya en la URL; no es el directorio.
+        '/api/v1/reports/legal-export/employees/search',
         // Tarea 3.9: informes generados en diferido (RF-IN-06, ADR-041). Es la
         // salida que el `422` de `/reports/period` lleva prometiendo desde la 2.8:
         // por encima del techo sincrono, el informe se genera en cola y se
@@ -1290,6 +1293,59 @@ it('publica en cabeceras cuanto se llevo cada exportacion legal', function (): v
         // navegador pueden guardarla.
         ->and($headers)->toContain('Cache-Control');
 })->group('RF-IN-05', 'RS-05');
+
+it('busca a la persona de la exportacion con los mismos ambitos y sin el DNI en la URL', function (): void {
+    // V21-3-PA-1: quien puede exportar puede elegir a quien, y no hay ambito
+    // nuevo (doc 02 §7.3 nota 9). `POST` y ningun parametro de consulta: un DNI
+    // en la URL acabaria en el registro de acceso del proxy y en el historial.
+    $path = '/api/v1/reports/legal-export/employees/search';
+
+    expect(Contract::keys('paths', $path))->toBe(['post'])
+        ->and(Contract::value('paths', $path, 'post', 'security'))->toBe([
+            ['managementToken' => ['reports:legal']],
+            ['managementToken' => ['reports:*']],
+        ])
+        ->and(Contract::has('paths', $path, 'post', 'parameters'))->toBeFalse()
+        ->and(Contract::keys('paths', $path, 'post', 'responses'))->toBe(['200', '401', '403', '422', '429'])
+        ->and(Contract::keys('paths', $path, 'post', 'responses', '200', 'headers'))->toContain('Cache-Control');
+})->group('RF-IN-05', 'RF-ID-02', 'RS-04');
+
+it('exige uno de los dos criterios y ningun otro campo', function (): void {
+    // El `oneOf` es lo que hace imposible enviar a la vez el nombre y el DNI, o
+    // colar un filtro que convierta la busqueda en el directorio.
+    $variants = Contract::value('components', 'schemas', 'LegalExportEmployeeSearch', 'oneOf');
+
+    expect($variants)->toBeArray()->toHaveCount(2);
+
+    /** @var list<array<string, mixed>> $variants */
+    $required = array_map(static fn (array $variant): mixed => $variant['required'], $variants);
+
+    expect($required)->toBe([['q'], ['national_id']]);
+
+    foreach ($variants as $variant) {
+        expect($variant['additionalProperties'])->toBeFalse();
+    }
+
+    // Los tres caracteres de RF-IN-05.
+    expect(Contract::value('components', 'schemas', 'LegalExportEmployeeSearch', 'oneOf', '0', 'properties', 'q', 'minLength'))->toBe(3);
+})->group('RF-IN-05');
+
+it('devuelve como mucho diez personas con los campos minimos, ni codigo ni documento', function (): void {
+    // RF-IN-05 y RL-08: lo justo para distinguir a dos personas con el mismo
+    // nombre. El codigo es lo que lleva impreso la tarjeta, y el documento solo
+    // existe como digest.
+    expect(Contract::value('components', 'schemas', 'LegalExportEmployeeMatches', 'properties', 'data', 'maxItems'))->toBe(10)
+        ->and(Contract::value('components', 'schemas', 'LegalExportEmployeeMatches', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'LegalExportEmployeeMatch', 'additionalProperties'))->toBeFalse();
+
+    $properties = Contract::keys('components', 'schemas', 'LegalExportEmployeeMatch', 'properties');
+
+    expect($properties)->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at'])
+        ->and($properties)->not->toContain('employee_code')
+        ->and($properties)->not->toContain('email')
+        ->and($properties)->not->toContain('national_id')
+        ->and($properties)->not->toContain('national_id_hash');
+})->group('RF-IN-05', 'RL-08');
 
 /*
  * Portal del empleado (tarea 1.11, RF-ID-05..08, RL-05).

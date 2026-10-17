@@ -214,6 +214,9 @@ function authorizationMatrix(): array
         'GET api/v1/reports/period' => [$admin, $rrhh],
         'GET api/v1/reports/period/export' => [$admin, $rrhh],
         'GET api/v1/reports/legal-export' => [$admin, $rrhh, $auditor],
+        // Y la busqueda de la persona de esa exportacion, con los mismos tres
+        // roles: quien exporta a una persona tiene que poder elegirla (RF-IN-05).
+        'POST api/v1/reports/legal-export/employees/search' => [$admin, $rrhh, $auditor],
         'GET api/v1/reports/payroll-export' => [$admin, $rrhh],
         'GET api/v1/reports/adoption' => [$admin, $rrhh],
         'GET api/v1/reports/adoption/export' => [$admin, $rrhh],
