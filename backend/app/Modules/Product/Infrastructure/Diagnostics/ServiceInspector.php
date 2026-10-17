@@ -102,6 +102,9 @@ final readonly class ServiceInspector
     /** La traza solo-append de los cambios de zona por la funcion de la correccion; la aplicacion solo la lee. */
     public const string SITE_TIMEZONE_TRACE = 'site_timezone_changes';
 
+    /** La linea base de la conciliacion de la zona; la aplicacion solo la lee. */
+    public const string SITE_TIMEZONE_BASELINE = 'site_timezone_audit_baseline';
+
     public function __construct(
         private ConnectionInterface $database,
         private Redis $redis,
@@ -418,12 +421,10 @@ final readonly class ServiceInspector
      *   ({@see self::definerFunctionIssues()}): sin `SECURITY DEFINER`, la
      *   correccion de consola chocaria con el *trigger* y no podria escribir la
      *   traza;
-     * - que la traza {@see self::SITE_TIMEZONE_TRACE} exista, sea del mismo
-     *   propietario que `sites` y la aplicacion solo la pueda leer: con
-     *   cualquier escritura podria borrar o inventar un cambio de zona.
-     *   Los privilegios se miran solo si quien pregunta no es el propietario:
-     *   el propietario los tiene todos por serlo, y en produccion la sonda
-     *   corre con el rol de la aplicacion.
+     * - que la traza {@see self::SITE_TIMEZONE_TRACE} y la linea base
+     *   {@see self::SITE_TIMEZONE_BASELINE} existan, sean del mismo propietario
+     *   que `sites` y la aplicacion solo las pueda leer
+     *   ({@see self::readOnlyTableIssues()}).
      *
      * Solo lee el catalogo.
      *
@@ -431,9 +432,7 @@ final readonly class ServiceInspector
      */
     private function siteTimezoneGuards(): array
     {
-        $trace = 'public.'.self::SITE_TIMEZONE_TRACE;
-
-        /** @var object{missing: bool, disabled: string, trace: bool, owner: bool, writable: string, sequence: bool} $row */
+        /** @var object{missing: bool, disabled: string} $row */
         $row = $this->database->selectOne(
             <<<'SQL'
             SELECT
@@ -445,24 +444,9 @@ final readonly class ServiceInspector
                     SELECT string_agg(g.tgname, ',' ORDER BY g.tgname)
                       FROM pg_catalog.pg_trigger g
                      WHERE g.tgrelid = 'public.sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
-                ), '') AS disabled,
-                to_regclass(?) IS NOT NULL AS trace,
-                coalesce((SELECT c.relowner = (SELECT s.relowner FROM pg_catalog.pg_class s WHERE s.oid = 'public.sites'::regclass)
-                            FROM pg_catalog.pg_class c WHERE c.oid = to_regclass(?)), true) AS owner,
-                coalesce((
-                    SELECT string_agg(p.priv, ',' ORDER BY p.priv)
-                      FROM unnest(ARRAY['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) AS p(priv)
-                     WHERE to_regclass(?) IS NOT NULL
-                       AND NOT pg_has_role(current_user, (SELECT c.relowner FROM pg_catalog.pg_class c WHERE c.oid = to_regclass(?)), 'USAGE')
-                       AND has_table_privilege(current_user, to_regclass(?), p.priv)
-                ), '') AS writable,
-                coalesce(
-                    NOT pg_has_role(current_user, (SELECT c.relowner FROM pg_catalog.pg_class c WHERE c.oid = to_regclass(?)), 'USAGE')
-                    AND has_sequence_privilege(current_user, to_regclass(?), 'USAGE'),
-                    false
-                ) AS sequence
+                ), '') AS disabled
             SQL,
-            [self::SITE_TIMEZONE_GUARD_TRIGGER, $trace, $trace, $trace, $trace, $trace, $trace, $trace.'_id_seq'],
+            [self::SITE_TIMEZONE_GUARD_TRIGGER],
         );
 
         $issues = $row->missing ? ['missing_trigger:'.self::SITE_TIMEZONE_GUARD_TRIGGER] : [];
@@ -471,22 +455,76 @@ final readonly class ServiceInspector
             $issues[] = 'disabled_trigger:'.$trigger;
         }
 
-        $issues = [...$issues, ...$this->definerFunctionIssues('public.site_correct_timezone(bigint, text, text)', 'site_timezone_function')];
+        return [
+            ...$issues,
+            ...$this->definerFunctionIssues('public.site_correct_timezone(bigint, text, text)', 'site_timezone_function'),
+            ...$this->readOnlyTableIssues(self::SITE_TIMEZONE_TRACE, 'site_timezone_trace', self::SITE_TIMEZONE_TRACE.'_id_seq'),
+            ...$this->readOnlyTableIssues(self::SITE_TIMEZONE_BASELINE, 'site_timezone_baseline', null),
+        ];
+    }
 
-        if (! $row->trace) {
-            return [...$issues, 'site_timezone_trace:missing'];
+    /**
+     * Lo que le falta a una tabla que la aplicacion solo debe leer, con el
+     * prefijo `$label`:
+     *
+     * - `missing`: no existe;
+     * - `owner`: no es del propietario de `sites` (el rol de migracion);
+     * - `owner_membership`: quien pregunta no es el propietario pero es miembro
+     *   de su rol: con herencia tiene todos sus privilegios, y sin ella
+     *   (`NOINHERIT`, como la aplicacion) le basta un `SET ROLE` para ser el
+     *   propietario. En produccion la sonda corre con la aplicacion: que sea
+     *   miembro del propietario es justo lo que no puede pasar;
+     * - `<PRIVILEGIO>`: un privilegio de escritura sobre la tabla;
+     * - `sequence`: `USAGE` sobre su secuencia.
+     *
+     * Si quien pregunta **es** el propietario no se miran los privilegios: los
+     * tiene todos por serlo.
+     *
+     * @return list<string>
+     */
+    private function readOnlyTableIssues(string $table, string $label, ?string $sequence): array
+    {
+        $qualified = 'public.'.$table;
+
+        /** @var object{present: bool, owner: bool, is_owner: bool, member: bool, writable: string, sequence: bool} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT c.oid IS NOT NULL AS present,
+                   coalesce(c.relowner = (SELECT s.relowner FROM pg_catalog.pg_class s WHERE s.oid = 'public.sites'::regclass), true) AS owner,
+                   coalesce(c.relowner = (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = current_user), false) AS is_owner,
+                   coalesce(pg_has_role(current_user, c.relowner, 'MEMBER'), false) AS member,
+                   coalesce((
+                       SELECT string_agg(p.priv, ',' ORDER BY p.priv)
+                         FROM unnest(ARRAY['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) AS p(priv)
+                        WHERE has_table_privilege(current_user, c.oid, p.priv)
+                   ), '') AS writable,
+                   coalesce(has_sequence_privilege(current_user, to_regclass(?), 'USAGE'), false) AS sequence
+              FROM (SELECT to_regclass(?) AS oid) AS wanted
+              LEFT JOIN pg_catalog.pg_class c ON c.oid = wanted.oid
+            SQL,
+            [$sequence === null ? null : 'public.'.$sequence, $qualified],
+        );
+
+        if (! $row->present) {
+            return [$label.':missing'];
         }
 
-        if (! $row->owner) {
-            $issues[] = 'site_timezone_trace:owner';
+        $issues = $row->owner ? [] : [$label.':owner'];
+
+        if ($row->is_owner) {
+            return $issues;
+        }
+
+        if ($row->member) {
+            return [...$issues, $label.':owner_membership'];
         }
 
         foreach (array_filter(explode(',', $row->writable)) as $privilege) {
-            $issues[] = 'site_timezone_trace:'.$privilege;
+            $issues[] = $label.':'.$privilege;
         }
 
         if ($row->sequence) {
-            $issues[] = 'site_timezone_trace:sequence';
+            $issues[] = $label.':sequence';
         }
 
         return $issues;

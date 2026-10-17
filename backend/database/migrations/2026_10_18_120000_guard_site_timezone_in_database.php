@@ -6,6 +6,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * La zona horaria del centro queda fija **tambien en la base de datos** en
@@ -99,6 +100,16 @@ use Illuminate\Support\Facades\DB;
  * llama. `site_id` es clave ajena `RESTRICT`: la aplicacion ya no puede borrar
  * el centro (ADR-057), y asi tampoco el rol de migracion por descuido.
  *
+ * ## 4. `site_timezone_audit_baseline`, la linea base de la conciliacion
+ *
+ * Una fila, propiedad del rol de migracion y solo lectura para la aplicacion:
+ * el `id` del ultimo asiento de `audit_log` al aplicar esta migracion. Hasta
+ * la 2.2.1 el panel cambiaba la zona con fichajes hechos sin firma (RN-23 llego
+ * en la 2.2.1) y las correcciones de consola de la 2.2.1 no dejaban fila en la
+ * traza: lo anterior a la linea base no se puede juzgar con las reglas de
+ * ahora. La conciliacion lo cuenta como no verificable, no lo denuncia, y no
+ * usa una correccion anterior para justificar una fila de la traza.
+ *
  * ## Lo que esto no impide
  *
  * **Llamar a la funcion fuera de la orden de consola**, con registro horario y
@@ -122,9 +133,10 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Reversible
  *
- * `down()` suelta el *trigger*, las dos funciones y la traza. No toca filas de
- * otras tablas ni sus privilegios. La traza se pierde con el `down()`: es lo
- * que se deshace.
+ * `down()` suelta el *trigger*, las dos funciones, la traza y la linea base. **Se
+ * niega si la traza tiene filas** (como `2026_10_03_100100` con sus avisos): son
+ * la unica constancia de que la zona cambio y no se borran al deshacer una
+ * migracion (regla dura 5). No toca filas de otras tablas ni sus privilegios.
  */
 return new class extends Migration
 {
@@ -154,6 +166,22 @@ return new class extends Migration
         DB::statement('GRANT SELECT ON TABLE public.site_timezone_changes TO '.$application);
         DB::statement('REVOKE ALL ON SEQUENCE public.site_timezone_changes_id_seq FROM '.$application);
 
+        // La linea base de la conciliacion: el ultimo asiento de `audit_log` al
+        // aplicar esta migracion. Lo anterior es historia de versiones en las que
+        // el panel aun cambiaba la zona con fichajes (hasta la 2.2.1, RN-23) y las
+        // correcciones no dejaban fila en la traza.
+        DB::statement(<<<'SQL'
+            CREATE TABLE public.site_timezone_audit_baseline (
+                id           smallint    PRIMARY KEY DEFAULT 1 CONSTRAINT site_timezone_audit_baseline_chk_single CHECK (id = 1),
+                audit_log_id bigint      NOT NULL,
+                set_at       timestamptz NOT NULL DEFAULT pg_catalog.now()
+            )
+            SQL);
+        DB::statement('INSERT INTO public.site_timezone_audit_baseline (audit_log_id) SELECT coalesce(max(id), 0) FROM public.audit_log');
+        DB::statement('REVOKE ALL ON TABLE public.site_timezone_audit_baseline FROM PUBLIC');
+        DB::statement('REVOKE ALL ON TABLE public.site_timezone_audit_baseline FROM '.$application);
+        DB::statement('GRANT SELECT ON TABLE public.site_timezone_audit_baseline TO '.$application);
+
         DB::statement($this->guardFunction());
         DB::statement($this->correctionFunction());
 
@@ -174,10 +202,18 @@ return new class extends Migration
     {
         $this->limitLockWait();
 
+        if (Schema::hasTable('site_timezone_changes') && DB::table('site_timezone_changes')->exists()) {
+            throw new RuntimeException(
+                'site_timezone_changes tiene cambios de zona del centro: es la unica constancia de que la zona '
+                .'cambio y no se borra al deshacer una migracion (regla dura 5, RN-23).'
+            );
+        }
+
         DB::statement('DROP TRIGGER IF EXISTS zz_sites_guard_timezone ON sites');
         DB::statement('DROP FUNCTION IF EXISTS public.site_correct_timezone(bigint, text, text)');
         DB::statement('DROP FUNCTION IF EXISTS public.sites_guard_timezone()');
         DB::statement('DROP TABLE IF EXISTS public.site_timezone_changes');
+        DB::statement('DROP TABLE IF EXISTS public.site_timezone_audit_baseline');
     }
 
     private function guardFunction(): string

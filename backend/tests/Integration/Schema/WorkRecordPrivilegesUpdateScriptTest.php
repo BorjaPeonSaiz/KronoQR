@@ -81,7 +81,7 @@ it('el SQL de update.sh da ok contra el esquema migrado', function (): void {
         ->and($values[0])->toBe('ok');
 })->group('RS-07', 'RL-04');
 
-it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da por buena sin su migracion', function (string $statement, string $expected): void {
+it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da por buena sin su migracion', function (string $statement, string $expected, bool $tampered): void {
     // RN-23, bloque 2 de la 2.3.0: el trigger de `sites` y la funcion de la
     // correccion de consola. En una transaccion del rol de migracion que se
     // deshace, como la prueba de abajo.
@@ -104,20 +104,65 @@ it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da 
 
     expect(array_values((array) $row)[0])->toBe($expected)
         ->and(array_values((array) $without)[0])->toBe('ok')
-        // Todo lo de la zona es manipulacion, no deriva que se repare sola,
-        // salvo un EXECUTE de mas para PUBLIC, que update.sh si retira.
-        ->and(privilegiosActualizadorManipulado($expected))->toBe(! str_ends_with($expected, ':PUBLIC'));
+        // Manipulacion (no se repara: update.sh deshace) o deriva que se repara.
+        ->and(privilegiosActualizadorManipulado($expected))->toBe($tampered);
 })->with([
-    'traza escribible por la aplicacion' => ['GRANT INSERT ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:INSERT'],
-    'traza con la secuencia para la aplicacion' => ['GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO :app', 'site_timezone_changes:SECUENCIA'],
-    'traza sin lectura' => ['REVOKE SELECT ON TABLE site_timezone_changes FROM :app', 'site_timezone_changes:SELECT'],
-    'traza borrada' => ['DROP TABLE site_timezone_changes', 'site_timezone_changes:AUSENTE'],
-    'trigger desactivado' => ['ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone', 'trigger:zz_sites_guard_timezone:DESACTIVADO'],
-    'trigger borrado' => ['DROP TRIGGER zz_sites_guard_timezone ON sites', 'trigger:zz_sites_guard_timezone:AUSENTE'],
-    'funcion sin SECURITY DEFINER' => ['ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER', 'site_correct_timezone:DEFINER'],
-    'funcion para PUBLIC' => ['GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC', 'site_correct_timezone:PUBLIC'],
-    'funcion borrada' => ['DROP FUNCTION public.site_correct_timezone(bigint, text, text)', 'site_correct_timezone:AUSENTE'],
+    'traza escribible por la aplicacion' => ['GRANT INSERT ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:INSERT', false],
+    'traza con la secuencia para la aplicacion' => ['GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO :app', 'site_timezone_changes:SECUENCIA', false],
+    'traza sin lectura' => ['REVOKE SELECT ON TABLE site_timezone_changes FROM :app', 'site_timezone_changes:SELECT', false],
+    'traza borrada' => ['DROP TABLE site_timezone_changes', 'site_timezone_changes:AUSENTE', true],
+    'linea base escribible por la aplicacion' => ['GRANT UPDATE ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:UPDATE', false],
+    'linea base borrada' => ['DROP TABLE site_timezone_audit_baseline', 'site_timezone_audit_baseline:AUSENTE', true],
+    'trigger desactivado' => ['ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone', 'trigger:zz_sites_guard_timezone:DESACTIVADO', true],
+    'trigger borrado' => ['DROP TRIGGER zz_sites_guard_timezone ON sites', 'trigger:zz_sites_guard_timezone:AUSENTE', true],
+    'funcion sin SECURITY DEFINER' => ['ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER', 'site_correct_timezone:DEFINER', true],
+    'funcion para PUBLIC' => ['GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC', 'site_correct_timezone:PUBLIC', false],
+    'funcion borrada' => ['DROP FUNCTION public.site_correct_timezone(bigint, text, text)', 'site_correct_timezone:AUSENTE', true],
 ])->group('RS-07', 'RN-23');
+
+it('la reparacion de update.sh deja la traza y la linea base de la zona en solo lectura', function (): void {
+    // Privilegios de mas sobre la traza, su secuencia y la linea base, y el
+    // SELECT de la traza retirado: es deriva, y la reparacion la deshace. En
+    // una transaccion del rol de migracion que se deshace.
+    $application = Config::string('database.roles.application');
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql($application);
+
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'CFG_DB_USERNAME='.escapeshellarg($application).'; KQ_WORK_RECORD_STAGE=b7; work_record_privileges_repair_sql'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    $migrator->beginTransaction();
+
+    try {
+        foreach ([
+            'GRANT INSERT, DELETE ON TABLE site_timezone_changes TO "'.$application.'"',
+            'REVOKE SELECT ON TABLE site_timezone_changes FROM "'.$application.'"',
+            'GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO "'.$application.'"',
+            'GRANT UPDATE ON TABLE site_timezone_audit_baseline TO "'.$application.'"',
+        ] as $statement) {
+            $migrator->statement($statement);
+        }
+
+        $before = $migrator->selectOne($sql);
+        $migrator->getPdo()->exec($process->getOutput());
+        $after = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($before) && is_object($after));
+
+    expect(array_values((array) $before)[0])->toBe('site_timezone_audit_baseline:UPDATE,site_timezone_changes:DELETE,site_timezone_changes:INSERT,site_timezone_changes:SECUENCIA,site_timezone_changes:SELECT')
+        ->and(array_values((array) $after)[0])->toBe('ok');
+})->group('RS-07', 'RN-23');
 
 it('toma por manipulacion la funcion de purga borrada, y no la repara', function (): void {
     $migrator = DB::connection(config()->string('database.migrations.connection'));

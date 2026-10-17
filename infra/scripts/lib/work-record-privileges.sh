@@ -40,6 +40,8 @@ readonly KQ_SITE_TIMEZONE_FUNCTION="site_correct_timezone"
 # `zz_` para ejecutarse el ultimo de los BEFORE de `sites` (orden alfabetico).
 readonly KQ_SITE_TIMEZONE_TRIGGER="zz_sites_guard_timezone"
 readonly KQ_SITE_TIMEZONE_TRACE="site_timezone_changes"
+# La linea base de la conciliacion (una fila, el ultimo asiento al migrar): mismo trato.
+readonly KQ_SITE_TIMEZONE_BASELINE="site_timezone_audit_baseline"
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
 # los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
@@ -86,14 +88,16 @@ work_record_privileges_stage() {
 
 # Devuelve 0 si la deriva (salida de work_record_privileges_sql) incluye un trigger ausente
 # o desactivado, una funcion SECURITY DEFINER (la purga o la correccion de la zona) ausente
-# o sin SECURITY DEFINER / search_path, o cualquier diferencia en la traza solo-append de la
-# zona (privilegios de mas, propietario, ausente). Eso NO se repara
-# solo: lo hace un superusuario o una migracion rota, y reactivarlo en silencio taparia
+# o sin SECURITY DEFINER / search_path, o la traza o la linea base de la zona ausentes o de
+# otro propietario (sus privilegios de mas, o el SELECT que falte, si se reparan). Eso NO
+# se repara solo: lo hace un superusuario o una migracion rota, y reactivarlo en silencio taparia
 # justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
 work_record_privileges_tampered() {
   case "$1" in
   *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"* | \
-    *"${KQ_WORK_RECORD_PURGE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_TRACE}:"*) return 0 ;;
+    *"${KQ_WORK_RECORD_PURGE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:AUSENTE"* | \
+    *"${KQ_SITE_TIMEZONE_TRACE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO"* | \
+    *"${KQ_SITE_TIMEZONE_BASELINE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:PROPIETARIO"*) return 0 ;;
   esac
   return 1
 }
@@ -123,6 +127,30 @@ work_record_definer_function_sql() {
    WHERE (${when})
      AND EXISTS (SELECT 1 FROM pg_proc p WHERE p.proname = '${fn}' AND p.pronamespace = 'public'::regnamespace
                    AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) AS c WHERE c LIKE 'search_path=%')))
+SQL
+}
+
+# SQL de una tabla de la zona que la aplicacion solo lee (la traza y la linea base):
+# `tabla:AUSENTE` y `tabla:PROPIETARIO` (distinto del de `sites`) son manipulacion;
+# `tabla:<PRIVILEGIO>` (de mas, o SELECT que falta) es deriva que se repara. `$3` es la
+# condicion SQL de que su migracion este aplicada.
+site_timezone_readonly_table_sql() {
+  local role="$1" tbl="$2" when="$3"
+  cat <<SQL
+  UNION ALL
+  SELECT '${tbl}:AUSENTE'
+   WHERE (${when}) AND to_regclass('public.${tbl}') IS NULL
+  UNION ALL
+  SELECT '${tbl}:PROPIETARIO'
+   WHERE (${when}) AND to_regclass('public.${tbl}') IS NOT NULL
+     AND (SELECT c.relowner FROM pg_class c WHERE c.oid = to_regclass('public.${tbl}'))
+         IS DISTINCT FROM (SELECT c.relowner FROM pg_class c WHERE c.oid = 'public.sites'::regclass)
+  UNION ALL
+  SELECT '${tbl}:' || p.priv
+    FROM (VALUES ('SELECT', true), ('INSERT', false), ('UPDATE', false), ('DELETE', false), ('TRUNCATE', false),
+                 ('REFERENCES', false), ('TRIGGER', false), ('MAINTAIN', false)) AS p(priv, want)
+   WHERE (${when}) AND to_regclass('public.${tbl}') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.${tbl}'), p.priv) IS DISTINCT FROM p.want
 SQL
 }
 
@@ -201,21 +229,8 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
     FROM pg_trigger g
    WHERE ${site_applied} AND g.tgrelid = 'sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
 $(work_record_definer_function_sql "${role}" "${KQ_SITE_TIMEZONE_FUNCTION}" "${site_applied}")
-  UNION ALL
-  SELECT '${KQ_SITE_TIMEZONE_TRACE}:AUSENTE'
-   WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NULL
-  UNION ALL
-  SELECT '${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO'
-   WHERE ${site_applied}
-     AND (SELECT c.relowner FROM pg_class c WHERE c.oid = to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}'))
-         IS DISTINCT FROM (SELECT c.relowner FROM pg_class c WHERE c.oid = 'public.sites'::regclass)
-     AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NOT NULL
-  UNION ALL
-  SELECT '${KQ_SITE_TIMEZONE_TRACE}:' || p.priv
-    FROM (VALUES ('SELECT', true), ('INSERT', false), ('UPDATE', false), ('DELETE', false), ('TRUNCATE', false),
-                 ('REFERENCES', false), ('TRIGGER', false), ('MAINTAIN', false)) AS p(priv, want)
-   WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NOT NULL
-     AND has_table_privilege('${role}', to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}'), p.priv) IS DISTINCT FROM p.want
+$(site_timezone_readonly_table_sql "${role}" "${KQ_SITE_TIMEZONE_TRACE}" "${site_applied}")
+$(site_timezone_readonly_table_sql "${role}" "${KQ_SITE_TIMEZONE_BASELINE}" "${site_applied}")
   UNION ALL
   SELECT '${KQ_SITE_TIMEZONE_TRACE}:SECUENCIA'
    WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq') IS NOT NULL
@@ -272,5 +287,8 @@ work_record_privileges_repair_sql() {
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
     # Por nombre, sin firma. Si la funcion no existe no hace nada y la deriva persiste.
     printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN ('${KQ_WORK_RECORD_PURGE_FUNCTION}', '${KQ_SITE_TIMEZONE_FUNCTION}') AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
+    # La traza y la linea base de la zona: solo SELECT, y nada sobre la secuencia de la
+    # traza. Si no existen (o no son del migrador, que es manipulacion) no se tocan.
+    printf '%s\n' "DO \$kq\$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['${KQ_SITE_TIMEZONE_TRACE}', '${KQ_SITE_TIMEZONE_BASELINE}'] LOOP IF to_regclass('public.' || t) IS NOT NULL THEN EXECUTE format('REVOKE ALL ON TABLE public.%I FROM %I', t, '${CFG_DB_USERNAME}'); EXECUTE format('GRANT SELECT ON TABLE public.%I TO %I', t, '${CFG_DB_USERNAME}'); END IF; END LOOP; IF to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq') IS NOT NULL THEN EXECUTE format('REVOKE ALL ON SEQUENCE public.%I FROM %I', '${KQ_SITE_TIMEZONE_TRACE}_id_seq', '${CFG_DB_USERNAME}'); END IF; END \$kq\$;"
   fi
 }

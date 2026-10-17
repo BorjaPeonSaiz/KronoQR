@@ -392,3 +392,43 @@ it('su down() suelta el trigger, las funciones y la traza, y su up() los vuelve 
         ->and(siteGuardTriggers($migrator))->toContain('zz_sites_guard_timezone')
         ->and($migrator->getSchemaBuilder()->hasTable('site_timezone_changes'))->toBeTrue();
 })->group('RN-23', 'RF-PD-10');
+
+it('su down() se niega si la traza tiene cambios: son la unica constancia de que la zona cambio', function (): void {
+    $site = siteGuardSite();
+    siteGuardEntry($site);
+    siteGuardCorrect($site, 'Europe/Madrid', 'Atlantic/Canary');
+
+    $name = config()->string('database.migrations.connection');
+    $migrator = DB::connection($name);
+
+    /** @var list<string> $applied */
+    $applied = $migrator->table('migrations')->orderByDesc('id')->pluck('migration')->all();
+    $steps = array_search(SITE_TIMEZONE_GUARD_MIGRATION, $applied, true);
+    \assert(is_int($steps));
+
+    $refused = null;
+
+    try {
+        Commands::run('migrate:rollback --database='.$name.' --step='.($steps + 1));
+    } catch (RuntimeException $exception) {
+        $refused = $exception->getMessage();
+    } finally {
+        [$forward, $forwardOutput] = Commands::run('migrate --database='.$name);
+    }
+
+    expect($refused)->toContain('site_timezone_changes tiene cambios de zona del centro')
+        ->and($forward)->toBe(0, $forwardOutput)
+        ->and(DB::table('site_timezone_changes')->count())->toBe(1)
+        ->and(siteGuardTriggers($migrator))->toContain('zz_sites_guard_timezone');
+})->group('RN-23', 'RF-PD-10');
+
+it('fija una linea base de la conciliacion: una fila, el ultimo asiento al migrar, solo lectura para la aplicacion', function (): void {
+    /** @var list<object{id: int, audit_log_id: int|string}> $rows */
+    $rows = DB::select('SELECT id, audit_log_id FROM site_timezone_audit_baseline');
+
+    expect($rows)->toHaveCount(1)
+        ->and((int) $rows[0]->audit_log_id)->toBeGreaterThanOrEqual(0);
+
+    siteGuardExpectDenied('reescribir la linea base', static fn (ConnectionInterface $db): int => $db->update('UPDATE site_timezone_audit_baseline SET audit_log_id = 0'), '42501', '');
+    siteGuardExpectDenied('borrar la linea base', static fn (ConnectionInterface $db): int => $db->delete('DELETE FROM site_timezone_audit_baseline'), '42501', '');
+})->group('RN-23', 'RS-07');

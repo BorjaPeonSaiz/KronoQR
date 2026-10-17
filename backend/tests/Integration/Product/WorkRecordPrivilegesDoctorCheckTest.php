@@ -286,6 +286,10 @@ it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde 
         'DROP TABLE site_timezone_changes',
         ['site_timezone_trace:missing'],
     ],
+    'la linea base borrada' => [
+        'DROP TABLE site_timezone_audit_baseline',
+        ['site_timezone_baseline:missing'],
+    ],
 ])->group('RF-PD-13', 'RS-07', 'RN-23');
 
 it('avisa si la aplicacion puede escribir la traza de cambios de zona o usar su secuencia', function (): void {
@@ -319,6 +323,29 @@ it('avisa si la aplicacion puede escribir la traza de cambios de zona o usar su 
             'site_timezone_trace:INSERT',
             'site_timezone_trace:sequence',
         ]);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('avisa si la aplicacion hereda del propietario de la traza en vez de omitir sus privilegios', function (): void {
+    // Miembro del rol propietario: con un SET ROLE es el propietario (la
+    // aplicacion es NOINHERIT). La sonda no lo puede dar por bueno.
+    $migrator = privilegiosRegistroMigrador();
+    $application = '"'.Config::string('database.roles.application').'"';
+    $owner = '"'.Config::string('database.roles.migration').'"';
+
+    try {
+        $migrator->statement('GRANT '.$owner.' TO '.$application);
+
+        $findings = privilegiosRegistroDoctor();
+    } finally {
+        $migrator->statement('REVOKE '.$owner.' FROM '.$application);
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->details['guard_issues'])
+        ->toContain('site_timezone_trace:owner_membership', 'site_timezone_baseline:owner_membership');
 
     expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
 })->group('RF-PD-13', 'RS-07', 'RN-23');
