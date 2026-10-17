@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
+use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezoneChange;
+use App\Modules\Compliance\Domain\ValueObject\RecordedSiteTimezoneChange;
+use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancyKind;
 
 /*
@@ -63,3 +66,115 @@ it('un asiento que no dice zona tampoco la justifica', function (array $payload)
     'zona que no es texto' => [['new_value' => ['timezone' => 3]]],
     'new_value que no es objeto' => [['new_value' => 'Europe/Madrid']],
 ])->group('RN-23', 'RL-04');
+
+// --- La historia de la zona: traza, firma y lo no verificable (revision del bloque 2) ---
+
+/** Un `site.updated` de `$from` a `$to`, firmado por consola o desde el panel. */
+function zonaAuditadaCambio(int $id, string $from, string $to, bool $firmado, bool $conRegistro = true): AuditedSiteTimezoneChange
+{
+    return AuditedSiteTimezoneChange::fromEntry($id, [
+        'previous_value' => ['name' => 'Hotel Marina', 'timezone' => $from],
+        'new_value' => ['name' => 'Hotel Marina', 'timezone' => $to],
+        ...($firmado ? ['via' => 'console', 'reason' => 'Se puso Madrid y era Canarias', 'shift_entry_count' => 3, 'responsible_user_id' => 7] : []),
+    ], $conRegistro);
+}
+
+function zonaAuditadaFila(string $from, string $to, string $cuando = '2026-10-18T09:00:00Z'): RecordedSiteTimezoneChange
+{
+    return new RecordedSiteTimezoneChange($from, $to, new DateTimeImmutable($cuando));
+}
+
+/**
+ * @param  list<AuditedSiteTimezoneChange>  $asientos
+ * @param  list<RecordedSiteTimezoneChange>  $filas
+ * @param  list<int>  $sellados
+ * @return list<string>
+ */
+function zonaAuditadaCampos(string $zona, array $asientos, array $filas, array $sellados = []): array
+{
+    $ultimo = $asientos === [] ? null : $asientos[\count($asientos) - 1];
+    $site = new AuditedSiteTimezone(1, $zona, $ultimo === null ? 5 : $ultimo->auditEntryId, $ultimo === null ? $zona : $ultimo->to, $asientos, $filas);
+
+    return array_map(static fn (WorkRecordDiscrepancy $d): string => $d->fields[0], $site->assess($sellados)->discrepancies);
+}
+
+it('da por buena una correccion de consola con su fila en la traza y su asiento firmado', function (): void {
+    expect(zonaAuditadaCampos('Atlantic/Canary', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', true)], [zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary')]))
+        ->toBe([]);
+})->group('RN-23', 'RL-04');
+
+it('denuncia una fila de la traza sin su asiento firmado, aunque la zona haya vuelto a ser la de antes', function (): void {
+    // A->B->A con la funcion fuera de la orden: la zona vuelve a coincidir con
+    // el asiento, pero la traza tiene dos filas y ningun asiento firmado.
+    expect(zonaAuditadaCampos('Europe/Madrid', [], [
+        zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary'),
+        zonaAuditadaFila('Atlantic/Canary', 'Europe/Madrid'),
+    ]))->toBe(['site_timezone_changes', 'site_timezone_changes']);
+
+    // Con un solo asiento firmado para dos cambios iguales, sobra una fila.
+    expect(zonaAuditadaCampos('Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', true),
+    ], [
+        zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary'),
+        zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary'),
+    ]))->toBe(['site_timezone_changes']);
+
+    // Un asiento sin firma no justifica una fila.
+    expect(zonaAuditadaCampos('Atlantic/Canary', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false, false)], [zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary')]))
+        ->toBe(['site_timezone_changes']);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('no denuncia una correccion firmada sin fila: las de la 2.2.1 son anteriores a la traza', function (): void {
+    expect(zonaAuditadaCampos('Atlantic/Canary', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', true)], []))->toBe([]);
+})->group('RN-23', 'RL-04');
+
+it('denuncia un cambio de zona sin firma despues del primer tramo, y no antes ni el de solo el nombre', function (): void {
+    expect(zonaAuditadaCampos('Atlantic/Canary', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false)], []))->toBe(['correction'])
+        ->and(zonaAuditadaCampos('Atlantic/Canary', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false, false)], []))->toBe([])
+        ->and(zonaAuditadaCampos('Europe/Madrid', [zonaAuditadaCambio(9, 'Europe/Madrid', 'Europe/Madrid', false)], []))->toBe([]);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('lee la firma de la consola: via, motivo, recuento y cuenta', function (array $sobra): void {
+    $firmado = zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', true);
+    $payload = [
+        'previous_value' => ['timezone' => 'Europe/Madrid'],
+        'new_value' => ['timezone' => 'Atlantic/Canary'],
+        'via' => 'console', 'reason' => 'Se puso Madrid y era Canarias', 'shift_entry_count' => 3, 'responsible_user_id' => 7,
+        ...$sobra,
+    ];
+
+    expect($firmado->signed)->toBeTrue()
+        ->and(AuditedSiteTimezoneChange::fromEntry(9, $payload, true)->signed)->toBeFalse();
+})->with([
+    'otra via' => [['via' => 'panel']],
+    'sin motivo' => [['reason' => '  ']],
+    'sin tramos' => [['shift_entry_count' => 0]],
+    'sin cuenta' => [['responsible_user_id' => null]],
+])->group('RN-23', 'RL-04');
+
+it('cuenta como no verificable la zona sin asiento, con o sin año sellado, y no la denuncia', function (array $sellados): void {
+    // Sin asiento `site.*`: una instalacion anterior a la tarea 5.5, o su asiento
+    // se fue con la particion purgada de su año (ADR-027). No se apaga en
+    // silencio: sale como no verificable.
+    $evaluacion = AuditedSiteTimezone::fromEntry(1, 'Europe/Madrid', null, null)->assess(array_values(array_map(intval(...), $sellados)));
+
+    expect($evaluacion->discrepancies)->toBe([])
+        ->and($evaluacion->unverifiableTimezone)->toBeTrue()
+        ->and($evaluacion->unverifiableChanges)->toBe(0);
+})->with([
+    'con año sellado' => [[2021]],
+    'sin año sellado' => [[]],
+])->group('RN-23', 'RL-04');
+
+it('no coteja las filas de la traza de un año cuya auditoria ya se purgo: las cuenta aparte', function (): void {
+    $site = new AuditedSiteTimezone(1, 'Atlantic/Canary', 50, 'Atlantic/Canary', [], [
+        zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary', '2021-12-31T23:30:00Z'),
+        zonaAuditadaFila('Atlantic/Canary', 'Europe/Lisbon', '2022-01-01T00:30:00Z'),
+    ]);
+
+    $evaluacion = $site->assess([2020, 2021]);
+
+    expect($evaluacion->unverifiableChanges)->toBe(1)
+        ->and($evaluacion->unverifiableTimezone)->toBeFalse()
+        ->and(array_map(static fn (WorkRecordDiscrepancy $d): string => $d->fields[0], $evaluacion->discrepancies))->toBe(['site_timezone_changes']);
+})->group('RN-23', 'RL-04');

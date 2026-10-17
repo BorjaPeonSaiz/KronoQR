@@ -46,14 +46,15 @@ groups:
           destinatario: seguridad
           component: audit
         annotations:
-          summary: "El registro horario no cuadra con su auditoria ({{ $labels.scope }}): {{ $value }} tramo(s)"
+          summary: "El registro horario no cuadra con su auditoria ({{ $labels.scope }}): {{ $value }} discrepancia(s)"
           description: >-
-            La conciliacion ha encontrado tramos de shift_entries que no
-            coinciden con el ultimo asiento que la aplicacion escribio sobre
-            ellos en audit_log: un tramo sin asiento, una hora o una persona
-            cambiadas, un tramo anulado sin correccion o un asiento cuyo tramo
-            ya no existe. Alguien ha escrito en el registro horario por fuera
-            de la aplicacion. El fichaje NO esta afectado y no hay que parar
+            La conciliacion ha encontrado discrepancias entre el registro
+            horario y su auditoria en audit_log: un tramo sin asiento, una hora
+            o una persona cambiadas, un tramo anulado sin correccion, un asiento
+            cuyo tramo ya no existe, o una zona horaria del centro que no es la
+            de su ultimo asiento o que cambio sin una correccion firmada.
+            Alguien ha escrito en el registro horario por fuera de la
+            aplicacion. El fichaje NO esta afectado y no hay que parar
             nada: preserva la evidencia antes de tocar ninguna fila y no
             generes exportaciones legales del periodo hasta aclararlo.
             Una purga no admisible que una persona ya ha dado por revisada

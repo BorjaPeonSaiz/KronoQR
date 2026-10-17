@@ -62,6 +62,15 @@ final readonly class TextfileWorkRecordReconciliationMetrics implements WorkReco
         $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="true"} '.$result->reviewedPurgesExplainingDeletions;
         $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="false"} '.$result->reviewedPurgesNotExplainingDeletions();
 
+        // RN-23, bloque 2 de la 2.3.0. Lo que la comprobacion de la zona del
+        // centro no ha podido mirar: un centro sin asiento `site.*` o filas de
+        // la traza de años cuya auditoria se purgo. Informativo, no integridad:
+        // no suma en `discrepancies` ni tiene alerta; las dos series siempre.
+        $lines[] = '# HELP work_record_reconciliation_unverifiable Lo que la conciliacion no ha podido verificar por falta de asiento con que compararlo (zona del centro sin asiento, cambios de zona anteriores a la auditoria conservada). No es una discrepancia.';
+        $lines[] = '# TYPE work_record_reconciliation_unverifiable gauge';
+        $lines[] = 'work_record_reconciliation_unverifiable{scope="'.$scope.'",subject="site_timezone"} '.$result->unverifiableSiteTimezones;
+        $lines[] = 'work_record_reconciliation_unverifiable{scope="'.$scope.'",subject="site_timezone_change"} '.$result->unverifiableSiteTimezoneChanges;
+
         TextfileExposition::write(self::FILE_PREFIX.$scope.'.prom', $lines);
     }
 }

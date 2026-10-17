@@ -84,6 +84,13 @@ final class ReconcileWorkRecordCommand extends Command
             $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
         }
 
+        // RN-23: lo que no se ha podido comparar con ningun asiento. Informa,
+        // no falla: no es una discrepancia.
+        if ($result->unverifiableSiteTimezones > 0 || $result->unverifiableSiteTimezoneChanges > 0) {
+            $this->line('zona del centro no verificable: '.$result->unverifiableSiteTimezones.' centro(s) sin asiento site.*, '
+                .$result->unverifiableSiteTimezoneChanges.' cambio(s) de zona anteriores a la auditoria conservada (no cuentan)');
+        }
+
         if ($result->isConsistent()) {
             $this->info('Registro y auditoria cuadran ('.$coverage.'): '.$result->entriesChecked.' tramos conciliados.');
 

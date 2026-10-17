@@ -312,40 +312,64 @@ conciliación lo seguirá contando en cada pasada: **la alerta no se apaga sola*
 hasta que la investigación termine y se dé por revisado (§3.1). Mientras tanto,
 anótalo en el registro del incidente.
 
-### `site_timezone_differs_from_audit` — la zona del centro no es la de su último asiento
+### `site_timezone_differs_from_audit` — la historia de la zona del centro no cuadra con su auditoría
 
-La zona horaria de `sites` no coincide con la de su último asiento
-`site.created` o `site.updated` (`new_value.timezone`). La línea dice el centro
-y ese asiento, **nunca las zonas**:
+Desde la 2.3.0 la base de datos no deja cambiar la zona con fichajes hechos
+(RN-23, ADR-056: *trigger* `zz_sites_guard_timezone`) salvo por la función
+`site_correct_timezone`. La usa `workforce:correct-site-timezone`, **no
+escribe asiento** (el asiento lo deja la orden) y **apunta cada cambio** en la
+traza solo-append `site_timezone_changes`, que la aplicación solo puede leer.
+La línea dice el centro, lo que no cuadra y, si lo hay, el asiento; **nunca las
+zonas**:
 
 ```text
 sites #1 · site_timezone_differs_from_audit · timezone · audit_log #48502
+sites #1 · site_timezone_differs_from_audit · site_timezone_changes
+sites #1 · site_timezone_differs_from_audit · correction · audit_log #48510
 ```
 
-Desde la 2.3.0 la base de datos no deja cambiar la zona con fichajes hechos
-(RN-23, ADR-056: *trigger* `sites_guard_timezone`) salvo por la función
-`site_correct_timezone`, que usa `workforce:correct-site-timezone` y que **no
-escribe asiento**: el asiento lo deja la orden. Así que esto es una de dos
-cosas, y las dos son escrituras por fuera del producto: alguien llamó a esa
-función con la credencial de la aplicación sin pasar por la orden, o cambió la
-zona con un `UPDATE` cuando aún no había fichajes. En los dos casos todo el
-histórico se presenta y se exporta con otra zona (RN-05).
+| Campo | Qué ha pasado |
+|---|---|
+| `timezone` | La zona de `sites` no es la del último asiento `site.created` o `site.updated` (`new_value.timezone`) |
+| `site_timezone_changes` | Una fila de la traza no tiene su `site.updated` firmado (`via: console`, motivo, recuento y cuenta) con el mismo antes y después. Es la función llamada con la credencial de la aplicación sin pasar por la orden; sale también si la zona ya ha vuelto a la de antes (A→B→A) |
+| `correction` | Un `site.updated` que cambia la zona **después del primer tramo** sin esa firma. El panel no lo puede escribir (`409`): alguien lo insertó en `audit_log` |
+
+En los tres casos alguien ha escrito por fuera del producto, y mientras la zona
+sea otra todo el histórico se presenta y se exporta con ella (RN-05).
 
 ```sql
--- La zona de ahora y los asientos del centro, en orden.
+-- La zona de ahora, los asientos del centro y la traza, en orden.
 SELECT id, name, timezone FROM sites;
 SELECT id, occurred_at, action, actor_type, actor_id, payload
   FROM audit_log WHERE subject_type = 'site' ORDER BY id;
+SELECT id, site_id, from_tz, to_tz, changed_at, txid FROM site_timezone_changes ORDER BY id;
 ```
+
+El `txid` de la fila es la transacción que llamó a la función: cotéjalo con el
+registro del motor del paso 4 de la §2.
 
 **Resolución:** trata el cambio como evidencia del ataque
 ([`brecha-de-seguridad.md`](brecha-de-seguridad.md)) y no exportes nada para la
 Inspección hasta devolver la zona. Se devuelve **por el producto**, a la zona
-del último asiento, y eso deja el asiento que falta: con fichajes,
+del último asiento legítimo, y eso deja el asiento que falta: con fichajes,
 `workforce:correct-site-timezone <zona del asiento> --reason=… --responsible=…`
 (el motivo cita el incidente, sin nombres de la plantilla); sin fichajes, desde
 Panel → **Centro**. Ninguno de los dos mueve ninguna jornada. Después, la
 conciliación de «Al terminar».
+
+**La fila sin firma no se va.** La traza es solo-append y el asiento firmado no
+se puede inventar después: un `site_timezone_changes` sin asiento **se sigue
+contando en cada pasada** y la alerta no se apaga sola, igual que un
+`purge_out_of_bounds` antes de revisarlo. Hoy no hay orden para darla por
+revisada: anótala en el registro del incidente y avisa al fabricante.
+
+**Zona no verificable** (línea `zona del centro no verificable: …` y métrica
+`work_record_reconciliation_unverifiable`, **no** es una alerta de integridad).
+Un centro sin ningún asiento `site.*` (instalación anterior a la puesta en
+marcha guiada, o su asiento se fue con la partición purgada de su año, ADR-027)
+no tiene con qué compararse, y una fila de la traza de un año cuya auditoría ya
+se purgó tampoco. No se denuncian: se cuentan para que se vea que esa parte no
+se ha mirado.
 
 ### 3.1 Dar por revisada una purga no admisible
 
@@ -535,14 +559,18 @@ misma comprobación (avisa con `trigger:<nombre>:DESACTIVADO` o `AUSENTE`) y
 actualización limpia nunca los deja así, y reactivarlos sin saber quién los
 tocó taparía la causa.
 
-**`sites`, desde la 2.3.0.** `sites_guard_timezone` niega cambiar la zona
+**`sites`, desde la 2.3.0.** `zz_sites_guard_timezone` niega cambiar la zona
 horaria del centro con fichajes hechos (RN-23), pero **no al propietario de la
 tabla**: el rol de migración la puede cambiar a mano sin desactivar nada, y no
 debe hacerlo. La corrección es `workforce:correct-site-timezone`, que deja
-asiento. Si `./doctor.sh` avisa con `trigger:sites_guard_timezone:DESACTIVADO`
-o `AUSENTE`, o con `site_correct_timezone:DEFINER` (la función de la corrección
-perdió `SECURITY DEFINER` o su `search_path`), reactívalo con
-`ALTER TABLE sites ENABLE TRIGGER sites_guard_timezone` en una transacción
+asiento. Un cambio hecho así tampoco deja fila en la traza
+`site_timezone_changes`: solo la escribe la función. Si `./doctor.sh` avisa con
+`trigger:zz_sites_guard_timezone:DESACTIVADO` o `AUSENTE`, con
+`site_correct_timezone:DEFINER` o `AUSENTE` (la función de la corrección falta o
+perdió `SECURITY DEFINER` o su `search_path`), o con `site_timezone_changes:…`
+(la traza falta, cambió de propietario o la aplicación ganó un privilegio sobre
+ella, que retiras con `REVOKE` en la misma transacción anotada), reactívalo con
+`ALTER TABLE sites ENABLE TRIGGER zz_sites_guard_timezone` en una transacción
 anotada —una función alterada se repone, con el rol de migración y en la misma
 transacción, con su definición de la migración
 `2026_10_18_120000_guard_site_timezone_in_database`— y concilia: un cambio

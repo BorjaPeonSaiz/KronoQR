@@ -103,6 +103,8 @@ final readonly class ReconcileWorkRecordWithAudit
             'discrepancies' => $result->discrepancyCount(),
             'reviewed_purges' => $result->reviewedPurges,
             'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
+            'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
+            'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
         ]);
 
         return $result;
@@ -114,6 +116,8 @@ final readonly class ReconcileWorkRecordWithAudit
         /** @var list<WorkRecordDiscrepancy> $detailed */
         $detailed = [];
         $checked = 0;
+        $unverifiableSites = 0;
+        $unverifiableChanges = 0;
         $boundary = WorkRecordPurgeBoundary::none();
 
         foreach ($this->source->read($window, $chunkSize) as $item) {
@@ -122,12 +126,17 @@ final readonly class ReconcileWorkRecordWithAudit
                 // asientos de purga que no se pueden creer no explican nada y
                 // salen ademas como discrepancia propia.
                 $boundary = WorkRecordPurgeBoundary::assess($item, $runAt, $this->floorsFor($item));
-                // Y la zona de cada centro frente a su ultimo asiento (RN-23):
-                // en las dos pasadas, porque es una fila y no una ventana.
-                $found = [
-                    ...$boundary->rejected,
-                    ...array_map(static fn (AuditedSiteTimezone $site): ?WorkRecordDiscrepancy => $site->discrepancy(), $item->sites),
-                ];
+                $found = $boundary->rejected;
+
+                // Y la zona de cada centro frente a su auditoria (RN-23): en las
+                // dos pasadas, porque es la historia entera de una fila y no una
+                // ventana. Lo que no se puede verificar se cuenta aparte.
+                foreach ($item->sites as $site) {
+                    $assessment = $site->assess($item->sealedAuditYears);
+                    $found = [...$found, ...$assessment->discrepancies];
+                    $unverifiableSites += $assessment->unverifiableTimezone ? 1 : 0;
+                    $unverifiableChanges += $assessment->unverifiableChanges;
+                }
             } else {
                 $checked++;
                 $found = [WorkRecordReconciliation::compare($item, $boundary)];
@@ -154,6 +163,8 @@ final readonly class ReconcileWorkRecordWithAudit
             truncated: array_sum($counts) > \count($detailed),
             reviewedPurges: \count($boundary->reviewedPurgeIds),
             reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
+            unverifiableSiteTimezones: $unverifiableSites,
+            unverifiableSiteTimezoneChanges: $unverifiableChanges,
         );
     }
 

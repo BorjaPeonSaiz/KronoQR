@@ -699,11 +699,14 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and($otra['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)');
 })->group('RS-07', 'RL-04', 'RL-02');
 
-it('denuncia la zona del centro cambiada por la funcion de la correccion fuera de la orden de consola', function (): void {
-    // RN-23, bloque 2 de la 2.3.0. La orden de consola corrige la zona por
-    // `site_correct_timezone` y deja `site.updated`: cuadra. La misma funcion
-    // llamada a pelo con la credencial de la aplicacion —que tiene `EXECUTE`—
-    // cambia la zona sin asiento, y eso es lo que tiene que ver la conciliacion.
+/**
+ * El escenario con una correccion de zona por la orden de consola, que deja su
+ * fila en la traza y su asiento firmado.
+ *
+ * @return array{site: int, metricas: string}
+ */
+function registroAuditadoZonaCorregida(): array
+{
     $escenario = registroAuditadoEscenario();
     registroAuditadoLegitimo($escenario);
 
@@ -718,7 +721,19 @@ it('denuncia la zona del centro cambiada por la funcion de la correccion fuera d
 
     $limpia = registroAuditadoConciliar(true);
 
-    expect($limpia['code'])->toBe(0, $limpia['output']);
+    expect($limpia['code'])->toBe(0, $limpia['output'])
+        ->and(DB::table('site_timezone_changes')->count())->toBe(1);
+
+    return ['site' => $escenario['site'], 'metricas' => $escenario['metricas']];
+}
+
+it('denuncia la zona del centro cambiada por la funcion de la correccion fuera de la orden de consola', function (): void {
+    // RN-23, bloque 2 de la 2.3.0. La orden de consola corrige la zona por
+    // `site_correct_timezone` y deja `site.updated`: cuadra. La misma funcion
+    // llamada a pelo con la credencial de la aplicacion —que tiene `EXECUTE`—
+    // cambia la zona sin asiento: la zona ya no es la del asiento y la traza
+    // tiene una fila sin firma.
+    $escenario = registroAuditadoZonaCorregida();
 
     DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
 
@@ -729,14 +744,76 @@ it('denuncia la zona del centro cambiada por la funcion de la correccion fuera d
         $pasada = registroAuditadoConciliar($completa);
 
         expect($pasada['code'])->toBe(1, $pasada['output'])
-            ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 1')
+            ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 2')
             ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · timezone · audit_log #'.$asiento)
+            ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · site_timezone_changes')
             // Nombres de campo, nunca valores.
             ->and($pasada['output'])->not->toContain('Lisbon');
     }
 
     expect(registroAuditadoMetricas($escenario['metricas'], 'recent'))
-        ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 1')
+        ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 2')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
-        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="site_timezone_differs_from_audit"} 1');
+        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="site_timezone_differs_from_audit"} 2');
 })->group('RN-23', 'RL-04', 'RS-07');
+
+it('denuncia un cambio de zona de ida y vuelta por la funcion, aunque la zona vuelva a ser la de su asiento', function (): void {
+    // A->B->A entre dos pasadas: la zona coincide otra vez con el asiento, pero
+    // la traza solo-append guarda los dos pasos y ninguno tiene asiento firmado.
+    $escenario = registroAuditadoZonaCorregida();
+
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Europe/Lisbon', 'Atlantic/Canary']);
+
+    $pasada = registroAuditadoConciliar();
+
+    expect(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Atlantic/Canary')
+        ->and($pasada['code'])->toBe(1, $pasada['output'])
+        ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 2')
+        ->and($pasada['output'])->not->toContain('· timezone ·');
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('denuncia un site.updated que cambia la zona despues del primer tramo sin la firma de la correccion', function (): void {
+    // El panel no lo puede escribir (409): un asiento asi lo ha escrito otro
+    // con la credencial de la aplicacion, que puede insertar en audit_log.
+    $escenario = registroAuditadoZonaCorregida();
+
+    DB::transaction(static function () use ($escenario): void {
+        foreach (['Atlantic/Canary', 'Europe/Madrid'] as $antes) {
+            resolve(RecordAuditEntry::class)->handle(new RecordAuditEntryCommand(
+                actor: AuditActor::system(),
+                action: AuditAction::SiteUpdated,
+                subject: AuditSubject::of('site', $escenario['site']),
+                payload: AuditPayload::of([
+                    'previous_value' => ['name' => 'Hotel', 'timezone' => $antes],
+                    'new_value' => ['name' => 'Hotel', 'timezone' => 'Atlantic/Canary'],
+                ]),
+            ));
+        }
+    });
+
+    /** @var int $asiento */
+    $asiento = DB::table('audit_log')->where('action', 'site.updated')->max('id');
+
+    $pasada = registroAuditadoConciliar(true);
+
+    // Solo el segundo: el primero no cambia la zona.
+    expect($pasada['code'])->toBe(1, $pasada['output'])
+        ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 1')
+        ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · correction · audit_log #'.$asiento);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('dice que la zona no se puede verificar si el centro no tiene ningun asiento, sin fallar', function (): void {
+    // El centro de las pruebas lo crean los ayudantes sin asiento
+    // `site.created`: es el caso de una instalacion anterior a la tarea 5.5.
+    $escenario = registroAuditadoEscenario();
+    registroAuditadoLegitimo($escenario);
+
+    $pasada = registroAuditadoConciliar(true);
+
+    expect($pasada['code'])->toBe(0, $pasada['output'])
+        ->and($pasada['output'])->toContain('zona del centro no verificable: 1 centro(s) sin asiento site.*')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
+        ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone"} 1')
+        ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone_change"} 0');
+})->group('RN-23', 'RL-04');

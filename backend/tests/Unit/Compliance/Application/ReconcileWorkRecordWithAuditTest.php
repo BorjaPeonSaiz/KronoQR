@@ -7,6 +7,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
+use App\Modules\Compliance\Domain\ValueObject\RecordedSiteTimezoneChange;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
@@ -208,4 +209,25 @@ it('no cuenta la zona que coincide con su ultimo asiento, ni la de un centro sin
         ->handle(WorkRecordReconciliationScope::Full, 7);
 
     expect($resultado->isConsistent())->toBeTrue();
+})->group('RN-23', 'RL-04');
+
+it('cuenta aparte la zona que no se puede verificar, sin hacer la pasada incoherente', function (): void {
+    // Un centro sin asiento `site.*` y otro con una fila de la traza de un año
+    // cuya auditoria se purgo (2021 sellado): ninguno es discrepancia, los dos
+    // salen en el resultado y en lo que se publica.
+    $metricas = new RecordingWorkRecordReconciliationMetrics;
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([], [2021], [], [
+        AuditedSiteTimezone::fromEntry(1, 'Europe/Madrid', null, null),
+        AuditedSiteTimezone::fromEntry(2, 'Atlantic/Canary', 42, ['new_value' => ['timezone' => 'Atlantic/Canary']], [], [
+            new RecordedSiteTimezoneChange('Europe/Madrid', 'Atlantic/Canary', new DateTimeImmutable('2021-06-01T10:00:00Z')),
+        ]),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    expect($resultado->isConsistent())->toBeTrue()
+        ->and($resultado->unverifiableSiteTimezones)->toBe(1)
+        ->and($resultado->unverifiableSiteTimezoneChanges)->toBe(1)
+        ->and($metricas->recorded[0]['result']->unverifiableSiteTimezones)->toBe(1);
 })->group('RN-23', 'RL-04');

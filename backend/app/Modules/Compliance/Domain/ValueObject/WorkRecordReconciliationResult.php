@@ -39,6 +39,17 @@ final readonly class WorkRecordReconciliationResult
          * purga. Se publican aparte para que la alerta las distinga.
          */
         public int $reviewedPurgesExplainingDeletions = 0,
+        /**
+         * Centros cuya zona no se ha podido comparar con ningun asiento
+         * `site.*` (RN-23, bloque 2 de la 2.3.0). **No es una discrepancia**:
+         * dice que la comprobacion no ha mirado algo, en vez de dar cero.
+         */
+        public int $unverifiableSiteTimezones = 0,
+        /**
+         * Filas de `site_timezone_changes` de años cuya auditoria ya se purgo
+         * (ADR-027): no hay asiento con que cotejarlas. Tampoco es discrepancia.
+         */
+        public int $unverifiableSiteTimezoneChanges = 0,
     ) {}
 
     /** Revisadas que no explican ningun borrado. */
