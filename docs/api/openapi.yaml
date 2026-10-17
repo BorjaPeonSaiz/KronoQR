@@ -4450,11 +4450,13 @@ paths:
                               version: 1
                               clocked_in_at: '2026-03-14T05:00:00.000000Z'
                               clocked_out_at: null
+                              closed_by: null
                               worked_minutes: 0
                             after:
                               version: 2
                               clocked_in_at: '2026-03-14T05:00:00.000000Z'
                               clocked_out_at: '2026-03-14T13:05:00.000000Z'
+                              closed_by: clock_out
                               worked_minutes: 485
                         incidents:
                           - id: 412
@@ -5715,6 +5717,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: opening_moved
                     errors:
                       clocked_in_at:
                         - 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.'
@@ -5725,6 +5728,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: entry_not_continued
                     errors:
                       clocked_in_at:
                         - 'Las horas de este tramo son de otra jornada: empieza otro día y no continúa la jornada del 2026-10-10, porque entre la salida anterior y su entrada median 12 h o más (el descanso mínimo entre jornadas) o hay un tramo de otra jornada. Dalo de alta en la jornada en que empieza.'
@@ -5735,6 +5739,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: entry_not_continued
                     errors:
                       clocked_in_at:
                         - 'Las horas que empiezan otro día solo continúan la jornada del 2026-10-10 si el tramo anterior terminó en pausa, y no terminó así: son de otra jornada. Dalas de alta en la jornada en que empiezan, o declara que el tramo anterior terminó en pausa.'
@@ -5938,6 +5943,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: opening_moved
                     errors:
                       clocked_in_at:
                         - 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.'
@@ -5948,6 +5954,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: next_entry_not_continued
                     errors:
                       clocked_out_at:
                         - 'El tramo siguiente dejaría de continuar la jornada del 2026-03-14: empieza otro día y su entrada quedaría a 12 h o más de la salida anterior (el descanso mínimo entre jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.'
@@ -6096,6 +6103,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: opening_voided
                     errors:
                       clocked_in_at:
                         - 'Este tramo abre la jornada del 2026-03-14 y el siguiente empieza otro día: anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.'
@@ -6106,6 +6114,7 @@ paths:
                     title: Peticion no valida
                     status: 422
                     detail: Revisa los campos indicados.
+                    cause: next_entry_not_continued
                     errors:
                       clocked_in_at:
                         - 'El tramo siguiente dejaría de continuar la jornada del 2026-03-14: empieza otro día y su entrada quedaría a 12 h o más de la salida anterior (el descanso mínimo entre jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.'
@@ -16867,6 +16876,18 @@ components:
                 minItems: 1
                 items:
                   type: string
+            cause:
+              type: string
+              enum: [opening_moved, opening_voided, entry_not_continued, next_entry_not_continued]
+              description: |
+                Solo con `type: urn:kronoqr:problem:correction-would-change-work-date`
+                (RN-05, ADR-058): **por que** las horas serian de otra jornada.
+                `opening_moved`, se movio la entrada que abre la jornada a otro
+                dia; `opening_voided`, anular el tramo que la abre la dejaria
+                abierta por uno de otro dia; `entry_not_continued`, el tramo
+                escrito no continua la jornada; `next_entry_not_continued`, el
+                tramo siguiente dejaria de continuarla. El panel elige con esto
+                que pista enseñar; el texto de cada caso va en `errors`.
 
     ScanRejected:
       type: object
@@ -17799,22 +17820,24 @@ components:
           type: string
           enum: [clock_in, break_end]
           description: |
-            Que escaneo abrio este tramo (tarea 3.5, ADR-024): `clock_in` es una
-            entrada y `break_end` la **vuelta de una pausa**, que continua la
-            jornada anterior. Se deriva de `scan_events.result` del escaneo que
-            lo abrio; un tramo declarado o corregido a mano sin escaneo detras
-            va como `clock_in`. Es lo que permite al panel y al portal enseñar
+            Como empezo este tramo (tarea 3.5, ADR-024, ADR-058): `clock_in` es
+            una entrada y `break_end` la **vuelta de una pausa**, que continua la
+            jornada. Se deriva del tramo anterior de la jornada: es `break_end`
+            si aquel termino en pausa (`closed_by: break_start`), sea por el
+            escaneo «Pausa» o porque asi se declaro a mano, y `clock_in` si no o
+            si es el primero. Es lo que permite al panel y al portal enseñar
             «pausa» entre dos tramos en vez de un hueco mudo.
           example: clock_in
         closed_by:
           type: [string, 'null']
           enum: [clock_out, break_start, null]
           description: |
-            Que escaneo cerro este tramo: `clock_out` es un fin de jornada y
-            `break_start` un **inicio de pausa** (la jornada sigue abierta y el
-            siguiente tramo vendra con `opened_by: break_end`). Nulo mientras el
-            tramo siga abierto. Un tramo cerrado a mano sin escaneo detras va
-            como `clock_out`.
+            Como termino este tramo (`shift_entries.closed_by`, ADR-058):
+            `clock_out` es una salida y `break_start` un **inicio de pausa** (la
+            jornada sigue abierta y el siguiente tramo vendra con
+            `opened_by: break_end`). Lo fija el escaneo («Pausa» o salida) o
+            quien escribe el tramo a mano (`ends_in_break`). Nulo mientras el
+            tramo siga abierto.
           example: clock_out
 
         duration_minutes:
@@ -17919,7 +17942,7 @@ components:
         **No lleva el nombre de nadie** (regla dura 21): describe horas. La
         persona esta en el tramo y quien firmo en `performed_by`.
       additionalProperties: false
-      required: [version, clocked_in_at, clocked_out_at, worked_minutes]
+      required: [version, clocked_in_at, clocked_out_at, closed_by, worked_minutes]
       properties:
         version:
           type: integer
@@ -17930,6 +17953,13 @@ components:
           oneOf:
             - $ref: '#/components/schemas/UtcTimestamp'
             - type: 'null'
+        closed_by:
+          type: [string, 'null']
+          enum: [clock_out, break_start, null]
+          description: |
+            Como termino esta version (ADR-058): salida o pausa. Nulo si seguia
+            abierta, o si la correccion es anterior a la 2.3.0 y no lo apunto.
+            Una correccion que solo declara la pausa cambia esto y nada mas.
         worked_minutes:
           type: integer
           minimum: 0

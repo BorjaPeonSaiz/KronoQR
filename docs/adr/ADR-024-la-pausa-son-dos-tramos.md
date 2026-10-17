@@ -2,11 +2,12 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Aceptada. **Enmendada por [ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md)** (18-10-2026) |
 | **Fecha** | 12 de agosto de 2026 |
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tarea 3.5 |
 | **Requisitos** | RF-AT-12, RN-01, RN-02, RN-05, RN-06, RN-12 |
+| **Enmiendas** | [Enmienda del 18-10-2026](#enmienda-del-18-10-2026-adr-058): `closed_by` y el tope del día siguiente ([ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md)) |
 
 ## Contexto
 
@@ -76,3 +77,7 @@ Tres señales que estaban en los documentos y que este ADR solo hace explícitas
 - Prueba unitaria: un `clock_in` que **no** es `break_end`, tras un `clock_out`, abre jornada nueva aunque ocurra el mismo día natural.
 - Prueba de integración: un lote offline con `break_start` y `break_end` sincronizado horas después conserva la intención y produce la misma atribución que si hubiera llegado en línea.
 - E2E de quiosco: el feedback de `break_start` es distinguible del de `clock_out`.
+
+## Enmienda del 18-10-2026 (ADR-058)
+
+> **Enmendado por [ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md)** (2.3.0, bloque 1, aprobado por el propietario). Lo que distingue una pausa de un fin de jornada ya no es solo el motivo del escaneo: es `shift_entries.closed_by`, un hecho persistido del tramo que el escaneo escribe y que el panel puede declarar a mano (`ends_in_break`), con versión y asiento. Y una jornada no se continúa más allá del día civil siguiente a `work_date`, tampoco en el quiosco, que entonces abre jornada nueva y nunca rechaza. El resto de esta decisión sigue vigente.

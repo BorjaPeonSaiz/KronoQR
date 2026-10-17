@@ -118,7 +118,7 @@ El backend se organiza en ocho módulos con fronteras verificadas por Deptrac:
 | `Product` | Configuración de instalación, perfiles de cumplimiento, marca blanca, licencia, diagnóstico y soporte. |
 | `Shared` | Objetos de valor comunes, puertos transversales (`Clock`, proveedores de configuración) y contratos de eventos. |
 
-Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (57 ADR).
+Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (58 ADR).
 
 ### 1.5 Cómo se ha construido: desarrollo asistido por IA
 
@@ -506,7 +506,7 @@ Los cuatro roles de gestión (`admin`, `rrhh`, `auditor` y `responsable_departam
 | [05 · Presentación al cliente](docs/05-presentacion-cliente.md) | Lo que se promete al cliente |
 | [06 · Guía visual](docs/06-guia-visual.md) | Tokens de diseño, contrastes WCAG y tipografía |
 | [07 · Seguridad, madurez y amenazas](docs/07-seguridad-madurez-y-amenazas.md) | OWASP SAMM, Microsoft SDL, ATT&CK y riesgos aceptados |
-| [ADR](docs/adr/) | Las 57 decisiones arquitectónicas |
+| [ADR](docs/adr/) | Las 58 decisiones arquitectónicas |
 | [Contrato OpenAPI](docs/api/openapi.yaml) | Fuente de verdad de la API `/api/v1` |
 | [Documentación de cliente](docs/cliente/) | Instalación, configuración, operación, endurecimiento, guías de RRHH y del portal, obligaciones legales |
 | [Runbooks](docs/runbooks/) | 33 procedimientos de operación e incidentes |

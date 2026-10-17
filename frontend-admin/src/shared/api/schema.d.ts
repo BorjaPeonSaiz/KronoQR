@@ -8975,6 +8975,18 @@ export interface components {
             errors: {
                 [key: string]: string[];
             };
+            /**
+             * @description Solo con `type: urn:kronoqr:problem:correction-would-change-work-date`
+             *     (RN-05, ADR-058): **por que** las horas serian de otra jornada.
+             *     `opening_moved`, se movio la entrada que abre la jornada a otro
+             *     dia; `opening_voided`, anular el tramo que la abre la dejaria
+             *     abierta por uno de otro dia; `entry_not_continued`, el tramo
+             *     escrito no continua la jornada; `next_entry_not_continued`, el
+             *     tramo siguiente dejaria de continuarla. El panel elige con esto
+             *     que pista enseñar; el texto de cada caso va en `errors`.
+             * @enum {string}
+             */
+            cause?: "opening_moved" | "opening_voided" | "entry_not_continued" | "next_entry_not_continued";
         };
         /**
          * ScanRejected
@@ -9650,22 +9662,24 @@ export interface components {
             clocked_out_recorded_at: components["schemas"]["UtcTimestamp"] | null;
             clock_out_source: components["schemas"]["ClockingSource"] | null;
             /**
-             * @description Que escaneo abrio este tramo (tarea 3.5, ADR-024): `clock_in` es una
-             *     entrada y `break_end` la **vuelta de una pausa**, que continua la
-             *     jornada anterior. Se deriva de `scan_events.result` del escaneo que
-             *     lo abrio; un tramo declarado o corregido a mano sin escaneo detras
-             *     va como `clock_in`. Es lo que permite al panel y al portal enseñar
+             * @description Como empezo este tramo (tarea 3.5, ADR-024, ADR-058): `clock_in` es
+             *     una entrada y `break_end` la **vuelta de una pausa**, que continua la
+             *     jornada. Se deriva del tramo anterior de la jornada: es `break_end`
+             *     si aquel termino en pausa (`closed_by: break_start`), sea por el
+             *     escaneo «Pausa» o porque asi se declaro a mano, y `clock_in` si no o
+             *     si es el primero. Es lo que permite al panel y al portal enseñar
              *     «pausa» entre dos tramos en vez de un hueco mudo.
              * @example clock_in
              * @enum {string}
              */
             opened_by: "clock_in" | "break_end";
             /**
-             * @description Que escaneo cerro este tramo: `clock_out` es un fin de jornada y
-             *     `break_start` un **inicio de pausa** (la jornada sigue abierta y el
-             *     siguiente tramo vendra con `opened_by: break_end`). Nulo mientras el
-             *     tramo siga abierto. Un tramo cerrado a mano sin escaneo detras va
-             *     como `clock_out`.
+             * @description Como termino este tramo (`shift_entries.closed_by`, ADR-058):
+             *     `clock_out` es una salida y `break_start` un **inicio de pausa** (la
+             *     jornada sigue abierta y el siguiente tramo vendra con
+             *     `opened_by: break_end`). Lo fija el escaneo («Pausa» o salida) o
+             *     quien escribe el tramo a mano (`ends_in_break`). Nulo mientras el
+             *     tramo siga abierto.
              * @example clock_out
              * @enum {string|null}
              */
@@ -9741,6 +9755,13 @@ export interface components {
             version: number;
             clocked_in_at: components["schemas"]["UtcTimestamp"];
             clocked_out_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Como termino esta version (ADR-058): salida o pausa. Nulo si seguia
+             *     abierta, o si la correccion es anterior a la 2.3.0 y no lo apunto.
+             *     Una correccion que solo declara la pausa cambia esto y nada mas.
+             * @enum {string|null}
+             */
+            closed_by: "clock_out" | "break_start" | null;
             /**
              * @description Minutos que decia esta version. Van escritos y no se deducen al leer:
              *     el historico responde «cuanto decia antes» sin recalcular nada.
