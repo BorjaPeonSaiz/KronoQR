@@ -7089,6 +7089,103 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/reports/legal-export/employees/search:
+    post:
+      operationId: searchLegalExportEmployees
+      summary: Buscar a la persona de la exportacion para la Inspeccion
+      description: |
+        Encuentra a la persona que nombra un requerimiento de la Inspeccion, **por
+        su nombre o por su DNI**, para pedir despues su exportacion con
+        `GET /api/v1/reports/legal-export?employee_uuid=` (RF-IN-05,
+        V21-3-PA-1, decision del propietario del 18-10-2026).
+
+        **Por que existe.** El `auditor` solo lleva `reports:legal` (RF-ID-02,
+        doc 02 §7.3 nota 9) y no puede leer la plantilla. Sin esta ruta, para
+        exportar a una persona tenia que pedir su UUID a RRHH o exportar la
+        plantilla entera, y ninguna de las dos cosas es minimizar (RGPD
+        art. 5.1.c).
+
+        **Por que es `POST` y no `GET`.** Para que el DNI **nunca vaya en la
+        URL**: una URL queda en los registros de acceso del proxy, en el
+        historial del navegador y en la cabecera `Referer`. El cuerpo no. No
+        crea nada y se puede repetir sin efectos sobre el registro; el asiento
+        de auditoria es lo unico que escribe.
+
+        **No es el directorio** (`GET /api/v1/employees`), y los limites estan
+        para que no pueda usarse como tal:
+
+        - `q` exige **al menos 3 caracteres** una vez recortado: casa con el
+          nombre, los apellidos o el nombre completo, **por subcadena y sin
+          distinguir mayusculas ni acentos**, o con el **codigo de empleado
+          exacto**. `%` y `_` se buscan como los caracteres que son.
+        - `national_id` se normaliza igual que en el alta y se compara **exacto
+          contra `national_id_hash`** (RL-08): devuelve una persona o ninguna. El
+          documento en claro no se guarda ni se escribe en ningun log.
+        - Devuelve **como maximo 10 personas**, ordenadas por apellidos y
+          nombre; `truncated` dice si habia mas y hay que afinar.
+        - **Incluye a las personas dadas de baja**: el registro se conserva
+          cuatro años (RL-02) y la Inspeccion pregunta tambien por quien ya se
+          fue.
+        - Solo los **campos minimos** para distinguir a dos personas con el
+          mismo nombre. Nunca el codigo, el correo, el documento ni su digest.
+
+        **Sin coincidencias no es un error**: `200` con `data: []`, nunca `404`.
+
+        **Deja asiento** (`personal_data.accessed`, dataset
+        `legal_export_employee_search`; ADR-037, enmienda del 18-10-2026) con el
+        criterio usado (`name_or_code` o `national_id`), el numero de personas
+        **devueltas** —tambien cero— y si la lista se recorto. **Nunca con el
+        termino buscado** (regla dura 21). El asiento se escribe antes de
+        responder: si falla, no hay respuesta (regla dura 6).
+
+        **No se degrada con la licencia** (ADR-019, regla dura 15): es parte de
+        atender un requerimiento, como la exportacion.
+      tags: [Compliance]
+      # Los mismos dos ambitos alternativos que la exportacion: quien puede
+      # exportar puede elegir a quien. No se crea un ambito nuevo (doc 02 §7.3,
+      # nota 9).
+      security:
+        - managementToken: ['reports:legal']
+        - managementToken: ['reports:*']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LegalExportEmployeeSearch'
+            examples:
+              byName:
+                summary: Por nombre, apellidos o codigo exacto
+                value:
+                  q: amrani
+              byNationalId:
+                summary: Por DNI, exacto
+                value:
+                  national_id: '00000000T'
+      responses:
+        '200':
+          description: |
+            Las personas que casan, como maximo 10. `data` vacio cuando no casa
+            nadie.
+          headers:
+            Cache-Control:
+              description: 'Siempre `no-store`: el cuerpo es una lista nominal.'
+              schema:
+                type: string
+                examples: ['no-store, private']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalExportEmployeeMatches'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   # ---------------------------------------------------------------------------
   # Informes generados en diferido (RF-IN-06, RF-IN-07, ADR-041, tarea 3.9).
   #
@@ -14753,6 +14850,106 @@ components:
             limite real lo comprueba el servidor y responde `422`. El
             `minLength` del esquema no describe la politica a proposito, porque
             es configuracion de cada instalacion (regla dura 13).
+
+    LegalExportEmployeeSearch:
+      title: LegalExportEmployeeSearch
+      description: |
+        Criterio de busqueda de la persona de la exportacion legal (RF-IN-05).
+        **Uno de los dos, nunca los dos ni ninguno**: un cuerpo con `q` y
+        `national_id` a la vez, o con cualquier otro campo, es un `422`.
+      oneOf:
+        - type: object
+          title: LegalExportEmployeeSearchByText
+          additionalProperties: false
+          required: [q]
+          properties:
+            q:
+              type: string
+              minLength: 3
+              maxLength: 100
+              description: |
+                Nombre, apellidos o nombre completo, por subcadena y sin
+                distinguir mayusculas ni acentos; o un codigo de empleado
+                **exacto**. Se recorta antes de contar: tres espacios no son
+                tres caracteres.
+              examples:
+                - amrani
+        - type: object
+          title: LegalExportEmployeeSearchByNationalId
+          additionalProperties: false
+          required: [national_id]
+          properties:
+            national_id:
+              type: string
+              minLength: 4
+              maxLength: 32
+              description: |
+                Documento de identidad. Se normaliza como en el alta y se
+                compara **exacto contra su hash** (RL-08): nunca se guarda ni se
+                escribe en un log, y no admite busqueda parcial.
+              examples:
+                - '00000000T'
+
+    LegalExportEmployeeMatches:
+      type: object
+      title: LegalExportEmployeeMatches
+      description: |
+        Resultado de la busqueda de la persona de la exportacion legal
+        (RF-IN-05). Lleva lo justo para distinguir a dos personas con el mismo
+        nombre y nada mas: **ni el codigo, ni el correo, ni el documento ni su
+        digest**.
+      additionalProperties: false
+      required: [data, truncated]
+      properties:
+        data:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/LegalExportEmployeeMatch'
+        truncated:
+          type: boolean
+          description: |
+            `true` si casaban mas de 10 personas y la lista se ha recortado: hay
+            que afinar la busqueda. Con `national_id` es siempre `false`.
+
+    LegalExportEmployeeMatch:
+      type: object
+      title: LegalExportEmployeeMatch
+      description: Una persona candidata. Incluye a las dadas de baja (RL-02).
+      additionalProperties: false
+      required: [uuid, first_name, last_name, department, status, hired_at, terminated_at]
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          description: |
+            Identificador publico. Es el que se pasa como `employee_uuid` a
+            `GET /api/v1/reports/legal-export`.
+          examples:
+            - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        department:
+          description: Departamento de la persona, o `null` si no tiene ninguno.
+          oneOf:
+            - $ref: '#/components/schemas/PresenceDepartment'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/EmploymentStatus'
+        hired_at:
+          type: string
+          format: date
+          description: Fecha de alta, civil y sin zona.
+        terminated_at:
+          type: [string, 'null']
+          format: date
+          description: Fecha de cese, o `null` si sigue de alta.
 
     EmploymentStatus:
       type: string
