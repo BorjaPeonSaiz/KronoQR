@@ -27,12 +27,16 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import LegalExportEmployeePicker from './LegalExportEmployeePicker.vue'
 import { downloadLegalExport, type LegalExportTally } from './legalExport.api'
 
 const { t } = useI18n()
 
 const from = ref('')
 const to = ref('')
+/** `all` = plantilla completa; `one` = una persona, que se elige con el buscador. */
+const scope = ref<'all' | 'one'>('all')
+/** UUID de la persona elegida. Nunca se escribe a mano ni se enseña. */
 const employeeUuid = ref('')
 
 const running = ref(false)
@@ -47,8 +51,19 @@ const lastTally = ref<LegalExportTally | null>(null)
 const invertedPeriod = computed(() => from.value !== '' && to.value !== '' && to.value < from.value)
 
 const canSubmit = computed(
-  () => from.value !== '' && to.value !== '' && !invertedPeriod.value && !running.value,
+  () =>
+    from.value !== '' &&
+    to.value !== '' &&
+    !invertedPeriod.value &&
+    !running.value &&
+    (scope.value === 'all' || employeeUuid.value !== ''),
 )
+
+function chooseScope(next: 'all' | 'one'): void {
+  scope.value = next
+  // Volver a "toda la plantilla" no puede dejar una persona elegida a medias.
+  employeeUuid.value = ''
+}
 
 async function submit(): Promise<void> {
   if (!canSubmit.value) {
@@ -63,7 +78,7 @@ async function submit(): Promise<void> {
     const exported = await downloadLegalExport({
       from: from.value,
       to: to.value,
-      employeeUuid: employeeUuid.value.trim(),
+      employeeUuid: scope.value === 'one' ? employeeUuid.value : '',
     })
 
     downloadDocument(exported.document)
@@ -129,22 +144,35 @@ async function submit(): Promise<void> {
         </FormField>
       </div>
 
-      <FormField
-        :label="t('reports.legalExport.employee')"
-        :hint="t('reports.legalExport.employeeHint')"
-      >
-        <template #default="{ id, describedBy }">
-          <input
-            :id="id"
-            v-model="employeeUuid"
-            type="text"
-            inputmode="text"
-            autocomplete="off"
-            :aria-describedby="describedBy"
-            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text"
-          />
-        </template>
-      </FormField>
+      <fieldset class="flex flex-col gap-3">
+        <legend class="mb-1 font-medium">{{ t('reports.legalExport.scope.legend') }}</legend>
+        <div class="flex flex-wrap gap-4">
+          <label class="flex items-center gap-2">
+            <input
+              type="radio"
+              name="legal-export-scope"
+              value="all"
+              :checked="scope === 'all'"
+              @change="chooseScope('all')"
+            />
+            {{ t('reports.legalExport.scope.all') }}
+          </label>
+          <label class="flex items-center gap-2">
+            <input
+              type="radio"
+              name="legal-export-scope"
+              value="one"
+              :checked="scope === 'one'"
+              @change="chooseScope('one')"
+            />
+            {{ t('reports.legalExport.scope.one') }}
+          </label>
+        </div>
+        <p v-if="scope === 'all'" class="text-sm text-kq-text-muted">
+          {{ t('reports.legalExport.scope.allHint') }}
+        </p>
+        <LegalExportEmployeePicker v-else v-model="employeeUuid" />
+      </fieldset>
 
       <div class="flex items-center gap-3">
         <button

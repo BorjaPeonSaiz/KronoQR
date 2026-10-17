@@ -67,6 +67,10 @@ import type {
 } from '@/shared/api/types'
 
 export const EMPLOYEE_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+/** Persona de baja que devuelve el doble de la busqueda de la exportacion para la Inspeccion. */
+export const LEGAL_EXPORT_PERSON_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92'
+/** DNI con el que el doble de la busqueda devuelve a esa persona. */
+export const LEGAL_EXPORT_PERSON_NATIONAL_ID = '00000000T'
 export const SESSION_TOKEN = '17|GhK2mXpR9vLdN4tZbYcF1wQ8sE3rT6uI0oP5aS7d'
 /** Token del reto de segundo factor (RS-06): NO es una sesion, solo alcanza `/auth/2fa/*`. */
 export const CHALLENGE_TOKEN = '41|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
@@ -4860,6 +4864,43 @@ export async function stubManagementApi(
           reportExports.unshift(created)
           reportExportCreatedAt.set(created.uuid, Date.now())
           await json(route, 202, { data: created })
+          return
+        }
+        case 'POST /api/v1/reports/legal-export/employees/search': {
+          // Busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
+          // Por nombre «amrani» casan dos personas, una de baja; por el DNI
+          // 00000000T, una sola; lo demas, ninguna (`200` con `data: []`, nunca
+          // `404`). La peticion es un POST: el DNI no puede aparecer en la URL.
+          const criteria = route.request().postDataJSON() as { q?: string; national_id?: string }
+          const people = [
+            {
+              uuid: LEGAL_EXPORT_PERSON_UUID,
+              first_name: 'Lucía',
+              last_name: 'Amrani',
+              department: { id: 3, name: 'Cocina' },
+              status: 'terminated',
+              hired_at: '2022-03-01',
+              terminated_at: '2026-02-15',
+            },
+            {
+              uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91',
+              first_name: 'Omar',
+              last_name: 'Amrani',
+              department: null,
+              status: 'active',
+              hired_at: '2024-01-10',
+              terminated_at: null,
+            },
+          ]
+          const found =
+            criteria.national_id === LEGAL_EXPORT_PERSON_NATIONAL_ID
+              ? people.slice(0, 1)
+              : (criteria.q ?? '').toLowerCase().includes('amrani')
+                ? people
+                : []
+
+          await json(route, 200, { data: found, truncated: false })
+
           return
         }
         case 'GET /api/v1/reports/legal-export':

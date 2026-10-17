@@ -293,3 +293,8 @@ export type DeactivateManagementAccountRequest = Schemas['DeactivateManagementAc
 export type ResetManagementPasswordRequest = Schemas['ResetManagementPasswordRequest']
 export type ResetManagementTwoFactorRequest = Schemas['ResetManagementTwoFactorRequest']
 export type ChangeOwnPasswordRequest = Schemas['ChangeOwnPasswordRequest']
+
+// Busqueda de la persona de la exportacion para la Inspeccion (RF-IN-05, V21-3-PA-1).
+export type LegalExportEmployeeSearch = Schemas['LegalExportEmployeeSearch']
+export type LegalExportEmployeeMatches = Schemas['LegalExportEmployeeMatches']
+export type LegalExportEmployeeMatch = Schemas['LegalExportEmployeeMatch']
