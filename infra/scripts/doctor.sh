@@ -707,9 +707,14 @@ check_work_record_privileges() {
 
   drift="$(work_record_privileges_sql "${role}" |
     compose_current exec -T postgres sh -c "${psql_in_container}" 2>/dev/null | tr -d '[:space:]')" || drift=""
+  # La manipulacion (trigger, funcion SECURITY DEFINER, traza de la zona) la decide la
+  # misma funcion que usa update.sh, no un patron copiado aqui.
+  if [ "${drift}" != "ok" ] && [ -n "${drift}" ] && work_record_privileges_tampered "${drift}"; then
+    check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_format d_w_work_record_triggers "${drift}")"
+    return 0
+  fi
   case "${drift}" in
   ok) check_pass "$(kq_format d_c_work_record_privileges "${role}")" ;;
-  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"*) check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_format d_w_work_record_triggers "${drift}")" ;;
   "") check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_text d_w_work_record_privileges_unknown)" ;;
   *) check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_format d_w_work_record_privileges_drift "${drift}")" ;;
   esac

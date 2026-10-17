@@ -93,7 +93,7 @@ it('solo CorrectSiteTimezoneHandler corrige la zona saltandose el bloqueo', func
 
 it('solo CorrectSiteTimezoneHandler guarda por la puerta de la correccion, y solo el repositorio llama a la funcion', function (): void {
     // `saveTimezoneCorrection()` llama a `site_correct_timezone`, la funcion
-    // `SECURITY DEFINER` que salta el *trigger* `sites_guard_timezone`
+    // `SECURITY DEFINER` que salta el *trigger* `zz_sites_guard_timezone`
     // (bloque 2 de la 2.3.0). Un segundo sitio que la usara cambiaria la zona
     // con registro horario sin motivo ni asiento.
     expect(siteTimezoneCallersOf('saveTimezoneCorrection'))

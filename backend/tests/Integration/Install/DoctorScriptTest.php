@@ -201,3 +201,45 @@ it('avisa si Prometheus no tiene cargadas las reglas de alerta del paquete (pend
 it('doctor.sh lanza la comprobacion de las reglas de Prometheus en sus dos ramas', function (): void {
     expect(substr_count(Repo::contents('infra/scripts/doctor.sh'), "\n  check_prometheus_rules\n"))->toBe(2);
 })->group('RF-PD-13');
+
+/**
+ * Carga doctor.sh y ejecuta `check_work_record_privileges` con PostgreSQL
+ * respondiendo que las migraciones de la 2.2.1 estan aplicadas y `$deriva` a la
+ * consulta de privilegios.
+ */
+function doctorConDerivaDelRegistro(string $deriva): Process
+{
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; env_value() { printf fichaje_app; }; DERIVA='.escapeshellarg($deriva).'; '
+        .'compose_current() { local sql; sql="$(cat)"; case "${sql}" in *"count(*) FILTER"*) printf "2,1" ;; *) printf "%s" "${DERIVA}" ;; esac; }; '
+        .'check_work_record_privileges; '
+        .'printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
+
+    $process = new Process(['bash', '-c', $script], timeout: 30.0);
+    $process->run();
+
+    return $process;
+}
+
+it('doctor.sh separa la manipulacion de las guardas de la deriva que update.sh repara, con la misma funcion que update.sh', function (string $deriva, string $texto): void {
+    $proceso = doctorConDerivaDelRegistro($deriva);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=1')
+        ->and($proceso->getOutput())->toContain($texto);
+})->with([
+    // Manipulacion: no se repara, se investiga (bloque 2 de la 2.3.0).
+    'funcion de purga borrada' => ['work_record_purge_batch:AUSENTE', 'update.sh NO lo repara'],
+    'funcion de la zona borrada' => ['site_correct_timezone:AUSENTE', 'update.sh NO lo repara'],
+    'traza de la zona escribible' => ['site_timezone_changes:INSERT', 'update.sh NO lo repara'],
+    'trigger de la zona desactivado' => ['trigger:zz_sites_guard_timezone:DESACTIVADO', 'update.sh NO lo repara'],
+    // Deriva: la repara update.sh.
+    'privilegio de mas' => ['scan_events:UPDATE', 'Ejecuta sudo ./update.sh (los repara)'],
+])->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('doctor.sh da por bueno el registro sin deriva', function (): void {
+    $proceso = doctorConDerivaDelRegistro('ok');
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=0');
+})->group('RF-PD-13', 'RS-07');

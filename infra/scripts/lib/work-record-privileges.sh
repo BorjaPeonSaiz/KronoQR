@@ -31,13 +31,15 @@ readonly KQ_WORK_RECORD_MIGRATION_PURGE="'2026_10_14_100000_work_record_trigger_
 # La funcion de purga del bloque 7 (se busca por nombre: no depende de su firma).
 readonly KQ_WORK_RECORD_PURGE_FUNCTION="work_record_purge_batch"
 # La zona del centro fija tambien en la base (RN-23, ADR-056, bloque 2 de la 2.3.0): el
-# trigger de sites y la funcion SECURITY DEFINER de la correccion de consola. Se exigen
+# trigger de sites, la funcion SECURITY DEFINER de la correccion de consola y su traza
+# solo-append `site_timezone_changes` (solo SELECT para el rol). Se exigen
 # SOLO si su migracion esta aplicada, dentro del propio SQL (no cambia los estados b6/b7):
 # una 2.2.1 como destino no los tiene.
 readonly KQ_SITE_TIMEZONE_MIGRATION="'2026_10_18_120000_guard_site_timezone_in_database'"
-# shellcheck disable=SC2034 # lo usa doctor.sh, que carga este fichero.
 readonly KQ_SITE_TIMEZONE_FUNCTION="site_correct_timezone"
-readonly KQ_SITE_TIMEZONE_TRIGGER="sites_guard_timezone"
+# `zz_` para ejecutarse el ultimo de los BEFORE de `sites` (orden alfabetico).
+readonly KQ_SITE_TIMEZONE_TRIGGER="zz_sites_guard_timezone"
+readonly KQ_SITE_TIMEZONE_TRACE="site_timezone_changes"
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
 # los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
@@ -83,12 +85,15 @@ work_record_privileges_stage() {
 }
 
 # Devuelve 0 si la deriva (salida de work_record_privileges_sql) incluye un trigger ausente
-# o desactivado, o la funcion de purga sin SECURITY DEFINER / search_path. Eso NO se repara
+# o desactivado, una funcion SECURITY DEFINER (la purga o la correccion de la zona) ausente
+# o sin SECURITY DEFINER / search_path, o cualquier diferencia en la traza solo-append de la
+# zona (privilegios de mas, propietario, ausente). Eso NO se repara
 # solo: lo hace un superusuario o una migracion rota, y reactivarlo en silencio taparia
 # justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
 work_record_privileges_tampered() {
   case "$1" in
-  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"*) return 0 ;;
+  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"* | \
+    *"${KQ_WORK_RECORD_PURGE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_TRACE}:"*) return 0 ;;
   esac
   return 1
 }
@@ -183,7 +188,8 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
     FROM pg_trigger g
    WHERE g.tgrelid IN (SELECT tn::regclass FROM unnest(ARRAY[${trg_tables}]) AS tn) AND NOT g.tgisinternal AND g.tgenabled <> 'O'"
     # La zona del centro (RN-23, ADR-056): con su migracion aplicada, el trigger de
-    # sites (y ninguno de sites desactivado) y la funcion de la correccion de consola.
+    # sites (y ninguno de sites desactivado), la funcion de la correccion de consola y su traza
+    # solo-append (solo SELECT para el rol, propiedad del mismo rol que sites).
     local site_applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_SITE_TIMEZONE_MIGRATION})"
     purge_sql="${purge_sql}
   UNION ALL
@@ -194,7 +200,27 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
   SELECT 'trigger:' || g.tgname || ':DESACTIVADO'
     FROM pg_trigger g
    WHERE ${site_applied} AND g.tgrelid = 'sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
-$(work_record_definer_function_sql "${role}" "${KQ_SITE_TIMEZONE_FUNCTION}" "${site_applied}")"
+$(work_record_definer_function_sql "${role}" "${KQ_SITE_TIMEZONE_FUNCTION}" "${site_applied}")
+  UNION ALL
+  SELECT '${KQ_SITE_TIMEZONE_TRACE}:AUSENTE'
+   WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NULL
+  UNION ALL
+  SELECT '${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO'
+   WHERE ${site_applied}
+     AND (SELECT c.relowner FROM pg_class c WHERE c.oid = to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}'))
+         IS DISTINCT FROM (SELECT c.relowner FROM pg_class c WHERE c.oid = 'public.sites'::regclass)
+     AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NOT NULL
+  UNION ALL
+  SELECT '${KQ_SITE_TIMEZONE_TRACE}:' || p.priv
+    FROM (VALUES ('SELECT', true), ('INSERT', false), ('UPDATE', false), ('DELETE', false), ('TRUNCATE', false),
+                 ('REFERENCES', false), ('TRIGGER', false), ('MAINTAIN', false)) AS p(priv, want)
+   WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}'), p.priv) IS DISTINCT FROM p.want
+  UNION ALL
+  SELECT '${KQ_SITE_TIMEZONE_TRACE}:SECUENCIA'
+   WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq') IS NOT NULL
+     AND has_sequence_privilege('${role}', to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq'), 'USAGE')"
+
   fi
 
   cat <<SQL

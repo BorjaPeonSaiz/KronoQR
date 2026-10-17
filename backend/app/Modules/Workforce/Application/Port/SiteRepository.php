@@ -31,7 +31,7 @@ interface SiteRepository
 
     /**
      * Guarda el nombre y la zona. **Con registro horario, la base de datos no
-     * deja cambiar la zona** (RN-23, ADR-056, *trigger* `sites_guard_timezone`):
+     * deja cambiar la zona** (RN-23, ADR-056, *trigger* `zz_sites_guard_timezone`):
      * si el caso de uso no lo hubiera comprobado antes, sale igualmente
      * {@see SiteTimezoneLocked} y no se guarda nada.
      *

@@ -238,7 +238,9 @@ it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde 
     $migrator->beginTransaction();
 
     try {
-        $migrator->statement($statement);
+        // `:app`, el rol de la aplicacion: el conjunto de datos se lee antes
+        // de que arranque la configuracion.
+        $migrator->statement(str_replace(':app', '"'.Config::string('database.roles.application').'"', $statement));
 
         $findings = privilegiosRegistroDoctor($migrator);
     } finally {
@@ -253,12 +255,12 @@ it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde 
     expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
 })->with([
     'el trigger de sites desactivado' => [
-        'ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone',
-        ['disabled_trigger:sites_guard_timezone'],
+        'ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone',
+        ['disabled_trigger:zz_sites_guard_timezone'],
     ],
     'el trigger de sites borrado' => [
-        'DROP TRIGGER sites_guard_timezone ON sites',
-        ['missing_trigger:sites_guard_timezone'],
+        'DROP TRIGGER zz_sites_guard_timezone ON sites',
+        ['missing_trigger:zz_sites_guard_timezone'],
     ],
     'la correccion sin SECURITY DEFINER' => [
         'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER',
@@ -272,7 +274,54 @@ it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde 
         'DROP FUNCTION public.site_correct_timezone(bigint, text, text)',
         ['site_timezone_function:missing'],
     ],
+    'la correccion para PUBLIC' => [
+        'GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC',
+        ['site_timezone_function:public_execute'],
+    ],
+    'la purga para PUBLIC' => [
+        'GRANT EXECUTE ON FUNCTION public.work_record_purge_batch(date, integer) TO PUBLIC',
+        ['purge_function:public_execute'],
+    ],
+    'la traza borrada' => [
+        'DROP TABLE site_timezone_changes',
+        ['site_timezone_trace:missing'],
+    ],
 ])->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('avisa si la aplicacion puede escribir la traza de cambios de zona o usar su secuencia', function (): void {
+    // Con el rol de la aplicacion, que es el que mira la sonda en produccion:
+    // el propietario los tiene todos por serlo. Los GRANT se confirman y el
+    // `finally` los retira, como en la prueba de lo que sobra.
+    $migrator = privilegiosRegistroMigrador();
+    $application = '"'.Config::string('database.roles.application').'"';
+    $grants = [
+        'INSERT, DELETE ON TABLE site_timezone_changes',
+        'USAGE ON SEQUENCE site_timezone_changes_id_seq',
+    ];
+
+    try {
+        foreach ($grants as $grant) {
+            $migrator->statement('GRANT '.$grant.' TO '.$application);
+        }
+
+        $findings = privilegiosRegistroDoctor();
+    } finally {
+        foreach ($grants as $grant) {
+            $migrator->statement('REVOKE '.$grant.' FROM '.$application);
+        }
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe([
+            'site_timezone_trace:DELETE',
+            'site_timezone_trace:INSERT',
+            'site_timezone_trace:sequence',
+        ]);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RN-23');
 
 it('no mira la guarda de la zona mientras su migracion no este aplicada', function (): void {
     $migrator = privilegiosRegistroMigrador();
@@ -280,7 +329,7 @@ it('no mira la guarda de la zona mientras su migracion no este aplicada', functi
 
     try {
         $migrator->table('migrations')->where('migration', ServiceInspector::SITE_TIMEZONE_GUARD_MIGRATION)->delete();
-        $migrator->statement('ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone');
+        $migrator->statement('ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone');
 
         $details = privilegiosRegistroDoctor($migrator)[0]->details;
     } finally {

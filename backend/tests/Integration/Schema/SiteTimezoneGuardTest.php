@@ -225,11 +225,39 @@ it('la funcion de la correccion cambia la zona con registro horario, que es su u
 
     expect(siteGuardTimezone($site))->toBe('Atlantic/Canary');
 
-    // La misma zona no hace nada y no falla.
+    // La misma zona no hace nada, no falla y no deja traza.
     siteGuardCorrect($site, 'Atlantic/Canary', 'Atlantic/Canary');
 
-    expect(siteGuardTimezone($site))->toBe('Atlantic/Canary');
+    // Y la vuelta atras deja su propia fila: un A->B->A no se borra.
+    siteGuardCorrect($site, 'Atlantic/Canary', 'Europe/Madrid');
+
+    $traza = DB::table('site_timezone_changes')->orderBy('id')->get(['site_id', 'from_tz', 'to_tz', 'changed_at', 'txid']);
+
+    expect(siteGuardTimezone($site))->toBe('Europe/Madrid')
+        ->and($traza)->toHaveCount(2)
+        ->and($traza->map(static fn (object $row): string => $row->site_id.':'.$row->from_tz.'->'.$row->to_tz)->all())
+        ->toBe([$site.':Europe/Madrid->Atlantic/Canary', $site.':Atlantic/Canary->Europe/Madrid'])
+        ->and($traza->every(static fn (object $row): bool => $row->changed_at !== null && $row->txid !== null))->toBeTrue();
 })->group('RN-23', 'RL-04');
+
+it('la traza de cambios de zona solo la lee la aplicacion: no la escribe, no la borra ni la vacia', function (string $statement): void {
+    $site = siteGuardSite();
+    siteGuardEntry($site);
+    siteGuardCorrect($site, 'Europe/Madrid', 'Atlantic/Canary');
+
+    expect(DB::table('site_timezone_changes')->count())->toBe(1);
+
+    siteGuardExpectDenied($statement, static fn (ConnectionInterface $db): bool => $db->statement(str_replace(':site', (string) $site, $statement)), '42501', '');
+
+    expect(DB::table('site_timezone_changes')->count())->toBe(1);
+})->with([
+    "INSERT INTO site_timezone_changes (site_id, from_tz, to_tz) VALUES (:site, 'Atlantic/Canary', 'Europe/Madrid')",
+    "UPDATE site_timezone_changes SET to_tz = 'Europe/Lisbon'",
+    'DELETE FROM site_timezone_changes',
+    'TRUNCATE site_timezone_changes',
+    "SELECT nextval('site_timezone_changes_id_seq')",
+    'CREATE TRIGGER x AFTER INSERT ON site_timezone_changes FOR EACH ROW EXECUTE FUNCTION public.sites_guard_timezone()',
+])->group('RN-23', 'RS-07');
 
 it('la funcion se niega sin registro horario, con otra zona de partida o sin centro', function (): void {
     $site = siteGuardSite();
@@ -301,19 +329,41 @@ it('la funcion es SECURITY DEFINER del rol de migracion, con search_path, y solo
     $guard = DB::selectOne("SELECT p.prosecdef AS definer FROM pg_proc p WHERE p.oid = 'public.sites_guard_timezone()'::regprocedure");
 
     expect($guard->definer)->toBeFalse()
-        ->and(siteGuardTriggers(DB::connection()))->toContain('sites_guard_timezone');
+        ->and(siteGuardTriggers(DB::connection()))->toContain('zz_sites_guard_timezone');
+
+    // BEFORE UPDATE de fila y sin lista de columnas (`OF timezone`): lo filtra
+    // el IS DISTINCT FROM. Y es el ultimo de los BEFORE de `sites` por nombre.
+    /** @var object{columns: int|string, timing: bool} $trigger */
+    $trigger = DB::selectOne("SELECT cardinality(g.tgattr::int2[]) AS columns, (g.tgtype & 2) <> 0 AS timing FROM pg_trigger g WHERE g.tgrelid = 'public.sites'::regclass AND g.tgname = 'zz_sites_guard_timezone'");
+
+    expect((int) $trigger->columns)->toBe(0)
+        ->and($trigger->timing)->toBeTrue()
+        ->and(siteGuardTriggers(DB::connection()))->toBe(['zz_sites_guard_timezone']);
+
+    /** @var object{owner: string, writes: bool, reads: bool} $trace */
+    $trace = DB::selectOne(<<<'SQL'
+        SELECT pg_get_userbyid(c.relowner) AS owner,
+               has_table_privilege(current_user, c.oid, 'INSERT') OR has_table_privilege(current_user, c.oid, 'UPDATE')
+                   OR has_table_privilege(current_user, c.oid, 'DELETE') OR has_table_privilege(current_user, c.oid, 'TRUNCATE') AS writes,
+               has_table_privilege(current_user, c.oid, 'SELECT') AS reads
+          FROM pg_class c WHERE c.oid = 'public.site_timezone_changes'::regclass
+        SQL);
+
+    expect($trace->owner)->toBe(Config::string('database.roles.migration'))
+        ->and($trace->writes)->toBeFalse()
+        ->and($trace->reads)->toBeTrue();
 })->group('RN-23', 'RS-07');
 
 it('la aplicacion no puede desactivar, soltar ni reescribir la guarda', function (string $statement): void {
     siteGuardExpectDenied($statement, static fn (ConnectionInterface $db): bool => $db->statement($statement), '42501', '');
 })->with([
-    'ALTER TABLE sites DISABLE TRIGGER sites_guard_timezone',
-    'DROP TRIGGER sites_guard_timezone ON sites',
+    'ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone',
+    'DROP TRIGGER zz_sites_guard_timezone ON sites',
     'CREATE OR REPLACE FUNCTION public.sites_guard_timezone() RETURNS trigger LANGUAGE plpgsql AS $x$ BEGIN RETURN NEW; END; $x$',
     'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER',
 ])->group('RN-23', 'RS-07');
 
-it('su down() suelta el trigger y las funciones, y su up() los vuelve a poner', function (): void {
+it('su down() suelta el trigger, las funciones y la traza, y su up() los vuelve a poner', function (): void {
     $name = config()->string('database.migrations.connection');
     $migrator = DB::connection($name);
 
@@ -330,7 +380,8 @@ it('su down() suelta el trigger y las funciones, y su up() los vuelve a poner', 
         expect($back)->toBe(0, $backOutput)
             ->and(siteGuardFunctionExists($migrator, 'site_correct_timezone(bigint, text, text)'))->toBeFalse()
             ->and(siteGuardFunctionExists($migrator, 'sites_guard_timezone()'))->toBeFalse()
-            ->and(siteGuardTriggers($migrator))->not->toContain('sites_guard_timezone');
+            ->and(siteGuardTriggers($migrator))->not->toContain('zz_sites_guard_timezone')
+            ->and($migrator->getSchemaBuilder()->hasTable('site_timezone_changes'))->toBeFalse();
     } finally {
         [$forward, $forwardOutput] = Commands::run('migrate --database='.$name);
     }
@@ -338,5 +389,6 @@ it('su down() suelta el trigger y las funciones, y su up() los vuelve a poner', 
     expect($forward)->toBe(0, $forwardOutput)
         ->and(siteGuardFunctionExists($migrator, 'site_correct_timezone(bigint, text, text)'))->toBeTrue()
         ->and(siteGuardFunctionExists($migrator, 'sites_guard_timezone()'))->toBeTrue()
-        ->and(siteGuardTriggers($migrator))->toContain('sites_guard_timezone');
+        ->and(siteGuardTriggers($migrator))->toContain('zz_sites_guard_timezone')
+        ->and($migrator->getSchemaBuilder()->hasTable('site_timezone_changes'))->toBeTrue();
 })->group('RN-23', 'RF-PD-10');

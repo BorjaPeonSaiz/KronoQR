@@ -984,9 +984,12 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         work_record_privileges_tampered "shift_entries:UPDATE,work_record_purge_batch:PUBLIC" || printf 'privilegios-se-reparan\n'
         work_record_privileges_tampered "sites:INSERT,site_correct_timezone:DEFINER" && printf 'manipulada-zona\n'
         work_record_privileges_tampered "site_correct_timezone:PUBLIC" || printf 'zona-se-repara\n'
-        grep -q "sites_guard_timezone" "${d}/sql.txt" && grep -q "2026_10_18_120000_guard_site_timezone_in_database" "${d}/sql.txt" && printf 'con-guarda-de-zona\n'
+        work_record_privileges_tampered "work_record_purge_batch:AUSENTE" && work_record_privileges_tampered "site_correct_timezone:AUSENTE" && printf 'funcion-ausente-manipulada\n'
+        work_record_privileges_tampered "site_timezone_changes:INSERT" && printf 'traza-manipulada\n'
+        grep -q "site_timezone_changes" "${d}/sql.txt" && printf 'con-traza-de-zona\n'
+        grep -q "zz_sites_guard_timezone" "${d}/sql.txt" && grep -q "2026_10_18_120000_guard_site_timezone_in_database" "${d}/sql.txt" && printf 'con-guarda-de-zona\n'
         grep -q "site_correct_timezone" "${d}/repara.txt" && printf 'repara-la-zona\n'
-        grep -q "sites_guard_timezone" "${d}/sql-b6.txt" || printf 'b6-sin-guarda-de-zona\n'
+        grep -q "zz_sites_guard_timezone" "${d}/sql-b6.txt" || printf 'b6-sin-guarda-de-zona\n'
         compose_new() { cat >/dev/null; return 0; }
         deriva=ok; r=0; repair_work_record_privileges || r=$?; printf 'reparado=%s\n' "${r}"
         deriva=sites:INSERT; r=0; repair_work_record_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
@@ -1022,6 +1025,9 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('privilegios-se-reparan')
         ->and($proceso->getOutput())->toContain('manipulada-zona')
         ->and($proceso->getOutput())->toContain('zona-se-repara')
+        ->and($proceso->getOutput())->toContain('funcion-ausente-manipulada')
+        ->and($proceso->getOutput())->toContain('traza-manipulada')
+        ->and($proceso->getOutput())->toContain('con-traza-de-zona')
         ->and($proceso->getOutput())->toContain('con-guarda-de-zona')
         ->and($proceso->getOutput())->toContain('repara-la-zona')
         ->and($proceso->getOutput())->toContain('b6-sin-guarda-de-zona')

@@ -23,7 +23,7 @@ use RuntimeException;
  *
  * ## La zona, vigilada tambien por la base de datos (RN-23, ADR-056)
  *
- * Con registro horario, el *trigger* `sites_guard_timezone` rechaza con `42501`
+ * Con registro horario, el *trigger* `zz_sites_guard_timezone` rechaza con `42501`
  * cualquier cambio de zona con la credencial del runtime. `save()` lo traduce a
  * {@see SiteTimezoneLocked}: el caso de uso ya lo comprueba antes con la fila
  * bloqueada, asi que solo se ve si alguien llega aqui sin pasar por el. La
