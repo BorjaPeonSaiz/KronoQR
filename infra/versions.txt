@@ -42,3 +42,4 @@
 2.1.0 2026_09_23_100000_weekly_summary_deliveries
 2.2.0 2026_10_09_100000_revoke_application_writes_on_migrations_table
 2.2.1 2026_10_16_100400_preserve_locales_on_existing_installations
+2.3.0 *
