@@ -653,6 +653,7 @@ final readonly class ErrorVocabulary
         'context',
         'contiene',
         'continuar',
+        'continuation',
         'continue',
         'continues',
         'contra',

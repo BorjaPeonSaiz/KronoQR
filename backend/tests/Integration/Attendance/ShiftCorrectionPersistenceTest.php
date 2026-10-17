@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\Instants;
@@ -107,6 +108,7 @@ it('conserva la fila anterior y la deja fuera del agregado reconstruido', functi
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $repositorio->save($jornada);
@@ -152,6 +154,7 @@ it('corrige un tramo cerrado sin violar la restriccion de exclusion', function (
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $repositorio->save($jornada);
@@ -197,6 +200,7 @@ it('anular libera el hueco y deja meter otro tramo en el mismo horario', functio
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $repositorio->save($nueva);
@@ -220,6 +224,7 @@ it('escribe la fila del libro de correcciones con el antes y el despues', functi
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->by($usuario)->at('2026-03-16 09:00')->build(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     app(WorkDayRepository::class)->save($jornada);

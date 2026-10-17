@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
+use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
@@ -114,12 +115,14 @@ use DateTimeImmutable;
 final readonly class ScanIntentPolicy
 {
     /**
-     * @param  WorkedDuration  $breakContinuationCeiling  RN-10, ya resuelto desde el perfil del
-     *                                                    centro (regla dura 14). Por debajo de el,
-     *                                                    un hueco es una pausa; a partir de el, es
-     *                                                    el descanso entre dos jornadas
+     * @param  ContinuationCeiling  $breakContinuationCeiling  RN-10, ya resuelto desde el perfil del
+     *                                                         centro (regla dura 14). Por debajo de el,
+     *                                                         un hueco es una pausa; a partir de el, es
+     *                                                         el descanso entre dos jornadas. Es la misma
+     *                                                         cota que el alta y la correccion manuales
+     *                                                         aplican en `WorkDay` (RN-05, 2.3.0)
      */
-    public function __construct(public WorkedDuration $breakContinuationCeiling) {}
+    public function __construct(public ContinuationCeiling $breakContinuationCeiling) {}
 
     /**
      * El techo de continuacion, escrito como lo que es: el descanso minimo entre
@@ -131,7 +134,7 @@ final readonly class ScanIntentPolicy
      */
     public static function allowingBreaksShorterThan(WorkedDuration $minimumRestBetweenWorkDays): self
     {
-        return new self($minimumRestBetweenWorkDays);
+        return new self(ContinuationCeiling::belowRestOf($minimumRestBetweenWorkDays));
     }
 
     /**
@@ -221,8 +224,8 @@ final readonly class ScanIntentPolicy
 
         // Estricto: con 12 h de descanso minimo, 11 h 59 sigue siendo pausa y
         // 12 h 00 exactas ya son dos jornadas. Misma semantica `[inicio, fin)`
-        // que el resto del dominio.
-        return $lastAccepted->distanceInSecondsTo($scanAt) < $this->breakContinuationCeiling->minutes * 60
+        // que el resto del dominio, y la misma cota que el alta manual.
+        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $scanAt)
             ? $continues
             : null;
     }

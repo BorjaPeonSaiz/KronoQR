@@ -12,17 +12,23 @@ use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
+use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
+use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -61,6 +67,14 @@ use Illuminate\Support\Str;
  * comparan con la hora del servidor mas `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`
  * ({@see ManualEntryHorizon}) antes de tocar el agregado: rellenar la jornada
  * teorica por adelantado o dejar escrita la salida «prevista» es un `422`.
+ *
+ * **Ni mas alla de la jornada ni del cese** (RN-05, 2.3.0). La cota de
+ * continuacion —el descanso minimo entre jornadas del perfil, la misma que acota
+ * la vuelta de una pausa en el quiosco— la resuelve {@see ContinuationCeilings}
+ * y la aplican dos sitios: {@see ManualEntryEligibility::assertTimesAllowed()},
+ * que no deja pasar ninguna marca de una persona de baja mas alla de su dia de
+ * cese, y el agregado, que no deja colgar de esta jornada un tramo de otro dia
+ * civil que no la continua. Orden: horizonte, jornada, cese y agregado.
  */
 final readonly class AddShiftEntryHandler
 {
@@ -71,6 +85,7 @@ final readonly class AddShiftEntryHandler
         private EmployeeDirectory $employees,
         private SiteCalendar $calendar,
         private OperationalSettingsProvider $settings,
+        private CompliancePolicyProvider $compliance,
         private EventPublisher $events,
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
@@ -80,6 +95,9 @@ final readonly class AddShiftEntryHandler
      * @throws EmployeeCannotBeClocked el empleado no existe, no puede fichar o su centro no tiene zona
      * @throws ShiftMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
      * @throws WorkDateOutsideEmployment la persona esta de baja y la jornada cae fuera de su periodo de empleo
+     * @throws ShiftMarkAfterTermination la persona esta de baja y una marca pasa de la cota de su dia de cese (RN-05)
+     * @throws CorrectionWouldChangeWorkDate el tramo abriria la jornada en otro dia civil (RN-05)
+     * @throws EntryDoesNotContinueWorkDay el tramo es de otro dia civil y no continua la jornada (RN-05)
      */
     public function handle(AddShiftEntryCommand $command): CorrectedShift
     {
@@ -102,6 +120,9 @@ final readonly class AddShiftEntryHandler
      * @throws EmployeeCannotBeClocked
      * @throws ShiftMarkInFuture
      * @throws WorkDateOutsideEmployment
+     * @throws ShiftMarkAfterTermination
+     * @throws CorrectionWouldChangeWorkDate
+     * @throws EntryDoesNotContinueWorkDay
      */
     private function add(
         AddShiftEntryCommand $command,
@@ -133,6 +154,12 @@ final readonly class AddShiftEntryHandler
         // alta y su cese. Antes de tocar el agregado: un `422` no escribe nada.
         ManualEntryEligibility::of($employee)->assertWorkDateAllowed($workDate);
 
+        // RN-05 (2.3.0): la cota de continuacion, la misma que la vuelta de una
+        // pausa en el quiosco. A una persona de baja, ademas, ninguna marca le
+        // puede pasar de esa cota contada desde el final de su dia de cese.
+        $continuation = ContinuationCeilings::forSite($this->compliance, $employee->siteId);
+        ManualEntryEligibility::of($employee)->assertTimesAllowed($times, $continuation, $timezone);
+
         // La jornada puede no existir todavia: un alta retroactiva de un dia en
         // el que la persona no ficho nada la crea.
         $workDay = $this->workDays->findWorkDayFor($employee->employeeUuid, $workDate)
@@ -144,6 +171,7 @@ final readonly class AddShiftEntryHandler
             ScanOrigin::MANUAL_ADMIN,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
             ClockingPolicies::forSettings($settings),
+            $continuation,
         );
 
         $this->workDays->save($workDay);
@@ -154,7 +182,7 @@ final readonly class AddShiftEntryHandler
         $this->ledger->record($correction);
         $this->events->publish(...$events);
 
-        $this->recheckAfterAudit($employee->employeeUuid, $workDate);
+        $this->recheckAfterAudit($employee->employeeUuid, $workDate, $times, $continuation, $timezone);
 
         return CorrectedShift::of($workDay, $entry, $correction);
     }
@@ -177,12 +205,22 @@ final readonly class AddShiftEntryHandler
      * `withChainLock()` es reentrante: si el asiento del tramo ya la tomo, no
      * espera.
      *
+     * Las marcas se vuelven a mirar con la cota del cese por lo mismo: una baja
+     * concurrente con cese en la jornada misma deja la jornada dentro del
+     * periodo, pero no las marcas que pasen de su dia de cese (RN-05, 2.3.0).
+     *
      * @throws EmployeeCannotBeClocked
      * @throws WorkDateOutsideEmployment
+     * @throws ShiftMarkAfterTermination
      */
-    private function recheckAfterAudit(string $employeeUuid, WorkDate $workDate): void
-    {
-        $this->serialized->withChainLock(function () use ($employeeUuid, $workDate): void {
+    private function recheckAfterAudit(
+        string $employeeUuid,
+        WorkDate $workDate,
+        ShiftTimes $times,
+        ContinuationCeiling $continuation,
+        DateTimeZone $timezone,
+    ): void {
+        $this->serialized->withChainLock(function () use ($employeeUuid, $workDate, $times, $continuation, $timezone): void {
             $current = $this->employees->find($employeeUuid);
 
             if (! $current instanceof EmployeeSnapshot || ! ManualEntryEligibility::of($current)->admitsEntries()) {
@@ -190,6 +228,7 @@ final readonly class AddShiftEntryHandler
             }
 
             ManualEntryEligibility::of($current)->assertWorkDateAllowed($workDate);
+            ManualEntryEligibility::of($current)->assertTimesAllowed($times, $continuation, $timezone);
         });
     }
 }

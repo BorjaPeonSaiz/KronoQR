@@ -14,9 +14,11 @@ use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
 use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
@@ -837,6 +839,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]));
 
         /*
+         * RN-05 (2.3.0, V21-3-AR-1): un tramo escrito a mano de otro dia civil
+         * que no continua la jornada. Es la misma familia que la de arriba —sus
+         * horas son de otra jornada— y por eso comparte su `type`; el campo es
+         * la marca que hay que corregir: la entrada del tramo, o su salida si lo
+         * que se rompe es la vuelta posterior. Solo lo lanzan el alta y la
+         * correccion manuales; el fichaje aplica la misma cota sin rechazar
+         * (regla dura 19).
+         */
+        $exceptions->render(static fn (EntryDoesNotContinueWorkDay $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
+            $exception->mark->value => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
          * RN-03: la salida es posterior a la entrada. Estrictamente — un tramo de
          * duracion cero no es un tramo. Acotada a las rutas de correccion por lo
          * dicho arriba.
@@ -1018,6 +1037,20 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (WorkDateOutsideEmployment $exception): mixed => ProblemDetails::validationFailed([
             'work_date' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * RN-05 y RN-14 (2.3.0): a una persona de baja ninguna marca escrita a
+         * mano le puede pasar de la cota de continuacion contada desde el final
+         * de su dia de cese. `422` en la marca, en el idioma negociado. Solo lo
+         * lanzan el alta y la correccion manuales; el escaneo no pasa por aqui.
+         */
+        $exceptions->render(static fn (ShiftMarkAfterTermination $exception): mixed => ProblemDetails::validationFailed([
+            $exception->mark->value => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
                 $exception->getMessage(),

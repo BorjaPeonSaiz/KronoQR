@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Factory\ShiftEntryFactory;
 use Tests\Support\Factory\WorkDayFactory;
@@ -41,6 +42,7 @@ function correcting(WorkDay $workDay, string $entryUuid, ShiftTimes $times): cal
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 }
 
@@ -120,6 +122,7 @@ it('permite que la correccion toque justo el borde del tramo siguiente', functio
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect($corregido->workedDuration()->minutes)->toBe(300)
@@ -183,6 +186,7 @@ it('permite corregir la vuelta de una pausa de madrugada sin mover la jornada', 
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect($corregido->workDate()->isoDate)->toBe('2026-03-14')

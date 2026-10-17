@@ -6,19 +6,26 @@ namespace App\Modules\Attendance\Application\UseCase;
 
 use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
+use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
+use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
@@ -87,11 +94,15 @@ final readonly class CorrectShiftHandler
         private EventPublisher $events,
         private OperationalSettingsProvider $settings,
         private Clock $clock,
+        private EmployeeDirectory $employees,
+        private CompliancePolicyProvider $compliance,
     ) {}
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya no es vigente
      * @throws ShiftMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
+     * @throws ShiftMarkAfterTermination la persona esta de baja y una marca resultante pasa de la cota de su dia de cese (RN-05)
+     * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
     public function handle(CorrectShiftCommand $command): CorrectedShift
     {
@@ -122,6 +133,19 @@ final readonly class CorrectShiftHandler
         ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes)
             ->assertTimesAllowed($times);
 
+        // RN-05 (2.3.0): la cota de continuacion, la misma que la vuelta de una
+        // pausa en el quiosco y que el alta manual. Corregir no depende del
+        // estado de la persona (RF-PA-04), pero a una de baja ninguna marca le
+        // puede pasar de esa cota contada desde el final de su dia de cese. La
+        // zona es la de la jornada: la del centro con que se atribuyo (RN-23).
+        $continuation = ContinuationCeilings::forSite($this->compliance, $workDay->siteId());
+        $employee = $this->employees->find($workDay->employeeUuid());
+
+        if ($employee instanceof EmployeeSnapshot) {
+            ManualEntryEligibility::of($employee)
+                ->assertTimesAllowed($times, $continuation, $workDay->workDate()->timezone);
+        }
+
         $corrected = $workDay->correctEntry(
             $command->shiftEntryUuid,
             // UUID v7, como el del fichaje: cada version es una fila nueva y
@@ -136,6 +160,7 @@ final readonly class CorrectShiftHandler
             ScanOrigin::MANUAL_ADMIN,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
             ClockingPolicies::forSettings($settings),
+            $continuation,
         );
 
         $this->workDays->save($workDay);
@@ -163,6 +188,15 @@ final readonly class CorrectShiftHandler
     private function timesFor(CorrectShiftCommand $command, WorkDay $workDay): ShiftTimes
     {
         $times = $workDay->entry($command->shiftEntryUuid)->times();
+
+        // Con las dos marcas en la orden no hay nada que conservar, y se
+        // construyen juntas: aplicarlas de una en una comprobaba RN-03 contra
+        // una mezcla de la marca nueva y la vieja que nadie pidio, y mover un
+        // tramo entero a una hora posterior a su salida antigua daba un `422`
+        // en `clocked_out_at` que no era verdad (2.3.0).
+        if ($command->clockedInAt !== null && $command->clockedOutAt !== null) {
+            return ShiftTimes::closed($command->clockedInAt, $command->clockedOutAt);
+        }
 
         if ($command->clockedInAt !== null) {
             $times = $times->withClockIn($command->clockedInAt);

@@ -18,6 +18,11 @@ return [
         'work_date_outside_employment' => 'This person has been offboarded since :terminated_on: hours can only '
             .'be recorded for working days between their start date (:hired_on) and their termination date '
             .'(:terminated_on).',
+        'entry_does_not_continue_work_day' => 'Those hours do not belong to the working day of :work_date: the shift '
+            .'starts on another day and :minutes minutes or more pass between the previous clock-out and its '
+            .'clock-in, the minimum rest between working days. Record them on the working day they start.',
+        'mark_after_termination' => 'This person left on :terminated_on: that time falls outside their last working '
+            .'day. Only hours that continue the working day of the termination date are accepted.',
     ],
 
 ];
