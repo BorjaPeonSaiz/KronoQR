@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\NationalId;
+
 /**
  * Una linea del fichero **ya normalizada**, antes de decidir que hacer con ella
  * (**RF-GP-05**).
@@ -22,9 +24,12 @@ namespace App\Modules\Workforce\Domain\ValueObject;
  * y ningun registro con el documento legible. Este objeto es lo mas lejos que
  * llega, y por eso no se serializa nunca.
  *
- * ## El documento se normaliza AQUI, en el constructor, y en ningun otro sitio
+ * ## El documento se normaliza AQUI, en el constructor
  *
- * Mayusculas, sin espacios y sin guiones. **Es una correccion de la revision de
+ * Con {@see NationalId::normalise()}, la unica definicion de la forma canonica en
+ * todo el producto: vive en `Shared` desde V21-3-PA-1 porque la busqueda de la
+ * persona de la exportacion legal, en `Compliance`, tiene que normalizar
+ * exactamente igual. Mayusculas, sin espacios y sin guiones. **Es una correccion de la revision de
  * la 5.5**, y el fallo que arregla es de los que no se ven hasta que duelen: la
  * comparacion dentro del fichero era insensible a mayusculas —`mb_strtolower` en
  * {@see self::identityKey()}— y la comparacion contra la base era sensible,
@@ -68,26 +73,7 @@ final readonly class ImportedEmployee
         public ?string $hiredAt,
         public ?string $locale,
     ) {
-        $this->nationalId = self::normaliseNationalId($nationalId);
-    }
-
-    /**
-     * La forma canonica de un documento de identidad.
-     *
-     * **Publica porque tiene que poder llamarse desde fuera**: el adaptador que
-     * consulta la base compara con `digest(?, 'sha256')` y necesita hashear
-     * exactamente esta misma cadena. Dos normalizaciones distintas —una aqui y
-     * otra alli— serian el mismo fallo que esta funcion existe para cerrar.
-     */
-    public static function normaliseNationalId(?string $nationalId): ?string
-    {
-        if ($nationalId === null) {
-            return null;
-        }
-
-        $normalised = str_replace([' ', '-', '.', "\u{00A0}"], '', mb_strtoupper(trim($nationalId)));
-
-        return $normalised === '' ? null : $normalised;
+        $this->nationalId = NationalId::normalise($nationalId);
     }
 
     /**

@@ -6,6 +6,8 @@ namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\NationalId;
+use App\Modules\Shared\Infrastructure\Persistence\NationalIdDigest;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
@@ -14,7 +16,6 @@ use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
-use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -390,17 +391,17 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
      * duplicada** — con dos codigos de empleado, dos PIN y dos tarjetas para la
      * misma persona (regla dura 5).
      *
-     * La forma canonica la decide {@see ImportedEmployee::normaliseNationalId()}
-     * y **es la unica**: hay una sola funcion en el producto que la define, y los
-     * tres sitios que la necesitan —el alta, la importacion y la busqueda del
-     * directorio— la llaman. Es idempotente, asi que aplicarla al valor que la
+     * La forma canonica la decide {@see NationalId} y la expresion
+     * {@see NationalIdDigest}, las dos en `Shared`, y **son las unicas**: los
+     * sitios que las necesitan —el alta, la importacion, la busqueda del
+     * directorio y la de la exportacion legal (RF-IN-05)— las llaman. Es idempotente, asi que aplicarla al valor que la
      * importacion ya normalizo no cambia nada.
      */
     private function storeNationalIdDigest(string $uuid, string $nationalId): void
     {
-        $normalised = ImportedEmployee::normaliseNationalId($nationalId);
+        $normalised = NationalId::fromInput($nationalId);
 
-        if ($normalised === null) {
+        if (! $normalised instanceof NationalId) {
             // Un documento que se queda en nada al normalizar —espacios y
             // guiones— no es un documento. Mejor sin digest que con el de la
             // cadena vacia, que emparejaria a todo el mundo entre si.
@@ -409,8 +410,8 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
 
         try {
             DB::update(
-                'UPDATE employees SET national_id_hash = digest(?, ?) WHERE uuid = ?',
-                [$normalised, 'sha256', $uuid],
+                'UPDATE employees SET national_id_hash = '.NationalIdDigest::EXPRESSION.' WHERE uuid = ?',
+                [...NationalIdDigest::bindings($normalised), $uuid],
             );
         } catch (QueryException $exception) {
             // El indice unico parcial del documento: `409` como el del correo, y
