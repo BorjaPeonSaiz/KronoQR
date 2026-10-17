@@ -110,7 +110,7 @@ final class SearchLegalExportEmployeesRequest extends FormRequest
 
     public function toSearch(): EmployeeSearch
     {
-        return $this->search ?? throw new LogicException('El criterio de busqueda se construye al validar la peticion.');
+        return $this->search ?? throw new LogicException('El criterio de busqueda no se puede construir antes de la peticion.');
     }
 
     /**
