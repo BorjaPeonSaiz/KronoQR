@@ -313,9 +313,9 @@ Desde la 2.3.0, un tramo dado de alta o corregido a mano que empieza en un día
 civil distinto de su jornada solo se admite si **continúa** el tramo anterior
 —su entrada queda a menos de `min_rest_hours` de la salida de aquel—, y a una
 persona de baja ninguna marca le puede quedar a `min_rest_hours` o más del final
-de su día de cese (RN-05, RN-14, RF-PA-04). Antes no se comprobaba, así que una
+de su día de cese (RN-05, RN-14, RF-PA-04). La tercera consulta busca jornadas que hoy abre un tramo de otro día civil, lo que puede dejar la anulación del tramo que las abría en una versión anterior. Antes no se comprobaba, así que una
 instalación puede tener tramos escritos que hoy se rechazarían. **La
-actualización no los toca** (regla dura 5): estas dos consultas, de solo
+actualización no los toca** (regla dura 5): estas tres consultas, de solo
 lectura, dicen si existen. Muestran `employee_uuid`, no nombres.
 
 ```bash
@@ -369,10 +369,27 @@ WHERE se.status NOT IN ('voided', 'superseded')
       >= ((e.terminated_at + 1)::timestamp AT TIME ZONE p.timezone)
          + make_interval(hours => p.min_rest_hours)
 ORDER BY se.work_date, e.uuid;
+
+-- 3. Jornadas abiertas por un tramo de otro día civil (RN-05).
+WITH primeros AS (
+    SELECT DISTINCT ON (se.employee_id, se.work_date)
+           se.employee_id, se.site_id, se.work_date, se.uuid, se.clocked_in_at
+    FROM shift_entries se
+    WHERE se.status NOT IN ('voided', 'superseded')
+    ORDER BY se.employee_id, se.work_date, se.clocked_in_at
+)
+SELECT e.uuid AS employee_uuid, p.uuid AS shift_entry_uuid, p.work_date,
+       p.clocked_in_at,
+       (p.clocked_in_at AT TIME ZONE s.timezone)::date AS fecha_civil_de_la_entrada
+FROM primeros p
+JOIN sites s ON s.id = p.site_id
+JOIN employees e ON e.id = p.employee_id
+WHERE (p.clocked_in_at AT TIME ZONE s.timezone)::date <> p.work_date
+ORDER BY p.work_date, e.uuid;
 SQL
 ```
 
-**Cero filas en las dos** es lo normal y no hay nada más que hacer. **Si sale
+**Cero filas en las tres** es lo normal y no hay nada más que hacer. **Si sale
 alguna, no es una avería ni se arregla con SQL**: pásale la lista a RRHH. Cada
 fila es un tramo que hay que revisar con la persona y, si sus horas son de otra
 jornada, anularlo y darlo de alta en la suya, dos correcciones con su motivo

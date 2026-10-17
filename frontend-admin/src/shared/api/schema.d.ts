@@ -16401,7 +16401,8 @@ export interface operations {
              *       serian de **otra jornada** (RN-05, ADR-035): la hora de entrada
              *       llevaria la jornada a otro dia civil, o el tramo empieza en un dia
              *       civil distinto de `work_date` y **no continua** el tramo anterior
-             *       —su entrada queda a `min_rest_hours` o mas de la salida de aquel—,
+             *       —su entrada queda a `min_rest_hours` o mas de la salida de aquel, o
+             *       entre medias hay un tramo vigente de otra jornada de la persona—,
              *       la misma cota que la vuelta de una pausa en el quiosco. Va en
              *       `errors.clocked_in_at`. Es `422` y no `409` porque no hay nada que
              *       releer: mover horas de un dia a otro son dos actos separados y
@@ -16492,8 +16493,9 @@ export interface operations {
              *       la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
              *       entrada o la salida resultantes son **futuras** (F1): mas alla del
              *       momento del servidor mas el margen
-             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de baja y
-             *       una marca resultante queda a `min_rest_hours` o mas del final de su
+             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`; la persona esta de baja y la
+             *       jornada cae fuera de su periodo de empleo (en `errors.work_date`), o
+             *       una marca **que cambia** queda a `min_rest_hours` o mas del final de su
              *       dia de cese (medianoche del dia siguiente en la zona del centro;
              *       RN-05, RN-14), en el campo de esa marca.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
@@ -16501,7 +16503,8 @@ export interface operations {
              *       abre la jornada al otro lado de la medianoche local, o dejar un
              *       tramo que empieza en un dia civil distinto de `work_date` sin
              *       **continuar** el anterior —su entrada a `min_rest_hours` o mas de
-             *       la salida de aquel—, la misma cota que la vuelta de una pausa en el
+             *       la salida de aquel, o detras de un tramo vigente de otra jornada de
+             *       la persona—, la misma cota que la vuelta de una pausa en el
              *       quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
              *       la vuelta posterior al adelantar la salida: entonces en
              *       `errors.clocked_out_at`. Es `422` y no `409` porque no hay nada que
@@ -16582,12 +16585,18 @@ export interface operations {
              *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale
              *       (el motivo, su explicacion).
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — anular
-             *       este tramo dejaria al **siguiente** fuera de la jornada (RN-05): su
-             *       entrada cae en un dia civil distinto de `work_date` y quedaria a
-             *       `min_rest_hours` o mas de la salida del anterior que sigue vigente.
-             *       Va en `errors.clocked_in_at` y se refiere a la entrada de ese tramo
-             *       siguiente. Anular el ultimo tramo, o uno cuyo siguiente es del dia
-             *       de la jornada, siempre se admite: se anula de atras hacia delante.
+             *       este tramo dejaria horas de la jornada en **otra jornada** (RN-05),
+             *       en uno de dos casos:
+             *       - es el que **abre** la jornada y el mas temprano de los que quedan
+             *         empieza en un dia civil distinto de `work_date`;
+             *       - el **siguiente** empieza en un dia civil distinto de `work_date`
+             *         y, medido contra el anterior que sigue vigente, quedaria a
+             *         `min_rest_hours` o mas de su salida, o detras de un tramo vigente
+             *         de otra jornada de la persona.
+             *       Va en `errors.clocked_in_at`, que en la anulacion no es un campo
+             *       del formulario: el panel enseña el mensaje tal cual. Anular el
+             *       ultimo tramo, o uno cuyo siguiente es del dia de la jornada,
+             *       siempre se admite: se anula de atras hacia delante.
              */
             422: {
                 headers: {

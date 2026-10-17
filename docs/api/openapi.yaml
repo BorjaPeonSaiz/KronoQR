@@ -5667,7 +5667,8 @@ paths:
               serian de **otra jornada** (RN-05, ADR-035): la hora de entrada
               llevaria la jornada a otro dia civil, o el tramo empieza en un dia
               civil distinto de `work_date` y **no continua** el tramo anterior
-              —su entrada queda a `min_rest_hours` o mas de la salida de aquel—,
+              —su entrada queda a `min_rest_hours` o mas de la salida de aquel, o
+              entre medias hay un tramo vigente de otra jornada de la persona—,
               la misma cota que la vuelta de una pausa en el quiosco. Va en
               `errors.clocked_in_at`. Es `422` y no `409` porque no hay nada que
               releer: mover horas de un dia a otro son dos actos separados y
@@ -5724,7 +5725,7 @@ paths:
                     detail: Revisa los campos indicados.
                     errors:
                       clocked_in_at:
-                        - 'Esas horas no son de la jornada del 2026-10-10: el tramo empieza otro día y entre la salida anterior y su entrada median 720 minutos o más, el descanso mínimo entre jornadas. Dalas de alta en la jornada en que empiezan.'
+                        - 'Las horas de este tramo son de otra jornada: empieza otro día y no continúa la jornada del 2026-10-10, porque entre la salida anterior y su entrada median 12 h o más (el descanso mínimo entre jornadas) o hay un tramo de otra jornada. Dalo de alta en la jornada en que empieza.'
                 marca-posterior-al-cese:
                   summary: Persona de baja y marca mas alla de la cota de su dia de cese (RN-05, RN-14)
                   value:
@@ -5868,8 +5869,9 @@ paths:
               la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
               entrada o la salida resultantes son **futuras** (F1): mas alla del
               momento del servidor mas el margen
-              `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de baja y
-              una marca resultante queda a `min_rest_hours` o mas del final de su
+              `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`; la persona esta de baja y la
+              jornada cae fuera de su periodo de empleo (en `errors.work_date`), o
+              una marca **que cambia** queda a `min_rest_hours` o mas del final de su
               dia de cese (medianoche del dia siguiente en la zona del centro;
               RN-05, RN-14), en el campo de esa marca.
             - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
@@ -5877,7 +5879,8 @@ paths:
               abre la jornada al otro lado de la medianoche local, o dejar un
               tramo que empieza en un dia civil distinto de `work_date` sin
               **continuar** el anterior —su entrada a `min_rest_hours` o mas de
-              la salida de aquel—, la misma cota que la vuelta de una pausa en el
+              la salida de aquel, o detras de un tramo vigente de otra jornada de
+              la persona—, la misma cota que la vuelta de una pausa en el
               quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
               la vuelta posterior al adelantar la salida: entonces en
               `errors.clocked_out_at`. Es `422` y no `409` porque no hay nada que
@@ -5924,7 +5927,7 @@ paths:
                     detail: Revisa los campos indicados.
                     errors:
                       clocked_out_at:
-                        - 'Esas horas no son de la jornada del 2026-03-14: el tramo empieza otro día y entre la salida anterior y su entrada median 720 minutos o más, el descanso mínimo entre jornadas. Dalas de alta en la jornada en que empiezan.'
+                        - 'El tramo siguiente dejaría de continuar la jornada del 2026-03-14: empieza otro día y su entrada quedaría a 12 h o más de la salida anterior (el descanso mínimo entre jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.'
                 marca-posterior-al-cese:
                   summary: Persona de baja y marca mas alla de la cota de su dia de cese (RN-05, RN-14)
                   value:
@@ -6036,12 +6039,18 @@ paths:
             - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale
               (el motivo, su explicacion).
             - `urn:kronoqr:problem:correction-would-change-work-date` — anular
-              este tramo dejaria al **siguiente** fuera de la jornada (RN-05): su
-              entrada cae en un dia civil distinto de `work_date` y quedaria a
-              `min_rest_hours` o mas de la salida del anterior que sigue vigente.
-              Va en `errors.clocked_in_at` y se refiere a la entrada de ese tramo
-              siguiente. Anular el ultimo tramo, o uno cuyo siguiente es del dia
-              de la jornada, siempre se admite: se anula de atras hacia delante.
+              este tramo dejaria horas de la jornada en **otra jornada** (RN-05),
+              en uno de dos casos:
+              - es el que **abre** la jornada y el mas temprano de los que quedan
+                empieza en un dia civil distinto de `work_date`;
+              - el **siguiente** empieza en un dia civil distinto de `work_date`
+                y, medido contra el anterior que sigue vigente, quedaria a
+                `min_rest_hours` o mas de su salida, o detras de un tramo vigente
+                de otra jornada de la persona.
+              Va en `errors.clocked_in_at`, que en la anulacion no es un campo
+              del formulario: el panel enseña el mensaje tal cual. Anular el
+              ultimo tramo, o uno cuyo siguiente es del dia de la jornada,
+              siempre se admite: se anula de atras hacia delante.
           content:
             application/problem+json:
               schema:
@@ -6056,6 +6065,16 @@ paths:
                     errors:
                       reason_code:
                         - El motivo de la correccion es obligatorio.
+                abre-la-jornada:
+                  summary: Anular el tramo que abre la jornada la dejaria abierta por un tramo de otro dia (RN-05)
+                  value:
+                    type: 'urn:kronoqr:problem:correction-would-change-work-date'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      clocked_in_at:
+                        - 'Este tramo abre la jornada del 2026-03-14 y el siguiente empieza otro día: anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.'
                 el-siguiente-no-continuaria:
                   summary: Anular dejaria la vuelta siguiente fuera de la jornada (RN-05)
                   value:
@@ -6065,7 +6084,7 @@ paths:
                     detail: Revisa los campos indicados.
                     errors:
                       clocked_in_at:
-                        - 'Esas horas no son de la jornada del 2026-03-14: el tramo empieza otro día y entre la salida anterior y su entrada median 720 minutos o más, el descanso mínimo entre jornadas. Dalas de alta en la jornada en que empiezan.'
+                        - 'El tramo siguiente dejaría de continuar la jornada del 2026-03-14: empieza otro día y su entrada quedaría a 12 h o más de la salida anterior (el descanso mínimo entre jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
