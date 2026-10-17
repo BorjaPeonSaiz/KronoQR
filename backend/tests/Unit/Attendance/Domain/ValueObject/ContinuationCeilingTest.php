@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Domain\Exception\BreakWithoutClockOut;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
+use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use Tests\Support\Factory\ContinuationCeilingFactory;
@@ -62,3 +65,27 @@ it('acaba la fecha civil en la medianoche local siguiente, tambien con cambio de
     'el domingo del cambio de octubre (25 h)' => ['2026-10-25', '2026-10-25 23:00'],
     'el domingo del cambio de marzo (23 h)' => ['2026-03-29', '2026-03-29 22:00'],
 ])->group('RN-05', 'RN-09');
+
+it('no deja construir un tramo abierto que termino en pausa', function (): void {
+    expect(fn () => ShiftTimes::of(
+        Instants::utc('2026-03-14 07:00'),
+        null,
+        EntryClosure::BREAK_START,
+    ))->toThrow(BreakWithoutClockOut::class)
+        ->and(fn () => ShiftTimes::open(Instants::utc('2026-03-14 07:00'))
+            ->withClosure(EntryClosure::BREAK_START))
+        ->toThrow(BreakWithoutClockOut::class);
+})->group('RN-05', 'RF-PA-04');
+
+it('distingue dos tramos con las mismas horas que terminaron distinto', function (): void {
+    $salida = ShiftTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 15:00'));
+    $pausa = $salida->withClosure(EntryClosure::BREAK_START);
+
+    expect($salida->equals($pausa))->toBeFalse()
+        ->and($pausa->endsInBreak())->toBeTrue()
+        ->and($salida->endsInBreak())->toBeFalse()
+        // Una salida sin cierre declarado termina en salida.
+        ->and(ShiftTimes::of(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 15:00'))->closure)
+        ->toBe(EntryClosure::CLOCK_OUT)
+        ->and(ShiftTimes::open(Instants::utc('2026-03-14 07:00'))->closure)->toBeNull();
+})->group('RN-05', 'RF-PA-04');

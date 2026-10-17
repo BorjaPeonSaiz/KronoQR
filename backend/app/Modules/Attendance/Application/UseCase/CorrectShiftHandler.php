@@ -21,6 +21,7 @@ use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Shared\Application\Port\Clock;
@@ -217,7 +218,11 @@ final readonly class CorrectShiftHandler
         // tramo entero a una hora posterior a su salida antigua daba un `422`
         // en `clocked_out_at` que no era verdad (2.3.0).
         if ($command->clockedInAt !== null && $command->clockedOutAt !== null) {
-            return ShiftTimes::closed($command->clockedInAt, $command->clockedOutAt);
+            return $this->withClosure($command, ShiftTimes::closed(
+                $command->clockedInAt,
+                $command->clockedOutAt,
+                $times->closure ?? EntryClosure::CLOCK_OUT,
+            ));
         }
 
         if ($command->clockedInAt !== null) {
@@ -228,6 +233,21 @@ final readonly class CorrectShiftHandler
             $times = $times->withClockOut($command->clockedOutAt);
         }
 
-        return $times;
+        return $this->withClosure($command, $times);
+    }
+
+    /**
+     * Como termino el tramo (`ends_in_break`, RN-05, 2.3.0): sin declararlo se
+     * conserva el de antes —o salida, si la correccion cierra un tramo abierto—.
+     * Declarar la pausa en un tramo que sigue abierto es un estado imposible y
+     * lo rechaza `ShiftTimes` (`422`).
+     */
+    private function withClosure(CorrectShiftCommand $command, ShiftTimes $times): ShiftTimes
+    {
+        return match (true) {
+            $command->endsInBreak === true => $times->withClosure(EntryClosure::BREAK_START),
+            $command->endsInBreak === false && ! $times->isOpen() => $times->withClosure(EntryClosure::CLOCK_OUT),
+            default => $times,
+        };
     }
 }

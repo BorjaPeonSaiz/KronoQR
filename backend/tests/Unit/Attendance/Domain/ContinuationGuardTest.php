@@ -8,6 +8,7 @@ use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
@@ -34,13 +35,17 @@ use Tests\Support\Time\Instants;
  */
 
 /** Da de alta un tramo cerrado en la jornada, con la cota de 12 h. */
-function continuacionAlta(WorkDay $workDay, string $desdeMadrid, ?string $hastaMadrid): ShiftEntry
+function continuacionAlta(WorkDay $workDay, string $desdeMadrid, ?string $hastaMadrid, bool $terminaEnPausa = false): ShiftEntry
 {
     return $workDay->addEntry(
-        'shift-entry-nuevo',
+        'shift-entry-nuevo-'.$desdeMadrid,
         $hastaMadrid === null
             ? ShiftTimes::open(Instants::inMadrid($desdeMadrid))
-            : ShiftTimes::closed(Instants::inMadrid($desdeMadrid), Instants::inMadrid($hastaMadrid)),
+            : ShiftTimes::closed(
+                Instants::inMadrid($desdeMadrid),
+                Instants::inMadrid($hastaMadrid),
+                $terminaEnPausa ? EntryClosure::BREAK_START : EntryClosure::CLOCK_OUT,
+            ),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -74,7 +79,10 @@ function continuacionRechazo(Closure $accion): EntryDoesNotContinueWorkDay
     throw new RuntimeException('Se esperaba EntryDoesNotContinueWorkDay y no se lanzo nada.');
 }
 
-/** La jornada del 10 de octubre con un tramo de 08:00 a 15:00. */
+/**
+ * La jornada del 10 de octubre con un tramo de 08:00 a 15:00 que termino en
+ * pausa: la cota es lo unico que decide si el tramo del dia siguiente continua.
+ */
 function continuacionJornadaDelDiez(): WorkDay
 {
     return WorkDayFactory::new()
@@ -82,7 +90,7 @@ function continuacionJornadaDelDiez(): WorkDay
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-10-10 08:00'),
             Instants::inMadrid('2026-10-10 15:00'),
-        ))
+        )->endingInBreak())
         ->build();
 }
 
@@ -187,7 +195,7 @@ it('rechaza colgar de la jornada del 10 un tramo del 13, en el alta y en la corr
 it('admite el turno de noche y la vuelta de su pausa de madrugada', function (): void {
     // Regla dura 4: un tramo que empieza el dia de la jornada no tiene cota.
     $noche = WorkDayFactory::new()->onWorkDate('2026-03-14')->build();
-    $turno = continuacionAlta($noche, '2026-03-14 22:00', '2026-03-15 02:00');
+    $turno = continuacionAlta($noche, '2026-03-14 22:00', '2026-03-15 02:00', terminaEnPausa: true);
 
     // Y la vuelta a las 02:30 continua la jornada del 14 (ADR-024).
     $vuelta = continuacionAlta($noche, '2026-03-15 02:30', '2026-03-15 06:00');
@@ -200,13 +208,14 @@ it('admite el turno de noche y la vuelta de su pausa de madrugada', function ():
 it('rechaza acortar una salida si la vuelta del dia siguiente queda en la cota o mas alla', function (string $salida, bool $admite): void {
     // La vuelta de las 02:30 del 15 continua el tramo de 08:00 a 15:00 del 14
     // (11 h 30 min). Adelantar la salida estira ese hueco: a las 14:30 son
-    // 12 h justas y la vuelta deja de continuar la jornada.
+    // 12 h justas y la vuelta deja de continuar la jornada. El tramo termina
+    // en pausa antes y despues: lo que se prueba es la cota.
     $jornada = WorkDayFactory::new()
         ->onWorkDate('2026-03-14')
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 08:00'),
             Instants::inMadrid('2026-03-14 15:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-15 02:30'),
             Instants::inMadrid('2026-03-15 04:00'),
@@ -216,6 +225,7 @@ it('rechaza acortar una salida si la vuelta del dia siguiente queda en la cota o
     $correccion = fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-1', ShiftTimes::closed(
         Instants::inMadrid('2026-03-14 08:00'),
         Instants::inMadrid($salida),
+        EntryClosure::BREAK_START,
     ));
 
     if ($admite) {
@@ -239,21 +249,22 @@ it('rechaza acortar una salida si la vuelta del dia siguiente queda en la cota o
 it('rechaza mover un tramo si el que venia detras deja de continuar la jornada', function (): void {
     // El tramo de 02:00 del 15 continua el de 18:00 a 23:00 del 14 (3 h). Si
     // ese tramo se mueve detras de el, su anterior pasa a ser el de 06:00 a
-    // 08:00 del 14, a 18 h: la vuelta ya no es de esta jornada.
+    // 08:00 del 14, a 18 h: la vuelta ya no es de esta jornada. Todos terminan
+    // en pausa: lo que se prueba es la cota.
     $jornada = WorkDayFactory::new()
         ->onWorkDate('2026-03-14')
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 06:00'),
             Instants::inMadrid('2026-03-14 08:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 18:00'),
             Instants::inMadrid('2026-03-14 23:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-15 02:00'),
             Instants::inMadrid('2026-03-15 04:00'),
-        ))
+        )->endingInBreak())
         ->build();
 
     $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-2', ShiftTimes::closed(
@@ -328,7 +339,7 @@ it('mide la cota en horas reales la noche del cambio de hora de octubre', functi
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::utc('2026-10-24 16:00'),
             Instants::utc('2026-10-24 23:30'),
-        ))
+        )->endingInBreak())
         ->build();
 
     $alta = fn (): ShiftEntry => $jornada->addEntry(
@@ -382,11 +393,11 @@ function continuacionJornadaConVuelta(string $vueltaMadrid): WorkDay
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 08:00'),
             Instants::inMadrid('2026-03-14 15:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 18:00'),
             Instants::inMadrid('2026-03-14 23:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid($vueltaMadrid),
             Instants::inMadrid('2026-03-15 06:00'),
@@ -548,3 +559,106 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
     expect($corrigiendo?->start)->toEqual(Instants::inMadrid('2026-03-15 00:00'))
         ->and($corrigiendo?->end)->toEqual(Instants::inMadrid('2026-03-15 01:30'));
 })->group('RN-05', 'RF-PA-04');
+
+// --- Solo una pausa continua la jornada, y como mucho hasta el dia siguiente (2.3.0)
+
+it('no deja encadenar dos turnos de dias seguidos sin pausa', function (): void {
+    // 10 de 08:00 a 20:00 y 11 de 07:00 a 19:00: 11 h entre medias, menos que
+    // la cota, pero el primero termino en salida. Si se admitiera, las dos
+    // jornadas serian una y el descanso insuficiente no se veria (RN-10).
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-10-10')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-10-10 08:00'),
+            Instants::inMadrid('2026-10-10 20:00'),
+        ))
+        ->build();
+
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAlta($jornada, '2026-10-11 07:00', '2026-10-11 19:00'));
+
+    expect($rechazo->mark)->toBe(FutureMark::ClockIn)
+        ->and($rechazo->translationKey)->toBe('attendance.errors.entry_not_after_break')
+        ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10'])
+        ->and($rechazo->getMessage())->toBe('A shift entry starting at 2026-10-11T05:00:00+00:00 does not continue '
+            .'work day 2026-10-10: the previous entry did not end in a break (RN-05).')
+        ->and($jornada->shiftCount())->toBe(1);
+})->group('RN-05', 'RF-PA-04', 'RN-10');
+
+it('no deja encadenar con pausas mas alla del dia siguiente', function (): void {
+    // Pausa en todos: el 10 de 20:00 a 23:00, el 11 de 08:00 a 20:00 (9 h
+    // despues) y el 12 a las 07:00 (11 h despues). Cada hueco cabe en la cota,
+    // pero la jornada del 10 solo llega hasta el 11.
+    $jornada = WorkDayFactory::new()->onWorkDate('2026-10-10')->build();
+    continuacionAlta($jornada, '2026-10-10 20:00', '2026-10-10 23:00', terminaEnPausa: true);
+    continuacionAlta($jornada, '2026-10-11 08:00', '2026-10-11 20:00', terminaEnPausa: true);
+
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAlta($jornada, '2026-10-12 07:00', '2026-10-12 09:00', terminaEnPausa: true));
+
+    expect($rechazo->translationKey)->toBe('attendance.errors.entry_beyond_next_day')
+        ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10', 'next_day' => '2026-10-11'])
+        ->and($rechazo->getMessage())->toBe('A shift entry starting at 2026-10-12T05:00:00+00:00 does not continue '
+            .'work day 2026-10-10: a work day only continues until 2026-10-11 (RN-05).')
+        ->and($jornada->shiftCount())->toBe(2);
+})->group('RN-05', 'RF-PA-04', 'RN-10');
+
+it('admite la vuelta de una pausa que cruza la medianoche', function (): void {
+    // Pausa a las 23:30 y vuelta a las 00:30: el quiosco lo continua, y el
+    // panel tambien.
+    $jornada = WorkDayFactory::new()->onWorkDate('2026-10-10')->build();
+    continuacionAlta($jornada, '2026-10-10 18:00', '2026-10-10 23:30', terminaEnPausa: true);
+    $vuelta = continuacionAlta($jornada, '2026-10-11 00:30', '2026-10-11 02:00');
+
+    expect($vuelta->workDate()->isoDate)->toBe('2026-10-10')
+        ->and($jornada->shiftCount())->toBe(2);
+})->group('RN-05', 'RF-PA-04');
+
+it('admite continuar un tramo anterior escrito a mano que se declaro terminado en pausa', function (): void {
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-10-10')
+        ->withShift(ShiftEntryFactory::new()
+            ->workedBetween(Instants::inMadrid('2026-10-10 22:00'), Instants::inMadrid('2026-10-11 01:00'))
+            ->endingInBreak())
+        ->build();
+
+    $vuelta = continuacionAlta($jornada, '2026-10-11 01:30', '2026-10-11 05:00');
+
+    expect($vuelta->workDate()->isoDate)->toBe('2026-10-10');
+})->group('RN-05', 'RF-PA-04');
+
+it('rechaza anular la pausa intermedia si la vuelta de despues deja de continuar la jornada', function (): void {
+    // De 18:00 a 22:00 (salida), de 23:00 a 23:30 (pausa) y vuelta a las 00:30.
+    // Sin el tramo de la pausa, la vuelta seguiria a una salida.
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-10-10')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-10-10 18:00'),
+            Instants::inMadrid('2026-10-10 22:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-10-10 23:00'),
+            Instants::inMadrid('2026-10-10 23:30'),
+        )->endingInBreak())
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-10-11 00:30'),
+            Instants::inMadrid('2026-10-11 02:00'),
+        ))
+        ->build();
+
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAnulacion($jornada, 'shift-entry-2'));
+
+    expect($rechazo->translationKey)->toBe('attendance.errors.entry_not_after_break')
+        ->and($rechazo->mark)->toBe(FutureMark::ClockIn)
+        ->and($jornada->shiftCount())->toBe(3)
+        ->and($jornada->releaseEvents())->toBe([]);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('declarar la pausa en una correccion es una version nueva, aunque las horas no cambien', function (): void {
+    $jornada = continuacionJornadaDelDiez();
+    $antes = $jornada->entry('shift-entry-1')->times();
+
+    $corregido = continuacionCorreccion($jornada, 'shift-entry-1', $antes->withClosure(EntryClosure::CLOCK_OUT));
+
+    expect($corregido->version())->toBe(2)
+        ->and($corregido->closure())->toBe(EntryClosure::CLOCK_OUT)
+        ->and($corregido->clockOutSource())->toBe(ScanOrigin::MANUAL_ADMIN);
+})->group('RN-05', 'RF-PA-04', 'RN-13');

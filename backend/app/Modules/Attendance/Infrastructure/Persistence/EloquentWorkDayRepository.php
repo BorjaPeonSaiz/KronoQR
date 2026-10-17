@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
@@ -396,6 +397,11 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             'clock_out_source' => new Expression(
                 'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.clock_out_source ELSE shift_entries.clock_out_source END'
             ),
+            // Como termino el tramo (RN-05, 2.3.0): con la salida, y por la misma
+            // razon solo cuando el tramo estaba abierto.
+            'closed_by' => new Expression(
+                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.closed_by ELSE shift_entries.closed_by END'
+            ),
             'updated_at',
         ]);
     }
@@ -502,6 +508,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             'status' => $entry->status()->value,
             'clock_in_source' => $entry->clockInSource()->value,
             'clock_out_source' => $entry->clockOutSource()?->value,
+            'closed_by' => $entry->closure()?->value,
             'version' => $entry->version(),
             'created_at' => $now,
             'updated_at' => $now,
@@ -522,6 +529,8 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             $clockOutSource === null ? null : ScanOrigin::from($clockOutSource),
             ShiftEntryStatus::from($row->status),
             $row->version,
+            null,
+            $row->closed_by === null ? null : EntryClosure::from($row->closed_by),
         );
     }
 

@@ -11,6 +11,7 @@ use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
+use App\Modules\Attendance\Domain\Exception\BreakWithoutClockOut;
 use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
@@ -1058,6 +1059,19 @@ return Application::configure(basePath: dirname(__DIR__))
          * de su dia de cese. `422` en la marca, en el idioma negociado. Solo lo
          * lanzan el alta y la correccion manuales; el escaneo no pasa por aqui.
          */
+        /*
+         * RN-05 (2.3.0): un tramo abierto no puede haber terminado en pausa. El
+         * `FormRequest` del alta lo atrapa antes; esto cubre la correccion, en la
+         * que el tramo puede seguir abierto sin que la peticion lo diga.
+         */
+        $exceptions->render(static fn (BreakWithoutClockOut $exception): mixed => ProblemDetails::validationFailed([
+            'ends_in_break' => [ProblemDetails::translated(
+                'attendance.errors.break_without_clock_out',
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
+
         $exceptions->render(static fn (ShiftMarkAfterTermination $exception): mixed => ProblemDetails::validationFailed([
             $exception->mark->value => [ProblemDetails::translated(
                 $exception->translationKey,

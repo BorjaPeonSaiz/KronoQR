@@ -55,6 +55,8 @@ final class AddShiftEntryRequest extends FormRequest
             // atribuida (regla dura 3, RN-04).
             'clocked_in_at' => ['required', 'string', 'regex:'.self::UTC_PATTERN],
             'clocked_out_at' => ['nullable', 'string', 'regex:'.self::UTC_PATTERN],
+            // RN-05 (2.3.0): si el tramo termino en pausa. Solo con salida.
+            'ends_in_break' => ['sometimes', 'boolean'],
             ...$this->reasonRules(),
         ];
     }
@@ -65,6 +67,7 @@ final class AddShiftEntryRequest extends FormRequest
 
         $validator->after(function (Validator $validator): void {
             $this->validateExplanation($validator);
+            $this->validateBreakHasClockOut($validator);
         });
     }
 
@@ -86,6 +89,20 @@ final class AddShiftEntryRequest extends FormRequest
             clockedOutAt: $this->utcInstant('clocked_out_at'),
             reason: $this->correctionReason(),
             performedByUserId: $this->performedByUserId(),
+            endsInBreak: $this->boolean('ends_in_break'),
         );
+    }
+
+    /**
+     * Un tramo abierto no ha terminado de ninguna forma: declarar la pausa sin
+     * hora de salida es un estado imposible (RN-05, 2.3.0).
+     */
+    private function validateBreakHasClockOut(Validator $validator): void
+    {
+        if (! $this->boolean('ends_in_break') || $this->utcInstant('clocked_out_at') !== null) {
+            return;
+        }
+
+        $validator->errors()->add('ends_in_break', 'Solo puede terminar en pausa un tramo con hora de salida.');
     }
 }

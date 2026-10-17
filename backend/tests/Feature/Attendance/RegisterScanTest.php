@@ -887,3 +887,33 @@ it('vuelve de la pausa a la misma jornada aunque RRHH haya corregido el tramo en
         ->and($vuelta->json('worked_minutes'))->toBe(250)
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RF-AT-12', 'RN-13', 'RN-05', 'RF-PA-04');
+
+it('no continua una pausa mas alla del dia siguiente a su jornada: abre jornada nueva sin rechazar', function (): void {
+    // RN-05 (2.3.0), el tope del quiosco. Jornada del 13 de 22:00 a 02:00 y
+    // vuelta a las 02:30 del 14; pausa a las 21:00 del 14 y vuelta a las 00:30
+    // del 15 (hora de Madrid, CET). La segunda vuelta queda a 3 h 30 min de la
+    // pausa, dentro de la cota, pero el 15 ya no es la jornada del 13 ni su dia
+    // siguiente: abre la jornada del 15. El fichaje se registra igual (regla
+    // dura 19).
+    $escenario = escenarioDeFichaje('2026-03-13 21:00:00');
+
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-13T21:00:00Z')->assertOk();
+    FrozenTime::at('2026-03-14 01:00:00');
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T01:00:00Z', ['intent' => 'break_start'])->assertOk();
+    FrozenTime::at('2026-03-14 01:30:00');
+    expect(escanear($escenario, Str::uuid7()->toString(), '2026-03-14T01:30:00Z')->json('action'))->toBe('break_end');
+
+    FrozenTime::at('2026-03-14 20:00:00');
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T20:00:00Z', ['intent' => 'break_start'])->assertOk();
+
+    FrozenTime::at('2026-03-14 23:30:00');
+    $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T23:30:00Z');
+
+    $vuelta->assertOk()->assertValidResponse();
+
+    expect($vuelta->json('action'))->toBe('clock_in')
+        ->and($vuelta->json('work_date'))->toBe('2026-03-15')
+        // Los dos tramos que cerro «Pausa» quedan cerrados en pausa.
+        ->and(DB::table('shift_entries')->where('closed_by', 'break_start')->count())->toBe(2)
+        ->and(DB::table('shift_entries')->where('work_date', '2026-03-13')->count())->toBe(2);
+})->group('RF-AT-12', 'RN-05', 'RN-10');

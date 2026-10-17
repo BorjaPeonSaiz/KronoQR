@@ -59,6 +59,7 @@ function historicoParaExportar(): void
                 'status' => 'closed',
                 'clock_in_source' => 'qr_kiosk',
                 'clock_out_source' => 'qr_kiosk',
+                'closed_by' => 'clock_out',
                 'version' => 1,
                 'created_at' => $date->setTime(6, 0)->format('Y-m-d H:i:sP'),
                 'updated_at' => $date->setTime(14, 0)->format('Y-m-d H:i:sP'),

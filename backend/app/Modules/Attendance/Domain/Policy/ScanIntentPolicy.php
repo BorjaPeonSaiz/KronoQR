@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
 
 /**
@@ -78,6 +79,7 @@ use DateTimeImmutable;
  * | Si | `break_end` | — | `CLOCK_OUT` | Contradice el estado: **se cierra sin inventar una pausa que nadie declaro** |
  * | No | `break_end` | `break_start` **dentro del techo** | `BREAK_END` | Vuelve de la pausa: continua la jornada de aquel tramo (RN-05) |
  * | No | `break_end` | `break_start` en el techo o mas alla | `CLOCK_IN` | Ha pasado el descanso minimo: por RN-10 ya es otra jornada |
+ * | No | `break_end` o `auto` | `break_start` de una jornada anterior al dia de ayer | `CLOCK_IN` | Tope de RN-05 (2.3.0): una jornada solo se continua hasta el dia siguiente |
  * | No | `break_end` | `break_start` **posterior** a este escaneo | `CLOCK_IN` | Cola desordenada (regla dura 9): no se puede volver de una pausa que aun no empezo |
  * | No | `break_end` | cualquier otro | `CLOCK_IN` | No hay pausa que continuar; contradice el estado y se abre jornada |
  * | No | `auto` | `break_start` dentro del techo | `BREAK_END` | **La vuelta no anade ningun paso**: pasar la tarjeta basta |
@@ -205,6 +207,15 @@ final readonly class ScanIntentPolicy
         $continues = $lastAccepted->breakInProgressShiftEntry();
 
         if ($continues === null || ! $lastAccepted->precedes($scanAt)) {
+            return null;
+        }
+
+        // RN-05, el tope (2.3.0): una jornada se continua, como mucho, hasta el
+        // dia civil siguiente al suyo. Una vuelta posterior abre jornada nueva;
+        // nunca se rechaza (regla dura 19).
+        $workDate = $lastAccepted->workDate;
+
+        if ($workDate instanceof WorkDate && $scanAt >= $workDate->next()->endsAt()) {
             return null;
         }
 

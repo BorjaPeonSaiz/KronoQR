@@ -7,6 +7,7 @@ namespace Tests\Support\Reporting;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
@@ -58,7 +59,7 @@ final class BreakFixtures
         $workDay = WorkDay::start($employee, $site, WorkDate::fromIsoDate($workDate, Instants::madrid()));
 
         $first = $workDay->clockIn(Str::uuid7()->toString(), Instants::inMadrid($clockIn), ScanOrigin::QR_KIOSK);
-        $workDay->clockOut(Instants::inMadrid($breakStart), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+        $workDay->clockOut(Instants::inMadrid($breakStart), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard(), ClockingAction::BREAK_START);
 
         $second = $workDay->clockIn(Str::uuid7()->toString(), Instants::inMadrid($breakEnd), ScanOrigin::QR_KIOSK);
 

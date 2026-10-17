@@ -230,6 +230,8 @@ function workDayJournalIndexEntry(
         'status' => 'closed',
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => 'qr_kiosk',
+        // Con los triggers en `replica` no se rellena solo (RN-05, 2.3.0).
+        'closed_by' => 'clock_out',
         'version' => $version,
         'superseded_by_id' => null,
         'created_at' => $in,

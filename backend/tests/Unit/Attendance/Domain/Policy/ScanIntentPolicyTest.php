@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use Tests\Support\Time\Instants;
 
@@ -401,3 +402,26 @@ it('exige que el instante del escaneo llegue en UTC', function (): void {
     expect(fn (): ClockingResolution => intentPolicy()->resolve(DeclaredIntent::AUTO, false, $madrid))
         ->toThrow(InstantIsNotUtc::class);
 })->group('RF-AT-12', 'RN-04', 'RQ-01');
+
+// --- El tope del dia siguiente (RN-05, 2.3.0) --------------------------------
+
+it('no continua una pausa mas alla del dia siguiente a su jornada: abre jornada nueva', function (string $jornada, ClockingAction $esperada): void {
+    // Pausa a las 22:00 del 15 en Madrid (21:00 UTC) y vuelta a la 01:00 del
+    // 16 (00:00 UTC): 3 h, dentro de la cota. Si la pausa es de la jornada del
+    // 15, la vuelta la continua; si es de la del 14 —que ya se habia continuado
+    // el 15—, el 16 queda fuera del tope y se abre jornada nueva. Nunca se
+    // rechaza (regla dura 19).
+    $pausa = new AcceptedScan(
+        Instants::utc('2026-03-15 21:00'),
+        ClockingAction::BREAK_START,
+        'shift-entry-1',
+        WorkDate::fromIsoDate($jornada, Instants::madrid()),
+    );
+
+    $resolution = intentPolicy()->resolve(DeclaredIntent::AUTO, false, Instants::utc('2026-03-16 00:00'), $pausa);
+
+    expect($resolution->action)->toBe($esperada);
+})->with([
+    'pausa de la jornada del 15' => ['2026-03-15', ClockingAction::BREAK_END],
+    'pausa de la jornada del 14' => ['2026-03-14', ClockingAction::CLOCK_IN],
+])->group('RN-05', 'RF-AT-12', 'RN-10');

@@ -404,6 +404,7 @@ final readonly class ErrorVocabulary
         'below',
         'beta',
         'between',
+        'beyond',
         'bg',
         'bigint',
         'bind',

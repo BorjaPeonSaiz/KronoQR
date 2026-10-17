@@ -9,6 +9,7 @@ use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -52,7 +53,8 @@ function interrupcionEscenario(bool $conJornadaDelQuince): array
 
     $catorce = WorkDay::start($employee, $site, WorkDate::fromIsoDate('2026-03-14', Instants::madrid()));
     $noche = $catorce->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-14 22:00'), ScanOrigin::QR_KIOSK);
-    $catorce->clockOut(Instants::inMadrid('2026-03-15 00:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+    // Termina en pausa: sin otra jornada entre medias, la vuelta la continuaria.
+    $catorce->clockOut(Instants::inMadrid('2026-03-15 00:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard(), ClockingAction::BREAK_START);
     $repositorio->save($catorce);
 
     if ($conJornadaDelQuince) {

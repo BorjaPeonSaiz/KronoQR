@@ -28,6 +28,12 @@ return [
             .'void that shift first.',
         'void_would_change_work_date' => 'This shift opens the working day of :work_date and the next one starts on '
             .'another day: voiding it would move their hours to another working day. Void the later shifts first.',
+        'entry_not_after_break' => 'Hours starting on another day only continue the working day of :work_date if '
+            .'the previous shift ended in a break, and it did not: they belong to another working day. Record them on '
+            .'the working day they start, or declare that the previous shift ended in a break.',
+        'entry_beyond_next_day' => 'The working day of :work_date only continues until :next_day at the latest: a '
+            .'shift starting later belongs to another working day. Record it on the working day it starts.',
+        'break_without_clock_out' => 'Only a shift with a clock-out time can end in a break.',
         'mark_after_termination' => 'This person left on :terminated_on: that time falls outside their last working '
             .'day. Only hours that continue the working day of the termination date are accepted.',
     ],

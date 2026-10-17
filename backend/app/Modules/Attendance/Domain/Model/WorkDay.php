@@ -21,6 +21,7 @@ use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -217,7 +218,13 @@ final class WorkDay
         $entry = $this->openEntry()
             ?? throw NoOpenShiftEntry::forEmployeeOn($this->employeeUuid, $this->workDate->isoDate);
 
-        $entry->close($at, $origin);
+        // Una pausa deja el tramo cerrado en pausa: es lo que permite que la
+        // vuelta del dia civil siguiente continue la jornada (RN-05, 2.3.0).
+        $entry->close(
+            $at,
+            $origin,
+            $action === ClockingAction::BREAK_START ? EntryClosure::BREAK_START : EntryClosure::CLOCK_OUT,
+        );
 
         // RN-07 y RN-08. El tramo queda cerrado con sus marcas reales pase lo
         // que pase: la anomalia se marca para que una persona lo revise, nunca
@@ -861,9 +868,16 @@ final class WorkDay
      * `guardOpeningStaysOnThisWorkDate()` mira solo la entrada mas temprana; un
      * tramo que no abre la jornada podia empezar dias despues, y sus horas
      * contaban en el total de otro dia. El fichaje ya lo impedia con la cota de
-     * la vuelta de pausa (`ScanIntentPolicy`); esta guarda aplica **la misma
-     * cota** al alta y a la correccion manuales: la entrada tiene que quedar a
-     * menos del descanso minimo entre jornadas de la salida del tramo anterior.
+     * la vuelta de pausa (`ScanIntentPolicy`); esta guarda aplica **las mismas
+     * reglas** al alta y a la correccion manuales. Tienen que darse las tres:
+     *
+     * - (a) el tramo anterior **termino en pausa** (`EntryClosure::BREAK_START`);
+     * - (b) la entrada queda a menos del descanso minimo entre jornadas de la
+     *   salida de ese tramo ({@see ContinuationCeiling});
+     * - (c) la entrada cae, como mucho, el dia civil siguiente a `work_date`.
+     *
+     * Sin (a) y (c), un responsable podia encadenar los turnos de dias seguidos
+     * en una sola jornada y esconder un descanso insuficiente (RN-10).
      * Un tramo que empieza en el dia de `work_date` no tiene cota —el turno
      * 22:00 -> 06:00 sigue siendo un unico tramo del dia de inicio— y uno sin
      * tramo anterior lo decide `guardOpeningStaysOnThisWorkDate()`.
@@ -955,17 +969,22 @@ final class WorkDay
      * RN-02 ya se ha comprobado: no hay dos entradas iguales, asi que el orden
      * por entrada es total.
      *
-     * @return list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, written: bool}>
+     * @return list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>
      */
     private function marksWith(?ShiftTimes $written, ?ShiftEntry $excluding): array
     {
         $marks = $written instanceof ShiftTimes
-            ? [['in' => $written->clockedInAt, 'out' => $written->clockedOutAt, 'written' => true]]
+            ? [['in' => $written->clockedInAt, 'out' => $written->clockedOutAt, 'breaks' => $written->endsInBreak(), 'written' => true]]
             : [];
 
         foreach ($this->entries as $entry) {
             if ($entry !== $excluding) {
-                $marks[] = ['in' => $entry->clockedInAt(), 'out' => $entry->clockedOutAt(), 'written' => false];
+                $marks[] = [
+                    'in' => $entry->clockedInAt(),
+                    'out' => $entry->clockedOutAt(),
+                    'breaks' => $entry->closure() === EntryClosure::BREAK_START,
+                    'written' => false,
+                ];
             }
         }
 
@@ -975,7 +994,7 @@ final class WorkDay
     }
 
     /**
-     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, written: bool}>  $marks
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
      */
     private function writtenIndex(array $marks): int
     {
@@ -992,7 +1011,7 @@ final class WorkDay
      * El hueco que el tramo `$index` dice continuar, si empieza otro dia civil
      * y tiene un anterior cerrado.
      *
-     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, written: bool}>  $marks
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
      */
     private function gapAt(array $marks, int $index): ?TimeRange
     {
@@ -1062,7 +1081,7 @@ final class WorkDay
      * `$isWritten` dice si el tramo que no continua es el que se esta escribiendo
      * o el que le sigue, que es lo que cambia el mensaje.
      *
-     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, written: bool}>  $marks
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
      *
      * @throws EntryDoesNotContinueWorkDay
      */
@@ -1073,15 +1092,46 @@ final class WorkDay
         bool $isWritten,
         ContinuationCeiling $continuation,
     ): void {
-        $gap = $this->gapAt($marks, $index);
+        if ($index < 1 || ! isset($marks[$index])) {
+            return;
+        }
 
-        if (! $gap instanceof TimeRange || $continuation->continues($gap->start, $gap->end)) {
+        $start = $marks[$index]['in'];
+        $previous = $marks[$index - 1];
+        // Un anterior abierto no puede existir: RN-02 ya lo habria rechazado,
+        // porque un tramo sin salida pisa a todo lo que empiece despues.
+        $lastMark = $previous['out'];
+
+        if (! $lastMark instanceof DateTimeImmutable) {
+            return;
+        }
+
+        // Un tramo del dia de la jornada no continua nada: no tiene cota.
+        if (WorkDate::fromInstant($start, $this->workDate->timezone)->equals($this->workDate)) {
+            return;
+        }
+
+        $workDate = $this->workDate->isoDate;
+
+        // (c) Como mucho, el dia siguiente: sin tope, una cadena de pausas
+        // encadenaria dias sucesivos en una sola jornada.
+        if ($start >= $this->workDate->next()->endsAt()) {
+            throw EntryDoesNotContinueWorkDay::beyondNextDay($field, $workDate, $this->workDate->next()->isoDate, $lastMark, $start, $isWritten);
+        }
+
+        // (a) Solo continua una pausa, igual que en el quiosco.
+        if (! $previous['breaks']) {
+            throw EntryDoesNotContinueWorkDay::notAfterBreak($field, $workDate, $lastMark, $start, $isWritten);
+        }
+
+        // (b) Y dentro de la cota del descanso minimo entre jornadas.
+        if ($continuation->continues($lastMark, $start)) {
             return;
         }
 
         throw $isWritten
-            ? EntryDoesNotContinueWorkDay::writtenEntry($field, $this->workDate->isoDate, $gap->start, $gap->end, $continuation)
-            : EntryDoesNotContinueWorkDay::nextEntry($field, $this->workDate->isoDate, $gap->start, $gap->end, $continuation);
+            ? EntryDoesNotContinueWorkDay::writtenEntry($field, $workDate, $lastMark, $start, $continuation)
+            : EntryDoesNotContinueWorkDay::nextEntry($field, $workDate, $lastMark, $start, $continuation);
     }
 
     private function dailyTotals(DateTimeImmutable $at): DailyTotalsRecalculated

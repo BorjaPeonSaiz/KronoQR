@@ -25,6 +25,7 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
@@ -140,7 +141,13 @@ final readonly class AddShiftEntryHandler
         }
 
         $workDate = WorkDate::fromIsoDate($command->workDate, $timezone);
-        $times = ShiftTimes::of($command->clockedInAt, $command->clockedOutAt);
+        // RN-05 (2.3.0): un tramo cerrado termina en salida salvo que se declare
+        // la pausa; declararla sin salida es un estado imposible (`422`).
+        $times = ShiftTimes::of(
+            $command->clockedInAt,
+            $command->clockedOutAt,
+            $command->endsInBreak ? EntryClosure::BREAK_START : null,
+        );
         $settings = $this->settings->forSite($employee->siteId);
 
         // F1: lo que no ha ocurrido no se anota. La jornada primero, porque una

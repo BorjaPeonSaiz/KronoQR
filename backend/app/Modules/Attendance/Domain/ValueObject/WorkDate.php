@@ -98,6 +98,15 @@ final readonly class WorkDate
     }
 
     /**
+     * La fecha civil siguiente, en la misma zona. Es el tope de RN-05: una
+     * jornada solo se continua, como mucho, hasta el dia siguiente (2.3.0).
+     */
+    public function next(): self
+    {
+        return self::fromInstant($this->endsAt(), $this->timezone);
+    }
+
+    /**
      * Dos jornadas son la misma si coinciden fecha y zona. La zona cuenta: el
      * mismo `2026-03-14` de dos centros en husos distintos son dos jornadas
      * diferentes, y `daily_totals` las indexa por empleado, que pertenece a uno.

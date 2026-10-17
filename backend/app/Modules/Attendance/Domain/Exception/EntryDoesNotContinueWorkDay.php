@@ -20,7 +20,11 @@ use DateTimeImmutable;
  * contaban en el total de otro dia; para una persona de baja, ademas, horas
  * posteriores a su cese.
  *
- * **Dos casos, dos mensajes** (2.3.0):
+ * **Por que no continua**, cada causa con su mensaje (2.3.0): el tramo anterior
+ * no termino en pausa ({@see notAfterBreak()}), el tramo cae despues del dia
+ * siguiente a la jornada ({@see beyondNextDay()}), la cota del descanso minimo
+ * ({@see writtenEntry()}, {@see nextEntry()}) u otra jornada entre medias
+ * ({@see interruptedByAnotherWorkDay()}). Para la cota, dos casos:
  *
  * - {@see writtenEntry()}: el tramo que se esta escribiendo —alta o
  *   correccion— es el que no continua. Su marca es la entrada.
@@ -74,6 +78,63 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
         ContinuationCeiling $ceiling,
     ): self {
         return self::make('attendance.errors.next_entry_would_not_continue_work_day', 'The next shift entry', $mark, $workDate, $lastMark, $start, $ceiling);
+    }
+
+    /**
+     * El tramo anterior no termino en pausa: solo una pausa se continua al dia
+     * civil siguiente, igual que en el quiosco (RN-05, 2.3.0).
+     */
+    public static function notAfterBreak(
+        FutureMark $mark,
+        string $workDate,
+        DateTimeImmutable $lastMark,
+        DateTimeImmutable $start,
+        bool $isWritten,
+    ): self {
+        return new self(
+            $mark,
+            $workDate,
+            $lastMark,
+            0,
+            'attendance.errors.entry_not_after_break',
+            ['work_date' => $workDate],
+            sprintf(
+                '%s starting at %s does not continue work day %s: the previous entry did not end in a break (RN-05).',
+                $isWritten ? 'A shift entry' : 'The next shift entry',
+                $start->format(DateTimeImmutable::ATOM),
+                $workDate,
+            ),
+        );
+    }
+
+    /**
+     * El tramo empieza despues del dia siguiente a la jornada: el tope de RN-05
+     * (2.3.0). Sin el, una cadena de pausas uniria dias sucesivos en una sola
+     * jornada y esconderia un descanso insuficiente (RN-10).
+     */
+    public static function beyondNextDay(
+        FutureMark $mark,
+        string $workDate,
+        string $nextDay,
+        DateTimeImmutable $lastMark,
+        DateTimeImmutable $start,
+        bool $isWritten,
+    ): self {
+        return new self(
+            $mark,
+            $workDate,
+            $lastMark,
+            0,
+            'attendance.errors.entry_beyond_next_day',
+            ['work_date' => $workDate, 'next_day' => $nextDay],
+            sprintf(
+                '%s starting at %s does not continue work day %s: a work day only continues until %s (RN-05).',
+                $isWritten ? 'A shift entry' : 'The next shift entry',
+                $start->format(DateTimeImmutable::ATOM),
+                $workDate,
+                $nextDay,
+            ),
+        );
     }
 
     /**

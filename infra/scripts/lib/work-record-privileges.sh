@@ -47,7 +47,7 @@ readonly KQ_WORK_RECORD_TABLES_B7="shift_entries:t:f:f shift_corrections:t:f:f s
 
 # Privilegios de COLUMNA con tabla sin ellos: tabla:PRIVILEGIO:col1,col2,...
 # shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
-readonly KQ_WORK_RECORD_COLUMNS="shift_entries:UPDATE:clocked_out_at,duration_minutes,status,clock_out_source,superseded_by_id,updated_at incidents:UPDATE:status,notified_at,resolved_at,resolved_by_user_id,resolution_note,updated_at compliance_profiles:UPDATE:name,retention_years,min_rest_hours,max_daily_hours,max_weekly_hours,break_required_after_hours,week_starts_on,holiday_calendar,updated_at,updated_by_user_id sites:INSERT:name,timezone sites:UPDATE:name,timezone"
+readonly KQ_WORK_RECORD_COLUMNS="shift_entries:UPDATE:clocked_out_at,duration_minutes,status,clock_out_source,closed_by,superseded_by_id,updated_at incidents:UPDATE:status,notified_at,resolved_at,resolved_by_user_id,resolution_note,updated_at compliance_profiles:UPDATE:name,retention_years,min_rest_hours,max_daily_hours,max_weekly_hours,break_required_after_hours,week_starts_on,holiday_calendar,updated_at,updated_by_user_id sites:INSERT:name,timezone sites:UPDATE:name,timezone"
 
 # Cuenta las migraciones del registro horario aplicadas: `<bloque6>,<bloque7>` (2,0 =
 # solo el bloque 6; 2,1 = tambien el 7). Lo ejecutan update.sh y doctor.sh.

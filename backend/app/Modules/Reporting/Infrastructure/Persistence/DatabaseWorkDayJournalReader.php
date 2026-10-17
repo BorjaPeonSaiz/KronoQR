@@ -204,7 +204,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         $rows = $this->connection->select(<<<SQL
             SELECT se.id, se.uuid, se.version, se.status, se.site_id, sites.timezone,
                    se.work_date, se.clocked_in_at, se.clocked_out_at,
-                   se.duration_minutes, se.clock_in_source, se.clock_out_source,
+                   se.duration_minutes, se.clock_in_source, se.clock_out_source, se.closed_by,
                    se.created_at,
                    (SELECT ev.recorded_at FROM scan_events ev
                      WHERE ev.shift_entry_id = se.id AND ev.occurred_at = se.clocked_in_at
@@ -252,7 +252,12 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 // fila en `scan_events` en toda su cadena de versiones, y lo que
                 // de hecho ocurrio es una entrada y una salida.
                 openedBy: $mark['opened_by'] ?? JournalShiftEntry::OPENED_BY_CLOCK_IN,
-                closedBy: $this->closedBy($mark['closed_by'], $row->nullableInstant('clocked_out_at')),
+                // La columna manda desde la 2.3.0 (RN-05): un tramo escrito a mano
+                // puede declararse terminado en pausa sin escaneo que lo diga.
+                closedBy: $this->closedBy(
+                    $row->nullableString('closed_by') ?? $mark['closed_by'],
+                    $row->nullableInstant('clocked_out_at'),
+                ),
             );
         }
 

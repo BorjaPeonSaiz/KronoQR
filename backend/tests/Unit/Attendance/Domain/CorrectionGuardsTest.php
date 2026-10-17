@@ -169,7 +169,7 @@ it('permite corregir la vuelta de una pausa de madrugada sin mover la jornada', 
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 22:00'),
             Instants::inMadrid('2026-03-15 02:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-15 02:30'),
             Instants::inMadrid('2026-03-15 06:00'),

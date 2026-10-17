@@ -218,13 +218,15 @@ it('admite en la jornada del cese el turno de noche y la vuelta de su pausa de m
     $contexto = contextoDelTramoDeUnaBaja();
     DB::table('employees')->where('uuid', $contexto['employee'])->update(['terminated_at' => '2026-10-10']);
 
-    foreach ([['2026-10-10T20:00:00Z', '2026-10-11T00:00:00Z', 240], ['2026-10-11T00:30:00Z', '2026-10-11T04:00:00Z', 450]] as [$entrada, $salida, $total]) {
+    // El turno termina en pausa: es lo que deja continuarlo al dia siguiente.
+    foreach ([['2026-10-10T20:00:00Z', '2026-10-11T00:00:00Z', 240, true], ['2026-10-11T00:30:00Z', '2026-10-11T04:00:00Z', 450, false]] as [$entrada, $salida, $total, $pausa]) {
         Api::as($contexto['token'])
             ->post('/api/v1/shift-entries', [
                 'employee_uuid' => $contexto['employee'],
                 'work_date' => '2026-10-10',
                 'clocked_in_at' => $entrada,
                 'clocked_out_at' => $salida,
+                'ends_in_break' => $pausa,
                 'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
             ])
             ->assertValidResponse(201)

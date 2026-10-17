@@ -26,6 +26,12 @@ return [
             .'jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.',
         'void_would_change_work_date' => 'Este tramo abre la jornada del :work_date y el siguiente empieza otro día: '
             .'anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.',
+        'entry_not_after_break' => 'Las horas que empiezan otro día solo continúan la jornada del :work_date si el '
+            .'tramo anterior terminó en pausa, y no terminó así: son de otra jornada. Dalas de alta en la jornada en '
+            .'que empiezan, o declara que el tramo anterior terminó en pausa.',
+        'entry_beyond_next_day' => 'La jornada del :work_date solo continúa, como mucho, hasta el :next_day: un tramo '
+            .'que empieza después es de otra jornada. Dalo de alta en la jornada en que empieza.',
+        'break_without_clock_out' => 'Solo puede terminar en pausa un tramo con hora de salida.',
         'mark_after_termination' => 'Esta persona cesó el :terminated_on: esa hora queda fuera de su última jornada. '
             .'Solo se admiten horas que continúen la jornada del día de cese.',
     ],
