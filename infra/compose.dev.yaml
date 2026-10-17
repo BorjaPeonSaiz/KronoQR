@@ -602,7 +602,7 @@ services:
 
   #--- 14 · Cuadros de mando --------------------------------------------------
   grafana:
-    image: grafana/grafana:11.5.1
+    image: grafana/grafana:11.6.16
     container_name: kronoqr-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -684,7 +684,7 @@ services:
   # OTEL_EXPORTER_OTLP_ENDPOINT no tendria a donde apuntar y la traza completa
   # del fetch del quiosco a la consulta SQL no se podria seguir en Grafana.
   tempo:
-    image: grafana/tempo:2.7.1
+    image: grafana/tempo:2.10.8
     container_name: kronoqr-tempo
     entrypoint: ["/tempo"]
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
