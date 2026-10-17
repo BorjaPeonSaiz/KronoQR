@@ -3617,8 +3617,9 @@ export interface paths {
          *     **Deja asiento** (`personal_data.accessed`, dataset
          *     `legal_export_employee_search`; ADR-037, enmienda del 18-10-2026) con el
          *     criterio usado (`name_or_code` o `national_id`), el numero de personas
-         *     **devueltas** —tambien cero— y si la lista se recorto. **Nunca con el
-         *     termino buscado** (regla dura 21). El asiento se escribe antes de
+         *     **devueltas** —tambien cero—, sus `employee_uuid` (`employee_uuids`, como
+         *     mucho diez; se omite sin resultados) y si la lista se recorto. **Nunca con
+         *     el termino buscado** (regla dura 21). El asiento se escribe antes de
          *     responder: si falla, no hay respuesta (regla dura 6).
          *
          *     **No se degrada con la licencia** (ADR-019, regla dura 15): es parte de
