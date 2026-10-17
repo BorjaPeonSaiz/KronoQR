@@ -89,8 +89,12 @@ Cumple las tres condiciones —terceros, sale hacia una persona, un conjunto de 
 asiento**, y aquí el argumento de la ficha individual no vale: el `auditor` no puede listar el índice,
 así que ningún otro asiento dice que tuvo esas personas delante. El asiento es
 `personal_data.accessed` con el dataset `legal_export_employee_search`, el número de personas
-**devueltas**, el criterio (`name_or_code` o `national_id`) y si la lista se recortó. **Nunca lleva
-el término buscado**: un nombre o un DNI en `audit_log` serían el dato personal que esta decisión
+**devueltas**, el criterio (`name_or_code` o `national_id`), si la lista se recortó y
+`employee_uuids`, los `uuid` de las como mucho diez personas devueltas separados por comas —como
+`incident_digest`—, que se omite cuando no hay ninguna. Es un conjunto pequeño, así que es nominal
+por el mismo criterio que `report_export.*`: sin los `uuid` el trail diría cuántas personas vio el
+auditor, pero no cuáles, y esa es la pregunta que RL-15 obliga a contestar. **Nunca lleva el término
+buscado**: un nombre o un DNI en `audit_log` serían el dato personal que esta decisión
 prohíbe copiar (regla dura 21), y un DNI en claro, además, el documento que RL-08 no deja guardar.
 Una búsqueda sin resultados también deja asiento, con recuento cero: probar documentos hasta acertar
 es justo lo que el trail tiene que poder enseñar.
