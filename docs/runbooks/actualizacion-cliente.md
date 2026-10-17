@@ -303,6 +303,81 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
   (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`), bórralo;
   la purga horaria lo retira a los 7 días. Si sacaste alguno del servidor,
   bórralo también de donde lo guardaras.
+- **Desde la 2.3.0, el alta y la corrección manuales siguen la cota de
+  continuación de RN-05.** Los tramos escritos antes no se tocan; comprueba si
+  hay alguno que hoy se rechazaría con las consultas del [§3 bis](#3-bis-tras-actualizar-a-la-230-tramos-escritos-antes-de-la-cota-de-continuación).
+
+### 3 bis. Tras actualizar a la 2.3.0: tramos escritos antes de la cota de continuación
+
+Desde la 2.3.0, un tramo dado de alta o corregido a mano que empieza en un día
+civil distinto de su jornada solo se admite si **continúa** el tramo anterior
+—su entrada queda a menos de `min_rest_hours` de la salida de aquel—, y a una
+persona de baja ninguna marca le puede quedar a `min_rest_hours` o más del final
+de su día de cese (RN-05, RN-14, RF-PA-04). Antes no se comprobaba, así que una
+instalación puede tener tramos escritos que hoy se rechazarían. **La
+actualización no los toca** (regla dura 5): estas dos consultas, de solo
+lectura, dicen si existen. Muestran `employee_uuid`, no nombres.
+
+```bash
+docker compose exec -T postgres psql -U fichaje_app -d fichaje <<'SQL'
+-- 1. Tramos de otro día civil que no continúan su jornada (RN-05).
+WITH perfil AS (
+    SELECT s.id AS site_id, s.timezone, cp.min_rest_hours
+    FROM sites s
+    JOIN compliance_profiles cp
+      ON cp.id = COALESCE(s.compliance_profile_id,
+                          (SELECT id FROM compliance_profiles WHERE is_default))
+), vigentes AS (
+    SELECT se.uuid, se.employee_id, se.site_id, se.work_date, se.clocked_in_at,
+           LAG(se.clocked_out_at) OVER (
+               PARTITION BY se.employee_id, se.work_date ORDER BY se.clocked_in_at
+           ) AS salida_anterior
+    FROM shift_entries se
+    WHERE se.status NOT IN ('voided', 'superseded')
+)
+SELECT e.uuid AS employee_uuid, v.uuid AS shift_entry_uuid, v.work_date,
+       v.salida_anterior, v.clocked_in_at,
+       round(extract(epoch FROM v.clocked_in_at - v.salida_anterior) / 3600, 2) AS horas_de_hueco,
+       p.min_rest_hours
+FROM vigentes v
+JOIN perfil p ON p.site_id = v.site_id
+JOIN employees e ON e.id = v.employee_id
+WHERE (v.clocked_in_at AT TIME ZONE p.timezone)::date <> v.work_date
+  AND v.salida_anterior IS NOT NULL
+  AND v.clocked_in_at - v.salida_anterior >= make_interval(hours => p.min_rest_hours)
+ORDER BY v.work_date, e.uuid;
+
+-- 2. Marcas de personas de baja más allá de la cota de su día de cese (RN-05, RN-14).
+WITH perfil AS (
+    SELECT s.id AS site_id, s.timezone, cp.min_rest_hours
+    FROM sites s
+    JOIN compliance_profiles cp
+      ON cp.id = COALESCE(s.compliance_profile_id,
+                          (SELECT id FROM compliance_profiles WHERE is_default))
+)
+SELECT e.uuid AS employee_uuid, se.uuid AS shift_entry_uuid, se.work_date,
+       e.terminated_at, se.clocked_in_at, se.clocked_out_at,
+       ((e.terminated_at + 1)::timestamp AT TIME ZONE p.timezone)
+           + make_interval(hours => p.min_rest_hours) AS limite
+FROM shift_entries se
+JOIN employees e ON e.id = se.employee_id
+JOIN perfil p ON p.site_id = se.site_id
+WHERE se.status NOT IN ('voided', 'superseded')
+  AND e.status = 'terminated'
+  AND e.terminated_at IS NOT NULL
+  AND GREATEST(se.clocked_in_at, COALESCE(se.clocked_out_at, se.clocked_in_at))
+      >= ((e.terminated_at + 1)::timestamp AT TIME ZONE p.timezone)
+         + make_interval(hours => p.min_rest_hours)
+ORDER BY se.work_date, e.uuid;
+SQL
+```
+
+**Cero filas en las dos** es lo normal y no hay nada más que hacer. **Si sale
+alguna, no es una avería ni se arregla con SQL**: pásale la lista a RRHH. Cada
+fila es un tramo que hay que revisar con la persona y, si sus horas son de otra
+jornada, anularlo y darlo de alta en la suya, dos correcciones con su motivo
+(RF-PA-04, RN-13). Si la marca es posterior al cese, RRHH decide si la baja se
+registró con la fecha correcta.
 
 ---
 
