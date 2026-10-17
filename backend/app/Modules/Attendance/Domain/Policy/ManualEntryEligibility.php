@@ -12,7 +12,6 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
-use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -93,65 +92,56 @@ final readonly class ManualEntryEligibility
      * RN-14, RF-PA-04). Para cualquier otra no comprueba nada.
      *
      * **El final del dia del cese** es la medianoche del dia siguiente en la zona
-     * del centro, y la cota se suma en segundos reales: el turno de noche del
+     * del centro ({@see WorkDate::endsAt()}), y la cota se suma en segundos
+     * reales ({@see ContinuationCeiling::limitAfter()}): el turno de noche del
      * ultimo dia y la vuelta de su pausa de madrugada caben, una entrada tres
      * dias despues no. Es la misma cota que acota la vuelta de una pausa en el
-     * quiosco ({@see ContinuationCeiling}), asi que una marca que el quiosco no
-     * habria atribuido a la jornada del cese tampoco entra por el panel.
+     * quiosco, asi que una marca que el quiosco no habria atribuido a la jornada
+     * del cese tampoco entra por el panel.
+     *
+     * **En una correccion solo se miran las marcas que cambian** (`$previous`,
+     * las del tramo antes de corregir), igual que la guarda del agregado es
+     * local: una marca que ya estaba escrita no impide corregir la otra.
      *
      * @throws ShiftMarkAfterTermination
      */
-    public function assertTimesAllowed(ShiftTimes $times, ContinuationCeiling $continuation, DateTimeZone $timezone): void
-    {
+    public function assertTimesAllowed(
+        ShiftTimes $times,
+        ContinuationCeiling $continuation,
+        DateTimeZone $timezone,
+        ?ShiftTimes $previous = null,
+    ): void {
         $terminatedOn = $this->employee->terminatedOn;
 
         if ($this->employee->status !== EmploymentStatus::TERMINATED || $terminatedOn === null) {
             return;
         }
 
-        $endOfTerminationDay = $this->endOfDay($terminatedOn, $timezone);
+        $limit = $continuation->limitAfter(WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt());
 
-        $this->assertMark(FutureMark::ClockIn, $times->clockedInAt, $endOfTerminationDay, $continuation, $terminatedOn);
-
-        if ($times->clockedOutAt instanceof DateTimeImmutable) {
-            $this->assertMark(FutureMark::ClockOut, $times->clockedOutAt, $endOfTerminationDay, $continuation, $terminatedOn);
+        if (! self::sameInstant($times->clockedInAt, $previous?->clockedInAt)) {
+            self::assertMark(FutureMark::ClockIn, $times->clockedInAt, $limit, $terminatedOn);
         }
+
+        if ($times->clockedOutAt instanceof DateTimeImmutable && ! self::sameInstant($times->clockedOutAt, $previous?->clockedOutAt)) {
+            self::assertMark(FutureMark::ClockOut, $times->clockedOutAt, $limit, $terminatedOn);
+        }
+    }
+
+    private static function sameInstant(DateTimeImmutable $mark, ?DateTimeImmutable $previous): bool
+    {
+        return $previous instanceof DateTimeImmutable && $previous->getTimestamp() === $mark->getTimestamp();
     }
 
     /**
      * @throws ShiftMarkAfterTermination
      */
-    private function assertMark(
-        FutureMark $mark,
-        DateTimeImmutable $instant,
-        DateTimeImmutable $endOfTerminationDay,
-        ContinuationCeiling $continuation,
-        string $terminatedOn,
-    ): void {
-        if ($continuation->continues($endOfTerminationDay, $instant)) {
+    private static function assertMark(FutureMark $mark, DateTimeImmutable $instant, DateTimeImmutable $limit, string $terminatedOn): void
+    {
+        if ($instant->getTimestamp() < $limit->getTimestamp()) {
             return;
         }
 
-        throw ShiftMarkAfterTermination::instant(
-            $mark,
-            $instant,
-            $endOfTerminationDay->add(new DateInterval('PT'.$continuation->minimumRest->minutes.'M')),
-            $terminatedOn,
-        );
-    }
-
-    /**
-     * La medianoche que cierra el dia civil `$isoDate` en la zona del centro, en
-     * UTC. Es un instante explicito, no el reloj (regla dura 2): el dia siguiente
-     * se calcula sobre la fecha civil, a mediodia UTC para que ningun desfase lo
-     * cambie, y `WorkDate::startsAt()` resuelve el cambio de hora (RN-09).
-     */
-    private function endOfDay(string $isoDate, DateTimeZone $timezone): DateTimeImmutable
-    {
-        $nextDay = new DateTimeImmutable($isoDate.' 12:00:00', new DateTimeZone('UTC'))
-            ->add(new DateInterval('P1D'))
-            ->format('Y-m-d');
-
-        return WorkDate::fromIsoDate($nextDay, $timezone)->startsAt();
+        throw ShiftMarkAfterTermination::instant($mark, $instant, $limit, $terminatedOn);
     }
 }

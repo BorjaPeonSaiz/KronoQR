@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
+use DateInterval;
 use DateTimeImmutable;
 
 /**
@@ -19,13 +20,13 @@ use DateTimeImmutable;
  * no ha podido haber un descanso entre jornadas y sigue siendo la misma; con el
  * umbral o mas, **por definicion legal ya es otra**.
  *
- * **Una sola semantica para los tres caminos que la aplican**: la vuelta de una
- * pausa en el quiosco ({@see ScanIntentPolicy}),
- * el tramo escrito a mano que continua una jornada (`WorkDay::addEntry()` y
- * `correctEntry()`) y el limite de las marcas de una persona de baja
- * ({@see ManualEntryEligibility}). Si cada
- * uno comparase por su cuenta, el dia que uno escribiera `<=` donde va `<` el
- * mismo hueco seria pausa en el quiosco y jornada nueva en el panel.
+ * **Una sola semantica para todos los caminos que la aplican**: la vuelta de
+ * una pausa en el quiosco ({@see ScanIntentPolicy}),
+ * el alta, la correccion y la anulacion manuales (`WorkDay::addEntry()`,
+ * `correctEntry()` y `voidEntry()`) y el limite de las marcas de una persona de
+ * baja ({@see ManualEntryEligibility}). Si
+ * cada uno comparase por su cuenta, el dia que uno escribiera `<=` donde va `<`
+ * el mismo hueco seria pausa en el quiosco y jornada nueva en el panel.
  *
  * **Estricta y en segundos reales**: con 12 h, 11 h 59 min 59 s continua y
  * 12 h 00 exactas ya no. Segundos reales porque es aritmetica sobre instantes
@@ -45,8 +46,17 @@ final readonly class ContinuationCeiling
     }
 
     /**
+     * El primer instante que ya **no** continua una jornada cuya ultima marca
+     * fue `$lastMark`. Es el unico sitio donde se suma la cota.
+     */
+    public function limitAfter(DateTimeImmutable $lastMark): DateTimeImmutable
+    {
+        return $lastMark->add(new DateInterval('PT'.$this->minimumRest->minutes.'M'));
+    }
+
+    /**
      * Si una marca que empieza en `$start` continua la jornada cuya ultima marca
-     * fue `$lastMark`.
+     * fue `$lastMark`: es anterior a {@see limitAfter()}.
      *
      * Una marca anterior o simultanea a `$lastMark` continua siempre: no ha
      * pasado ningun descanso. Quien necesita ademas el orden —la cola offline
@@ -54,6 +64,16 @@ final readonly class ContinuationCeiling
      */
     public function continues(DateTimeImmutable $lastMark, DateTimeImmutable $start): bool
     {
-        return $start->getTimestamp() - $lastMark->getTimestamp() < $this->minimumRest->minutes * 60;
+        return $start->getTimestamp() < $this->limitAfter($lastMark)->getTimestamp();
+    }
+
+    /** La cota en horas, para los mensajes: «12 h». */
+    public function hours(): string
+    {
+        $minutes = $this->minimumRest->minutes;
+
+        return $minutes % 60 === 0
+            ? (string) intdiv($minutes, 60)
+            : rtrim(rtrim(number_format($minutes / 60, 2, '.', ''), '0'), '.');
     }
 }

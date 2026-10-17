@@ -289,6 +289,27 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      * Se descartan los tramos sin salida —el turno abierto— porque ese caso es
      * RN-01 y se resuelve reintentando (ver el puerto).
      */
+    public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool
+    {
+        $employeeId = $this->employeeIdOf($employeeUuid);
+
+        if ($employeeId === null) {
+            return false;
+        }
+
+        // Mismo rango `[)` que `shift_entries_no_overlap`, con lo que el indice
+        // GiST de la restriccion de exclusion sirve tambien a esta consulta.
+        return ShiftEntry::query()
+            ->where('employee_id', $employeeId)
+            ->whereNotIn('status', self::historicalStatuses())
+            ->where('work_date', '<>', $workDate->isoDate)
+            ->whereRaw(
+                'tstzrange(clocked_in_at, clocked_out_at) && tstzrange(?::timestamptz, ?::timestamptz)',
+                [$this->toTimestamp($gap->start), $this->toTimestamp($gap->end)],
+            )
+            ->exists();
+    }
+
     public function closedEntryEndingAfter(string $employeeUuid, DateTimeImmutable $at): ?TimeRange
     {
         $employeeId = $this->employeeIdOf($employeeUuid);

@@ -299,6 +299,26 @@ function isWorkDateChangeProblem(caught: ApiError): boolean {
   return caught.status === 422 && caught.problem?.type === WORK_DATE_CHANGE_PROBLEM_TYPE
 }
 
+/**
+ * Si el `422` de cambio de jornada se cuelga de la entrada que se tecleo: solo
+ * entonces se pinta como pista de ese campo. Al anular no hay campo de hora, y
+ * cuando lo que se rompe es la vuelta siguiente el servidor lo cuelga de la
+ * salida (RN-05, 2.3.0): en esos casos se enseña su mensaje, que dice qué hacer.
+ */
+function pointsAtTypedClockIn(caught: ApiError): boolean {
+  return props.mode !== 'void' && caught.fieldErrors['clocked_out_at'] === undefined
+}
+
+/** Al anular, el error de cambio de jornada no tiene campo de hora en el formulario. */
+const errorFieldLabels = computed<Readonly<Record<string, string>>>(() =>
+  props.mode === 'void'
+    ? {
+        employee_uuid: t('corrections.dialog.employeeLabel'),
+        clocked_in_at: t('corrections.dialog.workDateLabel'),
+      }
+    : { employee_uuid: t('corrections.dialog.employeeLabel') },
+)
+
 /** `2026-08-14, 06:00`, tal cual lo escribió quien rellena el formulario: sin convertir nada. */
 function formatTyped(value: string): string {
   const [date, time] = value.split('T')
@@ -468,7 +488,7 @@ async function submit(): Promise<void> {
       if (kind === 'superseded') {
         emit('stale')
       }
-    } else if (isWorkDateChangeProblem(caught)) {
+    } else if (isWorkDateChangeProblem(caught) && pointsAtTypedClockIn(caught)) {
       workDateChangeNotice.value = true
     } else {
       error.value = caught
@@ -509,7 +529,7 @@ const inputClass =
       <ErrorNotice
         v-if="error !== null"
         :error="error"
-        :field-labels="{ employee_uuid: t('corrections.dialog.employeeLabel') }"
+        :field-labels="errorFieldLabels"
         data-test="dialog-error"
       />
 

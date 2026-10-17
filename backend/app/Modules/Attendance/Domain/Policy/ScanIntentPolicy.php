@@ -9,7 +9,6 @@ use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
-use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use DateTimeImmutable;
 
 /**
@@ -123,19 +122,6 @@ final readonly class ScanIntentPolicy
      *                                                         aplican en `WorkDay` (RN-05, 2.3.0)
      */
     public function __construct(public ContinuationCeiling $breakContinuationCeiling) {}
-
-    /**
-     * El techo de continuacion, escrito como lo que es: el descanso minimo entre
-     * jornadas de RN-10.
-     *
-     * Constructor con nombre para que el punto de construccion se lea como la
-     * regla y no como un numero: `allowingBreaksShorterThan($policy->minimumRest)`
-     * dice de donde sale el limite, `new ScanIntentPolicy($x)` no.
-     */
-    public static function allowingBreaksShorterThan(WorkedDuration $minimumRestBetweenWorkDays): self
-    {
-        return new self(ContinuationCeiling::belowRestOf($minimumRestBetweenWorkDays));
-    }
 
     /**
      * La accion que corresponde a este escaneo.

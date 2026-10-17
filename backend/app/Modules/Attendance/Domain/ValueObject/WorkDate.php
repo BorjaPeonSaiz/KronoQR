@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Exception\InvalidWorkDate;
+use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -78,6 +79,21 @@ final readonly class WorkDate
     public function startsAt(): DateTimeImmutable
     {
         return (new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone))
+            ->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
+     * El primer instante del dia civil **siguiente** en su zona, en UTC: donde
+     * acaba esta fecha.
+     *
+     * Lo usa la cota del dia del cese (RN-05, RN-14). Se suma un dia de
+     * calendario a la medianoche local, no 24 h: el dia del cambio de hora tiene
+     * 23 o 25 (RN-09), y PHP conserva la hora de reloj al sumar `P1D`.
+     */
+    public function endsAt(): DateTimeImmutable
+    {
+        return new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone)
+            ->add(new DateInterval('P1D'))
             ->setTimezone(new DateTimeZone('UTC'));
     }
 

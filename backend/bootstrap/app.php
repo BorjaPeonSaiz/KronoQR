@@ -830,11 +830,20 @@ return Application::configure(basePath: dirname(__DIR__))
          * resolverlo. Mover horas de un dia a otro son dos actos separados y
          * auditados, no un efecto lateral de un `PATCH` (RN-05, regla dura 4).
          */
+        //
+        // Al anular el tramo que abre la jornada (2.3.0), el texto es otro: lo
+        // que hay que hacer es anular antes los que vienen detras.
         $exceptions->render(static fn (CorrectionWouldChangeWorkDate $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
             'clocked_in_at' => [
-                'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, '
-                .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '
-                .'cada una con su motivo.',
+                $exception->byVoiding
+                    ? ProblemDetails::translated(
+                        'attendance.errors.void_would_change_work_date',
+                        ['work_date' => $exception->workDate],
+                        $exception->getMessage(),
+                    )
+                    : 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, '
+                    .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '
+                    .'cada una con su motivo.',
             ],
         ]));
 
@@ -843,9 +852,9 @@ return Application::configure(basePath: dirname(__DIR__))
          * que no continua la jornada. Es la misma familia que la de arriba —sus
          * horas son de otra jornada— y por eso comparte su `type`; el campo es
          * la marca que hay que corregir: la entrada del tramo, o su salida si lo
-         * que se rompe es la vuelta posterior. Solo lo lanzan el alta y la
-         * correccion manuales; el fichaje aplica la misma cota sin rechazar
-         * (regla dura 19).
+         * que se rompe es la vuelta posterior; al anular, la entrada del tramo
+         * siguiente. Solo lo lanzan el alta, la correccion y la anulacion
+         * manuales; el fichaje aplica la misma cota sin rechazar (regla dura 19).
          */
         $exceptions->render(static fn (EntryDoesNotContinueWorkDay $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
             $exception->mark->value => [ProblemDetails::translated(

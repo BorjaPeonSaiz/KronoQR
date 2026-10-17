@@ -529,6 +529,41 @@ it('rechaza anular un tramo intermedio si la vuelta de despues deja de continuar
     }
 })->group('RN-05', 'RF-PA-04', 'RN-13');
 
+it('rechaza anular el tramo que abre la jornada si el siguiente empieza otro dia, sin escribir nada', function (): void {
+    // RN-05 (2.3.0). Turno de 22:00 a 02:00 de Madrid y vuelta de 02:30 a 06:00:
+    // sin el turno, la jornada del 14 quedaria abierta por un tramo del 15.
+    $contexto = contextoDeCorreccion();
+    $tramos = [];
+
+    foreach ([['2026-03-14T21:00:00Z', '2026-03-15T01:00:00Z'], ['2026-03-15T01:30:00Z', '2026-03-15T05:00:00Z']] as [$entrada, $salida]) {
+        $tramos[] = Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => '2026-03-14',
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->json('shift_entry_uuid');
+    }
+
+    $antes = [DB::table('shift_corrections')->count(), DB::table('audit_log')->count(), DB::table('daily_totals')->value('total_minutes')];
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$tramos[0].'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('errors.clocked_in_at.0', 'Este tramo abre la jornada del 2026-03-14 y el siguiente empieza '
+            .'otro día: anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.');
+
+    expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
+        ->and([DB::table('shift_corrections')->count(), DB::table('audit_log')->count(), DB::table('daily_totals')->value('total_minutes')])->toBe($antes);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
 it('corrige las dos marcas a la vez aunque la entrada nueva sea posterior a la salida antigua', function (): void {
     // Con las dos marcas en la orden, RN-03 se comprueba sobre ellas y no sobre
     // una mezcla con la marca vieja (2.3.0): mover el tramo de 06:00-14:00 a
@@ -570,9 +605,10 @@ it('rechaza colgar de una jornada un tramo de otro dia que no la continua, tambi
         ->assertValidRequest()
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
-        ->assertJsonPath('errors.clocked_in_at.0', 'Those hours do not belong to the working day of 2026-03-14: '
-            .'the shift starts on another day and 720 minutes or more pass between the previous clock-out and '
-            .'its clock-in, the minimum rest between working days. Record them on the working day they start.');
+        ->assertJsonPath('errors.clocked_in_at.0', 'The hours of this shift belong to another working day: it starts '
+            .'on another day and does not continue the working day of 2026-03-14, because 12 h or more (the '
+            .'minimum rest between working days) pass between the previous clock-out and its clock-in, or a shift '
+            .'of another working day lies in between. Record it on the working day it starts.');
 
     expect(DB::table('shift_entries')->count())->toBe(1)
         ->and(DB::table('shift_corrections')->count())->toBe(0)

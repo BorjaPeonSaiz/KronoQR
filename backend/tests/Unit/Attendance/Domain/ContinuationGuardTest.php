@@ -136,7 +136,7 @@ it('admite la entrada del dia siguiente un segundo antes de la cota y la rechaza
         ->and($rechazo->minimumRestMinutes)->toBe(720)
         ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-10-10 15:00'))
         ->and($rechazo->translationKey)->toBe('attendance.errors.entry_does_not_continue_work_day')
-        ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10', 'minutes' => 720])
+        ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10', 'hours' => '12'])
         // Tecnico, en ingles y sin datos de la persona (regla dura 21).
         ->and($rechazo->getMessage())->toBe(
             'A shift entry starting at 2026-10-11T01:00:00+00:00 does not continue work day 2026-10-10: the '
@@ -224,7 +224,11 @@ it('rechaza acortar una salida si la vuelta del dia siguiente queda en la cota o
         return;
     }
 
-    expect(continuacionRechazo($correccion)->mark)->toBe(FutureMark::ClockOut)
+    $rechazo = continuacionRechazo($correccion);
+
+    // El que deja de continuar es el siguiente, y el mensaje lo dice.
+    expect($rechazo->mark)->toBe(FutureMark::ClockOut)
+        ->and($rechazo->translationKey)->toBe('attendance.errors.next_entry_would_not_continue_work_day')
         ->and($jornada->entry('shift-entry-1')->version())->toBe(1);
 })->with([
     'un minuto antes de la cota' => ['2026-03-14 14:31', true],
@@ -259,6 +263,7 @@ it('rechaza mover un tramo si el que venia detras deja de continuar la jornada',
 
     expect($rechazo->mark)->toBe(FutureMark::ClockIn)
         ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-14 08:00'))
+        ->and($rechazo->translationKey)->toBe('attendance.errors.next_entry_would_not_continue_work_day')
         ->and($jornada->shiftCount())->toBe(3);
 })->group('RN-05', 'RF-PA-04');
 
@@ -450,3 +455,96 @@ it('admite anular un tramo cuyo siguiente es del dia de la jornada', function ()
     expect(continuacionAnulacion($jornada, 'shift-entry-2')->status()->value)->toBe('voided')
         ->and($jornada->shiftCount())->toBe(2);
 })->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('rechaza anular el tramo que abre la jornada si el siguiente empieza otro dia, sin tocar nada', function (): void {
+    // Turno de noche del 14 con su vuelta a las 02:30 del 15. Sin el turno, la
+    // jornada del 14 quedaria abierta por un tramo del 15 (RN-05).
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 22:00'),
+            Instants::inMadrid('2026-03-15 02:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-15 02:30'),
+            Instants::inMadrid('2026-03-15 06:00'),
+        ))
+        ->build();
+
+    try {
+        continuacionAnulacion($jornada, 'shift-entry-1');
+        throw new RuntimeException('Se esperaba CorrectionWouldChangeWorkDate.');
+    } catch (CorrectionWouldChangeWorkDate $rechazo) {
+        expect($rechazo->byVoiding)->toBeTrue()
+            ->and($rechazo->workDate)->toBe('2026-03-14');
+    }
+
+    expect($jornada->shiftCount())->toBe(2)
+        ->and($jornada->retiredEntries())->toBe([])
+        ->and($jornada->releaseEvents())->toBe([]);
+
+    // De atras hacia delante si se puede.
+    continuacionAnulacion($jornada, 'shift-entry-2');
+
+    expect(continuacionAnulacion($jornada, 'shift-entry-1')->status()->value)->toBe('voided')
+        ->and($jornada->shiftCount())->toBe(0);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('admite anular el tramo que abre la jornada si el siguiente tambien empieza ese dia', function (): void {
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 06:00'),
+            Instants::inMadrid('2026-03-14 07:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 23:00'),
+            Instants::inMadrid('2026-03-15 02:00'),
+        ))
+        ->build();
+
+    expect(continuacionAnulacion($jornada, 'shift-entry-1')->status()->value)->toBe('voided');
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continua nada', function (): void {
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 22:00'),
+            Instants::inMadrid('2026-03-15 00:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-15 01:00'),
+            Instants::inMadrid('2026-03-15 03:00'),
+        ))
+        ->build();
+
+    $hueco = $jornada->continuationGapFor(ShiftTimes::closed(
+        Instants::inMadrid('2026-03-15 05:00'),
+        Instants::inMadrid('2026-03-15 07:00'),
+    ));
+
+    expect($hueco?->start)->toEqual(Instants::inMadrid('2026-03-15 03:00'))
+        ->and($hueco?->end)->toEqual(Instants::inMadrid('2026-03-15 05:00'))
+        // Un tramo del dia de la jornada no continua nada: no tiene hueco.
+        ->and($jornada->continuationGapFor(ShiftTimes::closed(
+            Instants::inMadrid('2026-03-14 18:00'),
+            Instants::inMadrid('2026-03-14 20:00'),
+        )))->toBeNull()
+        // Al anular el segundo, la vuelta... no hay siguiente: ninguno.
+        ->and($jornada->continuationGapAfterVoiding('shift-entry-2'))->toBeNull();
+
+    $anulandoElPrimero = $jornada->continuationGapAfterVoiding('shift-entry-1');
+
+    // Sin anterior, el segundo no continua nada que medir.
+    expect($anulandoElPrimero)->toBeNull();
+
+    // Corregir el segundo: el hueco se mide contra el primero.
+    $corrigiendo = $jornada->continuationGapFor(ShiftTimes::closed(
+        Instants::inMadrid('2026-03-15 01:30'),
+        Instants::inMadrid('2026-03-15 03:00'),
+    ), 'shift-entry-2');
+
+    expect($corrigiendo?->start)->toEqual(Instants::inMadrid('2026-03-15 00:00'))
+        ->and($corrigiendo?->end)->toEqual(Instants::inMadrid('2026-03-15 01:30'));
+})->group('RN-05', 'RF-PA-04');

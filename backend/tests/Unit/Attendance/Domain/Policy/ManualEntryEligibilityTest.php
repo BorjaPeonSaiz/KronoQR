@@ -219,3 +219,26 @@ it('no acota las marcas de quien no esta de baja', function (EmploymentStatus $s
     'en alta' => [EmploymentStatus::ACTIVE],
     'suspendida' => [EmploymentStatus::SUSPENDED],
 ])->group('RN-05', 'RN-14', 'RF-PA-04');
+
+it('en una correccion solo mira las marcas que cambian', function (): void {
+    // La salida antigua ya estaba mas alla de la cota (un dato anterior a la
+    // 2.3.0); corregir la entrada no tropieza con ella. Cambiarla, si.
+    $baja = personaParaElAltaManual(EmploymentStatus::TERMINATED, '2026-03-01', '2026-10-10');
+    $antes = ShiftTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 11:00'));
+
+    expect(sinRechazoDelAltaManual(fn () => $baja->assertTimesAllowed(
+        ShiftTimes::closed(Instants::utc('2026-10-10 07:00'), Instants::utc('2026-10-11 11:00')),
+        ContinuationCeilingFactory::standard(),
+        Instants::madrid(),
+        $antes,
+    )))->toBeTrue();
+
+    $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
+        ShiftTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 12:00')),
+        ContinuationCeilingFactory::standard(),
+        Instants::madrid(),
+        $antes,
+    ));
+
+    expect($rechazo->mark)->toBe(FutureMark::ClockOut);
+})->group('RN-05', 'RN-14', 'RF-PA-04');

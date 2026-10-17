@@ -9,8 +9,10 @@ use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Application\Support\ContinuationAcrossWorkDays;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
@@ -53,6 +55,7 @@ final readonly class VoidShiftHandler
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya fue anulado o sustituido
      * @throws EntryDoesNotContinueWorkDay el tramo siguiente dejaria de continuar la jornada (RN-05)
+     * @throws CorrectionWouldChangeWorkDate la jornada quedaria abierta por un tramo de otro dia civil (RN-05)
      */
     public function handle(VoidShiftCommand $command): CorrectedShift
     {
@@ -71,13 +74,19 @@ final readonly class VoidShiftHandler
             throw ShiftEntryNotFound::withUuid($command->shiftEntryUuid);
         }
 
+        // RN-05 (2.3.0): anular no puede dejar al tramo siguiente fuera de la
+        // jornada, ni dentro de la cota ni frente a otras jornadas de la
+        // persona. La misma cota que el fichaje, el alta y la correccion.
+        $continuation = ContinuationCeilings::forSite($this->compliance, $workDay->siteId());
+        $gap = $workDay->continuationGapAfterVoiding($command->shiftEntryUuid);
+
         $voided = $workDay->voidEntry(
             $command->shiftEntryUuid,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
-            // RN-05 (2.3.0): anular no puede dejar al tramo siguiente fuera de
-            // la jornada. La misma cota que el fichaje, el alta y la correccion.
-            ContinuationCeilings::forSite($this->compliance, $workDay->siteId()),
+            $continuation,
         );
+
+        ContinuationAcrossWorkDays::assertUninterrupted($this->workDays, $workDay, $gap, $continuation, false);
 
         // Recalcula `daily_totals` dentro de esta transaccion (RN-06, regla dura
         // 7). Es el caso en que el total **baja**, que es exactamente el que un

@@ -11,13 +11,14 @@ use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
+use App\Modules\Attendance\Application\Support\ContinuationAcrossWorkDays;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Application\Support\ManualEntryRecheck;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
-use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -96,6 +97,7 @@ final readonly class CorrectShiftHandler
         private Clock $clock,
         private EmployeeDirectory $employees,
         private CompliancePolicyProvider $compliance,
+        private ManualEntryRecheck $recheck,
     ) {}
 
     /**
@@ -133,18 +135,23 @@ final readonly class CorrectShiftHandler
         ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes)
             ->assertTimesAllowed($times);
 
-        // RN-05 (2.3.0): la cota de continuacion, la misma que la vuelta de una
-        // pausa en el quiosco y que el alta manual. Corregir no depende del
-        // estado de la persona (RF-PA-04), pero a una de baja ninguna marca le
+        // RN-05 y RN-14 (2.3.0): la cota de continuacion, la misma que la vuelta
+        // de una pausa en el quiosco y que el alta manual. Corregir no depende
+        // del estado de la persona (RF-PA-04), pero a una de baja la jornada
+        // tiene que caer en su periodo de empleo y ninguna marca que cambie le
         // puede pasar de esa cota contada desde el final de su dia de cese. La
         // zona es la de la jornada: la del centro con que se atribuyo (RN-23).
         $continuation = ContinuationCeilings::forSite($this->compliance, $workDay->siteId());
+        $previous = $workDay->entry($command->shiftEntryUuid)->times();
         $employee = $this->employees->find($workDay->employeeUuid());
 
         if ($employee instanceof EmployeeSnapshot) {
-            ManualEntryEligibility::of($employee)
-                ->assertTimesAllowed($times, $continuation, $workDay->workDate()->timezone);
+            ManualEntryRecheck::assertAllowed($employee, $workDay->workDate(), $times, $continuation, false, $previous);
         }
+
+        // El hueco que el tramo corregido dice continuar, si empieza otro dia:
+        // se mira antes de corregir, sobre la jornada como estaba.
+        $gap = $workDay->continuationGapFor($times, $command->shiftEntryUuid);
 
         $corrected = $workDay->correctEntry(
             $command->shiftEntryUuid,
@@ -163,6 +170,9 @@ final readonly class CorrectShiftHandler
             $continuation,
         );
 
+        // RN-05 frente a las otras jornadas de la persona, que el agregado no ve.
+        ContinuationAcrossWorkDays::assertUninterrupted($this->workDays, $workDay, $gap, $continuation);
+
         $this->workDays->save($workDay);
 
         $events = $workDay->releaseEvents();
@@ -173,6 +183,18 @@ final readonly class CorrectShiftHandler
         // dos, dentro de esta transaccion.
         $this->ledger->record($correction);
         $this->events->publish(...$events);
+
+        // RN-14 y RN-05: la ficha otra vez, con la cadena tomada. Una baja que
+        // confirmo despues de la primera lectura no deja corregir mas alla del
+        // cese (2.3.0).
+        $this->recheck->afterAudit(
+            $workDay->employeeUuid(),
+            $workDay->workDate(),
+            $times,
+            $continuation,
+            false,
+            $previous,
+        );
 
         return CorrectedShift::of($workDay, $corrected, $correction);
     }

@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
@@ -174,3 +177,78 @@ it('deshace la importacion de ausencias si la baja de la persona de la primera f
         ->and(DB::table('absences')->count())->toBe(0)
         ->and(DB::table('audit_log')->where('action', 'like', 'absence.%')->count())->toBe(0);
 })->group('RN-14', 'RF-GP-04', 'RL-04');
+
+// --- RN-05 (2.3.0): la cota del dia del cese, tambien con la cadena tomada ---
+
+/** La jornada y el cese de las pruebas de la cota: una semana antes de hoy. */
+const RECHECK_AFTER_AUDIT_CEASE_DAY = '2026-09-25';
+
+it('deshace el alta de un tramo que pasa tres dias del cese si la baja confirmo entre la lectura y el asiento', function (): void {
+    // En alta en la primera lectura: el tramo de 72 h es valido para ella. La
+    // baja, con cese el mismo dia de la jornada, deja la jornada dentro del
+    // periodo de empleo, pero no la salida, tres dias despues del cese.
+    $persona = personaParaLaRelectura();
+    $responsable = ManagementUsers::withRole(UserRole::RRHH);
+    $baja = EmployeeWriteInOtherSession::offboard($persona, RECHECK_AFTER_AUDIT_CEASE_DAY, RECHECK_AFTER_AUDIT_NOW);
+    app()->instance(EmployeeDirectory::class, new InterleavingEmployeeDirectory(
+        app(EmployeeDirectory::class),
+        $persona,
+        $baja->run(...),
+    ));
+
+    expect(fn () => app(AddShiftEntryHandler::class)->handle(new AddShiftEntryCommand(
+        employeeUuid: $persona,
+        workDate: RECHECK_AFTER_AUDIT_CEASE_DAY,
+        clockedInAt: new DateTimeImmutable('2026-09-25T06:00:00Z'),
+        clockedOutAt: new DateTimeImmutable('2026-09-28T06:00:00Z'),
+        reason: CorrectionReason::of(CorrectionReasonCode::OLVIDO_FICHAJE_ENTRADA),
+        performedByUserId: $responsable->id,
+    )))->toThrow(ShiftMarkAfterTermination::class);
+
+    expect($baja->outcome())->toBe(EmployeeWriteInOtherSession::COMMITTED)
+        ->and(DB::table('shift_entries')->count())->toBe(0)
+        ->and(DB::table('shift_corrections')->count())->toBe(0)
+        ->and(DB::table('daily_totals')->count())->toBe(0)
+        ->and(DB::table('audit_log')->where('action', 'like', 'shift_entry.%')->count())->toBe(0);
+})->group('RN-05', 'RN-14', 'RF-PA-04', 'RL-04');
+
+it('deshace la correccion de un tramo que pasa tres dias del cese si la baja confirmo entre la lectura y el asiento', function (): void {
+    $persona = personaParaLaRelectura();
+    $responsable = ManagementUsers::withRole(UserRole::RRHH);
+    $tramo = app(AddShiftEntryHandler::class)->handle(new AddShiftEntryCommand(
+        employeeUuid: $persona,
+        workDate: RECHECK_AFTER_AUDIT_CEASE_DAY,
+        clockedInAt: new DateTimeImmutable('2026-09-25T06:00:00Z'),
+        clockedOutAt: new DateTimeImmutable('2026-09-25T14:00:00Z'),
+        reason: CorrectionReason::of(CorrectionReasonCode::OLVIDO_FICHAJE_ENTRADA),
+        performedByUserId: $responsable->id,
+    ));
+    $antes = [
+        DB::table('audit_log')->where('action', 'like', 'shift_entry.%')->count(),
+        DB::table('shift_corrections')->count(),
+        DB::table('daily_totals')->value('total_minutes'),
+    ];
+
+    $baja = EmployeeWriteInOtherSession::offboard($persona, RECHECK_AFTER_AUDIT_CEASE_DAY, RECHECK_AFTER_AUDIT_NOW);
+    app()->instance(EmployeeDirectory::class, new InterleavingEmployeeDirectory(
+        app(EmployeeDirectory::class),
+        $persona,
+        $baja->run(...),
+    ));
+
+    expect(fn () => app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+        shiftEntryUuid: $tramo->shiftEntryUuid,
+        clockedInAt: null,
+        clockedOutAt: new DateTimeImmutable('2026-09-28T06:00:00Z'),
+        reason: CorrectionReason::of(CorrectionReasonCode::AJUSTE_ACORDADO_CON_RRHH),
+        performedByUserId: $responsable->id,
+    )))->toThrow(ShiftMarkAfterTermination::class);
+
+    // La baja confirmo y sus asientos estan; el de la correccion, no.
+    expect($baja->outcome())->toBe(EmployeeWriteInOtherSession::COMMITTED)
+        ->and(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('shift_entries')->value('clocked_out_at'))->toStartWith('2026-09-25 14:00:00')
+        ->and(DB::table('shift_corrections')->count())->toBe($antes[1])
+        ->and(DB::table('daily_totals')->value('total_minutes'))->toBe($antes[2])
+        ->and(DB::table('audit_log')->where('action', 'like', 'shift_entry.%')->count())->toBe($antes[0]);
+})->group('RN-05', 'RN-14', 'RF-PA-04', 'RL-04');

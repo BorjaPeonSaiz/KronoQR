@@ -8,6 +8,7 @@ use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
+use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use Tests\Support\Time\Instants;
@@ -51,7 +52,7 @@ function lastScan(ClockingAction $action, ?string $shiftEntryUuid = 'shift-entry
  */
 function intentPolicy(int $minimumRestHours = 12): ScanIntentPolicy
 {
-    return ScanIntentPolicy::allowingBreaksShorterThan(WorkedDuration::ofMinutes($minimumRestHours * 60));
+    return new ScanIntentPolicy(ContinuationCeiling::belowRestOf(WorkedDuration::ofHours($minimumRestHours)));
 }
 
 /** El instante del escaneo que llega. Distinto del de `lastScan()` para que la distancia se vea. */
