@@ -149,7 +149,7 @@ function rechazoPorElCese(Closure $accion): ShiftMarkAfterTermination
     throw new RuntimeException('Se esperaba ShiftMarkAfterTermination y no se lanzo nada.');
 }
 
-it('admite marcas de una persona de baja hasta un segundo antes de la cota de su dia de cese', function (string $cese, string $entrada, string $salida): void {
+it('admite marcas de una persona de baja hasta un segundo antes de la cota de su dia de cese', function (string $cese, string $entrada, ?string $salida): void {
     // Cese el 10: el dia acaba a la medianoche del 11 en Madrid (22:00 UTC del
     // 10) y la cota de 12 h llega a las 10:00 UTC del 11, las 12:00 locales.
     // Con el cese el 24 de octubre la medianoche es aun CEST y la cota cae
@@ -157,12 +157,15 @@ it('admite marcas de una persona de baja hasta un segundo antes de la cota de su
     $baja = personaParaElAltaManual(EmploymentStatus::TERMINATED, '2026-03-01', $cese);
 
     expect(sinRechazoDelAltaManual(fn () => $baja->assertTimesAllowed(
-        ShiftTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
+        $salida === null
+            ? ShiftTimes::open(Instants::utc($entrada))
+            : ShiftTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     )))->toBeTrue();
 })->with([
     'cese el 10' => ['2026-10-10', '2026-10-11 08:00', '2026-10-11 09:59:59'],
+    'un tramo abierto antes de la cota' => ['2026-10-10', '2026-10-11 08:00', null],
     'cese el 24, con cambio de hora' => ['2026-10-24', '2026-10-25 08:00', '2026-10-25 09:59:59'],
     'el turno de noche del dia del cese' => ['2026-10-10', '2026-10-10 20:00', '2026-10-11 04:00'],
 ])->group('RN-05', 'RN-14', 'RF-PA-04');

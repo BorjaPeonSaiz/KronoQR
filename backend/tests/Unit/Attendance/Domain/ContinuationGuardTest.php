@@ -137,6 +137,11 @@ it('admite la entrada del dia siguiente un segundo antes de la cota y la rechaza
         ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-10-10 15:00'))
         ->and($rechazo->translationKey)->toBe('attendance.errors.entry_does_not_continue_work_day')
         ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10', 'minutes' => 720])
+        // Tecnico, en ingles y sin datos de la persona (regla dura 21).
+        ->and($rechazo->getMessage())->toBe(
+            'A shift entry starting at 2026-10-11T01:00:00+00:00 does not continue work day 2026-10-10: the '
+            .'previous mark 2026-10-10T13:00:00+00:00 is 720 minutes or more before it (RN-05).',
+        )
         ->and($rechazada->shiftCount())->toBe(1)
         ->and($rechazada->releaseEvents())->toBe([]);
 })->group('RN-05', 'RF-PA-04');
@@ -255,6 +260,41 @@ it('rechaza mover un tramo si el que venia detras deja de continuar la jornada',
     expect($rechazo->mark)->toBe(FutureMark::ClockIn)
         ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-14 08:00'))
         ->and($jornada->shiftCount())->toBe(3);
+})->group('RN-05', 'RF-PA-04');
+
+it('no tropieza con un dato antiguo que ya violaba la cota mas adelante en la jornada', function (): void {
+    // La comprobacion es local: mira el tramo corregido, el que le sigue y el
+    // que seguia a su version anterior, no la jornada entera. Un tramo antiguo
+    // del 16, escrito antes de la 2.3.0 y que ya no continuaba nada, no impide
+    // corregir la salida del primer tramo del dia (doc 01, RN-05).
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 08:00'),
+            Instants::inMadrid('2026-03-14 12:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 18:00'),
+            Instants::inMadrid('2026-03-14 23:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-15 01:00'),
+            Instants::inMadrid('2026-03-15 03:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-16 08:00'),
+            Instants::inMadrid('2026-03-16 10:00'),
+        ))
+        ->build();
+
+    // Acortar el primero no cambia el anterior de nadie, asi que el tramo del
+    // 16 no se vuelve a juzgar.
+    $corregido = continuacionCorreccion($jornada, 'shift-entry-1', ShiftTimes::closed(
+        Instants::inMadrid('2026-03-14 08:00'),
+        Instants::inMadrid('2026-03-14 11:00'),
+    ));
+
+    expect($corregido->version())->toBe(2);
 })->group('RN-05', 'RF-PA-04');
 
 it('admite dos tramos del mismo dia civil aunque entre ellos medien 13 horas', function (): void {
