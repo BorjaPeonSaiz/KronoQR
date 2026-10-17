@@ -316,13 +316,21 @@ function isWorkDateChangeProblem(caught: ApiError): boolean {
 }
 
 /**
- * Si el `422` de cambio de jornada se cuelga de la entrada que se tecleo: solo
- * entonces se pinta como pista de ese campo. Al anular no hay campo de hora, y
- * cuando lo que se rompe es la vuelta siguiente el servidor lo cuelga de la
- * salida (RN-05, 2.3.0): en esos casos se enseña su mensaje, que dice qué hacer.
+ * Si el `422` de cambio de jornada es por **mover la entrada que abre la
+ * jornada** (`cause: opening_moved`, ADR-058): solo entonces se pinta la pista
+ * propia junto a la entrada. Los demas —el tramo no continua la jornada, el
+ * siguiente deja de continuarla, anular la apertura— enseñan el mensaje del
+ * servidor, que dice qué hacer en cada caso.
  */
-function pointsAtTypedClockIn(caught: ApiError): boolean {
-  return props.mode !== 'void' && caught.fieldErrors['clocked_out_at'] === undefined
+function isOpeningMoved(caught: ApiError): boolean {
+  const problem: unknown = caught.problem
+
+  return (
+    typeof problem === 'object' &&
+    problem !== null &&
+    'cause' in problem &&
+    problem.cause === 'opening_moved'
+  )
 }
 
 /** Al anular, el error de cambio de jornada no tiene campo de hora en el formulario. */
@@ -367,6 +375,11 @@ const changes = computed<Change[]>(() => {
         from: noBefore,
         to: clockOutInput.value === '' ? openMark : formatTyped(clockOutInput.value),
       },
+      {
+        label: t('workdays.history.fields.closedBy'),
+        from: noBefore,
+        to: clockOutInput.value === '' ? openMark : closureLabel(endsInBreak.value),
+      },
     ]
   }
 
@@ -407,8 +420,22 @@ const changes = computed<Change[]>(() => {
     })
   }
 
+  // Como termino (RN-05, ADR-058): una correccion que solo declara la pausa
+  // no cambia ninguna hora, y sin esta fila la vista previa saldria vacia.
+  if (endsInBreakChanged.value) {
+    rows.push({
+      label: t('workdays.history.fields.closedBy'),
+      from: closureLabel(originalEndsInBreak),
+      to: closureLabel(endsInBreak.value),
+    })
+  }
+
   return rows
 })
+
+function closureLabel(inBreak: boolean): string {
+  return t(`workdays.history.closedBy.${inBreak ? 'break_start' : 'clock_out'}`)
+}
 
 function close(): void {
   emit('cancel')
@@ -509,7 +536,7 @@ async function submit(): Promise<void> {
       if (kind === 'superseded') {
         emit('stale')
       }
-    } else if (isWorkDateChangeProblem(caught) && pointsAtTypedClockIn(caught)) {
+    } else if (isWorkDateChangeProblem(caught) && isOpeningMoved(caught)) {
       workDateChangeNotice.value = true
     } else {
       error.value = caught

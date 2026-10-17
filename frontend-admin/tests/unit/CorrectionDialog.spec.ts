@@ -451,6 +451,7 @@ describe('CorrectionDialog, modo «correct»', () => {
     stubFetch(() =>
       problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
         errors: { clocked_in_at: ['texto crudo del servidor que no debe verse'] },
+        cause: 'opening_moved',
       }),
     )
 
@@ -854,5 +855,58 @@ describe('CorrectionDialog, «Este tramo terminó en pausa» (@RN-05 @RF-PA-04)'
         body: { reason_code: 'AJUSTE_ACORDADO_CON_RRHH', reason_text: null, ends_in_break: true },
       },
     ])
+  })
+})
+
+describe('CorrectionDialog, causas del 422 de cambio de jornada (@RN-05)', () => {
+  it('si el tramo no continua la jornada, enseña el mensaje del servidor y no la pista de mover la entrada', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
+        errors: { clocked_in_at: ['Las horas de este tramo son de otra jornada.'] },
+        cause: 'entry_not_continued',
+      }),
+    )
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-03-16T07:00')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain('Las horas de este tramo son de otra jornada.')
+    expect(wrapper.text()).not.toContain(es.corrections.wouldChangeWorkDate)
+  })
+
+  it('la vista previa enseña como termina el tramo cuando solo cambia eso', async () => {
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await settle(1)
+
+    const preview = wrapper.find('[data-test="dialog-preview"]').text()
+
+    expect(preview).toContain(es.workdays.history.fields.closedBy)
+    expect(preview).toContain(es.workdays.history.closedBy.clock_out)
+    expect(preview).toContain(es.workdays.history.closedBy.break_start)
   })
 })

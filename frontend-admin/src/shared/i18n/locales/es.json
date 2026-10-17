@@ -1307,7 +1307,13 @@
         "in": "Entrada",
         "out": "Salida",
         "worked": "Tiempo trabajado",
-        "version": "Versión"
+        "version": "Versión",
+        "closedBy": "Cómo terminó"
+      },
+      "closedBy": {
+        "clock_out": "Salida",
+        "break_start": "Pausa",
+        "unknown": "Sin dato"
       }
     }
   },
