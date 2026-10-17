@@ -698,3 +698,45 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and($otra['output'])->toContain('shift_entries '.$posterior.' · audit_without_entry')
         ->and($otra['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)');
 })->group('RS-07', 'RL-04', 'RL-02');
+
+it('denuncia la zona del centro cambiada por la funcion de la correccion fuera de la orden de consola', function (): void {
+    // RN-23, bloque 2 de la 2.3.0. La orden de consola corrige la zona por
+    // `site_correct_timezone` y deja `site.updated`: cuadra. La misma funcion
+    // llamada a pelo con la credencial de la aplicacion —que tiene `EXECUTE`—
+    // cambia la zona sin asiento, y eso es lo que tiene que ver la conciliacion.
+    $escenario = registroAuditadoEscenario();
+    registroAuditadoLegitimo($escenario);
+
+    $orden = Artisan::call('workforce:correct-site-timezone', [
+        'timezone' => 'Atlantic/Canary',
+        '--reason' => 'La puesta en marcha se hizo con Madrid y el hotel esta en Tenerife.',
+        '--responsible' => (string) $escenario['autor'],
+        '--force' => true,
+    ]);
+
+    expect($orden)->toBe(0, Artisan::output());
+
+    $limpia = registroAuditadoConciliar(true);
+
+    expect($limpia['code'])->toBe(0, $limpia['output']);
+
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
+
+    /** @var int $asiento */
+    $asiento = DB::table('audit_log')->where('action', 'site.updated')->max('id');
+
+    foreach ([false, true] as $completa) {
+        $pasada = registroAuditadoConciliar($completa);
+
+        expect($pasada['code'])->toBe(1, $pasada['output'])
+            ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 1')
+            ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · timezone · audit_log #'.$asiento)
+            // Nombres de campo, nunca valores.
+            ->and($pasada['output'])->not->toContain('Lisbon');
+    }
+
+    expect(registroAuditadoMetricas($escenario['metricas'], 'recent'))
+        ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 1')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
+        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="site_timezone_differs_from_audit"} 1');
+})->group('RN-23', 'RL-04', 'RS-07');

@@ -10,7 +10,7 @@ procedimiento de 72 h es [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
-| `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-cinco-discrepancias) |
+| `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-seis-discrepancias) |
 | `ConciliacionDelRegistroAusente` | > 26 h sin la pasada diaria, `for: 30m` | Crítica (seguridad) | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la pasada completa, `for: 30m` | Alta | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `PurgaFueraDeLimitesRevisada` | `work_record_reconciliation_reviewed_purges` sube respecto a hace un día; se apaga sola al cabo de un día | Aviso (`warning`) | Responsable de seguridad | [§3.1](#31-dar-por-revisada-una-purga-no-admisible) |
@@ -150,9 +150,9 @@ como cualquier copia.
 
 ---
 
-## 3. Las cinco discrepancias
+## 3. Las seis discrepancias
 
-Cada línea de la salida dice el tramo, el tipo y, cuando lo hay, el asiento:
+Cada línea de la salida dice el tramo (o el centro), el tipo y, cuando lo hay, el asiento:
 
 ```text
 shift_entries 0199a1b2-…-a001 · entry_differs_from_audit · clocked_in_at · audit_log #48211
@@ -311,6 +311,41 @@ como `audit_without_entry`. El asiento no se puede quitar (regla dura 6) y la
 conciliación lo seguirá contando en cada pasada: **la alerta no se apaga sola**
 hasta que la investigación termine y se dé por revisado (§3.1). Mientras tanto,
 anótalo en el registro del incidente.
+
+### `site_timezone_differs_from_audit` — la zona del centro no es la de su último asiento
+
+La zona horaria de `sites` no coincide con la de su último asiento
+`site.created` o `site.updated` (`new_value.timezone`). La línea dice el centro
+y ese asiento, **nunca las zonas**:
+
+```text
+sites #1 · site_timezone_differs_from_audit · timezone · audit_log #48502
+```
+
+Desde la 2.3.0 la base de datos no deja cambiar la zona con fichajes hechos
+(RN-23, ADR-056: *trigger* `sites_guard_timezone`) salvo por la función
+`site_correct_timezone`, que usa `workforce:correct-site-timezone` y que **no
+escribe asiento**: el asiento lo deja la orden. Así que esto es una de dos
+cosas, y las dos son escrituras por fuera del producto: alguien llamó a esa
+función con la credencial de la aplicación sin pasar por la orden, o cambió la
+zona con un `UPDATE` cuando aún no había fichajes. En los dos casos todo el
+histórico se presenta y se exporta con otra zona (RN-05).
+
+```sql
+-- La zona de ahora y los asientos del centro, en orden.
+SELECT id, name, timezone FROM sites;
+SELECT id, occurred_at, action, actor_type, actor_id, payload
+  FROM audit_log WHERE subject_type = 'site' ORDER BY id;
+```
+
+**Resolución:** trata el cambio como evidencia del ataque
+([`brecha-de-seguridad.md`](brecha-de-seguridad.md)) y no exportes nada para la
+Inspección hasta devolver la zona. Se devuelve **por el producto**, a la zona
+del último asiento, y eso deja el asiento que falta: con fichajes,
+`workforce:correct-site-timezone <zona del asiento> --reason=… --responsible=…`
+(el motivo cita el incidente, sin nombres de la plantilla); sin fichajes, desde
+Panel → **Centro**. Ninguno de los dos mueve ninguna jornada. Después, la
+conciliación de «Al terminar».
 
 ### 3.1 Dar por revisada una purga no admisible
 
@@ -499,6 +534,20 @@ misma comprobación (avisa con `trigger:<nombre>:DESACTIVADO` o `AUSENTE`) y
 `./update.sh` **deshace la actualización** si la ve, sin reactivarlos él: una
 actualización limpia nunca los deja así, y reactivarlos sin saber quién los
 tocó taparía la causa.
+
+**`sites`, desde la 2.3.0.** `sites_guard_timezone` niega cambiar la zona
+horaria del centro con fichajes hechos (RN-23), pero **no al propietario de la
+tabla**: el rol de migración la puede cambiar a mano sin desactivar nada, y no
+debe hacerlo. La corrección es `workforce:correct-site-timezone`, que deja
+asiento. Si `./doctor.sh` avisa con `trigger:sites_guard_timezone:DESACTIVADO`
+o `AUSENTE`, o con `site_correct_timezone:DEFINER` (la función de la corrección
+perdió `SECURITY DEFINER` o su `search_path`), reactívalo con
+`ALTER TABLE sites ENABLE TRIGGER sites_guard_timezone` en una transacción
+anotada —una función alterada se repone, con el rol de migración y en la misma
+transacción, con su definición de la migración
+`2026_10_18_120000_guard_site_timezone_in_database`— y concilia: un cambio
+de zona hecho mientras la guarda estaba apagada sale como
+`site_timezone_differs_from_audit` (§3).
 
 ---
 

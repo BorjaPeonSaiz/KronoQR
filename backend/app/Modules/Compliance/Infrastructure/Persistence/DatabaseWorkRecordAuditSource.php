@@ -9,6 +9,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
+use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 use App\Modules\Compliance\Domain\ValueObject\AuditTrailEntry;
 use App\Modules\Compliance\Domain\ValueObject\RecordedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
@@ -193,7 +194,7 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
             // Purgas y revisiones en la misma instantanea: una revision
             // confirmada entre dos lecturas no puede tapar una purga que la
             // primera no vio, ni al reves.
-            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears(), $this->reviews());
+            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears(), $this->reviews(), $this->siteTimezones());
 
             $cursor = $this->declareCursor($window);
             $size = max(1, $chunkSize > 0 ? $chunkSize : $this->fetchSize);
@@ -276,6 +277,51 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
         }
 
         return $reviews;
+    }
+
+    /**
+     * La zona de cada centro con el ultimo asiento `site.created` o
+     * `site.updated` que lo tiene por sujeto (RN-23, bloque 2 de la 2.3.0). Cual
+     * cuadra lo decide el dominio ({@see AuditedSiteTimezone}).
+     *
+     * Un centro por instalacion (ADR-040): una fila, y su asiento entra por
+     * `audit_log_subject_index`. Lee `sites` por nombre de tabla, sin el modelo de
+     * `Workforce`, como `shift_entries` mas arriba.
+     *
+     * @return list<AuditedSiteTimezone>
+     */
+    private function siteTimezones(): array
+    {
+        $sites = [];
+        $rows = $this->connection->select(
+            <<<'SQL'
+                SELECT s.id, s.timezone, a.id AS audit_id, a.payload::text AS payload
+                  FROM sites s
+                  LEFT JOIN LATERAL (
+                       SELECT l.id, l.payload
+                         FROM audit_log l
+                        WHERE l.subject_type = 'site'
+                          AND l.subject_id = s.id
+                          AND l.action IN (?, ?)
+                        ORDER BY l.id DESC
+                        LIMIT 1
+                  ) a ON TRUE
+                 ORDER BY s.id
+                SQL,
+            [AuditAction::SiteCreated->value, AuditAction::SiteUpdated->value],
+        );
+
+        foreach ($rows as $raw) {
+            $row = Row::of((object) $raw);
+            $sites[] = AuditedSiteTimezone::fromEntry(
+                $row->int('id'),
+                $row->string('timezone'),
+                $row->nullableInt('audit_id'),
+                $row->json('payload'),
+            );
+        }
+
+        return $sites;
     }
 
     /**

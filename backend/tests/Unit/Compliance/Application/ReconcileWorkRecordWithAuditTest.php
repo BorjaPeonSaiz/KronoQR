@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
+use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
@@ -57,6 +58,7 @@ it('publica la pasada limpia tambien, con la marca de su ejecucion', function ()
             'retired_without_correction' => 0,
             'audit_without_entry' => 0,
             'purge_out_of_bounds' => 0,
+            'site_timezone_differs_from_audit' => 0,
         ])
         ->and($metricas->recorded)->toHaveCount(1)
         ->and($metricas->recorded[0]['at']->format('Y-m-d H:i'))->toBe('2026-10-08 04:15')
@@ -171,3 +173,39 @@ it('juzga una purga sin centro con el suelo del centro de la instalacion, como l
     // Sin centro de instalacion no hay suelo que leer: el minimo estructural.
     'sin centro de instalacion' => [null, ['site_id'], []],
 ])->group('RS-07', 'RL-02');
+
+it('cuenta la zona del centro que no es la de su ultimo asiento, en las dos pasadas', function (WorkRecordReconciliationScope $alcance): void {
+    // RN-23, bloque 2 de la 2.3.0: `site_correct_timezone` llamada fuera de la
+    // orden de consola, o un `UPDATE` sin tramos por fuera del producto, dejan
+    // `sites.timezone` distinta de la del ultimo `site.*`. Es una fila, no una
+    // ventana: la ven la diaria y la completa.
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([], [], [], [
+        AuditedSiteTimezone::fromEntry(1, 'Atlantic/Canary', 42, ['new_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid']]),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
+        ->handle($alcance, 7);
+
+    expect($resultado->counts['site_timezone_differs_from_audit'])->toBe(1)
+        ->and($resultado->isConsistent())->toBeFalse()
+        ->and($resultado->entriesChecked)->toBe(0)
+        ->and($resultado->discrepancies[0]->siteId)->toBe(1)
+        ->and($resultado->discrepancies[0]->auditEntryId)->toBe(42)
+        ->and($resultado->discrepancies[0]->fields)->toBe(['timezone'])
+        ->and($resultado->discrepancies[0]->describe())->toBe('sites #1 · site_timezone_differs_from_audit · timezone · audit_log #42');
+})->with([
+    'diaria' => [WorkRecordReconciliationScope::Recent],
+    'completa' => [WorkRecordReconciliationScope::Full],
+])->group('RN-23', 'RL-04', 'RS-07');
+
+it('no cuenta la zona que coincide con su ultimo asiento, ni la de un centro sin asiento', function (): void {
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([], [], [], [
+        AuditedSiteTimezone::fromEntry(1, 'Atlantic/Canary', 42, ['new_value' => ['timezone' => 'Atlantic/Canary']]),
+        AuditedSiteTimezone::fromEntry(2, 'Europe/Madrid', null, null),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    expect($resultado->isConsistent())->toBeTrue();
+})->group('RN-23', 'RL-04');

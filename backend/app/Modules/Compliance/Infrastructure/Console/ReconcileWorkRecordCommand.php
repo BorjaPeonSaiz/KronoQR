@@ -113,6 +113,8 @@ final class ReconcileWorkRecordCommand extends Command
             'rows' => array_map(
                 static fn (WorkRecordDiscrepancy $discrepancy): array => [
                     'shift_entry_uuid' => $discrepancy->shiftEntryUuid,
+                    // Solo en `site_timezone_differs_from_audit` (RN-23).
+                    'site_id' => $discrepancy->siteId,
                     'kind' => $discrepancy->kind->value,
                     'columns' => $discrepancy->fields,
                     'audit_entry_id' => $discrepancy->auditEntryId,
