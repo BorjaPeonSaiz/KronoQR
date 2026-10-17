@@ -67,4 +67,19 @@ final class LegalExportPolicy
     {
         return $actor->actsAs(...self::exporters());
     }
+
+    /**
+     * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05,
+     * V21-3-PA-1).
+     *
+     * **Los mismos tres roles que la exportacion, y tiene que ser asi**: quien
+     * puede exportar a una persona tiene que poder elegirla, y quien no puede
+     * exportar no tiene motivo para buscar a nadie por su DNI. Una lista propia
+     * acabaria separandose de la de arriba; por eso las dos leen
+     * {@see self::exporters()}.
+     */
+    public function searchEmployees(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::exporters());
+    }
 }

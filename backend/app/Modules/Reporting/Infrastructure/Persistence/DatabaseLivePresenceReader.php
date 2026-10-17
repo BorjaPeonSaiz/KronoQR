@@ -9,6 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\PresenceEntry;
 use App\Modules\Reporting\Domain\ValueObject\PresenceStatus;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use App\Modules\Shared\Infrastructure\Persistence\PersonNameSearch;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
@@ -183,22 +184,19 @@ final readonly class DatabaseLivePresenceReader implements LivePresenceReader
         if ($search !== null) {
             // Los mismos cuatro campos y el mismo tratamiento de acentos que
             // `GET /employees` (RF-GP-01): quien escribe en el cuadro de una
-            // pantalla del panel espera lo mismo en la de al lado. `unaccent()`
-            // a los dos lados porque `ILIKE` ignora mayusculas pero no
-            // diacriticos, y `%`, `_` y `\` se escapan para que no sean
-            // comodines que nadie ha contado al usuario.
-            $pattern = '%'.addcslashes($search, '\\%_').'%';
+            // pantalla del panel espera lo mismo en la de al lado. La expresion
+            // es la de `PersonNameSearch`: sin acentos y con `%`, `_` y `\`
+            // escapados despues de normalizar, para que no sean comodines que
+            // nadie ha contado al usuario.
+            [$condition, $searchBindings] = PersonNameSearch::anyOf([
+                'e.first_name',
+                'e.last_name',
+                'e.employee_code::text',
+                "e.first_name || ' ' || e.last_name",
+            ], $search);
 
-            $sql .= <<<'SQL'
-                 AND (
-                        unaccent(e.first_name) ILIKE unaccent(?)
-                     OR unaccent(e.last_name) ILIKE unaccent(?)
-                     OR unaccent(e.employee_code::text) ILIKE unaccent(?)
-                     OR unaccent(e.first_name || ' ' || e.last_name) ILIKE unaccent(?)
-                 )
-                SQL;
-
-            $bindings = [...$bindings, $pattern, $pattern, $pattern, $pattern];
+            $sql .= ' AND '.$condition;
+            $bindings = [...$bindings, ...$searchBindings];
         }
 
         return [$sql, $bindings];

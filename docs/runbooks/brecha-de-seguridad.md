@@ -237,8 +237,9 @@ UUID='<employee_uuid de la persona>'   # se ve en su ficha del panel
 # a) Accesos NOMINALES: alguien fue a por los datos de ESA persona.
 #    Cubre employee_workdays (su registro), incident_digest (el resumen que sale
 #    por correo), weekly_summary SOLO cuando el alcance tenía 50 personas o
-#    menos (por encima no nombra: ver b), la exportación legal por empleado y
-#    las denegaciones sobre su ficha.
+#    menos (por encima no nombra: ver b), la exportación legal por empleado,
+#    la búsqueda de la persona de esa exportación (legal_export_employee_search,
+#    las como mucho 10 personas que devolvió) y las denegaciones sobre su ficha.
 docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id,
@@ -288,6 +289,7 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `kiosk_roster` | Padrón que descarga una tablet | No (recuento y dispositivo) |
 | `credential_status` | Bandeja de credenciales | No (recuento y alcance) |
 | `incident_board` | Bandeja de incidencias | No (recuento y alcance) |
+| `legal_export_employee_search` | **Búsqueda de la persona de la exportación para la Inspección**, por nombre o DNI (RF-IN-05): hasta 10 personas con nombre, apellidos, departamento, situación y fechas de alta y cese. La hace también el `auditor`, que no tiene el directorio | **Sí**: `employee_uuids`, las como mucho 10 personas devueltas, con el recuento, `criterion` —`name_or_code` o `national_id`— y `truncated`. **Nunca el término buscado**: el asiento dice a quién vio, no a quién se buscó. Una búsqueda sin resultados también deja asiento, con recuento cero y sin `employee_uuids` |
 | `incident_digest` | **Resumen que sale por correo** (RF-PR-01) | **Sí**: `employee_uuids` |
 | `weekly_summary` | **Resumen semanal que sale por correo** al responsable de departamento (RF-PR-05) | **Solo si el alcance tiene 50 personas o menos**: `employee_uuids`. Por encima, `employees` (recuento), `scope`, `manager_user_id` y `week_start`, sin lista: se resuelve por departamento con la consulta (b) |
 | `payroll_export` | **Fichero preparado para importar en el programa de nómina** (RF-IN-06): una fila por persona y periodo con horas trabajadas, contratadas, exceso y ausencias. **Sale de la instalación hacia otro sistema** | No (recuento, `format`, alcance). Lo escriben la descarga directa y la generación en diferido: en el segundo caso, el fichero y su enlace de un solo uso dejan además los asientos `report_export.*` (§4.2) |

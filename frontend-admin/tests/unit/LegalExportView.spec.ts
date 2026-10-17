@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { mountView, problemResponse, settle, stubFetch } from './support/harness'
+import {
+  buttonWith,
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubFetch,
+} from './support/harness'
 
 // La pantalla de la exportacion para la Inspeccion (RF-IN-05, RL-06).
 //
@@ -27,10 +34,22 @@ function csvResponse(shiftRows: number, corrections: number): Response {
   })
 }
 
+const PERSON = {
+  uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+  first_name: 'Lucia',
+  last_name: 'Vilar',
+  department: { id: 3, name: 'Cocina' },
+  status: 'terminated',
+  hired_at: '2022-03-01',
+  terminated_at: '2026-02-15',
+}
+
 function inputWith(wrapper: Wrapper, label: string): DOMWrapper<HTMLInputElement> {
   const field = wrapper
     .findAll('label')
-    .find((candidate) => candidate.text().includes(label))
+    .find(
+      (candidate) => candidate.attributes('for') !== undefined && candidate.text().includes(label),
+    )
     ?.attributes('for')
 
   const input = wrapper.find<HTMLInputElement>(`#${CSS.escape(field ?? '')}`)
@@ -106,20 +125,74 @@ describe('exportacion para la Inspeccion', () => {
     expect(announcement.value).toContain('1240')
   })
 
-  it('acota a una persona cuando se indica', async () => {
-    const fetchSpy = stubFetch(() => csvResponse(12, 1))
+  it('acota a la persona elegida en el buscador y el uuid llega a la exportacion', async () => {
+    const fetchSpy = stubFetch((url) =>
+      url.includes('/employees/search')
+        ? jsonResponse({ data: [PERSON], truncated: false })
+        : csvResponse(12, 1),
+    )
     const wrapper = await mountView(LegalExportView)
 
     await fillPeriod(wrapper, '2026-01-01', '2026-01-31')
-    await inputWith(wrapper, es.reports.legalExport.employee).setValue(
-      '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
-    )
+    await wrapper.findAll('input[name="legal-export-scope"]')[1]?.setValue(true)
+    await settle()
+
+    // Ya no hay un campo de texto para teclear el UUID en crudo.
+    expect(wrapper.text()).not.toContain('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90')
+
+    await inputWith(wrapper, es.reports.legalExport.picker.textLabel).setValue('amrani')
+    await buttonWith(wrapper, es.reports.legalExport.picker.search).trigger('click')
+    await settle()
+    await wrapper
+      .find('input[type="radio"][value="0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90"]')
+      .setValue(true)
+    await buttonWith(wrapper, es.reports.legalExport.picker.choose).trigger('click')
+    await settle()
+
+    // El uuid se guarda pero no se enseña.
+    expect(wrapper.text()).not.toContain('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90')
+
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain(
-      'employee_uuid=0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
-    )
+    const exportCall = fetchSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((url) => url.includes('/legal-export?'))
+
+    expect(exportCall).toContain('employee_uuid=0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90')
+  })
+
+  it('no deja generar una persona sin haberla elegido', async () => {
+    stubFetch(() => csvResponse(0, 0))
+    const wrapper = await mountView(LegalExportView)
+
+    await fillPeriod(wrapper, '2026-01-01', '2026-01-31')
+    await wrapper.findAll('input[name="legal-export-scope"]')[1]?.setValue(true)
+
+    expect(
+      wrapper.find<HTMLButtonElement>('button[type="submit"]').attributes('disabled'),
+    ).toBeDefined()
+  })
+
+  it('el DNI se borra del campo al buscar y no viaja en la URL', async () => {
+    const fetchSpy = stubFetch(() => jsonResponse({ data: [], truncated: false }))
+    const wrapper = await mountView(LegalExportView)
+
+    await wrapper.findAll('input[name="legal-export-scope"]')[1]?.setValue(true)
+    await wrapper.findAll('input[type="radio"][value="nationalId"]')[0]?.setValue(true)
+    const field = inputWith(wrapper, es.reports.legalExport.picker.nationalIdLabel)
+
+    await field.setValue('00000000T')
+    await buttonWith(wrapper, es.reports.legalExport.picker.search).trigger('click')
+    await settle()
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+
+    expect(url).not.toContain('00000000T')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe(JSON.stringify({ national_id: '00000000T' }))
+    expect(field.element.value).toBe('')
+    expect(wrapper.text()).toContain(es.reports.legalExport.picker.noneByNationalId)
   })
 
   it('no llama al servidor con un periodo invertido y dice por que', async () => {

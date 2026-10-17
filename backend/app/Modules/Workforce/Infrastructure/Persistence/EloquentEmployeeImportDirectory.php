@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
+use App\Modules\Shared\Domain\ValueObject\NationalId;
+use App\Modules\Shared\Infrastructure\Persistence\NationalIdDigest;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Domain\ValueObject\ImportColumnMap;
-use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -31,8 +32,9 @@ use Illuminate\Database\ConnectionInterface;
  * un `12345678Z` en el fichero serian dos huellas distintas, la busqueda no
  * encontraria a nadie y la reimportacion **crearia una segunda ficha de la
  * misma persona**, con su registro horario partido en dos. La forma canonica la
- * decide {@see ImportedEmployee::normaliseNationalId()} y aqui se invoca; dos
- * implementaciones serian dos oportunidades de que se separen.
+ * decide {@see NationalId} y la expresion {@see NationalIdDigest}, las dos en
+ * `Shared`, y aqui se invocan; dos implementaciones serian dos oportunidades de
+ * que se separen.
  *
  * ## Los departamentos se traen de una vez
  *
@@ -55,14 +57,14 @@ final readonly class EloquentEmployeeImportDirectory implements EmployeeImportDi
 
     public function uuidByNationalId(string $nationalId): ?string
     {
-        $normalised = ImportedEmployee::normaliseNationalId($nationalId);
+        $normalised = NationalId::fromInput($nationalId);
 
-        if ($normalised === null) {
+        if (! $normalised instanceof NationalId) {
             return null;
         }
 
         $uuid = $this->connection->table('employees')
-            ->whereRaw('national_id_hash = digest(?, ?)', [$normalised, 'sha256'])
+            ->whereRaw(NationalIdDigest::matches(), NationalIdDigest::bindings($normalised))
             ->value('uuid');
 
         return \is_string($uuid) ? $uuid : null;

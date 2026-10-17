@@ -10,7 +10,8 @@
 // Enseñarlas no es cosmetica: quien atiende un requerimiento tiene que poder
 // decir cuantos tramos y cuantas correcciones entrego sin abrir el fichero.
 import type { BinaryDocument } from '@kronoqr/web-kit/http'
-import { requestBlob } from '@kronoqr/web-kit/http'
+import { requestBlob, requestJson } from '@kronoqr/web-kit/http'
+import type { LegalExportEmployeeMatches, LegalExportEmployeeSearch } from '@/shared/api/types'
 
 export interface LegalExportQuery {
   /** Primer dia del periodo, `YYYY-MM-DD`, por fecha de jornada (RN-05). */
@@ -69,4 +70,22 @@ export async function downloadLegalExport(query: LegalExportQuery): Promise<Lega
       corrections: counted(document_, 'X-Kronoqr-Export-Correction-Rows'),
     },
   }
+}
+
+/**
+ * Busca a la persona de la exportacion por nombre/codigo o por DNI
+ * (`searchLegalExportEmployees`, RF-IN-05).
+ *
+ * Es un `POST` para que el DNI **nunca viaje en la URL**. El resultado es una
+ * lista nominal: no se guarda en cache de consultas ni en ningun almacen; lo
+ * recoge quien llama y vive lo que viva el componente. Cada llamada deja un
+ * asiento en la auditoria, por eso tampoco se invoca mientras se teclea.
+ */
+export async function searchLegalExportEmployees(
+  body: LegalExportEmployeeSearch,
+): Promise<LegalExportEmployeeMatches> {
+  return requestJson<LegalExportEmployeeMatches>('/api/v1/reports/legal-export/employees/search', {
+    method: 'POST',
+    body,
+  })
 }

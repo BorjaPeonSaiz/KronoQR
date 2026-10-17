@@ -209,6 +209,9 @@ it('lista activas primero y por nombre, con filtros, paginacion y sin secretos',
 
     expect(Api::as($token)->get('/api/v1/management-accounts', ['q' => 'recepcion'])->json('meta.total'))->toBe(1)
         ->and(Api::as($token)->get('/api/v1/management-accounts', ['q' => '%'])->json('meta.total'))->toBe(0)
+        // `unaccent()` los convierte en `%` y `_`: el escape va despues.
+        ->and(Api::as($token)->get('/api/v1/management-accounts', ['q' => '％'])->json('meta.total'))->toBe(0)
+        ->and(Api::as($token)->get('/api/v1/management-accounts', ['q' => '＿＿＿'])->json('meta.total'))->toBe(0)
         ->and(Api::as($token)->get('/api/v1/management-accounts', ['status' => 'deactivated'])->json('data.0.email'))->toBe('baja@hotel.example')
         ->and(Api::as($token)->get('/api/v1/management-accounts', ['role' => 'auditor'])->json('meta.total'))->toBe(1)
         ->and(Api::as($token)->get('/api/v1/management-accounts', ['per_page' => 1, 'page' => 2])->json('meta.total_pages'))->toBe(4);

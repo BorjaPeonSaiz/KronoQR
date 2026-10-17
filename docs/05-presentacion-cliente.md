@@ -69,7 +69,7 @@ Desde el panel web, en su ordenador:
 
 ### 3.4 Para el auditor o la Inspección
 
-Un rol que **solo descarga la exportación normalizada para la Inspección**: el registro diario de toda la plantilla o de una persona, del periodo requerido, con las correcciones y sus motivos incluidos. No ve nada más del panel; lo que necesite revisar está en ese fichero.
+Un rol que **solo descarga la exportación normalizada para la Inspección**: el registro diario de toda la plantilla o de una persona, que se busca por su nombre o su DNI, del periodo requerido, con las correcciones y sus motivos incluidos. No ve nada más del panel; lo que necesite revisar está en ese fichero.
 
 ### 3.5 Para el informático del hotel
 

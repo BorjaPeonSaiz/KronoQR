@@ -23,6 +23,7 @@ use App\Modules\Compliance\Application\Port\IncidentNotices;
 use App\Modules\Compliance\Application\Port\IncidentNotifier;
 use App\Modules\Compliance\Application\Port\IncidentResolutionMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportAudit;
+use App\Modules\Compliance\Application\Port\LegalExportEmployeeDirectory;
 use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
@@ -91,6 +92,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentAssignment
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentBoard;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportEmployeeDirectory;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePurgeReviewLedger;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
@@ -133,6 +135,7 @@ use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
@@ -149,12 +152,15 @@ use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
 use App\Modules\Workforce\Domain\Event\SiteConfigured;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -382,6 +388,8 @@ final class ComplianceServiceProvider extends ServiceProvider
          */
         Gate::policy(LegalExport::class, LegalExportPolicy::class);
 
+        $this->registerLegalExportSearchRateLimiter();
+
         /*
          * La policy de la bandeja de incidencias (RF-PA-05, regla dura 18).
          *
@@ -555,6 +563,14 @@ final class ComplianceServiceProvider extends ServiceProvider
 
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
 
+        // La busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
+        // Lee `employees` como la propia exportacion; el asiento lo escribe el
+        // caso de uso por `PersonalDataAccessLog`, que ya esta enlazado arriba.
+        $this->app->bind(
+            LegalExportEmployeeDirectory::class,
+            static fn (): DatabaseLegalExportEmployeeDirectory => new DatabaseLegalExportEmployeeDirectory(DB::connection()),
+        );
+
         $this->app->singleton(LegalExportMetrics::class, TextfileLegalExportMetrics::class);
 
         // La pasada horaria sobre los ficheros de la exportacion legal (ADR-045):
@@ -572,6 +588,49 @@ final class ComplianceServiceProvider extends ServiceProvider
                 consoleWarningDays: Config::integer('compliance.legal_export_console_warning_days', 30),
             ),
         );
+    }
+
+    /**
+     * Zona propia, y unica, de la busqueda de la persona de la exportacion legal
+     * (RF-IN-05, V21-3-PA-1, RS-05): **por cuenta**, por minuto y por hora, y
+     * **por origen**, por minuto.
+     *
+     * **Por que no le basta `throttle:management`.** Aquella zona deja 120
+     * peticiones por minuto, que para esta ruta son 1.200 personas por minuto
+     * con su nombre, su departamento y sus fechas, o 120 documentos probados por
+     * minuto contra el hash. La busqueda existe para encontrar a la persona de
+     * un requerimiento, que son unas pocas busquedas por expediente; el techo
+     * corto es lo que impide usarla como el directorio que el `auditor` no tiene
+     * (RF-ID-02) o como un oraculo de DNI.
+     *
+     * **Los dos ejes de cuenta son los que cortan**: la cuenta es el sujeto del
+     * abuso. El **eje por origen** es la red de seguridad para cuando el actor
+     * no se puede resolver —detras de `auth:sanctum` no deberia pasar, pero el
+     * limitador no puede darlo por hecho— y por eso es **mas ancho**: en un
+     * hotel recepcion, direccion y RRHH salen por la misma IP publica, y un
+     * techo de cuenta en el origen haria que dos personas atendiendo el mismo
+     * requerimiento se cortaran entre si. Su valor por defecto es el de la zona
+     * de gestion, 120 por minuto, que es lo que esta ruta tenia por origen
+     * cuando llevaba las dos zonas.
+     *
+     * Los tres techos son configuracion (regla dura 13) y se leen en cada
+     * peticion, para que una prueba o un cambio de `.env` los vea sin reiniciar.
+     */
+    private function registerLegalExportSearchRateLimiter(): void
+    {
+        RateLimiter::for('legal-export-search', static function (Request $request): array {
+            $actor = $request->user();
+            $subject = 'legal-export-search:'.($actor instanceof ManagementActor ? $actor->actorUuid() : 'desconocido');
+
+            return [
+                Limit::perMinute(max(1, Config::integer('compliance.legal_export_search.per_minute', 10)))
+                    ->by($subject.':minute'),
+                Limit::perHour(max(1, Config::integer('compliance.legal_export_search.per_hour', 60)))
+                    ->by($subject.':hour'),
+                Limit::perMinute(max(1, Config::integer('compliance.legal_export_search.per_ip_per_minute', 120)))
+                    ->by('legal-export-search-ip:'.(string) $request->ip()),
+            ];
+        });
     }
 
     /**

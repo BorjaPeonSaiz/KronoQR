@@ -3566,6 +3566,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/legal-export/employees/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buscar a la persona de la exportacion para la Inspeccion
+         * @description Encuentra a la persona que nombra un requerimiento de la Inspeccion, **por
+         *     su nombre o por su DNI**, para pedir despues su exportacion con
+         *     `GET /api/v1/reports/legal-export?employee_uuid=` (RF-IN-05,
+         *     V21-3-PA-1, decision del propietario del 18-10-2026).
+         *
+         *     **Por que existe.** El `auditor` solo lleva `reports:legal` (RF-ID-02,
+         *     doc 02 §7.3 nota 9) y no puede leer la plantilla. Sin esta ruta, para
+         *     exportar a una persona tenia que pedir su UUID a RRHH o exportar la
+         *     plantilla entera, y ninguna de las dos cosas es minimizar (RGPD
+         *     art. 5.1.c).
+         *
+         *     **Por que es `POST` y no `GET`.** Para que el DNI **nunca vaya en la
+         *     URL**: una URL queda en los registros de acceso del proxy, en el
+         *     historial del navegador y en la cabecera `Referer`. El cuerpo no. No
+         *     crea nada y se puede repetir sin efectos sobre el registro; el asiento
+         *     de auditoria es lo unico que escribe.
+         *
+         *     **No es el directorio** (`GET /api/v1/employees`), y los limites estan
+         *     para que no pueda usarse como tal:
+         *
+         *     - `q` exige **al menos 3 caracteres** una vez recortado: casa con el
+         *       nombre, los apellidos o el nombre completo, **por subcadena y sin
+         *       distinguir mayusculas ni acentos**, o con el **codigo de empleado
+         *       exacto**. `%` y `_` se buscan como los caracteres que son.
+         *     - `national_id` se normaliza igual que en el alta y se compara **exacto
+         *       contra `national_id_hash`** (RL-08): devuelve una persona o ninguna. El
+         *       documento en claro no se guarda ni se escribe en ningun log.
+         *     - Devuelve **como maximo 10 personas**, ordenadas por apellidos y
+         *       nombre; `truncated` dice si habia mas y hay que afinar.
+         *     - **Incluye a las personas dadas de baja**: el registro se conserva
+         *       cuatro años (RL-02) y la Inspeccion pregunta tambien por quien ya se
+         *       fue.
+         *     - Solo los **campos minimos** para distinguir a dos personas con el
+         *       mismo nombre. Nunca el codigo, el correo, el documento ni su digest.
+         *
+         *     **Sin coincidencias no es un error**: `200` con `data: []`, nunca `404`.
+         *
+         *     **Deja asiento** (`personal_data.accessed`, dataset
+         *     `legal_export_employee_search`; ADR-037, enmienda del 18-10-2026) con el
+         *     criterio usado (`name_or_code` o `national_id`), el numero de personas
+         *     **devueltas** —tambien cero—, sus `employee_uuid` (`employee_uuids`, como
+         *     mucho diez; se omite sin resultados) y si la lista se recorto. **Nunca con
+         *     el termino buscado** (regla dura 21). El asiento se escribe antes de
+         *     responder: si falla, no hay respuesta (regla dura 6).
+         *
+         *     **No se degrada con la licencia** (ADR-019, regla dura 15): es parte de
+         *     atender un requerimiento, como la exportacion.
+         */
+        post: operations["searchLegalExportEmployees"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/exports": {
         parameters: {
             query?: never;
@@ -7598,6 +7664,73 @@ export interface components {
              *     es configuracion de cada instalacion (regla dura 13).
              */
             new_password: string;
+        };
+        /**
+         * LegalExportEmployeeSearch
+         * @description Criterio de busqueda de la persona de la exportacion legal (RF-IN-05).
+         *     **Uno de los dos, nunca los dos ni ninguno**: un cuerpo con `q` y
+         *     `national_id` a la vez, o con cualquier otro campo, es un `422`.
+         */
+        LegalExportEmployeeSearch: {
+            /**
+             * @description Nombre, apellidos o nombre completo, por subcadena y sin
+             *     distinguir mayusculas ni acentos; o un codigo de empleado
+             *     **exacto**. Se recorta antes de contar: tres espacios no son
+             *     tres caracteres.
+             * @example amrani
+             */
+            q: string;
+        } | {
+            /**
+             * @description Documento de identidad. Se normaliza como en el alta y se
+             *     compara **exacto contra su hash** (RL-08): nunca se guarda ni se
+             *     escribe en un log, y no admite busqueda parcial.
+             * @example 00000000T
+             */
+            national_id: string;
+        };
+        /**
+         * LegalExportEmployeeMatches
+         * @description Resultado de la busqueda de la persona de la exportacion legal
+         *     (RF-IN-05). Lleva lo justo para distinguir a dos personas con el mismo
+         *     nombre y nada mas: **ni el codigo, ni el correo, ni el documento ni su
+         *     digest**.
+         */
+        LegalExportEmployeeMatches: {
+            data: components["schemas"]["LegalExportEmployeeMatch"][];
+            /**
+             * @description `true` si casaban mas de 10 personas y la lista se ha recortado: hay
+             *     que afinar la busqueda. Con `national_id` es siempre `false`.
+             */
+            truncated: boolean;
+        };
+        /**
+         * LegalExportEmployeeMatch
+         * @description Una persona candidata. Incluye a las dadas de baja (RL-02).
+         */
+        LegalExportEmployeeMatch: {
+            /**
+             * Format: uuid
+             * @description Identificador publico. Es el que se pasa como `employee_uuid` a
+             *     `GET /api/v1/reports/legal-export`.
+             * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+             */
+            uuid: string;
+            first_name: string;
+            last_name: string;
+            /** @description Departamento de la persona, o `null` si no tiene ninguno. */
+            department: components["schemas"]["PresenceDepartment"] | null;
+            status: components["schemas"]["EmploymentStatus"];
+            /**
+             * Format: date
+             * @description Fecha de alta, civil y sin zona.
+             */
+            hired_at: string;
+            /**
+             * Format: date
+             * @description Fecha de cese, o `null` si sigue de alta.
+             */
+            terminated_at: string | null;
         };
         /**
          * EmploymentStatus
@@ -17222,6 +17355,39 @@ export interface operations {
                 };
                 content: {
                     "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    searchLegalExportEmployees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalExportEmployeeSearch"];
+            };
+        };
+        responses: {
+            /**
+             * @description Las personas que casan, como maximo 10. `data` vacio cuando no casa
+             *     nadie.
+             */
+            200: {
+                headers: {
+                    /** @description Siempre `no-store`: el cuerpo es una lista nominal. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalExportEmployeeMatches"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
