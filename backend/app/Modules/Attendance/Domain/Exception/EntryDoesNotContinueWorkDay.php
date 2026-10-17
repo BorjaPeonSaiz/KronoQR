@@ -48,17 +48,16 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
      */
     private function __construct(
         public readonly FutureMark $mark,
-        public readonly string $workDate,
-        public readonly DateTimeImmutable $lastMark,
-        public readonly int $minimumRestMinutes,
         public readonly string $translationKey,
         public readonly array $parameters,
         string $message,
+        /** Si el que deja de continuar la jornada es el tramo siguiente y no el escrito. */
+        public readonly bool $concernsNextEntry,
     ) {
         parent::__construct($message);
     }
 
-    /** El tramo escrito es el que no continua la jornada. */
+    /** El tramo escrito queda a la cota o mas alla de la salida anterior. */
     public static function writtenEntry(
         FutureMark $mark,
         string $workDate,
@@ -66,10 +65,10 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
         DateTimeImmutable $start,
         ContinuationCeiling $ceiling,
     ): self {
-        return self::make('attendance.errors.entry_does_not_continue_work_day', 'A shift entry', $mark, $workDate, $lastMark, $start, $ceiling);
+        return self::beyondCeiling('attendance.errors.entry_does_not_continue_work_day', true, $mark, $workDate, $lastMark, $start, $ceiling);
     }
 
-    /** El tramo siguiente al escrito, o al anulado, dejaria de continuar la jornada. */
+    /** El tramo siguiente al escrito, o al anulado, quedaria a la cota o mas alla. */
     public static function nextEntry(
         FutureMark $mark,
         string $workDate,
@@ -77,7 +76,7 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
         DateTimeImmutable $start,
         ContinuationCeiling $ceiling,
     ): self {
-        return self::make('attendance.errors.next_entry_would_not_continue_work_day', 'The next shift entry', $mark, $workDate, $lastMark, $start, $ceiling);
+        return self::beyondCeiling('attendance.errors.next_entry_would_not_continue_work_day', false, $mark, $workDate, $lastMark, $start, $ceiling);
     }
 
     /**
@@ -87,23 +86,20 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
     public static function notAfterBreak(
         FutureMark $mark,
         string $workDate,
-        DateTimeImmutable $lastMark,
         DateTimeImmutable $start,
         bool $isWritten,
     ): self {
         return new self(
             $mark,
-            $workDate,
-            $lastMark,
-            0,
             'attendance.errors.entry_not_after_break',
             ['work_date' => $workDate],
             sprintf(
                 '%s starting at %s does not continue work day %s: the previous entry did not end in a break (RN-05).',
-                $isWritten ? 'A shift entry' : 'The next shift entry',
+                self::subject($isWritten),
                 $start->format(DateTimeImmutable::ATOM),
                 $workDate,
             ),
+            ! $isWritten,
         );
     }
 
@@ -116,31 +112,28 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
         FutureMark $mark,
         string $workDate,
         string $nextDay,
-        DateTimeImmutable $lastMark,
         DateTimeImmutable $start,
         bool $isWritten,
     ): self {
         return new self(
             $mark,
-            $workDate,
-            $lastMark,
-            0,
             'attendance.errors.entry_beyond_next_day',
             ['work_date' => $workDate, 'next_day' => $nextDay],
             sprintf(
                 '%s starting at %s does not continue work day %s: a work day only continues until %s (RN-05).',
-                $isWritten ? 'A shift entry' : 'The next shift entry',
+                self::subject($isWritten),
                 $start->format(DateTimeImmutable::ATOM),
                 $workDate,
                 $nextDay,
             ),
+            ! $isWritten,
         );
     }
 
     /**
-     * El tramo escrito queda dentro de la cota, pero entre la salida anterior y
-     * su entrada hay un tramo vigente de otra jornada de la persona: la jornada
-     * ya se interrumpio. Mismo mensaje que {@see writtenEntry()}.
+     * El tramo queda dentro de la cota, pero entre la salida anterior y su
+     * entrada hay un tramo vigente de otra jornada de la persona: la jornada ya
+     * se interrumpio.
      */
     public static function interruptedByAnotherWorkDay(
         FutureMark $mark,
@@ -148,30 +141,29 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
         DateTimeImmutable $lastMark,
         DateTimeImmutable $start,
         ContinuationCeiling $ceiling,
-        bool $isWritten = true,
+        bool $isWritten,
     ): self {
         return new self(
             $mark,
-            $workDate,
-            $lastMark,
-            $ceiling->minimumRest->minutes,
             $isWritten
                 ? 'attendance.errors.entry_does_not_continue_work_day'
                 : 'attendance.errors.next_entry_would_not_continue_work_day',
             ['work_date' => $workDate, 'hours' => $ceiling->hours()],
             sprintf(
-                'A shift entry starting at %s does not continue work day %s: a current shift entry of another work day '
+                '%s starting at %s does not continue work day %s: a current shift entry of another work day '
                 .'lies between the previous mark %s and it (RN-05).',
+                self::subject($isWritten),
                 $start->format(DateTimeImmutable::ATOM),
                 $workDate,
                 $lastMark->format(DateTimeImmutable::ATOM),
             ),
+            ! $isWritten,
         );
     }
 
-    private static function make(
+    private static function beyondCeiling(
         string $translationKey,
-        string $subject,
+        bool $isWritten,
         FutureMark $mark,
         string $workDate,
         DateTimeImmutable $lastMark,
@@ -180,20 +172,23 @@ final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
     ): self {
         return new self(
             $mark,
-            $workDate,
-            $lastMark,
-            $ceiling->minimumRest->minutes,
             $translationKey,
             ['work_date' => $workDate, 'hours' => $ceiling->hours()],
             sprintf(
                 '%s starting at %s does not continue work day %s: the previous mark %s is %d minutes '
                 .'or more before it (RN-05).',
-                $subject,
+                self::subject($isWritten),
                 $start->format(DateTimeImmutable::ATOM),
                 $workDate,
                 $lastMark->format(DateTimeImmutable::ATOM),
                 $ceiling->minimumRest->minutes,
             ),
+            ! $isWritten,
         );
+    }
+
+    private static function subject(bool $isWritten): string
+    {
+        return $isWritten ? 'A shift entry' : 'The next shift entry';
     }
 }

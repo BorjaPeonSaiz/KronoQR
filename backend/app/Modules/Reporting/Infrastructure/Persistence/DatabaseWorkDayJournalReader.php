@@ -229,11 +229,16 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         $marks = $this->clockingMarks($ids);
 
         $byDate = [];
+        // Como termino el tramo anterior de cada jornada: las filas vienen por
+        // jornada y entrada.
+        $previousClosedBy = [];
 
         foreach ($rows as $raw) {
             $row = Row::of($raw);
-            $mark = $marks[$row->int('id')] ?? ['opened_by' => null, 'closed_by' => null];
-            $byDate[$this->isoDate($row->string('work_date'))][] = new JournalShiftEntry(
+            $date = $this->isoDate($row->string('work_date'));
+            $openedBy = $marks[$row->int('id')]['opened_by'] ?? null;
+            $closedBy = $this->closedBy($row->nullableString('closed_by'), $row->nullableInstant('clocked_out_at'));
+            $byDate[$date][] = new JournalShiftEntry(
                 uuid: $row->string('uuid'),
                 version: $row->int('version'),
                 status: $row->string('status'),
@@ -247,18 +252,18 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 clockOutSource: $row->nullableString('clock_out_source'),
                 durationMinutes: $row->nullableInt('duration_minutes'),
                 recordedAt: $row->instant('created_at'),
-                // **No hay escaneo que valga `null` aqui** (RF-AT-12, tarea
-                // 3.5): un tramo declarado o corregido a mano no tiene ninguna
-                // fila en `scan_events` en toda su cadena de versiones, y lo que
-                // de hecho ocurrio es una entrada y una salida.
-                openedBy: $mark['opened_by'] ?? JournalShiftEntry::OPENED_BY_CLOCK_IN,
-                // La columna manda desde la 2.3.0 (RN-05): un tramo escrito a mano
-                // puede declararse terminado en pausa sin escaneo que lo diga.
-                closedBy: $this->closedBy(
-                    $row->nullableString('closed_by') ?? $mark['closed_by'],
-                    $row->nullableInstant('clocked_out_at'),
-                ),
+                // Un tramo escrito a mano no tiene escaneo en ninguna version: se
+                // deriva del anterior de la jornada, que es lo que el registro
+                // dice (ADR-058). Es la vuelta de una pausa si aquel termino en
+                // pausa, y una entrada si no o si es el primero.
+                openedBy: $openedBy ?? (($previousClosedBy[$date] ?? null) === JournalShiftEntry::CLOSED_BY_BREAK_START
+                    ? JournalShiftEntry::OPENED_BY_BREAK_END
+                    : JournalShiftEntry::OPENED_BY_CLOCK_IN),
+                // `shift_entries.closed_by` (2.3.0, ADR-058): lo fija el escaneo
+                // o quien escribe el tramo a mano.
+                closedBy: $closedBy,
             );
+            $previousClosedBy[$date] = $closedBy;
         }
 
         return $byDate;
@@ -305,7 +310,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      * aqui: {@see currentEntries()} le da `clock_in` y `clock_out`.
      *
      * @param  list<int>  $entryIds  `shift_entries.id` de las versiones vigentes del rango
-     * @return array<int, array{opened_by: string|null, closed_by: string|null}>
+     * @return array<int, array{opened_by: string|null}>
      */
     private function clockingMarks(array $entryIds): array
     {
@@ -320,9 +325,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         $rows = $this->connection->select(<<<SQL
             SELECT l.current_id,
                    (ARRAY_AGG(ev.result ORDER BY ev.occurred_at)
-                      FILTER (WHERE ev.result IN ('clock_in', 'break_end')))[1] AS opened_by,
-                   (ARRAY_AGG(ev.result ORDER BY ev.occurred_at DESC)
-                      FILTER (WHERE ev.result IN ('clock_out', 'break_start')))[1] AS closed_by
+                      FILTER (WHERE ev.result IN ('clock_in', 'break_end')))[1] AS opened_by
               FROM (VALUES {$values}) AS l(current_id, entry_id)
               JOIN scan_events ev ON ev.shift_entry_id = l.entry_id
              GROUP BY l.current_id
@@ -335,7 +338,6 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
 
             $marks[$row->int('current_id')] = [
                 'opened_by' => $row->nullableString('opened_by'),
-                'closed_by' => $row->nullableString('closed_by'),
             ];
         }
 
@@ -551,6 +553,8 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
             clockedInAt: $marks->instant('clocked_in_at'),
             clockedOutAt: $marks->nullableInstant('clocked_out_at'),
             workedMinutes: $marks->int('worked_minutes'),
+            // Las correcciones anteriores a la 2.3.0 no lo apuntaban (ADR-058).
+            closedBy: $marks->nullableString('closed_by'),
         );
     }
 

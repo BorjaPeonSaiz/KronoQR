@@ -77,8 +77,13 @@ function conciliacionFila(array $cambios = []): RecordedShiftEntry
         'replacementCorrections' => [],
         ...$cambios,
     ];
+    // Como termino (RN-05, 2.3.0): un tramo cerrado termina en salida salvo que
+    // la prueba diga otra cosa; uno abierto, en nada.
+    $fila['closedBy'] = \array_key_exists('closedBy', $cambios)
+        ? $cambios['closedBy']
+        : ($fila['clockedOutAt'] === null ? null : 'clock_out');
 
-    /** @var array{uuid: string, employeeUuid: string, siteId: int, workDate: string, clockedInAt: string, clockedOutAt: string|null, durationMinutes: int|null, status: string, version: int, supersededByUuid: string|null, clockInSource: string, clockOutSource: string|null, corrections: list<RecordedCorrection>, replacementCorrections: list<RecordedCorrection>} $fila */
+    /** @var array{uuid: string, employeeUuid: string, siteId: int, workDate: string, clockedInAt: string, clockedOutAt: string|null, durationMinutes: int|null, status: string, version: int, supersededByUuid: string|null, clockInSource: string, clockOutSource: string|null, corrections: list<RecordedCorrection>, replacementCorrections: list<RecordedCorrection>, closedBy: string|null} $fila */
     return new RecordedShiftEntry(...$fila);
 }
 
@@ -242,7 +247,7 @@ it('da por bueno un tramo abierto contra el asiento de su entrada', function ():
     // Y el mismo asiento contra un tramo que alguien cerro por SQL: la salida
     // no la escribio ningun fichaje.
     expect(conciliacionCompara(conciliacionFila(), $entrada)?->fields)
-        ->toBe(['clocked_out_at', 'duration_minutes', 'clock_out_source', 'status']);
+        ->toBe(['clocked_out_at', 'duration_minutes', 'clock_out_source', 'closed_by', 'status']);
 })->group('RL-04', 'RS-07');
 
 it('da por bueno un tramo anomalo cuando su asiento trae anomalias, y no al reves', function (): void {

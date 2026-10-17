@@ -86,15 +86,19 @@ final readonly class WorkDate
      * El primer instante del dia civil **siguiente** en su zona, en UTC: donde
      * acaba esta fecha.
      *
-     * Lo usa la cota del dia del cese (RN-05, RN-14). Se suma un dia de
-     * calendario a la medianoche local, no 24 h: el dia del cambio de hora tiene
-     * 23 o 25 (RN-09), y PHP conserva la hora de reloj al sumar `P1D`.
+     * Lo usan la cota del dia del cese (RN-05, RN-14) y el tope del dia
+     * siguiente. Se calcula la **fecha** siguiente —a mediodia UTC, donde ningun
+     * desfase la mueve— y se toma su comienzo con {@see startsAt()}: el dia del
+     * cambio de hora tiene 23 o 25 h (RN-09), y en las zonas en que el salto es
+     * a medianoche (`America/Santiago`) ese dia ni siquiera tiene 00:00.
      */
     public function endsAt(): DateTimeImmutable
     {
-        return new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone)
+        $next = new DateTimeImmutable($this->isoDate.' 12:00:00', new DateTimeZone('UTC'))
             ->add(new DateInterval('P1D'))
-            ->setTimezone(new DateTimeZone('UTC'));
+            ->format('Y-m-d');
+
+        return self::fromIsoDate($next, $this->timezone)->startsAt();
     }
 
     /**

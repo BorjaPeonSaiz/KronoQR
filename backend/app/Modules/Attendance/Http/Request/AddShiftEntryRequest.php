@@ -103,6 +103,13 @@ final class AddShiftEntryRequest extends FormRequest
             return;
         }
 
-        $validator->errors()->add('ends_in_break', 'Solo puede terminar en pausa un tramo con hora de salida.');
+        // El mismo texto que el `422` del dominio (`BreakWithoutClockOut`), en el
+        // idioma negociado.
+        $message = __('attendance.errors.break_without_clock_out');
+
+        $validator->errors()->add(
+            'ends_in_break',
+            \is_string($message) ? $message : 'A shift entry without a clock-out cannot end in a break.',
+        );
     }
 }

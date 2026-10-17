@@ -917,3 +917,61 @@ it('no continua una pausa mas alla del dia siguiente a su jornada: abre jornada 
         ->and(DB::table('shift_entries')->where('closed_by', 'break_start')->count())->toBe(2)
         ->and(DB::table('shift_entries')->where('work_date', '2026-03-13')->count())->toBe(2);
 })->group('RF-AT-12', 'RN-05', 'RN-10');
+
+it('no vuelve de una pausa que una correccion dejo como salida: abre jornada nueva', function (): void {
+    // RN-05 (2.3.0). El ultimo escaneo fue «Pausa», pero RRHH declaro despues
+    // que aquel tramo termino en salida. La vuelta ya no continua nada.
+    $escenario = escenarioDeFichaje('2026-03-14 06:00:00');
+
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T06:00:00Z')->assertOk();
+    FrozenTime::at('2026-03-14 10:00:00');
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:00:00Z', ['intent' => 'break_start'])->assertOk();
+
+    /** @var string $tramo */
+    $tramo = DB::table('shift_entries')->orderBy('id')->value('uuid');
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'ends_in_break' => false,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertStatus(200);
+
+    FrozenTime::at('2026-03-14 10:30:00');
+    $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:30:00Z');
+
+    $vuelta->assertOk()->assertValidResponse();
+
+    expect($vuelta->json('action'))->toBe('clock_in');
+})->group('RF-AT-12', 'RN-05', 'RN-13');
+
+it('no vuelve de una pausa si otra jornada de la persona se interpuso: abre jornada nueva', function (): void {
+    // RN-05 (2.3.0). Pausa a las 23:00 del 14 en Madrid; entretanto, RRHH da de
+    // alta un tramo en la jornada del 15 (00:10 a 00:40); la vuelta de la 01:00
+    // ya no continua la jornada del 14. Nunca se rechaza (regla dura 19).
+    $escenario = escenarioDeFichaje('2026-03-14 17:00:00');
+
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T17:00:00Z')->assertOk();
+    FrozenTime::at('2026-03-14 22:00:00');
+    escanear($escenario, Str::uuid7()->toString(), '2026-03-14T22:00:00Z', ['intent' => 'break_start'])->assertOk();
+
+    // El alta, ya pasadas sus horas (F1).
+    FrozenTime::at('2026-03-14 23:50:00');
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $escenario['employee'],
+            'work_date' => '2026-03-15',
+            'clocked_in_at' => '2026-03-14T23:10:00Z',
+            'clocked_out_at' => '2026-03-14T23:40:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertStatus(201);
+
+    FrozenTime::at('2026-03-15 00:00:00');
+    $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-15T00:00:00Z');
+
+    $vuelta->assertOk()->assertValidResponse();
+
+    expect($vuelta->json('action'))->toBe('clock_in')
+        ->and($vuelta->json('work_date'))->toBe('2026-03-15');
+})->group('RF-AT-12', 'RN-05');

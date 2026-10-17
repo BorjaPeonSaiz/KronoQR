@@ -90,6 +90,9 @@ final readonly class AuditedShiftEntry
         public bool $knowsClockOutSource,
         public ?string $clockOutSource,
         public array $requiredCorrections,
+        /** Si los asientos dicen como termino el tramo (RN-05, 2.3.0). Los anteriores a la 2.3.0 no siempre. */
+        public bool $knowsClosedBy = false,
+        public ?string $closedBy = null,
     ) {}
 
     /**
@@ -113,6 +116,7 @@ final readonly class AuditedShiftEntry
         };
 
         $outSource = self::clockOutSourceOf($marks);
+        $closedBy = self::closedByOf($marks);
         $required = $base['required'];
 
         foreach ([$first, $marks] as $entry) {
@@ -137,6 +141,8 @@ final readonly class AuditedShiftEntry
             knowsClockOutSource: $outSource['known'],
             clockOutSource: $outSource['value'],
             requiredCorrections: $required,
+            knowsClosedBy: $closedBy['known'],
+            closedBy: $closedBy['value'],
         );
     }
 
@@ -244,6 +250,42 @@ final readonly class AuditedShiftEntry
             'created' => self::MANUAL_SOURCE,
             'modified', 'closed' => self::sideChanged($first->payload, 'clocked_in_at') ? self::MANUAL_SOURCE : null,
             default => null,
+        };
+    }
+
+    /**
+     * Como termino el tramo segun el ultimo asiento que fijo las marcas (RN-05,
+     * 2.3.0): la `action` del cierre del quiosco, o el `after.closed_by` de una
+     * correccion.
+     *
+     * @return array{known: bool, value: string|null}
+     */
+    private static function closedByOf(?AuditTrailEntry $marks): array
+    {
+        $unknown = ['known' => false, 'value' => null];
+
+        if (! $marks instanceof AuditTrailEntry) {
+            return $unknown;
+        }
+
+        if (! $marks->isCorrection()) {
+            return match ($marks->action) {
+                AuditAction::ShiftEntryCreated->value => ['known' => true, 'value' => null],
+                // La `action` del cierre es `clock_out` o `break_start`: lo que
+                // cerro el tramo (ADR-024).
+                AuditAction::ShiftEntryClosed->value => ['known' => true, 'value' => self::string($marks->payload, 'action')],
+                default => $unknown,
+            };
+        }
+
+        $after = $marks->payload['after'] ?? null;
+
+        return match (true) {
+            ! \is_array($after) || ! \array_key_exists('clocked_out_at', $after) => $unknown,
+            $after['clocked_out_at'] === null => ['known' => true, 'value' => null],
+            // Las correcciones anteriores a la 2.3.0 no lo apuntaban.
+            ! \array_key_exists('closed_by', $after) => $unknown,
+            default => ['known' => true, 'value' => self::string($after, 'closed_by')],
         };
     }
 

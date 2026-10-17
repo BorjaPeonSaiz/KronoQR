@@ -154,7 +154,12 @@ it('el motor rechaza las transiciones de tramo que el dominio no produce', funct
     'cerrar sin hora de salida' => ['open', ['status' => 'closed']],
     'escribir la salida al anular un tramo abierto' => ['open', ['status' => 'voided', 'clocked_out_at' => '2026-03-14 07:30:00+00']],
     'escribir la duracion de un tramo abierto' => ['open', ['duration_minutes' => 30]],
-])->group('RS-07', 'RL-04', 'RN-13');
+    // RN-05 (2.3.0): como termino un tramo solo se escribe al cerrarlo.
+    'reescribir como termino un tramo cerrado' => ['closed', ['closed_by' => 'break_start']],
+    'reescribir como termino un tramo anomalo' => ['anomalous', ['closed_by' => 'break_start']],
+    'escribir como termino un tramo abierto sin cerrarlo' => ['open', ['closed_by' => 'break_start']],
+    'escribir como termino al anular un tramo abierto' => ['open', ['status' => 'voided', 'closed_by' => 'break_start']],
+])->group('RS-07', 'RL-04', 'RN-13', 'RN-05');
 
 it('el motor rechaza un superseded_by_id que no es la version siguiente', function (string $case): void {
     $old = transitionsEntry('closed');
@@ -241,7 +246,9 @@ it('las transiciones del dominio pasan con el rol de la aplicacion', function (s
     'anular un anomalo (anomalous -> voided)' => ['anomalous', ['status' => 'voided']],
     'solo updated_at en un anulado' => ['voided', []],
     'reescribir los mismos valores de un cerrado (upsert)' => ['closed', ['status' => 'closed', 'clocked_out_at' => '2026-03-14 07:30:00+00', 'duration_minutes' => 30, 'clock_out_source' => 'qr_kiosk']],
-])->group('RS-07', 'RL-04', 'RN-13');
+    // RN-05 (2.3.0): el cierre del quiosco por «Pausa».
+    'cerrar en pausa (open -> closed, break_start)' => ['open', ['status' => 'closed', 'clocked_out_at' => '2026-03-14 11:00:00+00', 'duration_minutes' => 240, 'clock_out_source' => 'qr_kiosk', 'closed_by' => 'break_start']],
+])->group('RS-07', 'RL-04', 'RN-13', 'RN-05');
 
 it('superseder con su version nueva pasa, en el orden de EloquentWorkDayRepository', function (string $from): void {
     $old = transitionsEntry($from);

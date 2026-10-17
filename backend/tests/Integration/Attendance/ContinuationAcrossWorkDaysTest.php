@@ -102,7 +102,7 @@ it('rechaza el alta en la jornada del 14 si la jornada del 15 se interpuso, sin 
     } catch (EntryDoesNotContinueWorkDay $rechazo) {
         expect($rechazo->mark->value)->toBe('clocked_in_at')
             ->and($rechazo->translationKey)->toBe('attendance.errors.entry_does_not_continue_work_day')
-            ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-15 00:00'));
+            ->and($rechazo->getMessage())->toContain('previous mark 2026-03-14T23:00:00+00:00');
     }
 
     expect([

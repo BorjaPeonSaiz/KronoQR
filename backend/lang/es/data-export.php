@@ -330,6 +330,7 @@ return [
                 'status' => 'Estado: `open` (sin salida), `closed` (cerrado y vigente), `superseded` (sustituido por una correccion posterior) o `voided` (anulado, no suma horas).',
                 'clock_in_source' => 'Como se registro la entrada: `qr_kiosk` (tarjeta en el quiosco), `pin_fallback` (PIN, cuando la tarjeta no funciona), `manual` (correccion hecha desde el panel).',
                 'clock_out_source' => 'Lo mismo para la salida.',
+                'closed_by' => 'Cómo terminó el tramo: clock_out (salida) o break_start (pausa). Vacío si sigue abierto.',
                 'version' => 'Numero de version del tramo. La 1 es la original; cada correccion crea la siguiente.',
                 'superseded_by_uuid' => 'Tramo que sustituyo a este. Vacio en la version vigente. Siguiendo esta columna se reconstruye la historia completa de una correccion.',
                 'created_at' => 'Cuando se creo esta version.',

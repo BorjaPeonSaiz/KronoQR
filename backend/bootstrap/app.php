@@ -846,7 +846,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '
                     .'cada una con su motivo.',
             ],
-        ]));
+        ], $exception->byVoiding ? 'opening_voided' : 'opening_moved'));
 
         /*
          * RN-05 (2.3.0, V21-3-AR-1): un tramo escrito a mano de otro dia civil
@@ -863,7 +863,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 $exception->parameters,
                 $exception->getMessage(),
             )],
-        ]));
+        ], $exception->concernsNextEntry ? 'next_entry_not_continued' : 'entry_not_continued'));
 
         /*
          * RN-03: la salida es posterior a la entrada. Estrictamente — un tramo de

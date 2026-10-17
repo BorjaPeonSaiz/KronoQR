@@ -112,6 +112,15 @@ return [
     ],
 
     /*
+     * Como termino una version en el antes y el despues de una correccion
+     * (RN-05, ADR-058).
+     */
+    'closed_by' => [
+        'clock_out' => 'termina en salida',
+        'break_start' => 'termina en pausa',
+    ],
+
+    /*
      * Lo que dice `compliance:legal-export` al terminar (ADR-045 §f). La copia
      * de consola NO se borra sola: es la que se entrega a la Inspeccion, bajo
      * custodia de quien la genero. Ya no desaparece al recrear el contenedor, asi

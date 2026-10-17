@@ -8,6 +8,7 @@ use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Domain\ValueObject\ExportedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\ExportedDuration;
+use App\Modules\Compliance\Domain\ValueObject\ExportedMarks;
 use App\Modules\Compliance\Domain\ValueObject\ExportedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
@@ -265,9 +266,23 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
             // `audit_log`, o el fichero deja de poder cruzarse con ellos.
             'correction_reason' => $correction->reasonCode,
             'correction_explanation' => $correction->reasonText,
-            'correction_before' => $correction->before->describe(),
-            'correction_after' => $correction->after->describe(),
+            'correction_before' => $this->describeMarks($correction->before),
+            'correction_after' => $this->describeMarks($correction->after),
         ]);
+    }
+
+    /**
+     * Las marcas de una version y, si consta, como termino (ADR-058): una
+     * correccion que solo declara la pausa no cambia ninguna hora, y sin esto el
+     * «antes» y el «despues» saldrian iguales.
+     */
+    private function describeMarks(ExportedMarks $marks): string
+    {
+        $closedBy = $marks->closedBy();
+
+        return $closedBy === null
+            ? $marks->describe()
+            : $marks->describe().' · '.$this->text('closed_by.'.$closedBy);
     }
 
     /**

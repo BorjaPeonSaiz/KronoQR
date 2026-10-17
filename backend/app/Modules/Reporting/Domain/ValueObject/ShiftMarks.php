@@ -26,6 +26,11 @@ final readonly class ShiftMarks
         public DateTimeImmutable $clockedInAt,
         public ?DateTimeImmutable $clockedOutAt,
         public int $workedMinutes,
+        /**
+         * Como termino esta version: `clock_out`, `break_start`, o `null` si
+         * seguia abierta o la correccion es anterior a la 2.3.0 (ADR-058).
+         */
+        public ?string $closedBy = null,
     ) {
         if ($version < 1) {
             throw new InvalidArgumentException('La version de un tramo empieza en 1, y llego '.$version.'.');

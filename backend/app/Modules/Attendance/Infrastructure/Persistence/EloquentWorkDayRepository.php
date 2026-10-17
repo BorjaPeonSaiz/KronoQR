@@ -273,22 +273,14 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
     }
 
     /**
-     * RN-18 a traves de jornadas (RN-02).
+     * RN-05 frente a las otras jornadas de la persona (2.3.0): si algun tramo
+     * vigente de una jornada distinta de `$workDate` pisa el hueco que un tramo
+     * de otro dia civil dice continuar. Ver el puerto.
      *
-     * **La consulta es la restriccion de exclusion escrita como pregunta.** El
-     * tramo que una entrada abriria no tiene fin —`tstzrange(occurred_at, NULL)`
-     * es `[occurred_at, ∞)`— asi que solapa con todo lo que siga vivo despues.
-     * Se pregunta con el mismo operador `&&` y sobre el mismo predicado parcial
-     * que `shift_entries_no_overlap`, de modo que **el indice GiST de la propia
-     * restriccion la sirve** y, sobre todo, de modo que la respuesta no pueda
-     * discrepar de lo que la base de datos hara medio milisegundo despues: si
-     * aqui dijera «cabe» y alli no cupiera, volveriamos al `500`.
-     *
-     * `[)` incluido: entrar a la misma hora a la que se salio **no** solapa, y
-     * por eso no hay que restarle nada al instante.
-     *
-     * Se descartan los tramos sin salida —el turno abierto— porque ese caso es
-     * RN-01 y se resuelve reintentando (ver el puerto).
+     * Un tramo abierto cuenta —`tstzrange(entrada, NULL)` llega al infinito—:
+     * un turno en curso de otra jornada tambien interrumpe esta. Mismo operador
+     * `&&` y mismo predicado parcial que `shift_entries_no_overlap`, asi que el
+     * indice GiST de la restriccion la sirve.
      */
     public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool
     {
@@ -311,6 +303,24 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             ->exists();
     }
 
+    /**
+     * RN-18 a traves de jornadas (RN-02).
+     *
+     * **La consulta es la restriccion de exclusion escrita como pregunta.** El
+     * tramo que una entrada abriria no tiene fin —`tstzrange(occurred_at, NULL)`
+     * es `[occurred_at, ∞)`— asi que solapa con todo lo que siga vivo despues.
+     * Se pregunta con el mismo operador `&&` y sobre el mismo predicado parcial
+     * que `shift_entries_no_overlap`, de modo que **el indice GiST de la propia
+     * restriccion la sirve** y, sobre todo, de modo que la respuesta no pueda
+     * discrepar de lo que la base de datos hara medio milisegundo despues: si
+     * aqui dijera «cabe» y alli no cupiera, volveriamos al `500`.
+     *
+     * `[)` incluido: entrar a la misma hora a la que se salio **no** solapa, y
+     * por eso no hay que restarle nada al instante.
+     *
+     * Se descartan los tramos sin salida —el turno abierto— porque ese caso es
+     * RN-01 y se resuelve reintentando (ver el puerto).
+     */
     public function closedEntryEndingAfter(string $employeeUuid, DateTimeImmutable $at): ?TimeRange
     {
         $employeeId = $this->employeeIdOf($employeeUuid);

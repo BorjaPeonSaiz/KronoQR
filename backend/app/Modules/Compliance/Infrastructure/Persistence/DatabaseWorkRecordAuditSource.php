@@ -140,6 +140,7 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
                se.version                        AS version,
                se.clock_in_source::text          AS clock_in_source,
                se.clock_out_source::text         AS clock_out_source,
+               se.closed_by::text                AS closed_by,
                rep.uuid::text                    AS superseded_by_uuid,
                (SELECT json_agg(json_build_object('action', sc.action, 'reason_code', sc.reason_code,
                                                   'performed_by_user_id', sc.performed_by_user_id) ORDER BY sc.id)
@@ -362,6 +363,7 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
             clockOutSource: $row->nullableString('clock_out_source'),
             corrections: $this->corrections($row->json('corrections')),
             replacementCorrections: $this->corrections($row->json('replacement_corrections')),
+            closedBy: $row->nullableString('closed_by'),
         );
 
         $latest = $this->trailEntry($row, 'audit_id', 'audit_action', 'audit_payload');

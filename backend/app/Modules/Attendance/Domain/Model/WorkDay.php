@@ -945,6 +945,38 @@ final class WorkDay
     }
 
     /**
+     * Desde cuando hay una **pausa en curso** en esta jornada a la hora `$at`, o
+     * `null` si no la hay (RN-05, ADR-024; 2.3.0).
+     *
+     * La hay si el ultimo tramo cerrado antes de `$at` termino en pausa y no hay
+     * tramo abierto. El quiosco lo pregunta antes de tratar un escaneo como la
+     * vuelta: su ultimo escaneo fue «Pausa», pero una correccion posterior pudo
+     * declarar que aquel tramo termino en salida.
+     */
+    public function breakInProgressAt(DateTimeImmutable $at): ?DateTimeImmutable
+    {
+        if ($this->hasOpenEntry()) {
+            return null;
+        }
+
+        $last = null;
+
+        foreach ($this->entries as $entry) {
+            $out = $entry->clockedOutAt();
+
+            if ($out !== null && $out <= $at && ($last === null || $out > $last->clockedOutAt())) {
+                $last = $entry;
+            }
+        }
+
+        if (! $last instanceof ShiftEntry || $last->closure() !== EntryClosure::BREAK_START) {
+            return null;
+        }
+
+        return $last->clockedOutAt();
+    }
+
+    /**
      * El mismo hueco para el tramo que seguia a `$entryUuid` si este se anula:
      * pasa a continuar desde la salida del anterior que queda vigente.
      */
@@ -1039,10 +1071,11 @@ final class WorkDay
      * RN-05 al anular (2.3.0). Dos cosas, sobre la jornada que quedaria sin el
      * tramo:
      *
-     * 1. **La apertura sigue en el dia de la jornada.** Si quedan tramos, el
-     *    mas temprano tiene que empezar en `work_date`: anular el que abria la
-     *    jornada dejaria abriendola a un tramo de otro dia civil, y sus horas
-     *    serian de otra jornada (`CorrectionWouldChangeWorkDate`).
+     * 1. **La apertura no cambia de dia.** Si hoy la abre un tramo de
+     *    `work_date` y, sin el anulado, la abriria uno de otro dia civil, sus
+     *    horas serian de otra jornada (`CorrectionWouldChangeWorkDate`). Si ya
+     *    la abria uno de otro dia —un dato antiguo—, anular no cambia nada de
+     *    eso y se admite.
      * 2. **El tramo que le seguia sigue continuandola**, medido contra el
      *    anterior que queda vigente. Misma comprobacion local que
      *    `guardContinuesWorkDay()`.
@@ -1056,11 +1089,16 @@ final class WorkDay
     private function guardVoidKeepsContinuation(ShiftEntry $voided, ContinuationCeiling $continuation): void
     {
         $marks = $this->marksWith(null, $voided);
+        $current = $this->marksWith(null, null);
 
-        if ($marks !== []) {
+        // Solo si la anulacion CAMBIA la apertura: hoy esta en `work_date` y
+        // despues no. Una jornada que ya estaba abierta por un tramo de otro dia
+        // —un dato anterior a la 2.3.0— se tiene que poder limpiar anulando.
+        if ($marks !== [] && $current !== []) {
             $opening = WorkDate::fromInstant($marks[0]['in'], $this->workDate->timezone);
+            $openedHere = WorkDate::fromInstant($current[0]['in'], $this->workDate->timezone)->equals($this->workDate);
 
-            if (! $opening->equals($this->workDate)) {
+            if ($openedHere && ! $opening->equals($this->workDate)) {
                 throw CorrectionWouldChangeWorkDate::byVoiding($voided->uuid(), $this->workDate->isoDate, $opening->isoDate);
             }
         }
@@ -1116,12 +1154,12 @@ final class WorkDay
         // (c) Como mucho, el dia siguiente: sin tope, una cadena de pausas
         // encadenaria dias sucesivos en una sola jornada.
         if ($start >= $this->workDate->next()->endsAt()) {
-            throw EntryDoesNotContinueWorkDay::beyondNextDay($field, $workDate, $this->workDate->next()->isoDate, $lastMark, $start, $isWritten);
+            throw EntryDoesNotContinueWorkDay::beyondNextDay($field, $workDate, $this->workDate->next()->isoDate, $start, $isWritten);
         }
 
         // (a) Solo continua una pausa, igual que en el quiosco.
         if (! $previous['breaks']) {
-            throw EntryDoesNotContinueWorkDay::notAfterBreak($field, $workDate, $lastMark, $start, $isWritten);
+            throw EntryDoesNotContinueWorkDay::notAfterBreak($field, $workDate, $start, $isWritten);
         }
 
         // (b) Y dentro de la cota del descanso minimo entre jornadas.

@@ -140,9 +140,6 @@ it('admite la entrada del dia siguiente un segundo antes de la cota y la rechaza
     $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAlta($rechazada, '2026-10-11 03:00', '2026-10-11 04:00'));
 
     expect($rechazo->mark)->toBe(FutureMark::ClockIn)
-        ->and($rechazo->workDate)->toBe('2026-10-10')
-        ->and($rechazo->minimumRestMinutes)->toBe(720)
-        ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-10-10 15:00'))
         ->and($rechazo->translationKey)->toBe('attendance.errors.entry_does_not_continue_work_day')
         ->and($rechazo->parameters)->toBe(['work_date' => '2026-10-10', 'hours' => '12'])
         // Tecnico, en ingles y sin datos de la persona (regla dura 21).
@@ -273,7 +270,7 @@ it('rechaza mover un tramo si el que venia detras deja de continuar la jornada',
     )));
 
     expect($rechazo->mark)->toBe(FutureMark::ClockIn)
-        ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-14 08:00'))
+        ->and($rechazo->getMessage())->toContain('previous mark 2026-03-14T07:00:00+00:00')
         ->and($rechazo->translationKey)->toBe('attendance.errors.next_entry_would_not_continue_work_day')
         ->and($jornada->shiftCount())->toBe(3);
 })->group('RN-05', 'RF-PA-04');
@@ -377,7 +374,7 @@ it('aplica la cota del perfil, no una constante', function (): void {
         ContinuationCeilingFactory::ofHours(10),
     ));
 
-    expect($rechazo->minimumRestMinutes)->toBe(600);
+    expect($rechazo->parameters['hours'])->toBe('10');
 })->group('RN-05', 'RF-PA-04');
 
 // --- Anular tambien respeta la cota (2.3.0) ----------------------------------
@@ -425,7 +422,7 @@ it('rechaza anular el tramo intermedio si la vuelta de despues deja de continuar
     $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAnulacion($jornada, 'shift-entry-2'));
 
     expect($rechazo->mark)->toBe(FutureMark::ClockIn)
-        ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-14 15:00'))
+        ->and($rechazo->getMessage())->toContain('previous mark 2026-03-14T14:00:00+00:00')
         // La guarda va antes de tocar nada.
         ->and($jornada->shiftCount())->toBe(3)
         ->and($jornada->retiredEntries())->toBe([])
@@ -661,4 +658,26 @@ it('declarar la pausa en una correccion es una version nueva, aunque las horas n
     expect($corregido->version())->toBe(2)
         ->and($corregido->closure())->toBe(EntryClosure::CLOCK_OUT)
         ->and($corregido->clockOutSource())->toBe(ScanOrigin::MANUAL_ADMIN);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('deja anular los tramos antiguos de una jornada que ya abria otro dia', function (): void {
+    // Dos tramos del 15 en la jornada del 14, escritos antes de la 2.3.0. La
+    // anulacion no cambia de dia la apertura —ya estaba en otro—, asi que el
+    // dato se puede limpiar en cualquier orden.
+    $primero = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-15 10:00'), Instants::inMadrid('2026-03-15 11:00')))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-15 12:00'), Instants::inMadrid('2026-03-15 13:00')))
+        ->build();
+
+    expect(continuacionAnulacion($primero, 'shift-entry-1')->status()->value)->toBe('voided')
+        ->and(continuacionAnulacion($primero, 'shift-entry-2')->status()->value)->toBe('voided');
+
+    $ultimo = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-15 10:00'), Instants::inMadrid('2026-03-15 11:00')))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(Instants::inMadrid('2026-03-15 12:00'), Instants::inMadrid('2026-03-15 13:00')))
+        ->build();
+
+    expect(continuacionAnulacion($ultimo, 'shift-entry-2')->status()->value)->toBe('voided');
 })->group('RN-05', 'RF-PA-04', 'RN-13');

@@ -506,7 +506,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
             ->resolve($command->intent->declared(), $hasOpenEntry, $command->occurredAt, $lastAccepted);
 
         // Cargar la jornada puede CAMBIAR la decision: ver {@see ScanTarget}.
-        $target = $this->targetOf($resolution, $openWorkDay, $employee, $workDate, $flaggedForReview);
+        $target = $this->targetOf($resolution, $openWorkDay, $employee, $workDate, $flaggedForReview, $command->occurredAt);
 
         $resolution = $target->resolution;
         $workDay = $target->workDay;
@@ -703,6 +703,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         EmployeeSnapshot $employee,
         WorkDate $workDate,
         bool $flaggedForReview,
+        DateTimeImmutable $scanAt,
     ): ScanTarget {
         $continues = $resolution->continuesWorkDayOf();
 
@@ -716,9 +717,34 @@ final readonly class RegisterScanHandler implements ScanRegistration
 
         $continued = $this->workDays->findWorkDayOfAnyShiftEntry($continues);
 
-        return $continued instanceof WorkDay
+        return $continued instanceof WorkDay && $this->breakStillOpenIn($continued, $employee, $scanAt)
             ? ScanTarget::of($continued, $resolution, $flaggedForReview)
             : ScanTarget::degradedToClockIn($fallback());
+    }
+
+    /**
+     * RN-05 (2.3.0): la pausa que el escaneo diria continuar **sigue ahi**.
+     *
+     * El ultimo escaneo aceptado fue «Pausa», pero el registro ha podido
+     * cambiar despues: una correccion pudo declarar que ese tramo termino en
+     * salida, o la persona pudo fichar entretanto otra jornada en otro quiosco.
+     * En los dos casos la vuelta ya no continua nada y abre jornada nueva. Nunca
+     * se rechaza (regla dura 19): lo peor es una jornada nueva que un
+     * responsable puede corregir.
+     */
+    private function breakStillOpenIn(WorkDay $continued, EmployeeSnapshot $employee, DateTimeImmutable $scanAt): bool
+    {
+        $breakStartedAt = $continued->breakInProgressAt($scanAt);
+
+        if (! $breakStartedAt instanceof DateTimeImmutable) {
+            return false;
+        }
+
+        return $breakStartedAt >= $scanAt || ! $this->workDays->hasEntryOfAnotherWorkDayWithin(
+            $employee->employeeUuid,
+            $continued->workDate(),
+            new TimeRange($breakStartedAt, $scanAt),
+        );
     }
 
     /**

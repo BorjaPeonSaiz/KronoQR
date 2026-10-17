@@ -68,13 +68,12 @@ final readonly class ContinuationCeiling
         return $start < $this->limitAfter($lastMark);
     }
 
-    /** La cota en horas, para los mensajes: «12 h». */
+    /**
+     * La cota en horas, para los mensajes: «12 h». El perfil la guarda en horas
+     * enteras (`min_rest_hours`), asi que no hay fraccion que escribir.
+     */
     public function hours(): string
     {
-        $minutes = $this->minimumRest->minutes;
-
-        return $minutes % 60 === 0
-            ? (string) intdiv($minutes, 60)
-            : rtrim(rtrim(number_format($minutes / 60, 2, '.', ''), '0'), '.');
+        return (string) intdiv($this->minimumRest->minutes, 60);
     }
 }

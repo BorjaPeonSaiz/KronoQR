@@ -172,9 +172,11 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
                NULL::text                              AS before_in,
                NULL::text                              AS before_out,
                NULL::integer                           AS before_minutes,
+               NULL::text                              AS before_closed_by,
                NULL::text                              AS after_in,
                NULL::text                              AS after_out,
                NULL::integer                           AS after_minutes,
+               NULL::text                              AS after_closed_by,
                FALSE                                   AS has_before,
                FALSE                                   AS has_after,
                en.clocked_in_at                        AS sort_instant,
@@ -205,9 +207,11 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
                to_char((c.before ->> 'clocked_in_at')::timestamptz  AT TIME ZONE sc.site_timezone, 'YYYY-MM-DD HH24:MI'),
                to_char((c.before ->> 'clocked_out_at')::timestamptz AT TIME ZONE sc.site_timezone, 'YYYY-MM-DD HH24:MI'),
                (c.before ->> 'worked_minutes')::integer,
+               c.before ->> 'closed_by',
                to_char((c.after  ->> 'clocked_in_at')::timestamptz  AT TIME ZONE sc.site_timezone, 'YYYY-MM-DD HH24:MI'),
                to_char((c.after  ->> 'clocked_out_at')::timestamptz AT TIME ZONE sc.site_timezone, 'YYYY-MM-DD HH24:MI'),
                (c.after ->> 'worked_minutes')::integer,
+               c.after ->> 'closed_by',
                c.before IS NOT NULL,
                c.after  IS NOT NULL,
                c.created_at,
@@ -318,20 +322,22 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
                 $row->nullableString('before_in'),
                 $row->nullableString('before_out'),
                 $row->nullableInt('before_minutes'),
+                $row->nullableString('before_closed_by'),
             ),
             after: $this->marks(
                 $row->bool('has_after'),
                 $row->nullableString('after_in'),
                 $row->nullableString('after_out'),
                 $row->nullableInt('after_minutes'),
+                $row->nullableString('after_closed_by'),
             ),
         );
     }
 
-    private function marks(bool $present, ?string $localIn, ?string $localOut, ?int $minutes): ExportedMarks
+    private function marks(bool $present, ?string $localIn, ?string $localOut, ?int $minutes, ?string $closedBy): ExportedMarks
     {
         return $present
-            ? ExportedMarks::of($localIn, $localOut, ExportedDuration::ofNullableMinutes($minutes))
+            ? ExportedMarks::of($localIn, $localOut, ExportedDuration::ofNullableMinutes($minutes), $closedBy)
             : ExportedMarks::none();
     }
 }

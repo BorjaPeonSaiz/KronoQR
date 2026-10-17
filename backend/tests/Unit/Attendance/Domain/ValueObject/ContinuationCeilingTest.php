@@ -6,12 +6,10 @@ use App\Modules\Attendance\Domain\Exception\BreakWithoutClockOut;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
-use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
-use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Time\Instants;
 
@@ -50,10 +48,7 @@ it('da el limite sumando la cota en tiempo real y la escribe en horas', function
 
     // La noche del cambio de hora de octubre: 12 h reales, no de reloj.
     expect($ceiling->limitAfter(Instants::utc('2026-10-24 23:30')))->toEqual(Instants::utc('2026-10-25 11:30'))
-        ->and($ceiling->hours())->toBe('12')
-        ->and(ContinuationCeiling::belowRestOf(
-            WorkedDuration::ofMinutes(630),
-        )->hours())->toBe('10.5');
+        ->and($ceiling->hours())->toBe('12');
 })->group('RN-05', 'RN-09');
 
 it('acaba la fecha civil en la medianoche local siguiente, tambien con cambio de hora', function (string $fecha, string $finUtc): void {
@@ -89,3 +84,14 @@ it('distingue dos tramos con las mismas horas que terminaron distinto', function
         ->toBe(EntryClosure::CLOCK_OUT)
         ->and(ShiftTimes::open(Instants::utc('2026-03-14 07:00'))->closure)->toBeNull();
 })->group('RN-05', 'RF-PA-04');
+
+it('acaba la fecha civil aunque el dia siguiente no tenga medianoche', function (): void {
+    // Chile adelanta la hora a las 00:00 del 6 de septiembre de 2026: ese dia
+    // empieza a la 01:00 (-03), las 04:00 UTC.
+    $santiago = new DateTimeZone('America/Santiago');
+
+    expect(WorkDate::fromIsoDate('2026-09-05', $santiago)->endsAt())
+        ->toEqual(Instants::utc('2026-09-06 04:00'))
+        ->and(WorkDate::fromIsoDate('2026-09-05', $santiago)->next()->isoDate)
+        ->toBe('2026-09-06');
+})->group('RN-05', 'RN-09');
