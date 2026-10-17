@@ -12,7 +12,7 @@ use DateTimeImmutable;
  *
  * La tabla solo la escribe esa funcion y la aplicacion no la puede tocar, asi
  * que cada fila es un cambio que ocurrio de verdad, lo hiciera la orden de
- * consola o no. `changedAt` lo pone la base (`now()`).
+ * consola o no. `changedAt` lo pone la base de datos, no quien llama.
  */
 final readonly class RecordedSiteTimezoneChange
 {
