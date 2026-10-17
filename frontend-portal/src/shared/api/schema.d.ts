@@ -16573,7 +16573,30 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+             *     por campo para pintarlo junto al formulario, sin releer nada.
+             *
+             *     **`type` distingue las dos causas:**
+             *
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale
+             *       (el motivo, su explicacion).
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — anular
+             *       este tramo dejaria al **siguiente** fuera de la jornada (RN-05): su
+             *       entrada cae en un dia civil distinto de `work_date` y quedaria a
+             *       `min_rest_hours` o mas de la salida del anterior que sigue vigente.
+             *       Va en `errors.clocked_in_at` y se refiere a la entrada de ese tramo
+             *       siguiente. Anular el ultimo tramo, o uno cuyo siguiente es del dia
+             *       de la jornada, siempre se admite: se anula de atras hacia delante.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

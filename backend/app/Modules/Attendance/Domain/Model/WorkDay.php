@@ -378,12 +378,23 @@ final class WorkDay
      * `daily_totals`; recalcularla al anular moveria minutos entre dias sin que
      * nadie lo hubiera pedido, y dejaria una fila huerfana en la proyeccion.
      *
+     * **Respeta la cota de continuacion de RN-05** (2.3.0). Anular un tramo
+     * intermedio deja al que venia detras midiendose contra el anterior que
+     * sigue vigente; si asi queda a la cota o mas alla y empieza en otro dia
+     * civil, sus horas dejarian de ser de esta jornada y la anulacion se
+     * rechaza, en la entrada de ese tramo. Anular el ultimo, o uno cuyo
+     * siguiente es del dia de la jornada, siempre se puede: los datos malos se
+     * arreglan anulando de atras hacia delante.
+     *
      * @throws ShiftEntryNotInWorkDay el tramo no es de esta jornada, o ya estaba anulado o sustituido
+     * @throws EntryDoesNotContinueWorkDay el tramo siguiente dejaria de continuar la jornada (RN-05)
      */
-    public function voidEntry(string $entryUuid, Correction $correction): ShiftEntry
+    public function voidEntry(string $entryUuid, Correction $correction, ContinuationCeiling $continuation): ShiftEntry
     {
         $entry = $this->entry($entryUuid);
         $before = $entry->times();
+
+        $this->guardVoidKeepsContinuation($entry, $continuation);
 
         $entry->markVoided();
         $this->retire($entry);
@@ -901,6 +912,34 @@ final class WorkDay
 
                     break;
                 }
+            }
+        }
+    }
+
+    /**
+     * RN-05 al anular: el tramo que seguia al anulado, medido contra el
+     * anterior que queda vigente. Misma comprobacion local que
+     * `guardContinuesWorkDay()`, sobre la jornada que quedaria sin el.
+     *
+     * @throws EntryDoesNotContinueWorkDay
+     */
+    private function guardVoidKeepsContinuation(ShiftEntry $voided, ContinuationCeiling $continuation): void
+    {
+        $marks = [];
+
+        foreach ($this->entries as $entry) {
+            if ($entry !== $voided) {
+                $marks[] = ['in' => $entry->clockedInAt(), 'out' => $entry->clockedOutAt(), 'written' => false];
+            }
+        }
+
+        usort($marks, static fn (array $one, array $other): int => $one['in'] <=> $other['in']);
+
+        foreach ($marks as $index => $mark) {
+            if ($mark['in'] > $voided->clockedInAt()) {
+                $this->guardContinuationAt($marks, $index, FutureMark::ClockIn, $continuation);
+
+                return;
             }
         }
     }

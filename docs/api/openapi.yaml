@@ -6027,7 +6027,45 @@ paths:
                     status: 409
                     detail: Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de anular.
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+            por campo para pintarlo junto al formulario, sin releer nada.
+
+            **`type` distingue las dos causas:**
+
+            - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale
+              (el motivo, su explicacion).
+            - `urn:kronoqr:problem:correction-would-change-work-date` — anular
+              este tramo dejaria al **siguiente** fuera de la jornada (RN-05): su
+              entrada cae en un dia civil distinto de `work_date` y quedaria a
+              `min_rest_hours` o mas de la salida del anterior que sigue vigente.
+              Va en `errors.clocked_in_at` y se refiere a la entrada de ese tramo
+              siguiente. Anular el ultimo tramo, o uno cuyo siguiente es del dia
+              de la jornada, siempre se admite: se anula de atras hacia delante.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                falta-un-campo:
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      reason_code:
+                        - El motivo de la correccion es obligatorio.
+                el-siguiente-no-continuaria:
+                  summary: Anular dejaria la vuelta siguiente fuera de la jornada (RN-05)
+                  value:
+                    type: 'urn:kronoqr:problem:correction-would-change-work-date'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      clocked_in_at:
+                        - 'Esas horas no son de la jornada del 2026-03-14: el tramo empieza otro día y entre la salida anterior y su entrada median 720 minutos o más, el descanso mínimo entre jornadas. Dalas de alta en la jornada en que empiezan.'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 

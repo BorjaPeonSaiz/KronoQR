@@ -303,6 +303,7 @@ it('anula un tramo sin crear version nueva y descuenta sus minutos', function ()
     $anulado = $jornada->voidEntry(
         'shift-entry-2',
         CorrectionFactory::new()->because(CorrectionReasonCode::ERROR_DE_ESCANEO_DUPLICADO)->build(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -326,7 +327,7 @@ it('libera el turno abierto al anular el tramo que lo tenia', function (): void 
         ->withOpenShiftSince('2026-03-14 07:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // RN-01 se aplica al conjunto vigente: anular libera el hueco y el empleado
     // puede volver a fichar entrada.
@@ -393,7 +394,7 @@ it('nombra el evento de correccion una sola vez y para siempre', function (): vo
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // El nombre viaja al bus y de ahi a los listeners de Compliance y
     // Reporting: cambiarlo rompe a quien escucha sin que nada mas se entere.

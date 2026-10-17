@@ -79,7 +79,7 @@ it('rechaza corregir un tramo ya anulado', function (): void {
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // Un tramo anulado es historia: no se corrige, y quien lo intente esta
     // trabajando sobre una version que ya no es la vigente (ADR-026). Es lo que
@@ -200,7 +200,7 @@ it('rechaza anular un tramo que no esta en la jornada', function (): void {
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    expect(fn (): ShiftEntry => $jornada->voidEntry('shift-entry-9', CorrectionFactory::standard()))
+    expect(fn (): ShiftEntry => $jornada->voidEntry('shift-entry-9', CorrectionFactory::standard(), ContinuationCeilingFactory::standard()))
         ->toThrow(ShiftEntryNotInWorkDay::class);
 })->group('RN-13');
 

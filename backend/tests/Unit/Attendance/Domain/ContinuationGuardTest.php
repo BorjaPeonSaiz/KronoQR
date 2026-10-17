@@ -363,3 +363,90 @@ it('aplica la cota del perfil, no una constante', function (): void {
 
     expect($rechazo->minimumRestMinutes)->toBe(600);
 })->group('RN-05', 'RF-PA-04');
+
+// --- Anular tambien respeta la cota (2.3.0) ----------------------------------
+
+/**
+ * Jornada del 14 con un tramo de 08:00 a 15:00, otro de 18:00 a 23:00 y una
+ * vuelta el 15 a la hora que se pida. Hora de Madrid (CET).
+ */
+function continuacionJornadaConVuelta(string $vueltaMadrid): WorkDay
+{
+    return WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 08:00'),
+            Instants::inMadrid('2026-03-14 15:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 18:00'),
+            Instants::inMadrid('2026-03-14 23:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid($vueltaMadrid),
+            Instants::inMadrid('2026-03-15 06:00'),
+        ))
+        ->build();
+}
+
+function continuacionAnulacion(WorkDay $workDay, string $entryUuid): ShiftEntry
+{
+    return $workDay->voidEntry($entryUuid, CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
+}
+
+it('rechaza anular el tramo intermedio si la vuelta de despues deja de continuar la jornada', function (string $vuelta, bool $admite): void {
+    // Sin el tramo de 18:00 a 23:00, la vuelta del 15 se mide contra la salida
+    // de las 15:00 del 14: 12 h justas a las 03:00 ya son otra jornada.
+    $jornada = continuacionJornadaConVuelta($vuelta);
+
+    if ($admite) {
+        expect(continuacionAnulacion($jornada, 'shift-entry-2')->status()->value)->toBe('voided')
+            ->and($jornada->shiftCount())->toBe(2);
+
+        return;
+    }
+
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionAnulacion($jornada, 'shift-entry-2'));
+
+    expect($rechazo->mark)->toBe(FutureMark::ClockIn)
+        ->and($rechazo->lastMark)->toEqual(Instants::inMadrid('2026-03-14 15:00'))
+        // La guarda va antes de tocar nada.
+        ->and($jornada->shiftCount())->toBe(3)
+        ->and($jornada->retiredEntries())->toBe([])
+        ->and($jornada->releaseEvents())->toBe([]);
+})->with([
+    'un segundo antes de la cota' => ['2026-03-15 02:59:59', true],
+    'en la cota' => ['2026-03-15 03:00', false],
+    'mas alla de la cota' => ['2026-03-15 04:00', false],
+])->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('admite anular el ultimo tramo aunque la jornada ya no cumpla la cota', function (): void {
+    // Es como se arreglan los datos malos: de atras hacia delante.
+    $jornada = continuacionJornadaConVuelta('2026-03-15 04:00');
+
+    expect(continuacionAnulacion($jornada, 'shift-entry-3')->status()->value)->toBe('voided')
+        ->and(continuacionAnulacion($jornada, 'shift-entry-2')->status()->value)->toBe('voided');
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('admite anular un tramo cuyo siguiente es del dia de la jornada', function (): void {
+    // El siguiente empieza el 14: no tiene cota, por lejos que quede del
+    // anterior (regla dura 4).
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 06:00'),
+            Instants::inMadrid('2026-03-14 07:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 12:00'),
+            Instants::inMadrid('2026-03-14 14:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 21:00'),
+            Instants::inMadrid('2026-03-14 23:00'),
+        ))
+        ->build();
+
+    expect(continuacionAnulacion($jornada, 'shift-entry-2')->status()->value)->toBe('voided')
+        ->and($jornada->shiftCount())->toBe(2);
+})->group('RN-05', 'RF-PA-04', 'RN-13');

@@ -179,7 +179,7 @@ it('anular libera el hueco y deja meter otro tramo en el mismo horario', functio
 
     $repositorio = app(WorkDayRepository::class);
 
-    $jornada->voidEntry($original, CorrectionFactory::standard());
+    $jornada->voidEntry($original, CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
     $repositorio->save($jornada);
     proyectar($jornada);
 
@@ -262,7 +262,7 @@ it('apunta la anulacion al tramo que termino y sin valor posterior', function ()
     ['site' => $site, 'employee' => $employee, 'user' => $usuario] = correccionFixture();
     ['day' => $jornada, 'entry' => $original] = jornadaCerrada($site, $employee);
 
-    $jornada->voidEntry($original, CorrectionFactory::new()->by($usuario)->build());
+    $jornada->voidEntry($original, CorrectionFactory::new()->by($usuario)->build(), ContinuationCeilingFactory::standard());
 
     app(WorkDayRepository::class)->save($jornada);
     app(ShiftCorrectionLedger::class)->record(Corrections::in($jornada->releaseEvents()));
@@ -330,7 +330,7 @@ it('distingue el tramo que nunca existio del que ya no es vigente', function ():
     expect($historico->isRetired($original))->toBeFalse()
         ->and($historico->isRetired(Str::uuid7()->toString()))->toBeFalse();
 
-    $jornada->voidEntry($original, CorrectionFactory::standard());
+    $jornada->voidEntry($original, CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
     app(WorkDayRepository::class)->save($jornada);
 
     expect($historico->isRetired($original))->toBeTrue()

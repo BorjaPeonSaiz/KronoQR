@@ -9,10 +9,13 @@ use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -44,10 +47,12 @@ final readonly class VoidShiftHandler
         private ShiftCorrectionLedger $ledger,
         private EventPublisher $events,
         private Clock $clock,
+        private CompliancePolicyProvider $compliance,
     ) {}
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya fue anulado o sustituido
+     * @throws EntryDoesNotContinueWorkDay el tramo siguiente dejaria de continuar la jornada (RN-05)
      */
     public function handle(VoidShiftCommand $command): CorrectedShift
     {
@@ -69,6 +74,9 @@ final readonly class VoidShiftHandler
         $voided = $workDay->voidEntry(
             $command->shiftEntryUuid,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
+            // RN-05 (2.3.0): anular no puede dejar al tramo siguiente fuera de
+            // la jornada. La misma cota que el fichaje, el alta y la correccion.
+            ContinuationCeilings::forSite($this->compliance, $workDay->siteId()),
         );
 
         // Recalcula `daily_totals` dentro de esta transaccion (RN-06, regla dura

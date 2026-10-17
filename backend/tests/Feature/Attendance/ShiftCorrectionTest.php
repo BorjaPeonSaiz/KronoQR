@@ -485,6 +485,50 @@ it('devuelve 409 cuando el alta pisaria a otro tramo de la misma persona', funct
         ->assertValidResponse(409);
 })->group('RN-02', 'RF-PA-04');
 
+it('rechaza anular un tramo intermedio si la vuelta de despues deja de continuar la jornada', function (): void {
+    // RN-05 (2.3.0). Jornada del 14 en Madrid: 08:00-15:00, 18:00-23:00 y una
+    // vuelta el 15 a las 04:00. Sin el tramo de la tarde, la vuelta queda a
+    // 13 h de la salida de las 15:00 y sus horas serian de otra jornada.
+    $contexto = contextoDeCorreccion();
+    $tramos = [];
+
+    foreach ([['2026-03-14T07:00:00Z', '2026-03-14T14:00:00Z'], ['2026-03-14T17:00:00Z', '2026-03-14T22:00:00Z'], ['2026-03-15T03:00:00Z', '2026-03-15T05:00:00Z']] as [$entrada, $salida]) {
+        $tramos[] = Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => '2026-03-14',
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->json('shift_entry_uuid');
+    }
+
+    $antes = [DB::table('shift_corrections')->count(), DB::table('audit_log')->count()];
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$tramos[1].'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonStructure(['errors' => ['clocked_in_at']]);
+
+    expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
+        ->and([DB::table('shift_corrections')->count(), DB::table('audit_log')->count()])->toBe($antes);
+
+    // Anular de atras hacia delante si se puede: primero la vuelta, luego la tarde.
+    foreach ([$tramos[2], $tramos[1]] as $tramo) {
+        Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries/'.$tramo.'/void', [
+                'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+            ])
+            ->assertValidResponse(200);
+    }
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
 it('corrige las dos marcas a la vez aunque la entrada nueva sea posterior a la salida antigua', function (): void {
     // Con las dos marcas en la orden, RN-03 se comprueba sobre ellas y no sobre
     // una mezcla con la marca vieja (2.3.0): mover el tramo de 06:00-14:00 a
