@@ -6,7 +6,7 @@
 | **Fecha** | 27 de agosto de 2026 |
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `Shared/Application/Port/PersonalDataAccessLog` y sus llamantes · `Identity/Application/UseCase/CredentialStatusBoard` · `Workforce/Application/Query/EmployeeQueries` · `Compliance/Infrastructure/Persistence/DatabaseAuditTrail` |
-| **Requisitos** | RS-05, RL-15, RL-05, RF-QR-08, RF-GP-01, RF-PA-03 |
+| **Requisitos** | RS-05, RL-15, RL-05, RF-QR-08, RF-GP-01, RF-PA-03, RF-IN-05 (enmienda del 18-10-2026) |
 
 ## Contexto
 
@@ -53,6 +53,7 @@ Aplicada al producto:
 | `credentials:status --quiet-table` (planificador) | No | Falla la condición 2: solo salen contadores |
 | `GET /employees/{uuid}` (ficha) | No | Falla la condición 3 |
 | `GET /me/*` | No | Falla la condición 1 |
+| Búsqueda de la persona de la exportación legal (`POST /reports/legal-export/employees/search`, enmienda del 18-10-2026) | Sí | Conjunto —hasta 10 personas—, y la hace un rol que no tiene el directorio |
 
 **La ficha individual no audita, y no es un olvido.** Quien puede abrirla puede listar el índice, que
 sí deja asiento: el trail ya dice que esa cuenta tuvo el directorio delante. Repetir el apunte por
@@ -81,6 +82,18 @@ peticiones por minuto y el pico de fichaje son 300 escaneos repartidos en un cua
 día amenazara al p95 de RNF-P-02, la palanca es la **frecuencia** —agrupar lecturas idénticas del
 mismo actor en una ventana— y cabe entera detrás del puerto `PersonalDataAccessLog`, sin tocar a
 ninguno de sus llamantes.
+
+**Enmienda (18 de octubre de 2026, V21-3-PA-1, RF-IN-05).** La exportación para la Inspección se
+pide por persona eligiéndola por su nombre o su DNI, con una búsqueda que alcanza `reports:legal`.
+Cumple las tres condiciones —terceros, sale hacia una persona, un conjunto de hasta 10— y **deja
+asiento**, y aquí el argumento de la ficha individual no vale: el `auditor` no puede listar el índice,
+así que ningún otro asiento dice que tuvo esas personas delante. El asiento es
+`personal_data.accessed` con el dataset `legal_export_employee_search`, el número de personas
+**devueltas**, el criterio (`name_or_code` o `national_id`) y si la lista se recortó. **Nunca lleva
+el término buscado**: un nombre o un DNI en `audit_log` serían el dato personal que esta decisión
+prohíbe copiar (regla dura 21), y un DNI en claro, además, el documento que RL-08 no deja guardar.
+Una búsqueda sin resultados también deja asiento, con recuento cero: probar documentos hasta acertar
+es justo lo que el trail tiene que poder enseñar.
 
 ## Alternativas descartadas
 
