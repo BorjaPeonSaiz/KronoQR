@@ -230,3 +230,14 @@ Quien tenga la credencial del rol de migración es propietario de las tablas y d
 - `tests/Integration/Schema/WorkRecordPurgeFunctionTest.php`: `EXECUTE` solo para la aplicación (ni `PUBLIC` ni mantenimiento), corte posterior rechazado, también con `retention_years` por debajo del suelo, suelo atado al catálogo, la misma aritmética que `RetentionPolicy`, recuentos por lote y por generaciones, una tabla temporal no la desvía, y `down()`/`up()` reversibles.
 - `tests/Feature/Compliance/ApplyRetentionCommandTest.php`: `compliance:apply-retention` de punta a punta con su asiento, y sin borrar ni asentar nada si el reloj de la aplicación pide un corte que la función no admite.
 - `tests/Integration/Schema/WorkRecordPrivilegesTest.php`: `DELETE` da `42501` en las siete tablas.
+
+## Nota del 18-10-2026 (2.3.0, bloque 2): el mismo patrón en `sites`, y §4 compara la zona del centro
+
+**No cambia ninguna decisión de este ADR: aplica su patrón a otra tabla.** La enmienda del 18-10-2026 de [ADR-056](ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md) lleva RN-23 al motor con el mismo diseño que §2 y §3:
+
+- un *trigger* (`sites_guard_timezone`) que rechaza con `42501` cambiar `sites.timezone` con tramos;
+- y una función `SECURITY DEFINER` (`site_correct_timezone`), propiedad del rol de migración, con `search_path` fijo y `EXECUTE` solo para la aplicación, como única puerta para la corrección de consola.
+
+§7 no cambia: la aplicación conserva `UPDATE (name, timezone)` sobre `sites`, porque el cambio de antes del primer fichaje lo necesita.
+
+**§4 gana una sexta clase, `site_timezone_differs_from_audit`.** Es la zona de `sites` distinta de la del último asiento `site.created` o `site.updated` del centro. Cubre lo que el *trigger* no impide: llamar a la función fuera de la orden de consola, que no escribe asiento, igual que `work_record_purge_batch` fuera de `compliance:apply-retention`, o un `UPDATE` sin tramos por fuera del producto. La alerta `DiscrepanciaEntreRegistroYAuditoria` ya suma todas las clases y no cambia. El runbook `discrepancia-registro-auditoria.md` §3 dice cómo se resuelve.
