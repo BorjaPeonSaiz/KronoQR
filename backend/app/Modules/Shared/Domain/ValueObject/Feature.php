@@ -44,7 +44,8 @@ namespace App\Modules\Shared\Domain\ValueObject;
 enum Feature: string
 {
     /**
-     * Informes avanzados y comparacion entre periodos (RF-IN-01..03, tarea 2.8).
+     * Informes por periodo, con la comparativa frente a lo contratado (RF-IN-01..03,
+     * tarea 2.8). La comparacion entre periodos vive en el cuadro de impacto (tarea 3.13).
      *
      * Es `GET /api/v1/reports/period` y su exportacion. **No es la consulta del
      * registro**: las jornadas de una persona (`GET /employees/{uuid}/workdays`),
