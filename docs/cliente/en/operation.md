@@ -2637,6 +2637,17 @@ tablet's queue**, fix the cause on the server and follow
 not fit the working day ("Out-of-order clocking", [`hr-guide.md`](hr-guide.md)
 §4.4)— holds nothing up: it has an answer, and the queue moves on.
 
+**PIN clock-ins drain slowly, and on purpose.** Card clock-ins travel in
+batches of up to 50; PIN ones, **one at a time**, and the server accepts at
+most **10 per minute and per tablet** (`KIOSK_PIN_SCAN_RATE_PER_DEVICE`) and 60
+per minute from a single address (`KIOSK_PIN_SCAN_RATE_PER_IP`): it is the
+brake on anyone trying PINs blindly. A tablet that gets its network back with
+40 PIN clock-ins in the queue takes **about 4 minutes** to empty them, and what
+was clocked behind them waits its turn. It is not a jam: in the panel,
+"Pending" goes down, if slowly. No clock-in changes time, because each one
+keeps the moment it was made. **Do not raise those limits to speed it up**:
+they weaken the PIN's protection.
+
 **Two new situations on the "Kiosks" screen** (from 2.2.0):
 
 - **"Pending: Unknown"**, with the verdict at **failure**. The tablet **has lost

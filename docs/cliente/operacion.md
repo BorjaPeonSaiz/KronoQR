@@ -2602,6 +2602,17 @@ Un fichaje que el servidor **rechaza** —una tarjeta revocada, uno que no cabe 
 la jornada («Fichaje fuera de orden», [`guia-rrhh.md`](guia-rrhh.md) §4.4)— no
 atasca nada: tiene respuesta, y la cola sigue.
 
+**Los fichajes por PIN se vacían despacio, y es a propósito.** Los de tarjeta
+viajan en lotes de hasta 50; los de PIN, **de uno en uno**, y el servidor admite
+como mucho **10 por minuto y por tablet** (`KIOSK_PIN_SCAN_RATE_PER_DEVICE`) y
+60 por minuto desde una misma dirección (`KIOSK_PIN_SCAN_RATE_PER_IP`): es el
+freno contra quien prueba PIN a ciegas. Una tablet que recupera la red con 40
+fichajes por PIN en la cola tarda **unos 4 minutos** en vaciarlos, y lo que se
+fichó detrás de ellos espera su turno. No es un atasco: en el panel,
+«Pendientes» baja, aunque despacio. Ningún fichaje cambia de hora, porque cada
+uno conserva el momento en que se hizo. **No subas esos límites para
+acelerarlo**: debilitan la protección del PIN.
+
 **Dos situaciones nuevas en la pantalla «Quioscos»** (desde la 2.2.0):
 
 - **«Pendientes: Desconocido»**, con el veredicto en **fallo**. La tablet **ha
