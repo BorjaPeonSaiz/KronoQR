@@ -856,7 +856,7 @@
       "clockInCannotBeCleared": "The clock-in time cannot be removed. If the entry should not have been recorded this way, void it here and create it again.",
       "clockOutCannotBeCleared": "The clock-out time cannot be removed. If the entry should not have been closed, void it here and create it again.",
       "timeDoesNotExist": "That time did not exist in this zone: the clock skipped it when daylight saving changed. Choose another.",
-      "noChange": "Change at least one of the two times to save: a correction that changes nothing is an audit row that lies.",
+      "noChange": "Change at least one time or how the shift ended to save: a correction that changes nothing is an audit row that lies.",
       "voidSummary": "This entry will stop counting towards the daily total. The version it had is kept and stays available in the history.",
       "previewCaption": "What changes on this entry"
     }
