@@ -89,7 +89,7 @@ final readonly class EloquentSiteRepository implements SiteRepository
         $changeId = is_object($row) ? ($row->change_id ?? null) : null;
 
         if (! is_numeric($changeId)) {
-            throw new RuntimeException('site_correct_timezone no ha apuntado ningun cambio en la traza.');
+            throw new RuntimeException('site_correct_timezone returned no change id.');
         }
 
         return (int) $changeId;
