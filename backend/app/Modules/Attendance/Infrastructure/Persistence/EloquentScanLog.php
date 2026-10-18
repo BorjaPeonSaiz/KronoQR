@@ -10,6 +10,7 @@ use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
@@ -214,8 +215,15 @@ final readonly class EloquentScanLog implements ScanLog
         // quedo la persona, y ese estado puede ser de hace media hora —lo que
         // dura una comida— o de hace cuatro. `ORDER BY occurred_at DESC LIMIT 1`
         // lee una sola fila del indice, no el historico.
+        //
+        // Con la jornada del tramo y la zona de su centro: la vuelta de una pausa
+        // solo continua esa jornada hasta el dia civil siguiente (RN-05, 2.3.0).
         return $this->acceptedScanOf(
-            $this->acceptedScansOf($employeeId)->orderByDesc('scan_events.occurred_at')->first()
+            $this->acceptedScansOf($employeeId)
+                ->leftJoin('sites', 'sites.id', '=', 'shift_entries.site_id')
+                ->addSelect(['shift_entries.work_date', 'sites.timezone as site_timezone'])
+                ->orderByDesc('scan_events.occurred_at')
+                ->first()
         );
     }
 
@@ -275,7 +283,26 @@ final readonly class EloquentScanLog implements ScanLog
             occurredAt: $this->toUtc($occurredAt),
             action: $action,
             shiftEntryUuid: is_string($shiftEntryUuid) ? $shiftEntryUuid : null,
+            workDate: self::workDateOf($row),
         );
+    }
+
+    /**
+     * La jornada del tramo del escaneo, en la zona de su centro, cuando la
+     * consulta la trae (solo `lastAcceptedScanOf()`, RN-05, 2.3.0).
+     */
+    private static function workDateOf(stdClass $row): ?WorkDate
+    {
+        /** @var mixed $workDate */
+        $workDate = $row->work_date ?? null;
+        /** @var mixed $timezone */
+        $timezone = $row->site_timezone ?? null;
+
+        if (! is_string($workDate) || ! is_string($timezone)) {
+            return null;
+        }
+
+        return WorkDate::fromIsoDate(substr($workDate, 0, 10), new DateTimeZone($timezone));
     }
 
     private function employeeIdOf(string $employeeUuid): ?int

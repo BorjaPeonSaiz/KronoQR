@@ -11,12 +11,15 @@ use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
+use App\Modules\Attendance\Domain\Exception\BreakWithoutClockOut;
 use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
@@ -828,13 +831,39 @@ return Application::configure(basePath: dirname(__DIR__))
          * resolverlo. Mover horas de un dia a otro son dos actos separados y
          * auditados, no un efecto lateral de un `PATCH` (RN-05, regla dura 4).
          */
+        //
+        // Al anular el tramo que abre la jornada (2.3.0), el texto es otro: lo
+        // que hay que hacer es anular antes los que vienen detras.
         $exceptions->render(static fn (CorrectionWouldChangeWorkDate $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
             'clocked_in_at' => [
-                'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, '
-                .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '
-                .'cada una con su motivo.',
+                $exception->byVoiding
+                    ? ProblemDetails::translated(
+                        'attendance.errors.void_would_change_work_date',
+                        ['work_date' => $exception->workDate],
+                        $exception->getMessage(),
+                    )
+                    : 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, '
+                    .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '
+                    .'cada una con su motivo.',
             ],
-        ]));
+        ], $exception->byVoiding ? 'opening_voided' : 'opening_moved'));
+
+        /*
+         * RN-05 (2.3.0, V21-3-AR-1): un tramo escrito a mano de otro dia civil
+         * que no continua la jornada. Es la misma familia que la de arriba —sus
+         * horas son de otra jornada— y por eso comparte su `type`; el campo es
+         * la marca que hay que corregir: la entrada del tramo, o su salida si lo
+         * que se rompe es la vuelta posterior; al anular, la entrada del tramo
+         * siguiente. Solo lo lanzan el alta, la correccion y la anulacion
+         * manuales; el fichaje aplica la misma cota sin rechazar (regla dura 19).
+         */
+        $exceptions->render(static fn (EntryDoesNotContinueWorkDay $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
+            $exception->mark->value => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ], $exception->concernsNextEntry ? 'next_entry_not_continued' : 'entry_not_continued'));
 
         /*
          * RN-03: la salida es posterior a la entrada. Estrictamente — un tramo de
@@ -1018,6 +1047,33 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (WorkDateOutsideEmployment $exception): mixed => ProblemDetails::validationFailed([
             'work_date' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * RN-05 y RN-14 (2.3.0): a una persona de baja ninguna marca escrita a
+         * mano le puede pasar de la cota de continuacion contada desde el final
+         * de su dia de cese. `422` en la marca, en el idioma negociado. Solo lo
+         * lanzan el alta y la correccion manuales; el escaneo no pasa por aqui.
+         */
+        /*
+         * RN-05 (2.3.0): un tramo abierto no puede haber terminado en pausa. El
+         * `FormRequest` del alta lo atrapa antes; esto cubre la correccion, en la
+         * que el tramo puede seguir abierto sin que la peticion lo diga.
+         */
+        $exceptions->render(static fn (BreakWithoutClockOut $exception): mixed => ProblemDetails::validationFailed([
+            'ends_in_break' => [ProblemDetails::translated(
+                'attendance.errors.break_without_clock_out',
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (ShiftMarkAfterTermination $exception): mixed => ProblemDetails::validationFailed([
+            $exception->mark->value => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
                 $exception->getMessage(),

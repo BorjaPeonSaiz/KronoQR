@@ -85,6 +85,7 @@ describe('CorrectionHistory', () => {
           version: 2,
           clocked_in_at: '2026-03-14T05:00:00.000000Z',
           clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          closed_by: 'clock_out',
           worked_minutes: 485,
         },
         after: null,
@@ -125,5 +126,35 @@ describe('CorrectionHistory', () => {
     const wrapper = await mountHistory([correction()])
 
     expect(wrapper.find('table').text()).not.toContain(es.common.change.from)
+  })
+})
+
+describe('CorrectionHistory, como termino el tramo (@RN-05)', () => {
+  it('una correccion que solo declara la pausa enseña la fila «Cómo terminó»', async () => {
+    const wrapper = await mountHistory([
+      correction({
+        action: 'modified',
+        before: {
+          version: 1,
+          clocked_in_at: '2026-03-14T05:00:00.000000Z',
+          clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          closed_by: 'clock_out',
+          worked_minutes: 485,
+        },
+        after: {
+          version: 2,
+          clocked_in_at: '2026-03-14T05:00:00.000000Z',
+          clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          closed_by: 'break_start',
+          worked_minutes: 485,
+        },
+      }),
+    ])
+
+    const text = wrapper.text()
+
+    expect(text).toContain(es.workdays.history.fields.closedBy)
+    expect(text).toContain(es.workdays.history.closedBy.clock_out)
+    expect(text).toContain(es.workdays.history.closedBy.break_start)
   })
 })

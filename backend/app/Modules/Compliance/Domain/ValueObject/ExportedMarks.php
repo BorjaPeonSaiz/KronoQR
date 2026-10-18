@@ -29,20 +29,35 @@ final readonly class ExportedMarks
         private ?string $localClockedOutAt,
         private ExportedDuration $duration,
         private bool $present,
+        private ?string $closedBy = null,
     ) {}
 
+    /**
+     * @param  string|null  $closedBy  como termino esa version, `clock_out` o `break_start`; nulo si seguia
+     *                                 abierta o la correccion es anterior a la 2.3.0 (ADR-058)
+     */
     public static function of(
         ?string $localClockedInAt,
         ?string $localClockedOutAt,
         ExportedDuration $duration,
+        ?string $closedBy = null,
     ): self {
-        return new self($localClockedInAt, $localClockedOutAt, $duration, true);
+        return new self($localClockedInAt, $localClockedOutAt, $duration, true, $closedBy);
     }
 
     /** No habia version: un alta no tiene «antes» y una anulacion no tiene «despues». */
     public static function none(): self
     {
         return new self(null, null, ExportedDuration::absent(), false);
+    }
+
+    /**
+     * Como termino esa version (ADR-058): una correccion que solo declara la
+     * pausa cambia esto y nada mas, y el documento tiene que decirlo.
+     */
+    public function closedBy(): ?string
+    {
+        return $this->present ? $this->closedBy : null;
     }
 
     public function describe(): string

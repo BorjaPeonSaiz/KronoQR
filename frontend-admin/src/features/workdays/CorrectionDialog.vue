@@ -48,6 +48,7 @@ import type {
   CorrectedShiftEntry,
   CorrectionReasonCode,
   CorrectShiftEntryRequest,
+  WorkDateChangeCause,
   WorkDayShiftEntry,
 } from '@/shared/api/types'
 import { addShiftEntry, correctShiftEntry, voidShiftEntry } from './corrections.api'
@@ -60,6 +61,9 @@ const OVERLAPPING_SHIFT_ENTRY_TYPE = 'urn:kronoqr:problem:overlapping-shift-entr
 
 /** El `422` de RN-05/ADR-035 (corregir la entrada movería la jornada a otro día). */
 const WORK_DATE_CHANGE_PROBLEM_TYPE = 'urn:kronoqr:problem:correction-would-change-work-date'
+
+/** La causa de ese `422` que tiene su propia pista: mover la apertura (ADR-058). */
+const OPENING_MOVED = 'opening_moved' satisfies WorkDateChangeCause
 
 type ConflictKind = 'superseded' | 'shiftAlreadyOpen' | 'overlap' | 'generic'
 
@@ -199,6 +203,19 @@ const clockOutChanged = computed(
   () => clockOutInput.value !== originalClockOut && !clockOutCleared.value,
 )
 
+/**
+ * Si el tramo terminó en pausa (`ends_in_break`, RN-05). Solo tiene sentido con
+ * hora de salida: sin ella el tramo no ha terminado, y la casilla no se enseña.
+ * Sin marcarla, el tramo que empiece al día civil siguiente no continúa la
+ * jornada.
+ */
+const originalEndsInBreak = props.mode === 'correct' && props.entry?.closed_by === 'break_start'
+const endsInBreak = ref(originalEndsInBreak)
+const showsEndsInBreak = computed(() => props.mode !== 'void' && clockOutInput.value !== '')
+const endsInBreakChanged = computed(
+  () => showsEndsInBreak.value && endsInBreak.value !== originalEndsInBreak,
+)
+
 function isNonexistentLocal(value: string): boolean {
   return value !== '' && zonedInputToUtcIso(value, props.timeZone) === null
 }
@@ -224,7 +241,10 @@ const canSubmit = computed(() => {
   }
 
   if (props.mode === 'correct') {
-    return (clockInChanged.value || clockOutChanged.value) && props.entry !== undefined
+    return (
+      (clockInChanged.value || clockOutChanged.value || endsInBreakChanged.value) &&
+      props.entry !== undefined
+    )
   }
 
   return props.entry !== undefined
@@ -299,6 +319,34 @@ function isWorkDateChangeProblem(caught: ApiError): boolean {
   return caught.status === 422 && caught.problem?.type === WORK_DATE_CHANGE_PROBLEM_TYPE
 }
 
+/**
+ * Si el `422` de cambio de jornada es por **mover la entrada que abre la
+ * jornada** (`cause: opening_moved`, ADR-058): solo entonces se pinta la pista
+ * propia junto a la entrada. Los demas —el tramo no continua la jornada, el
+ * siguiente deja de continuarla, anular la apertura— enseñan el mensaje del
+ * servidor, que dice qué hacer en cada caso.
+ */
+function isOpeningMoved(caught: ApiError): boolean {
+  const problem: unknown = caught.problem
+
+  return (
+    typeof problem === 'object' &&
+    problem !== null &&
+    'cause' in problem &&
+    problem.cause === OPENING_MOVED
+  )
+}
+
+/** Al anular, el error de cambio de jornada no tiene campo de hora en el formulario. */
+const errorFieldLabels = computed<Readonly<Record<string, string>>>(() =>
+  props.mode === 'void'
+    ? {
+        employee_uuid: t('corrections.dialog.employeeLabel'),
+        clocked_in_at: t('corrections.dialog.workDateLabel'),
+      }
+    : { employee_uuid: t('corrections.dialog.employeeLabel') },
+)
+
 /** `2026-08-14, 06:00`, tal cual lo escribió quien rellena el formulario: sin convertir nada. */
 function formatTyped(value: string): string {
   const [date, time] = value.split('T')
@@ -330,6 +378,11 @@ const changes = computed<Change[]>(() => {
         label: outLabel,
         from: noBefore,
         to: clockOutInput.value === '' ? openMark : formatTyped(clockOutInput.value),
+      },
+      {
+        label: t('workdays.history.fields.closedBy'),
+        from: noBefore,
+        to: clockOutInput.value === '' ? openMark : closureLabel(endsInBreak.value),
       },
     ]
   }
@@ -371,8 +424,22 @@ const changes = computed<Change[]>(() => {
     })
   }
 
+  // Como termino (RN-05, ADR-058): una correccion que solo declara la pausa
+  // no cambia ninguna hora, y sin esta fila la vista previa saldria vacia.
+  if (endsInBreakChanged.value) {
+    rows.push({
+      label: t('workdays.history.fields.closedBy'),
+      from: closureLabel(originalEndsInBreak),
+      to: closureLabel(endsInBreak.value),
+    })
+  }
+
   return rows
 })
+
+function closureLabel(inBreak: boolean): string {
+  return t(`workdays.history.closedBy.${inBreak ? 'break_start' : 'clock_out'}`)
+}
 
 function close(): void {
   emit('cancel')
@@ -418,6 +485,7 @@ async function submit(): Promise<void> {
         work_date: workDateInput.value,
         clocked_in_at: clockedInAt,
         clocked_out_at: clockedOutAt,
+        ends_in_break: clockedOutAt !== null && endsInBreak.value,
         reason_code: reason,
         reason_text: reasonTextPayload,
       })
@@ -444,6 +512,10 @@ async function submit(): Promise<void> {
         }
       }
 
+      if (endsInBreakChanged.value) {
+        body.ends_in_break = endsInBreak.value
+      }
+
       result = await correctShiftEntry(props.entry.uuid, body)
     } else {
       result = await voidShiftEntry(props.entry.uuid, {
@@ -468,7 +540,7 @@ async function submit(): Promise<void> {
       if (kind === 'superseded') {
         emit('stale')
       }
-    } else if (isWorkDateChangeProblem(caught)) {
+    } else if (isWorkDateChangeProblem(caught) && isOpeningMoved(caught)) {
       workDateChangeNotice.value = true
     } else {
       error.value = caught
@@ -509,7 +581,7 @@ const inputClass =
       <ErrorNotice
         v-if="error !== null"
         :error="error"
-        :field-labels="{ employee_uuid: t('corrections.dialog.employeeLabel') }"
+        :field-labels="errorFieldLabels"
         data-test="dialog-error"
       />
 
@@ -575,6 +647,27 @@ const inputClass =
           :aria-invalid="field.invalid"
           data-test="dialog-clock-out"
         />
+      </FormField>
+
+      <FormField
+        v-if="showsEndsInBreak"
+        v-slot="field"
+        :label="t('corrections.dialog.endsInBreakLegend')"
+        :hint="t('corrections.dialog.endsInBreakHint')"
+        :errors="fieldErrors('ends_in_break')"
+      >
+        <label class="flex items-start gap-2">
+          <input
+            :id="field.id"
+            v-model="endsInBreak"
+            type="checkbox"
+            class="mt-1"
+            :aria-describedby="field.describedBy"
+            :aria-invalid="field.invalid"
+            data-test="dialog-ends-in-break"
+          />
+          <span>{{ t('corrections.dialog.endsInBreakLabel') }}</span>
+        </label>
       </FormField>
 
       <p v-if="mode === 'void'" class="text-kq-text-muted" data-test="dialog-void-summary">

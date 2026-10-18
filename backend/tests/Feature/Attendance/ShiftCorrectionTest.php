@@ -19,6 +19,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -341,6 +342,7 @@ it('rechaza mover a otro dia la entrada que abre la jornada', function (): void 
         // lo pinta junto a la hora de entrada— pero le permite ofrecer los dos
         // actos (anular aqui, dar de alta alla) en vez de un parrafo.
         ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'opening_moved')
         ->assertJsonPath('status', 422)
         ->assertJsonPath('errors.clocked_in_at.0', fn (string $mensaje): bool => str_contains($mensaje, 'anula'));
 })->group('RN-05', 'RF-AT-08', 'RF-PA-04');
@@ -483,6 +485,254 @@ it('devuelve 409 cuando el alta pisaria a otro tramo de la misma persona', funct
         ])
         ->assertValidResponse(409);
 })->group('RN-02', 'RF-PA-04');
+
+it('rechaza anular un tramo intermedio si la vuelta de despues deja de continuar la jornada', function (): void {
+    // RN-05 (2.3.0). Jornada del 14 en Madrid: 08:00-15:00, 18:00-23:00 y una
+    // vuelta el 15 a las 04:00. Sin el tramo de la tarde, la vuelta queda a
+    // 13 h de la salida de las 15:00 y sus horas serian de otra jornada.
+    $contexto = contextoDeCorreccion();
+    $tramos = [];
+
+    // Los dos primeros terminan en pausa: lo que rompe la anulacion es la cota.
+    foreach ([['2026-03-14T07:00:00Z', '2026-03-14T14:00:00Z', true], ['2026-03-14T17:00:00Z', '2026-03-14T22:00:00Z', true], ['2026-03-15T03:00:00Z', '2026-03-15T05:00:00Z', false]] as [$entrada, $salida, $pausa]) {
+        $tramos[] = Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => '2026-03-14',
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'ends_in_break' => $pausa,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->json('shift_entry_uuid');
+    }
+
+    $antes = [DB::table('shift_corrections')->count(), DB::table('audit_log')->count()];
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$tramos[1].'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'next_entry_not_continued')
+        ->assertJsonStructure(['errors' => ['clocked_in_at']]);
+
+    expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
+        ->and([DB::table('shift_corrections')->count(), DB::table('audit_log')->count()])->toBe($antes);
+
+    // Anular de atras hacia delante si se puede: primero la vuelta, luego la tarde.
+    foreach ([$tramos[2], $tramos[1]] as $tramo) {
+        Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries/'.$tramo.'/void', [
+                'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+            ])
+            ->assertValidResponse(200);
+    }
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('rechaza anular el tramo que abre la jornada si el siguiente empieza otro dia, sin escribir nada', function (): void {
+    // RN-05 (2.3.0). Turno de 22:00 a 02:00 de Madrid y vuelta de 02:30 a 06:00:
+    // sin el turno, la jornada del 14 quedaria abierta por un tramo del 15.
+    $contexto = contextoDeCorreccion();
+    $tramos = [];
+
+    foreach ([['2026-03-14T21:00:00Z', '2026-03-15T01:00:00Z', true], ['2026-03-15T01:30:00Z', '2026-03-15T05:00:00Z', false]] as [$entrada, $salida, $pausa]) {
+        $tramos[] = Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => '2026-03-14',
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'ends_in_break' => $pausa,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->json('shift_entry_uuid');
+    }
+
+    $antes = [DB::table('shift_corrections')->count(), DB::table('audit_log')->count(), DB::table('daily_totals')->value('total_minutes')];
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$tramos[0].'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'opening_voided')
+        ->assertJsonPath('errors.clocked_in_at.0', 'Este tramo abre la jornada del 2026-03-14 y el siguiente empieza '
+            .'otro día: anularlo dejaría sus horas en otra jornada. Anula antes los tramos que vienen detrás.');
+
+    expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
+        ->and([DB::table('shift_corrections')->count(), DB::table('audit_log')->count(), DB::table('daily_totals')->value('total_minutes')])->toBe($antes);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('rechaza declarar la pausa en un tramo sin salida, en el alta y en la correccion', function (): void {
+    // RN-05 (2.3.0): un tramo abierto no ha terminado de ninguna forma.
+    $contexto = contextoDeCorreccion();
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-03-14',
+            'clocked_in_at' => '2026-03-14T06:00:00Z',
+            'ends_in_break' => true,
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        ->assertJsonStructure(['errors' => ['ends_in_break']]);
+
+    $abierto = tramoRegistrado($contexto['site'], $contexto['employee'], out: null);
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$abierto, [
+            'ends_in_break' => true,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('errors.ends_in_break.0', 'Solo puede terminar en pausa un tramo con hora de salida.');
+
+    expect(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('shift_corrections')->count())->toBe(0);
+})->group('RN-05', 'RF-PA-04');
+
+it('declarar solo que el tramo termino en pausa crea la version 2 y queda en la auditoria', function (): void {
+    // RN-05 (2.3.0): cambiar como termino un tramo es una correccion, con su
+    // version nueva, su fila en shift_corrections y su asiento (RN-13).
+    $contexto = contextoDeCorreccion();
+    $tramo = tramoRegistrado($contexto['site'], $contexto['employee']);
+
+    $respuesta = Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'ends_in_break' => true,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('version', 2)
+        ->assertJsonPath('action', 'modified')
+        ->assertJsonPath('daily_total_minutes', 480);
+
+    $nueva = $respuesta->json('shift_entry_uuid');
+    $correccion = DB::table('shift_corrections')->first();
+    $asiento = DB::table('audit_log')->where('action', 'shift_entry.modified')->value('payload');
+
+    expect(DB::table('shift_entries')->where('uuid', $nueva)->value('closed_by'))->toBe('break_start')
+        ->and(DB::table('shift_entries')->where('uuid', $tramo)->value('closed_by'))->toBe('clock_out')
+        ->and(DB::table('shift_entries')->where('uuid', $nueva)->value('clock_out_source'))->toBe('manual_admin')
+        ->and($correccion?->before)->toContain('"closed_by": "clock_out"')
+        ->and($correccion?->after)->toContain('"closed_by": "break_start"')
+        ->and($asiento)->toContain('break_start');
+
+    // Volver a declararlo no cambia nada.
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$nueva, [
+            'ends_in_break' => true,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(422);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('corrige las dos marcas a la vez aunque la entrada nueva sea posterior a la salida antigua', function (): void {
+    // Con las dos marcas en la orden, RN-03 se comprueba sobre ellas y no sobre
+    // una mezcla con la marca vieja (2.3.0): mover el tramo de 06:00-14:00 a
+    // 15:00-20:00 del mismo dia es una correccion legitima.
+    $contexto = contextoDeCorreccion();
+    $tramo = tramoRegistrado($contexto['site'], $contexto['employee']);
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'clocked_in_at' => '2026-03-14T15:00:00Z',
+            'clocked_out_at' => '2026-03-14T20:00:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('clocked_in_at', '2026-03-14T15:00:00.000000Z')
+        ->assertJsonPath('daily_total_minutes', 300);
+})->group('RN-03', 'RN-13', 'RF-PA-04');
+
+it('rechaza colgar de una jornada un tramo de otro dia que no la continua, tambien en ingles', function (): void {
+    // RN-05 (2.3.0): el tramo de 07:00 a 14:00 UTC del 14 sale a las 15:00 de
+    // Madrid; una entrada el 17 no continua esa jornada, aunque la persona este
+    // en alta. Mismo `type` que mover la apertura: sus horas son de otra
+    // jornada. Con el ingles activo: de serie solo lo esta el español.
+    InstallationLocale::set('es', ['es', 'en']);
+    $contexto = contextoDeCorreccion();
+    tramoRegistrado($contexto['site'], $contexto['employee'], '2026-03-14 07:00', '2026-03-14 14:00');
+    $asientos = DB::table('audit_log')->count();
+
+    Api::as($contexto['token'])
+        ->withHeaders(['Accept-Language' => 'en'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-03-14',
+            'clocked_in_at' => '2026-03-17T07:00:00Z',
+            'clocked_out_at' => '2026-03-17T14:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'entry_not_continued')
+        // El 17 queda mas alla del tope: la jornada del 14 solo llega al 15.
+        ->assertJsonPath('errors.clocked_in_at.0', 'The working day of 2026-03-14 only continues until 2026-03-15 at '
+            .'the latest: a shift starting later belongs to another working day. Record it on the working day it '
+            .'starts.');
+
+    expect(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('shift_corrections')->count())->toBe(0)
+        ->and(DB::table('audit_log')->count())->toBe($asientos);
+})->group('RN-05', 'RF-PA-04');
+
+it('rechaza corregir la salida del dia del cese mas alla de su cota, tambien en ingles', function (): void {
+    // RN-05 y RN-14 (2.3.0). Cese el 30 de junio (`WorkforceFixtures`): el dia
+    // acaba a las 22:00 UTC del 30 y la cota de 12 h llega a las 10:00 UTC del
+    // 1 de julio. Corregir no depende del estado de la persona, pero sus marcas
+    // no pasan de ahi.
+    InstallationLocale::set('es', ['es', 'en']);
+    $contexto = contextoDeCorreccion();
+    $cesada = WorkforceFixtures::employee($contexto['site'], null, 'terminated');
+
+    $tramo = Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $cesada,
+            'work_date' => '2026-06-30',
+            'clocked_in_at' => '2026-06-30T20:00:00Z',
+            'clocked_out_at' => '2026-07-01T04:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidResponse(201)
+        ->json('shift_entry_uuid');
+    \assert(\is_string($tramo));
+
+    Api::as($contexto['token'])
+        ->withHeaders(['Accept-Language' => 'en'])
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'clocked_out_at' => '2026-07-01T10:00:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        ->assertJsonPath('errors.clocked_out_at.0', 'This person left on 2026-06-30: that time falls outside their '
+            .'last working day. Only hours that continue the working day of the termination date are accepted.');
+
+    // Un minuto antes de la cota, si.
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'clocked_out_at' => '2026-07-01T09:59:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(200)
+        ->assertJsonPath('work_date', '2026-06-30');
+})->group('RN-05', 'RN-14', 'RF-PA-04');
 
 // --- Auditoria e instrumentacion ---------------------------------------------
 

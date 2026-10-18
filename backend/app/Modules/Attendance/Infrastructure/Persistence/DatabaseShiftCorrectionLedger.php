@@ -76,6 +76,9 @@ final readonly class DatabaseShiftCorrectionLedger implements ShiftCorrectionLed
             'version' => $version,
             'clocked_in_at' => $this->iso($times->clockedInAt),
             'clocked_out_at' => $times->clockedOutAt === null ? null : $this->iso($times->clockedOutAt),
+            // Como termino (RN-05, 2.3.0): lo unico que cambia en una correccion
+            // que solo declara la pausa.
+            'closed_by' => $times->closure?->value,
             // Los minutos van escritos y no se deducen al leer: el historico
             // tiene que poder responder «cuanto decia este tramo antes» sin
             // recalcular nada, que es lo que se ensena en el detalle de jornada.

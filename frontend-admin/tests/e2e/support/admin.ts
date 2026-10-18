@@ -571,12 +571,14 @@ export const WORKDAYS: EmployeeWorkDays = {
             version: 1,
             clocked_in_at: '2026-03-14T05:00:00.000000Z',
             clocked_out_at: null,
+            closed_by: null,
             worked_minutes: 0,
           },
           after: {
             version: 2,
             clocked_in_at: '2026-03-14T05:00:00.000000Z',
             clocked_out_at: '2026-03-14T13:05:00.000000Z',
+            closed_by: 'clock_out',
             worked_minutes: 485,
           },
         },
@@ -1809,11 +1811,12 @@ async function validationProblem(
   type: string,
   title: string,
   errors: Record<string, string[]>,
+  extra: Record<string, unknown> = {},
 ): Promise<void> {
   await route.fulfill({
     status: 422,
     contentType: 'application/problem+json',
-    body: JSON.stringify({ type, title, status: 422, errors }),
+    body: JSON.stringify({ type, title, status: 422, errors, ...extra }),
   })
 }
 
@@ -2883,6 +2886,8 @@ export async function stubManagementApi(
                   'destino: son dos acciones, cada una con su motivo.',
               ],
             },
+            // ADR-058: el panel solo pinta su propia pista al mover la apertura.
+            { cause: 'opening_moved' },
           )
 
           return
@@ -2972,12 +2977,14 @@ export async function stubManagementApi(
             version: entry.version,
             clocked_in_at: entry.clocked_in_at,
             clocked_out_at: entry.clocked_out_at,
+            closed_by: entry.closed_by,
             worked_minutes: entry.duration_minutes ?? 0,
           },
           after: {
             version: newEntry.version,
             clocked_in_at: newEntry.clocked_in_at,
             clocked_out_at: newEntry.clocked_out_at,
+            closed_by: newEntry.closed_by,
             worked_minutes: newEntry.duration_minutes ?? 0,
           },
         })
@@ -3041,6 +3048,7 @@ export async function stubManagementApi(
             version: entry.version,
             clocked_in_at: entry.clocked_in_at,
             clocked_out_at: entry.clocked_out_at,
+            closed_by: entry.closed_by,
             worked_minutes: entry.duration_minutes ?? 0,
           },
           after: null,
@@ -4449,6 +4457,7 @@ export async function stubManagementApi(
               version: 1,
               clocked_in_at: entry.clocked_in_at,
               clocked_out_at: entry.clocked_out_at,
+              closed_by: entry.closed_by,
               worked_minutes: entry.duration_minutes ?? 0,
             },
           })

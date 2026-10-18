@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support\Factory;
 
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
@@ -52,6 +53,8 @@ final class ShiftEntryFactory
     private int $version = 1;
 
     private ?string $supersededByUuid = null;
+
+    private ?EntryClosure $closure = null;
 
     private function __construct()
     {
@@ -192,6 +195,18 @@ final class ShiftEntryFactory
     }
 
     /**
+     * El tramo termino en pausa (`closed_by: break_start`, RN-05, 2.3.0): el del
+     * dia civil siguiente puede continuar su jornada.
+     */
+    public function endingInBreak(): self
+    {
+        $clone = clone $this;
+        $clone->closure = EntryClosure::BREAK_START;
+
+        return $clone;
+    }
+
+    /**
      * Los valores por defecto de la jornada que monta este tramo. Lo que la
      * prueba fijo a mano se respeta.
      */
@@ -218,6 +233,7 @@ final class ShiftEntryFactory
             $this->status,
             $this->version,
             $this->supersededByUuid,
+            $this->closure,
         );
     }
 }

@@ -1041,3 +1041,25 @@ it('se niega a revisar lo que no es una discrepancia pendiente, y con opciones m
     'con --full' => [['--acknowledge-site-change' => 'change::fila', '--full' => '1'], 2, 'no se combina'],
     'motivo corto' => [['--acknowledge-site-change' => 'change::fila', '--reason' => 'corto'], 1, 'al menos'],
 ])->group('RN-23', 'RS-07');
+
+it('detecta que alguien reescribio como termino un tramo, por fichaje y por correccion', function (): void {
+    // RN-05 (2.3.0): `closed_by` decide si el tramo del dia siguiente continua
+    // la jornada, asi que reescribirlo es manipular el registro. Se compara con
+    // la `action` del cierre del quiosco y con el `after.closed_by` de la
+    // ultima correccion.
+    $escenario = registroAuditadoEscenario();
+    $tramos = registroAuditadoLegitimo($escenario);
+    $pausa = registroAuditadoTramo($escenario['tercera'], '2026-10-06 07:00');
+
+    SchemaOwner::bypassingTransitionGuards(static function (ConnectionInterface $owner) use ($pausa, $tramos): void {
+        $owner->update("UPDATE shift_entries SET closed_by = 'clock_out' WHERE uuid = ?", [$pausa]);
+        $owner->update("UPDATE shift_entries SET closed_by = 'break_start' WHERE uuid = ?", [$tramos['corregido']]);
+    });
+
+    $resultado = registroAuditadoConciliar(true);
+
+    expect($resultado['code'])->toBe(1)
+        ->and($resultado['output'])->toContain('2 discrepancia(s)')
+        ->and($resultado['output'])->toContain('shift_entries '.$pausa.' · entry_differs_from_audit · closed_by')
+        ->and($resultado['output'])->toContain('shift_entries '.$tramos['corregido'].' · entry_differs_from_audit · closed_by');
+})->group('RL-04', 'RS-07', 'RN-05');

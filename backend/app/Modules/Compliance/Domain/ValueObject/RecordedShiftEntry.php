@@ -40,6 +40,8 @@ final readonly class RecordedShiftEntry
         public ?string $clockOutSource,
         public array $corrections = [],
         public array $replacementCorrections = [],
+        /** Como termino: `clock_out`, `break_start` o `null` si sigue abierto (RN-05, 2.3.0). */
+        public ?string $closedBy = null,
     ) {}
 
     /**

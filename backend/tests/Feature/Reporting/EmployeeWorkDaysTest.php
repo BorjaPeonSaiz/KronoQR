@@ -575,3 +575,73 @@ it('conserva la marca de pausa tras corregir la hora de salida del primer tramo'
         ->assertJsonPath('data.0.shift_entries.1.opened_by', 'break_end')
         ->assertJsonPath('data.0.shift_entries.1.closed_by', 'clock_out');
 })->group('RF-AT-12', 'RF-PA-04', 'RN-13');
+
+/** Un turno partido del 14 escaneado como dos entradas y dos salidas, sin pausa. */
+function jornadasTurnoPartido(int $site, string $employee): string
+{
+    $repositorio = app(WorkDayRepository::class);
+    $proyector = app(DailyTotalsProjector::class);
+    $jornada = WorkDay::start($employee, $site, WorkDate::fromIsoDate('2026-03-14', Instants::madrid()));
+    $primero = $jornada->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-14 06:00'), ScanOrigin::QR_KIOSK);
+    $jornada->clockOut(Instants::inMadrid('2026-03-14 10:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+    $jornada->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-14 16:00'), ScanOrigin::QR_KIOSK);
+    $jornada->clockOut(Instants::inMadrid('2026-03-14 20:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+    $repositorio->save($jornada);
+
+    foreach ($jornada->releaseEvents() as $evento) {
+        if ($evento instanceof DailyTotalsRecalculated) {
+            $proyector->handle($evento);
+        }
+    }
+
+    return $primero->uuid();
+}
+
+it('abre como vuelta de pausa el tramo que sigue a una pausa declarada a mano', function (): void {
+    // ADR-058: `opened_by` se deriva del `closed_by` del tramo anterior. Un turno
+    // partido escaneado sin «Pausa» y RRHH declarando despues que el primero
+    // termino en pausa: el segundo pasa a ser la vuelta.
+    $contexto = contextoDeJornadas();
+    $primero = jornadasTurnoPartido($contexto['site'], $contexto['employee']);
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$primero, [
+            'ends_in_break' => true,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(200);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'break_start')
+        ->assertJsonPath('data.0.shift_entries.1.opened_by', 'break_end')
+        ->assertJsonPath('data.0.corrections.0.before.closed_by', 'clock_out')
+        ->assertJsonPath('data.0.corrections.0.after.closed_by', 'break_start');
+})->group('RF-AT-12', 'RF-PA-03', 'RN-05');
+
+it('abre como entrada el tramo que sigue a una pausa escaneada que se corrigio a salida', function (): void {
+    $contexto = contextoDeJornadas();
+    $tramos = BreakFixtures::dayWithBreak(
+        $contexto['site'],
+        $contexto['employee'],
+        '2026-03-14',
+        '2026-03-14 06:00',
+        '2026-03-14 10:00',
+        '2026-03-14 10:30',
+        '2026-03-14 14:00',
+    );
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramos['first'], [
+            'ends_in_break' => false,
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(200);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'clock_out')
+        ->assertJsonPath('data.0.shift_entries.1.opened_by', 'clock_in');
+})->group('RF-AT-12', 'RF-PA-03', 'RN-05');

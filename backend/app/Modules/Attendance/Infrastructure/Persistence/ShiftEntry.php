@@ -34,6 +34,7 @@ use Illuminate\Support\Carbon;
  * @property string $status
  * @property string $clock_in_source
  * @property string|null $clock_out_source
+ * @property string|null $closed_by
  * @property int $version
  * @property int|null $superseded_by_id
  *
@@ -57,6 +58,7 @@ final class ShiftEntry extends Model
         'status',
         'clock_in_source',
         'clock_out_source',
+        'closed_by',
         'version',
         'superseded_by_id',
     ];

@@ -37,7 +37,9 @@ const WORK_RECORD_PRIVILEGES_MIGRATION = '2026_10_13_100000_restrict_application
  * @var array<string, list<string>>
  */
 const WORK_RECORD_PRIVILEGES_UPDATABLE = [
-    'shift_entries' => ['clocked_out_at', 'duration_minutes', 'status', 'clock_out_source', 'superseded_by_id', 'updated_at'],
+    // `closed_by` desde la 2.3.0 (RN-05): se escribe al cerrar un tramo abierto,
+    // con la salida. Va al final porque la lista sigue el orden de las columnas.
+    'shift_entries' => ['clocked_out_at', 'duration_minutes', 'status', 'clock_out_source', 'superseded_by_id', 'updated_at', 'closed_by'],
     'incidents' => ['status', 'notified_at', 'resolved_at', 'resolved_by_user_id', 'resolution_note', 'updated_at'],
 ];
 

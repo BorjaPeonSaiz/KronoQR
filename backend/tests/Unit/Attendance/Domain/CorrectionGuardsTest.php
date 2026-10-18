@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Factory\ShiftEntryFactory;
 use Tests\Support\Factory\WorkDayFactory;
@@ -41,6 +42,7 @@ function correcting(WorkDay $workDay, string $entryUuid, ShiftTimes $times): cal
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 }
 
@@ -77,7 +79,7 @@ it('rechaza corregir un tramo ya anulado', function (): void {
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // Un tramo anulado es historia: no se corrige, y quien lo intente esta
     // trabajando sobre una version que ya no es la vigente (ADR-026). Es lo que
@@ -120,6 +122,7 @@ it('permite que la correccion toque justo el borde del tramo siguiente', functio
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect($corregido->workedDuration()->minutes)->toBe(300)
@@ -166,7 +169,7 @@ it('permite corregir la vuelta de una pausa de madrugada sin mover la jornada', 
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-14 22:00'),
             Instants::inMadrid('2026-03-15 02:00'),
-        ))
+        )->endingInBreak())
         ->withShift(ShiftEntryFactory::new()->workedBetween(
             Instants::inMadrid('2026-03-15 02:30'),
             Instants::inMadrid('2026-03-15 06:00'),
@@ -183,6 +186,7 @@ it('permite corregir la vuelta de una pausa de madrugada sin mover la jornada', 
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect($corregido->workDate()->isoDate)->toBe('2026-03-14')
@@ -196,7 +200,7 @@ it('rechaza anular un tramo que no esta en la jornada', function (): void {
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    expect(fn (): ShiftEntry => $jornada->voidEntry('shift-entry-9', CorrectionFactory::standard()))
+    expect(fn (): ShiftEntry => $jornada->voidEntry('shift-entry-9', CorrectionFactory::standard(), ContinuationCeilingFactory::standard()))
         ->toThrow(ShiftEntryNotInWorkDay::class);
 })->group('RN-13');
 

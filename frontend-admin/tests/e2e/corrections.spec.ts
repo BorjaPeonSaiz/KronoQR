@@ -58,6 +58,36 @@ test.describe('Añadir un tramo', () => {
   )
 
   test(
+    'declara que el tramo termino en pausa, y la casilla solo aparece con salida',
+    { tag: ['@RF-PA-04', '@RN-05'] },
+    async ({ page }) => {
+      const api = await stubManagementApi(page)
+      await logIn(page)
+      await page.goto(WORKDAYS_URL)
+
+      await page.getByTestId('add-shift-entry').click()
+
+      const dialog = page.getByRole('dialog', { name: 'Añadir un tramo' })
+      await dialog.getByTestId('dialog-work-date').fill('2026-08-14')
+      await dialog.getByTestId('dialog-clock-in').fill('2026-08-14T18:00')
+      await expect(dialog.getByTestId('dialog-ends-in-break')).toBeHidden()
+
+      await dialog.getByTestId('dialog-clock-out').fill('2026-08-14T23:30')
+      await dialog.getByLabel('Este tramo terminó en pausa').check()
+      await dialog.getByTestId('dialog-reason').selectOption('OLVIDO_FICHAJE_ENTRADA')
+      await dialog.getByTestId('dialog-submit').click()
+
+      await expect(dialog).toBeHidden()
+
+      const request = api.requests.find(
+        (candidate) => candidate.path === '/api/v1/shift-entries' && candidate.method === 'POST',
+      )
+
+      expect(request?.body).toMatchObject({ ends_in_break: true })
+    },
+  )
+
+  test(
     'con el motivo «otro motivo» y menos de 20 caracteres, no deja guardar',
     { tag: ['@RF-PA-04'] },
     async ({ page }) => {

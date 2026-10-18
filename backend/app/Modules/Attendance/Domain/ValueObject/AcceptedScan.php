@@ -56,6 +56,12 @@ final readonly class AcceptedScan
          * que regla dura 19 prohibe.
          */
         public ?string $shiftEntryUuid = null,
+        /**
+         * La jornada de ese tramo (RN-05, 2.3.0): la vuelta de una pausa solo la
+         * continua, como mucho, hasta el dia civil siguiente. Nulo en los mismos
+         * casos que el tramo.
+         */
+        public ?WorkDate $workDate = null,
     ) {
         TimeRange::assertUtc('occurredAt', $occurredAt);
     }

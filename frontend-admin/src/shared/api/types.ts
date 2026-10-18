@@ -122,6 +122,9 @@ export type CorrectShiftEntryRequest = Schemas['CorrectShiftEntryRequest']
 export type VoidShiftEntryRequest = Schemas['VoidShiftEntryRequest']
 export type CorrectedShiftEntry = Schemas['CorrectedShiftEntry']
 
+/** Por qué un 422 de cambio de jornada (RN-05, ADR-058). */
+export type WorkDateChangeCause = NonNullable<Schemas['ValidationProblem']['cause']>
+
 // `Problem`/`ValidationProblem` (RFC 9457) ya no se alias aqui: el cliente HTTP
 // base que los consumia vive en `@kronoqr/web-kit/http`, que declara su propia
 // forma estructural para no depender del `schema.d.ts` de ninguna SPA

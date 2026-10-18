@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Model;
 
 use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyClosed;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
@@ -53,6 +54,7 @@ final class ShiftEntry
         private ShiftEntryStatus $status,
         private readonly int $version,
         private ?string $supersededByUuid,
+        private ?EntryClosure $closure,
     ) {}
 
     /**
@@ -88,6 +90,7 @@ final class ShiftEntry
             ShiftEntryStatus::OPEN,
             1,
             null,
+            null,
         );
     }
 
@@ -121,6 +124,7 @@ final class ShiftEntry
             $times->isOpen() ? ShiftEntryStatus::OPEN : ShiftEntryStatus::CLOSED,
             1,
             null,
+            $times->closure,
         );
     }
 
@@ -146,6 +150,7 @@ final class ShiftEntry
         ShiftEntryStatus $status,
         int $version,
         ?string $supersededByUuid = null,
+        ?EntryClosure $closure = null,
     ): self {
         TimeRange::assertUtc('clockedInAt', $clockedInAt);
 
@@ -166,6 +171,9 @@ final class ShiftEntry
             $status,
             $version,
             $supersededByUuid,
+            // Un tramo cerrado sin cierre registrado es anterior a `closed_by`
+            // (2.3.0): termino en salida, que es lo que el registro afirma de el.
+            $clockedOutAt === null ? null : ($closure ?? EntryClosure::CLOCK_OUT),
         );
     }
 
@@ -174,7 +182,7 @@ final class ShiftEntry
      *
      * @internal Solo lo llama WorkDay::clockOut().
      */
-    public function close(DateTimeImmutable $clockedOutAt, ScanOrigin $source): void
+    public function close(DateTimeImmutable $clockedOutAt, ScanOrigin $source, EntryClosure $closure): void
     {
         if (! $this->status->isOpen()) {
             throw ShiftEntryAlreadyClosed::withUuid($this->uuid);
@@ -185,6 +193,7 @@ final class ShiftEntry
 
         $this->clockedOutAt = $clockedOutAt;
         $this->clockOutSource = $source;
+        $this->closure = $closure;
         $this->status = ShiftEntryStatus::CLOSED;
     }
 
@@ -226,7 +235,9 @@ final class ShiftEntry
     public function nextVersion(string $uuid, ShiftTimes $times, ScanOrigin $source): self
     {
         $clockInChanged = $times->clockedInAt->getTimestamp() !== $this->clockedInAt->getTimestamp();
-        $clockOutChanged = $times->clockedOutAt?->getTimestamp() !== $this->clockedOutAt?->getTimestamp();
+        // Cambiar como termino el tramo es cambiar su salida (RN-05, 2.3.0).
+        $clockOutChanged = $times->clockedOutAt?->getTimestamp() !== $this->clockedOutAt?->getTimestamp()
+            || $times->closure !== $this->closure;
 
         return new self(
             $uuid,
@@ -246,6 +257,7 @@ final class ShiftEntry
             $times->isOpen() ? ShiftEntryStatus::OPEN : ShiftEntryStatus::CLOSED,
             $this->version + 1,
             null,
+            $times->closure,
         );
     }
 
@@ -315,6 +327,12 @@ final class ShiftEntry
         return $this->clockOutSource;
     }
 
+    /** Como termino el tramo, o `null` si sigue abierto (RN-05, 2.3.0). */
+    public function closure(): ?EntryClosure
+    {
+        return $this->closure;
+    }
+
     public function status(): ShiftEntryStatus
     {
         return $this->status;
@@ -349,7 +367,7 @@ final class ShiftEntry
      */
     public function times(): ShiftTimes
     {
-        return ShiftTimes::of($this->clockedInAt, $this->clockedOutAt);
+        return ShiftTimes::of($this->clockedInAt, $this->clockedOutAt, $this->closure);
     }
 
     /**

@@ -30,22 +30,17 @@ use Psr\Log\LoggerInterface;
  * abre quien lleva un turno.
  *
  * Hay una quinta, las incidencias, y **solo cuando se piden**: el panel las
- * incrusta en el detalle (RF-PA-05) y el portal del empleado no. Y las marcas
- * de pausa de cada tramo ({@see clockingMarks()}), agrupadas por tramo y solo
- * si el rango trajo alguno: dos consultas, la cadena de versiones y sus
- * escaneos.
+ * incrusta en el detalle (RF-PA-05) y el portal del empleado no.
  *
  * **Todo el detalle de un mes se sirve por indices** (RNF-P-02), y lo vigila
  * `tests/Integration/Reporting/WorkDayJournalIndexUsageTest.php`. Los tres
  * filtros por empleado y rango caen sobre
  * `shift_entries_employee_id_work_date_index` y sobre el UNIQUE de
  * `daily_totals`, que existen desde la migracion inicial precisamente para esto.
- * Lo que toca `scan_events` —las marcas `recorded_at` y {@see clockingMarks()}—
- * va por `scan_events_shift_entry_id_occurred_at_index`, y la subida por la
- * cadena de versiones por `shift_entries_superseded_by_id_unique`; los dos de
- * `2026_10_08_100000_index_work_day_journal_lookups` (el segundo, unico desde
- * `2026_10_14_100200`). Sin ellos son unos 270 buffers por tramo y dos
- * `Seq Scan` por consulta.
+ * Lo que toca `scan_events` —las marcas `recorded_at`— va por
+ * `scan_events_shift_entry_id_occurred_at_index`, de
+ * `2026_10_08_100000_index_work_day_journal_lookups`. Sin el son unos 270
+ * buffers por tramo.
  *
  * ## Vigente y no vigente
  *
@@ -64,15 +59,13 @@ use Psr\Log\LoggerInterface;
  *
  * ## Quien abrio y quien cerro (RF-AT-12, tarea 3.5)
  *
- * `opened_by` y `closed_by` salen de `scan_events.result` de esos mismos
- * escaneos, y se correlacionan **por el desenlace** y no por el instante: lo que
- * abre es `clock_in` o `break_end` y lo que cierra es `clock_out` o
- * `break_start` (ADR-024). Van en consultas aparte —{@see
- * clockingMarks()}— y no en subconsultas correlacionadas porque hay que subir
- * por la cadena de versiones: una correccion no crea escaneos, y mirando solo la
- * version vigente la marca de pausa desaparecia en cuanto alguien corregia el
- * tramo. Sin escaneo en toda la estirpe —un tramo declarado a mano— valen
- * `clock_in` y `clock_out`, que es lo que de hecho ocurrio.
+ * `closed_by` es la columna de `shift_entries` (ADR-058): la escribe el escaneo
+ * («Pausa» o salida) o quien escribe el tramo a mano (`ends_in_break`), y viaja
+ * con cada version. `opened_by` **se deriva** de ella: es `break_end` si el
+ * tramo vigente anterior de la jornada termino en pausa, y `clock_in` si no o si
+ * es el primero. Asi las dos dicen siempre lo mismo que el registro, tambien
+ * cuando una correccion declara o retira una pausa, y no hace falta subir por la
+ * cadena de versiones a buscar escaneos.
  *
  * ## Un turno nocturno no se parte
  *
@@ -204,7 +197,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         $rows = $this->connection->select(<<<SQL
             SELECT se.id, se.uuid, se.version, se.status, se.site_id, sites.timezone,
                    se.work_date, se.clocked_in_at, se.clocked_out_at,
-                   se.duration_minutes, se.clock_in_source, se.clock_out_source,
+                   se.duration_minutes, se.clock_in_source, se.clock_out_source, se.closed_by,
                    se.created_at,
                    (SELECT ev.recorded_at FROM scan_events ev
                      WHERE ev.shift_entry_id = se.id AND ev.occurred_at = se.clocked_in_at
@@ -220,20 +213,16 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
              ORDER BY se.work_date, se.clocked_in_at
         SQL, [$employeeId, $range->isoFrom(), $range->isoTo()]);
 
-        $ids = [];
-
-        foreach ($rows as $raw) {
-            $ids[] = Row::of($raw)->int('id');
-        }
-
-        $marks = $this->clockingMarks($ids);
-
         $byDate = [];
+        // Como termino el tramo anterior de cada jornada: las filas vienen por
+        // jornada y entrada.
+        $previousClosedBy = [];
 
         foreach ($rows as $raw) {
             $row = Row::of($raw);
-            $mark = $marks[$row->int('id')] ?? ['opened_by' => null, 'closed_by' => null];
-            $byDate[$this->isoDate($row->string('work_date'))][] = new JournalShiftEntry(
+            $date = $this->isoDate($row->string('work_date'));
+            $closedBy = $this->closedBy($row->nullableString('closed_by'), $row->nullableInstant('clocked_out_at'));
+            $byDate[$date][] = new JournalShiftEntry(
                 uuid: $row->string('uuid'),
                 version: $row->int('version'),
                 status: $row->string('status'),
@@ -247,143 +236,19 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 clockOutSource: $row->nullableString('clock_out_source'),
                 durationMinutes: $row->nullableInt('duration_minutes'),
                 recordedAt: $row->instant('created_at'),
-                // **No hay escaneo que valga `null` aqui** (RF-AT-12, tarea
-                // 3.5): un tramo declarado o corregido a mano no tiene ninguna
-                // fila en `scan_events` en toda su cadena de versiones, y lo que
-                // de hecho ocurrio es una entrada y una salida.
-                openedBy: $mark['opened_by'] ?? JournalShiftEntry::OPENED_BY_CLOCK_IN,
-                closedBy: $this->closedBy($mark['closed_by'], $row->nullableInstant('clocked_out_at')),
+                // Siempre del anterior vigente de la jornada (ADR-058): la vuelta
+                // de una pausa si aquel termino en pausa, una entrada si no.
+                openedBy: ($previousClosedBy[$date] ?? null) === JournalShiftEntry::CLOSED_BY_BREAK_START
+                    ? JournalShiftEntry::OPENED_BY_BREAK_END
+                    : JournalShiftEntry::OPENED_BY_CLOCK_IN,
+                // `shift_entries.closed_by` (2.3.0, ADR-058): lo fija el escaneo
+                // o quien escribe el tramo a mano.
+                closedBy: $closedBy,
             );
+            $previousClosedBy[$date] = $closedBy;
         }
 
         return $byDate;
-    }
-
-    /**
-     * Que abrio y que cerro cada tramo, **siguiendo su cadena de versiones**
-     * (RF-AT-12, ADR-024, ADR-035).
-     *
-     * ## Por que no basta con mirar los escaneos del tramo vigente
-     *
-     * Porque una correccion (RN-13, RF-PA-04) **no crea escaneos**: crea una
-     * version nueva, marca la anterior `superseded` y apunta a ella con
-     * `superseded_by_id`. Los escaneos siguen colgando de la version vieja. Con
-     * la consulta directa, corregir por un minuto la hora de salida de una
-     * jornada con pausa hacia **desaparecer la marca de pausa** del panel y del
-     * portal: dos tramos con un hueco mudo, indistinguibles de dos jornadas, y
-     * justo en el registro que alguien acaba de tocar — que es el que mas se
-     * mira. El tiempo seguia bien; lo que se perdia era poder explicarlo.
-     *
-     * ## Como se sigue la cadena: la estirpe primero, sus escaneos despues
-     *
-     * Primero la estirpe ({@see lineage()}): un `WITH RECURSIVE` que sube de la
-     * version vigente a sus antepasados. Despues, los escaneos de toda la
-     * estirpe, con la estirpe ya resuelta como lista literal: `ARRAY_AGG(...)
-     * FILTER (...)` ordenado por `occurred_at` toma el primero que abre y el
-     * ultimo que cierra.
-     *
-     * **Por que no va en una sola consulta recursiva.** PostgreSQL estima una
-     * consulta recursiva a ciegas —diez veces las filas del termino inicial,
-     * multiplicadas por lo que crea que devuelve cada paso—: con un mes de
-     * treinta tramos calculaba miles de filas de estirpe y, con esa cifra, unia
-     * `scan_events` con `Hash Join` y `Seq Scan` de la tabla entera aunque
-     * existiera el indice. Forzar el bucle anidado con `LATERAL` cambiaba el
-     * recorrido por el indice pero inflaba el coste estimado hasta encender el
-     * compilador JIT, que tardaba mas que el recorrido. Con la estirpe como
-     * `VALUES`, el planificador sabe cuantas filas son —las de verdad, un par
-     * por tramo— y va por `scan_events_shift_entry_id_occurred_at_index`.
-     *
-     * **Dos consultas para todo el rango, agrupadas por tramo**, no una por fila:
-     * el detalle de un mes pasa de cuatro `SELECT` a seis (siete con
-     * incidencias), no a uno por tramo. Con la lista vacia ni siquiera se
-     * pregunta. Un tramo a mano no tiene escaneos en ninguna version y no sale
-     * aqui: {@see currentEntries()} le da `clock_in` y `clock_out`.
-     *
-     * @param  list<int>  $entryIds  `shift_entries.id` de las versiones vigentes del rango
-     * @return array<int, array{opened_by: string|null, closed_by: string|null}>
-     */
-    private function clockingMarks(array $entryIds): array
-    {
-        if ($entryIds === []) {
-            return [];
-        }
-
-        $lineage = $this->lineage($entryIds);
-        $values = implode(', ', array_fill(0, \count($lineage), '(CAST(? AS bigint), CAST(? AS bigint))'));
-
-        /** @var list<object> $rows */
-        $rows = $this->connection->select(<<<SQL
-            SELECT l.current_id,
-                   (ARRAY_AGG(ev.result ORDER BY ev.occurred_at)
-                      FILTER (WHERE ev.result IN ('clock_in', 'break_end')))[1] AS opened_by,
-                   (ARRAY_AGG(ev.result ORDER BY ev.occurred_at DESC)
-                      FILTER (WHERE ev.result IN ('clock_out', 'break_start')))[1] AS closed_by
-              FROM (VALUES {$values}) AS l(current_id, entry_id)
-              JOIN scan_events ev ON ev.shift_entry_id = l.entry_id
-             GROUP BY l.current_id
-        SQL, array_merge(...$lineage));
-
-        $marks = [];
-
-        foreach ($rows as $raw) {
-            $row = Row::of($raw);
-
-            $marks[$row->int('current_id')] = [
-                'opened_by' => $row->nullableString('opened_by'),
-                'closed_by' => $row->nullableString('closed_by'),
-            ];
-        }
-
-        return $marks;
-    }
-
-    /**
-     * Cada version vigente con ella misma y con todos sus antepasados, como
-     * pares `[vigente, version]`.
-     *
-     * Un `WITH RECURSIVE` que sube de cada version a la que sustituyo
-     * —`previous.superseded_by_id = descendiente`—, servido por
-     * `shift_entries_superseded_by_id_unique`, que es parcial: solo las versiones
-     * sustituidas. El `IS NOT NULL` explicito no cambia el resultado —la
-     * igualdad ya descarta los nulos— y es lo que deja usar ese indice parcial
-     * tambien cuando el planificador elige un `Hash Join` o un `Merge Join` y
-     * recorre el lado interno entero: recorre las versiones sustituidas, que son
-     * pocas, y no la tabla.
-     *
-     * Devuelve los pares y no los escaneos a proposito: ver {@see clockingMarks()}.
-     *
-     * @param  non-empty-list<int>  $entryIds
-     * @return non-empty-list<array{int, int}>
-     */
-    private function lineage(array $entryIds): array
-    {
-        $placeholders = implode(', ', array_fill(0, \count($entryIds), '?'));
-
-        /** @var list<object> $rows */
-        $rows = $this->connection->select(<<<SQL
-            WITH RECURSIVE lineage(current_id, entry_id) AS (
-                SELECT se.id, se.id
-                  FROM shift_entries se
-                 WHERE se.id IN ({$placeholders})
-                 UNION ALL
-                SELECT l.current_id, previous.id
-                  FROM shift_entries previous
-                  JOIN lineage l ON previous.superseded_by_id = l.entry_id
-                 WHERE previous.superseded_by_id IS NOT NULL
-            )
-            SELECT current_id, entry_id FROM lineage
-        SQL, $entryIds);
-
-        $pairs = [];
-
-        foreach ($rows as $raw) {
-            $row = Row::of($raw);
-            $pairs[] = [$row->int('current_id'), $row->int('entry_id')];
-        }
-
-        // Nunca vacia: el termino inicial devuelve cada version vigente, que
-        // existe porque acaba de leerse en esta misma peticion.
-        return $pairs === [] ? array_map(static fn (int $id): array => [$id, $id], $entryIds) : $pairs;
     }
 
     /**
@@ -546,6 +411,8 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
             clockedInAt: $marks->instant('clocked_in_at'),
             clockedOutAt: $marks->nullableInstant('clocked_out_at'),
             workedMinutes: $marks->int('worked_minutes'),
+            // Las correcciones anteriores a la 2.3.0 no lo apuntaban (ADR-058).
+            closedBy: $marks->nullableString('closed_by'),
         );
     }
 

@@ -35,6 +35,11 @@ final readonly class AddShiftEntryCommand
         public CorrectionReason $reason,
         /** `users.id` de quien firma el alta. */
         public int $performedByUserId,
+        /**
+         * Si el tramo termino en pausa (`ends_in_break`, RN-05, 2.3.0). Sin
+         * declararlo, un tramo cerrado termina en salida.
+         */
+        public bool $endsInBreak = false,
     ) {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('A manual shift entry needs the employee.');

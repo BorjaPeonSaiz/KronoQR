@@ -8975,6 +8975,18 @@ export interface components {
             errors: {
                 [key: string]: string[];
             };
+            /**
+             * @description Solo con `type: urn:kronoqr:problem:correction-would-change-work-date`
+             *     (RN-05, ADR-058): **por que** las horas serian de otra jornada.
+             *     `opening_moved`, se movio la entrada que abre la jornada a otro
+             *     dia; `opening_voided`, anular el tramo que la abre la dejaria
+             *     abierta por uno de otro dia; `entry_not_continued`, el tramo
+             *     escrito no continua la jornada; `next_entry_not_continued`, el
+             *     tramo siguiente dejaria de continuarla. El panel elige con esto
+             *     que pista enseñar; el texto de cada caso va en `errors`.
+             * @enum {string}
+             */
+            cause?: "opening_moved" | "opening_voided" | "entry_not_continued" | "next_entry_not_continued";
         };
         /**
          * ScanRejected
@@ -9385,6 +9397,15 @@ export interface components {
              *     la entrada.
              */
             clocked_out_at?: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Si el tramo **termino en pausa** (RN-05, 2.3.0). Solo con
+             *     `clocked_out_at`: `true` sin salida es `422` en `ends_in_break`. Sin
+             *     declararlo, el tramo termina en salida, y el que empiece al dia civil
+             *     siguiente no continua la jornada. Es lo mismo que el escaneo «Pausa»
+             *     del quiosco.
+             * @default false
+             */
+            ends_in_break: boolean;
             reason_code: components["schemas"]["CorrectionReasonCode"];
             reason_text?: components["schemas"]["CorrectionReasonText"] | null;
         };
@@ -9392,13 +9413,20 @@ export interface components {
          * CorrectShiftEntryRequest
          * @description Rectificacion de las marcas de un tramo vigente (RF-PA-04, RN-13).
          *
-         *     **Hay que enviar al menos una de las dos marcas.** Una peticion que solo
-         *     trae el motivo no corrige nada, y una correccion que no cambia nada es
-         *     una fila de auditoria que miente.
+         *     **Hay que enviar al menos una de las dos marcas, o `ends_in_break`.** Una
+         *     peticion que solo trae el motivo no corrige nada, y una correccion que no
+         *     cambia nada es una fila de auditoria que miente.
          */
         CorrectShiftEntryRequest: {
             clocked_in_at?: components["schemas"]["UtcTimestamp"];
             clocked_out_at?: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Si el tramo **termino en pausa** (RN-05, 2.3.0). Si falta, se conserva
+             *     como estaba (y un tramo abierto que se cierra termina en salida).
+             *     Cambiar solo esto es una correccion con version nueva. `true` en un
+             *     tramo que queda abierto es `422` en `ends_in_break`.
+             */
+            ends_in_break?: boolean;
             reason_code: components["schemas"]["CorrectionReasonCode"];
             reason_text?: components["schemas"]["CorrectionReasonText"] | null;
         };
@@ -9634,22 +9662,24 @@ export interface components {
             clocked_out_recorded_at: components["schemas"]["UtcTimestamp"] | null;
             clock_out_source: components["schemas"]["ClockingSource"] | null;
             /**
-             * @description Que escaneo abrio este tramo (tarea 3.5, ADR-024): `clock_in` es una
-             *     entrada y `break_end` la **vuelta de una pausa**, que continua la
-             *     jornada anterior. Se deriva de `scan_events.result` del escaneo que
-             *     lo abrio; un tramo declarado o corregido a mano sin escaneo detras
-             *     va como `clock_in`. Es lo que permite al panel y al portal enseñar
+             * @description Como empezo este tramo (tarea 3.5, ADR-024, ADR-058): `clock_in` es
+             *     una entrada y `break_end` la **vuelta de una pausa**, que continua la
+             *     jornada. Se deriva del tramo anterior de la jornada: es `break_end`
+             *     si aquel termino en pausa (`closed_by: break_start`), sea por el
+             *     escaneo «Pausa» o porque asi se declaro a mano, y `clock_in` si no o
+             *     si es el primero. Es lo que permite al panel y al portal enseñar
              *     «pausa» entre dos tramos en vez de un hueco mudo.
              * @example clock_in
              * @enum {string}
              */
             opened_by: "clock_in" | "break_end";
             /**
-             * @description Que escaneo cerro este tramo: `clock_out` es un fin de jornada y
-             *     `break_start` un **inicio de pausa** (la jornada sigue abierta y el
-             *     siguiente tramo vendra con `opened_by: break_end`). Nulo mientras el
-             *     tramo siga abierto. Un tramo cerrado a mano sin escaneo detras va
-             *     como `clock_out`.
+             * @description Como termino este tramo (`shift_entries.closed_by`, ADR-058):
+             *     `clock_out` es una salida y `break_start` un **inicio de pausa** (la
+             *     jornada sigue abierta y el siguiente tramo vendra con
+             *     `opened_by: break_end`). Lo fija el escaneo («Pausa» o salida) o
+             *     quien escribe el tramo a mano (`ends_in_break`). Nulo mientras el
+             *     tramo siga abierto.
              * @example clock_out
              * @enum {string|null}
              */
@@ -9725,6 +9755,13 @@ export interface components {
             version: number;
             clocked_in_at: components["schemas"]["UtcTimestamp"];
             clocked_out_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Como termino esta version (ADR-058): salida o pausa. Nulo si seguia
+             *     abierta, o si la correccion es anterior a la 2.3.0 y no lo apunto.
+             *     Una correccion que solo declara la pausa cambia esto y nada mas.
+             * @enum {string|null}
+             */
+            closed_by: "clock_out" | "break_start" | null;
             /**
              * @description Minutos que decia esta version. Van escritos y no se deducen al leer:
              *     el historico responde «cuanto decia antes» sin recalcular nada.
@@ -16393,12 +16430,23 @@ export interface operations {
              *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de
              *       baja y `work_date` cae **fuera de su periodo de empleo** —despues
              *       de la fecha de cese o antes de la de alta— (RN-14), en
-             *       `errors.work_date`.
-             *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
-             *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
-             *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
-             *       dia a otro son dos actos separados y auditados —anular en origen,
-             *       dar de alta en destino—, y el `detail` del campo lo dice.
+             *       `errors.work_date`, o la persona esta de baja y una **marca** queda
+             *       a `min_rest_hours` o mas del final de su dia de cese (medianoche del
+             *       dia siguiente en la zona del centro; RN-05, RN-14), en
+             *       `errors.clocked_in_at` o `errors.clocked_out_at`.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
+             *       serian de **otra jornada** (RN-05, ADR-035): la hora de entrada
+             *       llevaria la jornada a otro dia civil, o el tramo empieza en un dia
+             *       civil distinto de `work_date` y **no continua** el tramo anterior:
+             *       aquel no termino en pausa (`ends_in_break`), su entrada queda a
+             *       `min_rest_hours` o mas de la salida de aquel, cae despues del dia
+             *       siguiente a `work_date`, o entre medias hay un tramo vigente de otra
+             *       jornada de la persona. Son las mismas reglas que la vuelta de una
+             *       pausa en el quiosco. Va en
+             *       `errors.clocked_in_at`. Es `422` y no `409` porque no hay nada que
+             *       releer: mover horas de un dia a otro son dos actos separados y
+             *       auditados —anular en origen, dar de alta en destino—, y el
+             *       `detail` del campo lo dice.
              */
             422: {
                 headers: {
@@ -16484,12 +16532,24 @@ export interface operations {
              *       la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
              *       entrada o la salida resultantes son **futuras** (F1): mas alla del
              *       momento del servidor mas el margen
-             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
-             *     - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
-             *       entrada que abre la jornada al otro lado de la medianoche local
-             *       llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y
-             *       no `409` porque no hay nada que releer: son dos actos separados y
-             *       auditados —anular en origen, dar de alta en destino—.
+             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`; la persona esta de baja y la
+             *       jornada cae fuera de su periodo de empleo (en `errors.work_date`), o
+             *       una marca **que cambia** queda a `min_rest_hours` o mas del final de su
+             *       dia de cese (medianoche del dia siguiente en la zona del centro;
+             *       RN-05, RN-14), en el campo de esa marca.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — las horas
+             *       serian de **otra jornada** (RN-05, ADR-035): mover la entrada que
+             *       abre la jornada al otro lado de la medianoche local, o dejar un
+             *       tramo que empieza en un dia civil distinto de `work_date` sin
+             *       **continuar** el anterior —aquel no termino en pausa, su entrada a
+             *       `min_rest_hours` o mas de la salida de aquel, despues del dia
+             *       siguiente a `work_date`, o detras de un tramo vigente de otra
+             *       jornada de la persona—, las mismas reglas que la vuelta de una
+             *       pausa en el quiosco. Va en `errors.clocked_in_at`, salvo que lo que se rompa sea
+             *       la vuelta posterior al adelantar la salida: entonces en
+             *       `errors.clocked_out_at`. Es `422` y no `409` porque no hay nada que
+             *       releer: son dos actos separados y auditados —anular en origen, dar
+             *       de alta en destino—.
              */
             422: {
                 headers: {
@@ -16556,7 +16616,37 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+             *     por campo para pintarlo junto al formulario, sin releer nada.
+             *
+             *     **`type` distingue las dos causas:**
+             *
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale
+             *       (el motivo, su explicacion).
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — anular
+             *       este tramo dejaria horas de la jornada en **otra jornada** (RN-05),
+             *       en uno de dos casos:
+             *       - es el que **abre** la jornada y el mas temprano de los que quedan
+             *         empieza en un dia civil distinto de `work_date`;
+             *       - el **siguiente** empieza en un dia civil distinto de `work_date`
+             *         y, medido contra el anterior que sigue vigente, ya no lo continua:
+             *         aquel no termino en pausa, o quedaria a `min_rest_hours` o mas de
+             *         su salida, o detras de un tramo vigente de otra jornada de la
+             *         persona.
+             *       Va en `errors.clocked_in_at`, que en la anulacion no es un campo
+             *       del formulario: el panel enseña el mensaje tal cual. Anular el
+             *       ultimo tramo, o uno cuyo siguiente es del dia de la jornada,
+             *       siempre se admite: se anula de atras hacia delante.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

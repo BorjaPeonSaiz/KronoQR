@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Exception\InvalidWorkDate;
+use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -79,6 +80,34 @@ final readonly class WorkDate
     {
         return (new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone))
             ->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
+     * El primer instante del dia civil **siguiente** en su zona, en UTC: donde
+     * acaba esta fecha.
+     *
+     * Lo usan la cota del dia del cese (RN-05, RN-14) y el tope del dia
+     * siguiente. Se calcula la **fecha** siguiente —a mediodia UTC, donde ningun
+     * desfase la mueve— y se toma su comienzo con {@see startsAt()}: el dia del
+     * cambio de hora tiene 23 o 25 h (RN-09), y en las zonas en que el salto es
+     * a medianoche (`America/Santiago`) ese dia ni siquiera tiene 00:00.
+     */
+    public function endsAt(): DateTimeImmutable
+    {
+        $next = new DateTimeImmutable($this->isoDate.' 12:00:00', new DateTimeZone('UTC'))
+            ->add(new DateInterval('P1D'))
+            ->format('Y-m-d');
+
+        return self::fromIsoDate($next, $this->timezone)->startsAt();
+    }
+
+    /**
+     * La fecha civil siguiente, en la misma zona. Es el tope de RN-05: una
+     * jornada solo se continua, como mucho, hasta el dia siguiente (2.3.0).
+     */
+    public function next(): self
+    {
+        return self::fromInstant($this->endsAt(), $this->timezone);
     }
 
     /**

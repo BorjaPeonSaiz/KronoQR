@@ -303,6 +303,138 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
   (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`), bórralo;
   la purga horaria lo retira a los 7 días. Si sacaste alguno del servidor,
   bórralo también de donde lo guardaras.
+- **Desde la 2.3.0, el alta y la corrección manuales siguen la cota de
+  continuación de RN-05.** Los tramos escritos antes no se tocan; comprueba si
+  hay alguno que hoy se rechazaría con las consultas del [§3 bis](#3-bis-tras-actualizar-a-la-230-tramos-escritos-antes-de-la-cota-de-continuación).
+
+### 3 bis. Tras actualizar a la 2.3.0: tramos escritos antes de la cota de continuación
+
+Desde la 2.3.0 (ADR-058),
+un tramo dado de alta o corregido a mano que empieza en un día civil distinto de
+su jornada solo se admite si **continúa una pausa**: el tramo anterior terminó en
+pausa (`closed_by`, que la actualización rellena desde los escaneos «Pausa»), su
+entrada queda a menos de `min_rest_hours` de la salida de aquel, cae como mucho
+el día siguiente y entre medias no hay ningún tramo de otra jornada de la
+persona. A una persona de baja, además, ninguna marca le puede quedar a
+`min_rest_hours` o más del final de su día de cese (RN-05, RN-14, RF-PA-04).
+Antes no se comprobaba, así que una instalación puede tener tramos escritos que
+hoy se rechazarían. **La actualización no los toca** (regla dura 5): estas tres
+consultas, de solo lectura, dicen si existen. Muestran `employee_uuid`, no
+nombres.
+
+**Cuánto tarda.** El relleno de `closed_by` va por lotes de 2000 tramos, cada uno
+en su propia transacción. Medido en desarrollo con 22 560 tramos cerrados y
+193 574 escaneos: **1 s en total, unos 90 ms por lote**. Una instalación de 100
+personas con cuatro años de registro (unos 200 000 tramos) tarda del orden de
+**10 s**. Corre dentro de la ventana de mantenimiento de `update.sh`, sin
+fichajes concurrentes, que es el único despliegue soportado: con la versión
+anterior atendiendo, las pausas que cerrara quedarían como salidas. Si hubiera
+que deshacer la actualización, se restaura la copia (ADR-054): repetir el
+relleno no reproduce las pausas declaradas a mano.
+
+```bash
+docker compose exec -T postgres psql -U fichaje_app -d fichaje <<'SQL'
+-- 1. Tramos de otro día civil que no continúan su jornada: el anterior no terminó
+--    en pausa, el hueco llega a la cota, cae después del día siguiente u otra
+--    jornada de la persona se interpone (RN-05).
+WITH perfil AS (
+    SELECT s.id AS site_id, s.timezone, cp.min_rest_hours
+    FROM sites s
+    JOIN compliance_profiles cp
+      ON cp.id = COALESCE(s.compliance_profile_id,
+                          (SELECT id FROM compliance_profiles WHERE is_default))
+), vigentes AS (
+    SELECT se.uuid, se.employee_id, se.site_id, se.work_date, se.clocked_in_at,
+           LAG(se.clocked_out_at) OVER (
+               PARTITION BY se.employee_id, se.work_date ORDER BY se.clocked_in_at
+           ) AS salida_anterior,
+           LAG(se.closed_by) OVER (
+               PARTITION BY se.employee_id, se.work_date ORDER BY se.clocked_in_at
+           ) AS cierre_anterior
+    FROM shift_entries se
+    WHERE se.status NOT IN ('voided', 'superseded')
+)
+SELECT e.uuid AS employee_uuid, v.uuid AS shift_entry_uuid, v.work_date,
+       v.salida_anterior, v.cierre_anterior, v.clocked_in_at,
+       round(extract(epoch FROM v.clocked_in_at - v.salida_anterior) / 3600, 2) AS horas_de_hueco,
+       p.min_rest_hours
+FROM vigentes v
+JOIN perfil p ON p.site_id = v.site_id
+JOIN employees e ON e.id = v.employee_id
+WHERE (v.clocked_in_at AT TIME ZONE p.timezone)::date <> v.work_date
+  AND v.salida_anterior IS NOT NULL
+  AND (v.cierre_anterior IS DISTINCT FROM 'break_start'
+       OR v.clocked_in_at - v.salida_anterior >= make_interval(hours => p.min_rest_hours)
+       OR (v.clocked_in_at AT TIME ZONE p.timezone)::date > v.work_date + 1
+       -- Otra jornada de la persona entre la salida anterior y la entrada.
+       OR EXISTS (SELECT 1 FROM shift_entries o
+                   WHERE o.employee_id = v.employee_id
+                     AND o.work_date <> v.work_date
+                     AND o.status NOT IN ('voided', 'superseded')
+                     AND tstzrange(o.clocked_in_at, o.clocked_out_at)
+                         && tstzrange(v.salida_anterior, v.clocked_in_at)))
+ORDER BY v.work_date, e.uuid;
+
+-- 2. Marcas de personas de baja más allá de la cota de su día de cese (RN-05, RN-14).
+WITH perfil AS (
+    SELECT s.id AS site_id, s.timezone, cp.min_rest_hours
+    FROM sites s
+    JOIN compliance_profiles cp
+      ON cp.id = COALESCE(s.compliance_profile_id,
+                          (SELECT id FROM compliance_profiles WHERE is_default))
+)
+SELECT e.uuid AS employee_uuid, se.uuid AS shift_entry_uuid, se.work_date,
+       e.terminated_at, se.clocked_in_at, se.clocked_out_at,
+       ((e.terminated_at + 1)::timestamp AT TIME ZONE p.timezone)
+           + make_interval(hours => p.min_rest_hours) AS limite
+FROM shift_entries se
+JOIN employees e ON e.id = se.employee_id
+JOIN perfil p ON p.site_id = se.site_id
+WHERE se.status NOT IN ('voided', 'superseded')
+  AND e.status = 'terminated'
+  AND e.terminated_at IS NOT NULL
+  AND GREATEST(se.clocked_in_at, COALESCE(se.clocked_out_at, se.clocked_in_at))
+      >= ((e.terminated_at + 1)::timestamp AT TIME ZONE p.timezone)
+         + make_interval(hours => p.min_rest_hours)
+ORDER BY se.work_date, e.uuid;
+
+-- 3. Jornadas que hoy abre un tramo de otro día civil (RN-05): por ejemplo, porque
+--    en una versión anterior se anuló el tramo que las abría.
+WITH primeros AS (
+    SELECT DISTINCT ON (se.employee_id, se.work_date)
+           se.employee_id, se.site_id, se.work_date, se.uuid, se.clocked_in_at
+    FROM shift_entries se
+    WHERE se.status NOT IN ('voided', 'superseded')
+    ORDER BY se.employee_id, se.work_date, se.clocked_in_at
+)
+SELECT e.uuid AS employee_uuid, p.uuid AS shift_entry_uuid, p.work_date,
+       p.clocked_in_at,
+       (p.clocked_in_at AT TIME ZONE s.timezone)::date AS fecha_civil_de_la_entrada
+FROM primeros p
+JOIN sites s ON s.id = p.site_id
+JOIN employees e ON e.id = p.employee_id
+WHERE (p.clocked_in_at AT TIME ZONE s.timezone)::date <> p.work_date
+ORDER BY p.work_date, e.uuid;
+SQL
+```
+
+**Si sale alguna fila, no es una avería ni se arregla con SQL**: pásale la lista
+a RRHH. Puede salir aunque nadie haya hecho nada mal: antes de la 2.3.0 un tramo
+escrito a mano no podía decir que terminaba en pausa, así que la vuelta de
+madrugada de un turno de noche completado a mano sale en la consulta 1. Cada fila
+se revisa con la persona y tiene **dos salidas**, cada una con su motivo
+(RF-PA-04, RN-13):
+
+- **Declarar que el tramo anterior terminó en pausa** (casilla «Este tramo
+  terminó en pausa» al corregirlo), si de verdad fue una pausa y la vuelta queda
+  dentro de la cota y del día siguiente. Las horas se quedan en su jornada.
+- **Anular y dar de alta**, si las horas son de otra jornada: anular el tramo en
+  la jornada en que está y darlo de alta en la suya.
+
+En la consulta 3, la jornada empieza en otro día: se anulan sus tramos de atrás
+hacia delante y se dan de alta en la jornada correcta. Si la marca es posterior
+al cese (consulta 2), RRHH decide además si la baja se registró con la fecha
+correcta.
 
 ---
 

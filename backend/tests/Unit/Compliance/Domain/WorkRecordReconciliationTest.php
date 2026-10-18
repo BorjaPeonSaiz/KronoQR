@@ -77,8 +77,13 @@ function conciliacionFila(array $cambios = []): RecordedShiftEntry
         'replacementCorrections' => [],
         ...$cambios,
     ];
+    // Como termino (RN-05, 2.3.0): un tramo cerrado termina en salida salvo que
+    // la prueba diga otra cosa; uno abierto, en nada.
+    $fila['closedBy'] = \array_key_exists('closedBy', $cambios)
+        ? $cambios['closedBy']
+        : ($fila['clockedOutAt'] === null ? null : 'clock_out');
 
-    /** @var array{uuid: string, employeeUuid: string, siteId: int, workDate: string, clockedInAt: string, clockedOutAt: string|null, durationMinutes: int|null, status: string, version: int, supersededByUuid: string|null, clockInSource: string, clockOutSource: string|null, corrections: list<RecordedCorrection>, replacementCorrections: list<RecordedCorrection>} $fila */
+    /** @var array{uuid: string, employeeUuid: string, siteId: int, workDate: string, clockedInAt: string, clockedOutAt: string|null, durationMinutes: int|null, status: string, version: int, supersededByUuid: string|null, clockInSource: string, clockOutSource: string|null, corrections: list<RecordedCorrection>, replacementCorrections: list<RecordedCorrection>, closedBy: string|null} $fila */
     return new RecordedShiftEntry(...$fila);
 }
 
@@ -242,7 +247,7 @@ it('da por bueno un tramo abierto contra el asiento de su entrada', function ():
     // Y el mismo asiento contra un tramo que alguien cerro por SQL: la salida
     // no la escribio ningun fichaje.
     expect(conciliacionCompara(conciliacionFila(), $entrada)?->fields)
-        ->toBe(['clocked_out_at', 'duration_minutes', 'clock_out_source', 'status']);
+        ->toBe(['clocked_out_at', 'duration_minutes', 'clock_out_source', 'closed_by', 'status']);
 })->group('RL-04', 'RS-07');
 
 it('da por bueno un tramo anomalo cuando su asiento trae anomalias, y no al reves', function (): void {
@@ -777,3 +782,17 @@ it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->occurredAt)->toBe($instante)
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->auditEntryId)->toBe(5);
 })->group('RS-07', 'RL-04');
+
+it('trata como salida el cierre de un asiento anterior a la v2.1.0, que no apuntaba la accion', function (): void {
+    // Los cierres de la v2.0.0 y anteriores no llevan `action`: no existia la
+    // pausa, asi que fueron salidas (RN-05, ADR-058). Un `break_start` puesto a
+    // mano sobre ellos tiene que salir.
+    $salida = conciliacionSalidaAuditada();
+    $payload = $salida->payload;
+    unset($payload['action']);
+    $antigua = new AuditTrailEntry($salida->id, $salida->action, $payload);
+    $asiento = AuditedShiftEntry::fromTrail($antigua, false, conciliacionEntradaAuditada(), $antigua);
+
+    expect(conciliacionCompara(conciliacionFila(['closedBy' => 'clock_out']), $asiento))->toBeNull()
+        ->and(conciliacionCompara(conciliacionFila(['closedBy' => 'break_start']), $asiento)?->fields)->toBe(['closed_by']);
+})->group('RL-04', 'RS-07', 'RN-05');

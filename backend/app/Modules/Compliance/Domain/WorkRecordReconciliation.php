@@ -200,6 +200,9 @@ final class WorkRecordReconciliation
         return [
             'clock_in_source' => $audited->clockInSource === null || $audited->clockInSource === $recorded->clockInSource,
             'clock_out_source' => ! $audited->knowsClockOutSource || $audited->clockOutSource === $recorded->clockOutSource,
+            // Como termino (RN-05, 2.3.0): decide si el tramo del dia siguiente
+            // continua la jornada, asi que se vigila como una marca.
+            'closed_by' => ! $audited->knowsClosedBy || $audited->closedBy === $recorded->closedBy,
         ];
     }
 

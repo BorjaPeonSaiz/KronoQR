@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\ValueObject;
 
+use App\Modules\Attendance\Domain\Exception\BreakWithoutClockOut;
 use DateTimeImmutable;
 
 /**
@@ -25,13 +26,25 @@ use DateTimeImmutable;
  * RN-04, todo instante en UTC— las sigue haciendo `TimeRange`, en un solo sitio.
  *
  * Es inmutable y no admite estados imposibles: una salida anterior a la entrada
- * no llega a existir.
+ * no llega a existir, y un tramo abierto no puede haber terminado en pausa.
+ *
+ * **Lleva tambien como termino el tramo** ({@see EntryClosure}, 2.3.0): en
+ * salida o en pausa. Es lo que decide si el tramo del dia civil siguiente
+ * continua la jornada (RN-05), y por eso forma parte del estado temporal del
+ * tramo y de su igualdad.
  */
 final readonly class ShiftTimes
 {
+    /**
+     * @param  EntryClosure|null  $closure  como termino el tramo (RN-05, 2.3.0): nulo si y solo si
+     *                                      sigue abierto
+     *
+     * @throws BreakWithoutClockOut un cierre sin salida
+     */
     private function __construct(
         public DateTimeImmutable $clockedInAt,
         public ?DateTimeImmutable $clockedOutAt,
+        public ?EntryClosure $closure,
     ) {
         TimeRange::assertUtc('clockedInAt', $clockedInAt);
 
@@ -40,27 +53,45 @@ final readonly class ShiftTimes
             // posterior a la entrada, esto lanza y el objeto no nace (RN-03).
             new TimeRange($clockedInAt, $clockedOutAt);
         }
+
+        // Un tramo abierto no ha terminado de ninguna forma: decir que termino
+        // en pausa sin hora de salida es un estado imposible.
+        if ($clockedOutAt === null && $closure instanceof EntryClosure) {
+            throw BreakWithoutClockOut::create();
+        }
     }
 
     /** Un tramo con entrada y sin salida todavia. */
     public static function open(DateTimeImmutable $clockedInAt): self
     {
-        return new self($clockedInAt, null);
+        return new self($clockedInAt, null, null);
     }
 
-    /** Un tramo con sus dos marcas. */
-    public static function closed(DateTimeImmutable $clockedInAt, DateTimeImmutable $clockedOutAt): self
-    {
-        return new self($clockedInAt, $clockedOutAt);
+    /** Un tramo con sus dos marcas, que termino en salida salvo que se diga otra cosa. */
+    public static function closed(
+        DateTimeImmutable $clockedInAt,
+        DateTimeImmutable $clockedOutAt,
+        EntryClosure $closure = EntryClosure::CLOCK_OUT,
+    ): self {
+        return new self($clockedInAt, $clockedOutAt, $closure);
     }
 
     /**
      * Las dos marcas tal como llegan de la peticion, donde la salida puede
-     * faltar.
+     * faltar. Con salida y sin cierre declarado, el tramo termino en salida.
+     *
+     * @throws BreakWithoutClockOut un cierre declarado sin salida
      */
-    public static function of(DateTimeImmutable $clockedInAt, ?DateTimeImmutable $clockedOutAt): self
-    {
-        return new self($clockedInAt, $clockedOutAt);
+    public static function of(
+        DateTimeImmutable $clockedInAt,
+        ?DateTimeImmutable $clockedOutAt,
+        ?EntryClosure $closure = null,
+    ): self {
+        return new self(
+            $clockedInAt,
+            $clockedOutAt,
+            $clockedOutAt === null ? $closure : ($closure ?? EntryClosure::CLOCK_OUT),
+        );
     }
 
     /**
@@ -69,21 +100,38 @@ final readonly class ShiftTimes
      */
     public function withClockIn(DateTimeImmutable $clockedInAt): self
     {
-        return new self($clockedInAt, $this->clockedOutAt);
+        return new self($clockedInAt, $this->clockedOutAt, $this->closure);
     }
 
     /**
      * Las mismas marcas con otra salida: la correccion de la hora de salida y,
-     * cuando antes no habia ninguna, el cierre manual de un tramo olvidado.
+     * cuando antes no habia ninguna, el cierre manual de un tramo olvidado, que
+     * termina en salida salvo que se declare la pausa con {@see withClosure()}.
      */
     public function withClockOut(DateTimeImmutable $clockedOutAt): self
     {
-        return new self($this->clockedInAt, $clockedOutAt);
+        return new self($this->clockedInAt, $clockedOutAt, $this->closure ?? EntryClosure::CLOCK_OUT);
+    }
+
+    /**
+     * Las mismas marcas con otro cierre (`ends_in_break`, RF-PA-04).
+     *
+     * @throws BreakWithoutClockOut si el tramo sigue abierto
+     */
+    public function withClosure(EntryClosure $closure): self
+    {
+        return new self($this->clockedInAt, $this->clockedOutAt, $closure);
     }
 
     public function isOpen(): bool
     {
         return $this->clockedOutAt === null;
+    }
+
+    /** Si el tramo termino en pausa (RN-05): lo que deja continuar la jornada al dia siguiente. */
+    public function endsInBreak(): bool
+    {
+        return $this->closure === EntryClosure::BREAK_START;
     }
 
     /**
@@ -118,6 +166,8 @@ final readonly class ShiftTimes
     public function equals(self $other): bool
     {
         return $this->clockedInAt->getTimestamp() === $other->clockedInAt->getTimestamp()
-            && $this->clockedOutAt?->getTimestamp() === $other->clockedOutAt?->getTimestamp();
+            && $this->clockedOutAt?->getTimestamp() === $other->clockedOutAt?->getTimestamp()
+            // Cambiar solo como termino es una correccion (RN-05, 2.3.0).
+            && $this->closure === $other->closure;
     }
 }

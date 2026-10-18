@@ -37,12 +37,17 @@ final readonly class CorrectShiftCommand
         public CorrectionReason $reason,
         /** `users.id` de quien firma la rectificacion. */
         public int $performedByUserId,
+        /**
+         * Si el tramo termino en pausa (`ends_in_break`, RN-05, 2.3.0), o `null`
+         * para dejarlo como esta. Cambiarlo solo a el tambien es una correccion.
+         */
+        public ?bool $endsInBreak = null,
     ) {
         if ($shiftEntryUuid === '') {
             throw new InvalidArgumentException('Correcting a shift entry needs the shift entry.');
         }
 
-        if ($clockedInAt === null && $clockedOutAt === null) {
+        if ($clockedInAt === null && $clockedOutAt === null && $endsInBreak === null) {
             throw new InvalidArgumentException('A correction must change at least one of the two marks.');
         }
 

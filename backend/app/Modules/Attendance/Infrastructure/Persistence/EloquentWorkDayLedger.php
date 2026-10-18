@@ -8,6 +8,7 @@ use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
@@ -280,6 +281,8 @@ final class EloquentWorkDayLedger implements WorkDayLedger
             $clockOutSource === null ? null : ScanOrigin::from($clockOutSource),
             ShiftEntryStatus::from($row->status),
             $row->version,
+            null,
+            $row->closed_by === null ? null : EntryClosure::from($row->closed_by),
         );
     }
 

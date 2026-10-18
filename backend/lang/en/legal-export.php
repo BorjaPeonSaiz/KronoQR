@@ -107,6 +107,15 @@ return [
     ],
 
     /*
+     * How a version ended, in the before and after of a correction (RN-05,
+     * ADR-058).
+     */
+    'closed_by' => [
+        'clock_out' => 'ends with clock-out',
+        'break_start' => 'ends in a break',
+    ],
+
+    /*
      * What `compliance:legal-export` prints when it finishes (ADR-045 §f).
      */
     'console' => [
