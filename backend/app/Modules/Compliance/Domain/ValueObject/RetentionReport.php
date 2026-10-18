@@ -68,18 +68,6 @@ final readonly class RetentionReport
     }
 
     /**
-     * La orden que ejecuta ESTA purga, tal como la imprimen la consola y el
-     * informe: una sola redaccion para los dos (2.3.0 bloque 3). Lleva la
-     * frase y `--responsible`, que la purga exige desde la 2.3.0 (doc 01
-     * RF-PR-03, §7.2 «Firmas por consola»).
-     */
-    public function executionCommand(): string
-    {
-        return 'php artisan compliance:apply-retention --confirm='.$this->confirmationToken()
-            .' --responsible=<correo o uuid de una cuenta admin o rrhh>';
-    }
-
-    /**
      * @return list<RetentionTally>
      */
     public function talliesFor(RetentionScope $scope): array

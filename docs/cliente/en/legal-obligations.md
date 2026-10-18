@@ -53,8 +53,9 @@ in your record of processing activities under art. 30 of the GDPR (RGPD):
 - Log of access and of actions with legal relevance (`audit_log`). Console
   signatures name the management account that answers for them, and the report
   of each restore (`BACKUP_PATH/reports/restore-*.log`) keeps the e-mail
-  declared by whoever ran it (`declared_operator`). It is kept like the audit
-  entry that cites it.
+  declared by whoever ran it (`declared_operator`). It is kept at least as long as
+  the audit entry that cites it (four years); no pass deletes it afterwards, so
+  the final period is set by the customer with their DPO.
 
 The **impact dashboard** ([`hr-guide.md`](hr-guide.md) §6.6) adds nothing to
 that list: it is a further, **aggregate** use of data already processed

@@ -419,9 +419,11 @@ docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh \
 **Quién restaura queda en el informe.** `--operator` se guarda en
 `BACKUP_PATH/reports/restore-<marca>.log` como `declared_operator`: el correo de
 una cuenta de gestión, declarado y no verificado. Es un dato personal y **se
-conserva igual que el asiento `system.restored_from_backup` que remite al
-informe** por su `report_id` (cuatro años, RL-02): ninguna pasada automática
-borra los informes de restauración, y no hay que borrarlos a mano antes. Sin
+conserva como mínimo lo que el asiento `system.restored_from_backup` que remite
+al informe** por su `report_id` (cuatro años, RL-02). No hay que borrarlo a mano
+antes. Ninguna pasada automática borra los informes de restauración, así que
+después de esos cuatro años siguen ahí hasta que el cliente decida su plazo con
+su DPO (está anotado en el inventario de tratamientos). Sin
 él, el asiento diría qué se restauró pero no quién lo declaró.
 
 ### 6.3 Vuelta atrás

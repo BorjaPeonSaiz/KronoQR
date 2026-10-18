@@ -13,6 +13,7 @@ use App\Modules\Compliance\Application\UseCase\RetentionOutcome;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
+use App\Modules\Compliance\Infrastructure\Retention\RetentionExecutionCommand;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
@@ -200,7 +201,7 @@ final class ApplyRetentionCommand extends Command
         $this->line('');
         $this->warn('Nada se ha borrado. Para ejecutar ESTA purga, con la autorizacion del responsable:');
         // La misma orden que imprime el informe: sale de un solo sitio.
-        $this->line('  '.$report->executionCommand());
+        $this->line('  '.RetentionExecutionCommand::for($report));
     }
 
     /**
