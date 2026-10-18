@@ -295,8 +295,9 @@ to know in order to explain it to somebody:
   same rule as always: the working day belongs to the day it started.
 - **But a break does not stay open for ever.** The return continues the previous
   working day only if it arrives **before** the minimum rest between working
-  days you have set in the profile (`min_rest_hours`, 12 h out of the box —§7—).
-  After that time, the next clocking **opens a new working day**, which is the
+  days you have set in the profile (`min_rest_hours`, 12 h out of the box —§7—)
+  and, at the latest, on the day after the working day. After that time, the
+  next clocking **opens a new working day**, which is the
   right thing: somebody who pressed "Break" at 15:00 and clocks in the next day
   at 08:00 is starting their shift, not coming back from a seventeen-hour break.
 - **A break with no return opens no incident.** If somebody presses "Break",
@@ -310,7 +311,8 @@ to know in order to explain it to somebody:
   exactly what break clocking is there to clarify.
 - **A badly clocked break is corrected like any other entry**, from the same
   screen and with its reason (§5). There is no separate procedure: what has to
-  be corrected is a clock-in or clock-out time, as always.
+  be corrected is a clock-in or clock-out time, as always. If you write by hand
+  an entry that ends in a break, tick **"This shift ended in a break"** (§5.4).
 - **If the hotel does not have break clocking turned on, nothing changes here**
   and you will see no mark.
 
@@ -949,6 +951,54 @@ Two warnings you will see and what they mean:
 **The employee does not correct their own record**, and that is why the portal
 is read-only. A record that the interested party can edit proves nothing. What
 they can do is raise it, and HR corrects it with their signature.
+
+### 5.4 A shift that carries on into the next day: "This shift ended in a break"
+
+From 2.3.0, each entry records **how it ended**: with a **clock-out** or with a
+**break**. On the tablet the clocking decides it ("Break" closes the entry in a
+break). When you add or correct an entry by hand, you say it with the **"This
+shift ended in a break"** checkbox, in the **"How it ended"** part of the form.
+Tick it if the person went on a break and came back; unticked, the entry ends
+with a clock-out.
+
+**Why it matters: it decides which working day the next entry belongs to.** The
+working day is the one of the day the shift started, and an entry whose
+clock-in falls **on the next day** only stays in that same working day if all
+three things hold:
+
+1. the previous entry **ended in a break** (the checkbox ticked);
+2. its clock-in arrives **before the minimum rest** between working days in the
+   profile (`min_rest_hours`, 12 h out of the box, §7), counted from the moment
+   they went on the break;
+3. it falls **on the day after the working day at the latest**, never two days
+   later.
+
+Example: the night shift clocks in on Monday at 22:00, goes on a break at 02:00
+on Tuesday and comes back at 02:30. For the return to count in **Monday's**
+working day, the 22:00 to 02:00 entry has to have the checkbox ticked. Without
+it, the system treats it as a clock-out, and the hours from 02:30 on belong to
+Tuesday's working day.
+
+If any of the three does not hold, the panel rejects it on saving and says why,
+for example: *"Hours starting on another day only continue the working day of …
+if the previous shift ended in a break, and it did not: they belong to another
+working day. Record them on the working day they start, or declare that the
+previous shift ended in a break."* The two ways out are the ones the message
+gives: correct the previous entry to tick the checkbox, if it really was a
+break, or record the hours on the working day they start. **For a person who
+has left, in addition, no entry can start after their termination day.**
+
+**Ticking or unticking the checkbox is a correction like any other**: it takes
+a reason, creates a new version and stays in the "Amendment history". There,
+the **"How it ended"** row shows the before and the after ("Clock-out" or
+"Break"), and the same row appears in the form's preview before saving. "Not
+recorded" means that version did not record it. The export for the Labour
+Inspectorate also says, in each correction, whether the entry ended with a
+clock-out or a break.
+
+Entries written before 2.3.0 are not touched. Those closed with "Break" on the
+tablet already show as ended in a break, and those closed by hand, as ended
+with a clock-out.
 
 ---
 
