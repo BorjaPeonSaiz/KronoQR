@@ -292,13 +292,15 @@ range.** If your kiosk VLAN is exactly that one, leave it: the installer shows
 a `[warn]` saying it matches the template and **goes on installing**. If it is
 not, change it: with a range that does not cover the tablets nothing fails,
 but clocking falls into the request limit meant for the internet and slows
-down at shift change. After installing, check that no tablet is left out:
+down at shift change. After installing, with the tablets switched on, count
+their heartbeats per address:
 
 ```bash
-sudo docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
 
-No line with the IP of a tablet should appear.
+Every line has to end in `1`. How to read the output and what to do if one
+ends in `0`: §6, "`KIOSK_VLAN_CIDR`".
 
 **`METRICS_ALLOW_CIDR=172.29.0.20/32` is left as it is.** It is the fixed
 address of Prometheus, the product's own metrics collector, and it is the right

@@ -287,13 +287,15 @@ rango real.** Si la VLAN de tus quioscos es justo esa, déjalo: el instalador
 muestra un `[aviso]` de que coincide con la plantilla y **sigue instalando**.
 Si no lo es, cámbialo: con un rango que no cubre las tablets nada falla, pero
 el fichaje cae al límite de peticiones pensado para internet y se frena en el
-cambio de turno. Tras instalar, comprueba que ninguna tablet queda fuera:
+cambio de turno. Tras instalar, con las tablets encendidas, cuenta sus latidos por
+dirección:
 
 ```bash
-sudo docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
 
-No debe salir ninguna línea con la IP de una tablet.
+Todas las líneas tienen que terminar en `1`. Cómo leer la salida y qué hacer si
+alguna termina en `0`: §6, «`KIOSK_VLAN_CIDR`».
 
 **`METRICS_ALLOW_CIDR=172.29.0.20/32` se deja tal cual.** Es la dirección fija
 de Prometheus, el recolector de métricas del propio producto, y es el valor
