@@ -76,10 +76,13 @@ persona ni por departamento—, compatible con la finalidad del registro.
 esto importa: nadie puede negarse a fichar, y tampoco hace falta pedir permiso
 para registrar la jornada.
 
-### Lo que sale del servidor por su cuenta: dos correos
+### Lo que sale del servidor por su cuenta: tres correos y las alertas
 
-Todo lo demás se queda en tu instalación. Dos cosas salen por correo, y las dos
-van **al responsable de cada departamento** y **solo con su ámbito**:
+Todo lo demás se queda en tu instalación. Salen **tres correos** del producto,
+más **las alertas** del sistema de vigilancia si les pones destinatario. Es el
+inventario para tu registro de actividades. Los dos primeros llevan nombres de
+la plantilla; van **al responsable de cada departamento** y **solo con su
+ámbito**:
 
 - **El aviso diario de incidencias.** Cada noche, un resumen de las incidencias
   pendientes con **la fecha, el nombre de la persona y el tipo de incidencia**
@@ -95,7 +98,24 @@ van **al responsable de cada departamento** y **solo con su ámbito**:
   mucho 50 líneas; el resto se lee en el panel. Ni RRHH ni administración lo
   reciben: tienen el panel entero.
 
-Tres consecuencias que son tuyas, no del fabricante, y que valen para los dos:
+Los otros dos no llevan datos de la plantilla:
+
+- **«Tu informe ya se puede descargar».** Cuando un informe pedido desde el
+  panel termina de generarse, avisa **a quien lo pidió**, a la dirección de su
+  cuenta de gestión. Lleva su nombre, el periodo, el formato, el número de filas
+  y hasta cuándo se puede descargar. **No lleva el fichero ni el enlace de
+  descarga**: la descarga se pide desde el panel. Ese envío no tiene asiento
+  propio en la auditoría, aunque la petición y la generación del informe sí lo
+  tienen.
+- **Las alertas del sistema de vigilancia**, si rellenas sus destinatarios
+  (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`): llevan el
+  nombre de la alerta, el centro, el dispositivo o componente afectado y una
+  descripción técnica. Nunca nombres de personas: como mucho, el identificador
+  interno de una (ver [`operacion.md`](operacion.md) §10.4, «Cómo llegan las
+  alertas»).
+
+Tres consecuencias que son tuyas, no del fabricante. Las dos primeras valen
+para todos los correos, y la tercera para los dos resúmenes:
 
 1. **Si el correo lo entrega un servidor de un tercero** —Microsoft 365, Google
    Workspace, el SMTP de tu proveedor de hosting—, ese tercero es un **encargado
@@ -106,7 +126,7 @@ Tres consecuencias que son tuyas, no del fabricante, y que valen para los dos:
    `MAIL_SCHEME=smtps` fuerza TLS y **falla** si el servidor de correo no lo
    soporta, que es lo que quieres. Dejarlo vacío negocia el cifrado «si se
    puede», y con un relevo que no lo ofrezca el correo viaja legible por la red.
-3. **Cada envío queda registrado** en el trail de auditoría, con quién lo recibió
+3. **Cada envío de los resúmenes queda registrado** en el trail de auditoría, con quién lo recibió
    y de qué personas iba —en el resumen semanal, una a una cuando el ámbito
    tiene 50 personas o menos, y por recuento y departamento por encima—. Es lo que te permite responder si un día hay que
    reconstruir por dónde salieron unos datos.
@@ -149,7 +169,7 @@ recomendable.** Los factores que disparan el riesgo alto no están: no hay
 biometría (ADR-009: no es una opción desactivada, no existe), no hay
 geolocalización por persona, no hay decisiones automatizadas con efectos sobre
 nadie, y los datos no salen de tu infraestructura —con la excepción de los
-**dos correos** descritos arriba—. Lo que queda es el dato mínimo —quién
+**tres correos y las alertas** descritos arriba—. Lo que queda es el dato mínimo —quién
 ficha, cuándo y en qué dispositivo— tratado con la base jurídica del art.
 6.1.c. **Y desde que se registran ausencias hay una categoría especial en
 juego** —el tipo «Baja médica» y su nota—, y eso pesa en el análisis: las

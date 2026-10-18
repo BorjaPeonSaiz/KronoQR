@@ -477,9 +477,11 @@ Y estos son tuyos:
 **Por este canal salen nombres de la plantilla, a diario.** El resumen nocturno
 de incidencias se envía al responsable de cada departamento con **la fecha, el
 nombre, el tipo y la gravedad** de cada hallazgo, y nada más: ni el registro horario, ni
-datos de contrato, ni totales. Es el único camino por el que datos personales
-salen del servidor sin que nadie pulse nada, y por eso **deja asiento en la
-auditoría**: sabrás siempre de quién se enviaron datos y cuándo.
+datos de contrato, ni totales. Con el resumen semanal de horas, si lo activas, es el único camino por el que
+datos de la plantilla salen del servidor sin que nadie pulse nada, y por eso los
+dos **dejan asiento en la auditoría**: sabrás siempre de quién se enviaron datos
+y cuándo. Lo que sale por correo, uno a uno (tres correos y las alertas), está
+en [`obligaciones-legales.md`](obligaciones-legales.md) §2.
 
 Dos cosas te tocan a ti:
 

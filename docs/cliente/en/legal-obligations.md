@@ -77,10 +77,13 @@ record.
 this matters: nobody can refuse to clock in, and there is no need to ask
 permission to record the working day.
 
-### What leaves the server on its own: two emails
+### What leaves the server on its own: three emails and the alerts
 
-Everything else stays in your installation. Two things go out by email, and
-both go **to the manager of each department** and **only with their scope**:
+Everything else stays in your installation. **Three emails** leave from the
+product, plus **the alerts** of the monitoring system if you give them
+recipients. This is the inventory for your record of processing activities.
+The first two carry staff names; they go **to the manager of each department**
+and **only with their scope**:
 
 - **The daily incident notice.** Every night, a summary of the pending
   incidents with **the date, the person's name and the incident type** of each
@@ -96,7 +99,23 @@ both go **to the manager of each department** and **only with their scope**:
   50 lines; the rest is read in the panel. Neither HR nor administration
   receive it: they have the whole panel.
 
-Three consequences that are yours, not the vendor's, and that apply to both:
+The other two carry no staff data:
+
+- **"Your report is ready to download".** When a report requested from the
+  panel finishes generating, it notifies **whoever requested it**, at the
+  address of their management account. It carries their name, the period, the
+  format, the number of rows and until when it can be downloaded. **It carries
+  neither the file nor the download link**: the download is requested from the
+  panel. That send has no audit entry of its own, although the request and the
+  generation of the report do.
+- **The monitoring system's alerts**, if you fill in their recipients
+  (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`): they carry
+  the alert name, the site, the affected device or component and a technical
+  description. Never people's names: at most, a person's internal identifier
+  (see [`operation.md`](operation.md) §10.4, "How alerts reach you").
+
+Three consequences that are yours, not the vendor's. The first two apply to
+every email, and the third to the two summaries:
 
 1. **If the email is delivered by a third party's server** — Microsoft 365,
    Google Workspace, your hosting provider's SMTP — that third party is a
@@ -109,7 +128,7 @@ Three consequences that are yours, not the vendor's, and that apply to both:
    support it, which is what you want. Leaving it empty negotiates encryption
    "if possible", and with a relay that does not offer it the email travels
    across the network in the clear.
-3. **Every send is recorded** in the audit trail, with who received it and
+3. **Every send of the summaries is recorded** in the audit trail, with who received it and
    which people it concerned —in the weekly summary, one by one when the scope
    has 50 people or fewer, and by count and department above that—. That is what lets you answer if one day you have
    to reconstruct where some data went out.
@@ -154,7 +173,7 @@ advisable.** The factors that trigger high risk are absent: there is no
 biometrics (ADR-009: it is not a disabled option, it does not exist), no
 geolocation of individuals, no automated decisions with effects on anybody,
 and the data does not leave your infrastructure — with the exception of the
-**two emails** described above. What remains is the minimum data — who
+**three emails and the alerts** described above. What remains is the minimum data — who
 clocks in, when and on which device — processed under the legal basis of art.
 6.1.c. **And since absences are recorded there is a special category at
 stake** —the "Sick leave" type and its note—, and that weighs in the analysis:

@@ -2263,9 +2263,11 @@ Tempo and blackbox-exporter add, is in [`operation.md`](operation.md) §10.
 
 > **Staff names go out through this channel, daily.** The nightly incident
 > digest goes to the manager of each department with the date, the name and the
-> type of each finding. It is the only path by which personal data leaves the
-> server without anyone pressing anything, and that is why it leaves an entry
-> in the audit log. **If your mail relay is a third party's, that third party
+> type of each finding. Together with the weekly hours summary, if you enable
+> it, it is the only path by which staff data leaves the server without anyone
+> pressing anything, and that is why both leave an entry in the audit log. In
+> all, three emails and the alerts go out: the list is in
+> [`legal-obligations.md`](legal-obligations.md) §2. **If your mail relay is a third party's, that third party
 > is a data processor and you have to have it under contract**: see
 > [`legal-obligations.md`](legal-obligations.md).
 >
