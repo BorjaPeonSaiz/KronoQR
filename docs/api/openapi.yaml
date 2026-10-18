@@ -1718,9 +1718,11 @@ paths:
         llegado al servidor (`discards_unreported`).
         Un quiosco cuya `app_version` es anterior a la del servidor esta en
         `warning` (`app_version_behind`), sin dejar de fichar (regla dura 19):
-        desde la 2.2.1 se pone al dia solo en la franja de actualizacion con la
-        cola vacia; uno con la 2.2.0 o anterior necesita que se desregistre su
-        *service worker*, sin borrar los datos del sitio.
+        desde la 2.2.1 se pone al dia solo, a cualquier hora y sin esperar a la
+        franja de actualizacion, en cuanto tiene la cola vacia y en disco y
+        nadie lo usa (modo urgente, `KioskHeartbeat.minimum_app_version`); uno
+        con la 2.2.0 o anterior espera a su franja o, si no se puede esperar,
+        se desregistra su *service worker*, sin borrar los datos del sitio.
 
         **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
         nota 5). Gestionar dispositivos es la misma potestad que configurar la
@@ -13326,6 +13328,12 @@ components:
             zona, no sobre la que tenga configurada el aparato. Hasta recibirla, o
             si el navegador no reconoce el nombre, usa la zona de la tablet.
 
+            **Excepcion: la tablet atrasada no espera a la franja.** Si su PWA
+            es anterior a `minimum_app_version`, se recarga a cualquier hora en
+            cuanto la cola esta vacia y en disco, nadie la esta usando y han
+            pasado `quiet_minutes` sin escaneos (al menos 2). Ver
+            `minimum_app_version`.
+
             **Es una ventana de PERMISO, no de bloqueo**: fuera de ella la tablet
             sigue fichando y sigue encolando con normalidad; lo unico que no hace
             es recargarse (regla dura 19). Una actualizacion a las 06:00 con
@@ -13378,11 +13386,28 @@ components:
             que ya no es la desplegada.
 
             **Una tablet por debajo se pone al dia sin bloquear el fichaje**
-            (regla dura 19): sigue fichando y encolando con normalidad, y solo
-            se recarga dentro de `update_window`, con la cola vacia y sin
-            escaneos en los ultimos `update_window.quiet_minutes`. Que la tablet
-            vaya por detras no cambia ni un fichaje; en el panel el quiosco pasa
-            a `warning` (`DeviceHealth.reason` = `app_version_behind`).
+            (regla dura 19): sigue fichando y encolando con normalidad. Que la
+            tablet vaya por detras no cambia ni un fichaje; en el panel el
+            quiosco pasa a `warning` (`DeviceHealth.reason` =
+            `app_version_behind`).
+
+            **Modo urgente: la tablet atrasada recarga a cualquier hora, fuera
+            de `update_window`** (excepcion de RF-KI-07, doc 01 §3.7; riesgo
+            V21-6-KI-1 aceptado por el propietario). Una PWA 2.2.1 o posterior
+            que se ve por debajo busca la version nueva en el acto y se recarga
+            en el primer momento en que se cumplen **a la vez**: la cola vacia,
+            ya leida y en almacenamiento duradero (con la cola en memoria,
+            ADR-047, nunca); nadie a media interaccion (envio en curso, PIN a
+            medio teclear, pausa armada o confirmacion en pantalla); y ningun
+            escaneo en los ultimos `update_window.quiet_minutes`, con un suelo
+            de 2 minutos aunque valga `0`. **La franja horaria es lo unico que
+            se relaja.** Como este campo es la version desplegada, tras cada
+            actualizacion del servidor todas las tablets atrasadas pasan a este
+            modo en su primer latido: por eso las guias piden ejecutar
+            `update.sh` fuera de los turnos. Tras 3 recargas, o 6 comprobaciones
+            sin version nueva (unos 30 min), sin alcanzar la minima, la tablet
+            vuelve a esperar a `update_window` y lo reporta como
+            `kiosk.update.unreachable`.
 
             **Opcional y aditivo.** El servidor lo **omite** —nunca lo manda a
             `null`— si no puede resolver su propia version **y tambien si es un
@@ -14097,10 +14122,13 @@ components:
             todo lo anterior es lo que se lo impide y es lo que hay que mirar
             primero. Con la cola en memoria, ademas, recargarla borraria los
             fichajes no enviados (ADR-047). Una tablet 2.2.1 o posterior se
-            actualiza sola en la franja de `update_window` con la cola vacia;
-            una 2.2.0 o anterior necesita que se desregistre su *service worker*,
-            sin borrar los datos del sitio. En ningun caso deja de fichar entre
-            tanto (regla dura 19).
+            actualiza sola **a cualquier hora**, sin esperar a `update_window`,
+            en cuanto tiene la cola vacia y en disco y nadie la usa (modo
+            urgente, ver `KioskHeartbeat.minimum_app_version`); una 2.2.0 o
+            anterior no conoce el modo urgente: espera a su franja de
+            `update_window` o, si no puede esperar, se desregistra su *service
+            worker*, sin borrar los datos del sitio. En ningun caso deja de
+            fichar entre tanto (regla dura 19).
         seconds_since_last_seen:
           type: ['integer', 'null']
           minimum: 0
@@ -15948,7 +15976,10 @@ components:
         tablet exige ademas antes de aplicar (10 de serie; `0` la desactiva). Las
         dos son `presentation`: no mueven ni un minuto del registro. La franja se
         **declara** y no se infiere (regla dura 13), y fuera de ella la tablet
-        sigue fichando y encolando: lo unico que no hace es recargarse.
+        sigue fichando y encolando: lo unico que no hace es recargarse. La
+        excepcion es la tablet atrasada respecto a la version del servidor, que
+        recarga a cualquier hora con la cola vacia y sin uso
+        (`KioskHeartbeat.minimum_app_version`).
 
         `BASELINE_MANUAL_HOURS_PER_MONTH` (tarea 3.13, RF-IN-08) son las **horas al
         mes que el cliente dedicaba a consolidar hojas de horas a mano antes de

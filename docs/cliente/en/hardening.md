@@ -484,9 +484,11 @@ And these are yours:
 
 **Workforce names leave through this channel, daily.** The nightly incidents
 digest is sent to each department's manager with **the date, the name , the type and the severity** of each finding, and nothing more: no working-time record, no contract
-data, no totals. It is the only path by which personal data leaves the server
-without anyone pressing anything, and that is why it **leaves an entry in the
-audit log**: you will always know whose data was sent and when.
+data, no totals. Together with the weekly hours summary, if you enable it, it is the only path
+by which staff data leaves the server without anyone pressing anything, and that
+is why both **leave an entry in the audit log**: you will always know whose data
+was sent and when. What goes out by email, one by one (three emails and the
+alerts), is in [`legal-obligations.md`](legal-obligations.md) §2.
 
 Two things fall to you:
 

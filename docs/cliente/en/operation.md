@@ -1053,17 +1053,30 @@ kiosk clock-in endpoint** — answers "under maintenance" (503); only the
 `/api/v1/health` and `/api/v1/ready` probes keep answering. The kiosks keep
 confirming locally and queueing; when it finishes they sync with the real time
 of each clock-in, so nothing is lost and the legal record keeps the moment
-each person scanned. **How long it lasts:** in the vendor's test with an
-almost empty database and no pending migrations, the 503 lasted **under a
-minute** (about 52 seconds the last time it was measured) from start to
-finish; with your data it will last longer, because the pre-update backup is
-taken inside that window and grows with the database. **Downloading the new
-images does not count**: `update.sh` does it in step 1, before turning
-maintenance on. Your real figure is in the update report
-(`BACKUP_PATH/reports/update-*.log`): the "Maintenance window: N s" line and,
-below it, its breakdown by phase (workers stopped, pre-update backup,
-migrations, start-up). Schedule it outside shift changes. If the window was long, the inbox will show
-sync incidents: they are not a fault.
+each person scanned.
+
+**How long it lasts: about one minute of 503**, which the tablet's queue
+covers, and **a little over one minute for the whole update**. These are the
+figures of the vendor's automated test: stage ⑧b of its CI, which updates from
+the previous version with an almost empty database and 0 to 3 pending
+migrations. In the last three green runs (18-10-2026), the 503 lasted 51 to 53
+seconds and the whole `update.sh`, 63 to 65 seconds. With your data it will
+last longer, because the pre-update backup is taken inside that window and
+grows with the database. And it depends on the hardware: it is an integration
+machine, not your server. **Downloading the new images does not count**:
+`update.sh` does it in step 1, before turning maintenance on. Your real figure
+is in the update report (`BACKUP_PATH/reports/update-*.log`): the "Maintenance
+window: N s" line and, below it, its breakdown by phase (workers stopped,
+pre-update backup, migrations, start-up). If the window was long, the inbox
+will show sync incidents: they are not a fault.
+
+**Run `update.sh` outside shifts.** There are two reasons: the minute of
+downtime, and that right afterwards **the tablets reload by themselves at any
+time**. Each tablet on 2.2.1 or later that is behind the server reloads at the
+first moment its queue is empty and nobody is using it or has clocked in the
+last few minutes, and has no camera for a few seconds meanwhile. No clock-in is
+lost (see below, "From 2.2.1, a tablet that has fallen behind does not wait
+for the window").
 
 ```bash
 cd /opt                                   # the new package, NEXT TO the current one
@@ -1584,10 +1597,17 @@ the tablet's is older, the tablet looks for the new version right then —withou
 waiting for the hourly check— and reloads **as soon as conditions 2 and 3
 hold**, at any time: an empty queue kept on the tablet (not only in memory) and
 nobody has clocked in the last `KIOSK_UPDATE_QUIET_MINUTES` minutes (in this
-case, at least 2 even if the setting is `0`). The window stops counting for it;
-**the empty queue and the quiet minutes, never**. In practice, after the server
-is updated the tablets catch up by themselves at the first gap without
-clockings. Only a tablet that **already** has 2.2.1 or later knows how to do
+case, at least 2 even if the setting is `0`). Besides, it never reloads with
+someone halfway through: not with a clock-in being sent, not with a PIN half
+typed, not with a confirmation on screen. The window stops counting for it;
+**the empty queue, the use and the quiet minutes, never**. In practice, after
+the server is updated the tablets catch up by themselves at the first gap
+without clockings, **whatever the time**. That includes a tablet that spent the
+night without network and gets it back at 05:55 with nobody in front of it.
+While it reloads the tablet has no camera for a few seconds, and whoever
+arrives at that moment waits for it to come back. That is why `update.sh` is
+run outside shifts.
+Only a tablet that **already** has 2.2.1 or later knows how to do
 this: one on an older version (2.2.0, 2.1.0) catches up by itself as always, in
 its window, with the three conditions above (see "What to do if a tablet does
 not change by itself", below).

@@ -136,3 +136,7 @@ semanal y marca blanca— llegan en tareas posteriores. El estado de licencia lo
 marca como no implementados y ni el panel ni `license:show` los presentan como
 algo que el cliente acaba de perder: anunciar la pérdida de algo que nunca ha
 visto es una llamada de soporte garantizada.
+
+## Nota del 18-10-2026 (2.3.0, bloque 4): qué hay detrás de «Informes avanzados»
+
+La fila «Informes avanzados y comparación entre periodos» de la tabla «Degradable» conserva su nombre, porque `LicenseBoundaryTest` la casa con `Feature::AdvancedReports`. Pero ese nombre promete más de lo que hay. Detrás de `advanced_reports` están **los informes por periodo, con la comparativa frente a lo contratado**: `GET /api/v1/reports/period` y su exportación, que `license:show` ya describe así. **La comparación entre periodos** está en el cuadro de impacto (`Feature::ImpactDashboard`, RF-IN-08). El doc 05 (§10.5 y §11) y el doc 02 (Fase 4) lo cuentan así desde esta fecha. La decisión no cambia: las dos funcionalidades siguen siendo accesorias y degradables.

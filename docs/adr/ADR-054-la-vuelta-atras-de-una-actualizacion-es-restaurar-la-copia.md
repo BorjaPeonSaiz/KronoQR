@@ -75,3 +75,11 @@ Para desarrollo y para la CI. `MigrationsRoundTripTest` comprueba que cada migra
 - `restore-drill.sh`: ensayo trimestral de la restauración.
 - Arquitectura: `MigrationSafetyTest` falla si una migración nueva escribe un `CREATE INDEX CONCURRENTLY` o un `VALIDATE CONSTRAINT` a mano, o si valida dentro de la transacción que crea la restricción.
 - Integración: `MigrationsRoundTripTest` sube, baja y vuelve a subir cada migración en una base de pruebas.
+
+## Nota del 18-10-2026 (2.3.0, bloque 4): lo que dura la parada y lo que pasa después en las tablets
+
+Esta nota precisa dos cosas que el texto de arriba no cuenta. La decisión no cambia: la vuelta atrás sigue siendo restaurar la copia.
+
+- **El mantenimiento afecta a toda la API**, y no solo a la de gestión: el fichaje (`/scan`) también responde `503`, y solo siguen respondiendo `/api/v1/health` y `/api/v1/ready`. El quiosco lo cubre encolando (regla dura 19, ADR-008).
+- **Lo que dura.** En la etapa ⑧b de la CI, con la base casi vacía, la ventana fue de 51 a 53 s en las tres últimas ejecuciones verdes (18-10-2026; por ejemplo `workers=11s backup=3s migrations=9s start=28s`), y `update.sh` entero tardó entre 63 y 65 s. La copia previa va dentro de la ventana y crece con la base, así que en un servidor real la ventana depende de los datos y del hardware. Cada instalación tiene su cifra en el informe (`Ventana de mantenimiento: N s`).
+- **Después de la actualización.** Las tablets con la PWA anterior pasan a modo urgente y recargan a cualquier hora, con la cola vacía y sin uso (excepción de RF-KI-07, nota de ADR-012 de esta misma fecha). Por eso `update.sh` se ejecuta fuera de los turnos.

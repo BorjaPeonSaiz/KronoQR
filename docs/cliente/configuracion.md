@@ -2240,9 +2240,11 @@ añaden Tempo y blackbox-exporter, está en [`operacion.md`](operacion.md) §10.
 
 > **Por este canal salen nombres de la plantilla, a diario.** El resumen
 > nocturno de incidencias va al responsable de cada departamento con la fecha,
-> el nombre y el tipo de cada hallazgo. Es el único camino por el que datos
-> personales salen del servidor sin que nadie pulse nada, y por eso deja
-> asiento en el registro de auditoría. **Si tu relevo de correo es de un
+> el nombre y el tipo de cada hallazgo. Con el resumen semanal de horas, si lo
+> activas, es el único camino por el que datos de la plantilla salen del
+> servidor sin que nadie pulse nada, y por eso los dos dejan asiento en el
+> registro de auditoría. En total salen tres correos y las alertas: la lista
+> está en [`obligaciones-legales.md`](obligaciones-legales.md) §2. **Si tu relevo de correo es de un
 > tercero, ese tercero es un encargado del tratamiento y tienes que tenerlo
 > contratado**: ver [`obligaciones-legales.md`](obligaciones-legales.md).
 >

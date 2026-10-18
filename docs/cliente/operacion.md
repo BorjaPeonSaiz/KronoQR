@@ -1040,17 +1040,30 @@ entrada de fichajes del quiosco**— responde «en mantenimiento» (503); solo
 siguen respondiendo las sondas `/api/v1/health` y `/api/v1/ready`. Los quioscos
 siguen confirmando en local y encolando; al terminar sincronizan con la hora
 real de cada fichaje, así que no se pierde nada y el registro legal conserva el
-momento en que cada persona pasó la tarjeta. **Cuánto dura:** en la prueba del
-fabricante, con una base casi vacía y sin migraciones pendientes, el 503 duró
-**menos de un minuto** (unos 52 segundos la última vez que se midió) de
-principio a fin; con tus datos durará más, porque la copia previa se hace
-dentro de esa ventana y crece con la base. **La descarga de las imágenes nuevas
-no cuenta**: `update.sh` la hace en el paso 1, antes de poner el mantenimiento.
-Tu cifra real queda en el informe de la actualización
-(`BACKUP_PATH/reports/update-*.log`): la línea «Ventana de mantenimiento: N s»
-y, debajo, su reparto por fases (parada de trabajadores, copia previa,
-migraciones, arranque). Prográmala fuera de los cambios de turno. Si la ventana fue larga, la bandeja mostrará
-incidencias de sincronización: no son un fallo.
+momento en que cada persona pasó la tarjeta.
+
+**Cuánto dura: alrededor de un minuto de 503**, que cubre la cola de la
+tablet, y **poco más de un minuto la actualización completa**. Son las cifras
+de la prueba automática del fabricante: la etapa ⑧b de su CI, que actualiza
+desde la versión anterior con una base casi vacía y de 0 a 3 migraciones
+pendientes. En las tres últimas ejecuciones verdes (18-10-2026), el 503 duró
+de 51 a 53 segundos y `update.sh` entero, de 63 a 65 segundos. Con tus datos
+durará más, porque la copia previa se hace dentro de esa ventana y crece con la
+base. Y depende del hardware: es una máquina de integración, no tu servidor.
+**La descarga de las imágenes nuevas no cuenta**: `update.sh` la hace en el
+paso 1, antes de poner el mantenimiento. Tu cifra real queda en el informe de
+la actualización (`BACKUP_PATH/reports/update-*.log`): la línea «Ventana de
+mantenimiento: N s» y, debajo, su reparto por fases (parada de trabajadores,
+copia previa, migraciones, arranque). Si la ventana fue larga, la bandeja
+mostrará incidencias de sincronización: no son un fallo.
+
+**Ejecuta `update.sh` fuera de los turnos.** Hay dos motivos: el minuto de
+parada, y que justo después **las tablets se recargan solas a cualquier
+hora**. Cada tablet con la 2.2.1 o posterior que va por detrás del servidor se
+recarga en el primer momento en que tiene la cola vacía y nadie la usa ni ha
+fichado en los últimos minutos, y se queda unos segundos sin cámara mientras
+tanto. No se pierde ningún fichaje (ver más abajo, «Desde la 2.2.1, la tablet
+que se ha quedado atrás no espera a la ventana»).
 
 ```bash
 cd /opt                                   # el paquete nuevo, AL LADO del actual
@@ -1568,10 +1581,16 @@ la tablet es anterior, la tablet busca la versión nueva en ese momento —sin
 esperar a la comprobación de cada hora— y se recarga **en cuanto se cumplen las
 condiciones 2 y 3**, a cualquier hora: cola vacía y guardada en la tablet (no
 solo en memoria) y nadie ha fichado en los últimos `KIOSK_UPDATE_QUIET_MINUTES`
-minutos (en este caso, al menos 2 aunque el ajuste valga `0`). La ventana deja
-de contar para ella; **la cola vacía y los minutos de calma, nunca**. En la
+minutos (en este caso, al menos 2 aunque el ajuste valga `0`). Además, nunca
+se recarga con alguien a medias: ni con un fichaje enviándose, ni con un PIN a
+medio teclear, ni con una confirmación en pantalla. La ventana deja de contar
+para ella; **la cola vacía, el uso y los minutos de calma, nunca**. En la
 práctica, tras actualizar el servidor las tablets se ponen al día solas en el
-primer hueco sin fichajes. Esto solo lo sabe hacer una tablet que **ya** tiene
+primer hueco sin fichajes, **sea la hora que sea**. Eso incluye una tablet que
+pasó la noche sin red y la recupera a las 05:55 sin nadie delante. Durante la
+recarga la tablet pasa unos segundos sin cámara, y quien llegue en ese momento
+espera a que vuelva. Por eso `update.sh` se ejecuta fuera de los turnos.
+Esto solo lo sabe hacer una tablet que **ya** tiene
 la 2.2.1 o posterior: una con una versión anterior (2.2.0, 2.1.0) se pone al
 día sola como siempre, en su ventana, con las tres condiciones de arriba (ver
 «Qué hacer si una tablet no cambia sola», más abajo).

@@ -1,9 +1,31 @@
 # Runbook — actualizar una instalación de cliente
 
 > **Quién lo usa:** el IT del hotel, en cada versión nueva, con `update.sh`
-> delante. **Cuándo:** en ventana de baja actividad, aunque no es obligatorio:
-> el fichaje no se detiene en ningún momento (§3). **Cuánto dura:** entre 5 y
-> 20 minutos según el tamaño de la base de datos; casi todo es la copia previa.
+> delante.
+>
+> **Cuándo: fuera de los turnos.** Hay dos motivos, y ninguno pierde un
+> fichaje:
+>
+> - **La parada.** Durante la ventana de mantenimiento **toda la API responde
+>   503**, también la entrada de fichajes. Las tablets confirman en local,
+>   encolan y lo envían al terminar, con la hora real de cada fichaje (§3).
+> - **Las tablets se recargan justo después.** Cada tablet con la 2.2.1 o
+>   posterior que va por detrás del servidor se recarga sola **a cualquier
+>   hora**, en el primer momento en que tiene la cola vacía y nadie la está
+>   usando ni ha fichado en `KIOSK_UPDATE_QUIET_MINUTES` (10 de serie). Durante
+>   la recarga se queda unos segundos sin cámara (§3, «Después del servidor:
+>   las tablets»).
+>
+> **Cuánto dura:** una parada de **alrededor de un minuto** (503), que cubre la
+> cola de la tablet, y **poco más de un minuto** la actualización completa.
+> Son las cifras de la etapa ⑧b de la CI del fabricante (actualización desde
+> la versión anterior), con la base casi vacía: de 51 a 53 s de parada y de 63
+> a 65 s de `update.sh` en las tres últimas ejecuciones verdes (18-10-2026). No
+> cuentan la descarga de las imágenes, que `update.sh` hace en el paso 1,
+> antes de parar. En tu servidor durará más cuanto mayor sea la base, porque
+> la copia previa va dentro de la parada, y también depende del hardware. Tu
+> cifra real queda en el informe del paso 7 (`BACKUP_PATH/reports/update-*.log`):
+> la línea «Ventana de mantenimiento: N s» y, debajo, su reparto por fases.
 >
 > Este runbook cubre lo que el script no puede decidir por ti: cómo preparar el
 > paquete, qué significa cada salida, y qué hacer **a mano** en el único caso
@@ -250,9 +272,14 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
 
 - **Una tablet con la 2.2.1 o posterior se pone al día sola**, a cualquier
   hora, en cuanto su cola está vacía y guardada en la tablet (no solo en
-  memoria) y nadie ha fichado en `KIOSK_UPDATE_QUIET_MINUTES`: el latido le dice
-  que va por detrás del servidor y no espera a la ventana. No hay que hacer
-  nada.
+  memoria), nadie la está usando (ni un PIN a medio teclear ni una
+  confirmación en pantalla) y nadie ha fichado en `KIOSK_UPDATE_QUIET_MINUTES`
+  (10 de serie; al menos 2 aunque valga `0`): el latido le dice que va por
+  detrás del servidor y no espera a la ventana. No hay que hacer nada. **Por
+  esto `update.sh` se ejecuta fuera de los turnos:** justo después, cada tablet
+  atrasada se recarga en el primer hueco de calma, sea la hora que sea, y pasa
+  unos segundos sin cámara. Una tablet que estaba sin red se recarga cuando la
+  recupera, si está en calma, aunque sea a las seis de la mañana.
 - **Una tablet anterior a la 2.2.1** (2.2.0, o 2.1.0, que declara `0.0.0`)
   también se pone al día sola, como siempre: se recarga cuando se cumplen a la
   vez la ventana `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y

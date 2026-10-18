@@ -701,7 +701,17 @@ sequenceDiagram
 
 > **Por qué la zona de fichaje distingue el origen.** Los 30 r/m por IP son un control pensado para internet, y **todos los quioscos de un hotel salen por la misma IP**. Aplicado sin distinción, el propio Nginx frenaría el sistema tres órdenes de magnitud por debajo de lo que exige RNF-P-06 —50 fichajes por segundo—, y el síntoma en producción sería «el quiosco va lento a las 06:00» en el cambio de turno, que es justo el pico que el producto existe para absorber.
 >
-> **El límite no se elimina para la red interna: se eleva.** RS-02 exige limitar «por dispositivo **y por IP**», y dejar el tráfico interno sin techo por origen permitiría a un equipo comprometido enchufado a esa VLAN barrer tokens al ritmo que dé la aplicación. Los 600 r/m con ráfaga de 50 sostienen RNF-P-06 con margen y mantienen RS-02 literalmente satisfecho. **El eje por credencial no existe y no es un olvido**: ADR-036 explica por qué un `429` por tarjeta sería la única forma de dejar a una persona concreta sin fichar.
+> **El límite no se elimina para la red interna: se eleva.** RS-02 exige limitar «por dispositivo **y por IP**», y dejar el tráfico interno sin techo por origen permitiría a un equipo comprometido enchufado a esa VLAN barrer tokens al ritmo que dé la aplicación. Los 600 r/m con ráfaga de 50 mantienen RS-02 literalmente satisfecho.
+>
+> **Lo que los 600 r/m no sostienen** (V21-5-DV-1, decisión D5 de la 2.3.0). El límite se cuenta **por IP** (`$binary_remote_addr` en `kronoqr.conf.template`). Si cada quiosco sale con su propia IP dentro de `KIOSK_VLAN_CIDR`, cada uno tiene 10 r/s, más la ráfaga de 50. Si todos salen por **una sola IP**, porque hay NAT entre la VLAN y el servidor, la comparten, siempre que la IP del NAT esté dentro de `KIOSK_VLAN_CIDR`: pasa una ráfaga de 50 peticiones y después 10 por segundo, cinco veces menos que los 50/s de RNF-P-06. Si la IP del NAT queda fuera del rango, el tráfico cae en la zona `scan_other`: 30 r/m con ráfaga de 10. El límite cuenta **peticiones**, no fichajes: un `POST /scan/batch` lleva varios, así que 10 r/s son un mínimo de 10 fichajes por segundo. La prueba de carga no lo ve, porque reparte el tráfico entre varias IP. **No se sube el límite**, por tres motivos:
+>
+> - **un `429` no pierde nada**: el quiosco lo trata como un fallo de transporte, conserva el fichaje en su cola con su `occurred_at` y lo reintenta (`client.ts`, `syncRunner.ts`; regla dura 19);
+> - **las filas reales no llegan a ese ritmo**: cada persona tarda unos segundos en pasar la tarjeta, así que ni las diez tablets de una instalación estándar sumadas se acercan a 10 por segundo, y el arranque del cambio de turno cabe en la ráfaga;
+> - **lo que da margen es `KIOSK_VLAN_CIDR`**: que los quioscos lleguen al servidor con sus propias IP, sin NAT, dentro de ese rango.
+>
+> RNF-P-06 es la capacidad para la que **está diseñado el servidor**, sumando todos los orígenes. No es un caudal que el borde garantice para una sola IP, y el doc 05 §9.4 lo presenta así.
+>
+> **El eje por credencial no existe y no es un olvido**: ADR-036 explica por qué un `429` por tarjeta sería la única forma de dejar a una persona concreta sin fichar.
 >
 > **El CIDR de la VLAN es un parámetro de instalación**, no una constante: va en `.env.example` y en la documentación de instalación. Si el cliente coloca los quioscos fuera de ese rango, quedan bajo el límite de 30 r/m — y eso hay que decírselo, porque el fallo es silencioso y se manifiesta como lentitud, no como error.
 
@@ -1390,7 +1400,7 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 
 ### Fase 4 — Evolución · 60–90 h (a decidir con datos de uso reales)
 
-Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y permisos con flujo de aprobación, integración directa con sistemas de nómina concretos, informes avanzados y consolidación multi-centro para cadenas. Coincide con lo anunciado al cliente en el documento 05, §11.
+Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y permisos con flujo de aprobación, integración directa con sistemas de nómina concretos y consolidación multi-centro para cadenas. Los informes por periodo, con la comparativa frente a lo contratado, ya existen (`Feature::AdvancedReports`), y la comparación entre periodos está en el cuadro de impacto (tarea 3.13): no son evolución futura. Coincide con lo anunciado al cliente en el documento 05, §11.
 
 **Adelantada a la 2.2.0: tarea 4.1, cuentas de gestión desde el panel** (RF-ID-10, [ADR-051](adr/ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md); ficha en `plan implementacion/07-fase-4-evolucion.md`; `arquitecto-dominio` → `backend-laravel` + `frontend-panel` → `qa-testing` → `revisor-codigo` + `seguridad-cumplimiento`). Es la única tarea de la fase entregada; el resto sigue a decidir con datos de uso.
 
