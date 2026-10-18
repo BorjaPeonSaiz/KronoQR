@@ -60,7 +60,7 @@ Desde el panel web, en su ordenador:
 
 ### 3.3 Para Recursos Humanos
 
-- Da de alta y de baja empleados y contratos, y crea y renombra departamentos. Los departamentos no se eliminan.
+- Da de alta y de baja a los empleados, registra sus contratos y crea y renombra departamentos. Ni los contratos ni los departamentos se dan de baja ni se eliminan: un cambio de contrato crea uno nuevo y el anterior queda en el histórico.
 - **Emite las tarjetas QR** y las imprime: en formato tarjeta de crédito, o en hojas A4 con varias por página para dar de alta a 40 personas de temporada en una tarde.
 - Registra la **entrega** de cada tarjeta (fecha y quién la entregó).
 - Consulta un **panel de estado de credenciales** que responde a la pregunta clave: *¿quién está de alta pero todavía no puede fichar?*
@@ -260,7 +260,7 @@ Este punto suele generar dudas, así que conviene dejarlo claro:
 | El sistema revela si un código existe o está revocado | No lo hace: todos los rechazos dan el mismo mensaje y tardan lo mismo. El detalle solo va al registro interno |
 | Alguien adivina un PIN por fuerza bruta | Bloqueo del PIN de cada persona tras 3 fallos (5 minutos), que crece si insiste (5 y 10 fallos), límite y bloqueo por dirección de red, y portal restringido a la red interna salvo decisión expresa del hotel; si lo abre, el sistema le avisa y le recomienda el PIN de 8 cifras |
 | Roban la tablet | Su acceso solo sirve para fichar y sincronizar; se revoca desde el panel y los datos que guarda están cifrados y son mínimos |
-| Alguien modifica horas directamente en la base de datos | La cadena de auditoría lo detecta y se dispara una alerta. Además, el usuario de la aplicación no tiene permiso para modificar ni borrar el registro de auditoría |
+| Alguien modifica horas directamente en la base de datos | La conciliación nocturna, que compara cada tramo con la anotación que se escribió con él, lo detecta y dispara una alerta, con el límite que explica el punto 6.1. La cadena de auditoría protege las anotaciones: si alguien altera o borra una, la cadena se rompe. Además, el usuario de la aplicación no tiene permiso para modificar ni borrar el registro de auditoría |
 | Un empleado niega haber fichado, o niega una corrección | Todo escaneo queda registrado, aceptado o no, con quién, cuándo y desde dónde |
 | Alguien intenta ver datos que no le corresponden | Cada operación comprueba permisos, el intento se rechaza y queda anotado |
 | Saturación del sistema en el cambio de turno | Límites de tasa, colas de proceso, y el modo offline que mantiene el fichaje operativo pase lo que pase |
@@ -333,17 +333,19 @@ Sin internet solo se pierden tres cosas accesorias: los certificados de segurida
 2. **El panel de gestión** — para responsables, RRHH, auditores y administración.
 3. **El portal del empleado** — una web sencilla y responsive para consultar el registro propio.
 
-### 9.4 Objetivos de rendimiento comprometidos
+### 9.4 Objetivos de rendimiento de diseño
 
 | Aspecto | Objetivo |
 |---|---|
 | De pasar la tarjeta a ver la confirmación | Menos de 0,8 segundos en el 95 % de los casos |
-| Fichajes simultáneos soportados | 50 por segundo (el pico del cambio de turno) |
+| Fichajes simultáneos | El servidor está **diseñado para 50 por segundo**, sumando todas las tablets (el pico del cambio de turno) |
 | Disponibilidad del sistema | 99,5 % mensual |
 | **Disponibilidad del acto de fichar** | **99,9 %**, gracias al modo sin conexión |
 | Pérdida máxima de datos ante un desastre | 15 minutos, **siempre que las copias y el registro continuo de cambios salgan del servidor** a otro disco o a otra máquina, como indica la guía de operación. Si se quedan en el mismo servidor y este se pierde, se pierden con él |
 | Tiempo máximo de recuperación | 4 horas |
 | Carga del panel de presencia con 500 empleados | Menos de 1,5 segundos |
+
+Son **objetivos de diseño, no cifras medidas en su servidor**. Los 50 fichajes por segundo se comprueban antes de publicar cada versión menor, con una prueba de carga en el entorno de integración del fabricante que reparte el tráfico entre varios orígenes. No hay un servidor de referencia con el que medirlo, así que en el hotel la cifra depende del hardware y de la red. La guía de operación explica cómo lanzar esa misma prueba en su servidor. Si todas las tablets llegan al servidor por una sola dirección de red, el límite de protección deja pasar una ráfaga de 50 fichajes y después 10 por segundo. Un pico por encima de eso no pierde nada: la tablet guarda el fichaje con su hora real y lo envía segundos después.
 
 ### 9.5 Cómo se garantiza que el cálculo de horas es correcto
 
@@ -409,7 +411,7 @@ Se admite el salto entre versiones no consecutivas: si el hotel lleva tiempo sin
 
 **Se hace descomprimiendo la versión nueva al lado de la actual, nunca encima**: así la anterior queda entera por si hubiera que volver a ella a mano.
 
-**Durante la actualización el fichaje no se detiene para la plantilla**: la tablet sigue registrando y encolando, y sincroniza cuando el servidor vuelve, con la hora real de cada fichaje. **El servidor sí se detiene**, alrededor de un minuto en una instalación recién puesta y algo más cuanto mayor sea la base de datos, porque la copia previa se hace en esa ventana: durante ese rato el panel y el portal muestran «en mantenimiento». Por eso se programa fuera de los cambios de turno.
+**Durante la actualización el fichaje no se detiene para la plantilla**: la tablet sigue registrando y encolando, y sincroniza cuando el servidor vuelve, con la hora real de cada fichaje. **El servidor sí se detiene, durante alrededor de un minuto**: el panel, el portal y la entrada de fichajes responden «en mantenimiento», y la tablet lo cubre con su cola. **La actualización completa tarda poco más de un minuto.** Son las cifras de la prueba automática del fabricante, con la base casi vacía: de 51 a 53 segundos de parada y de 63 a 65 segundos en total (18-10-2026). No cuentan la descarga de la versión nueva, que se hace antes de parar. En el hotel tarda más cuanto mayor sea la base de datos, porque la copia previa se hace dentro de la parada, y también depende del hardware. Cada actualización deja su cifra real en el informe. **Se programa fuera de los turnos**, por dos motivos: la parada misma, y que justo después cada tablet se pone al día sola en el primer momento en que nadie la usa y no tiene fichajes pendientes, sea la hora que sea, y se queda unos segundos sin cámara mientras se recarga.
 
 ### 10.5 Licencia
 
@@ -457,7 +459,8 @@ El sistema entra en producción cubriendo todo lo anterior. Están contemplados 
 
 - Planificación de cuadrantes y comparación entre lo planificado y lo realmente trabajado.
 - Gestión de vacaciones y permisos con flujo de aprobación.
-- Informes avanzados.
+
+Los informes avanzados con comparación entre periodos no figuran en esta lista porque ya están en el producto, como funcionalidad del plan (punto 10.5).
 
 **Cada hotel es una instalación con su licencia.** Una cadena opera tantas instalaciones como hoteles; el producto no consolida datos entre ellas ni está previsto que lo haga.
 
