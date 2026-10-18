@@ -67,8 +67,8 @@ apartado *Assets*, `kronoqr-<versión>.tar.gz` y `SHA256SUMS`, en `/opt`:
 
 ```bash
 cd /opt
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
@@ -84,7 +84,7 @@ lo publicó.** Baja también `SHA256SUMS.bundle` (tercer fichero del apartado
 porque un paquete sustituido llevaría una a su medida—:
 
 ```bash
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS.bundle
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS.bundle
 cosign verify-blob \
   --bundle SHA256SUMS.bundle \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \

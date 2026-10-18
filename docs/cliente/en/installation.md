@@ -325,7 +325,7 @@ by itself.
 commands as they are, after saving the `.env`:
 
 ```bash
-registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+registro="$(sudo sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
 sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
 
@@ -1004,7 +1004,7 @@ in `TRUSTED_PROXY_CIDR` (§6).
 There are three possible causes, and a single test download tells them apart:
 
 ```bash
-registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+registro="$(sudo sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
 echo "${registro}"
 sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
