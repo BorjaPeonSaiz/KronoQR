@@ -435,11 +435,19 @@ mensaje, que es lo que hay que leer.**
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
 muestra y no bloquea, y solo un fallo (`2`) se traduce al `6` de la tabla de
-arriba. En `update.sh` el diagnóstico no se traduce a `6`: es informativo, y
-un fallo de `product:doctor` en la versión nueva provoca la vuelta atrás
-(código `4`) igual que cualquier otro fallo del paso 5, nunca un `6`. La única
-traducción a `6` que sí existe en `update.sh` es otra cosa por completo: el
-asiento `system.updated` que el paso 5 deja en `audit_log` (sección 11).
+arriba. En `update.sh` el diagnóstico **es solo informativo**: ni un aviso ni
+un fallo de `product:doctor` en la versión nueva deshacen la actualización ni
+la convierten en un `6`. Se muestran en pantalla con qué hacer y quedan en el
+informe («correcto», «correcto, con avisos» o «con fallos (informativo, no
+bloquea)»), y la actualización sigue:
+la versión nueva ya está verificada por las sondas, la cadena de auditoría y
+los privilegios, y casi todo lo que `product:doctor` puede encontrar en rojo es
+del servidor (disco, certificado, correo), no de la versión. **Lo único que
+deshace es que la imagen no traiga `product:doctor`**: eso es un paquete roto,
+y vuelve atrás con `4`. Si la actualización termina con un `product:doctor` en
+rojo, corrígelo después con `./doctor.sh` (§12.1). La única traducción a `6`
+que sí existe en `update.sh` es otra cosa por completo: el asiento
+`system.updated` que el paso 5 deja en `audit_log` (sección 11).
 
 ### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
 
@@ -1067,7 +1075,7 @@ que se ha quedado atrás no espera a la ventana»).
 
 ```bash
 cd /opt                                   # el paquete nuevo, AL LADO del actual
-tar xzf kronoqr-<version>.tar.gz
+sudo tar xzf kronoqr-<version>.tar.gz
 cd kronoqr-<version>
 sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta algo
 sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
@@ -1788,8 +1796,11 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
 Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
 nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del resto
-del documento; quien lo reciba puede comprobar que no se alteró por el camino
-con `php artisan product:diagnostics --verify=<fichero>`.
+del documento, y con ella se comprueba que no se alteró ni se cortó por el
+camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
+enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
+comando al generarlo:
+`docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
 
 **Qué lleva:** versión y entorno, configuración **solo de una lista de claves
 permitidas** (nunca `LICENSE_KEY`, claves de firma del QR, de cifrado de
@@ -2144,7 +2155,8 @@ aplicación con el `uuid` de la exportación). Corrige la causa y genera otra.
 Viene **desactivada** y el sistema funciona exactamente igual sin ella. Solo
 se envía si se cumplen **tres** condiciones a la vez: `TELEMETRY_ENABLED=true`,
 un destino `https://` en `TELEMETRY_ENDPOINT` y una licencia que incluya la
-funcionalidad `telemetry` (`php artisan license:show` lo enseña). Si falta
+funcionalidad `telemetry` (`docker compose exec app php artisan license:show`
+lo enseña). Si falta
 cualquiera de las tres, `product:telemetry` lo dice y no se envía nada. Cuando
 se cumplen, los lunes a las 05:40 UTC se envía un informe con
 versiones, estado de la licencia, tamaño de la instalación por tramos y
@@ -3333,6 +3345,35 @@ sudo docker compose logs --tail 100 scheduler horizon
 Si se vuelven a parar, adjunta esos registros al paquete de diagnóstico
 (§12.2). Después de arrancar `scheduler`, comprueba que la última copia es de
 hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2).
+
+### …`./doctor.sh` avisa de «bases de una restauración que no terminó»
+
+**Síntoma.** `[aviso] Hay bases de una restauracion que no termino:
+fichaje_restore_20261012T031500Z`, y en su «Que hacer» una orden con dos huecos,
+`<migrador>` y `<nombre>`.
+
+**Qué es.** Una restauración crea primero una base de trabajo con un nombre
+`<base>_restore_<fecha>`; si muere sin limpiar (`kill -9`, un corte de luz),
+esa base se queda. **No la usa nadie, pero lleva una copia entera de los datos
+personales**, y por eso `doctor.sh` la señala cuando tiene más de un día. Las
+que se llaman `<base>_pre_restore_<fecha>` son otra cosa —la base anterior a
+una restauración que sí terminó— y **no** salen en este aviso.
+
+**Qué hacer.** Primero, asegúrate de que no hay ninguna restauración en marcha
+(`pgrep -af restore.sh` no debe devolver nada). Después, rellena los dos
+huecos: `<migrador>` es el valor de `DB_MIGRATION_USERNAME` de tu `.env`
+(`fichaje_migrator` de serie), y `<nombre>`, cada uno de los nombres que da el
+aviso, de uno en uno. Desde el directorio vigente:
+
+```bash
+sudo grep '^DB_MIGRATION_USERNAME=' .env
+sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
+./doctor.sh
+```
+
+La orden no pide contraseña: se ejecuta dentro del contenedor de PostgreSQL.
+Las comillas dobles alrededor del nombre son necesarias. Si `doctor.sh` ya no
+lo avisa, está resuelto.
 
 ### …la actualización se cortó a mitad (sesión SSH, Ctrl+C) y no sabes cómo acabó
 

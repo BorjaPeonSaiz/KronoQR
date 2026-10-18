@@ -107,7 +107,7 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
 
    ```bash
    cd /opt
-   tar xzf kronoqr-2.2.0.tar.gz          # crea /opt/kronoqr-2.2.0
+   sudo tar xzf kronoqr-2.2.0.tar.gz     # crea /opt/kronoqr-2.2.0
    ls /opt                                # kronoqr-2.1.0  kronoqr-2.2.0
    ```
 
@@ -129,7 +129,7 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
    > cd /opt
    > tar xzf kronoqr-2.1.0.tar.gz -O kronoqr-2.1.0/docker-compose.yml | sudo tee /opt/kronoqr-2.1.0/docker-compose.yml >/dev/null
    > # 2. Descomprimir el paquete nuevo AL LADO
-   > tar xzf kronoqr-2.2.0.tar.gz
+   > sudo tar xzf kronoqr-2.2.0.tar.gz
    > # 3. Actualizar desde el directorio nuevo
    > cd /opt/kronoqr-2.2.0 && sudo ./update.sh
    > ```

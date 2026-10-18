@@ -447,11 +447,19 @@ is in the message, which is what you have to read.**
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
 phase (RF-PD-13): in `install.sh` a warning (`product:doctor` code `1`) is
 shown and does not block, and only a failure (`2`) translates into the `6` of
-the table above. In `update.sh` the diagnostic never translates into `6`: it
-is informational, and a `product:doctor` failure on the new version triggers
-the rollback (code `4`) just like any other failure in step 5, never a `6`.
-The only translation into `6` that does exist in `update.sh` is something
-else entirely: the `system.updated` entry that step 5 leaves in `audit_log`
+the table above. In `update.sh` the diagnostic **is informational only**:
+neither a warning nor a failure from `product:doctor` on the new version undoes
+the update or turns it into a `6`. They are shown on screen with what to do and
+recorded in the report ("ok", "ok, with warnings" or "with failures
+(informational, non-blocking)"), and the
+update goes on: the new version is already verified by the probes, the audit
+chain and the privileges, and almost everything `product:doctor` can find in
+red belongs to the server (disk, certificate, mail), not to the version. **The
+only thing that rolls back is the image not carrying `product:doctor`**: that
+is a broken package, and it rolls back with `4`. If the update finishes with
+`product:doctor` in red, fix it afterwards with `./doctor.sh` (§12.1). The only
+translation into `6` that does exist in `update.sh` is something else
+entirely: the `system.updated` entry that step 5 leaves in `audit_log`
 (section 11).
 
 ### If you had a cron job written against the previous `backup.sh` table
@@ -1080,7 +1088,7 @@ for the window").
 
 ```bash
 cd /opt                                   # the new package, NEXT TO the current one
-tar xzf kronoqr-<version>.tar.gz
+sudo tar xzf kronoqr-<version>.tar.gz
 cd kronoqr-<version>
 sudo ./update.sh --check-only             # without touching anything: what is missing, if anything
 sudo ./update.sh                          # updates, verifies and rolls itself back if it fails
@@ -1805,8 +1813,11 @@ through your contract's channel. **Support does not go into your server**
 It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 unencrypted on purpose: **open it before sending it** and check that it carries
 nothing you do not want to send. Its header (`manifest`) carries the
-fingerprint of the rest of the document; whoever receives it can check that it
-was not altered on the way with `php artisan product:diagnostics --verify=<fichero>`.
+fingerprint of the rest of the document, and with it you can check that it was
+not altered or cut short on the way. Support checks it on receipt; to check it
+yourself before sending it, from the installation directory and with the path
+the command printed when it generated it:
+`docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
 
 **What it carries:** version and environment, configuration **only from an
 allow-list of keys** (never `LICENSE_KEY`, QR signing keys, backup encryption
@@ -2171,7 +2182,8 @@ application log with the export's `uuid`). Fix the cause and generate another.
 It ships **disabled** and the system works exactly the same without it. It is
 only sent if **three** conditions are met at once: `TELEMETRY_ENABLED=true`,
 an `https://` destination in `TELEMETRY_ENDPOINT` and a licence that includes
-the `telemetry` feature (`php artisan license:show` shows it). If any of the
+the `telemetry` feature (`docker compose exec app php artisan license:show`
+shows it). If any of the
 three is missing, `product:telemetry` says so and nothing is sent. When they
 are met, on Mondays at 05:40 UTC a report is sent with versions, licence
 status, installation size in bands and aggregate counters; **never** data
@@ -3386,6 +3398,36 @@ If they stop again, attach those logs to the diagnostics bundle (§12.2). After
 starting `scheduler`, check that the latest backup is from today or last night
 ([`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2,
 in Spanish).
+
+### …`./doctor.sh` warns about "databases from a restore that did not finish"
+
+**Symptom.** `[warn] There are databases from a restore that did not finish:
+fichaje_restore_20261012T031500Z`, and in its "What to do" a command with two
+blanks, `<migrator>` and `<name>`.
+
+**What it is.** A restore first creates a working database named
+`<base>_restore_<date>`; if it dies without cleaning up (`kill -9`, a power
+cut), that database stays. **Nobody uses it, but it holds a whole copy of the
+personal data**, which is why `doctor.sh` points it out once it is more than a
+day old. The ones named `<base>_pre_restore_<date>` are something else —the
+database before a restore that did finish— and do **not** show up in this
+warning.
+
+**What to do.** First, make sure no restore is running (`pgrep -af restore.sh`
+must return nothing). Then fill in the two blanks: `<migrator>` is the value of
+`DB_MIGRATION_USERNAME` in your `.env` (`fichaje_migrator` by default), and
+`<name>` each of the names the warning gives, one at a time. From the current
+directory:
+
+```bash
+sudo grep '^DB_MIGRATION_USERNAME=' .env
+sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
+./doctor.sh
+```
+
+The command does not ask for a password: it runs inside the PostgreSQL
+container. The double quotes around the name are required. If `doctor.sh` no
+longer warns about it, it is solved.
 
 ### …the update was cut off halfway (SSH session, Ctrl+C) and you do not know how it ended
 

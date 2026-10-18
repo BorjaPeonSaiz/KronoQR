@@ -124,8 +124,16 @@ Si la IP de la tablet cae **fuera** de `KIOSK_VLAN_CIDR`, el borde no le
 niega el paso — le aplica el límite pensado para tráfico de internet, 30
 peticiones por minuto en vez de 600 (doc 02 §7.1) — y el síntoma no es un
 error visible: es una tablet que va lenta y a veces se queda sin latido en
-hora punta. Detalle completo y comprobación con `curl` en
-[`../cliente/instalacion.md`](../cliente/instalacion.md) §6.
+hora punta. Para saber qué dirección ve el servidor de cada tablet y si cae
+dentro del rango, cuenta sus latidos de los últimos diez minutos:
+
+```bash
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
+```
+
+Una línea que termina en `"from_kiosk_vlan":0` es una dirección fuera del
+rango. Cómo leer la salida y cómo corregir el rango:
+[`../cliente/instalacion.md`](../cliente/instalacion.md) §6, «`KIOSK_VLAN_CIDR`».
 
 ### 2.5 La propia tablet, y su pantalla de diagnóstico
 

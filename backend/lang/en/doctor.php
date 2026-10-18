@@ -692,16 +692,18 @@ return [
                     ."  MAIL_MAILER=smtp\n"
                     ."  MAIL_HOST=...\n"
                     ."  MAIL_PORT=587\n"
-                    ."then restart the application:\n"
-                    ."  docker compose up -d app\n"
+                    ."then recreate the three services that send mail (with app alone, deferred\n"
+                    ."notices and the weekly summary would keep using the previous server):\n"
+                    ."  docker compose up -d app horizon scheduler\n"
                     .'If you do not want email notifications, leave it as it is: nothing else is affected.',
             ],
             'reachable' => [
                 'warning' => "Check MAIL_HOST and MAIL_PORT in the .env file and that the hotel firewall allows\n"
-                    ."outbound traffic on that port. Then:\n"
-                    .'  docker compose up -d app',
+                    ."outbound traffic on that port. Then recreate the three services that send mail:\n"
+                    .'  docker compose up -d app horizon scheduler',
                 'warning_not_configured' => "If you want email notifications, fill in MAIL_MAILER, MAIL_HOST and\n"
-                    ."MAIL_PORT in the .env file and restart with `docker compose up -d app`.\n"
+                    ."MAIL_PORT in the .env file and recreate the three services that send mail with\n"
+                    ."`docker compose up -d app horizon scheduler`.\n"
                     .'If you do not want them, there is nothing to do.',
             ],
             'alert_recipients' => [

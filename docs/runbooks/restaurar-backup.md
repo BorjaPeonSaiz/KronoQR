@@ -662,7 +662,9 @@ antes de decidir qué ocurrió, así que nunca deja la instalación sin base de
 producción por una señal. Una base `<base>_restore_<fecha>` de más de un día en
 `pg_database` es de una restauración que murió sin limpiar (por ejemplo, con
 `kill -9`): `restore.sh` y `doctor.sh` lo avisan y se elimina con
-`DROP DATABASE "<nombre>" WITH (FORCE)`.
+`DROP DATABASE "<nombre>" WITH (FORCE)`. La orden completa, con qué poner en
+cada hueco, está en [`../cliente/operacion.md`](../cliente/operacion.md) §18,
+«…`./doctor.sh` avisa de "bases de una restauración que no terminó"».
 
 Si la restauración la lanzó `update.sh` en su vuelta atrás, la salida `8` cuenta como
 restaurada y la vuelta atrás sigue; `update.sh` ignora una segunda señal mientras

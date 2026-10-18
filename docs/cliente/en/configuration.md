@@ -1356,7 +1356,7 @@ that moment and not when someone prints a card. Each message says what to do:
 | “The logo path has to be absolute and start with `/`” | You wrote a relative path | Write the full path: `/var/kronoqr/branding/logo.png` |
 | “The logo path cannot contain `..`” | The path climbs a directory | Write it without jumps, exactly as it stands inside the brand directory |
 | “The logo has to be inside the brand directory” | The file is somewhere else on the server | Copy it to the `BRANDING_PATH` folder and save the path **as seen from inside the container** |
-| “There is no file at that path” | Almost always, the volume is not mounted | `docker compose exec app ls -l /var/kronoqr/branding`. If it comes out empty, check `BRANDING_PATH` and `docker compose up -d app` |
+| “There is no file at that path” | Almost always, the volume is not mounted | `docker compose exec app ls -l /var/kronoqr/branding`. If it comes out empty, check `BRANDING_PATH` and recreate the three services that mount the folder: `docker compose up -d app horizon scheduler` (with `app` alone, deferred PDFs would come out without the logo) |
 | “The file exists but the application cannot read it” | Permissions | `sudo chmod 0644 <file>` on the server |
 | “The logo is larger than 512 KiB” | Image too heavy | Export it at a lower resolution, or as SVG |
 | “The file is neither a PNG nor an SVG” | The **content** is checked, not the extension | Renaming does not help. Export it again from your design tool |
@@ -1967,7 +1967,7 @@ alter the record: it has no credential to do it with.
 | `REDIS_HOST` | — | Name of the Redis container | `redis` | Only if you move Redis to a separate server | No |
 | `REDIS_PORT` | — | Port | `6379` | Same as above | No |
 | `REDIS_PASSWORD` | — | Redis password | *(empty)* | Empty is correct in the standard installation: Redis **publishes no port** and is reachable only from Docker's internal network. Fill it in only if you move Redis to another machine, and configure it there too | No |
-| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, jobs queued in the meantime (reports, exports, alerts) fail and must be repeated. **Clocking keeps working**: the request limiter fails open only on scan, batch upload and PIN clocking (`scan`, `scan-batch`, `scan-pin`). The rest of the API (panel, portal, sign-in) does depend on Redis (cache and limiter) and may stop responding until it returns | No |
+| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, it depends on the job. **What was already in the queue** is kept in Redis and runs when it returns (unless its persistence file has to be repaired: [`operation.md`](operation.md) §18). **What is requested while it is down** —reports, exports, notices— cannot be queued: it shows as "Failed" and has to be repeated when it returns. **The clocking's own jobs** —live presence and worked minutes— do not wait for the queue: if it does not answer, they run on the spot, after replying to the tablet. **Clocking keeps working**: the request limiter fails open only on scan, batch upload and PIN clocking (`scan`, `scan-batch`, `scan-pin`). The rest of the API (panel, portal, sign-in) does depend on Redis (cache and limiter) and may stop responding until it returns | No |
 | `CACHE_STORE` | — | Where the cache lives | `redis` | Never | No |
 | `SESSION_DRIVER` | — | Where sessions live | `redis` | Never | No |
 

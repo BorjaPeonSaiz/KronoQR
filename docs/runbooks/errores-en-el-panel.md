@@ -252,8 +252,14 @@ quiosco — los que le impiden fichar: `kiosk.camera.*`, `kiosk.scanner.*`,
 puede parar.
 
 Un ejemplo de `error` que conviene reconocer: `kiosk.update.unreachable` (desde la
-2.2.1) dice que una tablet no ha conseguido ponerse en la versión mínima que
-pide el servidor tras tres intentos de actualización urgente. La tablet sigue
+2.2.1) dice que una tablet ha abandonado el modo de actualización urgente sin
+ponerse en la versión mínima que pide el servidor. Lo abandona por una de dos
+razones, y la más frecuente es la segunda: **tres recargas** seguidas sin que la
+versión cambie, o **seis comprobaciones seguidas sin encontrar versión nueva**,
+una cada 5 minutos como mínimo, así que unos **30 minutos** después de
+empezar. Es el caso típico de un servidor que pide una versión que no puede
+servir: el navegador no ve ninguna versión nueva y nunca hay nada que recargar.
+La tablet sigue
 fichando con normalidad y vuelve a su franja nocturna; qué hacer, en
 [`operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una tablet no
 cambia sola tras actualizar el servidor».

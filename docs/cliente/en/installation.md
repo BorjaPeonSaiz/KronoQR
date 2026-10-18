@@ -1309,12 +1309,39 @@ appears**: the symptom is *"the kiosk is slow at 06:00"*, right when 500
 people clock in at once. If someone describes that symptom, this variable is
 the first thing to check.
 
-**How to check it.** From an already installed kiosk:
+**How to check it.** On the server, not on the tablet: a tablet has no
+console, and the address that matters is not the one it thinks it has but
+**the one the server sees** (with NAT or a router in between, they differ).
+Each paired tablet sends one heartbeat a minute, and the edge records on every
+request whether it came in through the kiosk VLAN (`"from_kiosk_vlan":1`) or
+not (`0`). With the tablets switched on for a few minutes, from the
+installation directory:
 
 ```bash
-# The IP the kiosk presents to the server must fall inside KIOSK_VLAN_CIDR
-ip -4 addr show | grep inet
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
+
+There is one line for each address heartbeats arrive from, with how many have
+arrived in those ten minutes:
+
+```
+     10 "remote_addr":"10.0.30.21","from_kiosk_vlan":1
+     10 "remote_addr":"10.0.30.22","from_kiosk_vlan":1
+```
+
+- **All end in `1`**: fine, every tablet is inside the range.
+- **Some end in `0`**: that address is outside. Widen `KIOSK_VLAN_CIDR` so it
+  covers it (or set one that covers them all) and apply it with
+  `sudo docker compose up -d`, which recreates only the services whose
+  configuration changed. If all the tablets go out through the same address
+  (NAT), that is the one that has to be inside.
+- **Nothing comes out**: no heartbeat arrived in those ten minutes. Either no
+  tablet is paired yet, or they do not reach the server:
+  [`quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md) (in
+  Spanish).
+
+`./doctor.sh` does the reverse check: it warns if requests for the panel or the
+portal arrive from the kiosk range, a sign that the range is too wide.
 
 **The internal limit is raised, not removed.** The product also limits by IP
 inside the VLAN: a compromised device plugged into that network cannot be left

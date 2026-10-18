@@ -1280,12 +1280,39 @@ síntoma es *«el quiosco va lento a las 06:00»*, justo en el momento en que 50
 personas fichan a la vez. Si alguien describe ese síntoma, esta variable es lo
 primero que hay que comprobar.
 
-**Cómo comprobarlo.** Desde un quiosco ya instalado:
+**Cómo comprobarlo.** En el servidor, no en la tablet: una tablet no tiene
+consola, y la dirección que importa no es la que ella cree tener, sino **la que
+ve el servidor** (con NAT o un router de por medio, son distintas). Cada tablet
+emparejada envía un latido por minuto, y el borde anota en cada petición si
+entró por la VLAN de quioscos (`"from_kiosk_vlan":1`) o no (`0`). Con las
+tablets encendidas desde hace unos minutos, desde el directorio de la
+instalación:
 
 ```bash
-# La IP que el quiosco presenta al servidor debe caer dentro de KIOSK_VLAN_CIDR
-ip -4 addr show | grep inet
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
+
+Sale una línea por cada dirección desde la que llegan latidos, con cuántos han
+llegado en esos diez minutos:
+
+```
+     10 "remote_addr":"10.0.30.21","from_kiosk_vlan":1
+     10 "remote_addr":"10.0.30.22","from_kiosk_vlan":1
+```
+
+- **Todas terminan en `1`**: bien, todas las tablets están dentro del rango.
+- **Alguna termina en `0`**: esa dirección está fuera. Amplía
+  `KIOSK_VLAN_CIDR` para que la cubra (o pon una que cubra a todas) y aplícalo
+  con `sudo docker compose up -d`, que recrea solo los servicios cuya
+  configuración ha cambiado. Si todas las tablets salen por la misma
+  dirección (NAT), esa es la que tiene que estar dentro.
+- **No sale nada**: en esos diez minutos no ha llegado ningún latido. O no hay
+  ninguna tablet emparejada todavía, o no llegan al servidor:
+  [`../runbooks/quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md).
+
+`./doctor.sh` hace la comprobación inversa: avisa si desde el rango de quioscos
+llegan peticiones del panel o del portal, señal de que el rango es demasiado
+ancho.
 
 **El límite interno se eleva, no se elimina.** El producto limita también por
 IP dentro de la VLAN: un equipo comprometido enchufado a esa red no puede

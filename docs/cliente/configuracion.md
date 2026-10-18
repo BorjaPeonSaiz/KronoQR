@@ -1340,7 +1340,7 @@ dice qué hacer:
 | «La ruta del logotipo tiene que ser absoluta y empezar por `/`» | Has escrito una ruta relativa | Escribe la ruta completa: `/var/kronoqr/branding/logo.png` |
 | «La ruta del logotipo no puede contener `..`» | La ruta sube de directorio | Escríbela sin saltos, tal cual queda dentro del directorio de marca |
 | «El logotipo tiene que estar dentro del directorio de marca» | El fichero está en otro sitio del servidor | Cópialo a la carpeta de `BRANDING_PATH` y guarda la ruta **de dentro del contenedor** |
-| «No hay ningún fichero en esa ruta» | Casi siempre, el volumen no está montado | `docker compose exec app ls -l /var/kronoqr/branding`. Si sale vacío, revisa `BRANDING_PATH` y `docker compose up -d app` |
+| «No hay ningún fichero en esa ruta» | Casi siempre, el volumen no está montado | `docker compose exec app ls -l /var/kronoqr/branding`. Si sale vacío, revisa `BRANDING_PATH` y recrea los tres servicios que montan la carpeta: `docker compose up -d app horizon scheduler` (con solo `app`, los PDF en diferido saldrían sin logotipo) |
 | «El fichero existe pero la aplicación no puede leerlo» | Permisos | `sudo chmod 0644 <fichero>` en el servidor |
 | «El logotipo ocupa más de 512 KiB» | Imagen demasiado pesada | Expórtala con menos resolución, o en SVG |
 | «El fichero no es un PNG ni un SVG» | Se mira el **contenido**, no la extensión | Renombrar no sirve. Vuelve a exportarlo desde tu herramienta de diseño |
@@ -1945,7 +1945,7 @@ alterar el registro: no tiene ninguna credencial con la que hacerlo.
 | `REDIS_HOST` | — | Nombre del contenedor de Redis | `redis` | Solo si mueves Redis a un servidor aparte | No |
 | `REDIS_PORT` | — | Puerto | `6379` | Íd. | No |
 | `REDIS_PASSWORD` | — | Contraseña de Redis | *(vacía)* | Vacía es lo correcto en la instalación estándar: Redis **no publica ningún puerto** y solo es alcanzable desde la red interna de Docker. Rellénala solo si sacas Redis a otra máquina, y configúralo también en él | No |
-| `QUEUE_CONNECTION` | — | Dónde viven los trabajos en segundo plano | `redis` | Nunca. Si Redis cae, los trabajos que se encolan mientras tanto (informes, exportaciones, avisos) fallan y hay que repetirlos. **El fichaje sigue funcionando**: el limitador de peticiones falla abierto solo en el escaneo, el envío por lotes y el fichaje por PIN (`scan`, `scan-batch`, `scan-pin`). El resto de la API —panel, portal, acceso— sí depende de Redis (caché y limitador) y puede dejar de responder hasta que vuelva | No |
+| `QUEUE_CONNECTION` | — | Dónde viven los trabajos en segundo plano | `redis` | Nunca. Si Redis cae, depende del trabajo. **Lo que ya estaba en la cola** se conserva en Redis y se ejecuta cuando vuelve (salvo que haya que reparar su fichero de persistencia: [`operacion.md`](operacion.md) §18). **Lo que se pide mientras está caído** —informes, exportaciones, avisos— no se puede encolar: sale «Fallida» y hay que repetirlo cuando vuelva. **Los trabajos del propio fichaje** —la presencia en vivo y los minutos trabajados— no esperan a la cola: si no responde, se ejecutan en el momento, después de contestar a la tablet. **El fichaje sigue funcionando**: el limitador de peticiones falla abierto solo en el escaneo, el envío por lotes y el fichaje por PIN (`scan`, `scan-batch`, `scan-pin`). El resto de la API —panel, portal, acceso— sí depende de Redis (caché y limitador) y puede dejar de responder hasta que vuelva | No |
 | `CACHE_STORE` | — | Dónde vive la caché | `redis` | Nunca | No |
 | `SESSION_DRIVER` | — | Dónde viven las sesiones | `redis` | Nunca | No |
 
