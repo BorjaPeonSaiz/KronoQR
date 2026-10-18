@@ -9,12 +9,9 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
-use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
-use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezoneChange;
 use App\Modules\Compliance\Domain\ValueObject\AuditTrailEntry;
 use App\Modules\Compliance\Domain\ValueObject\RecordedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
-use App\Modules\Compliance\Domain\ValueObject\RecordedSiteTimezoneChange;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
@@ -196,7 +193,9 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
             // Purgas y revisiones en la misma instantanea: una revision
             // confirmada entre dos lecturas no puede tapar una purga que la
             // primera no vio, ni al reves.
-            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears(), $this->reviews(), $this->siteTimezones());
+            $siteTimezones = new DatabaseSiteTimezoneAuditReader($this->connection);
+
+            yield new WorkRecordAuditContext($this->purges(), $siteTimezones->sealedAuditYears(), $this->reviews(), $siteTimezones->sites());
 
             $cursor = $this->declareCursor($window);
             $size = max(1, $chunkSize > 0 ? $chunkSize : $this->fetchSize);
@@ -279,117 +278,6 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
         }
 
         return $reviews;
-    }
-
-    /**
-     * La zona de cada centro con su auditoria (RN-23, bloque 2 de la 2.3.0): el
-     * ultimo asiento `site.created` o `site.updated` que lo tiene por sujeto,
-     * todos sus `site.updated` y las filas de la traza `site_timezone_changes`.
-     * Que cuadra lo decide el dominio ({@see AuditedSiteTimezone}).
-     *
-     * Un centro por instalacion (ADR-040): una fila, unos pocos asientos —uno
-     * por cambio del centro— que entran por `audit_log_subject_index`, y una
-     * traza que solo crece con cada correccion. Lee `sites` y la traza por
-     * nombre de tabla, sin el modelo de `Workforce`, como `shift_entries` mas
-     * arriba.
-     *
-     * **Despues del primer tramo** se decide por el orden de la cadena
-     * (ADR-010): hay un asiento `shift_entry.*` con `id` menor. El filtro por
-     * `occurred_at` solo acota el recorrido del indice de accion: un dia de
-     * margen sobre el reloj de quien escribio el asiento.
-     *
-     * @return list<AuditedSiteTimezone>
-     */
-    private function siteTimezones(): array
-    {
-        $audited = [];
-        $rows = $this->connection->select(
-            \sprintf(
-                <<<'SQL'
-                    SELECT a.subject_id AS site_id, a.id, a.payload::text AS payload,
-                           EXISTS (
-                               SELECT 1 FROM audit_log s
-                                WHERE s.action IN (%s)
-                                  AND s.occurred_at <= a.occurred_at + interval '1 day'
-                                  AND s.id < a.id
-                           ) AS after_work_record
-                      FROM audit_log a
-                     WHERE a.subject_type = 'site'
-                       AND a.action = ?
-                     ORDER BY a.id
-                    SQL,
-                self::quoted(AuditedShiftEntry::ACTIONS),
-            ),
-            [AuditAction::SiteUpdated->value],
-        );
-
-        foreach ($rows as $raw) {
-            $row = Row::of((object) $raw);
-            $audited[$row->int('site_id')][] = AuditedSiteTimezoneChange::fromEntry(
-                $row->int('id'),
-                $row->json('payload') ?? [],
-                $row->bool('after_work_record'),
-            );
-        }
-
-        $recorded = [];
-
-        foreach ($this->connection->select('SELECT site_id, from_tz, to_tz, changed_at FROM site_timezone_changes ORDER BY id') as $raw) {
-            $row = Row::of((object) $raw);
-            $recorded[$row->int('site_id')][] = new RecordedSiteTimezoneChange(
-                $row->string('from_tz'),
-                $row->string('to_tz'),
-                $row->instant('changed_at'),
-            );
-        }
-
-        $sites = [];
-        $rows = $this->connection->select(
-            <<<'SQL'
-                SELECT s.id, s.timezone, a.id AS audit_id, a.payload::text AS payload
-                  FROM sites s
-                  LEFT JOIN LATERAL (
-                       SELECT l.id, l.payload
-                         FROM audit_log l
-                        WHERE l.subject_type = 'site'
-                          AND l.subject_id = s.id
-                          AND l.action IN (?, ?)
-                        ORDER BY l.id DESC
-                        LIMIT 1
-                  ) a ON TRUE
-                 ORDER BY s.id
-                SQL,
-            [AuditAction::SiteCreated->value, AuditAction::SiteUpdated->value],
-        );
-
-        foreach ($rows as $raw) {
-            $row = Row::of((object) $raw);
-            $id = $row->int('id');
-            $sites[] = AuditedSiteTimezone::fromEntry(
-                $id,
-                $row->string('timezone'),
-                $row->nullableInt('audit_id'),
-                $row->json('payload'),
-                $audited[$id] ?? [],
-                $recorded[$id] ?? [],
-            );
-        }
-
-        return $sites;
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function sealedAuditYears(): array
-    {
-        $years = [];
-
-        foreach ($this->connection->select('SELECT partition_year FROM '.AuditLogSchema::ANCHORS_TABLE.' ORDER BY partition_year') as $row) {
-            $years[] = Row::of((object) $row)->int('partition_year');
-        }
-
-        return $years;
     }
 
     /**

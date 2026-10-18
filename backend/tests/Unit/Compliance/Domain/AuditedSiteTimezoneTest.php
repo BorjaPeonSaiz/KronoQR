@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezoneChange;
+use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezoneReview;
 use App\Modules\Compliance\Domain\ValueObject\RecordedSiteTimezoneChange;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancyKind;
@@ -79,9 +80,9 @@ function zonaAuditadaCambio(int $id, string $from, string $to, bool $firmado, bo
     ], $conRegistro);
 }
 
-function zonaAuditadaFila(string $from, string $to, string $cuando = '2026-10-18T09:00:00Z'): RecordedSiteTimezoneChange
+function zonaAuditadaFila(string $from, string $to, string $cuando = '2026-10-18T09:00:00Z', int $id = 1): RecordedSiteTimezoneChange
 {
-    return new RecordedSiteTimezoneChange($from, $to, new DateTimeImmutable($cuando));
+    return new RecordedSiteTimezoneChange($id, $from, $to, new DateTimeImmutable($cuando));
 }
 
 /**
@@ -177,4 +178,74 @@ it('no coteja las filas de la traza de un año cuya auditoria ya se purgo: las c
     expect($evaluacion->unverifiableChanges)->toBe(1)
         ->and($evaluacion->unverifiableTimezone)->toBeFalse()
         ->and(array_map(static fn (WorkRecordDiscrepancy $d): string => $d->fields[0], $evaluacion->discrepancies))->toBe(['site_timezone_changes']);
+})->group('RN-23', 'RL-04');
+
+// --- Linea base y revisiones (segunda revision del bloque 2) ---------------------
+
+it('cuenta como historico, y no denuncia, un cambio sin firma anterior a la linea base', function (): void {
+    // Hasta la 2.2.1 el panel cambiaba la zona con fichajes hechos.
+    $site = new AuditedSiteTimezone(1, 'Atlantic/Canary', 9, 'Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false),
+    ], [], [], 9);
+
+    $evaluacion = $site->assess([]);
+
+    expect($evaluacion->discrepancies)->toBe([])
+        ->and($evaluacion->unverifiableChanges)->toBe(1);
+
+    // El mismo asiento despues de la linea base si es discrepancia.
+    $despues = new AuditedSiteTimezone(1, 'Atlantic/Canary', 9, 'Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false),
+    ], [], [], 8);
+
+    expect(array_map(static fn (WorkRecordDiscrepancy $d): string => $d->fields[0], $despues->assess([])->discrepancies))->toBe(['correction']);
+})->group('RN-23', 'RL-04');
+
+it('no usa una correccion firmada anterior a la linea base para justificar una fila de la traza', function (): void {
+    $site = new AuditedSiteTimezone(1, 'Atlantic/Canary', 9, 'Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', true),
+    ], [zonaAuditadaFila('Europe/Madrid', 'Atlantic/Canary', '2026-10-18T09:00:00Z', 4)], [], 9);
+
+    $discrepancias = $site->assess([])->discrepancies;
+
+    expect($discrepancias)->toHaveCount(1)
+        ->and($discrepancias[0]->fields)->toBe(['site_timezone_changes'])
+        ->and($discrepancias[0]->siteTimezoneChangeId)->toBe(4)
+        ->and($discrepancias[0]->describe())->toBe('sites #1 · site_timezone_differs_from_audit · site_timezone_changes #4');
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('saca de las pendientes lo revisado, y la cuenta como revisada', function (): void {
+    $site = new AuditedSiteTimezone(1, 'Atlantic/Canary', 9, 'Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false),
+    ], [zonaAuditadaFila('Atlantic/Canary', 'Europe/Lisbon', '2026-10-18T09:00:00Z', 4)], [
+        AuditedSiteTimezoneReview::fromEntry(20, ['reviewed_audit_entry_id' => 9]),
+        AuditedSiteTimezoneReview::fromEntry(21, ['reviewed_site_timezone_change_id' => 4]),
+    ]);
+
+    $evaluacion = $site->assess([]);
+
+    expect($evaluacion->discrepancies)->toBe([])
+        ->and($evaluacion->reviewed)->toBe(2)
+        ->and($site->reviewable([]))->toBe([]);
+})->group('RN-23', 'RL-04');
+
+it('no da por revisado un asiento con una revision anterior a el ni con otra fila', function (): void {
+    $site = new AuditedSiteTimezone(1, 'Atlantic/Canary', 9, 'Atlantic/Canary', [
+        zonaAuditadaCambio(9, 'Europe/Madrid', 'Atlantic/Canary', false),
+    ], [zonaAuditadaFila('Atlantic/Canary', 'Europe/Lisbon', '2026-10-18T09:00:00Z', 4)], [
+        AuditedSiteTimezoneReview::fromEntry(5, ['reviewed_audit_entry_id' => 9]),
+        AuditedSiteTimezoneReview::fromEntry(21, ['reviewed_site_timezone_change_id' => 99]),
+        AuditedSiteTimezoneReview::fromEntry(22, ['reviewed_site_timezone_change_id' => '4']),
+    ]);
+
+    expect($site->assess([])->reviewed)->toBe(0)
+        ->and(array_map(static fn (WorkRecordDiscrepancy $d): string => $d->fields[0], $site->reviewable([])))
+        ->toBe(['correction', 'site_timezone_changes']);
+})->group('RN-23', 'RL-04');
+
+it('no ofrece revisar la zona actual: se devuelve por el producto', function (): void {
+    $site = AuditedSiteTimezone::fromEntry(1, 'Europe/Lisbon', 42, ['new_value' => ['timezone' => 'Atlantic/Canary']]);
+
+    expect($site->assess([])->discrepancies)->toHaveCount(1)
+        ->and($site->reviewable([]))->toBe([]);
 })->group('RN-23', 'RL-04');

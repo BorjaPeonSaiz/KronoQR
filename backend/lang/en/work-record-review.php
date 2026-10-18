@@ -24,4 +24,12 @@ return [
     'explains' => 'It also explains again deletions of work days before :cutoff at site :site.',
     'explains_nothing' => 'It explains no deletion: its defects (:violations) are not only the retention period.',
 
+    'site_change_not_pending' => ':target is not a pending site time zone discrepancy: a site_timezone_changes row without its signed entry (change:<id>) or an unsigned site.updated (audit:<id>). The current time zone is not reviewed: it is set back through the product. Nothing was written.',
+    'site_change_already_reviewed' => ':target was already reviewed. A review is not repeated or amended; anything else belongs in the incident report.',
+    'site_change_incompatible' => '--acknowledge-site-change cannot be combined with --full, --days or --acknowledge: either reconcile or review one thing.',
+    'invalid_site_change' => '--acknowledge-site-change must be change:<id> (a site_timezone_changes row) or audit:<id> (a site.updated entry); ":value" is not. Nothing was written.',
+    'site_change_missing_options' => 'To mark :target as reviewed, --reason and --responsible are required. Nothing was written.',
+    'site_change_preview' => 'Pending discrepancy :target of site :site.',
+    'site_change_done' => 'Entry :review written: :target is now reviewed and no longer counted as pending.',
+
 ];

@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Console;
 
 use App\Modules\Compliance\Application\Command\ReviewOutOfBoundsPurgeCommand;
+use App\Modules\Compliance\Application\Command\ReviewSiteTimezoneDiscrepancyCommand;
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
+use App\Modules\Compliance\Application\UseCase\ReviewSiteTimezoneDiscrepancy;
 use App\Modules\Compliance\Domain\Exception\PurgeReviewRejected;
+use App\Modules\Compliance\Domain\Exception\SiteTimezoneReviewRejected;
+use App\Modules\Compliance\Domain\ValueObject\SiteTimezoneReviewTarget;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationResult;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
@@ -47,15 +51,22 @@ final class ReconcileWorkRecordCommand extends Command
         {--chunk=500 : Filas por lote. Solo afecta a la memoria, no al resultado}
         {--acknowledge= : Id del asiento retention.purge_executed que se da por revisado. No concilia: escribe el asiento de revision}
         {--reason= : Motivo de la revision, de 10 a 1000 caracteres. Obligatorio con --acknowledge}
-        {--responsible= : Id de la cuenta de gestion activa que responde de la revision. Obligatorio con --acknowledge}';
+        {--acknowledge-site-change= : Discrepancia de la zona del centro que se da por revisada: change:<id> (fila de site_timezone_changes) o audit:<id> (site.updated sin firma). No concilia}
+        {--responsible= : Id de la cuenta de gestion activa que responde de la revision. Obligatorio con --acknowledge y --acknowledge-site-change}';
 
     /** Tramos que se detallan en el log tecnico. Ver `handle()`. */
     private const int LOGGED_ROWS = 50;
 
     protected $description = 'Concilia shift_entries con sus asientos de audit_log y alerta ante cualquier discrepancia (ADR-057)';
 
-    public function handle(ReconcileWorkRecordWithAudit $reconcile, ReviewOutOfBoundsPurge $review): int
+    public function handle(ReconcileWorkRecordWithAudit $reconcile, ReviewOutOfBoundsPurge $review, ReviewSiteTimezoneDiscrepancy $siteReview): int
     {
+        $siteChange = $this->stringOption('acknowledge-site-change');
+
+        if ($siteChange !== null) {
+            return $this->acknowledgeSiteChange($siteReview, $siteChange);
+        }
+
         $acknowledge = $this->stringOption('acknowledge');
 
         if ($acknowledge !== null) {
@@ -80,16 +91,7 @@ final class ReconcileWorkRecordCommand extends Command
             ? 'registro completo'
             : 'ultimos '.$days.' dias';
 
-        if ($result->reviewedPurges > 0) {
-            $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
-        }
-
-        // RN-23: lo que no se ha podido comparar con ningun asiento. Informa,
-        // no falla: no es una discrepancia.
-        if ($result->unverifiableSiteTimezones > 0 || $result->unverifiableSiteTimezoneChanges > 0) {
-            $this->line('zona del centro no verificable: '.$result->unverifiableSiteTimezones.' centro(s) sin asiento site.*, '
-                .$result->unverifiableSiteTimezoneChanges.' cambio(s) de zona anteriores a la auditoria conservada (no cuentan)');
-        }
+        $this->printNotCounted($result);
 
         if ($result->isConsistent()) {
             $this->info('Registro y auditoria cuadran ('.$coverage.'): '.$result->entriesChecked.' tramos conciliados.');
@@ -101,6 +103,28 @@ final class ReconcileWorkRecordCommand extends Command
         $this->printMismatch($result, $coverage);
 
         return self::FAILURE;
+    }
+
+    /**
+     * Lo que la pasada ha visto y no cuenta como discrepancia: lo revisado y
+     * lo no verificable. Informa, no falla.
+     */
+    private function printNotCounted(WorkRecordReconciliationResult $result): void
+    {
+        if ($result->reviewedPurges > 0) {
+            $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
+        }
+
+        if ($result->reviewedSiteTimezoneDiscrepancies > 0) {
+            $this->line('discrepancias de la zona del centro revisadas: '.$result->reviewedSiteTimezoneDiscrepancies.' (no cuentan)');
+        }
+
+        // RN-23: lo que no se ha podido comparar con ningun asiento. Informa,
+        // no falla: no es una discrepancia.
+        if ($result->unverifiableSiteTimezones > 0 || $result->unverifiableSiteTimezoneChanges > 0) {
+            $this->line('zona del centro no verificable: '.$result->unverifiableSiteTimezones.' centro(s) sin asiento site.*, '
+                .$result->unverifiableSiteTimezoneChanges.' cambio(s) de zona anteriores a la auditoria conservada o a la linea base (no cuentan)');
+        }
     }
 
     /**
@@ -122,6 +146,7 @@ final class ReconcileWorkRecordCommand extends Command
                     'shift_entry_uuid' => $discrepancy->shiftEntryUuid,
                     // Solo en `site_timezone_differs_from_audit` (RN-23).
                     'site_id' => $discrepancy->siteId,
+                    'site_timezone_change_id' => $discrepancy->siteTimezoneChangeId,
                     'kind' => $discrepancy->kind->value,
                     'columns' => $discrepancy->fields,
                     'audit_entry_id' => $discrepancy->auditEntryId,
@@ -224,6 +249,88 @@ final class ReconcileWorkRecordCommand extends Command
 
         $this->info(__('work-record-review.done', ['id' => $outcome->purgeAuditEntryId, 'review' => $outcome->reviewAuditEntryId]));
         $this->printReview($purgeId, $outcome->violations, $outcome->explainsDeletions, $outcome->cutoffDate, $outcome->siteId);
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * `--acknowledge-site-change=change:<id>|audit:<id>`: da por revisada una
+     * discrepancia de la zona del centro (RN-23, bloque 2 de la 2.3.0). No
+     * concilia. Mismos codigos que `--acknowledge`:
+     *
+     * - con `--full`, `--days` o `--acknowledge`, o un objetivo o un
+     *   `--responsible` mal escritos: 2, sin hacer nada;
+     * - `--responsible` que no es una cuenta activa con rol admin o rrhh: 2,
+     *   sin escribir (tambien en la vista previa);
+     * - sin `--reason` o sin `--responsible`: vista previa y 2, sin escribir;
+     * - no es una discrepancia pendiente o ya esta revisada: 1;
+     * - escrita: 0.
+     *
+     * El motivo nunca va al log tecnico (regla dura 21).
+     */
+    /**
+     * Lo que se pide revisar, o `INVALID` si se combina con otra cosa o no es
+     * `change:<id>` ni `audit:<id>`.
+     */
+    private function siteChangeTarget(string $value): SiteTimezoneReviewTarget|int
+    {
+        if ((bool) $this->option('full') || $this->stringOption('days') !== null || $this->stringOption('acknowledge') !== null) {
+            $this->error(__('work-record-review.site_change_incompatible'));
+
+            return self::INVALID;
+        }
+
+        $target = SiteTimezoneReviewTarget::parse($value);
+
+        if ($target === null) {
+            $this->error(__('work-record-review.invalid_site_change', ['value' => $value]));
+
+            return self::INVALID;
+        }
+
+        return $target;
+    }
+
+    private function acknowledgeSiteChange(ReviewSiteTimezoneDiscrepancy $review, string $value): int
+    {
+        $target = $this->siteChangeTarget($value);
+
+        if (\is_int($target)) {
+            return $target;
+        }
+
+        $reason = $this->stringOption('reason');
+        $responsibleOption = $this->stringOption('responsible');
+        $responsible = $responsibleOption === null ? null : ConsoleIds::positive($responsibleOption);
+
+        if ($responsibleOption !== null && $responsible === null) {
+            $this->error(__('work-record-review.invalid_responsible', ['value' => $responsibleOption]));
+
+            return self::INVALID;
+        }
+
+        try {
+            if ($reason === null || $responsible === null) {
+                $site = $review->preview($target, $responsible);
+                $this->line('  '.__('work-record-review.site_change_preview', ['target' => $target->label(), 'site' => $site]));
+                $this->error(__('work-record-review.site_change_missing_options', ['target' => $target->label()]));
+
+                return self::INVALID;
+            }
+
+            $reviewId = $review->handle(new ReviewSiteTimezoneDiscrepancyCommand($target, $reason, $responsible));
+        } catch (SiteTimezoneReviewRejected $rejected) {
+            $this->error(__($rejected->translationKey, $rejected->parameters));
+
+            return $rejected->translationKey === SiteTimezoneReviewRejected::RESPONSIBLE_NOT_ACTIVE ? self::INVALID : self::FAILURE;
+        }
+
+        Log::warning('work_record_site_timezone_discrepancy_reviewed', [
+            'target' => $target->label(),
+            'review_entry_id' => $reviewId,
+        ]);
+
+        $this->info(__('work-record-review.site_change_done', ['target' => $target->label(), 'review' => $reviewId]));
 
         return self::SUCCESS;
     }

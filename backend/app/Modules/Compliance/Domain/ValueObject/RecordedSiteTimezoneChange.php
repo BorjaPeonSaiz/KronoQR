@@ -17,6 +17,8 @@ use DateTimeImmutable;
 final readonly class RecordedSiteTimezoneChange
 {
     public function __construct(
+        /** `site_timezone_changes.id`: lo que nombran la discrepancia y su revision. */
+        public int $id,
         public string $from,
         public string $to,
         public DateTimeImmutable $changedAt,

@@ -50,6 +50,12 @@ final readonly class WorkRecordReconciliationResult
          * (ADR-027): no hay asiento con que cotejarlas. Tampoco es discrepancia.
          */
         public int $unverifiableSiteTimezoneChanges = 0,
+        /**
+         * Discrepancias de la zona del centro que una persona dio por revisadas
+         * (`site.timezone_discrepancy_reviewed`). Como las purgas revisadas, no
+         * son discrepancias: se publican aparte y tienen su propia alerta.
+         */
+        public int $reviewedSiteTimezoneDiscrepancies = 0,
     ) {}
 
     /** Revisadas que no explican ningun borrado. */

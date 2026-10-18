@@ -27,8 +27,8 @@ use DateTimeZone;
  *   huella de la funcion llamada fuera de la orden, tambien de un A→B→A que
  *   deja la zona como estaba;
  * - `correction`: un `site.updated` que cambia la zona despues del primer
- *   tramo sin la firma de una correccion: el panel no puede escribirlo (`409`),
- *   asi que lo escribio otro.
+ *   tramo sin la firma de una correccion. **Desde la 2.2.1** el panel no puede
+ *   escribirlo (`409`), asi que lo escribio otro; antes si podia.
  *
  * **Una sola clase y no tres** porque son el mismo hecho —la historia de la
  * zona del centro no cuadra con su auditoria—, se investigan con la misma
@@ -43,10 +43,23 @@ use DateTimeZone;
  * - Una fila de la traza **de un año cuya particion de `audit_log` ya se
  *   purgo** (el ultimo año sellado o antes): su asiento, si lo hubo, ya no
  *   esta.
+ * - Un `site.updated` sin firma **anterior a la linea base**
+ *   (`site_timezone_audit_baseline`, el ultimo asiento al aplicar la migracion
+ *   de la 2.3.0). Hasta la 2.2.1 el panel cambiaba la zona con fichajes, y una
+ *   instalacion que viene de la 2.1.0 o la 2.2.0 tiene esos asientos
+ *   legitimos. Por lo mismo, una correccion firmada anterior a la linea base
+ *   (las de la 2.2.1, que no dejaban fila) no justifica una fila de la traza.
  *
- * Ninguno de los dos se denuncia: se cuentan como **no verificables**
+ * Ninguno se denuncia: se cuentan como **no verificables**
  * ({@see SiteTimezoneAssessment}) para que la comprobacion no se apague en
  * silencio.
+ *
+ * ## Lo revisado
+ *
+ * Una discrepancia de la traza o de un asiento sin firma se puede dar por
+ * revisada (`site.timezone_discrepancy_reviewed`, {@see AuditedSiteTimezoneReview}):
+ * deja de ser pendiente y se cuenta como revisada, que tiene su propia alerta.
+ * La de la zona actual no: se resuelve devolviendo la zona por el producto.
  *
  * Lleva el identificador del centro y el del asiento, **nunca la zona**, en lo
  * que sale hacia el log ({@see WorkRecordDiscrepancy}).
@@ -56,6 +69,7 @@ final readonly class AuditedSiteTimezone
     /**
      * @param  list<AuditedSiteTimezoneChange>  $auditedChanges  Los `site.updated` del centro, en el orden de la cadena.
      * @param  list<RecordedSiteTimezoneChange>  $recordedChanges  Las filas de `site_timezone_changes` del centro.
+     * @param  list<AuditedSiteTimezoneReview>  $reviews  Los `site.timezone_discrepancy_reviewed` del centro.
      */
     public function __construct(
         public int $siteId,
@@ -67,12 +81,20 @@ final readonly class AuditedSiteTimezone
         public ?string $auditedTimezone,
         public array $auditedChanges = [],
         public array $recordedChanges = [],
+        public array $reviews = [],
+        /**
+         * La linea base (`site_timezone_audit_baseline`): el ultimo asiento al
+         * aplicar la migracion de la 2.3.0. Lo que hay hasta ella se escribio
+         * con las reglas de antes. `null` si no hay linea base: se juzga todo.
+         */
+        public ?int $auditBaseline = null,
     ) {}
 
     /**
      * @param  array<array-key, mixed>|null  $payload  El del ultimo asiento, o `null` si no hay
      * @param  list<AuditedSiteTimezoneChange>  $auditedChanges
      * @param  list<RecordedSiteTimezoneChange>  $recordedChanges
+     * @param  list<AuditedSiteTimezoneReview>  $reviews
      */
     public static function fromEntry(
         int $siteId,
@@ -81,6 +103,8 @@ final readonly class AuditedSiteTimezone
         ?array $payload,
         array $auditedChanges = [],
         array $recordedChanges = [],
+        array $reviews = [],
+        ?int $auditBaseline = null,
     ): self {
         $newValue = $payload['new_value'] ?? null;
         $timezone = \is_array($newValue) ? ($newValue['timezone'] ?? null) : null;
@@ -92,6 +116,8 @@ final readonly class AuditedSiteTimezone
             \is_string($timezone) ? $timezone : null,
             $auditedChanges,
             $recordedChanges,
+            $reviews,
+            $auditBaseline,
         );
     }
 
@@ -110,54 +136,85 @@ final readonly class AuditedSiteTimezone
     }
 
     /**
-     * Las tres comprobaciones y lo que queda sin verificar.
+     * Las tres comprobaciones, lo revisado y lo que queda sin verificar.
      *
      * @param  list<int>  $sealedAuditYears  Años de `audit_log` purgados con su ancla (ADR-027).
      */
     public function assess(array $sealedAuditYears): SiteTimezoneAssessment
     {
         $current = $this->discrepancy();
-        [$unmatched, $unverifiableChanges] = $this->unmatchedChanges($sealedAuditYears);
+        [$unsigned, $historical, $reviewedUnsigned] = $this->unsignedChanges();
+        [$unmatched, $unverifiableRows, $reviewedRows] = $this->unmatchedChanges($sealedAuditYears);
 
         return new SiteTimezoneAssessment(
             [
                 ...($current instanceof WorkRecordDiscrepancy ? [$current] : []),
-                ...$this->unsignedChanges(),
+                ...$unsigned,
                 ...$unmatched,
             ],
             $this->auditEntryId === null,
-            $unverifiableChanges,
+            $historical + $unverifiableRows,
+            $reviewedUnsigned + $reviewedRows,
         );
     }
 
     /**
-     * Los `site.updated` que cambian la zona con registro horario sin la firma
-     * de la correccion: el panel no los puede escribir.
+     * Las discrepancias que se pueden dar por revisadas (las de la traza y las
+     * de un asiento sin firma), sin las ya revisadas. Lo que lee
+     * `compliance:reconcile-work-record --acknowledge-site-change` para saber
+     * si lo que se pide revisar sigue pendiente.
      *
+     * @param  list<int>  $sealedAuditYears
      * @return list<WorkRecordDiscrepancy>
+     */
+    public function reviewable(array $sealedAuditYears): array
+    {
+        return array_values(array_filter(
+            $this->assess($sealedAuditYears)->discrepancies,
+            static fn (WorkRecordDiscrepancy $discrepancy): bool => $discrepancy->fields !== ['timezone'],
+        ));
+    }
+
+    /**
+     * Los `site.updated` que cambian la zona con registro horario sin la firma
+     * de la correccion. Desde la 2.2.1 el panel no los puede escribir; los
+     * anteriores a la linea base son de versiones en las que si podia (RN-23
+     * llego en la 2.2.1) y se cuentan como no verificables.
+     *
+     * @return array{0: list<WorkRecordDiscrepancy>, 1: int, 2: int}
      */
     private function unsignedChanges(): array
     {
         $found = [];
+        $historical = 0;
+        $reviewed = 0;
 
         foreach ($this->auditedChanges as $change) {
-            if ($change->changesTimezone() && $change->afterWorkRecord && ! $change->signed) {
+            if (! $change->changesTimezone() || ! $change->afterWorkRecord || $change->signed) {
+                continue;
+            }
+
+            if ($this->beforeBaseline($change->auditEntryId)) {
+                $historical++;
+            } elseif ($this->reviewedEntry($change->auditEntryId)) {
+                $reviewed++;
+            } else {
                 $found[] = $this->discrepancyOf('correction', $change->auditEntryId);
             }
         }
 
-        return $found;
+        return [$found, $historical, $reviewed];
     }
 
     /**
      * Cada fila de la traza, con su asiento firmado. Se empareja por «de -> a»
-     * y se cuenta: dos A->B necesitan dos asientos A->B. Los asientos firmados
-     * sin fila (correcciones de la 2.2.1, anteriores a la traza) no se
-     * denuncian. Las filas de un año cuya auditoria ya se purgo no se pueden
-     * cotejar y se cuentan aparte.
+     * y se cuenta: dos A->B necesitan dos asientos A->B. Solo cuentan los
+     * asientos posteriores a la linea base: una correccion de la 2.2.1, sin
+     * fila, no justifica una fila de hoy. Las filas de un año cuya auditoria ya
+     * se purgo no se pueden cotejar y se cuentan aparte.
      *
      * @param  list<int>  $sealedAuditYears
-     * @return array{0: list<WorkRecordDiscrepancy>, 1: int}
+     * @return array{0: list<WorkRecordDiscrepancy>, 1: int, 2: int}
      */
     private function unmatchedChanges(array $sealedAuditYears): array
     {
@@ -165,6 +222,7 @@ final readonly class AuditedSiteTimezone
         $signed = $this->signedChangeCounts();
         $found = [];
         $unverifiable = 0;
+        $reviewed = 0;
 
         foreach ($this->recordedChanges as $row) {
             // Las particiones de `audit_log` son por año UTC (ADR-027).
@@ -172,16 +230,18 @@ final readonly class AuditedSiteTimezone
                 $unverifiable++;
             } elseif (($signed[$row->key()] ?? 0) > 0) {
                 $signed[$row->key()]--;
+            } elseif ($this->reviewedChange($row->id)) {
+                $reviewed++;
             } else {
-                $found[] = $this->discrepancyOf('site_timezone_changes', null);
+                $found[] = $this->discrepancyOf('site_timezone_changes', null, $row->id);
             }
         }
 
-        return [$found, $unverifiable];
+        return [$found, $unverifiable, $reviewed];
     }
 
     /**
-     * Cuantos asientos firmados hay de cada «de -> a».
+     * Cuantos asientos firmados posteriores a la linea base hay de cada «de -> a».
      *
      * @return array<string, int>
      */
@@ -190,7 +250,7 @@ final readonly class AuditedSiteTimezone
         $signed = [];
 
         foreach ($this->auditedChanges as $change) {
-            if ($change->signed && $change->changesTimezone()) {
+            if ($change->signed && $change->changesTimezone() && ! $this->beforeBaseline($change->auditEntryId)) {
                 $signed[$change->key()] = ($signed[$change->key()] ?? 0) + 1;
             }
         }
@@ -198,7 +258,34 @@ final readonly class AuditedSiteTimezone
         return $signed;
     }
 
-    private function discrepancyOf(string $field, ?int $auditEntryId): WorkRecordDiscrepancy
+    private function beforeBaseline(int $auditEntryId): bool
+    {
+        return $this->auditBaseline !== null && $auditEntryId <= $this->auditBaseline;
+    }
+
+    private function reviewedEntry(int $auditEntryId): bool
+    {
+        foreach ($this->reviews as $review) {
+            if ($review->reviewsEntry($auditEntryId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function reviewedChange(int $changeId): bool
+    {
+        foreach ($this->reviews as $review) {
+            if ($review->reviewsChange($changeId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function discrepancyOf(string $field, ?int $auditEntryId, ?int $changeId = null): WorkRecordDiscrepancy
     {
         return new WorkRecordDiscrepancy(
             shiftEntryUuid: null,
@@ -206,6 +293,7 @@ final readonly class AuditedSiteTimezone
             fields: [$field],
             auditEntryId: $auditEntryId,
             siteId: $this->siteId,
+            siteTimezoneChangeId: $changeId,
         );
     }
 }

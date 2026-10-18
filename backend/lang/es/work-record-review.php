@@ -24,4 +24,12 @@ return [
     'explains' => 'Además vuelve a explicar los borrados de jornadas anteriores a :cutoff en el centro :site.',
     'explains_nothing' => 'No explica ningún borrado: sus defectos (:violations) no son solo el plazo.',
 
+    'site_change_not_pending' => ':target no es una discrepancia pendiente de la zona del centro: una fila de site_timezone_changes sin su asiento firmado (change:<id>) o un site.updated sin firma (audit:<id>). La de la zona actual no se revisa: se devuelve la zona por el producto. No se ha escrito nada.',
+    'site_change_already_reviewed' => ':target ya está revisada. Una revisión no se repite ni se corrige: lo que haya que añadir va al informe del incidente.',
+    'site_change_incompatible' => '--acknowledge-site-change no se combina con --full, --days ni --acknowledge: o se concilia o se revisa una cosa.',
+    'invalid_site_change' => '--acknowledge-site-change tiene que ser change:<id> (fila de site_timezone_changes) o audit:<id> (asiento site.updated); «:value» no lo es. No se ha escrito nada.',
+    'site_change_missing_options' => 'Para dar por revisada :target faltan --reason y --responsible. No se ha escrito nada.',
+    'site_change_preview' => 'Discrepancia pendiente :target del centro :site.',
+    'site_change_done' => 'Asiento :review escrito: :target queda revisada y deja de contarse como pendiente.',
+
 ];

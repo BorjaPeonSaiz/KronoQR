@@ -29,6 +29,8 @@ final readonly class WorkRecordDiscrepancy
         public array $fields = [],
         public ?int $auditEntryId = null,
         public ?int $siteId = null,
+        /** Solo en la de la traza: la fila de `site_timezone_changes`. */
+        public ?int $siteTimezoneChangeId = null,
     ) {}
 
     public function describe(): string
@@ -41,6 +43,10 @@ final readonly class WorkRecordDiscrepancy
 
         if ($this->fields !== []) {
             $line .= ' · '.implode(', ', $this->fields);
+        }
+
+        if ($this->siteTimezoneChangeId !== null) {
+            $line .= ' #'.$this->siteTimezoneChangeId;
         }
 
         if (($this->shiftEntryUuid !== null || $this->siteId !== null) && $this->auditEntryId !== null) {

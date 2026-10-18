@@ -105,6 +105,7 @@ final readonly class ReconcileWorkRecordWithAudit
             'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
             'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
             'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
+            'reviewed_site_timezone_discrepancies' => $result->reviewedSiteTimezoneDiscrepancies,
         ]);
 
         return $result;
@@ -118,6 +119,7 @@ final readonly class ReconcileWorkRecordWithAudit
         $checked = 0;
         $unverifiableSites = 0;
         $unverifiableChanges = 0;
+        $reviewedSiteTimezones = 0;
         $boundary = WorkRecordPurgeBoundary::none();
 
         foreach ($this->source->read($window, $chunkSize) as $item) {
@@ -136,6 +138,7 @@ final readonly class ReconcileWorkRecordWithAudit
                     $found = [...$found, ...$assessment->discrepancies];
                     $unverifiableSites += $assessment->unverifiableTimezone ? 1 : 0;
                     $unverifiableChanges += $assessment->unverifiableChanges;
+                    $reviewedSiteTimezones += $assessment->reviewed;
                 }
             } else {
                 $checked++;
@@ -165,6 +168,7 @@ final readonly class ReconcileWorkRecordWithAudit
             reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
             unverifiableSiteTimezones: $unverifiableSites,
             unverifiableSiteTimezoneChanges: $unverifiableChanges,
+            reviewedSiteTimezoneDiscrepancies: $reviewedSiteTimezones,
         );
     }
 

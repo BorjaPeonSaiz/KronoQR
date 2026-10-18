@@ -219,7 +219,7 @@ it('cuenta aparte la zona que no se puede verificar, sin hacer la pasada incoher
     $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([], [2021], [], [
         AuditedSiteTimezone::fromEntry(1, 'Europe/Madrid', null, null),
         AuditedSiteTimezone::fromEntry(2, 'Atlantic/Canary', 42, ['new_value' => ['timezone' => 'Atlantic/Canary']], [], [
-            new RecordedSiteTimezoneChange('Europe/Madrid', 'Atlantic/Canary', new DateTimeImmutable('2021-06-01T10:00:00Z')),
+            new RecordedSiteTimezoneChange(3, 'Europe/Madrid', 'Atlantic/Canary', new DateTimeImmutable('2021-06-01T10:00:00Z')),
         ]),
     ]));
 

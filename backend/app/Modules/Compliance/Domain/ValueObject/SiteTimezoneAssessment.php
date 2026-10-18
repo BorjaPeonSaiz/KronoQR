@@ -24,7 +24,9 @@ final readonly class SiteTimezoneAssessment
         public array $discrepancies,
         /** La zona actual no tiene asiento con el que compararla. */
         public bool $unverifiableTimezone,
-        /** Filas de la traza anteriores a la auditoria que se conserva. */
+        /** Filas de la traza anteriores a la auditoria que se conserva, y cambios sin firma anteriores a la linea base. */
         public int $unverifiableChanges,
+        /** Discrepancias que una persona dio por revisadas: no son pendientes. */
+        public int $reviewed = 0,
     ) {}
 }

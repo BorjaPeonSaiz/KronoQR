@@ -17,6 +17,8 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
+use App\Modules\Workforce\Application\UseCase\UpdateSiteHandler;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -817,3 +819,225 @@ it('dice que la zona no se puede verificar si el centro no tiene ningun asiento,
         ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone"} 1')
         ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone_change"} 0');
 })->group('RN-23', 'RL-04');
+
+it('da por buena la zona cambiada desde el panel antes del primer tramo', function (): void {
+    // RN-23: sin registro horario el PATCH /site es el camino normal. Sus
+    // `site.updated` no llevan firma y van antes del primer tramo en la cadena.
+    WorkforceFixtures::site();
+    app(UpdateSiteHandler::class)->handle(new UpdateSiteCommand(timezone: 'Atlantic/Canary'));
+    app(UpdateSiteHandler::class)->handle(new UpdateSiteCommand(timezone: 'Europe/Madrid'));
+
+    $escenario = registroAuditadoEscenario();
+    registroAuditadoLegitimo($escenario);
+
+    $pasada = registroAuditadoConciliar(true);
+
+    expect($pasada['code'])->toBe(0, $pasada['output'])
+        ->and($pasada['output'])->not->toContain('site_timezone_differs_from_audit')
+        ->and($pasada['output'])->not->toContain('no verificable');
+})->group('RN-23', 'RL-04');
+
+it('no denuncia lo anterior a la linea base, y no usa una correccion de entonces para justificar una fila de hoy', function (): void {
+    // Una instalacion que viene de la 2.1.0 o la 2.2.0: el panel cambiaba la
+    // zona con fichajes hechos, sin firma, y la 2.2.1 corregia por consola sin
+    // dejar fila en la traza. La migracion de la 2.3.0 fija la linea base en
+    // el ultimo asiento: lo anterior es historia, no discrepancia.
+    $escenario = registroAuditadoEscenario();
+    registroAuditadoLegitimo($escenario);
+
+    DB::transaction(static function () use ($escenario): void {
+        $asientos = [
+            // El panel de la 2.2.0, con fichajes hechos y sin firma.
+            ['previous_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid'], 'new_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Lisbon']],
+            ['previous_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Lisbon'], 'new_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid']],
+            // Una correccion de la 2.2.1, firmada y sin fila en la traza.
+            [
+                'previous_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid'], 'new_value' => ['name' => 'Hotel', 'timezone' => 'Atlantic/Canary'],
+                'via' => 'console', 'reason' => 'Se puso Madrid y era Canarias', 'shift_entry_count' => 3, 'responsible_user_id' => $escenario['autor'],
+            ],
+            ['previous_value' => ['name' => 'Hotel', 'timezone' => 'Atlantic/Canary'], 'new_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid']],
+        ];
+
+        foreach ($asientos as $payload) {
+            resolve(RecordAuditEntry::class)->handle(new RecordAuditEntryCommand(
+                actor: AuditActor::system(),
+                action: AuditAction::SiteUpdated,
+                subject: AuditSubject::of('site', $escenario['site']),
+                payload: AuditPayload::of($payload),
+            ));
+        }
+    });
+
+    // La linea base que habria fijado la migracion al actualizar: el ultimo
+    // asiento. La escribe el rol propietario; el vaciado la restaura.
+    SchemaOwner::connection()->update('UPDATE site_timezone_audit_baseline SET audit_log_id = (SELECT max(id) FROM audit_log)');
+
+    $limpia = registroAuditadoConciliar(true);
+
+    // Tres cambios sin firma tras el primer tramo, anteriores a la linea base.
+    expect($limpia['code'])->toBe(0, $limpia['output'])
+        ->and($limpia['output'])->toContain('zona del centro no verificable: 0 centro(s) sin asiento site.*, 3 cambio(s)');
+
+    // La correccion de la 2.2.1 (Madrid -> Canarias) no justifica una fila de hoy
+    // con el mismo antes y despues.
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Europe/Madrid', 'Atlantic/Canary']);
+
+    /** @var int $fila */
+    $fila = DB::table('site_timezone_changes')->max('id');
+    $pasada = registroAuditadoConciliar(true);
+
+    expect($pasada['code'])->toBe(1, $pasada['output'])
+        ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 2')
+        ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · site_timezone_changes #'.$fila);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+// --- Revisar una discrepancia de la zona (--acknowledge-site-change) ------------
+
+const WORK_RECORD_RECONCILIATION_MOTIVO_ZONA = 'Investigado en el incidente 2026-14: la llamo el equipo de soporte en una prueba.';
+
+/**
+ * @param  array<string, string>  $opciones
+ * @return array{code: int, output: string}
+ */
+function registroAuditadoRevisarZona(array $opciones): array
+{
+    $code = Artisan::call('compliance:reconcile-work-record', $opciones);
+
+    return ['code' => $code, 'output' => Artisan::output()];
+}
+
+function registroAuditadoRevisionesDeZona(): int
+{
+    return DB::table('audit_log')->where('action', 'site.timezone_discrepancy_reviewed')->count();
+}
+
+it('da por revisada una fila de la traza sin firma: sale de las pendientes y se publica como revisada', function (): void {
+    $escenario = registroAuditadoZonaCorregida();
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Europe/Lisbon', 'Atlantic/Canary']);
+
+    /** @var list<int> $filas */
+    $filas = DB::table('site_timezone_changes')->orderBy('id')->pluck('id')->all();
+    $responsable = ManagementUsers::withRole(UserRole::RRHH)->id;
+
+    foreach ([$filas[1], $filas[2]] as $fila) {
+        $revision = registroAuditadoRevisarZona([
+            '--acknowledge-site-change' => 'change:'.$fila,
+            '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+            '--responsible' => (string) $responsable,
+        ]);
+
+        expect($revision['code'])->toBe(0, $revision['output']);
+    }
+
+    /** @var object{actor_id: int|string, subject_type: string, payload: string} $asiento */
+    $asiento = DB::table('audit_log')->where('action', 'site.timezone_discrepancy_reviewed')->orderByDesc('id')->first();
+    $payload = json_decode($asiento->payload, true, 8, JSON_THROW_ON_ERROR);
+    \assert(is_array($payload));
+
+    expect((int) $asiento->actor_id)->toBe($responsable)
+        ->and($asiento->subject_type)->toBe('site')
+        ->and($payload['reviewed_site_timezone_change_id'])->toBe($filas[2])
+        ->and($payload['reason'])->toBe(WORK_RECORD_RECONCILIATION_MOTIVO_ZONA)
+        ->and($payload['responsible_user_id'])->toBe($responsable);
+
+    $pasada = registroAuditadoConciliar();
+
+    expect($pasada['code'])->toBe(0, $pasada['output'])
+        ->and($pasada['output'])->toContain('discrepancias de la zona del centro revisadas: 2 (no cuentan)')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'recent'))
+        ->toContain('work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent"} 2')
+        ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 0');
+
+    // Una revision no se repite.
+    $otra = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'change:'.$filas[1],
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--responsible' => (string) $responsable,
+    ]);
+
+    expect($otra['code'])->toBe(1, $otra['output'])
+        ->and($otra['output'])->toContain('ya está revisada')
+        ->and(registroAuditadoRevisionesDeZona())->toBe(2);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('da por revisado un site.updated sin firma por su asiento', function (): void {
+    $escenario = registroAuditadoZonaCorregida();
+
+    DB::transaction(static function () use ($escenario): void {
+        resolve(RecordAuditEntry::class)->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::system(),
+            action: AuditAction::SiteUpdated,
+            subject: AuditSubject::of('site', $escenario['site']),
+            payload: AuditPayload::of([
+                'previous_value' => ['name' => 'Hotel', 'timezone' => 'Europe/Madrid'],
+                'new_value' => ['name' => 'Hotel', 'timezone' => 'Atlantic/Canary'],
+            ]),
+        ));
+    });
+
+    /** @var int $asiento */
+    $asiento = DB::table('audit_log')->where('action', 'site.updated')->max('id');
+
+    $revision = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'audit:'.$asiento,
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+    ]);
+
+    expect($revision['code'])->toBe(0, $revision['output'])
+        ->and(registroAuditadoConciliar(true)['code'])->toBe(0);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('no deja revisar una discrepancia de la zona a una cuenta sin rol admin ni rrhh', function (UserRole $rol): void {
+    $escenario = registroAuditadoZonaCorregida();
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
+
+    /** @var int $fila */
+    $fila = DB::table('site_timezone_changes')->max('id');
+
+    $revision = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'change:'.$fila,
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--responsible' => (string) ManagementUsers::withRole($rol)->id,
+    ]);
+
+    // Tambien en la vista previa, sin motivo.
+    $previa = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'change:'.$fila,
+        '--responsible' => (string) ManagementUsers::withRole($rol)->id,
+    ]);
+
+    expect($revision['code'])->toBe(2, $revision['output'])
+        ->and($revision['output'])->toContain('rol de administración o de RRHH')
+        ->and($previa['code'])->toBe(2, $previa['output'])
+        ->and(registroAuditadoRevisionesDeZona())->toBe(0);
+})->with([
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
+    'auditor' => [UserRole::AUDITOR],
+])->group('RN-23', 'RS-07');
+
+it('se niega a revisar lo que no es una discrepancia pendiente, y con opciones mal escritas', function (array $opciones, int $codigo, string $texto): void {
+    $escenario = registroAuditadoZonaCorregida();
+
+    /** @var int $fila */
+    $fila = DB::table('site_timezone_changes')->max('id');
+    $opciones = array_map(static fn (string $valor): string => str_replace(':fila', (string) $fila, $valor), $opciones);
+
+    $revision = registroAuditadoRevisarZona([
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--responsible' => (string) ManagementUsers::withRole(UserRole::RRHH)->id,
+        ...$opciones,
+    ]);
+
+    expect($revision['code'])->toBe($codigo, $revision['output'])
+        ->and($revision['output'])->toContain($texto)
+        ->and(registroAuditadoRevisionesDeZona())->toBe(0);
+})->with([
+    // La fila de la correccion de consola tiene su asiento firmado: cuadra.
+    'una fila que cuadra' => [['--acknowledge-site-change' => 'change::fila'], 1, 'no es una discrepancia pendiente'],
+    'una fila que no existe' => [['--acknowledge-site-change' => 'change:999999'], 1, 'no es una discrepancia pendiente'],
+    'sin prefijo' => [['--acknowledge-site-change' => '12'], 2, 'change:<id>'],
+    'con --full' => [['--acknowledge-site-change' => 'change::fila', '--full' => '1'], 2, 'no se combina'],
+    'motivo corto' => [['--acknowledge-site-change' => 'change::fila', '--reason' => 'corto'], 1, 'al menos'],
+])->group('RN-23', 'RS-07');
