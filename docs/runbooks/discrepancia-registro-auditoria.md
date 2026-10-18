@@ -331,7 +331,7 @@ sites #1 · site_timezone_differs_from_audit · correction · audit_log #48510
 | Campo | Qué ha pasado |
 |---|---|
 | `timezone` | La zona de `sites` no es la del último asiento `site.created` o `site.updated` (`new_value.timezone`) |
-| `site_timezone_changes #<id>` | La fila `<id>` de la traza no tiene su `site.updated` firmado (`via: console`, motivo, recuento y cuenta) con el mismo antes y después, posterior a la línea base. Es la función llamada con la credencial de la aplicación sin pasar por la orden; sale también si la zona ya ha vuelto a la de antes (A→B→A) |
+| `site_timezone_changes #<id>` | La fila `<id>` de la traza no tiene **su** `site.updated` firmado: el que la nombra por `site_timezone_change_id` (lo escribe la orden con el id que devuelve la función), con el mismo antes y después, motivo, recuento y cuenta, y posterior a la línea base. Se empareja por identidad: una corrección legítima no tapa la fila de un ataque con el mismo antes y después. Es la función llamada con la credencial de la aplicación sin pasar por la orden; sale también si la zona ya ha vuelto a la de antes (A→B→A) |
 | `correction` | Un `site.updated` que cambia la zona **después del primer tramo** sin esa firma y **posterior a la línea base** de la 2.3.0. Desde la 2.2.1 el panel no lo puede escribir (`409`): alguien lo insertó en `audit_log`. Los anteriores a la línea base (el panel de la 2.1.0 y la 2.2.0 sí cambiaba la zona con fichajes) no se denuncian: cuentan como no verificables |
 
 En los tres casos alguien ha escrito por fuera del producto, y mientras la zona
@@ -370,7 +370,7 @@ marcha guiada, o su asiento se fue con la partición purgada de su año, ADR-027
 no tiene con qué compararse; una fila de la traza de un año cuya auditoría ya
 se purgó tampoco, ni un `site.updated` sin firma anterior a la línea base
 (`site_timezone_audit_baseline`, el último asiento cuando se instaló la 2.3.0).
-La alerta `ZonaDelCentroNoVerificable` es informativa y no notifica. No se denuncian: se cuentan para que se vea que esa parte no
+La alerta `ZonaDelCentroNoVerificable` es informativa, no notifica y solo salta cuando la cifra sube respecto a hace un día. No se denuncian: se cuentan para que se vea que esa parte no
 se ha mirado.
 
 ### 3.1 Dar por revisada una purga no admisible
@@ -496,12 +496,24 @@ docker compose exec -T app php artisan compliance:reconcile-work-record \
 ```
 
 Sale con 2 si la cuenta no puede firmar o algo está mal escrito, con 1 si no es
-una discrepancia pendiente o ya está revisada, y con 0 si escribe. Desde la
-siguiente pasada, la discrepancia sale como `discrepancias de la zona del
-centro revisadas: N` y en `work_record_reconciliation_reviewed_site_timezone_discrepancies`.
-Eso **dispara `DiscrepanciaDeZonaRevisada`** (aviso, seguridad): quien la recibe
-comprueba en `audit_log` que la revisión la firmó quien debía y que el motivo
-cuadra con el incidente. Si nadie la reconoce, trátala como la §1.1.
+una discrepancia pendiente o ya está revisada, y con 0 si escribe. Una
+revisión de una fila solo cuenta si su asiento es **posterior** al último
+asiento que había cuando la fila se escribió (`site_timezone_changes.audit_log_id`):
+no se puede revisar de antemano. Desde la siguiente pasada, la discrepancia sale
+como `discrepancias de la zona del centro revisadas: N de la traza, M de
+asientos sin firma` y en
+`work_record_reconciliation_reviewed_site_timezone_discrepancies{target="change"|"audit"}`.
+Eso dispara una alerta según lo revisado:
+
+- **`CambioDeZonaRevisado`** (crítica, integridad) para una fila de la traza:
+  un cambio de zona que ocurrió por fuera de la orden deja de contarse.
+  Verifica **hoy** con quien firma que lo hizo y que la zona actual es la
+  correcta;
+- **`DiscrepanciaDeZonaRevisada`** (aviso) para un `site.updated` sin firma.
+
+En los dos casos, comprueba en `audit_log` que la revisión la firmó quien
+debía y que el motivo cuadra con el incidente. Si nadie la reconoce, trátala
+como la §1.1.
 
 ### 3.2 Reactivar los triggers: cómo se escribe en el registro a mano
 
