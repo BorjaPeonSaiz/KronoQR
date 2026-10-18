@@ -139,19 +139,49 @@ groups:
 
       #------------------------------------------------------------------------
       # Alguien ha dado por revisada una discrepancia de la zona del centro
-      # (RN-23, bloque 2 de la 2.3.0): una fila de site_timezone_changes sin su
-      # asiento firmado, o un site.updated que cambio la zona sin firma. La
-      # traza es solo-append y la discrepancia, sin salida, sonaria en cada
-      # pasada; la salida es `compliance:reconcile-work-record
+      # (RN-23, bloque 2 de la 2.3.0) con `compliance:reconcile-work-record
       # --acknowledge-site-change`, que escribe site.timezone_discrepancy_reviewed.
-      # Igual que PurgaFueraDeLimitesRevisada, esa salida no puede ser
+      # La traza es solo-append y la discrepancia, sin salida, sonaria en cada
+      # pasada. Igual que PurgaFueraDeLimitesRevisada, esa salida no puede ser
       # silenciosa: con la credencial del runtime tambien se podria escribir el
-      # asiento de revision.
+      # asiento de revision. Dos alertas segun lo revisado:
+      #
+      # - `target="change"`: una fila de la traza sin asiento firmado, es decir,
+      #   un cambio de zona que SI ocurrio por fuera de la orden. Revisarlo con
+      #   un asiento falso es la forma de que la conciliacion deje de verlo:
+      #   critica e inmediata, como PurgaRevisadaQueExplicaBorrados.
+      # - `target="audit"`: un site.updated sin firma, un asiento y no un
+      #   cambio. Aviso.
       #------------------------------------------------------------------------
+      - alert: CambioDeZonaRevisado
+        expr: >-
+          max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="change"})
+            > (max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="change"} offset 1d) or vector(0))
+        for: 0m
+        labels:
+          severity: critical
+          integrity: "true"
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "Se ha dado por revisado un cambio de la zona del centro hecho por fuera de la orden"
+          description: >-
+            Alguien ha ejecutado compliance:reconcile-work-record
+            --acknowledge-site-change sobre una fila de site_timezone_changes
+            sin asiento firmado ({{ $value }} en la ultima pasada diaria): un
+            cambio de la zona del centro que ocurrio por fuera de la orden de
+            consola deja de contarse como discrepancia. Verifica HOY con la
+            persona que firma (responsible) que lo hizo ella, contrasta quien
+            tenia acceso por shell al servidor y que la zona actual es la
+            correcta. Si nadie lo reconoce, es un cambio de zona tapado con
+            una revision escrita con la credencial de la aplicacion: trata el
+            caso como un incidente de integridad.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
       - alert: DiscrepanciaDeZonaRevisada
         expr: >-
-          max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent"})
-            > (max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent"} offset 1d) or vector(0))
+          max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="audit"})
+            > (max(work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="audit"} offset 1d) or vector(0))
         for: 0m
         labels:
           severity: warning
@@ -160,9 +190,9 @@ groups:
         annotations:
           summary: "Se ha dado por revisada una discrepancia de la zona del centro"
           description: >-
-            El numero de discrepancias revisadas de la zona horaria del centro
-            ha subido en el ultimo dia ({{ $value }} en la ultima pasada
-            diaria). No es una discrepancia pendiente: alguien ha ejecutado
+            El numero de asientos site.updated sin firma dados por revisados ha
+            subido en el ultimo dia ({{ $value }} en la ultima pasada diaria).
+            No es una discrepancia pendiente: alguien ha ejecutado
             compliance:reconcile-work-record --acknowledge-site-change.
             Comprueba en audit_log el asiento
             site.timezone_discrepancy_reviewed (quien responde, el motivo) y
@@ -172,16 +202,19 @@ groups:
           runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
 
       #------------------------------------------------------------------------
-      # La comprobacion de la zona del centro no ha podido mirar algo: un
+      # La comprobacion de la zona del centro no ha podido mirar algo NUEVO: un
       # centro sin asiento site.*, cambios sin firma anteriores a la linea base
       # (instalaciones que vienen de la 2.1.0 o la 2.2.0) o filas de la traza
-      # de un año cuya auditoria se purgo. NO es integridad ni avisa a nadie
-      # (`severity: info`, receptor silencio): queda visible en Prometheus y
-      # Alertmanager para que «cero discrepancias» no se lea como «todo
-      # comprobado».
+      # de un año cuya auditoria se purgo. Solo cuando la cifra sube respecto a
+      # hace un dia: una instalacion con historia de antes de la 2.3.0 tiene
+      # siempre algo no verificable, y eso no es noticia. NO es integridad ni
+      # avisa a nadie (`severity: info`, receptor silencio): queda visible en
+      # Prometheus y Alertmanager. El valor es la suma de los dos tipos.
       #------------------------------------------------------------------------
       - alert: ZonaDelCentroNoVerificable
-        expr: max(work_record_reconciliation_unverifiable{scope="full"}) > 0
+        expr: >-
+          sum by (scope) (work_record_reconciliation_unverifiable{scope="full"})
+            > ignoring (scope) (sum(work_record_reconciliation_unverifiable{scope="full"} offset 1d) or vector(0))
         for: 0m
         labels:
           severity: info
@@ -191,10 +224,11 @@ groups:
           summary: "Parte de la historia de la zona del centro no se puede verificar"
           description: >-
             La conciliacion completa no ha podido cotejar con la auditoria
-            {{ $value }} elemento(s) de la zona horaria del centro: un centro
-            sin asiento site.*, cambios sin firma anteriores a la linea base
-            de la 2.3.0 o cambios de un año cuya auditoria ya se purgo. No es
-            una discrepancia ni hay nada que hacer: es informativo.
+            {{ $value }} elemento(s) de la zona horaria del centro, mas que
+            hace un dia: un centro sin asiento site.*, cambios sin firma
+            anteriores a la linea base de la 2.3.0 o cambios de un año cuya
+            auditoria ya se purgo. No es una discrepancia ni hay nada que
+            hacer: es informativo.
           runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
 
       #------------------------------------------------------------------------
