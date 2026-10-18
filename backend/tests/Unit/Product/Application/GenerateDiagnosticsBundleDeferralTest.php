@@ -7,7 +7,12 @@ use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -52,6 +57,26 @@ function diagnosticsDeferralHandler(?string $service, ?Throwable $failure = null
         productVersion: '2.2.1',
         maxBytes: 8 * 1024 * 1024,
         failures: $failures,
+        accounts: new class implements ResponsibleAccounts
+        {
+            public function find(ResponsibleReference $reference): ?ResponsibleAccount
+            {
+                return null;
+            }
+
+            public function isActiveManagementAccount(int $userId, array $roles = []): bool
+            {
+                // Solo una cuenta admin firma el paquete con datos personales.
+                return $roles === [UserRole::ADMIN];
+            }
+        },
+        ledger: new class implements SerializedLedgerWrite
+        {
+            public function withChainLock(callable $work): mixed
+            {
+                return $work();
+            }
+        },
     );
 }
 
@@ -71,7 +96,11 @@ it('no aplaza fuera de las tres condiciones: relanza el fallo original', functio
     $failure = new RuntimeException('el fallo original');
     $handler = diagnosticsDeferralHandler($service, $failure);
 
-    expect(static fn () => $handler->handle($options, $actor))->toThrow($failure);
+    // Por consola, el paquete con datos personales lo firma una cuenta admin
+    // (2.3.0 bloque 3): sin ella el caso de uso ni siquiera llega al asiento.
+    $responsible = $actor === DiagnosticsActor::Console && $options->includePersonalData ? 7 : null;
+
+    expect(static fn () => $handler->handle($options, $actor, $responsible))->toThrow($failure);
 })->with([
     'desde el panel, base caida' => [DiagnosticsActor::User, DiagnosticsOptions::anonymized(), ProbeFailureClassifier::DATABASE],
     'por soporte, base caida' => [DiagnosticsActor::SupportGrant, DiagnosticsOptions::anonymized(), ProbeFailureClassifier::DATABASE],

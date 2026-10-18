@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Application\UseCase;
 
+use App\Modules\Product\Application\Exception\DiagnosticsResponsibleNotAllowed;
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
+use App\Modules\Product\Application\Support\DiagnosticsSigners;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
@@ -14,6 +16,8 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
@@ -71,6 +75,16 @@ use Throwable;
  * con datos personales o desde el panel— sube tal cual: sin asiento no hay
  * paquete.
  *
+ * ## Por consola, los datos personales los firma una cuenta (2.3.0 bloque 3)
+ *
+ * El paquete con datos personales pedido por consola lleva la cuenta `admin`
+ * que lo autoriza (`--responsible`), y sus dos asientos son de esa cuenta, no
+ * de `system` (PR17; doc 01 §7.2, «Firmas por consola»). Sin ella no se
+ * genera, y la cuenta se vuelve a comprobar aqui aunque la consola ya la haya
+ * resuelto: es la comprobacion que vale si la cuenta se da de baja entre la
+ * pregunta y la generacion. El manifiesto sigue diciendo `console` y nada mas
+ * (ADR-020): la cuenta se queda en `audit_log`, que no sale de la instalacion.
+ *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
  * No consulta la licencia para decidir nada. La seccion `license` **informa** de
@@ -88,15 +102,27 @@ final readonly class GenerateDiagnosticsBundleHandler
         private string $productVersion,
         private int $maxBytes,
         private ProbeFailureClassifier $failures,
+        private ResponsibleAccounts $accounts,
+        private SerializedLedgerWrite $ledger,
     ) {}
 
-    public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
+    /**
+     * @param  int|null  $responsibleUserId  la cuenta `admin` que firma el paquete con datos personales pedido por consola
+     *
+     * @throws DiagnosticsResponsibleNotAllowed
+     */
+    public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId = null): DiagnosticsBundle
     {
-        return UseCaseInstrumentation::run('product.generate_diagnostics_bundle', fn (): DiagnosticsBundle => $this->doHandle($options, $actor));
+        return UseCaseInstrumentation::run(
+            'product.generate_diagnostics_bundle',
+            fn (): DiagnosticsBundle => $this->doHandle($options, $actor, $responsibleUserId),
+        );
     }
 
-    private function doHandle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
+    private function doHandle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): DiagnosticsBundle
     {
+        $this->assertResponsible($options, $actor, $responsibleUserId);
+
         $sections = [];
 
         foreach ($this->collectors as $collector) {
@@ -119,7 +145,7 @@ final readonly class GenerateDiagnosticsBundleHandler
         );
 
         try {
-            $this->audit($bundle, $options, $actor);
+            $this->audit($bundle, $options, $actor, $responsibleUserId);
         } catch (Throwable $failure) {
             if (! $this->mayDefer($failure, $options, $actor)) {
                 throw $failure;
@@ -154,7 +180,38 @@ final readonly class GenerateDiagnosticsBundleHandler
         }
     }
 
-    private function audit(DiagnosticsBundle $bundle, DiagnosticsOptions $options, DiagnosticsActor $actor): void
+    /**
+     * Por consola, el paquete con datos personales exige una cuenta `admin`
+     * activa que lo firme; quien lo pide por el panel firma con su sesion y no
+     * pasa cuenta. Antes de recolectar nada: un paquete que no se va a poder
+     * firmar no se genera.
+     *
+     * @throws DiagnosticsResponsibleNotAllowed
+     */
+    private function assertResponsible(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): void
+    {
+        if ($responsibleUserId === null) {
+            if ($actor === DiagnosticsActor::Console && $options->includePersonalData) {
+                throw DiagnosticsResponsibleNotAllowed::missing();
+            }
+
+            return;
+        }
+
+        $this->assertActiveAdmin($responsibleUserId);
+    }
+
+    /**
+     * @throws DiagnosticsResponsibleNotAllowed
+     */
+    private function assertActiveAdmin(int $responsibleUserId): void
+    {
+        if (! $this->accounts->isActiveManagementAccount($responsibleUserId, DiagnosticsSigners::ROLES)) {
+            throw DiagnosticsResponsibleNotAllowed::notAnActiveAdmin();
+        }
+    }
+
+    private function audit(DiagnosticsBundle $bundle, DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): void
     {
         $now = $this->clock->now();
 
@@ -165,6 +222,7 @@ final readonly class GenerateDiagnosticsBundleHandler
             sizeBytes: \strlen($bundle->toJson()),
             generatedBy: $actor->value,
             occurredAt: $now,
+            responsibleUserId: $responsibleUserId,
         )];
 
         if ($options->includePersonalData) {
@@ -180,9 +238,25 @@ final readonly class GenerateDiagnosticsBundleHandler
                 sha256: $bundle->manifest->sha256,
                 generatedBy: $actor->value,
                 occurredAt: $now,
+                responsibleUserId: $responsibleUserId,
             );
         }
 
-        $this->events->publish(...$events);
+        if ($responsibleUserId === null) {
+            $this->events->publish(...$events);
+
+            return;
+        }
+
+        // Por consola, la cuenta que firma se vuelve a comprobar con la cadena
+        // de `audit_log` tomada, y los dos asientos se escriben dentro de esa
+        // misma transaccion: la baja de una cuenta toma la cadena antes de tocar
+        // su fila (ADR-051 §6), asi que una baja durante la generacion no deja
+        // un paquete con datos personales firmado por quien ya no responde. Si
+        // lanza, no hay asiento y el paquete no se entrega.
+        $this->ledger->withChainLock(function () use ($responsibleUserId, $events): void {
+            $this->assertActiveAdmin($responsibleUserId);
+            $this->events->publish(...$events);
+        });
     }
 }

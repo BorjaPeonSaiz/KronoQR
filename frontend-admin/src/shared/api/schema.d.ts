@@ -2825,8 +2825,12 @@ export interface paths {
          *
          *     **El responsable es quien tiene la sesion abierta.** No se acepta en el
          *     cuerpo: dejar que se declare permitiria firmar una entrega a nombre de un
-         *     companero. Por consola —donde no hay sesion— se declara con `--by=`, y el
-         *     actor del asiento de auditoria queda como `system`.
+         *     companero. Por consola —donde no hay sesion— se declara con
+         *     `--responsible=<correo o uuid>`, la orden ensena la cuenta y pide
+         *     confirmarla, y el actor del asiento es esa cuenta (`user`), no `system`
+         *     (2.3.0). Por los dos caminos firma `admin` o `rrhh`, y la cuenta se
+         *     vuelve a comprobar al firmar: si se dio de baja entre medias, `403` sin
+         *     entrega.
          *
          *     **La entrega es un solo acto presencial y arrastra tres cosas**: la
          *     tarjeta, el PIN del portal y la hoja de instrucciones. El runbook

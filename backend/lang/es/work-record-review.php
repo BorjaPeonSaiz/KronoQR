@@ -15,12 +15,12 @@ return [
     'admissible' => 'El asiento :id es una purga admisible: la conciliación ya la cree y no hay nada que revisar.',
     'reason_too_short' => 'El motivo tiene que explicar lo investigado: al menos :min caracteres.',
     'reason_too_long' => 'El motivo admite como mucho :max caracteres.',
-    'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa con rol de administración o de RRHH. La revisión la firma una persona que responde de ella. No se ha escrito nada.',
+    'responsible_inactive' => 'La cuenta de --responsible no es una cuenta de gestión activa con rol admin o rrhh: puede haberse dado de baja o cambiado de rol mientras se confirmaba. La revisión la firma una persona que responde de ella. No se ha escrito nada.',
     'missing_options' => 'Para dar por revisado el asiento :id faltan --reason y --responsible. No se ha escrito nada.',
     'incompatible_options' => '--acknowledge no se combina con --full ni con --days: o se concilia o se revisa.',
     'invalid_purge_id' => '--acknowledge tiene que ser el id del asiento, un entero positivo; «:value» no lo es. No se ha escrito nada.',
-    'invalid_responsible' => '--responsible tiene que ser el id de la cuenta, un entero positivo; «:value» no lo es. No se ha escrito nada.',
     'done' => 'Asiento :review escrito: la purga :id queda revisada y deja de contarse como pendiente.',
+    'confirm_purge' => '¿Dar por revisada la purga :id con esta firma?',
     'explains' => 'Además vuelve a explicar los borrados de jornadas anteriores a :cutoff en el centro :site.',
     'explains_nothing' => 'No explica ningún borrado: sus defectos (:violations) no son solo el plazo.',
 
@@ -31,5 +31,6 @@ return [
     'site_change_missing_options' => 'Para dar por revisada :target faltan --reason y --responsible. No se ha escrito nada.',
     'site_change_preview' => 'Discrepancia pendiente :target del centro :site.',
     'site_change_done' => 'Asiento :review escrito: :target queda revisada y deja de contarse como pendiente.',
+    'confirm_site_change' => '¿Dar por revisada :target con esta firma?',
 
 ];

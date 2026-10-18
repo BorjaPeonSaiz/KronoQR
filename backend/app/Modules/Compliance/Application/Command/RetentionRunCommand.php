@@ -21,10 +21,10 @@ final readonly class RetentionRunCommand
         /** La frase que imprimio el `--dry-run`; `null` en simulacion. */
         public ?string $confirmation,
         /**
-         * Cuenta de gestion que autoriza la purga, para el asiento. `null`
-         * cuando la lanza quien tiene acceso al servidor sin sesion en el panel:
-         * el actor es entonces `system`, que es la verdad y se cruza con el
-         * registro de acceso a la maquina.
+         * Cuenta de gestion que autoriza la purga y firma el asiento, con rol
+         * admin o rrhh. **Obligatoria para ejecutar desde la 2.3.0** (doc 01
+         * RF-PR-03, §7.2 «Firmas por consola»): solo puede ser `null` en la
+         * simulacion, que no escribe asiento.
          */
         public ?int $responsibleUserId,
         /** Filas por sentencia de borrado. Acota el tamano, no la transaccion. */
@@ -40,7 +40,7 @@ final readonly class RetentionRunCommand
         return new self(RetentionMode::Simulation, null, $responsibleUserId, $batchSize);
     }
 
-    public static function execute(string $confirmation, ?int $responsibleUserId, int $batchSize = 1000): self
+    public static function execute(string $confirmation, int $responsibleUserId, int $batchSize = 1000): self
     {
         return new self(RetentionMode::Execution, $confirmation, $responsibleUserId, $batchSize);
     }

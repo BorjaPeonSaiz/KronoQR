@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Console;
 
+use App\Modules\Product\Application\Exception\DiagnosticsResponsibleNotAllowed;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
+use App\Modules\Product\Application\Support\DiagnosticsSigners;
 use App\Modules\Product\Application\UseCase\DeliverDiagnosticsBundle;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
@@ -14,6 +16,9 @@ use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository as Config;
 use Throwable;
@@ -32,9 +37,12 @@ use Throwable;
  *
  * ## `--with-personal-data` es una accion distinta (RL-19)
  *
- * Pide confirmacion antes de nada —salvo con `--no-interaction`, que es como lo
- * ejecuta un script—, avisa en texto llano de que se incluye y deja un asiento
- * propio en `audit_log`. Nunca es un efecto secundario de otra opcion.
+ * Exige `--responsible`, la cuenta `admin` que lo autoriza (su `uuid` o su
+ * correo), enseña quien firma y pide confirmacion antes de nada —sin terminal,
+ * `--responsible-confirm=<correo>` de esa cuenta—, avisa en texto llano de que
+ * se incluye y deja un asiento propio en `audit_log` **firmado por esa cuenta**,
+ * no por `system` (2.3.0 bloque 3, PR17; doc 01 §7.2). Nunca es un efecto
+ * secundario de otra opcion.
  *
  * ## `--verify=RUTA` no genera nada
  *
@@ -50,8 +58,8 @@ use Throwable;
  * | Codigo | Significado |
  * |---|---|
  * | `0` | El paquete se genero, o el que se verifico esta integro. |
- * | `1` | No se genero: no se pudo escribir el fichero, o no se pudo dejar constancia en `audit_log` (ni ahora ni como pendiente). El mensaje dice cual y que hacer. |
- * | `2` | Con `--verify`: la huella no coincide, o el fichero no es un paquete. |
+ * | `1` | No se genero: no se pudo escribir el fichero, no se pudo dejar constancia en `audit_log` (ni ahora ni como pendiente), o se respondio que no a la confirmacion de los datos personales. El mensaje dice cual y que hacer. |
+ * | `2` | Con `--verify`: la huella no coincide, o el fichero no es un paquete. Con `--with-personal-data`: periodo fuera de rango, falta `--responsible`, la cuenta no es `admin` activa (al preguntar o al firmar), o sin terminal falta o no cuadra `--responsible-confirm`. |
  *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
@@ -68,6 +76,8 @@ final class ProductDiagnosticsCommand extends Command
         {--anonymized : Alias explicito del comportamiento por defecto: sin datos personales}
         {--with-personal-data : Incluye plantilla, fichajes e incidencias. Accion distinta y auditada (RL-19)}
         {--period-days=7 : Dias de fichajes que abarca --with-personal-data}
+        {--responsible= : Con --with-personal-data, uuid o correo de la cuenta admin que lo autoriza y firma el asiento. Obligatorio}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio sin terminal}
         {--output= : Fichero o directorio donde escribirlo. Por defecto, storage/app/diagnostics}
         {--verify= : No genera nada: comprueba la huella de un paquete ya escrito}';
 
@@ -81,6 +91,7 @@ final class ProductDiagnosticsCommand extends Command
         RecordPendingDiagnosticsAudits $recordPending,
         DeliverDiagnosticsBundle $delivery,
         ProbeFailureClassifier $failures,
+        ResponsibleAccounts $accounts,
     ): int {
         $verify = $this->option('verify');
 
@@ -95,17 +106,34 @@ final class ProductDiagnosticsCommand extends Command
         $options = $this->requestedOptions($config);
 
         if ($options === null) {
-            return self::SUCCESS;
+            // Periodo fuera de rango: es un error de uso, como el resto (2).
+            return self::INVALID;
         }
 
-        if ($options->includePersonalData && ! $this->confirmed($options)) {
-            $this->line('No se ha generado nada.');
+        $responsible = null;
 
-            return self::SUCCESS;
+        if ($options->includePersonalData) {
+            try {
+                $responsible = $this->signedBy($accounts, $options);
+            } catch (Throwable $failure) {
+                // Sin base no se puede saber quien firma, y el paquete con datos
+                // personales no se genera si no se puede auditar (RL-19): el
+                // mismo mensaje que si fallara el asiento, sin la excepcion.
+                return $this->notAudited($failure, $options, $failures);
+            }
+
+            if (is_int($responsible)) {
+                return $responsible;
+            }
         }
 
         try {
-            $bundle = $diagnostics->handle($options, DiagnosticsActor::Console);
+            $bundle = $diagnostics->handle($options, DiagnosticsActor::Console, $responsible?->id);
+        } catch (DiagnosticsResponsibleNotAllowed) {
+            // La cuenta se dio de baja o perdio el rol entre la pregunta y la
+            // generacion —tambien con la cadena tomada, antes de los asientos—:
+            // no se ha escrito ningun asiento ni se entrega el paquete.
+            return ConsoleResponsible::noLongerAllowed($this);
         } catch (Throwable $failure) {
             return $this->notAudited($failure, $options, $failures);
         }
@@ -213,22 +241,50 @@ final class ProductDiagnosticsCommand extends Command
     }
 
     /**
+     * La cuenta `admin` que firma el paquete con datos personales, o el codigo
+     * de salida con el motivo ya escrito: `2` si falta, no puede firmar o no
+     * cuadra `--responsible-confirm`; `1` si la persona responde que no. En
+     * ningun caso se ha generado ni escrito nada.
+     */
+    private function signedBy(ResponsibleAccounts $accounts, DiagnosticsOptions $options): ResponsibleAccount|int
+    {
+        $option = $this->option('responsible');
+
+        if (! is_string($option) || trim($option) === '') {
+            return ConsoleResponsible::missing($this);
+        }
+
+        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, DiagnosticsSigners::ROLES);
+
+        if (is_int($responsible)) {
+            return $responsible;
+        }
+
+        $this->warnAboutPersonalData($options);
+
+        return ConsoleResponsible::confirm(
+            $this,
+            $responsible,
+            '¿Seguro que quieres incluir los datos personales?',
+            ! $this->input->isInteractive(),
+        ) ?? $responsible;
+    }
+
+    /**
      * El aviso previo, en texto llano y antes de generar nada (RL-19).
      *
-     * ## Sin terminal, la bandera **es** la confirmacion
+     * ## Sin terminal, `--responsible-confirm` **es** la confirmacion
      *
-     * Con `--no-interaction` no hay nadie a quien preguntar, y `confirm()`
-     * devolveria el valor por defecto —`false`—, es decir, un comando que no
-     * hace nada y no dice por que. El aviso se imprime igual, porque acaba en el
-     * registro de quien lanzo el script.
+     * Con `--no-interaction` no hay nadie a quien preguntar. El aviso se
+     * imprime igual, porque acaba en el registro de quien lanzo el script, y
+     * la confirmacion es el correo de la cuenta que firma (2.3.0 bloque 3).
      *
      * Y RL-19 se sigue cumpliendo entero: la accion **es** distinta —hay que
      * escribir `--with-personal-data`, que nunca es el valor por defecto ni el
      * efecto secundario de otra opcion—, va avisada y deja su propio asiento en
-     * `audit_log`. La pregunta interactiva es una red de seguridad para la
-     * persona que esta delante, no la fuente de la legitimidad.
+     * `audit_log`, firmado por la cuenta que la autoriza.
      */
-    private function confirmed(DiagnosticsOptions $options): bool
+    private function warnAboutPersonalData(DiagnosticsOptions $options): void
     {
         $this->line('');
         $this->line('ATENCION: vas a generar un paquete CON DATOS PERSONALES.');
@@ -240,16 +296,14 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('');
         $this->line('Que implica:');
         $this->line('  - El fichero deja de estar anonimizado y no se debe enviar sin necesidad.');
-        $this->line('  - La accion queda registrada en el registro de auditoria, con quien la hizo.');
+        $this->line('  - La accion queda registrada en el registro de auditoria, firmada por la cuenta');
+        $this->line('    de --responsible.');
         $this->line('  - Si se lo envias al proveedor, este actua como encargado del tratamiento');
         $this->line('    para ese supuesto (RGPD art. 28). Necesitas el contrato de encargo firmado.');
         $this->line('');
         $this->line('Si solo quieres diagnosticar un problema tecnico, no hace falta: ejecuta');
         $this->line('  php artisan product:diagnostics');
         $this->line('');
-
-        return ! $this->input->isInteractive()
-            || $this->confirm('¿Seguro que quieres incluir los datos personales?', false);
     }
 
     private function report(

@@ -49,7 +49,12 @@ de actividades de tratamiento (art. 30 RGPD):
   dispositivo desde el que se registraron.
 - Ausencias: tipo, fechas, nota opcional, versiones y anulaciones.
 - Datos de contrato: horas pactadas, tipo de jornada y vigencia.
-- Registro de accesos y de acciones con relevancia legal (`audit_log`).
+- Registro de accesos y de acciones con relevancia legal (`audit_log`). Las
+  firmas por consola nombran la cuenta de gestión que responde, y el informe de
+  cada restauración (`BACKUP_PATH/reports/restore-*.log`) guarda el correo que
+  declaró quien la hizo (`declared_operator`). Se conserva como mínimo lo que el
+  asiento que lo cita (cuatro años); ninguna pasada lo borra después, así que el
+  plazo final lo fija el cliente con su DPO.
 
 El **cuadro de impacto** ([`guia-rrhh.md`](guia-rrhh.md) §6.6) no añade nada a
 esa lista: es un uso ulterior **agregado** de datos ya tratados —recuentos y

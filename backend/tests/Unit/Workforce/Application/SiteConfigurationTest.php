@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Application\Command\CreateSiteCommand;
@@ -371,6 +373,11 @@ function siteCorrectionHandler(SiteRepository $sites, SiteCorrectionJournal $jou
     {
         /** @param list<int> $active */
         public function __construct(private SiteCorrectionJournal $journal, private array $active) {}
+
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return null;
+        }
 
         public function isActiveManagementAccount(int $userId, array $roles = []): bool
         {

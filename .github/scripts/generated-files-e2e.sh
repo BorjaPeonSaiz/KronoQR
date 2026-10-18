@@ -344,7 +344,7 @@ later_file="$(export_file "${later}")"
 dc exec -T app rm -f -- "${kept_file}"
 
 dc stop app horizon scheduler reverb
-dc run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore.sh --yes >"${WORK}/restore.out" 2>&1 ||
+dc run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore.sh --yes --operator e2e@kronoqr.invalid >"${WORK}/restore.out" 2>&1 ||
   fail "restore.sh falla: $(tail -n 30 "${WORK}/restore.out")"
 restore_report="$(as_root find "${backup_path}/reports" -maxdepth 1 -type f -name 'restore-*.log' | sort | tail -n 1)"
 [ -n "${restore_report}" ] || fail "restore.sh no ha dejado su informe en ${backup_path}/reports"

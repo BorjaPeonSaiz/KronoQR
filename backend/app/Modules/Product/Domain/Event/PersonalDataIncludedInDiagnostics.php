@@ -39,6 +39,12 @@ final readonly class PersonalDataIncludedInDiagnostics implements DomainEvent
         public string $sha256,
         public string $generatedBy,
         private DateTimeImmutable $occurredAt,
+        /**
+         * La cuenta `admin` que firma el paquete pedido por consola (2.3.0
+         * bloque 3, PR17): el asiento es suyo y no de `system`. `null` por el
+         * panel, donde firma la sesion.
+         */
+        public ?int $responsibleUserId = null,
     ) {}
 
     public function eventName(): string

@@ -2,10 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ConsoleSignature;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -132,7 +139,7 @@ it('escribe el fichero con permisos cerrados', function (): void {
 it('--with-personal-data avisa de lo que incluye antes de generarlo', function (): void {
     // RL-19: «aviso en la interfaz que explica que se va a incluir y que
     // implica». En consola, la interfaz es esta salida.
-    $result = runDiagnostics(['--with-personal-data' => true]);
+    $result = runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
 
     expect($result['output'])->toContain('ATENCION: vas a generar un paquete CON DATOS PERSONALES.')
         ->and($result['output'])->toContain('La plantilla: nombre, codigo de empleado')
@@ -146,11 +153,22 @@ it('--with-personal-data audita la inclusion como accion distinta', function ():
     $siteId = WorkforceFixtures::onlySiteId();
     WorkforceFixtures::employee($siteId, firstName: 'Marta', lastName: 'Lopez');
 
-    runDiagnostics(['--with-personal-data' => true, '--period-days' => 7]);
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    runDiagnostics(['--with-personal-data' => true, '--period-days' => 7, ...ConsoleSignature::for($admin)]);
 
     // DOS asientos, no uno con un booleano: es el punto entero de RL-19.
     expect(DB::table('audit_log')->where('action', 'diagnostics.bundle_generated')->count())->toBe(1)
         ->and(DB::table('audit_log')->where('action', 'diagnostics.personal_data_included')->count())->toBe(1);
+
+    // Los dos los firma la cuenta admin de --responsible, no `system` (2.3.0
+    // bloque 3, PR17).
+    expect(DB::table('audit_log')->whereIn('action', ['diagnostics.bundle_generated', 'diagnostics.personal_data_included'])
+        ->get(['actor_type', 'actor_id'])->map(static fn (object $row): array => (array) $row)->all())
+        ->toBe([
+            ['actor_type' => 'user', 'actor_id' => $admin->id],
+            ['actor_type' => 'user', 'actor_id' => $admin->id],
+        ]);
 
     /** @var object{payload: string} $entry */
     $entry = DB::table('audit_log')->where('action', 'diagnostics.personal_data_included')->first();
@@ -165,6 +183,34 @@ it('--with-personal-data audita la inclusion como accion distinta', function ():
         // personales, que seria absurdo (regla dura 21).
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Marta');
 })->group('RF-PD-09', 'RL-19', 'RL-04');
+
+it('--with-personal-data sin una cuenta admin que firme sale con 2 sin generar ni auditar nada', function (Closure $opciones, string $dice): void {
+    app()->setLocale('es');
+    $antes = DB::table('audit_log')->count();
+
+    $result = runDiagnostics(['--with-personal-data' => true, ...$opciones()]);
+
+    expect($result['code'])->toBe(2, $result['output'])
+        ->and($result['output'])->toContain($dice)
+        ->and(glob(directorioDePaquetes().'/*.json'))->toBe([])
+        ->and(DB::table('audit_log')->count())->toBe($antes);
+})->with([
+    'sin --responsible' => [fn (): array => [], 'Falta --responsible'],
+    'id numerico' => [fn (): array => ['--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id], 'ya no admite el id interno'],
+    'rrhh, que no es admin' => [fn (): array => ConsoleSignature::for(ManagementUsers::withRole(UserRole::RRHH)), 'admin'],
+    'auditor' => [fn (): array => ConsoleSignature::for(ManagementUsers::withRole(UserRole::AUDITOR)), 'admin'],
+    'admin dado de baja' => [function (): array {
+        $baja = ManagementUsers::withRole(UserRole::ADMIN);
+        DB::table('users')->where('id', $baja->id)->update(['is_active' => false]);
+
+        return ConsoleSignature::for($baja);
+    }, 'dada de baja'],
+    'confirmacion de otra cuenta' => [fn (): array => [
+        ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN)),
+        '--responsible-confirm' => 'otra@kronoqr.test',
+    ], 'no coincide'],
+    'sin confirmacion' => [fn (): array => ['--responsible' => ManagementUsers::withRole(UserRole::ADMIN)->email], '--responsible-confirm=<correo de la cuenta>'],
+])->group('RF-PD-09', 'RL-19', 'RL-04');
 
 it('rechaza un periodo fuera del maximo y dice como corregirlo', function (): void {
     $result = runDiagnostics(['--with-personal-data' => true, '--period-days' => 400]);
@@ -290,3 +336,48 @@ it('--output respeta la ruta que se le da', function (): void {
 
     @unlink($destino);
 })->group('RF-PD-09');
+
+// --- La firma del paquete con datos personales (2.3.0 bloque 3) -------------
+
+it('--with-personal-data acepta la cuenta admin por su uuid y la deja como actor', function (): void {
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $result = runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::byUuid($admin)]);
+
+    expect($result['code'])->toBe(0, $result['output'])
+        ->and(DB::table('audit_log')->where('action', 'diagnostics.personal_data_included')->value('actor_id'))->toBe($admin->id);
+})->group('RF-PD-09', 'RL-19', 'RL-04');
+
+it('una baja durante la generacion no deja asientos ni paquete (salida 2)', function (): void {
+    app()->setLocale('es');
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $antes = DB::table('audit_log')->count();
+
+    // Activa cuando se pide el paquete; dada de baja cuando se va a firmar, con
+    // la cadena tomada.
+    app()->instance(ResponsibleAccounts::class, new class implements ResponsibleAccounts
+    {
+        private int $preguntas = 0;
+
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return new DatabaseResponsibleAccounts(DB::connection())->find($reference);
+        }
+
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
+        {
+            return ++$this->preguntas === 1;
+        }
+    });
+
+    $result = runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for($admin)]);
+
+    expect($result['code'])->toBe(2, $result['output'])
+        ->and($result['output'])->toContain('ya no es una cuenta de gestión activa')
+        ->and(glob(directorioDePaquetes().'/*.json'))->toBe([])
+        ->and(DB::table('audit_log')->count())->toBe($antes);
+})->group('RF-PD-09', 'RL-19', 'RL-04', 'RS-07');
+
+it('rechaza el periodo fuera de rango con codigo de uso', function (): void {
+    expect(runDiagnostics(['--with-personal-data' => true, '--period-days' => 0])['code'])->toBe(2);
+})->group('RF-PD-09', 'RL-19');

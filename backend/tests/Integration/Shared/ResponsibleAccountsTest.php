@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
@@ -55,3 +56,35 @@ it('no acepta una cuenta dada de baja ni una que no existe', function (): void {
         ->and(responsablesPuerto()->isActiveManagementAccount($cuenta, [UserRole::ADMIN]))->toBeFalse()
         ->and(responsablesPuerto()->isActiveManagementAccount(999_999))->toBeFalse();
 })->group('RL-04', 'RN-23');
+
+// --- find(): la cuenta por su uuid o su correo (2.3.0 bloque 3) -------------
+
+it('encuentra la cuenta por su uuid y por su correo sin distinguir mayusculas, con sus roles', function (): void {
+    $cuenta = ManagementUsers::withRole(UserRole::RRHH, 'Marta.RRHH@kronoqr.test');
+
+    $porUuid = responsablesPuerto()->find(ResponsibleReference::parse($cuenta->uuid));
+    $porCorreo = responsablesPuerto()->find(ResponsibleReference::parse('marta.rrhh@KRONOQR.test'));
+
+    expect($porUuid)->toEqual($porCorreo)
+        ->and($porUuid?->id)->toBe($cuenta->id)
+        ->and($porUuid?->uuid)->toBe($cuenta->uuid)
+        ->and($porUuid?->name)->toBe($cuenta->name)
+        ->and($porUuid?->isActive)->toBeTrue()
+        ->and($porUuid?->roles)->toBe([UserRole::RRHH]);
+})->group('RL-04');
+
+it('devuelve tambien la cuenta dada de baja, para poder decir por que no firma', function (): void {
+    $cuenta = ManagementUsers::withRole(UserRole::ADMIN);
+    DB::table('users')->where('id', $cuenta->id)->update(['is_active' => false]);
+
+    expect(responsablesPuerto()->find(ResponsibleReference::parse($cuenta->email))?->isActive)->toBeFalse();
+})->group('RL-04');
+
+it('no encuentra lo que no existe', function (string $valor): void {
+    ManagementUsers::withRole(UserRole::ADMIN);
+
+    expect(responsablesPuerto()->find(ResponsibleReference::parse($valor)))->toBeNull();
+})->with([
+    'correo' => ['nadie@kronoqr.test'],
+    'uuid' => ['0192f1a4-0000-7000-8000-000000000000'],
+])->group('RL-04');

@@ -92,7 +92,7 @@ final class PrintCredentialCommand extends Command
         $this->info('Tarjeta generada: '.$out);
         $this->line('Credencial: '.$printed->credentials[0]->credential->uuid);
         $this->line('Imprime, plastifica y BORRA el fichero: es un instrumento al portador.');
-        $this->line('Despues, registra la entrega: php artisan credentials:deliver '.$printed->credentials[0]->credential->uuid.' --by=<correo>');
+        $this->line('Despues, registra la entrega: php artisan credentials:deliver '.$printed->credentials[0]->credential->uuid.' --responsible=<correo>');
 
         return self::SUCCESS;
     }

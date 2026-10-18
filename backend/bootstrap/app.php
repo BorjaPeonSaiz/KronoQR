@@ -28,6 +28,7 @@ use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
+use App\Modules\Identity\Application\Exception\CredentialDeliverySignerNotAllowed;
 use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
 use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
@@ -400,6 +401,11 @@ return Application::configure(basePath: dirname(__DIR__))
          * dejaria el intento sin traza.
          */
         $exceptions->render(static fn (AccessOutOfScope $exception): mixed => ProblemDetails::forbidden());
+
+        // RF-QR-06 (2.3.0 bloque 3): quien firma la entrega se dio de baja o
+        // perdio el rol entre la autorizacion y la firma. Es una denegacion, y
+        // sale con el mismo `403` que cualquier otra. No se ha entregado nada.
+        $exceptions->render(static fn (CredentialDeliverySignerNotAllowed $exception): mixed => ProblemDetails::forbidden());
 
         // El framework convierte la `AuthorizationException` —tambien la
         // `MissingAbilityException` del middleware `ability`— en esta ANTES de

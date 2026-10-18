@@ -337,7 +337,7 @@ producto que borra datos (regla dura 5).
      -e DB_MAINTENANCE_PASSWORD='<la del rol fichaje_maintenance>' app \
      php artisan compliance:apply-retention \
        --confirm=PURGAR-AAAA-MM-DD-xxxxxx \
-       --responsible=<id de la cuenta de gestión que autoriza>
+       --responsible=<correo de la cuenta admin o rrhh que autoriza>
    ```
 
 4. **Archiva el informe de purga** (`retencion-purga-*.txt`, en la misma

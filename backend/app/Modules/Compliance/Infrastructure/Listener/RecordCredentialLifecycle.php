@@ -110,10 +110,11 @@ final readonly class RecordCredentialLifecycle
      * incidencias distintas»*.
      *
      * **`delivered_by_user_id` va en el payload aunque el actor ya este en su
-     * columna, y no es redundante.** Por consola el actor es `system` —no hay
-     * sesion— y el responsable es la persona que se declara con `--by=`. Son dos
-     * hechos distintos: quien manejo el sistema y quien firma que entrego la
-     * tarjeta. Confundirlos dejaria asientos sin responsable.
+     * columna, y no es redundante.** Son dos hechos distintos: quien manejo el
+     * sistema y quien firma que entrego la tarjeta. Hoy coinciden por los dos
+     * caminos —el panel firma con la sesion y, desde la 2.3.0, la consola con la
+     * cuenta de `--responsible`, que confirma quien es—, pero un actor `system`
+     * sin responsable en el payload dejaria un asiento sin nadie que responda.
      */
     public function handleCredentialDelivered(CredentialDelivered $event): void
     {

@@ -29,6 +29,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -73,6 +74,15 @@ use Illuminate\Database\ConnectionInterface;
  */
 final readonly class ApplyRetention
 {
+    /**
+     * Quien puede autorizar una purga y firmar su asiento (doc 01 RF-PR-03 y
+     * §7.2 «Firmas por consola», decision del propietario del 18-10-2026): los
+     * mismos roles que revisan una purga no admisible.
+     *
+     * @var list<UserRole>
+     */
+    public const array RESPONSIBLE_ROLES = [UserRole::ADMIN, UserRole::RRHH];
+
     public function __construct(
         private PlanRetention $planner,
         private WorkRecordArchive $workRecords,
@@ -436,22 +446,21 @@ final readonly class ApplyRetention
     private function assertResponsible(RetentionRunCommand $command): void
     {
         if ($command->responsibleUserId === null) {
+            // Solo la simulacion llega aqui sin cuenta: `execute()` la exige.
             return;
         }
 
-        // Sin roles: quien puede responder de una purga lo decide el propietario.
-        if (! $this->accounts->isActiveManagementAccount($command->responsibleUserId)) {
+        if (! $this->accounts->isActiveManagementAccount($command->responsibleUserId, self::RESPONSIBLE_ROLES)) {
             throw new RetentionResponsibleNotActive($command->responsibleUserId);
         }
     }
 
     /**
-     * Quien responde de la purga.
+     * Quien responde de la purga: la cuenta de gestion que la autoriza.
      *
-     * `user` cuando se indica la cuenta de gestion que la autoriza; `system`
-     * cuando la lanza quien tiene acceso al servidor sin sesion en el panel, que
-     * es la verdad y se cruza con el registro de acceso a la maquina. Decir
-     * «usuario desconocido» seria peor que decir la verdad (ADR-039).
+     * Desde la 2.3.0 una ejecucion siempre la lleva (`RetentionRunCommand::execute`
+     * la exige) y el asiento es de `user`. La rama `system` queda para la
+     * simulacion, que no escribe asiento, y no se alcanza al purgar.
      */
     private function actorFor(RetentionRunCommand $command): AuditActor
     {

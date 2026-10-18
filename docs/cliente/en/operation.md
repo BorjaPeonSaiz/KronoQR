@@ -124,19 +124,25 @@ docker compose -f docker-compose.yml run --rm \
   -e DB_MAINTENANCE_PASSWORD='<contraseña de fichaje_maintenance>' app \
   php artisan compliance:apply-retention \
     --confirm=PURGAR-AAAA-MM-DD-xxxxxx \
-    --responsible=<id de la cuenta de gestión que autoriza>
+    --responsible=<correo de la cuenta de gestión que autoriza>
 ```
 
-(The two placeholders are the `fichaje_maintenance` password and the id of the
-management account that authorises the purge.)
+(The two placeholders are the `fichaje_maintenance` password and the e-mail of
+the management account that authorises the purge.) Without a terminal (a
+script, `-T`), add `--responsible-confirm=<the same e-mail>`.
 
 **What happens, in order:**
 
-1. `--responsible` is checked: it must be the id (a positive integer) of an
-   **active management account**. If it is not —letters, an account that does
-   not exist or one that has been deactivated—, the command exits with code `2`
-   without simulating or deleting anything. It is checked again before dropping
-   each partition and before the audit entry. Then the phrase is checked. If it
+1. `--responsible` is checked: it must be the **e-mail or uuid** of an
+   **active management account with the admin or rrhh role** (since 2.3.0 the
+   account number is not accepted). If it is not —a number, an account that does
+   not exist, one that has been deactivated or one with another role—, the
+   command exits with code `2` without simulating or deleting anything. If it
+   is, it **shows who signs** (`Signed by: name <e-mail> · role · uuid`) and
+   asks; without a terminal, the confirmation is `--responsible-confirm` and it
+   must be that account's e-mail. The purge entry is **signed by that
+   account**. It is checked again before dropping each partition and before the
+   audit entry. Then the phrase is checked. If it
    does not match what would be purged **now**, it goes no further: a report
    from three months ago cannot be executed.
 2. **The chain is verified** for every audit partition that was going to be
@@ -583,7 +589,7 @@ docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
 
 # 2. Run the purge supplying the credential, without writing it to any file
 docker compose run --rm -e DB_MAINTENANCE_PASSWORD="${clave}" app \
-  php artisan compliance:apply-retention --confirm=PURGAR-...
+  php artisan compliance:apply-retention --confirm=PURGAR-... --responsible=<correo>
 
 # 3. Take it away as soon as you finish
 docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
@@ -1919,8 +1925,11 @@ and audited**, never the default:
 
 - Panel: tick "Include personal data"; the screen tells you what will be
   included and that it is recorded, and only then lets you generate.
-- Console: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
-  (31 days at most).
+- Console: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7 --responsible=<your e-mail>`
+  (31 days at most). Since 2.3.0 it is authorised and signed by an active
+  **admin account**, by its e-mail or uuid: the command shows who signs and
+  asks (without a terminal, `--responsible-confirm=<the same e-mail>`), and both
+  audit entries are in that account's name, not "system".
 
 It adds the workforce —**only the people with activity in the period or with an
 open incident**, never the whole workforce— with code, name, status and

@@ -82,7 +82,7 @@ final class PrintCredentialBatchCommand extends Command
 
         $this->info($printed->count().' tarjeta(s) en una sola hoja: '.$out);
         $this->line('Imprime, corta por las guias y BORRA el fichero.');
-        $this->line('Despues, registra cada entrega: php artisan credentials:deliver <credencial> --by=<correo>');
+        $this->line('Despues, registra cada entrega: php artisan credentials:deliver <credencial> --responsible=<correo>');
 
         return self::SUCCESS;
     }

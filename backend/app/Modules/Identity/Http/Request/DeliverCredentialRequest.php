@@ -47,8 +47,9 @@ final class DeliverCredentialRequest extends FormRequest
         return new DeliverCredentialCommand(
             credentialUuid: $credentialUuid,
             // Por la API, quien maneja el sistema y quien responde de la entrega
-            // son la misma persona. Por consola no: ahi no hay sesion y el
-            // responsable se declara con `--by=`.
+            // son la misma persona. Por consola tambien desde la 2.3.0: se
+            // declara con `--responsible=`, la orden la enseña y se confirma, y
+            // el actor del asiento es esa cuenta (`user`).
             deliveredByUserId: $actorUserId,
             actorUserId: $actorUserId,
         );

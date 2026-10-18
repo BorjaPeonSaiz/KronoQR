@@ -126,16 +126,22 @@ docker compose -f docker-compose.yml run --rm \
   -e DB_MAINTENANCE_PASSWORD='<contraseña de fichaje_maintenance>' app \
   php artisan compliance:apply-retention \
     --confirm=PURGAR-AAAA-MM-DD-xxxxxx \
-    --responsible=<id de la cuenta de gestión que autoriza>
+    --responsible=<correo de la cuenta de gestión que autoriza>
 ```
+
+Sin terminal (un script, `-T`), añade `--responsible-confirm=<el mismo correo>`.
 
 **Qué pasa, en orden:**
 
-1. Se comprueba `--responsible`: tiene que ser el id (un entero positivo) de una
-   **cuenta de gestión activa**. Si no lo es —letras, una cuenta que no existe o
-   una dada de baja—, la orden sale con código `2` sin simular ni borrar nada.
-   Se vuelve a comprobar antes de soltar cada partición y antes del asiento.
-   Después se comprueba la frase. Si no corresponde a lo que se purgaría
+1. Se comprueba `--responsible`: tiene que ser el **correo o el uuid** de una
+   **cuenta de gestión activa con rol admin o rrhh** (desde la 2.3.0 no vale el
+   número de la cuenta). Si no lo es —un número, una cuenta que no existe, una
+   dada de baja o de otro rol—, la orden sale con código `2` sin simular ni
+   borrar nada. Si lo es, **enseña quién firma** (`Firma: nombre <correo> · rol
+   · uuid`) y pregunta; sin terminal, la confirmación es `--responsible-confirm`
+   y tiene que ser el correo de esa cuenta. El asiento de la purga queda
+   **firmado por esa cuenta**. Se vuelve a comprobar antes de soltar cada
+   partición y antes del asiento. Después se comprueba la frase. Si no corresponde a lo que se purgaría
    **ahora**, no se sigue: un informe de hace tres meses no puede ejecutarse.
 2. Se **verifica la cadena** de cada partición de auditoría que iba a soltarse. Si
    una no verifica, **aborta sin borrar nada**.
@@ -569,7 +575,7 @@ docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
 
 # 2. Ejecuta la purga aportando la credencial, sin escribirla en ningún fichero
 docker compose run --rm -e DB_MAINTENANCE_PASSWORD="${clave}" app \
-  php artisan compliance:apply-retention --confirm=PURGAR-...
+  php artisan compliance:apply-retention --confirm=PURGAR-... --responsible=<correo>
 
 # 3. Retírasela en cuanto termines
 docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
@@ -1899,8 +1905,11 @@ y auditada**, nunca el valor por defecto:
 
 - Panel: marca «Incluir datos personales»; la pantalla te dice qué se va a
   incluir y que queda registrado, y solo entonces te deja generar.
-- Consola: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
-  (máximo 31 días).
+- Consola: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7 --responsible=<tu correo>`
+  (máximo 31 días). Desde la 2.3.0 lo autoriza y lo firma una **cuenta admin**
+  activa, por su correo o su uuid: la orden enseña quién firma y pregunta (sin
+  terminal, `--responsible-confirm=<el mismo correo>`), y los dos asientos
+  quedan a nombre de esa cuenta, no de «sistema».
 
 Añade la plantilla —**solo las personas con actividad en el periodo o con una
 incidencia abierta**, nunca la plantilla entera— con código, nombre, estado y

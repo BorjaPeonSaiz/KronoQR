@@ -30,6 +30,8 @@ use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
@@ -308,6 +310,30 @@ function retentionUsing(ConnectionInterface $connection, string $now, ?Responsib
     );
 }
 
+/**
+ * Una cuenta que siempre puede firmar la purga, para las pruebas que van por
+ * la conexion de migracion: esa sesion no ve las cuentas que la transaccion de
+ * la prueba crea en la otra. Exige los roles de la purga (admin o rrhh, 2.3.0
+ * bloque 3): si el caso de uso dejara de pedirlos, esta doble lo denunciaria.
+ */
+function retentionAnyResponsible(): ResponsibleAccounts
+{
+    return new class implements ResponsibleAccounts
+    {
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return null;
+        }
+
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
+        {
+            Assert::assertSame(ApplyRetention::RESPONSIBLE_ROLES, $roles);
+
+            return true;
+        }
+    };
+}
+
 /** Una entrada de auditoria con `occurred_at` elegido, para poblar particiones. */
 function auditEntryAt(DatabaseAuditTrail $trail, string $occurredAt, int $n): void
 {
@@ -384,8 +410,15 @@ it('no borra nada sin la frase de confirmacion, ni con una frase que no correspo
     expect(Artisan::call('compliance:apply-retention'))->toBe(0)
         ->and(retentionCounts())->toBe($before);
 
-    // Con una frase inventada: falla y no borra.
-    expect(Artisan::call('compliance:apply-retention', ['--confirm' => 'PURGAR-2023-06-01-000000']))->toBe(1)
+    // Con una frase inventada: falla y no borra, aunque firme una cuenta que puede.
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    expect(Artisan::call('compliance:apply-retention', [
+        '--confirm' => 'PURGAR-2023-06-01-000000',
+        '--responsible' => $admin->email,
+        '--responsible-confirm' => $admin->email,
+        '--no-interaction' => true,
+    ]))->toBe(1)
         ->and(retentionCounts())->toBe($before);
 
     // Y con la buena pero pidiendo simular, manda la que no borra.
@@ -408,7 +441,9 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
 
     expect(Artisan::call('compliance:apply-retention', [
         '--confirm' => retentionToken(),
-        '--responsible' => (string) $responsible->id,
+        '--responsible' => $responsible->email,
+        '--responsible-confirm' => $responsible->email,
+        '--no-interaction' => true,
     ]))->toBe(0);
 
     // Lo vencido se ha ido y lo vigente sigue entero (RL-02).
@@ -508,10 +543,10 @@ it('purga el log tecnico y el historico de errores en su ciclo de 90 dias', func
             $grupoDeErroresDe('2027-05-31 10:00:00+00'),
         ]);
 
-        $retention = retentionUsing($migrator, RETENTION_NOW);
+        $retention = retentionUsing($migrator, RETENTION_NOW, retentionAnyResponsible());
         $token = $retention->handle(RetentionRunCommand::simulate())->confirmationToken();
 
-        $outcome = $retention->handle(RetentionRunCommand::execute($token, null));
+        $outcome = $retention->handle(RetentionRunCommand::execute($token, 7));
 
         // 90 dias antes del 1 de junio de 2027 es el 3 de marzo: se va la huella
         // de enero y se queda la de mayo.
@@ -552,14 +587,14 @@ it('suelta la particion vencida con su ancla sellada y deja la cadena verificabl
             auditEntryAt($trail, '2027-03-0'.$n.' 08:00:00', $n);
         }
 
-        $retention = retentionUsing($migrator, PARTITION_NOW);
+        $retention = retentionUsing($migrator, PARTITION_NOW, retentionAnyResponsible());
         $plan = $retention->handle(RetentionRunCommand::simulate());
 
         expect($plan->report->auditPartitionYears)->toBe([2026]);
 
         $outcome = $retention->handle(RetentionRunCommand::execute(
             $plan->confirmationToken(),
-            null,
+            7,
         ));
 
         expect($outcome->report->rowsFor(RetentionScope::AuditLog))->toBe(3);
@@ -644,6 +679,11 @@ it('no suelta ninguna particion si la cuenta responsable deja de estar activa an
 
             public function __construct(private readonly int $activaDurante) {}
 
+            public function find(ResponsibleReference $reference): ?ResponsibleAccount
+            {
+                return null;
+            }
+
             public function isActiveManagementAccount(int $userId, array $roles = []): bool
             {
                 return ++$this->preguntas <= $this->activaDurante;
@@ -695,10 +735,10 @@ it('aborta sin soltar nada cuando la cadena de la particion no verifica', functi
 
         $migrator->statement("UPDATE audit_log SET payload = '{\"n\": 66}'::jsonb WHERE id = ?", [$victim->id]);
 
-        $retention = retentionUsing($migrator, PARTITION_NOW);
+        $retention = retentionUsing($migrator, PARTITION_NOW, retentionAnyResponsible());
         $token = $retention->handle(RetentionRunCommand::simulate())->confirmationToken();
 
-        expect(fn () => $retention->handle(RetentionRunCommand::execute($token, null)))
+        expect(fn () => $retention->handle(RetentionRunCommand::execute($token, 7)))
             ->toThrow(AuditPartitionNotPurgeable::class);
 
         // La particion sigue donde estaba, sin ancla y con sus tres filas.

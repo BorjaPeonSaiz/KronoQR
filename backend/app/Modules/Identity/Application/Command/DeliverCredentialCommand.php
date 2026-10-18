@@ -12,14 +12,15 @@ use InvalidArgumentException;
  * **`deliveredByUserId` es obligatorio y no se deduce.** RF-QR-06 pide «fecha y
  * responsable», y responsable significa una persona con nombre en `users`, no
  * «el sistema». Por la API es quien tiene la sesion abierta; por consola no hay
- * sesion, asi que la orden lo declara (`--by=`). La columna es `NOT NULL` cuando
+ * sesion, asi que la orden lo declara (`--responsible=`). La columna es `NOT NULL` cuando
  * hay entrega —CHECK `credentials_chk_delivery_is_signed`— precisamente para que
  * no exista el camino de escribir una entrega sin responsable.
  *
  * **`actorUserId` puede ser `null` y no es lo mismo.** Es quien manejo el
- * sistema. Un comando de consola no tiene sesion y atribuirle la accion a la
- * ultima persona que entro al panel seria falsificar el trail: en `audit_log`
- * queda `system` como actor y el responsable, dentro del asiento.
+ * sistema. Desde la 2.3.0 la consola pasa la cuenta de `--responsible`, porque
+ * la orden la enseña y quien teclea confirma que es ella (doc 01 §7.2,
+ * «Firmas por consola»); `null` queda para quien llame sin nadie que confirme,
+ * y el asiento dice entonces `system`, que es la verdad.
  */
 final readonly class DeliverCredentialCommand
 {
@@ -27,7 +28,7 @@ final readonly class DeliverCredentialCommand
         public string $credentialUuid,
         /** Quien responde de la entrega (`credentials.delivered_by_user_id`). */
         public int $deliveredByUserId,
-        /** Quien manejo el sistema, o `null` si fue consola. */
+        /** Quien manejo el sistema, o `null` si nadie ha confirmado su firma. */
         public ?int $actorUserId = null,
     ) {
         if ($credentialUuid === '') {

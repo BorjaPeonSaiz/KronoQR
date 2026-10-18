@@ -352,7 +352,7 @@ registro del motor del paso 4 de la §2.
 ([`brecha-de-seguridad.md`](brecha-de-seguridad.md)) y no exportes nada para la
 Inspección hasta devolver la zona. Se devuelve **por el producto**, a la zona
 del último asiento legítimo, y eso deja el asiento que falta: con fichajes,
-`workforce:correct-site-timezone <zona del asiento> --reason=… --responsible=…`
+`workforce:correct-site-timezone <zona del asiento> --reason=… --responsible=<tu correo>`
 (el motivo cita el incidente, sin nombres de la plantilla); sin fichajes, desde
 Panel → **Centro**. Ninguno de los dos mueve ninguna jornada. Después, la
 conciliación de «Al terminar».
@@ -400,9 +400,14 @@ la conciliación te lo recordará.
 **Quién y cómo.** La firma una cuenta de gestión **activa con rol de
 administración o de RRHH** (desde el 16-10-2026, por decisión del propietario;
 antes valía cualquier cuenta activa). Quien la firma responde de ella y queda
-como actor del asiento. Si `--responsible` no es una de esas cuentas, la orden
-sale con 2 sin escribir nada, también en la simulación. Primero la simulación, que no escribe nada: sin `--reason` ni
-`--responsible` imprime los defectos del asiento y qué explicaría, y sale con 2.
+como actor del asiento. **Desde la 2.3.0, `--responsible` es el correo o el
+uuid de la cuenta, nunca su número**; la orden enseña quién firma (`Firma:
+nombre <correo> · rol · uuid`) antes de escribir y, sin terminal (`exec -T`),
+exige `--responsible-confirm` con el correo de esa misma cuenta. Si
+`--responsible` no es una de esas cuentas, la orden sale con 2 sin escribir
+nada, también en la simulación. Primero la simulación, que no escribe nada: sin
+`--reason` ni `--responsible` imprime los defectos del asiento y qué
+explicaría, y sale con 2.
 
 ```bash
 # 1. Simulación: defectos del asiento y, si procede, hasta qué fecha explicaría borrados.
@@ -413,7 +418,8 @@ docker compose exec -T app php artisan compliance:reconcile-work-record --acknow
 docker compose exec -T app php artisan compliance:reconcile-work-record \
   --acknowledge=<id-del-asiento> \
   --reason="<qué pasó y qué se hizo; referencia del incidente>" \
-  --responsible=<id-de-tu-cuenta-de-gestión>
+  --responsible=<correo-de-tu-cuenta-de-gestión> \
+  --responsible-confirm=<el-mismo-correo>
 ```
 
 Sale con 0 si escribe el asiento; con 1 si lo rechaza (no es una purga del
@@ -449,7 +455,8 @@ SELECT id, occurred_at, actor_type, actor_id, payload
 ```
 
 El actor **no está autenticado**: el comando se ejecuta en la consola del
-servidor, sin sesión, y `--responsible` es solo un id tecleado, así que un
+servidor, sin sesión, y `--responsible` es solo un correo tecleado y
+confirmado (desde la 2.3.0; antes, un id), así que un
 `auth.login_succeeded` previo no existe en una revisión legítima y no es una
 prueba. Verifica con esa persona que la hizo ella y contrasta quién tenía acceso
 por shell al servidor en ese momento. Comprueba además que el
@@ -485,13 +492,14 @@ admin o rrhh**. Una revisión no se repite ni se corrige.
 ```bash
 # 1. Sin --reason: comprueba que es una discrepancia pendiente y de qué centro.
 docker compose exec -T app php artisan compliance:reconcile-work-record \
-  --acknowledge-site-change=change:7 --responsible=<id de la cuenta>
+  --acknowledge-site-change=change:7 --responsible=<correo de la cuenta>
 
 # 2. Revisión de verdad: change:<id> para una fila de la traza,
 #    audit:<id> para un site.updated sin firma. Motivo de 10 a 1000
 #    caracteres, SIN nombres de la plantilla.
 docker compose exec -T app php artisan compliance:reconcile-work-record \
-  --acknowledge-site-change=change:7 --responsible=<id de la cuenta> \
+  --acknowledge-site-change=change:7 --responsible=<correo de la cuenta> \
+  --responsible-confirm=<el mismo correo> \
   --reason="Incidente 2026-14: la llamada a la función fue de soporte; zona devuelta con la orden"
 ```
 

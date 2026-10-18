@@ -1485,6 +1485,15 @@ docker compose exec -T app php artisan compliance:apply-retention --dry-run
 
 La primera línea del informe dice el corte que se aplicaría y de qué perfil sale.
 
+Para **ejecutarla**, la purga la autoriza y la firma una cuenta de gestión
+activa con rol **admin o rrhh**: `--responsible=<su correo>` (o su uuid; desde
+la 2.3.0 no vale el número de la cuenta). La orden enseña quién firma y lo
+pregunta; si la lanzas sin terminal, confirma con
+`--responsible-confirm=<el mismo correo>`. Las demás órdenes de consola que
+dejan un asiento firmado —la corrección de la zona del centro, las revisiones
+de la conciliación y la entrega de una tarjeta— siguen la misma regla; el
+paquete de diagnóstico con datos personales lo firma solo una cuenta admin.
+
 ### …necesito saber quién cambió un umbral y cuándo
 
 Cada clave modificada deja una entrada propia en el registro de auditoría, con la
@@ -1865,7 +1874,7 @@ cinco líneas.
 | `APP_DEBUG` | `[CLIENTE]` | Muestra la traza y la configuración completa ante cualquier error | `false` | **Nunca en producción.** Con `true`, cualquiera que provoque un error ve las claves incluidas. La aplicación **se niega a arrancar** con `APP_ENV=production` y esto en `true`, y dice cómo corregirlo | No |
 | `APP_KEY` | `[INSTALADOR]` | Cifra sesiones y los datos cifrados en base de datos | (vacía; la genera `install.sh`) | Nunca a mano. Cambiarla deja ilegibles las sesiones y los datos ya cifrados | No |
 | `APP_URL` | `[CLIENTE]` | La URL `https` por la que llegan los quioscos, el panel y el portal | `https://localhost` en la plantilla | Al instalar, y si cambias el nombre del servidor. **Tiene que coincidir con el nombre del certificado TLS.** Ejemplo: `https://fichaje.tuhotel.local` | No |
-| `APP_TIMEZONE` | `[FIJO]` | Zona horaria del proceso | `UTC` | **Nunca.** Todo instante se almacena en UTC y la conversión a hora local ocurre al presentarlo. La zona horaria **del centro** es otra cosa: se elige en la puesta en marcha y **queda fija con el primer fichaje** (RN-23). Hasta entonces se cambia en el panel, en la pantalla de departamentos, apartado «Centro»; después el panel la muestra sin dejar editarla. Si se puso mal, se corrige en el servidor con `docker compose exec app php artisan workforce:correct-site-timezone <zona> --reason="…" --responsible=<id>`, que pide confirmación, deja asiento y **no mueve ninguna jornada ya registrada**: el histórico pasa a verse con la zona corregida. Si hay turnos cerca de la medianoche, habla antes con tu asesoría. Cambiar esto invalida el cálculo de jornada y deja el registro horario sin valor legal; el instalador ni siquiera ofrece tocarlo | **Sí** — cambiarla invalida el registro |
+| `APP_TIMEZONE` | `[FIJO]` | Zona horaria del proceso | `UTC` | **Nunca.** Todo instante se almacena en UTC y la conversión a hora local ocurre al presentarlo. La zona horaria **del centro** es otra cosa: se elige en la puesta en marcha y **queda fija con el primer fichaje** (RN-23). Hasta entonces se cambia en el panel, en la pantalla de departamentos, apartado «Centro»; después el panel la muestra sin dejar editarla. Si se puso mal, se corrige en el servidor con `docker compose exec app php artisan workforce:correct-site-timezone <zona> --reason="…" --responsible=<tu correo>`, que firma una cuenta de gestión activa con rol **admin o rrhh** (por su correo o su uuid, nunca por un número), enseña quién firma, pide confirmación, deja asiento y **no mueve ninguna jornada ya registrada**: el histórico pasa a verse con la zona corregida. Si hay turnos cerca de la medianoche, habla antes con tu asesoría. Cambiar esto invalida el cálculo de jornada y deja el registro horario sin valor legal; el instalador ni siquiera ofrece tocarlo | **Sí** — cambiarla invalida el registro |
 | `APP_LOCALE` | — | Idioma de respaldo de la API y de los documentos si la base de datos no responde | `es` | Casi nunca: manda `LOCALE_DEFAULT` del panel (sección 2.3) | No |
 | `APP_FALLBACK_LOCALE` | — | Idioma al que se recurre si falta una traducción | `es` | Casi nunca | No |
 | `APP_SUPPORTED_LOCALES` | — | Idiomas que la API acepta negociar, como respaldo | `es` | Casi nunca: manda `LOCALE_AVAILABLE` del panel (sección 2.3). **No es donde se activa el inglés**: eso se hace en el panel | No |

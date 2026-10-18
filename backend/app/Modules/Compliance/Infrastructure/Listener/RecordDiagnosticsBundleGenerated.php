@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Listener;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
@@ -103,8 +104,12 @@ final readonly class RecordDiagnosticsBundleGenerated
         $this->audit->handle(new RecordAuditEntryCommand(
             // Quien lo hizo lo resuelve la sesion en curso. Por consola no hay
             // sesion, y eso tambien es informacion: distingue «lo genero Marta
-            // desde el panel» de «lo genero alguien por SSH».
-            actor: $this->context->actor(),
+            // desde el panel» de «lo genero alguien por SSH». Salvo el paquete
+            // con datos personales de consola, que firma la cuenta admin de
+            // `--responsible` (2.3.0 bloque 3, PR17).
+            actor: $event->responsibleUserId === null
+                ? $this->context->actor()
+                : AuditActor::user($event->responsibleUserId),
             action: AuditAction::DiagnosticsBundleGenerated,
             subject: AuditSubject::of('diagnostics'),
             payload: AuditPayload::of([

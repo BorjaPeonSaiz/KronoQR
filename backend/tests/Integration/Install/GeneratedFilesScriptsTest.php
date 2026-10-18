@@ -1059,6 +1059,6 @@ it('restore.sh no lo anuncia cuando la restauracion no va a la base de la instal
     ['informe' => $informe, 'proceso' => $proceso] = ficherosGeneradosRestauracion(0, 'es');
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($informe)->toContain('Restauracion iniciada por')
+        ->and($informe)->toContain('Restauracion iniciada')
         ->and($informe)->not->toContain('file_missing');
 })->group('RF-PR-04', 'RL-15');

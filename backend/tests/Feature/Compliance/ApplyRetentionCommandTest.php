@@ -7,7 +7,10 @@ use App\Modules\Compliance\Application\UseCase\PlanRetention;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -16,6 +19,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Shared\InteractiveConsole;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -167,7 +171,9 @@ it('purga lo vencido por la funcion, con el rol de la aplicacion y con su asient
 
     expect(Artisan::call('compliance:apply-retention', [
         '--confirm' => applyRetentionToken(),
-        '--responsible' => (string) $responsible->id,
+        '--responsible' => $responsible->email,
+        '--responsible-confirm' => $responsible->email,
+        '--no-interaction' => true,
         '--batch' => '1',
     ]))->toBe(0, Artisan::output());
 
@@ -227,9 +233,12 @@ it('no borra nada ni deja asiento si el reloj de la aplicacion pide un corte que
     $before = applyRetentionCounts();
     $audit = DB::table('audit_log')->count();
 
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
     $exit = Artisan::call('compliance:apply-retention', [
         '--confirm' => applyRetentionToken(),
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        '--responsible' => $admin->email,
+        '--responsible-confirm' => $admin->email,
+        '--no-interaction' => true,
     ]);
 
     $output = Artisan::output();
@@ -292,9 +301,12 @@ it('explica cada fallo de la purga por su SQLSTATE, no por el nombre de la funci
     $before = applyRetentionCounts();
     $audit = DB::table('audit_log')->count();
 
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
     $exit = Artisan::call('compliance:apply-retention', [
         '--confirm' => applyRetentionToken(),
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        '--responsible' => $admin->email,
+        '--responsible-confirm' => $admin->email,
+        '--no-interaction' => true,
     ]);
 
     $output = Artisan::output();
@@ -327,7 +339,7 @@ it('explica cada fallo de la purga por su SQLSTATE, no por el nombre de la funci
     ],
 ])->group('RL-02', 'RF-PR-03');
 
-// --- `--responsible`: un id de verdad y una cuenta activa (bloque 23 de la 2.2.1) ---
+// --- `--responsible`: el uuid o el correo de una cuenta admin o rrhh activa (2.3.0 bloque 3) ---
 
 /**
  * Una entrada vencida y otra vigente, y el reloj en hoy. Devuelve el estado de
@@ -346,60 +358,145 @@ function applyRetentionResponsibleScenario(): array
     return ['counts' => applyRetentionCounts(), 'audit' => DB::table('audit_log')->count()];
 }
 
-it('sale con 2 sin simular ni purgar si --responsible no es un id', function (string $valor, bool $simular): void {
-    $antes = applyRetentionResponsibleScenario();
+/**
+ * La orden en simulacion o en ejecucion, sin terminal.
+ *
+ * @param  array<string, string|bool>  $opciones
+ * @return array{code: int, output: string}
+ */
+function applyRetentionOrder(bool $simular, array $opciones): array
+{
     $orden = $simular ? ['--dry-run' => true] : ['--confirm' => applyRetentionToken()];
+    $code = Artisan::call('compliance:apply-retention', [...$orden, ...$opciones, '--no-interaction' => true]);
 
-    $exit = Artisan::call('compliance:apply-retention', [...$orden, '--responsible' => $valor]);
-    $salida = Artisan::output();
+    return ['code' => $code, 'output' => Artisan::output()];
+}
 
-    // `12abc` ya no es la cuenta 12: antes el `(int)` lo dejaba pasar.
-    expect($exit)->toBe(2, $salida)
-        ->and($salida)->toContain('entero positivo')
-        ->and(applyRetentionCounts())->toBe($antes['counts'])
+/** @param array{counts: array<string, int>, audit: int} $antes */
+function applyRetentionNothingChanged(array $antes): void
+{
+    expect(applyRetentionCounts())->toBe($antes['counts'])
         ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
-})->with([
-    'con letras detras, al ejecutar' => ['12abc', false],
-    'con letras detras, al simular' => ['12abc', true],
-    'negativo' => ['-3', false],
-    'cero' => ['0', false],
-    'decimal' => ['1.5', false],
-])->group('RF-PR-03', 'RL-04');
+}
 
-it('sale con 2 sin simular ni purgar si --responsible nombra una cuenta que no existe', function (bool $simular): void {
+it('firma la purga con la cuenta de --responsible dada por su uuid', function (): void {
+    applyRetentionResponsibleScenario();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $orden = applyRetentionOrder(false, ['--responsible' => $rrhh->uuid, '--responsible-confirm' => $rrhh->email]);
+
+    /** @var object{actor_type: string, actor_id: int} $asiento */
+    $asiento = DB::table('audit_log')->where('action', 'retention.purge_executed')->sole();
+
+    expect($orden['code'])->toBe(0, $orden['output'])
+        ->and($orden['output'])->toContain('Firma: '.$rrhh->name.' <'.$rrhh->email.'> · rrhh · '.$rrhh->uuid)
+        ->and($asiento->actor_type)->toBe('user')
+        ->and($asiento->actor_id)->toBe($rrhh->id);
+})->group('RF-PR-03', 'RL-04');
+
+it('acepta el correo sin distinguir mayusculas', function (): void {
+    applyRetentionResponsibleScenario();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $orden = applyRetentionOrder(false, [
+        '--responsible' => mb_strtoupper($admin->email),
+        '--responsible-confirm' => $admin->email,
+    ]);
+
+    expect($orden['code'])->toBe(0, $orden['output'])
+        ->and(DB::table('audit_log')->where('action', 'retention.purge_executed')->value('actor_id'))->toBe($admin->id);
+})->group('RF-PR-03', 'RL-04');
+
+it('sale con 2 sin simular ni purgar si --responsible es un id numerico, y explica el cambio', function (bool $simular): void {
     $antes = applyRetentionResponsibleScenario();
-    $orden = $simular ? ['--dry-run' => true] : ['--confirm' => applyRetentionToken()];
-    $inexistente = ManagementUsers::withRole(UserRole::ADMIN)->id + 1000;
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
 
-    $exit = Artisan::call('compliance:apply-retention', [...$orden, '--responsible' => (string) $inexistente]);
+    // Hasta la 2.2.1 esto era el id de la cuenta: ahora se rechaza aunque exista.
+    $orden = applyRetentionOrder($simular, ['--responsible' => (string) $admin->id, '--responsible-confirm' => $admin->email]);
 
-    $salida = Artisan::output();
-
-    expect($exit)->toBe(2, $salida)
-        ->and($salida)->toContain('no existe o no está activa')
-        ->and(applyRetentionCounts())->toBe($antes['counts'])
-        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('ya no admite el id interno')
+        ->and($orden['output'])->toContain('2.3.0');
+    applyRetentionNothingChanged($antes);
 })->with([
     'al ejecutar' => [false],
     'al simular' => [true],
 ])->group('RF-PR-03', 'RL-04');
 
-it('sale con 2 sin purgar si --responsible es una cuenta dada de baja', function (): void {
+it('sale con 2 sin simular ni purgar si --responsible no es un uuid ni un correo, o no existe', function (string $valor, string $dice): void {
+    $antes = applyRetentionResponsibleScenario();
+
+    $orden = applyRetentionOrder(false, ['--responsible' => $valor, '--responsible-confirm' => $valor]);
+
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain($dice);
+    applyRetentionNothingChanged($antes);
+})->with([
+    'con letras' => ['12abc', 'no es ninguno de los dos'],
+    'correo que no existe' => ['nadie@kronoqr.test', 'No hay ninguna cuenta'],
+    'uuid que no existe' => ['0192f1a4-0000-7000-8000-000000000000', 'No hay ninguna cuenta'],
+])->group('RF-PR-03', 'RL-04');
+
+it('sale con 2 sin purgar si falta --responsible al ejecutar, y simula sin el', function (): void {
+    $antes = applyRetentionResponsibleScenario();
+
+    $ejecutar = applyRetentionOrder(false, []);
+
+    expect($ejecutar['code'])->toBe(2, $ejecutar['output'])
+        ->and($ejecutar['output'])->toContain('Falta --responsible');
+    applyRetentionNothingChanged($antes);
+
+    // La simulacion semanal del planificador no lleva cuenta: no escribe asiento.
+    expect(applyRetentionOrder(true, [])['code'])->toBe(0);
+})->group('RF-PR-03', 'RL-04');
+
+it('sale con 2 sin purgar si la cuenta esta dada de baja', function (): void {
     $antes = applyRetentionResponsibleScenario();
     $baja = ManagementUsers::withRole(UserRole::ADMIN);
     DB::table('users')->where('id', $baja->id)->update(['is_active' => false]);
 
-    $exit = Artisan::call('compliance:apply-retention', [
-        '--confirm' => applyRetentionToken(),
-        '--responsible' => (string) $baja->id,
-    ]);
+    $orden = applyRetentionOrder(false, ['--responsible' => $baja->email, '--responsible-confirm' => $baja->email]);
 
-    expect($exit)->toBe(2, Artisan::output())
-        ->and(applyRetentionCounts())->toBe($antes['counts'])
-        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('dada de baja');
+    applyRetentionNothingChanged($antes);
 })->group('RF-PR-03', 'RL-04');
 
-it('deshace la purga si la cuenta deja de estar activa entre la simulacion y el asiento', function (): void {
+it('sale con 2 sin purgar si la cuenta no es admin ni rrhh', function (UserRole $rol): void {
+    $antes = applyRetentionResponsibleScenario();
+    $cuenta = ManagementUsers::withRole($rol);
+
+    $orden = applyRetentionOrder(false, ['--responsible' => $cuenta->email, '--responsible-confirm' => $cuenta->email]);
+
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('admin, rrhh')
+        ->and($orden['output'])->not->toContain('Firma:');
+    applyRetentionNothingChanged($antes);
+})->with([
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
+    'auditor' => [UserRole::AUDITOR],
+])->group('RF-PR-03', 'RL-04', 'RS-05');
+
+it('sin terminal exige --responsible-confirm con el correo de la cuenta', function (?string $confirmacion, string $dice): void {
+    $antes = applyRetentionResponsibleScenario();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $opciones = ['--responsible' => $admin->email];
+
+    if ($confirmacion !== null) {
+        $opciones['--responsible-confirm'] = $confirmacion;
+    }
+
+    $orden = applyRetentionOrder(false, $opciones);
+
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain($dice);
+    applyRetentionNothingChanged($antes);
+})->with([
+    'sin confirmacion' => [null, '--responsible-confirm=<correo de la cuenta>'],
+    'con el correo de otra cuenta' => ['otra@kronoqr.test', 'no coincide'],
+])->group('RF-PR-03', 'RL-04');
+
+it('deshace la purga si la cuenta deja de estar activa entre la orden y el asiento', function (): void {
     // La segunda comprobacion va con la cadena de auditoria tomada, justo antes
     // del asiento: si la cuenta se dio de baja entre medias, no hay asiento y,
     // por tanto, tampoco borrado (regla dura 6).
@@ -410,6 +507,12 @@ it('deshace la purga si la cuenta deja de estar activa entre la simulacion y el 
     {
         private int $preguntas = 0;
 
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            // La consola la ve activa: lo que se prueba es la comprobacion del caso de uso.
+            return (new DatabaseResponsibleAccounts(DB::connection()))->find($reference);
+        }
+
         public function isActiveManagementAccount(int $userId, array $roles = []): bool
         {
             // Activa en la primera comprobacion; dada de baja en la segunda.
@@ -417,13 +520,25 @@ it('deshace la purga si la cuenta deja de estar activa entre la simulacion y el 
         }
     });
 
-    $exit = Artisan::call('compliance:apply-retention', [
-        '--confirm' => applyRetentionToken(),
-        '--responsible' => (string) $responsable->id,
-    ]);
+    $orden = applyRetentionOrder(false, ['--responsible' => $responsable->email, '--responsible-confirm' => $responsable->email]);
 
-    expect($exit)->toBe(2, Artisan::output())
-        ->and(applyRetentionCounts())->toBe($antes['counts'])
-        ->and(DB::table('audit_log')->where('action', 'retention.purge_executed')->count())->toBe(0)
-        ->and(DB::table('audit_log')->count())->toBe($antes['audit']);
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('ya no es una cuenta de gestión activa')
+        ->and(DB::table('audit_log')->where('action', 'retention.purge_executed')->count())->toBe(0);
+    applyRetentionNothingChanged($antes);
 })->group('RF-PR-03', 'RL-04', 'RS-07');
+
+it('con terminal pregunta por la firma y, si se responde que no, sale con 1 sin purgar', function (): void {
+    $antes = applyRetentionResponsibleScenario();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $orden = InteractiveConsole::run('compliance:apply-retention', [
+        '--confirm' => applyRetentionToken(),
+        '--responsible' => $admin->email,
+    ], 'no');
+
+    expect($orden['code'])->toBe(1, $orden['output'])
+        ->and($orden['output'])->toContain('Firma: '.$admin->name)
+        ->and($orden['output'])->toContain('Cancelado. No se ha escrito nada.');
+    applyRetentionNothingChanged($antes);
+})->group('RF-PR-03', 'RL-04');

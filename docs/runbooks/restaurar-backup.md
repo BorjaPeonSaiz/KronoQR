@@ -362,7 +362,11 @@ docker compose stop app horizon scheduler reverb
 
 # 2. Restaura. Se restaura en una base NUEVA y solo al final se intercambian
 #    los nombres: hasta ese instante la base viva no se toca.
-docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes
+#    --operator es quien restaura (el correo de tu cuenta de gestión). Desde la
+#    2.3.0 es obligatorio: el contenedor corre como `app` y eso no dice quién
+#    estaba delante. Se declara y no se verifica, y queda en el informe como
+#    `declared_operator`; el asiento de auditoría remite al informe.
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes --operator <tu correo>
 
 # 3. Arranca y comprueba
 docker compose up -d
@@ -408,8 +412,19 @@ Para restaurar una copia concreta, no la última:
 ```bash
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --list
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh \
-  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/kronoqr-<marca>.dump.enc" --yes
+  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/kronoqr-<marca>.dump.enc" --yes \
+  --operator <tu correo>
 ```
+
+**Quién restaura queda en el informe.** `--operator` se guarda en
+`BACKUP_PATH/reports/restore-<marca>.log` como `declared_operator`: el correo de
+una cuenta de gestión, declarado y no verificado. Es un dato personal y **se
+conserva como mínimo lo que el asiento `system.restored_from_backup` que remite
+al informe** por su `report_id` (cuatro años, RL-02). No hay que borrarlo a mano
+antes. Ninguna pasada automática borra los informes de restauración, así que
+después de esos cuatro años siguen ahí hasta que el cliente decida su plazo con
+su DPO (está anotado en el inventario de tratamientos). Sin
+él, el asiento diría qué se restauró pero no quién lo declaró.
 
 ### 6.3 Vuelta atrás
 
@@ -499,7 +514,9 @@ reprodujeron).
 El actualizador (tarea 5.7) no tiene un camino de restauración propio: cuando
 una migración o la verificación de la versión nueva fallan, **para lo que
 escribe y ejecuta este mismo `restore.sh --yes`** con la copia que hizo en su
-paso 3, y después relanza la versión anterior desde su directorio. Lo que eso
+paso 3, y después relanza la versión anterior desde su directorio. Esa vuelta
+atrás no pide `--operator` (`--audit-by-caller`): **el responsable es quien
+ejecutó la actualización**, y su asiento es el de `update.sh`. Lo que eso
 deja en el servidor es exactamente lo de §6.2 y §6.3: la base fallida
 conservada como `<base>_pre_restore_<marca>` durante 7 días, un informe en
 `BACKUP_PATH/reports/restore-<marca>.log` **y otro en
@@ -518,7 +535,7 @@ traiga el archivo: una copia con `ALTER ROLE fichaje_app SUPERUSER` dentro
 dejaría la aplicación con poder para reescribir el registro.
 
 1. **No uses esa copia.** Prueba con la anterior (`backup.sh list`,
-   `restore.sh --file <anterior> --yes`).
+   `restore.sh --file <anterior> --yes --operator <tu correo>`).
 2. Comprueba que los roles están como antes (el mensaje dice si la reversión se
    ha comprobado; si dice que NO, corrige a mano los que difieran de la lista):
    `SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls,
