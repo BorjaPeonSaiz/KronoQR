@@ -31,6 +31,7 @@ use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Shared\InteractiveConsole;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -1064,3 +1065,66 @@ it('detecta que alguien reescribio como termino un tramo, por fichaje y por corr
         ->and($resultado['output'])->toContain('shift_entries '.$pausa.' · entry_differs_from_audit · closed_by')
         ->and($resultado['output'])->toContain('shift_entries '.$tramos['corregido'].' · entry_differs_from_audit · closed_by');
 })->group('RL-04', 'RS-07', 'RN-05');
+
+// --- La firma de --acknowledge-site-change (2.3.0 bloque 3) -----------------
+
+/** Una fila de la traza sin firma, pendiente de revisar. Devuelve su id. */
+function registroAuditadoFilaPendiente(): int
+{
+    $escenario = registroAuditadoZonaCorregida();
+    DB::select('SELECT public.site_correct_timezone(?::bigint, ?::text, ?::text)', [$escenario['site'], 'Atlantic/Canary', 'Europe/Lisbon']);
+
+    /** @var int $fila */
+    $fila = DB::table('site_timezone_changes')->max('id');
+
+    return $fila;
+}
+
+it('revisa la discrepancia de la zona con la cuenta nombrada por su uuid', function (): void {
+    $fila = registroAuditadoFilaPendiente();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $revision = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'change:'.$fila,
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        ...ConsoleSignature::byUuid($rrhh),
+    ]);
+
+    expect($revision['code'])->toBe(0, $revision['output'])
+        ->and($revision['output'])->toContain('Firma: '.$rrhh->name.' <'.$rrhh->email.'> · rrhh · '.$rrhh->uuid)
+        ->and(DB::table('audit_log')->where('action', 'site.timezone_discrepancy_reviewed')->value('actor_id'))->toBe($rrhh->id);
+})->group('RN-23', 'RL-04', 'RS-07');
+
+it('no revisa la discrepancia de la zona si la firma no vale (salida 2, sin asiento)', function (Closure $firma, string $dice): void {
+    app()->setLocale('es');
+    $fila = registroAuditadoFilaPendiente();
+
+    $revision = registroAuditadoRevisarZona([
+        '--acknowledge-site-change' => 'change:'.$fila,
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--no-interaction' => true,
+        ...$firma(),
+    ]);
+
+    expect($revision['code'])->toBe(2, $revision['output'])
+        ->and($revision['output'])->toContain($dice)
+        ->and(registroAuditadoRevisionesDeZona())->toBe(0);
+})->with([
+    'id numerico' => [fn (): array => ['--responsible' => (string) ManagementUsers::withRole(UserRole::RRHH)->id], 'ya no admite el id interno'],
+    'sin --responsible-confirm' => [fn (): array => ['--responsible' => ManagementUsers::withRole(UserRole::RRHH)->email], '--responsible-confirm=<correo de la cuenta>'],
+])->group('RN-23', 'RL-04', 'RS-07');
+
+it('con terminal, responder que no a la firma de la revision sale con 1 sin asiento', function (): void {
+    $fila = registroAuditadoFilaPendiente();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $revision = InteractiveConsole::run('compliance:reconcile-work-record', [
+        '--acknowledge-site-change' => 'change:'.$fila,
+        '--reason' => WORK_RECORD_RECONCILIATION_MOTIVO_ZONA,
+        '--responsible' => $rrhh->email,
+    ], 'no');
+
+    expect($revision['code'])->toBe(1, $revision['output'])
+        ->and($revision['output'])->toContain('Firma: '.$rrhh->name)
+        ->and(registroAuditadoRevisionesDeZona())->toBe(0);
+})->group('RN-23', 'RL-04', 'RS-07');

@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Shared\InteractiveConsole;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -526,3 +527,18 @@ it('deshace la purga si la cuenta deja de estar activa entre la orden y el asien
         ->and(DB::table('audit_log')->where('action', 'retention.purge_executed')->count())->toBe(0);
     applyRetentionNothingChanged($antes);
 })->group('RF-PR-03', 'RL-04', 'RS-07');
+
+it('con terminal pregunta por la firma y, si se responde que no, sale con 1 sin purgar', function (): void {
+    $antes = applyRetentionResponsibleScenario();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $orden = InteractiveConsole::run('compliance:apply-retention', [
+        '--confirm' => applyRetentionToken(),
+        '--responsible' => $admin->email,
+    ], 'no');
+
+    expect($orden['code'])->toBe(1, $orden['output'])
+        ->and($orden['output'])->toContain('Firma: '.$admin->name)
+        ->and($orden['output'])->toContain('Cancelado. No se ha escrito nada.');
+    applyRetentionNothingChanged($antes);
+})->group('RF-PR-03', 'RL-04');

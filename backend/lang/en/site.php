@@ -25,7 +25,7 @@ return [
         'missing_options' => 'To correct the time zone, --reason and --responsible are required. Nothing has been changed.',
         'reason_too_short' => 'The reason must explain the setup mistake: at least :min characters.',
         'reason_too_long' => 'The reason accepts at most :max characters.',
-        'responsible_inactive' => 'Account :id is not an active management account with the administration or HR role. The correction is signed by someone who can change the site from the panel. Nothing has been changed.',
+        'responsible_inactive' => 'The --responsible account is not an active management account with the admin or rrhh role: it may have been deactivated or changed role while confirming. The correction is signed by someone who can change the site from the panel. Nothing has been changed.',
         'summary_current' => 'Current site time zone: :timezone',
         'summary_new' => 'Corrected time zone:    :timezone',
         'summary_entries' => 'Recorded clock-ins:     :count shift entry(ies), from work day :first to :last',

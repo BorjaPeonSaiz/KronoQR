@@ -142,7 +142,8 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
         if ($report->mode === RetentionMode::Simulation) {
             $lines[] = 'No se ha borrado nada. Para ejecutar ESTA purga, con la confirmacion del responsable:';
             $lines[] = '';
-            $lines[] = '    php artisan compliance:apply-retention --confirm='.$report->confirmationToken();
+            // La misma orden que imprime la consola: sale de un solo sitio.
+            $lines[] = '    '.$report->executionCommand();
             $lines[] = '';
             $lines[] = 'La frase caduca cuando cambia el corte o el perfil de cumplimiento: se ejecuta lo que';
             $lines[] = 'se aprobo, no lo que hoy toque.';

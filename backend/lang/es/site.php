@@ -25,7 +25,7 @@ return [
         'missing_options' => 'Para corregir la zona faltan --reason y --responsible. No se ha cambiado nada.',
         'reason_too_short' => 'El motivo tiene que explicar el error de la puesta en marcha: al menos :min caracteres.',
         'reason_too_long' => 'El motivo admite como mucho :max caracteres.',
-        'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa con rol de administración o de RRHH. La corrección la firma quien puede modificar el centro desde el panel. No se ha cambiado nada.',
+        'responsible_inactive' => 'La cuenta de --responsible no es una cuenta de gestión activa con rol admin o rrhh: puede haberse dado de baja o cambiado de rol mientras se confirmaba. La corrección la firma quien puede modificar el centro desde el panel. No se ha cambiado nada.',
         'summary_current' => 'Zona actual del centro: :timezone',
         'summary_new' => 'Zona corregida:          :timezone',
         'summary_entries' => 'Fichajes registrados:    :count tramo(s), de la jornada :first a la :last',

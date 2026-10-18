@@ -199,8 +199,8 @@ final class ApplyRetentionCommand extends Command
 
         $this->line('');
         $this->warn('Nada se ha borrado. Para ejecutar ESTA purga, con la autorizacion del responsable:');
-        $this->line('  php artisan compliance:apply-retention --confirm='.$outcome->confirmationToken()
-            .' --responsible=<correo o uuid de la cuenta admin o rrhh>');
+        // La misma orden que imprime el informe: sale de un solo sitio.
+        $this->line('  '.$report->executionCommand());
     }
 
     /**

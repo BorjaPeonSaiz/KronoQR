@@ -102,7 +102,7 @@ final class RotateSigningKeyCommand extends Command
         $this->line('');
         $this->line('Siguientes pasos (docs/runbooks/rotacion-clave-qr.md):');
         $this->line('  1. php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf');
-        $this->line('  2. Entregar en mano y registrar: php artisan credentials:deliver <uuid> --by=<usuario>');
+        $this->line('  2. Entregar en mano y registrar: php artisan credentials:deliver <uuid> --responsible=<correo>');
         $this->line('  3. php artisan credentials:status --key-id='.$report->retiringKeyId.'   # quien falta');
         $this->line('  4. php artisan credentials:retire-key '.$report->retiringKeyId.'        # cuando no falte nadie');
     }
