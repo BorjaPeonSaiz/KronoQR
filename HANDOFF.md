@@ -93,6 +93,8 @@ Lo que se aprobó con el plan:
 - **Las notas de la 2.3.0 viven en `operacion.md` §11** (es/en), en párrafos «Al actualizar a la 2.3.0» y «Al actualizar desde la 2.2.0», como las de versiones anteriores; el resumen del CHANGELOG se escribe en el bloque final. **Cada bloque que cambie algo visible para el hotel añade allí su párrafo.** D6 (400 `problem+json`) entra con el bloque 10.
 - `check-package-links.sh` comprueba ya cualquier destino relativo, no solo `.md` e imágenes. Un enlace de un runbook a `../../infra/…`, `.github/…` o `.gitleaks.toml` rompe ⑧ y `release.yml`.
 - La guía de instalación descomprime en `/opt` con `sudo`, como las actualizaciones.
+- `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
+- La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
 **Siguiente acción:** cerrar el bloque 5 (CI manual, revisiones, PR y merge) y seguir con el bloque 6 (`update.sh` a prueba de Ctrl+C, rama `fix/update-sh-interrupcion`).
 
@@ -172,9 +174,7 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 ## Pendiente
 
 - **Del bloque 5 de la 2.3.0 (18-10-2026), sin bloque asignado todavía:**
-  - `package.sh` sigue metiendo en el paquete los dos runbooks del fabricante (`fallo-de-ci.md`, `triaje-hallazgos-seguridad.md`). La guía ya lo dice; excluirlos es un cambio de script (I10).
   - El «Que hacer» de `KIOSK_VLAN_CIDR` igual a la plantilla, en `install.sh` y `doctor.sh` (`f_kiosk_vlan_template`), sigue mandando a `grep "from_kiosk_vlan":0`. La guía usa ahora el recuento por latidos, que dice qué IP ve el servidor de cada tablet. Se puede alinear en el bloque 7.
-  - La guía de RRHH no explica la casilla «Este tramo terminó en pausa» ni la fila «Cómo terminó» (bloque 1, ADR-058). Solo lo dicen las notas de `operacion.md` §11.
 - **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
