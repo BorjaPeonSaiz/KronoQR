@@ -89,7 +89,9 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Siguiente acción:** cerrar el bloque 0 (rama `docs/plan-2.3.0`: plan, `2.3.0 *` en `infra/versions.txt` (`VERSION` sigue en 2.2.1 hasta la publicación, por las capturas), doc 07 y la línea D12 en el doc 02) y seguir con B1 en el orden del plan.
+**Estado de la 2.3.0 (18-10-2026):** bloques 0 a 3 integrados (#182 a #185). **Bloque 4 «Lo que se le promete al cliente» en curso** en la rama `docs/promesas-al-cliente`, sin push. Trae: doc 05 (diseñado para 50/s, contratos y departamentos sin baja, la conciliación detecta las horas tocadas, informes avanzados ya existen); doc 02 §7.1 (600 r/m por IP); RF-KI-07 y el contrato del latido con la recarga urgente a cualquier hora, con notas en ADR-012 y ADR-054; la parada medida en ⑧b (51-53 s de 503 y 63-65 s de `update.sh`) en el runbook, `operacion.md` (es/en) y el doc 05; tres correos y las alertas en `obligaciones-legales.md`. El plan pedía la nota en ADR-044/049, que no tratan del quiosco: se puso en ADR-012 y ADR-054.
+
+**Siguiente acción:** revisar e integrar el bloque 4 y seguir con el bloque 5 (guías del cliente, rama `docs/guias-cliente-2.3.0`). La cifra de la parada entra también en las notas de la 2.3.0 (tarea 5.4).
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -166,6 +168,8 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+- **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
+
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
 
 - **Integrados:** B18 (#162: CSP por ubicación, cosign *keyless* de imágenes y de `SHA256SUMS`, Redis por digest),
@@ -230,7 +234,8 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 ### Anotado en el bloque 13 de la 2.2.1 (14-10-2026)
 
 - V6-DV-9: la ventana de 503 de una actualización sigue sin medirse con carga; `update.sh` la reparte por fases y ⑧b la
-  publica en el resumen del job. Sustituir la cifra «unos 52 s» de `operacion.md` (es/en) por la medida.
+  publica en el resumen del job. La cifra de ⑧b ya está en las guías (bloque 4 de la 2.3.0); falta medirla con una base
+  con volumen.
 - `doctor.sh` no comprueba que Prometheus tenga cargados los nombres de alerta del paquete (`/api/v1/rules`).
 - `product:doctor` no muestra `LOG_RETENTION_HOURS`: la app no recibe la variable; hacerlo pasa por ADR-042.
 - El salto 2.2.0 → 2.2.1 no fusiona `observability/` (la 2.2.0 no trae `observability.sha256`): gana el paquete y avisa.
