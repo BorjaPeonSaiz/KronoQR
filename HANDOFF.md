@@ -173,8 +173,6 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
-- **Del bloque 5 de la 2.3.0 (18-10-2026), sin bloque asignado todavía:**
-  - El «Que hacer» de `KIOSK_VLAN_CIDR` igual a la plantilla, en `install.sh` y `doctor.sh` (`f_kiosk_vlan_template`), sigue mandando a `grep "from_kiosk_vlan":0`. La guía usa ahora el recuento por latidos, que dice qué IP ve el servidor de cada tablet. Se puede alinear en el bloque 7.
 - **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
