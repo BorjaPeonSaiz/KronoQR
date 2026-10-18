@@ -543,7 +543,7 @@ wizard**. There is nothing to look for in any menu.
 | --- | --- | --- | --- |
 | 1 | **First administrator** | Yes | Creates your account and enables its second factor. |
 | 2 | **Organisation** | Yes | The system's visible name and languages. **Spanish only by default**: leave only Spanish ticked if nobody will use English; if somebody will, tick it here (or later in **Operational settings**). |
-| 3 | **Site** and time zone | Yes | The hotel. **The time zone decides which day each shift goes to.** |
+| 3 | **Site** and time zone | Yes | The hotel. **The time zone decides which day each shift goes to, and becomes fixed with the first clock-in.** |
 | 4 | **Departments** | Can be skipped | The ones you use. They can be created later. |
 | 5 | **Compliance profile** | Yes | The legal thresholds, in plain sight, for you to check them. |
 | 6 | **Staff** | Can be skipped | From CSV or Excel, with prior validation. |
@@ -597,22 +597,34 @@ It is the piece of information the system uses to decide **which day each
 shift belongs to**. A shift from 22:00 to 06:00 counts entirely in the day it
 started, and "the day" is measured in the site's zone.
 
-Get it right the first time. It can be changed later — it is recorded — but
-**changing it does not rewrite the working days already calculated**: from
-that moment on they are calculated with the new one and before that they were
-calculated with the old one, while the panel, the portal and the reports start
-showing the whole history in the new zone. With clock-ins already recorded, do
-not change it without asking support first
-([`configuration.md`](configuration.md) §6.1, `APP_TIMEZONE`).
+> ⚠️ **With the first clock-in, the time zone becomes fixed for good.**
+>
+> While there is no clock-in it can be changed in the panel, on the
+> departments screen, “Site” section. **From the first one on, neither the
+> panel nor the API lets you change it** (RN-23): the panel shows it without
+> letting you edit it and explains why. It is the only start-up setting that
+> cannot be put right later from the panel.
+>
+> If it was set wrongly all the same, there is a console correction on the
+> server, with a reason, a management account with the admin or rrhh role that
+> signs, confirmation and an audit entry. **It does not move any work day
+> already recorded**: each shift stays in the day it was attributed to with the
+> wrong zone, and only the way the history is shown changes. Shifts close to
+> midnight that would have fallen on another day have to be corrected one by
+> one, by hand. How it is used: [`configuration.md`](configuration.md) §6.1,
+> the `APP_TIMEZONE` row.
 
+Get it right the first time and check it **before pairing the first tablet**.
 If the hotel is in the Canary Islands, it is `Atlantic/Canary`, not
 `Europe/Madrid`.
 
-**The time shown on the tablet's screen is the tablet's own**, in the time zone
-the device is set to, not the site's. Set each tablet to the site's zone, with
-automatic date and time. Otherwise the employee will see a time different from
-the one in their record; **the legal record is not affected**: it stores the
-exact instant and always presents it in the site's zone.
+**The tablet shows the site's time, not its own.** The time on the clocking
+screen and on the confirmation is drawn in the zone you set here, even if the
+device has another one configured: the tablet receives it from the server and
+keeps it so it can go on using it without network. Only a tablet that has
+never yet reached the server shows its own zone's time. Even so, leave each
+tablet on **automatic date and time**: what matters about its clock is not the
+zone but that the instant is right.
 
 ![Step 3: site, with its name and the time zone](../img/en/asistente-03-centro.png)
 

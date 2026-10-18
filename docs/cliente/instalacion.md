@@ -533,7 +533,7 @@ puesta en marcha**. No hay nada que buscar en ningún menú.
 | --- | --- | --- | --- |
 | 1 | **Primer administrador** | Sí | Crea tu cuenta y activa su segundo factor. |
 | 2 | **Datos de la organización** | Sí | Nombre visible del sistema e idiomas. **De serie, solo español**: deja marcado solo el español si nadie va a usar el inglés; si alguien lo va a usar, márcalo aquí (o más tarde en **Ajustes operativos**). |
-| 3 | **Centro y zona horaria** | Sí | El hotel. **La zona horaria decide a qué día va cada turno.** |
+| 3 | **Centro y zona horaria** | Sí | El hotel. **La zona horaria decide a qué día va cada turno, y queda fija con el primer fichaje.** |
 | 4 | **Departamentos** | Se puede omitir | Los que uses. Se pueden crear después. |
 | 5 | **Perfil de convenio** | Sí | Los umbrales legales, a la vista, para que los contrastes. |
 | 6 | **Carga de plantilla** | Se puede omitir | Desde CSV o Excel, con comprobación previa. |
@@ -585,21 +585,32 @@ Es el dato con el que el sistema decide **a qué día pertenece cada turno**. Un
 turno de 22:00 a 06:00 cuenta entero en el día en que empezó, y «el día» se mide
 en la zona del centro.
 
-Ponla bien a la primera. Se puede cambiar después —queda registrado— pero
-**cambiarla no reescribe las jornadas ya calculadas**: a partir de ese momento se
-calculan con la nueva y antes se calcularon con la anterior, mientras que el
-panel, el portal y los informes pasan a enseñar todo el histórico en la zona
-nueva. Con fichajes ya hechos, no la cambies sin consultarlo antes con soporte
-([`configuracion.md`](configuracion.md) §6.1, `APP_TIMEZONE`).
+> ⚠️ **Con el primer fichaje, la zona horaria queda fija para siempre.**
+>
+> Mientras no haya ningún fichaje se puede cambiar en el panel, en la pantalla
+> de departamentos, apartado «Centro». **Desde el primero, ni el panel ni la
+> API dejan cambiarla** (RN-23): el panel la enseña sin dejar editarla y
+> explica por qué. Es el único dato de la puesta en marcha que no se puede
+> rectificar después desde el panel.
+>
+> Si aun así se puso mal, hay una corrección por consola en el servidor, con
+> motivo, una cuenta de gestión con rol admin o rrhh que firma, confirmación y
+> asiento en la auditoría. **No mueve ninguna jornada ya registrada**: cada
+> turno se queda en el día al que se atribuyó con la zona mal puesta, y solo
+> cambia cómo se enseña el histórico. Los turnos de cerca de la medianoche que
+> hubieran caído en otro día hay que corregirlos uno a uno, a mano. Cómo se usa:
+> [`configuracion.md`](configuracion.md) §6.1, fila `APP_TIMEZONE`.
 
+Ponla bien a la primera y compruébala **antes de vincular la primera tablet**.
 Si el hotel está en Canarias, es `Atlantic/Canary`, no `Europe/Madrid`.
 
-**La hora que enseña la pantalla de la tablet es la de la propia tablet**, en
-la zona horaria que tenga configurada el aparato, no la del centro. Pon cada
-tablet en la zona del centro, con fecha y hora automáticas. Si no, el empleado
-verá una hora distinta de la de su registro; **el registro legal no se ve
-afectado**: guarda el instante exacto y lo presenta siempre en la zona del
-centro.
+**La tablet enseña la hora del centro, no la suya.** La hora de la pantalla de
+fichaje y la de la confirmación se pintan en la zona que pongas aquí, aunque el
+aparato tenga otra configurada: la tablet la recibe del servidor y la guarda
+para seguir usándola sin red. Solo una tablet que todavía no ha contactado
+nunca con el servidor enseña la de su propia zona. Aun así, deja cada tablet
+con **fecha y hora automáticas**: lo que importa de su reloj no es la zona,
+sino que el instante sea el correcto.
 
 ![Paso 3: centro de trabajo, con su nombre y la zona horaria](img/es/asistente-03-centro.png)
 

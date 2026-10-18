@@ -2229,7 +2229,7 @@
       },
       "site": {
         "heading": "Site",
-        "intro": "The site's name and time zone. The time zone decides which work day each shift counts towards: it is never the browser's zone nor the application's, which is always UTC.",
+        "intro": "The site's name and time zone. The time zone decides which work day each shift counts towards: it is never the browser's zone nor the application's, which is always UTC. With the first clock-in it becomes fixed: after that it can no longer be changed from the panel, so check it before pairing the first tablet.",
         "fields": {
           "name": "Site name",
           "timezone": "Time zone"
