@@ -173,7 +173,7 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
-- **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
+- **Decidido (18-10-2026):** firma `--responsible` para `product:export-all`, `compliance:legal-export` y `credentials:revoke` en el bloque 35 de la 2.3.0 (tras el B7). El resto sigue como `system` (doc 07 §6).
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
 
