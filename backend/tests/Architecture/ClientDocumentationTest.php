@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Support\Version\DeployedVersion;
+use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\ClientDocs;
 use Tests\Architecture\Support\Repo;
 
