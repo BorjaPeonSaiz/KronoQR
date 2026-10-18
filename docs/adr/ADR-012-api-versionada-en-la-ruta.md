@@ -55,3 +55,15 @@ Reglas de evolución, que son la parte útil de esta decisión:
 - Prueba de contrato: ningún cambio del contrato elimina campos ni endurece validaciones dentro de v1. Se revisa en el *pull request* que toca `openapi.yaml`.
 - Prueba de integración del actualizador (RQ-11): tras actualizar el servidor, un lote offline generado con el cliente de la versión anterior se sincroniza sin error.
 - Comprobación de rutas: `routes/api_v1.php` es el único origen de rutas de API públicas.
+
+## Nota del 18-10-2026 (2.3.0, bloque 4): la tablet atrasada no espera a la ventana
+
+El contexto de arriba dice que la actualización del quiosco «está sujeta a ventana controlada». Desde la 2.2.1 hay una excepción, y esta nota la deja escrita sin cambiar la decisión de este ADR, que sigue siendo la versión en la ruta y la evolución aditiva dentro de v1.
+
+- **Qué hace.** El latido publica `minimum_app_version`, que es el núcleo de la versión desplegada. Una tablet con una PWA anterior se recarga **a cualquier hora**, fuera de `update_window`. La recarga solo ocurre si se cumplen a la vez tres condiciones:
+  - la cola está vacía y en almacenamiento duradero;
+  - nadie está a media interacción;
+  - no ha habido escaneos en `quiet_minutes`, con un mínimo de 2.
+- **Dónde está escrito.** En la excepción de RF-KI-07 (doc 01 §3.7) y en `KioskHeartbeat.minimum_app_version` del contrato.
+- **Por qué no rompe lo que este ADR protege.** El servidor sigue aceptando lo que la PWA anterior tenga en la cola, porque v1 es aditiva. La tablet solo recarga cuando no le queda nada por enviar, así que la recarga urgente no depende de que el contrato cambie.
+- **El riesgo que se acepta** (V21-6-KI-1, decisión del propietario del 18-10-2026). Tras cada `update.sh`, las tablets atrasadas recargan en el primer hueco sin uso, sea la hora que sea. Por eso las guías piden ejecutar `update.sh` fuera de los turnos.
