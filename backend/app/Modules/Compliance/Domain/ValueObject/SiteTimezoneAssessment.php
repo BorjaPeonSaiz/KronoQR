@@ -26,7 +26,9 @@ final readonly class SiteTimezoneAssessment
         public bool $unverifiableTimezone,
         /** Filas de la traza anteriores a la auditoria que se conserva, y cambios sin firma anteriores a la linea base. */
         public int $unverifiableChanges,
-        /** Discrepancias que una persona dio por revisadas: no son pendientes. */
-        public int $reviewed = 0,
+        /** Filas de la traza (`change`) que una persona dio por revisadas: no son pendientes. */
+        public int $reviewedChanges = 0,
+        /** Asientos sin firma (`audit`) que una persona dio por revisados. */
+        public int $reviewedEntries = 0,
     ) {}
 }

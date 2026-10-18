@@ -141,13 +141,14 @@ final readonly class DatabaseSiteTimezoneAuditReader implements SiteTimezoneAudi
     {
         $recorded = [];
 
-        foreach ($this->connection->select('SELECT id, site_id, from_tz, to_tz, changed_at FROM '.self::TRACE_TABLE.' ORDER BY id') as $raw) {
+        foreach ($this->connection->select('SELECT id, site_id, from_tz, to_tz, changed_at, audit_log_id FROM '.self::TRACE_TABLE.' ORDER BY id') as $raw) {
             $row = Row::of((object) $raw);
             $recorded[$row->int('site_id')][] = new RecordedSiteTimezoneChange(
                 $row->int('id'),
                 $row->string('from_tz'),
                 $row->string('to_tz'),
                 $row->instant('changed_at'),
+                $row->int('audit_log_id'),
             );
         }
 

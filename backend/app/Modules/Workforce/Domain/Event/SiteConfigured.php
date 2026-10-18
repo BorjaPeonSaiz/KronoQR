@@ -69,6 +69,8 @@ final readonly class SiteConfigured implements DomainEvent
         public bool $created,
         private DateTimeImmutable $occurredAt,
         public ?SiteTimezoneCorrection $correction = null,
+        /** La fila de `site_timezone_changes` de la correccion: el asiento la nombra (bloque 2 de la 2.3.0). */
+        public ?int $siteTimezoneChangeId = null,
     ) {}
 
     public static function created(
@@ -102,8 +104,9 @@ final readonly class SiteConfigured implements DomainEvent
         string $previousTimezone,
         SiteTimezoneCorrection $correction,
         DateTimeImmutable $occurredAt,
+        ?int $siteTimezoneChangeId = null,
     ): self {
-        return new self($siteId, $name, $timezone, $name, $previousTimezone, false, $occurredAt, $correction);
+        return new self($siteId, $name, $timezone, $name, $previousTimezone, false, $occurredAt, $correction, $siteTimezoneChangeId);
     }
 
     public function eventName(): string

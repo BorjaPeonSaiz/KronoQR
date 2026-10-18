@@ -105,7 +105,8 @@ final readonly class ReconcileWorkRecordWithAudit
             'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
             'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
             'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
-            'reviewed_site_timezone_discrepancies' => $result->reviewedSiteTimezoneDiscrepancies,
+            'reviewed_site_timezone_changes' => $result->reviewedSiteTimezoneChanges,
+            'reviewed_site_timezone_entries' => $result->reviewedSiteTimezoneEntries,
         ]);
 
         return $result;
@@ -119,7 +120,8 @@ final readonly class ReconcileWorkRecordWithAudit
         $checked = 0;
         $unverifiableSites = 0;
         $unverifiableChanges = 0;
-        $reviewedSiteTimezones = 0;
+        $reviewedChanges = 0;
+        $reviewedEntries = 0;
         $boundary = WorkRecordPurgeBoundary::none();
 
         foreach ($this->source->read($window, $chunkSize) as $item) {
@@ -138,7 +140,8 @@ final readonly class ReconcileWorkRecordWithAudit
                     $found = [...$found, ...$assessment->discrepancies];
                     $unverifiableSites += $assessment->unverifiableTimezone ? 1 : 0;
                     $unverifiableChanges += $assessment->unverifiableChanges;
-                    $reviewedSiteTimezones += $assessment->reviewed;
+                    $reviewedChanges += $assessment->reviewedChanges;
+                    $reviewedEntries += $assessment->reviewedEntries;
                 }
             } else {
                 $checked++;
@@ -168,7 +171,8 @@ final readonly class ReconcileWorkRecordWithAudit
             reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
             unverifiableSiteTimezones: $unverifiableSites,
             unverifiableSiteTimezoneChanges: $unverifiableChanges,
-            reviewedSiteTimezoneDiscrepancies: $reviewedSiteTimezones,
+            reviewedSiteTimezoneChanges: $reviewedChanges,
+            reviewedSiteTimezoneEntries: $reviewedEntries,
         );
     }
 

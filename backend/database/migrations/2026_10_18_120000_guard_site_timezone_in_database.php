@@ -77,7 +77,10 @@ use Illuminate\Support\Facades\Schema;
  * - `22023` si falta un argumento;
  * - si `p_from` y `p_to` son la misma zona no hace nada (ni traza);
  * - si no, cambia la zona **y apunta el paso en `site_timezone_changes`**, en
- *   la misma sentencia de la misma transaccion.
+ *   la misma transaccion, y **devuelve el `id` de la fila**: la orden de
+ *   consola lo guarda en su asiento (`site_timezone_change_id`) y la
+ *   conciliacion empareja cada fila con su asiento por ese id. Con la misma
+ *   zona devuelve `NULL`.
  *
  * **No valida que `p_to` sea una zona IANA**: lo hace el dominio
  * (`SiteTimezone`) con la base de zonas de PHP, que es con la que se calculan
@@ -86,7 +89,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## 3. `site_timezone_changes`, la traza solo-append
  *
- * `(id, site_id, from_tz, to_tz, changed_at, txid)`, propiedad del rol de
+ * `(id, site_id, from_tz, to_tz, changed_at, txid, audit_log_id)`, propiedad del rol de
  * migracion. La escribe **solo la funcion** de la seccion 2: la aplicacion
  * tiene `SELECT` y nada mas (ni `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`,
  * `REFERENCES` o `TRIGGER`, ni la secuencia). Hay que retirarlo a mano porque
@@ -96,8 +99,10 @@ use Illuminate\Support\Facades\Schema;
  * volvia a coincidir con su asiento. Con ella, la conciliacion exige que cada
  * fila tenga su `site.updated` firmado con el mismo antes y despues.
  *
- * `changed_at` y `txid` los pone la base (`now()`, `txid_current()`), no quien
- * llama. `site_id` es clave ajena `RESTRICT`: la aplicacion ya no puede borrar
+ * `changed_at`, `txid` y `audit_log_id` (el ultimo asiento de `audit_log` al
+ * cambiar) los pone la base, no quien llama. Una revision de la fila
+ * (`site.timezone_discrepancy_reviewed`) solo cuenta si su asiento es
+ * posterior a `audit_log_id`. `site_id` es clave ajena `RESTRICT`: la aplicacion ya no puede borrar
  * el centro (ADR-057), y asi tampoco el rol de migracion por descuido.
  *
  * ## 4. `site_timezone_audit_baseline`, la linea base de la conciliacion
@@ -156,6 +161,7 @@ return new class extends Migration
                 to_tz      text        NOT NULL,
                 changed_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
                 txid       bigint      NOT NULL DEFAULT pg_catalog.txid_current(),
+                audit_log_id bigint    NOT NULL,
                 CONSTRAINT site_timezone_changes_chk_changes CHECK (from_tz <> to_tz)
             )
             SQL);
@@ -183,6 +189,10 @@ return new class extends Migration
         DB::statement('GRANT SELECT ON TABLE public.site_timezone_audit_baseline TO '.$application);
 
         DB::statement($this->guardFunction());
+        // `CREATE OR REPLACE` no cambia el tipo de retorno de una funcion que
+        // ya exista (una base de desarrollo o de pruebas migrada con una
+        // version anterior de esta migracion): se suelta antes.
+        DB::statement('DROP FUNCTION IF EXISTS public.site_correct_timezone(bigint, text, text)');
         DB::statement($this->correctionFunction());
 
         DB::statement('DROP TRIGGER IF EXISTS zz_sites_guard_timezone ON sites');
@@ -249,13 +259,14 @@ return new class extends Migration
     {
         return <<<'SQL'
             CREATE OR REPLACE FUNCTION public.site_correct_timezone(p_site_id bigint, p_from text, p_to text)
-            RETURNS void
+            RETURNS bigint
             LANGUAGE plpgsql
             SECURITY DEFINER
             SET search_path = pg_catalog, pg_temp
             AS $kronoqr$
             DECLARE
                 v_current text;
+                v_id      bigint;
             BEGIN
                 IF p_site_id IS NULL OR p_from IS NULL OR p_to IS NULL OR p_from = '' OR p_to = '' THEN
                     RAISE EXCEPTION 'site_correct_timezone: faltan el centro, la zona actual o la zona nueva'
@@ -280,13 +291,18 @@ return new class extends Migration
                 END IF;
 
                 IF p_from = p_to THEN
-                    RETURN;
+                    RETURN NULL;
                 END IF;
 
                 UPDATE public.sites SET timezone = p_to WHERE id = p_site_id;
 
-                INSERT INTO public.site_timezone_changes (site_id, from_tz, to_tz)
-                VALUES (p_site_id, p_from, p_to);
+                -- `audit_log_id`: el ultimo asiento al cambiar. Una revision de la
+                -- fila solo cuenta si es posterior (no se puede revisar de antemano).
+                INSERT INTO public.site_timezone_changes (site_id, from_tz, to_tz, audit_log_id)
+                VALUES (p_site_id, p_from, p_to, (SELECT coalesce(max(a.id), 0) FROM public.audit_log a))
+                RETURNING id INTO v_id;
+
+                RETURN v_id;
             END;
             $kronoqr$
             SQL;

@@ -944,9 +944,9 @@ it('da por revisada una fila de la traza sin firma: sale de las pendientes y se 
     $pasada = registroAuditadoConciliar();
 
     expect($pasada['code'])->toBe(0, $pasada['output'])
-        ->and($pasada['output'])->toContain('discrepancias de la zona del centro revisadas: 2 (no cuentan)')
+        ->and($pasada['output'])->toContain('discrepancias de la zona del centro revisadas: 2 de la traza, 0 de asientos sin firma (no cuentan)')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'recent'))
-        ->toContain('work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent"} 2')
+        ->toContain('work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="change"} 2')
         ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 0');
 
     // Una revision no se repite.

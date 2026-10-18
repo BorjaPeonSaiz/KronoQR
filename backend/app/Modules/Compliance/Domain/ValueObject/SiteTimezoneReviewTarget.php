@@ -52,12 +52,6 @@ final readonly class SiteTimezoneReviewTarget
             : $discrepancy->siteTimezoneChangeId === null && $discrepancy->auditEntryId === $this->id;
     }
 
-    /** Si una revision ya la nombra. */
-    public function reviewedBy(AuditedSiteTimezoneReview $review): bool
-    {
-        return $this->isChange ? $review->reviewsChange($this->id) : $review->reviewsEntry($this->id);
-    }
-
     public function label(): string
     {
         return ($this->isChange ? self::CHANGE : self::AUDIT).':'.$this->id;

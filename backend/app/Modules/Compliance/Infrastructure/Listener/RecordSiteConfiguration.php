@@ -96,6 +96,9 @@ final readonly class RecordSiteConfiguration
                     'reason' => $correction->reason,
                     'shift_entry_count' => $correction->shiftEntryCount,
                     'responsible_user_id' => $correction->responsibleUserId,
+                    // La fila de la traza que deja la funcion: la conciliacion
+                    // la empareja con este asiento por identidad (RN-23).
+                    'site_timezone_change_id' => $event->siteTimezoneChangeId,
                 ]),
             ]),
             occurredAt: $event->occurredAt(),

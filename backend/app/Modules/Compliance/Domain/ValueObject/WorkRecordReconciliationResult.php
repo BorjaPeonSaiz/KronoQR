@@ -51,11 +51,15 @@ final readonly class WorkRecordReconciliationResult
          */
         public int $unverifiableSiteTimezoneChanges = 0,
         /**
-         * Discrepancias de la zona del centro que una persona dio por revisadas
-         * (`site.timezone_discrepancy_reviewed`). Como las purgas revisadas, no
-         * son discrepancias: se publican aparte y tienen su propia alerta.
+         * Filas de la traza `site_timezone_changes` sin firma que una persona dio
+         * por revisadas (`site.timezone_discrepancy_reviewed`, `change:<id>`).
+         * Como las purgas revisadas, no son discrepancias: se publican aparte y
+         * su alerta es de integridad (una revision falsificada tapa un cambio
+         * de zona hecho por fuera de la orden).
          */
-        public int $reviewedSiteTimezoneDiscrepancies = 0,
+        public int $reviewedSiteTimezoneChanges = 0,
+        /** Asientos `site.updated` sin firma dados por revisados (`audit:<id>`): aviso. */
+        public int $reviewedSiteTimezoneEntries = 0,
     ) {}
 
     /** Revisadas que no explican ningun borrado. */

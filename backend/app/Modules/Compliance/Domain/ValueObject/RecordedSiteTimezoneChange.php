@@ -22,11 +22,8 @@ final readonly class RecordedSiteTimezoneChange
         public string $from,
         public string $to,
         public DateTimeImmutable $changedAt,
+        /** El ultimo asiento de `audit_log` al cambiar: una revision de la fila tiene que ser posterior. */
+        public int $auditMark = 0,
     ) {}
 
-    /** La clave con que se empareja con un asiento firmado. */
-    public function key(): string
-    {
-        return $this->from.' -> '.$this->to;
-    }
 }

@@ -179,6 +179,9 @@ it('deja site.updated con el motivo, el recuento y la cuenta que responde, firma
         ->and($payload['responsible_user_id'])->toBe($responsable)
         ->and($payload['previous_value'])->toMatchArray(['timezone' => 'Europe/Madrid'])
         ->and($payload['new_value'])->toMatchArray(['timezone' => 'Atlantic/Canary'])
+        // La fila que la funcion apunto en la traza: la conciliacion la
+        // empareja con este asiento por identidad.
+        ->and($payload['site_timezone_change_id'])->toBe(DB::table('site_timezone_changes')->max('id'))
         ->and(DB::table('sites')->where('id', $escenario['site'])->value('name'))
         ->toBe(is_array($payload['new_value']) ? $payload['new_value']['name'] : null);
 })->group('RN-23', 'RL-04');

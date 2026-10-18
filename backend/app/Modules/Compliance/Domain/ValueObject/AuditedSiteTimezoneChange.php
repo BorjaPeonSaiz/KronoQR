@@ -29,6 +29,8 @@ final readonly class AuditedSiteTimezoneChange
         public bool $signed,
         /** Hay un asiento `shift_entry.*` anterior en la cadena. */
         public bool $afterWorkRecord,
+        /** `site_timezone_change_id`: la fila de la traza que asienta, o `null` si no la nombra. */
+        public ?int $changeId = null,
     ) {}
 
     /**
@@ -36,12 +38,15 @@ final readonly class AuditedSiteTimezoneChange
      */
     public static function fromEntry(int $auditEntryId, array $payload, bool $afterWorkRecord): self
     {
+        $changeId = $payload['site_timezone_change_id'] ?? null;
+
         return new self(
             $auditEntryId,
             self::timezone($payload['previous_value'] ?? null),
             self::timezone($payload['new_value'] ?? null),
             self::isSigned($payload),
             $afterWorkRecord,
+            is_int($changeId) && $changeId >= 1 ? $changeId : null,
         );
     }
 
@@ -72,10 +77,18 @@ final readonly class AuditedSiteTimezoneChange
         return $this->from !== null && $this->to !== null && $this->from !== $this->to;
     }
 
-    /** La clave con que se empareja con una fila de la traza. */
-    public function key(): string
+    /**
+     * Si asienta esa fila de la traza: la nombra por su `id`, va firmado y dice
+     * el mismo antes y despues. Por identidad y no por «de -> a»: una fila
+     * revisada no se come el asiento de una correccion legitima posterior, ni
+     * una legitima tapa la del ataque.
+     */
+    public function records(RecordedSiteTimezoneChange $row): bool
     {
-        return $this->from.' -> '.$this->to;
+        return $this->signed
+            && $this->changeId === $row->id
+            && $this->from === $row->from
+            && $this->to === $row->to;
     }
 
     private static function timezone(mixed $value): ?string

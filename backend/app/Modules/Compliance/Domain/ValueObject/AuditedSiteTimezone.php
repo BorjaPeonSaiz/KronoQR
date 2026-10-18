@@ -143,8 +143,8 @@ final readonly class AuditedSiteTimezone
     public function assess(array $sealedAuditYears): SiteTimezoneAssessment
     {
         $current = $this->discrepancy();
-        [$unsigned, $historical, $reviewedUnsigned] = $this->unsignedChanges();
-        [$unmatched, $unverifiableRows, $reviewedRows] = $this->unmatchedChanges($sealedAuditYears);
+        [$unsigned, $historical, $reviewedEntries] = $this->unsignedChanges();
+        [$unmatched, $unverifiableRows, $reviewedChanges] = $this->unmatchedChanges($sealedAuditYears);
 
         return new SiteTimezoneAssessment(
             [
@@ -154,7 +154,8 @@ final readonly class AuditedSiteTimezone
             ],
             $this->auditEntryId === null,
             $historical + $unverifiableRows,
-            $reviewedUnsigned + $reviewedRows,
+            $reviewedChanges,
+            $reviewedEntries,
         );
     }
 
@@ -173,6 +174,22 @@ final readonly class AuditedSiteTimezone
             $this->assess($sealedAuditYears)->discrepancies,
             static fn (WorkRecordDiscrepancy $discrepancy): bool => $discrepancy->fields !== ['timezone'],
         ));
+    }
+
+    /** Si ya hay una revision que cuente para `$target`. */
+    public function isReviewed(SiteTimezoneReviewTarget $target): bool
+    {
+        if (! $target->isChange) {
+            return $this->reviewedEntry($target->id);
+        }
+
+        foreach ($this->recordedChanges as $row) {
+            if ($row->id === $target->id) {
+                return $this->reviewedChange($row);
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -207,11 +224,13 @@ final readonly class AuditedSiteTimezone
     }
 
     /**
-     * Cada fila de la traza, con su asiento firmado. Se empareja por «de -> a»
-     * y se cuenta: dos A->B necesitan dos asientos A->B. Solo cuentan los
-     * asientos posteriores a la linea base: una correccion de la 2.2.1, sin
-     * fila, no justifica una fila de hoy. Las filas de un año cuya auditoria ya
-     * se purgo no se pueden cotejar y se cuentan aparte.
+     * Cada fila de la traza, con **su** asiento firmado: el que la nombra por
+     * `site_timezone_change_id`, con el mismo antes y despues, posterior a la
+     * linea base. Por identidad: una correccion de la 2.2.1 (sin fila, anterior
+     * a la linea base) no justifica una fila de hoy, una fila revisada no se
+     * come el asiento de otra, y una correccion legitima no tapa la fila del
+     * ataque. Las filas de un año cuya auditoria ya se purgo no se pueden
+     * cotejar y se cuentan aparte.
      *
      * @param  list<int>  $sealedAuditYears
      * @return array{0: list<WorkRecordDiscrepancy>, 1: int, 2: int}
@@ -219,7 +238,6 @@ final readonly class AuditedSiteTimezone
     private function unmatchedChanges(array $sealedAuditYears): array
     {
         $lastSealedYear = $sealedAuditYears === [] ? null : max($sealedAuditYears);
-        $signed = $this->signedChangeCounts();
         $found = [];
         $unverifiable = 0;
         $reviewed = 0;
@@ -228,9 +246,9 @@ final readonly class AuditedSiteTimezone
             // Las particiones de `audit_log` son por año UTC (ADR-027).
             if ($lastSealedYear !== null && (int) $row->changedAt->setTimezone(new DateTimeZone('UTC'))->format('Y') <= $lastSealedYear) {
                 $unverifiable++;
-            } elseif (($signed[$row->key()] ?? 0) > 0) {
-                $signed[$row->key()]--;
-            } elseif ($this->reviewedChange($row->id)) {
+            } elseif ($this->recorded($row)) {
+                continue;
+            } elseif ($this->reviewedChange($row)) {
                 $reviewed++;
             } else {
                 $found[] = $this->discrepancyOf('site_timezone_changes', null, $row->id);
@@ -240,22 +258,16 @@ final readonly class AuditedSiteTimezone
         return [$found, $unverifiable, $reviewed];
     }
 
-    /**
-     * Cuantos asientos firmados posteriores a la linea base hay de cada «de -> a».
-     *
-     * @return array<string, int>
-     */
-    private function signedChangeCounts(): array
+    /** Si un asiento firmado, posterior a la linea base, asienta esa fila. */
+    private function recorded(RecordedSiteTimezoneChange $row): bool
     {
-        $signed = [];
-
         foreach ($this->auditedChanges as $change) {
-            if ($change->signed && $change->changesTimezone() && ! $this->beforeBaseline($change->auditEntryId)) {
-                $signed[$change->key()] = ($signed[$change->key()] ?? 0) + 1;
+            if (! $this->beforeBaseline($change->auditEntryId) && $change->records($row)) {
+                return true;
             }
         }
 
-        return $signed;
+        return false;
     }
 
     private function beforeBaseline(int $auditEntryId): bool
@@ -274,10 +286,10 @@ final readonly class AuditedSiteTimezone
         return false;
     }
 
-    private function reviewedChange(int $changeId): bool
+    private function reviewedChange(RecordedSiteTimezoneChange $row): bool
     {
         foreach ($this->reviews as $review) {
-            if ($review->reviewsChange($changeId)) {
+            if ($review->reviewsChange($row)) {
                 return true;
             }
         }

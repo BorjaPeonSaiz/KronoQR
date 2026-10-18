@@ -102,12 +102,16 @@ function siteGuardExpectDenied(string $what, Closure $write, string $code = '425
     Assert::fail('PostgreSQL ha admitido «'.$what.'».');
 }
 
-function siteGuardCorrect(int $site, string $from, string $to, ?ConnectionInterface $connection = null): void
+/** El `id` de la fila de la traza que devuelve la funcion, o `null` si no cambio nada. */
+function siteGuardCorrect(int $site, string $from, string $to, ?ConnectionInterface $connection = null): ?int
 {
-    ($connection ?? DB::connection())->select(
-        'SELECT public.'.EloquentSiteRepository::CORRECTION_FUNCTION.'(?::bigint, ?::text, ?::text)',
+    /** @var object{change_id: int|string|null} $row */
+    $row = ($connection ?? DB::connection())->selectOne(
+        'SELECT public.'.EloquentSiteRepository::CORRECTION_FUNCTION.'(?::bigint, ?::text, ?::text) AS change_id',
         [$site, $from, $to],
     );
+
+    return $row->change_id === null ? null : (int) $row->change_id;
 }
 
 function siteGuardFunctionExists(ConnectionInterface $connection, string $signature): bool
@@ -221,12 +225,21 @@ it('la funcion de la correccion cambia la zona con registro horario, que es su u
     $site = siteGuardSite();
     siteGuardEntry($site);
 
-    siteGuardCorrect($site, 'Europe/Madrid', 'Atlantic/Canary');
+    /** @var object{audit: int|string|null} $ultimo */
+    $ultimo = DB::selectOne('SELECT max(id) AS audit FROM audit_log');
+    $primera = siteGuardCorrect($site, 'Europe/Madrid', 'Atlantic/Canary');
 
-    expect(siteGuardTimezone($site))->toBe('Atlantic/Canary');
+    /** @var object{id: int|string, audit_log_id: int|string} $fila */
+    $fila = DB::selectOne('SELECT id, audit_log_id FROM site_timezone_changes ORDER BY id DESC LIMIT 1');
 
-    // La misma zona no hace nada, no falla y no deja traza.
-    siteGuardCorrect($site, 'Atlantic/Canary', 'Atlantic/Canary');
+    expect(siteGuardTimezone($site))->toBe('Atlantic/Canary')
+        // Devuelve la fila que apunta: la orden la guarda en su asiento.
+        ->and($primera)->toBe((int) $fila->id)
+        // Y la fila guarda el ultimo asiento al cambiar.
+        ->and((int) $fila->audit_log_id)->toBe((int) ($ultimo->audit ?? 0));
+
+    // La misma zona no hace nada, no falla, no deja traza y devuelve null.
+    expect(siteGuardCorrect($site, 'Atlantic/Canary', 'Atlantic/Canary'))->toBeNull();
 
     // Y la vuelta atras deja su propia fila: un A->B->A no se borra.
     siteGuardCorrect($site, 'Atlantic/Canary', 'Europe/Madrid');

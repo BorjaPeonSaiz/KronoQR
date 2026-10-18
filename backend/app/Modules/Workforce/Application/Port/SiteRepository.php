@@ -50,8 +50,12 @@ interface SiteRepository
      * `$previous` es la zona sobre la que se decidio la correccion: si la del
      * centro ya no es esa, la funcion se niega y no se guarda nada. Con la fila
      * del centro bloqueada por quien llama, no puede ocurrir.
+     *
+     * Devuelve el `id` de la fila que la funcion apunta en la traza
+     * `site_timezone_changes`: el asiento de la correccion lo guarda y la
+     * conciliacion empareja la fila con su asiento por el.
      */
-    public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): void;
+    public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): int;
 
     /**
      * `null` solo antes de la puesta en marcha (RF-PD-03).

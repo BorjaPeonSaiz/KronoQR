@@ -69,7 +69,7 @@ final readonly class EloquentSiteRepository implements SiteRepository
         }
     }
 
-    public function saveTimezoneCorrection(SiteEntity $corrected, SiteTimezone $previous): void
+    public function saveTimezoneCorrection(SiteEntity $corrected, SiteTimezone $previous): int
     {
         if ($corrected->id === null) {
             throw new RuntimeException('No se puede corregir la zona de un centro que todavia no se ha guardado.');
@@ -79,10 +79,20 @@ final readonly class EloquentSiteRepository implements SiteRepository
         // esa, `42501` si no hay registro horario) no se traducen: con la fila
         // del centro bloqueada por el caso de uso y el recuento hecho dentro,
         // ninguno puede ocurrir, y si ocurre es un defecto que tiene que verse.
-        Site::query()->getConnection()->select(
-            'SELECT public.'.self::CORRECTION_FUNCTION.'(?::bigint, ?::text, ?::text)',
+        $row = Site::query()->getConnection()->selectOne(
+            'SELECT public.'.self::CORRECTION_FUNCTION.'(?::bigint, ?::text, ?::text) AS change_id',
             [$corrected->id, $previous->identifier, $corrected->timezone->identifier],
         );
+
+        // La misma zona no llega aqui (el caso de uso la descarta antes): sin
+        // fila en la traza no hay correccion que asentar.
+        $changeId = is_object($row) ? ($row->change_id ?? null) : null;
+
+        if (! is_numeric($changeId)) {
+            throw new RuntimeException('site_correct_timezone no ha apuntado ningun cambio en la traza.');
+        }
+
+        return (int) $changeId;
     }
 
     public function installationSite(): ?SiteEntity

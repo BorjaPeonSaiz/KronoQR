@@ -152,10 +152,8 @@ final readonly class ReviewSiteTimezoneDiscrepancy
         $sealed = $this->reader->sealedAuditYears();
 
         foreach ($this->reader->sites() as $site) {
-            foreach ($site->reviews as $review) {
-                if ($target->reviewedBy($review)) {
-                    throw SiteTimezoneReviewRejected::alreadyReviewed($target->label());
-                }
+            if ($site->isReviewed($target)) {
+                throw SiteTimezoneReviewRejected::alreadyReviewed($target->label());
             }
 
             foreach ($site->reviewable($sealed) as $discrepancy) {

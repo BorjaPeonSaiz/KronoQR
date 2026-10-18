@@ -172,7 +172,7 @@ final readonly class CorrectSiteTimezoneHandler
                 // Por la funcion de la base de datos y no por `save()`: con
                 // registro horario, el *trigger* `zz_sites_guard_timezone` niega
                 // cualquier otro `UPDATE` de la zona.
-                $this->sites->saveTimezoneCorrection($corrected, $current->timezone);
+                $changeId = $this->sites->saveTimezoneCorrection($corrected, $current->timezone);
 
                 $this->events->publish(SiteConfigured::corrected(
                     siteId: (int) $corrected->id,
@@ -180,6 +180,7 @@ final readonly class CorrectSiteTimezoneHandler
                     timezone: $corrected->timezone->identifier,
                     previousTimezone: $current->timezone->identifier,
                     correction: $correction,
+                    siteTimezoneChangeId: $changeId,
                     occurredAt: $this->clock->now(),
                 ));
 

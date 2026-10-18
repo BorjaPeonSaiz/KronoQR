@@ -115,8 +115,9 @@ final class ReconcileWorkRecordCommand extends Command
             $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
         }
 
-        if ($result->reviewedSiteTimezoneDiscrepancies > 0) {
-            $this->line('discrepancias de la zona del centro revisadas: '.$result->reviewedSiteTimezoneDiscrepancies.' (no cuentan)');
+        if ($result->reviewedSiteTimezoneChanges + $result->reviewedSiteTimezoneEntries > 0) {
+            $this->line('discrepancias de la zona del centro revisadas: '.$result->reviewedSiteTimezoneChanges.' de la traza, '
+                .$result->reviewedSiteTimezoneEntries.' de asientos sin firma (no cuentan)');
         }
 
         // RN-23: lo que no se ha podido comparar con ningun asiento. Informa,

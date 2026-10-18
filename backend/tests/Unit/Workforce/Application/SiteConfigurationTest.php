@@ -69,11 +69,13 @@ function siteRepositoryHolding(?Site $site): SiteRepository
             $this->stored = $site;
         }
 
-        public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): void
+        public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): int
         {
             $this->saves++;
             $this->corrections[] = $previous->identifier.'->'.$corrected->timezone->identifier;
             $this->stored = $corrected;
+
+            return count($this->corrections);
         }
 
         public function installationSite(): ?Site

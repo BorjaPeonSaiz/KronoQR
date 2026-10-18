@@ -35,10 +35,14 @@ final readonly class AuditedSiteTimezoneReview
         return new self($auditEntryId, \is_int($change) ? $change : null, \is_int($entry) ? $entry : null);
     }
 
-    /** Si revisa esa fila de la traza. */
-    public function reviewsChange(int $changeId): bool
+    /**
+     * Si revisa esa fila de la traza: la nombra y es posterior al ultimo
+     * asiento que habia al cambiar. Una revision escrita de antemano, antes de
+     * que la fila existiera, no revisa nada.
+     */
+    public function reviewsChange(RecordedSiteTimezoneChange $row): bool
     {
-        return $this->reviewedChangeId === $changeId;
+        return $this->reviewedChangeId === $row->id && $this->auditEntryId > $row->auditMark;
     }
 
     /** Si revisa ese asiento: lo nombra y es posterior a el en la cadena. */
