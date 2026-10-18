@@ -234,24 +234,30 @@ it('el asiento de la vuelta atras de update.sh anota la integridad de la copia, 
 
 // --- Quien restaura: --operator declarado, no verificado (R3-PL-09, 2.3.0 bloque 3) ---
 
-it('con --yes, la restauracion que escribe su asiento exige --operator antes de leer la copia (salida 1)', function (): void {
-    [, $sinOperador] = restoreAuditScenario('AUDITAR=1; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
-    [, $conOperador] = restoreAuditScenario('AUDITAR=1; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR="it@hotel.es"; comprobar_operador; echo sigue');
-    [, $otraBase] = restoreAuditScenario('AUDITAR=0; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
-    [, $simulacro] = restoreAuditScenario('AUDITAR=1; CONFIRMADO=0; SOLO_COMPROBAR=1; OPERADOR=""; comprobar_operador; echo sigue');
+it('con --yes, la restauracion que escribe su asiento exige --operator antes de las precondiciones (salida 1)', function (): void {
+    [, $sinOperador] = restoreAuditScenario('CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
+    [, $conOperador] = restoreAuditScenario('CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR="it@hotel.es"; comprobar_operador; echo sigue');
+    [, $otraBase] = restoreAuditScenario('BASE_DESTINO=fichaje_destino; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
+    [, $porDefecto] = restoreAuditScenario('BASE_DESTINO=""; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
+    [, $llamador] = restoreAuditScenario('ASIENTO_POR_LLAMADOR=1; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador; echo sigue');
+    [, $simulacro] = restoreAuditScenario('CONFIRMADO=0; SOLO_COMPROBAR=1; OPERADOR=""; comprobar_operador; echo sigue');
 
     expect($sinOperador->getExitCode())->toBe(1)
         ->and($sinOperador->getErrorOutput())->toContain('falta --operator')
         ->and($sinOperador->getErrorOutput())->toContain('No se ha tocado nada')
         ->and($sinOperador->getOutput())->not->toContain('sigue')
         ->and($conOperador->getOutput())->toContain('sigue')
-        // Con --database hacia otra base no hay asiento, y --dry-run no toca nada.
+        // Sin --database el destino es la base de la instalacion: hay asiento.
+        ->and($porDefecto->getExitCode())->toBe(1)
+        // Con --database hacia otra base no hay asiento, la vuelta atras de
+        // update.sh escribe el suyo, y --dry-run no toca nada.
         ->and($otraBase->getOutput())->toContain('sigue')
+        ->and($llamador->getOutput())->toContain('sigue')
         ->and($simulacro->getOutput())->toContain('sigue');
 })->group('RL-04', 'RF-PR-04');
 
 it('el aviso de --operator sale en ingles con KQ_LANG=en', function (): void {
-    [, $process] = restoreAuditScenario('AUDITAR=1; CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador', ['KQ_LANG' => 'en']);
+    [, $process] = restoreAuditScenario('CONFIRMADO=1; SOLO_COMPROBAR=0; OPERADOR=""; comprobar_operador', ['KQ_LANG' => 'en']);
 
     expect($process->getExitCode())->toBe(1)
         ->and($process->getErrorOutput())->toContain('--operator is missing');

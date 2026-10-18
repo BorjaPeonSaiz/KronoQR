@@ -580,14 +580,17 @@ comprobar_precondiciones() {
 
   decidir_asiento
   comprobar_asiento_posible
-  comprobar_operador
 }
 
 # Con --yes, la restauracion que escribe su propio asiento exige saber quien
 # esta delante (R3-PL-09): el contenedor corre como `app` y eso no identifica a
-# nadie. Antes de leer la copia: sin --operator no se ha tocado nada.
+# nadie. Se comprueba justo tras leer las opciones y la configuracion, ANTES de
+# las precondiciones: es un error de uso (salida 1) y no se ha tocado nada. El
+# asiento lo escribe la propia restauracion salvo con --audit-by-caller o hacia
+# otra base que la de la instalacion (la misma regla que decidir_asiento).
 comprobar_operador() {
-  [ "$AUDITAR" -eq 1 ] || return 0
+  [ "$ASIENTO_POR_LLAMADOR" -eq 0 ] || return 0
+  [ "${BASE_DESTINO:-${PGDATABASE:-}}" = "${PGDATABASE:-}" ] || return 0
   [ "$CONFIRMADO" -eq 1 ] || return 0
   [ "$SOLO_COMPROBAR" -eq 0 ] || return 0
   [ -z "$OPERADOR" ] || return 0
@@ -959,6 +962,7 @@ main() {
     return 0
   fi
 
+  comprobar_operador
   comprobar_precondiciones
   preparar_volcado
 
