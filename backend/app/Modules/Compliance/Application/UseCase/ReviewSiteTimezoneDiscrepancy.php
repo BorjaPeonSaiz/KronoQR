@@ -16,11 +16,9 @@ use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Domain\ValueObject\SiteTimezoneReviewTarget;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
-use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\SignOffReason;
 use App\Modules\Shared\Domain\ValueObject\SignOffReasonViolation;
-use OpenTelemetry\API\Trace\SpanKind;
-use Throwable;
 
 /**
  * Da por revisada una discrepancia de la zona del centro que la conciliacion
@@ -80,24 +78,16 @@ final readonly class ReviewSiteTimezoneDiscrepancy
      */
     public function handle(ReviewSiteTimezoneDiscrepancyCommand $command): int
     {
-        $span = SpanScope::start(
-            'kronoqr.compliance',
+        // La medida comun de los casos de uso; el span lleva el objetivo
+        // (`change:<id>` o `audit:<id>`) y el asiento escrito, nunca el motivo.
+        return UseCaseInstrumentation::run(
             'compliance.review_site_timezone_discrepancy',
-            SpanKind::KIND_INTERNAL,
-            ['target' => $command->target->label()],
+            fn (): int => $this->review($command),
+            static fn (int $reviewId): array => [
+                'target' => $command->target->label(),
+                'review_entry_id' => $reviewId,
+            ],
         );
-
-        try {
-            $reviewId = $this->review($command);
-        } catch (Throwable $failure) {
-            $span->end(['outcome' => $failure instanceof SiteTimezoneReviewRejected ? 'rejected' : 'error']);
-
-            throw $failure;
-        }
-
-        $span->end(['outcome' => 'reviewed', 'review_entry_id' => $reviewId]);
-
-        return $reviewId;
     }
 
     /**
