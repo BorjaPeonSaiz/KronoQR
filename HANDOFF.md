@@ -89,9 +89,12 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (18-10-2026):** bloques 0 a 3 integrados (#182 a #185). **Bloque 4 «Lo que se le promete al cliente» en curso** en la rama `docs/promesas-al-cliente`, sin push. Trae: doc 05 (diseñado para 50/s, contratos y departamentos sin baja, la conciliación detecta las horas tocadas, informes avanzados ya existen); doc 02 §7.1 (600 r/m por IP); RF-KI-07 y el contrato del latido con la recarga urgente a cualquier hora, con notas en ADR-012 y ADR-054; la parada medida en ⑧b (51-53 s de 503 y 63-65 s de `update.sh`) en el runbook, `operacion.md` (es/en) y el doc 05; tres correos y las alertas en `obligaciones-legales.md`. El plan pedía la nota en ADR-044/049, que no tratan del quiosco: se puso en ADR-012 y ADR-054.
+**Estado de la 2.3.0 (18-10-2026):** bloques 0 a 4 integrados (#182 a #186). **Bloque 5 «Guía de instalación y documentación del cliente» en curso** en la rama `docs/guias-cliente-2.3.0`, sin push: tareas 5.1 a 5.5 hechas, un commit por tarea (la 5.3 en dos). Lo que conviene saber:
+- **Las notas de la 2.3.0 viven en `operacion.md` §11** (es/en), en párrafos «Al actualizar a la 2.3.0» y «Al actualizar desde la 2.2.0», como las de versiones anteriores; el resumen del CHANGELOG se escribe en el bloque final. **Cada bloque que cambie algo visible para el hotel añade allí su párrafo.** D6 (400 `problem+json`) entra con el bloque 10.
+- `check-package-links.sh` comprueba ya cualquier destino relativo, no solo `.md` e imágenes. Un enlace de un runbook a `../../infra/…`, `.github/…` o `.gitleaks.toml` rompe ⑧ y `release.yml`.
+- La guía de instalación descomprime en `/opt` con `sudo`, como las actualizaciones.
 
-**Siguiente acción:** revisar e integrar el bloque 4 y seguir con el bloque 5 (guías del cliente, rama `docs/guias-cliente-2.3.0`). La cifra de la parada entra también en las notas de la 2.3.0 (tarea 5.4).
+**Siguiente acción:** cerrar el bloque 5 (CI manual, revisiones, PR y merge) y seguir con el bloque 6 (`update.sh` a prueba de Ctrl+C, rama `fix/update-sh-interrupcion`).
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -168,6 +171,10 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+- **Del bloque 5 de la 2.3.0 (18-10-2026), sin bloque asignado todavía:**
+  - `package.sh` sigue metiendo en el paquete los dos runbooks del fabricante (`fallo-de-ci.md`, `triaje-hallazgos-seguridad.md`). La guía ya lo dice; excluirlos es un cambio de script (I10).
+  - El «Que hacer» de `KIOSK_VLAN_CIDR` igual a la plantilla, en `install.sh` y `doctor.sh` (`f_kiosk_vlan_template`), sigue mandando a `grep "from_kiosk_vlan":0`. La guía usa ahora el recuento por latidos, que dice qué IP ve el servidor de cada tablet. Se puede alinear en el bloque 7.
+  - La guía de RRHH no explica la casilla «Este tramo terminó en pausa» ni la fila «Cómo terminó» (bloque 1, ADR-058). Solo lo dicen las notas de `operacion.md` §11.
 - **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
