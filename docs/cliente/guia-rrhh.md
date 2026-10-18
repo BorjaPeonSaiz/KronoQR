@@ -944,12 +944,14 @@ en salida.
 
 **Por qué importa: decide de qué jornada es el tramo siguiente.** La jornada es
 la del día en que empezó el turno, y un tramo cuya entrada cae **el día
-siguiente** solo sigue en esa misma jornada si se cumplen las tres cosas:
+siguiente** solo sigue en esa misma jornada si se cumplen las cuatro cosas:
 
 1. el tramo anterior **terminó en pausa** (la casilla marcada);
 2. su entrada llega **antes del descanso mínimo** entre jornadas del perfil
    (`min_rest_hours`, 12 h de serie, §7), contado desde que salió a la pausa;
-3. cae **como tarde el día siguiente** a la jornada, nunca dos días después.
+3. cae **como tarde el día siguiente** a la jornada, nunca dos días después;
+4. entre los dos **no hay ningún tramo vigente de otra jornada** de la misma
+   persona.
 
 Ejemplo: el turno de noche entra el lunes a las 22:00, sale a descansar a las
 02:00 del martes y vuelve a las 02:30. Para que la vuelta cuente en la jornada
@@ -957,7 +959,7 @@ del **lunes**, el tramo de 22:00 a 02:00 tiene que tener la casilla marcada. Sin
 ella, el sistema lo trata como una salida, y las horas de 02:30 en adelante son
 de la jornada del martes.
 
-Si no se cumple alguna de las tres, al guardar el panel lo rechaza y dice por
+Si no se cumple alguna de las cuatro, al guardar el panel lo rechaza y dice por
 qué, por ejemplo: *«Las horas que empiezan otro día solo continúan la jornada
 del … si el tramo anterior terminó en pausa, y no terminó así: son de otra
 jornada. Dalas de alta en la jornada en que empiezan, o declara que el tramo

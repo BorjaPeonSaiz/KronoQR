@@ -964,14 +964,16 @@ with a clock-out.
 **Why it matters: it decides which working day the next entry belongs to.** The
 working day is the one of the day the shift started, and an entry whose
 clock-in falls **on the next day** only stays in that same working day if all
-three things hold:
+four things hold:
 
 1. the previous entry **ended in a break** (the checkbox ticked);
 2. its clock-in arrives **before the minimum rest** between working days in the
    profile (`min_rest_hours`, 12 h out of the box, §7), counted from the moment
    they went on the break;
 3. it falls **on the day after the working day at the latest**, never two days
-   later.
+   later;
+4. between the two there is **no current entry of another working day** of the
+   same person.
 
 Example: the night shift clocks in on Monday at 22:00, goes on a break at 02:00
 on Tuesday and comes back at 02:30. For the return to count in **Monday's**
@@ -979,7 +981,7 @@ working day, the 22:00 to 02:00 entry has to have the checkbox ticked. Without
 it, the system treats it as a clock-out, and the hours from 02:30 on belong to
 Tuesday's working day.
 
-If any of the three does not hold, the panel rejects it on saving and says why,
+If any of the four does not hold, the panel rejects it on saving and says why,
 for example: *"Hours starting on another day only continue the working day of …
 if the previous shift ended in a break, and it did not: they belong to another
 working day. Record them on the working day they start, or declare that the
