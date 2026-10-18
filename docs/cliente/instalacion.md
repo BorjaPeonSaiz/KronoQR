@@ -192,11 +192,6 @@ docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
 docs/CHANGELOG.md        Qué cambia en cada versión.
 ```
 
-En `docs/runbooks/` viajan también dos procedimientos internos del fabricante,
-`fallo-de-ci.md` y `triaje-hallazgos-seguridad.md`: tratan de su integración
-continua, no de tu instalación, y no hace falta leerlos. El índice
-(`docs/runbooks/README.md`) los aparta en «Solo del fabricante».
-
 > **`./doctor.sh`, para cuando algo no va bien.** Localiza la instalación solo
 > (igual que `update.sh`; `--current RUTA` la fija a mano si hace falta) y:
 >

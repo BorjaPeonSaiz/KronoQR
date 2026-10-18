@@ -194,13 +194,6 @@ docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
 docs/CHANGELOG.md        What changes in each version.
 ```
 
-Two internal procedures of the manufacturer also travel in `docs/runbooks/`
-(in Spanish, like the rest of the runbooks): `fallo-de-ci.md` and
-`triaje-hallazgos-seguridad.md`. They are about its continuous integration,
-not about your installation, and you do not need to read them. The index
-(`docs/runbooks/README.md`) sets them apart under «Solo del fabricante»
-(manufacturer only).
-
 > **`./doctor.sh`, for when something is not right.** It locates the
 > installation on its own (like `update.sh`; `--current PATH` pins it by hand
 > if needed) and:

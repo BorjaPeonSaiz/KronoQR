@@ -140,10 +140,14 @@ paquete: es de la integración continua del fabricante.
 
 ### Solo del fabricante (no del cliente)
 
+Viven en el repositorio del fabricante y **no viajan en el paquete** de
+instalación (`infra/scripts/package.sh` los retira): por eso aquí no van
+enlazados.
+
 | Runbook | Cuándo se usa |
 | --- | --- |
-| [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o una puerta de versión bloquea una etiqueta |
-| [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job de seguridad |
+| `fallo-de-ci.md` | Una etapa del pipeline está en rojo, o una puerta de versión bloquea una etiqueta |
+| `triaje-hallazgos-seguridad.md` | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job de seguridad |
 
 `alta-nuevo-empleado` no es un runbook: es el §2 de
 [`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md).

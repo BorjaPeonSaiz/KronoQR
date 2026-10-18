@@ -709,3 +709,44 @@ it('publica en la release los ficheros que las guias mandan descargar', function
         ->and(preg_match('/^\s*sha256sum "kronoqr-\$\{VERSION\}\.tar\.gz"[^\n]*>SHA256SUMS$/m', $release))
         ->toBe(1, 'release.yml ya no suma kronoqr-${VERSION}.tar.gz en SHA256SUMS.');
 })->group('RF-PD-02');
+
+it('deja fuera del paquete los runbooks internos del fabricante y ningun documento del paquete los enlaza', function (): void {
+    // I10 (2.3.0, bloque 5). `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md`
+    // tratan de la integracion continua del fabricante, no de la instalacion del
+    // hotel: `package.sh` los retira. Se arma el paquete de verdad, como hace la
+    // etapa ⑧, porque mirar solo el texto del script no ve un `cp -r` que los
+    // vuelva a meter. Y si algun documento que viaja los enlazara, el enlace
+    // quedaria roto en casa del cliente.
+    $internos = ['fallo-de-ci.md', 'triaje-hallazgos-seguridad.md'];
+    $destino = sys_get_temp_dir().'/kronoqr-paquete-'.bin2hex(random_bytes(6));
+    $proceso = new Process(['bash', Repo::file('infra/scripts/package.sh'), $destino], timeout: 120.0);
+    $proceso->run();
+
+    $dentro = [];
+    $enlaces = [];
+    if ($proceso->isSuccessful()) {
+        foreach ($internos as $runbook) {
+            if (file_exists($destino.'/docs/runbooks/'.$runbook)) {
+                $dentro[] = $runbook;
+            }
+        }
+
+        $documentos = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($destino.'/docs', FilesystemIterator::SKIP_DOTS));
+        foreach ($documentos as $documento) {
+            if (! $documento instanceof SplFileInfo || $documento->getExtension() !== 'md') {
+                continue;
+            }
+            $texto = (string) file_get_contents($documento->getPathname());
+            foreach ($internos as $runbook) {
+                if (preg_match('/\]\([^)\s]*'.preg_quote($runbook, '/').'/', $texto) === 1) {
+                    $enlaces[] = $documento->getFilename().' -> '.$runbook;
+                }
+            }
+        }
+    }
+    (new Process(['rm', '-rf', $destino]))->run();
+
+    expect($proceso->isSuccessful())->toBeTrue($proceso->getErrorOutput().$proceso->getOutput())
+        ->and($dentro)->toBe([], 'Runbooks internos del fabricante dentro del paquete: '.implode(', ', $dentro))
+        ->and($enlaces)->toBe([], 'Documentos del paquete que enlazan un runbook que no viaja: '.implode('; ', $enlaces));
+})->group('RF-PD-02');

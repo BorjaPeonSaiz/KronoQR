@@ -123,6 +123,15 @@ kq_obs_manifest "${DEST}/observability" >"${DEST}/observability.sha256"
 # paquete.
 cp -r "${REPO_ROOT}/docs/cliente" "${DEST}/docs/cliente"
 cp -r "${REPO_ROOT}/docs/runbooks" "${DEST}/docs/runbooks"
+# Los runbooks INTERNOS del fabricante no viajan (I10, 2.3.0): tratan de su
+# integracion continua, no de la instalacion del cliente, y en el servidor del
+# hotel solo serian ruido. Ningun documento del paquete los enlaza: si alguno lo
+# hiciera, check-package-links.sh lo daria por roto en la etapa ⑧ y en
+# release.yml.
+internal_runbooks=(fallo-de-ci.md triaje-hallazgos-seguridad.md)
+for runbook in "${internal_runbooks[@]}"; do
+  rm -f "${DEST}/docs/runbooks/${runbook}"
+done
 # El registro de cambios viaja con el paquete: update.sh remite a el para
 # saber que cambia ANTES de tocar el servidor (doc 02 §10.5).
 cp "${REPO_ROOT}/CHANGELOG.md" "${DEST}/docs/CHANGELOG.md"
@@ -156,6 +165,9 @@ fi
 
 # Lo que no puede estar, comprobado y no supuesto.
 [ ! -e "${DEST}/tools" ] || die 1 "'tools/' ha acabado dentro del paquete: el emisor de licencias es del fabricante (§7.7, RS-08)."
+for runbook in "${internal_runbooks[@]}"; do
+  [ ! -e "${DEST}/docs/runbooks/${runbook}" ] || die 1 "el runbook interno '${runbook}' ha acabado dentro del paquete: es del fabricante (I10)."
+done
 [ ! -e "${DEST}/.env" ] || die 1 "hay un '.env' dentro del paquete: el paquete se entrega SIN configuracion rellenada."
 
 printf 'Paquete de entrega %s armado en %s\n' "$(tr -d '[:space:]' <"${DEST}/VERSION")" "${DEST}"
