@@ -156,7 +156,7 @@ Migración `2026_10_18_120000_guard_site_timezone_in_database`, reversible, sin 
 
 ## Nota 18-10-2026 (2.3.0, bloque 3): quién firma la corrección
 
-**Precisa el punto 3, no cambia la decisión.** El punto 3 pedía una corrección «explícita»; la 2.2.1 la firmaba con `--responsible=<id>`, el id interno de la cuenta, que nadie ve en el panel y que, mal tecleado, firmaba con otra persona sin que nada lo delatara (V21-7-SC-1). Desde la 2.3.0, por decisión del propietario del 18-10-2026 (doc 01 RN-23 y §7.2, «Firmas por consola»):
+**Precisa el punto 3, no cambia la decisión.** El punto 3 pedía una corrección «explícita»; la 2.2.1 la firmaba con el id interno de la cuenta en `--responsible`, que nadie ve en el panel y que, mal tecleado, firmaba con otra persona sin que nada lo delatara (V21-7-SC-1). Desde la 2.3.0, por decisión del propietario del 18-10-2026 (doc 01 RN-23 y §7.2, «Firmas por consola»):
 
 - **Firma una cuenta de gestión activa con rol `admin` o `rrhh`**, los mismos que pueden modificar el centro con `PATCH /site` (`SiteMaintainers::ROLES`): la consola no es la vía por la que alguien hace lo que el panel le niega. Lo mismo vale para `--acknowledge-site-change` de la conciliación.
 - **`--responsible` es el `uuid` o el correo de la cuenta**; un valor numérico se rechaza con salida `2` y un mensaje que explica el cambio.

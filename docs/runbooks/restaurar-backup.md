@@ -412,8 +412,17 @@ Para restaurar una copia concreta, no la última:
 ```bash
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --list
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh \
-  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/kronoqr-<marca>.dump.enc" --yes
+  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/kronoqr-<marca>.dump.enc" --yes \
+  --operator <tu correo>
 ```
+
+**Quién restaura queda en el informe.** `--operator` se guarda en
+`BACKUP_PATH/reports/restore-<marca>.log` como `declared_operator`: el correo de
+una cuenta de gestión, declarado y no verificado. Es un dato personal y **se
+conserva igual que el asiento `system.restored_from_backup` que remite al
+informe** por su `report_id` (cuatro años, RL-02): ninguna pasada automática
+borra los informes de restauración, y no hay que borrarlos a mano antes. Sin
+él, el asiento diría qué se restauró pero no quién lo declaró.
 
 ### 6.3 Vuelta atrás
 
@@ -503,7 +512,9 @@ reprodujeron).
 El actualizador (tarea 5.7) no tiene un camino de restauración propio: cuando
 una migración o la verificación de la versión nueva fallan, **para lo que
 escribe y ejecuta este mismo `restore.sh --yes`** con la copia que hizo en su
-paso 3, y después relanza la versión anterior desde su directorio. Lo que eso
+paso 3, y después relanza la versión anterior desde su directorio. Esa vuelta
+atrás no pide `--operator` (`--audit-by-caller`): **el responsable es quien
+ejecutó la actualización**, y su asiento es el de `update.sh`. Lo que eso
 deja en el servidor es exactamente lo de §6.2 y §6.3: la base fallida
 conservada como `<base>_pre_restore_<marca>` durante 7 días, un informe en
 `BACKUP_PATH/reports/restore-<marca>.log` **y otro en

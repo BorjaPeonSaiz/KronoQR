@@ -575,7 +575,7 @@ docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
 
 # 2. Ejecuta la purga aportando la credencial, sin escribirla en ningún fichero
 docker compose run --rm -e DB_MAINTENANCE_PASSWORD="${clave}" app \
-  php artisan compliance:apply-retention --confirm=PURGAR-...
+  php artisan compliance:apply-retention --confirm=PURGAR-... --responsible=<correo>
 
 # 3. Retírasela en cuanto termines
 docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \

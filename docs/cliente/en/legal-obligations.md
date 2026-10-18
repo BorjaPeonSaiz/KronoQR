@@ -50,7 +50,11 @@ in your record of processing activities under art. 30 of the GDPR (RGPD):
   device they were recorded from.
 - Absences: type, dates, optional note, versions and voidings.
 - Contract data: agreed hours, type of working day and validity period.
-- Log of access and of actions with legal relevance (`audit_log`).
+- Log of access and of actions with legal relevance (`audit_log`). Console
+  signatures name the management account that answers for them, and the report
+  of each restore (`BACKUP_PATH/reports/restore-*.log`) keeps the e-mail
+  declared by whoever ran it (`declared_operator`). It is kept like the audit
+  entry that cites it.
 
 The **impact dashboard** ([`hr-guide.md`](hr-guide.md) §6.6) adds nothing to
 that list: it is a further, **aggregate** use of data already processed
