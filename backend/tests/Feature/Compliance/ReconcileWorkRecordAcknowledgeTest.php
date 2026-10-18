@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use OpenTelemetry\SDK\Trace\EventInterface;
 use OpenTelemetry\SDK\Trace\ImmutableSpan;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Observability\CapturedLog;
 use Tests\Support\Telemetry\RecordingTracer;
@@ -104,7 +105,7 @@ it('no se combina con una pasada de conciliacion', function (array $extra): void
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN)->id),
         ...$extra,
     ]);
 
@@ -131,7 +132,7 @@ it('rechaza con 1 y sin escribir lo que no se puede revisar', function (string $
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => $caso === 'motivo corto' ? 'porque si' : RECONCILE_ACKNOWLEDGE_MOTIVO,
-        '--responsible' => (string) $responsable->id,
+        ...ConsoleSignature::for($responsable->id),
     ]);
 
     expect($resultado['code'])->toBe(1, $resultado['output'])
@@ -153,7 +154,7 @@ it('escribe un unico asiento de revision con el payload del diseño, y no repite
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => '  '.RECONCILE_ACKNOWLEDGE_MOTIVO.'  ',
-        '--responsible' => (string) $responsable->id,
+        ...ConsoleSignature::for($responsable->id),
     ]);
 
     expect($resultado['code'])->toBe(0, $resultado['output'])
@@ -191,7 +192,7 @@ it('escribe un unico asiento de revision con el payload del diseño, y no repite
     $otra = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
-        '--responsible' => (string) $responsable->id,
+        ...ConsoleSignature::for($responsable->id),
     ]);
 
     expect($otra['code'])->toBe(1)
@@ -212,14 +213,14 @@ it('habla ingles en una instalacion en ingles', function (): void {
         ->and(acuseDePurgaRevisiones())->toBe(0);
 })->group('RL-04', 'RS-07');
 
-it('sale con 2 y sin escribir si un id no es un entero positivo escrito tal cual', function (string $opcion, string $valor, string $mensaje): void {
+it('sale con 2 y sin escribir si el asiento no es un entero positivo o el responsable no es un uuid ni un correo', function (string $opcion, string $valor, string $mensaje): void {
     $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
     $asientos = DB::table('audit_log')->count();
 
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN)->id),
         // `(int)` habria leido `12abc` como 12 y `7x` como 7.
         $opcion => $valor,
     ]);
@@ -233,9 +234,12 @@ it('sale con 2 y sin escribir si un id no es un entero positivo escrito tal cual
     'asiento con letras detras' => ['--acknowledge', '12abc', 'tiene que ser el id del asiento, un entero positivo'],
     'asiento negativo' => ['--acknowledge', '-3', 'tiene que ser el id del asiento, un entero positivo'],
     'asiento cero' => ['--acknowledge', '0', 'tiene que ser el id del asiento, un entero positivo'],
-    'responsable con letras detras' => ['--responsible', '7x', 'tiene que ser el id de la cuenta, un entero positivo'],
-    'responsable cero' => ['--responsible', '0', 'tiene que ser el id de la cuenta, un entero positivo'],
-    'responsable negativo' => ['--responsible', '-7', 'tiene que ser el id de la cuenta, un entero positivo'],
+    // Desde la 2.3.0 el responsable es su uuid o su correo (bloque 3).
+    'responsable con letras detras' => ['--responsible', '7x', 'no es ninguno de los dos'],
+    'responsable negativo' => ['--responsible', '-7', 'no es ninguno de los dos'],
+    'responsable por id numerico' => ['--responsible', '7', 'ya no admite el id interno'],
+    'correo que no existe' => ['--responsible', 'nadie@kronoqr.test', 'No hay ninguna cuenta'],
+    'confirmacion con el correo de otra cuenta' => ['--responsible-confirm', 'otra@kronoqr.test', 'no coincide'],
 ])->group('RL-04', 'RS-07');
 
 it('dice en ingles que el id no es valido', function (): void {
@@ -262,7 +266,7 @@ it('no deja el motivo de la revision en el log tecnico ni en las trazas', functi
             $resultado = acuseDePurgaOrden([
                 '--acknowledge' => (string) $purga,
                 '--reason' => $centinela,
-                '--responsible' => (string) $responsable,
+                ...ConsoleSignature::for($responsable),
             ]);
 
             expect($resultado['code'])->toBe(0, $resultado['output'])
@@ -305,11 +309,11 @@ it('sale con 2 y sin asiento si quien firma no es una cuenta activa de administr
     $resultado = acuseDePurgaOrden([
         '--acknowledge' => (string) $purga,
         ...($conMotivo ? ['--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO] : []),
-        '--responsible' => (string) $cuenta->id,
+        ...ConsoleSignature::for($cuenta->id),
     ]);
 
     expect($resultado['code'])->toBe(2, $resultado['output'])
-        ->and($resultado['output'])->toContain('con rol de administración o de RRHH')
+        ->and($resultado['output'])->toContain($rol === null ? 'dada de baja' : 'admin, rrhh')
         ->and(acuseDePurgaRevisiones())->toBe(0);
 })->with([
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO, true],
@@ -318,3 +322,38 @@ it('sale con 2 y sin asiento si quien firma no es una cuenta activa de administr
     'administracion dada de baja' => [null, true],
     'auditor en la vista previa' => [UserRole::AUDITOR, false],
 ])->group('RL-04', 'RS-07');
+
+// --- La firma por consola (2.3.0 bloque 3) ---------------------------------
+
+it('acepta al responsable por su uuid y enseña quien firma', function (): void {
+    $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $resultado = acuseDePurgaOrden([
+        '--acknowledge' => (string) $purga,
+        '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
+        '--responsible' => $admin->uuid,
+        '--responsible-confirm' => mb_strtoupper($admin->email),
+        '--no-interaction' => true,
+    ]);
+
+    expect($resultado['code'])->toBe(0, $resultado['output'])
+        ->and($resultado['output'])->toContain('Firma: '.$admin->name.' <'.$admin->email.'> · admin · '.$admin->uuid)
+        ->and(DB::table('audit_log')->where('action', 'retention.purge_reviewed')->value('actor_id'))->toBe($admin->id);
+})->group('RL-04', 'RS-07');
+
+it('sin terminal y sin --responsible-confirm sale con 2 sin escribir', function (): void {
+    $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $resultado = acuseDePurgaOrden([
+        '--acknowledge' => (string) $purga,
+        '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
+        '--responsible' => $admin->email,
+        '--no-interaction' => true,
+    ]);
+
+    expect($resultado['code'])->toBe(2, $resultado['output'])
+        ->and($resultado['output'])->toContain('--responsible-confirm=<correo de la cuenta>')
+        ->and(acuseDePurgaRevisiones())->toBe(0);
+})->group('RL-04', 'RS-07');

@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Infrastructure\Console;
 
 /**
- * Un identificador escrito en una opcion de consola (`--responsible=7`,
- * `--acknowledge=42`), leido sin adivinar.
+ * Un identificador escrito en una opcion de consola (`--acknowledge=42`), leido
+ * sin adivinar.
  *
- * `(int)` se tragaria `12abc` como 12 y firmaria con la cuenta equivocada: un
- * id es un entero positivo escrito tal cual, sin signo ni decimales, o no es un
- * id. Lo usan las acciones de consola que firman un asiento
- * (`compliance:reconcile-work-record --acknowledge`,
- * `workforce:correct-site-timezone`, `compliance:apply-retention --responsible`).
+ * `(int)` se tragaria `12abc` como 12 y revisaria el asiento equivocado: un id
+ * es un entero positivo escrito tal cual, sin signo ni decimales, o no es un
+ * id. Lo usa `compliance:reconcile-work-record --acknowledge`, cuyo objetivo es
+ * el id del asiento de `audit_log`. **La cuenta que firma ya no se nombra por su
+ * id** desde la 2.3.0: `--responsible` es su uuid o su correo
+ * ({@see ConsoleResponsible}).
  */
 final class ConsoleIds
 {

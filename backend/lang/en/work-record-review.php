@@ -19,8 +19,8 @@ return [
     'missing_options' => 'To mark entry :id as reviewed, --reason and --responsible are required. Nothing was written.',
     'incompatible_options' => '--acknowledge cannot be combined with --full or --days: either reconcile or review.',
     'invalid_purge_id' => '--acknowledge must be the audit entry id, a positive integer; ":value" is not. Nothing was written.',
-    'invalid_responsible' => '--responsible must be the account id, a positive integer; ":value" is not. Nothing was written.',
     'done' => 'Entry :review written: purge :id is now reviewed and no longer counted as pending.',
+    'confirm_purge' => 'Mark purge :id as reviewed with this signature?',
     'explains' => 'It also explains again deletions of work days before :cutoff at site :site.',
     'explains_nothing' => 'It explains no deletion: its defects (:violations) are not only the retention period.',
 
@@ -31,5 +31,6 @@ return [
     'site_change_missing_options' => 'To mark :target as reviewed, --reason and --responsible are required. Nothing was written.',
     'site_change_preview' => 'Pending discrepancy :target of site :site.',
     'site_change_done' => 'Entry :review written: :target is now reviewed and no longer counted as pending.',
+    'confirm_site_change' => 'Mark :target as reviewed with this signature?',
 
 ];

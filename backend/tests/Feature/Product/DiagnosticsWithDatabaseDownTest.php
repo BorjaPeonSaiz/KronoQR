@@ -371,7 +371,13 @@ it('con PostgreSQL caido, --with-personal-data no genera nada porque no se puede
     diagnosticsDbDownBreakDatabase();
     $log = diagnosticsDbDownLog();
 
-    $result = diagnosticsDbDownRun(['--with-personal-data' => true]);
+    // Con la cuenta que firma: sin base ni siquiera se puede leer, y el paquete
+    // con datos personales no se genera (2.3.0 bloque 3).
+    $result = diagnosticsDbDownRun([
+        '--with-personal-data' => true,
+        '--responsible' => 'admin@hotel.test',
+        '--responsible-confirm' => 'admin@hotel.test',
+    ]);
 
     expect($result['code'])->toBe(1)
         ->and(diagnosticsDbDownFiles('diagnostics'))->toBe([])

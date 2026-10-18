@@ -15,7 +15,10 @@ use App\Modules\Compliance\Domain\ValueObject\SiteTimezoneReviewTarget;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationResult;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -52,25 +55,26 @@ final class ReconcileWorkRecordCommand extends Command
         {--acknowledge= : Id del asiento retention.purge_executed que se da por revisado. No concilia: escribe el asiento de revision}
         {--reason= : Motivo de la revision, de 10 a 1000 caracteres. Obligatorio con --acknowledge}
         {--acknowledge-site-change= : Discrepancia de la zona del centro que se da por revisada: change:<id> (fila de site_timezone_changes) o audit:<id> (site.updated sin firma). No concilia}
-        {--responsible= : Id de la cuenta de gestion activa que responde de la revision. Obligatorio con --acknowledge y --acknowledge-site-change}';
+        {--responsible= : Uuid o correo de la cuenta de gestion activa (admin o rrhh) que firma la revision. Obligatorio con --acknowledge y --acknowledge-site-change}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio sin terminal}';
 
     /** Tramos que se detallan en el log tecnico. Ver `handle()`. */
     private const int LOGGED_ROWS = 50;
 
     protected $description = 'Concilia shift_entries con sus asientos de audit_log y alerta ante cualquier discrepancia (ADR-057)';
 
-    public function handle(ReconcileWorkRecordWithAudit $reconcile, ReviewOutOfBoundsPurge $review, ReviewSiteTimezoneDiscrepancy $siteReview): int
+    public function handle(ReconcileWorkRecordWithAudit $reconcile, ReviewOutOfBoundsPurge $review, ReviewSiteTimezoneDiscrepancy $siteReview, ResponsibleAccounts $accounts): int
     {
         $siteChange = $this->stringOption('acknowledge-site-change');
 
         if ($siteChange !== null) {
-            return $this->acknowledgeSiteChange($siteReview, $siteChange);
+            return $this->acknowledgeSiteChange($siteReview, $siteChange, $accounts);
         }
 
         $acknowledge = $this->stringOption('acknowledge');
 
         if ($acknowledge !== null) {
-            return $this->acknowledge($review, $acknowledge);
+            return $this->acknowledge($review, $acknowledge, $accounts);
         }
 
         $scope = (bool) $this->option('full')
@@ -190,17 +194,20 @@ final class ReconcileWorkRecordCommand extends Command
      * enmienda del 10-10-2026 §6). No concilia.
      *
      * - Con `--full` o `--days`: 2, sin hacer nada.
-     * - `--acknowledge` o `--responsible` que no son un entero positivo: 2, sin
-     *   hacer nada.
-     * - `--responsible` que no es una cuenta de gestion activa con rol admin o
-     *   rrhh: 2, sin escribir (tambien en la vista previa).
+     * - `--acknowledge` que no es un entero positivo (el id del asiento de
+     *   `audit_log`): 2, sin hacer nada.
+     * - `--responsible` que no es el `uuid` ni el correo de una cuenta de
+     *   gestion activa con rol admin o rrhh (un id numerico se rechaza desde la
+     *   2.3.0): 2, sin escribir (tambien en la vista previa).
      * - Sin `--reason` o sin `--responsible`: vista previa y 2, sin escribir.
+     * - Enseña quien firma y pide confirmarlo; sin terminal, falta o no cuadra
+     *   `--responsible-confirm`: 2; la persona responde que no: 1. Sin escribir.
      * - Revision rechazada: 1 y el motivo.
      * - Escrita: 0.
      *
      * El motivo nunca va al log tecnico (regla dura 21): es texto libre.
      */
-    private function acknowledge(ReviewOutOfBoundsPurge $review, string $acknowledge): int
+    private function acknowledge(ReviewOutOfBoundsPurge $review, string $acknowledge, ResponsibleAccounts $accounts): int
     {
         if ((bool) $this->option('full') || $this->stringOption('days') !== null) {
             $this->error(__('work-record-review.incompatible_options'));
@@ -219,25 +226,28 @@ final class ReconcileWorkRecordCommand extends Command
         }
 
         $reason = $this->stringOption('reason');
-        $responsibleOption = $this->stringOption('responsible');
-        $responsible = $responsibleOption === null ? null : ConsoleIds::positive($responsibleOption);
+        $responsible = $this->responsible($accounts);
 
-        if ($responsibleOption !== null && $responsible === null) {
-            $this->error(__('work-record-review.invalid_responsible', ['value' => $responsibleOption]));
-
-            return self::INVALID;
+        if (\is_int($responsible)) {
+            return $responsible;
         }
 
         try {
-            if ($reason === null || $responsible === null) {
-                $preview = $review->preview($purgeId, $responsible);
+            if ($reason === null || ! $responsible instanceof ResponsibleAccount) {
+                $preview = $review->preview($purgeId, $responsible?->id);
                 $this->printReview($purgeId, $preview->violations, $preview->explainsDeletions, $preview->cutoffDate, $preview->siteId);
                 $this->error(__('work-record-review.missing_options', ['id' => $purgeId]));
 
                 return self::INVALID;
             }
 
-            $outcome = $review->handle(new ReviewOutOfBoundsPurgeCommand($purgeId, $reason, $responsible));
+            $declined = $this->confirmSignature($responsible, __('work-record-review.confirm_purge', ['id' => $purgeId]));
+
+            if ($declined !== null) {
+                return $declined;
+            }
+
+            $outcome = $review->handle(new ReviewOutOfBoundsPurgeCommand($purgeId, $reason, $responsible->id));
         } catch (PurgeReviewRejected $rejected) {
             return $this->rejected($rejected);
         }
@@ -292,7 +302,7 @@ final class ReconcileWorkRecordCommand extends Command
         return $target;
     }
 
-    private function acknowledgeSiteChange(ReviewSiteTimezoneDiscrepancy $review, string $value): int
+    private function acknowledgeSiteChange(ReviewSiteTimezoneDiscrepancy $review, string $value, ResponsibleAccounts $accounts): int
     {
         $target = $this->siteChangeTarget($value);
 
@@ -301,25 +311,28 @@ final class ReconcileWorkRecordCommand extends Command
         }
 
         $reason = $this->stringOption('reason');
-        $responsibleOption = $this->stringOption('responsible');
-        $responsible = $responsibleOption === null ? null : ConsoleIds::positive($responsibleOption);
+        $responsible = $this->responsible($accounts);
 
-        if ($responsibleOption !== null && $responsible === null) {
-            $this->error(__('work-record-review.invalid_responsible', ['value' => $responsibleOption]));
-
-            return self::INVALID;
+        if (\is_int($responsible)) {
+            return $responsible;
         }
 
         try {
-            if ($reason === null || $responsible === null) {
-                $site = $review->preview($target, $responsible);
+            if ($reason === null || ! $responsible instanceof ResponsibleAccount) {
+                $site = $review->preview($target, $responsible?->id);
                 $this->line('  '.__('work-record-review.site_change_preview', ['target' => $target->label(), 'site' => $site]));
                 $this->error(__('work-record-review.site_change_missing_options', ['target' => $target->label()]));
 
                 return self::INVALID;
             }
 
-            $reviewId = $review->handle(new ReviewSiteTimezoneDiscrepancyCommand($target, $reason, $responsible));
+            $declined = $this->confirmSignature($responsible, __('work-record-review.confirm_site_change', ['target' => $target->label()]));
+
+            if ($declined !== null) {
+                return $declined;
+            }
+
+            $reviewId = $review->handle(new ReviewSiteTimezoneDiscrepancyCommand($target, $reason, $responsible->id));
         } catch (SiteTimezoneReviewRejected $rejected) {
             $this->error(__($rejected->translationKey, $rejected->parameters));
 
@@ -358,6 +371,30 @@ final class ReconcileWorkRecordCommand extends Command
         $this->line('  '.($explains
             ? __('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
             : __('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
+    }
+
+    /**
+     * La cuenta de `--responsible`, `null` si no se ha dado (la vista previa
+     * no la necesita), o `INVALID` si no es el `uuid` ni el correo de una
+     * cuenta activa con rol admin o rrhh: no se hace nada, tampoco la vista
+     * previa.
+     */
+    private function responsible(ResponsibleAccounts $accounts): ResponsibleAccount|int|null
+    {
+        $option = $this->stringOption('responsible');
+
+        return $option === null
+            ? null
+            : ConsoleResponsible::resolve($this, $accounts, $option, ReviewOutOfBoundsPurge::RESPONSIBLE_ROLES);
+    }
+
+    /**
+     * Enseña quien firma la revision y la confirma: con terminal se pregunta;
+     * sin ella, `--responsible-confirm` con el correo de la cuenta.
+     */
+    private function confirmSignature(ResponsibleAccount $responsible, string $question): ?int
+    {
+        return ConsoleResponsible::confirm($this, $responsible, $question, ! $this->input->isInteractive());
     }
 
     private function stringOption(string $name): ?string

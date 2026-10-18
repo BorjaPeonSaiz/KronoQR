@@ -185,6 +185,7 @@ use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
 use App\Modules\Shared\Application\Port\PinLengthProvider;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
@@ -2106,6 +2107,7 @@ final class ProductServiceProvider extends ServiceProvider
                 productVersion: Config::string('app.version'),
                 maxBytes: Config::integer('product.diagnostics_max_bytes'),
                 failures: $app->make(ProbeFailureClassifier::class),
+                accounts: $app->make(ResponsibleAccounts::class),
             ),
         );
     }

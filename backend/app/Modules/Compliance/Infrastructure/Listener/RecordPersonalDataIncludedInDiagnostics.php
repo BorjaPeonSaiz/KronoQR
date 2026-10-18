@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Listener;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
@@ -49,7 +50,11 @@ final readonly class RecordPersonalDataIncludedInDiagnostics
     public function handle(PersonalDataIncludedInDiagnostics $event): void
     {
         $this->audit->handle(new RecordAuditEntryCommand(
-            actor: $this->context->actor(),
+            // Por el panel firma la sesion; por consola, la cuenta admin de
+            // `--responsible` (2.3.0 bloque 3, PR17), nunca `system`.
+            actor: $event->responsibleUserId === null
+                ? $this->context->actor()
+                : AuditActor::user($event->responsibleUserId),
             action: AuditAction::DiagnosticsPersonalDataIncluded,
             subject: AuditSubject::of('diagnostics'),
             payload: AuditPayload::of([

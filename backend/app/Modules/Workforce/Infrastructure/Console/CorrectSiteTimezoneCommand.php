@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Console;
 
-use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand as CorrectSiteTimezone;
+use App\Modules\Workforce\Application\Support\SiteMaintainers;
 use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
 use App\Modules\Workforce\Application\UseCase\SiteTimezoneCorrectionOutcome;
 use App\Modules\Workforce\Application\UseCase\SiteTimezoneCorrectionReport;
@@ -30,8 +33,14 @@ use Illuminate\Support\Facades\Log;
  * - `1`: no se puede corregir por aqui —sin centro, sin registro horario, que
  *   se cambia desde el panel— o la persona respondio que no a la confirmacion.
  * - `2` (`INVALID`): zona que no existe, faltan `--reason` o `--responsible`,
- *   motivo fuera de 10 a 1000 caracteres, responsable que no es una cuenta de
- *   gestion activa, o `--no-interaction` sin `--force`.
+ *   motivo fuera de 10 a 1000 caracteres, `--responsible` que no es el `uuid`
+ *   ni el correo de una cuenta de gestion activa con rol admin o rrhh (un id
+ *   numerico se rechaza desde la 2.3.0), `--no-interaction` sin `--force`, o
+ *   `--force` sin `--responsible-confirm` con el correo de esa cuenta.
+ *
+ * **Antes de confirmar enseña quien firma** (`Firma: nombre <correo> · rol ·
+ * uuid`) con {@see ConsoleResponsible}, igual que las otras ordenes que firman
+ * un asiento (doc 01 §7.2, «Firmas por consola»).
  *
  * En todos menos en el `0` de una correccion, **no se ha escrito nada**.
  *
@@ -43,18 +52,21 @@ final class CorrectSiteTimezoneCommand extends Command
     protected $signature = 'workforce:correct-site-timezone
         {timezone : Zona horaria IANA correcta, por ejemplo Atlantic/Canary}
         {--reason= : Que se configuro mal y como se supo, de 10 a 1000 caracteres. Obligatorio}
-        {--responsible= : Id de la cuenta de gestion activa que responde de la correccion. Obligatorio}
-        {--force : No pedir confirmacion. Necesario con --no-interaction}';
+        {--responsible= : Uuid o correo de la cuenta de gestion activa (admin o rrhh) que responde de la correccion. Obligatorio}
+        {--force : No pedir confirmacion. Necesario con --no-interaction; exige --responsible-confirm}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio con --force}';
 
     protected $description = 'Corrige la zona horaria del centro cuando ya hay fichajes, sin mover ninguna jornada (RN-23, ADR-056)';
 
-    public function handle(CorrectSiteTimezoneHandler $handler): int
+    public function handle(CorrectSiteTimezoneHandler $handler, ResponsibleAccounts $accounts): int
     {
-        $request = $this->request();
+        $signed = $this->request($accounts);
 
-        if (\is_int($request)) {
-            return $request;
+        if (\is_int($signed)) {
+            return $signed;
         }
+
+        [$request, $responsible] = $signed;
 
         $preview = $this->attempt(fn (): SiteTimezoneCorrectionReport => $this->previewOf($handler, $request));
 
@@ -68,7 +80,7 @@ final class CorrectSiteTimezoneCommand extends Command
 
         $this->printSummary($preview);
 
-        $declined = $this->declined();
+        $declined = $this->declined($responsible);
 
         if ($declined !== null) {
             return $declined;
@@ -90,7 +102,7 @@ final class CorrectSiteTimezoneCommand extends Command
             'previous_timezone' => $report->currentTimezone,
             'timezone' => $report->newTimezone,
             'shift_entry_count' => $report->shiftEntryCount,
-            'responsible_user_id' => $request->responsibleUserId,
+            'responsible_uuid' => $responsible->uuid,
         ]);
 
         $this->info(__('site.correct_timezone.done', [
@@ -102,10 +114,12 @@ final class CorrectSiteTimezoneCommand extends Command
     }
 
     /**
-     * La orden tal como se pidio, o el codigo de salida si faltan opciones o
-     * `--responsible` no es un id.
+     * La orden tal como se pidio y la cuenta que la firma, o el codigo de
+     * salida si faltan opciones o `--responsible` no puede firmarla.
+     *
+     * @return array{0: CorrectSiteTimezone, 1: ResponsibleAccount}|int
      */
-    private function request(): CorrectSiteTimezone|int
+    private function request(ResponsibleAccounts $accounts): array|int
     {
         $reason = $this->stringOption('reason');
         $responsibleOption = $this->stringOption('responsible');
@@ -116,15 +130,13 @@ final class CorrectSiteTimezoneCommand extends Command
             return self::INVALID;
         }
 
-        $responsible = ConsoleIds::positive($responsibleOption);
+        $responsible = ConsoleResponsible::resolve($this, $accounts, $responsibleOption, SiteMaintainers::ROLES);
 
-        if ($responsible === null) {
-            $this->error(__('site.correct_timezone.invalid_responsible', ['value' => $responsibleOption]));
-
-            return self::INVALID;
+        if (\is_int($responsible)) {
+            return $responsible;
         }
 
-        return new CorrectSiteTimezone((string) $this->argument('timezone'), $reason, $responsible);
+        return [new CorrectSiteTimezone((string) $this->argument('timezone'), $reason, $responsible->id), $responsible];
     }
 
     /**
@@ -162,28 +174,22 @@ final class CorrectSiteTimezoneCommand extends Command
     }
 
     /**
-     * `null` si se puede seguir: con `--force`, o si la persona confirma. Sin
-     * terminal y sin `--force` no hay a quien preguntar, y eso es `INVALID`.
+     * `null` si se puede seguir. Enseña quien firma; con `--force` exige
+     * `--responsible-confirm` con su correo, y si no, pregunta. Sin terminal y
+     * sin `--force` no hay a quien preguntar, y eso es `INVALID`. Si la persona
+     * responde que no, `FAILURE`.
      */
-    private function declined(): ?int
+    private function declined(ResponsibleAccount $responsible): ?int
     {
-        if ((bool) $this->option('force')) {
-            return null;
-        }
+        $force = (bool) $this->option('force');
 
-        if (! $this->input->isInteractive()) {
+        if (! $force && ! $this->input->isInteractive()) {
             $this->error(__('site.correct_timezone.needs_force'));
 
             return self::INVALID;
         }
 
-        if ($this->confirm(__('site.correct_timezone.confirm'), false)) {
-            return null;
-        }
-
-        $this->line(__('site.correct_timezone.cancelled'));
-
-        return self::FAILURE;
+        return ConsoleResponsible::confirm($this, $responsible, __('site.correct_timezone.confirm'), $force);
     }
 
     private function explain(SiteTimezoneCorrectionReport $report): int

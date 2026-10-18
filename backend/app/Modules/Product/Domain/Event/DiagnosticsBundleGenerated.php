@@ -26,8 +26,9 @@ use DateTimeImmutable;
  *
  * Que secciones llevaba, si iba anonimizado, su tamaño y su huella: lo justo
  * para reconocer **ese** paquete si vuelve mas adelante en una conversacion. No
- * viaja el contenido —el asiento acaba en el trail y el trail se exporta— ni el
- * actor, que lo resuelve la sesion en curso.
+ * viaja el contenido —el asiento acaba en el trail y el trail se exporta—. El
+ * actor lo resuelve la sesion en curso, salvo por consola, donde viaja la
+ * cuenta que firma (`responsibleUserId`, 2.3.0 bloque 3).
  *
  * ## `deferred`: el asiento que se escribe al volver la base (ADR-020, enmienda
  * del 14-10-2026)
@@ -54,6 +55,12 @@ final readonly class DiagnosticsBundleGenerated implements DomainEvent
         private DateTimeImmutable $occurredAt,
         public bool $deferred = false,
         public ?DateTimeImmutable $generatedAt = null,
+        /**
+         * La cuenta que firma el paquete pedido por consola (2.3.0 bloque 3):
+         * el asiento es suyo y no de `system`. `null` por el panel, donde
+         * firma la sesion, y en el anonimizado de consola.
+         */
+        public ?int $responsibleUserId = null,
     ) {}
 
     public function eventName(): string

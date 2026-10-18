@@ -19,8 +19,8 @@ return [
     'missing_options' => 'Para dar por revisado el asiento :id faltan --reason y --responsible. No se ha escrito nada.',
     'incompatible_options' => '--acknowledge no se combina con --full ni con --days: o se concilia o se revisa.',
     'invalid_purge_id' => '--acknowledge tiene que ser el id del asiento, un entero positivo; «:value» no lo es. No se ha escrito nada.',
-    'invalid_responsible' => '--responsible tiene que ser el id de la cuenta, un entero positivo; «:value» no lo es. No se ha escrito nada.',
     'done' => 'Asiento :review escrito: la purga :id queda revisada y deja de contarse como pendiente.',
+    'confirm_purge' => '¿Dar por revisada la purga :id con esta firma?',
     'explains' => 'Además vuelve a explicar los borrados de jornadas anteriores a :cutoff en el centro :site.',
     'explains_nothing' => 'No explica ningún borrado: sus defectos (:violations) no son solo el plazo.',
 
@@ -31,5 +31,6 @@ return [
     'site_change_missing_options' => 'Para dar por revisada :target faltan --reason y --responsible. No se ha escrito nada.',
     'site_change_preview' => 'Discrepancia pendiente :target del centro :site.',
     'site_change_done' => 'Asiento :review escrito: :target queda revisada y deja de contarse como pendiente.',
+    'confirm_site_change' => '¿Dar por revisada :target con esta firma?',
 
 ];

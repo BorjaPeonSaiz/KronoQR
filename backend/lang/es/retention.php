@@ -10,8 +10,8 @@ declare(strict_types=1);
 
 return [
 
-    'invalid_responsible' => '--responsible tiene que ser el id de la cuenta, un entero positivo; «:value» no lo es. No se ha simulado ni borrado nada.',
-    'responsible_not_active' => 'La cuenta :id de --responsible no existe o no está activa: no puede responder de la purga. No se ha borrado nada.',
+    'responsible_not_active' => 'La cuenta de --responsible ya no es una cuenta de gestión activa con rol admin o rrhh: no puede responder de la purga. No se ha borrado nada.',
+    'confirm_signature' => '¿Ejecutar ESTA purga, firmada por esta cuenta?',
 
     'failure' => [
         'title' => 'La purga no ha podido completarse contra la base de datos. No se ha borrado nada.',

@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ConsoleSignature;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Shared\GeneratedFilesSandbox;
@@ -147,7 +150,7 @@ it('barre igual el paquete con datos personales: el nombre no distingue', functi
     // El escritor da el mismo nombre al anonimizado y al que lleva datos
     // personales (`DiagnosticsManifest::fileName()`), y es el segundo el que
     // de verdad no puede quedarse en el disco.
-    Artisan::call('product:diagnostics', ['--with-personal-data' => true, '--no-interaction' => true]);
+    Artisan::call('product:diagnostics', ['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
 
     $escritos = glob(diagnosticsSweepRoot().'/kronoqr-diagnostics-*.json') ?: [];
 

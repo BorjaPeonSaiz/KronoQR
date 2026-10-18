@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Infrastructure\Persistence;
 
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
@@ -45,5 +47,40 @@ final readonly class DatabaseResponsibleAccounts implements ResponsibleAccounts
         }
 
         return $query->exists();
+    }
+
+    public function find(ResponsibleReference $reference): ?ResponsibleAccount
+    {
+        $query = $this->connection->table('users')->select(['id', 'uuid', 'name', 'email', 'is_active']);
+
+        // `email` es `citext`: la igualdad ya no distingue mayusculas.
+        $row = $reference->isUuid()
+            ? $query->where('uuid', $reference->uuid)->first()
+            : $query->where('email', $reference->email)->first();
+
+        if ($row === null) {
+            return null;
+        }
+
+        $id = (int) $row->id;
+
+        /** @var list<string> $names */
+        $names = $this->connection->table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $id)
+            ->orderBy('roles.name')
+            ->pluck('roles.name')
+            ->map(static fn (mixed $name): string => \is_string($name) ? $name : '')
+            ->values()
+            ->all();
+
+        return new ResponsibleAccount(
+            id: $id,
+            uuid: (string) $row->uuid,
+            name: (string) $row->name,
+            email: (string) $row->email,
+            isActive: (bool) $row->is_active,
+            roles: array_values(array_filter(array_map(UserRole::tryFrom(...), $names))),
+        );
     }
 }

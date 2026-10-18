@@ -13,6 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -86,7 +87,7 @@ it('no toma por revision un asiento con el id de la purga en cadena, igual que l
     $resultado = Artisan::call('compliance:reconcile-work-record', [
         '--acknowledge' => (string) $purgaId,
         '--reason' => 'INC-2027-15: revision con el id en cadena, añadida por fuera.',
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN)->id),
     ]);
 
     expect($resultado)->toBe(0, Artisan::output())

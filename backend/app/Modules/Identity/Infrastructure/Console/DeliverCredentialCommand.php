@@ -7,44 +7,64 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand as DeliverCredential;
 use App\Modules\Identity\Application\UseCase\DeliverCredential as DeliverCredentialHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
-use App\Modules\Identity\Infrastructure\Persistence\User;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 
 /**
- * `php artisan credentials:deliver {credential} --by=` — registra que la tarjeta
- * llego a manos de su titular (Anexo C del doc 02, RF-QR-06).
+ * `php artisan credentials:deliver {credential} --responsible=` — registra que
+ * la tarjeta llego a manos de su titular (Anexo C del doc 02, RF-QR-06).
  *
- * **`--by` es obligatorio y no tiene valor por defecto.** RF-QR-06 pide «fecha y
- * responsable», y responsable significa una persona con nombre en `users`, no «el
- * sistema». La columna es `NOT NULL` cuando hay entrega —CHECK
- * `credentials_chk_delivery_is_signed`— precisamente para que no exista el camino
- * de escribir una entrega sin responsable. Sin este dato, el registro no sirve
- * para lo unico para lo que existe: distinguir *«se perdio antes de darsela»* de
- * *«la perdio el empleado»* (doc 02 §5.5).
+ * **`--responsible` es obligatorio y no tiene valor por defecto.** RF-QR-06
+ * pide «fecha y responsable», y responsable significa una persona con nombre en
+ * `users`, no «el sistema». La columna es `NOT NULL` cuando hay entrega —CHECK
+ * `credentials_chk_delivery_is_signed`— precisamente para que no exista el
+ * camino de escribir una entrega sin responsable. Sin este dato, el registro no
+ * sirve para lo unico para lo que existe: distinguir *«se perdio antes de
+ * darsela»* de *«la perdio el empleado»* (doc 02 §5.5).
  *
- * **El actor de la auditoria sigue siendo el sistema.** Una consola no tiene
- * sesion, y atribuirle la accion a la persona de `--by` seria decir que ella
- * ejecuto el comando, cosa que nadie sabe. En `audit_log` queda `system` como
- * actor y el responsable, dentro del asiento. Son dos hechos distintos y se
- * escriben como tales.
+ * **Desde la 2.3.0 la cuenta firma el asiento** (doc 01 §7.2, «Firmas por
+ * consola»). Hasta la 2.2.1 el asiento decia `system` y el responsable iba
+ * dentro, porque nadie sabia quien tecleaba la orden. Ahora la orden enseña la
+ * cuenta (`Firma: nombre <correo> · rol · uuid`) y la persona confirma que es
+ * ella —sin terminal, con `--responsible-confirm=<correo>`—, asi que el actor
+ * es esa cuenta, como cuando la entrega se registra desde el panel. Firma quien
+ * puede registrarla desde el panel: `admin` o `rrhh` (`CredentialPolicy::deliver`).
+ *
+ * `--by` era la opcion de la 2.2.1: se rechaza con `2` y se explica el cambio.
+ *
+ * **Codigos de salida:** `0` registrada; `1` la credencial no existe, no se
+ * puede entregar (sin imprimir, ya entregada, revocada) o la persona responde
+ * que no; `2` falta la credencial o `--responsible`, la cuenta no puede firmar,
+ * o falta o no cuadra `--responsible-confirm`. Con `1` o `2` no hay asiento.
  *
  * **No es idempotente.** Marcar dos veces la misma entrega falla: sobrescribirla
  * cambiaria el responsable y el momento que ya constan en la auditoria.
  */
 final class DeliverCredentialCommand extends Command
 {
+    /**
+     * Los roles que registran una entrega desde el panel
+     * (`CredentialPolicy::deliver`): la consola no puede ser la via por la que
+     * alguien hace lo que el panel le niega.
+     *
+     * @var list<UserRole>
+     */
+    private const array RESPONSIBLE_ROLES = [UserRole::ADMIN, UserRole::RRHH];
+
     protected $signature = 'credentials:deliver
         {credential : UUID de la credencial}
-        {--by= : Correo del usuario de gestion que responde de la entrega. Obligatorio}';
+        {--responsible= : Uuid o correo de la cuenta de gestion (admin o rrhh) que responde de la entrega y la firma. Obligatorio}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio sin terminal}
+        {--by= : Retirada en la 2.3.0: usa --responsible}';
 
     protected $description = 'Registra la entrega de una tarjeta, con fecha y responsable (RF-QR-06).';
 
-    public function handle(DeliverCredentialHandler $handler): int
+    public function handle(DeliverCredentialHandler $handler, ResponsibleAccounts $accounts): int
     {
-        $responsibleEmail = $this->option('by');
-
-        $credentialUuid = trim($this->argument('credential'));
-        $by = \is_string($responsibleEmail) ? mb_strtolower(trim($responsibleEmail)) : '';
+        $credentialUuid = trim((string) $this->argument('credential'));
 
         if ($credentialUuid === '') {
             $this->error('Hace falta el UUID de la credencial.');
@@ -52,27 +72,19 @@ final class DeliverCredentialCommand extends Command
             return self::INVALID;
         }
 
-        if ($by === '') {
-            $this->error('Una entrega tiene que declarar su responsable: --by=persona@ejemplo.es');
+        $responsible = $this->signedBy($accounts, $credentialUuid);
 
-            return self::INVALID;
-        }
-
-        $responsible = User::query()->where('email', $by)->first();
-
-        if (! $responsible instanceof User) {
-            $this->error('No hay ningun usuario de gestion con el correo «'.$by.'».');
-
-            return self::FAILURE;
+        if (\is_int($responsible)) {
+            return $responsible;
         }
 
         try {
             $delivered = $handler->handle(new DeliverCredential(
                 credentialUuid: $credentialUuid,
                 deliveredByUserId: $responsible->id,
-                // Sin actor: la consola no tiene sesion. El asiento dira
-                // `system`, que es lo honesto.
-                actorUserId: null,
+                // La cuenta que ha confirmado su firma: el asiento es suyo,
+                // como cuando la entrega se registra desde el panel.
+                actorUserId: $responsible->id,
             ));
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
@@ -92,5 +104,41 @@ final class DeliverCredentialCommand extends Command
         $this->line('Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/runbooks/alta-nuevo-empleado.md');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * La cuenta que firma la entrega, o el codigo de salida con el motivo ya
+     * escrito: `2` si se usa `--by`, falta `--responsible`, la cuenta no puede
+     * firmar o no cuadra `--responsible-confirm`; `1` si la persona responde
+     * que no.
+     */
+    private function signedBy(ResponsibleAccounts $accounts, string $credentialUuid): ResponsibleAccount|int
+    {
+        $by = $this->option('by');
+
+        if (\is_string($by) && $by !== '') {
+            $this->error('--by se retiro en la 2.3.0: la entrega la firma la cuenta de --responsible (su uuid o su correo), que confirma quien es. No se ha registrado nada.');
+
+            return self::INVALID;
+        }
+
+        $option = $this->option('responsible');
+
+        if (! \is_string($option) || trim($option) === '') {
+            return ConsoleResponsible::missing($this);
+        }
+
+        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, self::RESPONSIBLE_ROLES);
+
+        if (\is_int($responsible)) {
+            return $responsible;
+        }
+
+        return ConsoleResponsible::confirm(
+            $this,
+            $responsible,
+            '¿Registrar la entrega de la tarjeta '.$credentialUuid.' con esta firma?',
+            ! $this->input->isInteractive(),
+        ) ?? $responsible;
     }
 }

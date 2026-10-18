@@ -13,8 +13,10 @@ use App\Modules\Compliance\Application\UseCase\RetentionOutcome;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
-use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
@@ -44,24 +46,33 @@ use Illuminate\Support\Facades\Config;
  * ## Codigos de salida
  *
  * `0` si la pasada termino -haya purgado o no-, `1` si algo la aborto: una
- * cadena de auditoria que no verifica, una frase que no corresponde o la falta de
- * centro de trabajo. Un fallo aqui nunca deja el sistema a medias: lo destructivo
- * va detras de todas las comprobaciones.
- * `2` si `--responsible` no es un id entero positivo o nombra una cuenta que no
- * existe o no esta activa, tanto al simular como al ejecutar: no se simula ni se
- * borra nada.
+ * cadena de auditoria que no verifica, una frase que no corresponde, la falta de
+ * centro de trabajo o una confirmacion de la firma respondida que no. Un fallo
+ * aqui nunca deja el sistema a medias: lo destructivo va detras de todas las
+ * comprobaciones.
+ * `2` si falta `--responsible` al ejecutar, si no es el `uuid` ni el correo de
+ * una cuenta de gestion activa con rol admin o rrhh (un id numerico se rechaza
+ * desde la 2.3.0), tanto al simular como al ejecutar, o si sin terminal falta o
+ * no cuadra `--responsible-confirm`: no se simula ni se borra nada.
+ *
+ * ## Quien firma (2.3.0 bloque 3)
+ *
+ * Ejecutar exige `--responsible` y, antes de borrar, enseña la cuenta que firma
+ * y pide confirmarla ({@see ConsoleResponsible}; doc 01 RF-PR-03 y §7.2). La
+ * simulacion semanal del planificador no lo necesita: no escribe asiento.
  */
 final class ApplyRetentionCommand extends Command
 {
     protected $signature = 'compliance:apply-retention
         {--dry-run : Simula y no borra nada. Es el modo por defecto}
         {--confirm= : Frase que imprime la simulacion. Sin ella NO se borra nada}
-        {--responsible= : Id de la cuenta de gestion activa que autoriza la purga, para el asiento}
+        {--responsible= : Uuid o correo de la cuenta de gestion activa (admin o rrhh) que autoriza la purga y firma el asiento. Obligatorio con --confirm}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio sin terminal}
         {--batch= : Filas por sentencia de borrado. Por defecto compliance.retention.batch_size}';
 
     protected $description = 'Propone la purga por retencion y, con confirmacion explicita, la ejecuta (RF-PR-03)';
 
-    public function handle(ApplyRetention $retention): int
+    public function handle(ApplyRetention $retention, ResponsibleAccounts $accounts): int
     {
         $confirmation = $this->stringOption('confirm');
         $batchSize = $this->batchSize();
@@ -70,25 +81,24 @@ final class ApplyRetentionCommand extends Command
         // ha pedido es simular. Ante dos senales contrarias, la que no borra.
         $simulate = $confirmation === '' || $this->option('dry-run') === true;
 
-        // `--responsible` firma el asiento: `12abc` no es la cuenta 12, es un
-        // error de quien teclea. Sale con 2 sin simular ni borrar nada.
-        $responsibleOption = $this->stringOption('responsible');
-        $responsible = $responsibleOption === '' ? null : ConsoleIds::positive($responsibleOption);
+        $responsible = $this->responsible($accounts, $simulate);
 
-        if ($responsibleOption !== '' && $responsible === null) {
-            $this->error($this->text('retention.invalid_responsible', ['value' => $responsibleOption]));
-
-            return self::INVALID;
+        if (\is_int($responsible)) {
+            return $responsible;
         }
 
-        $order = $simulate
-            ? RetentionRunCommand::simulate($batchSize, $responsible)
-            : RetentionRunCommand::execute($confirmation, $responsible, $batchSize);
+        $order = $simulate || ! $responsible instanceof ResponsibleAccount
+            ? RetentionRunCommand::simulate($batchSize, $responsible?->id)
+            : $this->signedExecution($confirmation, $responsible, $batchSize);
+
+        if (\is_int($order)) {
+            return $order;
+        }
 
         try {
             $outcome = $retention->handle($order);
-        } catch (RetentionResponsibleNotActive $notActive) {
-            $this->error($this->text('retention.responsible_not_active', ['id' => (string) $notActive->userId]));
+        } catch (RetentionResponsibleNotActive) {
+            $this->error($this->text('retention.responsible_not_active'));
 
             return self::INVALID;
         } catch (RetentionNotConfirmed|AuditPartitionNotPurgeable|InstallationSiteMissing $stopped) {
@@ -102,6 +112,40 @@ final class ApplyRetentionCommand extends Command
         $this->render($outcome);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * La cuenta que autoriza la purga, `null` si se simula sin ella, o el
+     * codigo de salida (`2`) si falta para ejecutar o no puede firmar: no se
+     * simula ni se borra nada. En la simulacion es opcional y, si se da, se
+     * comprueba igual: una simulacion con una cuenta que no vale no sirve de
+     * ensayo de nada.
+     */
+    private function responsible(ResponsibleAccounts $accounts, bool $simulate): ResponsibleAccount|int|null
+    {
+        $option = $this->stringOption('responsible');
+
+        if ($option === '') {
+            return $simulate ? null : ConsoleResponsible::missing($this);
+        }
+
+        return ConsoleResponsible::resolve($this, $accounts, $option, ApplyRetention::RESPONSIBLE_ROLES);
+    }
+
+    /**
+     * La ejecucion, despues de enseñar quien la firma y de que lo confirme: con
+     * terminal se pregunta; sin ella, `--responsible-confirm` con su correo.
+     */
+    private function signedExecution(string $confirmation, ResponsibleAccount $responsible, int $batchSize): RetentionRunCommand|int
+    {
+        $declined = ConsoleResponsible::confirm(
+            $this,
+            $responsible,
+            $this->text('retention.confirm_signature'),
+            ! $this->input->isInteractive(),
+        );
+
+        return $declined ?? RetentionRunCommand::execute($confirmation, $responsible->id, $batchSize);
     }
 
     private function render(RetentionOutcome $outcome): void
@@ -156,7 +200,7 @@ final class ApplyRetentionCommand extends Command
         $this->line('');
         $this->warn('Nada se ha borrado. Para ejecutar ESTA purga, con la autorizacion del responsable:');
         $this->line('  php artisan compliance:apply-retention --confirm='.$outcome->confirmationToken()
-            .' --responsible=<id>');
+            .' --responsible=<correo o uuid de la cuenta admin o rrhh>');
     }
 
     /**

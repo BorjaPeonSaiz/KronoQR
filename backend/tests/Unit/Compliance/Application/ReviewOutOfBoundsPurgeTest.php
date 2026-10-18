@@ -17,6 +17,8 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Tests\Support\Compliance\FixedRetentionYearsFloor;
 use Tests\Support\Time\FixedClock;
@@ -87,6 +89,11 @@ function reviewPurgeUseCase(
     {
         /** @param list<int> $active */
         public function __construct(private array $active) {}
+
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return null;
+        }
 
         public function isActiveManagementAccount(int $userId, array $roles = []): bool
         {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand;
@@ -84,9 +85,20 @@ function correccionDeZonaRegistro(): array
     ];
 }
 
-function correccionDeZonaResponsable(): int
+function correccionDeZonaResponsable(): User
 {
-    return ManagementUsers::withRole(UserRole::RRHH)->id;
+    return ManagementUsers::withRole(UserRole::RRHH);
+}
+
+/**
+ * La firma de la orden sin terminal: la cuenta por su correo y la
+ * confirmacion con el mismo correo (2.3.0 bloque 3).
+ *
+ * @return array{'--responsible': string, '--responsible-confirm': string}
+ */
+function correccionDeZonaFirma(User $cuenta): array
+{
+    return ['--responsible' => $cuenta->email, '--responsible-confirm' => $cuenta->email];
 }
 
 /**
@@ -143,7 +155,7 @@ it('corrige la zona sin tocar ni un tramo ni un total, y la cadena sigue integra
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) $responsable,
+        ...correccionDeZonaFirma($responsable),
         '--force' => true,
     ]);
 
@@ -162,7 +174,7 @@ it('deja site.updated con el motivo, el recuento y la cuenta que responde, firma
     correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => '  '.CORRECT_SITE_TIMEZONE_MOTIVO.'  ',
-        '--responsible' => (string) $responsable,
+        ...correccionDeZonaFirma($responsable),
         '--force' => true,
     ]);
 
@@ -172,11 +184,11 @@ it('deja site.updated con el motivo, el recuento y la cuenta que responde, firma
     $payload = json_decode($asiento->payload, true, 512, JSON_THROW_ON_ERROR);
 
     expect($asiento->actor_type)->toBe('user')
-        ->and($asiento->actor_id)->toBe($responsable)
+        ->and($asiento->actor_id)->toBe($responsable->id)
         ->and($payload['via'])->toBe('console')
         ->and($payload['reason'])->toBe(CORRECT_SITE_TIMEZONE_MOTIVO)
         ->and($payload['shift_entry_count'])->toBe(1)
-        ->and($payload['responsible_user_id'])->toBe($responsable)
+        ->and($payload['responsible_user_id'])->toBe($responsable->id)
         ->and($payload['previous_value'])->toMatchArray(['timezone' => 'Europe/Madrid'])
         ->and($payload['new_value'])->toMatchArray(['timezone' => 'Atlantic/Canary'])
         // La fila que la funcion apunto en la traza: la conciliacion la
@@ -196,7 +208,7 @@ it('cuenta tambien los tramos anulados', function (): void {
     correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--force' => true,
     ]);
 
@@ -214,7 +226,7 @@ it('ensena la zona actual, la nueva, los tramos, las jornadas y el aviso, y no c
     $orden = correccionDeZonaOrdenInteractiva([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
     ], 'no');
 
     expect($orden['code'])->toBe(1, $orden['output'])
@@ -223,10 +235,30 @@ it('ensena la zona actual, la nueva, los tramos, las jornadas y el aviso, y no c
         ->and($orden['output'])->toContain('1 tramo(s), de la jornada 2026-03-14 a la 2026-03-14')
         ->and($orden['output'])->toContain('No se mueve ninguna jornada ni se recalcula nada')
         ->and($orden['output'])->toContain('¿Corregir la zona horaria del centro?')
-        ->and($orden['output'])->toContain('Cancelado. No se ha cambiado nada.')
+        ->and($orden['output'])->toContain('Cancelado. No se ha escrito nada.')
         ->and(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Europe/Madrid')
         ->and(correccionDeZonaAsientos())->toBe(0);
 })->group('RN-23');
+
+it('enseña quien firma antes de preguntar y acepta la cuenta por su uuid', function (): void {
+    $escenario = correccionDeZonaConRegistro();
+    $rrhh = correccionDeZonaResponsable();
+
+    $orden = correccionDeZonaOrdenInteractiva([
+        'timezone' => 'Atlantic/Canary',
+        '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
+        '--responsible' => $rrhh->uuid,
+    ], 'yes');
+
+    $salida = $orden['output'];
+
+    expect($orden['code'])->toBe(0, $salida)
+        ->and($salida)->toContain('Firma: '.$rrhh->name.' <'.$rrhh->email.'> · rrhh · '.$rrhh->uuid)
+        // La firma va antes de la pregunta: se confirma sabiendo quien firma.
+        ->and(strpos($salida, 'Firma: '))->toBeLessThan((int) strpos($salida, '¿Corregir la zona horaria del centro?'))
+        ->and(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Atlantic/Canary')
+        ->and(DB::table('audit_log')->where('action', 'site.updated')->value('actor_id'))->toBe($rrhh->id);
+})->group('RN-23', 'RL-04');
 
 it('corrige si se confirma', function (): void {
     $escenario = correccionDeZonaConRegistro();
@@ -234,7 +266,7 @@ it('corrige si se confirma', function (): void {
     $orden = correccionDeZonaOrdenInteractiva([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
     ], 'yes');
 
     expect($orden['code'])->toBe(0, $orden['output'])
@@ -248,7 +280,7 @@ it('sin terminal y sin --force sale INVALID sin cambiar nada', function (): void
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--no-interaction' => true,
     ]);
 
@@ -265,7 +297,7 @@ it('se niega sin escribir nada cuando la orden esta mal escrita', function (arra
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) $responsable,
+        ...correccionDeZonaFirma($responsable),
         '--force' => true,
         ...$opciones,
     ]);
@@ -277,22 +309,26 @@ it('se niega sin escribir nada cuando la orden esta mal escrita', function (arra
 })->with([
     'sin motivo' => [['--reason' => ''], 'faltan --reason y --responsible'],
     'sin responsable' => [['--responsible' => ''], 'faltan --reason y --responsible'],
-    'responsable que no es un id' => [['--responsible' => '12abc'], 'tiene que ser el id de la cuenta'],
+    'responsable que no es uuid ni correo' => [['--responsible' => '12abc'], 'no es ninguno de los dos'],
+    'responsable por id numerico' => [['--responsible' => '7'], 'ya no admite el id interno'],
+    'correo que no existe' => [['--responsible' => 'nadie@kronoqr.test'], 'No hay ninguna cuenta'],
+    'force sin confirmar la firma' => [['--responsible-confirm' => ''], '--responsible-confirm=<correo de la cuenta>'],
+    'force con el correo de otra cuenta' => [['--responsible-confirm' => 'otra@kronoqr.test'], 'no coincide'],
     'motivo corto' => [['--reason' => 'Error.   '], 'al menos 10 caracteres'],
     'motivo largo' => [['--reason' => str_repeat('a', 1001)], 'como mucho 1000 caracteres'],
-    'responsable que no existe' => [['--responsible' => '999999'], 'no es una cuenta de gestión activa'],
+    'uuid que no existe' => [['--responsible' => '0192f1a4-0000-7000-8000-000000000000'], 'No hay ninguna cuenta'],
     'zona que no existe' => [['timezone' => 'Europe/Atlantida'], 'no existe'],
 ])->group('RN-23');
 
 it('no acepta como responsable una cuenta dada de baja', function (): void {
     $escenario = correccionDeZonaConRegistro();
     $responsable = correccionDeZonaResponsable();
-    DB::table('users')->where('id', $responsable)->update(['is_active' => false]);
+    DB::table('users')->where('id', $responsable->id)->update(['is_active' => false]);
 
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) $responsable,
+        ...correccionDeZonaFirma($responsable),
         '--force' => true,
     ]);
 
@@ -307,7 +343,7 @@ it('con la misma zona no hace nada y lo dice', function (): void {
     $orden = correccionDeZonaOrden([
         'timezone' => 'Europe/Madrid',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--force' => true,
     ]);
 
@@ -322,7 +358,7 @@ it('sin registro horario remite al panel y no cambia nada', function (): void {
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--force' => true,
     ]);
 
@@ -336,7 +372,7 @@ it('sin centro remite a la puesta en marcha', function (): void {
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--force' => true,
     ]);
 
@@ -351,7 +387,7 @@ it('habla en ingles a una instalacion en ingles', function (): void {
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) correccionDeZonaResponsable(),
+        ...correccionDeZonaFirma(correccionDeZonaResponsable()),
         '--force' => true,
     ]);
 
@@ -369,11 +405,11 @@ it('no acepta como responsable a quien no puede modificar el centro por la API',
     $orden = correccionDeZonaOrdenInteractiva([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) ManagementUsers::withRole($rol)->id,
+        '--responsible' => ManagementUsers::withRole($rol)->email,
     ], 'yes');
 
     expect($orden['code'])->toBe(2, $orden['output'])
-        ->and($orden['output'])->toContain('rol de administración o de RRHH')
+        ->and($orden['output'])->toContain('admin, rrhh')
         ->and($orden['output'])->not->toContain('¿Corregir la zona horaria del centro?')
         ->and(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Europe/Madrid')
         ->and(correccionDeZonaAsientos())->toBe(0);
@@ -389,7 +425,7 @@ it('acepta como responsable al administrador', function (): void {
     $orden = correccionDeZonaOrden([
         'timezone' => 'Atlantic/Canary',
         '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
-        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        ...correccionDeZonaFirma(ManagementUsers::withRole(UserRole::ADMIN)),
         '--force' => true,
     ]);
 
@@ -403,10 +439,10 @@ it('vuelve a comprobar al responsable dentro de la transaccion, sin fiarse de la
     // vista previa: lo que se afirma es que la comprobacion esta tambien ahi.
     $escenario = correccionDeZonaConRegistro();
     $responsable = correccionDeZonaResponsable();
-    DB::table('users')->where('id', $responsable)->update(['is_active' => false]);
+    DB::table('users')->where('id', $responsable->id)->update(['is_active' => false]);
 
     expect(fn (): mixed => app(CorrectSiteTimezoneHandler::class)->handle(
-        new CorrectSiteTimezoneCommand('Atlantic/Canary', CORRECT_SITE_TIMEZONE_MOTIVO, $responsable),
+        new CorrectSiteTimezoneCommand('Atlantic/Canary', CORRECT_SITE_TIMEZONE_MOTIVO, $responsable->id),
     ))->toThrow(InvalidSiteTimezoneCorrection::class);
 
     expect(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Europe/Madrid')

@@ -23,7 +23,6 @@ return [
         'same_timezone' => 'The site already has the time zone :timezone. There is nothing to correct and nothing has been changed.',
         'no_work_record' => 'There are no clock-ins yet: change the time zone from the panel, in Departments, Site section. Nothing has been changed.',
         'missing_options' => 'To correct the time zone, --reason and --responsible are required. Nothing has been changed.',
-        'invalid_responsible' => '--responsible must be the account id, a positive integer; «:value» is not. Nothing has been changed.',
         'reason_too_short' => 'The reason must explain the setup mistake: at least :min characters.',
         'reason_too_long' => 'The reason accepts at most :max characters.',
         'responsible_inactive' => 'Account :id is not an active management account with the administration or HR role. The correction is signed by someone who can change the site from the panel. Nothing has been changed.',
@@ -35,7 +34,6 @@ return [
             .'If a shift entry near midnight should belong to another work day, void it and add it to the right one, each step with its reason.',
         'confirm' => 'Correct the site time zone?',
         'needs_force' => 'Without a terminal there is no way to confirm: repeat the command with --force once you have reviewed the above. Nothing has been changed.',
-        'cancelled' => 'Cancelled. Nothing has been changed.',
         'done' => 'Time zone corrected from :previous to :timezone. It is recorded in the audit log (site.updated) with the reason and the responsible account.',
     ],
 

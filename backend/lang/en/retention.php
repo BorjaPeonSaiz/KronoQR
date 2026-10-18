@@ -10,8 +10,8 @@ declare(strict_types=1);
 
 return [
 
-    'invalid_responsible' => '--responsible must be the account id, a positive integer; «:value» is not. Nothing has been simulated or deleted.',
-    'responsible_not_active' => 'Account :id given in --responsible does not exist or is not active: it cannot answer for the purge. Nothing has been deleted.',
+    'responsible_not_active' => 'The --responsible account is no longer an active management account with the admin or rrhh role: it cannot answer for the purge. Nothing has been deleted.',
+    'confirm_signature' => 'Run THIS purge, signed by this account?',
 
     'failure' => [
         'title' => 'The purge could not be completed against the database. Nothing has been deleted.',
