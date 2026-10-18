@@ -1801,7 +1801,7 @@ php artisan attendance:reconcile --from= --to=  # Recalcula proyecciones y alert
 php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
 php artisan compliance:reconcile-work-record [--full] [--days=]   # Concilia el registro horario con su auditoría (ADR-057 §4). Diaria 04:15 UTC sobre 7 días; --full los domingos 02:15
 php artisan compliance:apply-retention --dry-run   # PROPONE la purga por retención. No borra nada
-php artisan compliance:apply-retention --confirm=PURGAR-… --responsible=<id>   # La ejecuta. Exige la frase del informe y el rol de mantenimiento
+php artisan compliance:apply-retention --confirm=PURGAR-… --responsible=<correo|uuid>   # La ejecuta. Exige la frase del informe, el rol de mantenimiento y una cuenta admin o rrhh que firma (doc 01 §7.2)
 php artisan reporting:presence-metrics          # Recalcula open_shifts_current y websocket_connections_active (§8.2)
 php artisan reporting:weekly-summary [--week=AAAA-Www]   # Resumen semanal por correo al responsable de cada departamento (RF-PR-05). Lunes 06:00 UTC en el planificador; sin SMTP, sin licencia o con el ajuste apagado sale 0 y no envía nada
 
@@ -1815,7 +1815,7 @@ php artisan compliance:legal-export --from= --to= --employee=
 php artisan credentials:issue {employee}         # Emite y deja pendiente de imprimir
 php artisan credentials:print {employee}         # PDF en formato tarjeta
 php artisan credentials:print-batch --site= --pending   # Impresión masiva en A4
-php artisan credentials:deliver {credential}     # Registra la entrega
+php artisan credentials:deliver {credential} --responsible=<correo|uuid>   # Registra la entrega, firmada por una cuenta admin o rrhh (doc 01 §7.2)
 php artisan credentials:revoke {credential} --reason=
 php artisan credentials:rotate-key               # Rotación con solape (--dry-run para informar sin escribir)
 php artisan credentials:retire-key {key_id}      # Cierra el solape. Se niega si queda alguna tarjeta viva
@@ -1839,7 +1839,7 @@ php artisan product:doctor [--json] [--lang=]     # Comprobación de salud (RF-P
 php artisan product:errors --since=24h --level=  # Histórico de errores agrupado (RF-PD-15)
 php artisan product:errors:prune                 # Purga a 90 días, en el scheduler
 php artisan product:diagnostics [--anonymized]   # Paquete de diagnóstico (RF-PD-09); anonimizado por defecto
-php artisan product:diagnostics --with-personal-data --period-days=7   # Acción distinta y auditada (RL-19)
+php artisan product:diagnostics --with-personal-data --period-days=7 --responsible=<correo|uuid>   # Acción distinta y auditada (RL-19), firmada por una cuenta admin
 php artisan product:diagnostics --verify=RUTA    # Recalcula la huella de un paquete recibido
 php artisan product:export-all                   # Exportación íntegra (RF-PD-14, RL-20): ZIP con CSV por tabla, JSON, manifest y README. Registra su fila; funciona sin licencia
 php artisan product:export-all --purge           # Borra los ZIP caducados y marca sus filas (nunca las borra). En el planificador, cada hora

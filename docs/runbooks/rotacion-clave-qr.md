@@ -152,7 +152,7 @@ Se reparte en tandas, al ritmo que se pueda:
 
 ```bash
 php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf
-php artisan credentials:deliver <uuid> --by=persona@ejemplo.es
+php artisan credentials:deliver <uuid> --responsible=persona@ejemplo.es   # cuenta admin o rrhh; enseña quién firma y pregunta
 ```
 
 - **Imprime solo la tanda que vas a entregar ese día.** Una tarjeta impresa ficha

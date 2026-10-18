@@ -1505,6 +1505,15 @@ docker compose exec -T app php artisan compliance:apply-retention --dry-run
 The first line of the report states the cut-off that would apply and which
 profile it comes from.
 
+To **run** it, the purge is authorised and signed by an active management
+account with the **admin or rrhh** role: `--responsible=<their e-mail>` (or
+their uuid; since 2.3.0 the account number is not accepted). The command shows
+who signs and asks; if you run it without a terminal, confirm with
+`--responsible-confirm=<the same e-mail>`. The other console commands that
+leave a signed audit entry —the site time zone correction, the reconciliation
+reviews and the delivery of a card— follow the same rule; the diagnostics
+bundle with personal data is signed only by an admin account.
+
 ### …I need to know who changed a threshold and when
 
 Each modified key leaves its own entry in the audit log, with the account that
@@ -1887,7 +1896,7 @@ lines.
 | `APP_DEBUG` | `[CLIENTE]` | Shows the stack trace and the full configuration on any error | `false` | **Never in production.** With `true`, anyone who triggers an error sees the keys, included. The application **refuses to start** with `APP_ENV=production` and this set to `true`, and says how to fix it | No |
 | `APP_KEY` | `[INSTALADOR]` | Encrypts sessions and the encrypted data in the database | (empty; `install.sh` generates it) | Never by hand. Changing it makes the sessions and the already encrypted data unreadable | No |
 | `APP_URL` | `[CLIENTE]` | The `https` URL through which the kiosks, the panel and the portal arrive | `https://localhost` in the template | On installing, and if you change the server name. **It has to match the name on the TLS certificate.** Example: `https://fichaje.tuhotel.local` | No |
-| `APP_TIMEZONE` | `[FIJO]` | Time zone of the process | `UTC` | **Never.** Every instant is stored in UTC and the conversion to local time happens on presentation. The **site's** time zone is something else: it is chosen at start-up and **becomes fixed with the first clock-in** (RN-23). Until then it is changed in the panel, on the departments screen, “Site” section; after that the panel shows it without letting you edit it. If it was set wrongly, it is corrected on the server with `docker compose exec app php artisan workforce:correct-site-timezone <zone> --reason="…" --responsible=<id>`, which asks for confirmation, leaves an audit entry and **does not move any work day already recorded**: the history is then shown in the corrected zone. If there are shifts close to midnight, talk to your legal advisers first. Changing this invalidates the working-day calculation and strips the working-time record of its legal value; the installer does not even offer to touch it | **Yes** — changing it invalidates the record |
+| `APP_TIMEZONE` | `[FIJO]` | Time zone of the process | `UTC` | **Never.** Every instant is stored in UTC and the conversion to local time happens on presentation. The **site's** time zone is something else: it is chosen at start-up and **becomes fixed with the first clock-in** (RN-23). Until then it is changed in the panel, on the departments screen, “Site” section; after that the panel shows it without letting you edit it. If it was set wrongly, it is corrected on the server with `docker compose exec app php artisan workforce:correct-site-timezone <zone> --reason="…" --responsible=<your e-mail>`, which is signed by an active management account with the **admin or rrhh** role (by its e-mail or uuid, never by a number), shows who signs, asks for confirmation, leaves an audit entry and **does not move any work day already recorded**: the history is then shown in the corrected zone. If there are shifts close to midnight, talk to your legal advisers first. Changing this invalidates the working-day calculation and strips the working-time record of its legal value; the installer does not even offer to touch it | **Yes** — changing it invalidates the record |
 | `APP_LOCALE` | — | Fallback language of the API and of the documents if the database does not answer | `es` | Almost never: `LOCALE_DEFAULT` in the panel rules (section 2.3) | No |
 | `APP_FALLBACK_LOCALE` | — | Language fallen back on if a translation is missing | `es` | Almost never | No |
 | `APP_SUPPORTED_LOCALES` | — | Languages the API accepts negotiating, as a fallback | `es` | Almost never: `LOCALE_AVAILABLE` in the panel rules (section 2.3). **This is not where English is turned on**: that is done in the panel | No |

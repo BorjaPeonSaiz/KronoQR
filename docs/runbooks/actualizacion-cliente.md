@@ -553,7 +553,7 @@ sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml stop app
 #    Va por el servicio de un solo uso `restore` del paquete NUEVO: es el único
 #    que recibe la credencial del rol de migración, que restaurar necesita.
 sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm --no-deps restore \
-  bash /opt/kronoqr/scripts/restore.sh --file $COPIA --yes
+  bash /opt/kronoqr/scripts/restore.sh --file $COPIA --yes --operator <tu correo>
 
 # 3. Relanzar la versión anterior desde SU directorio (su compose, su .env,
 #    su IMAGE_TAG). --remove-orphans retira lo que la versión nueva creó.

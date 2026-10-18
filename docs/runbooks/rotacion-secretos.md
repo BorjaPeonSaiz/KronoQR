@@ -88,7 +88,7 @@ Resumen de una línea, con el detalle en el runbook enlazado:
 # 1. En el .env: PREVIOUS = la que había, CURRENT = 32 bytes nuevos con otro key_id
 php artisan credentials:rotate-key                  # reemite, sin invalidar nada
 php artisan credentials:print-batch --pending       # reimprimir en tandas
-php artisan credentials:deliver <uuid> --by=...     # la entrega revoca la vieja
+php artisan credentials:deliver <uuid> --responsible=<correo>  # la entrega revoca la vieja
 php artisan credentials:status --key-id=<saliente>  # quién falta
 php artisan credentials:retire-key <saliente>       # se niega si queda alguien
 # 6. En el .env: vaciar PREVIOUS

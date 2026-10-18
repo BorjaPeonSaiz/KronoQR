@@ -141,7 +141,7 @@ docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh -
 
 ```bash
 docker compose stop app horizon scheduler reverb
-docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes --operator <tu correo>
 docker compose up -d
 ```
 

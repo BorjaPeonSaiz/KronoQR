@@ -362,7 +362,11 @@ docker compose stop app horizon scheduler reverb
 
 # 2. Restaura. Se restaura en una base NUEVA y solo al final se intercambian
 #    los nombres: hasta ese instante la base viva no se toca.
-docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes
+#    --operator es quien restaura (el correo de tu cuenta de gestión). Desde la
+#    2.3.0 es obligatorio: el contenedor corre como `app` y eso no dice quién
+#    estaba delante. Se declara y no se verifica, y queda en el informe como
+#    `declared_operator`; el asiento de auditoría remite al informe.
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes --operator <tu correo>
 
 # 3. Arranca y comprueba
 docker compose up -d
@@ -518,7 +522,7 @@ traiga el archivo: una copia con `ALTER ROLE fichaje_app SUPERUSER` dentro
 dejaría la aplicación con poder para reescribir el registro.
 
 1. **No uses esa copia.** Prueba con la anterior (`backup.sh list`,
-   `restore.sh --file <anterior> --yes`).
+   `restore.sh --file <anterior> --yes --operator <tu correo>`).
 2. Comprueba que los roles están como antes (el mensaje dice si la reversión se
    ha comprobado; si dice que NO, corrige a mano los que difieran de la lista):
    `SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls,
