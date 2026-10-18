@@ -1565,6 +1565,129 @@ portal stay as they were. If nobody uses English, untick it there and the
 selector disappears ([`configuration.md`](configuration.md) §2.3). There is no
 need to touch `APP_SUPPORTED_LOCALES` in the `.env`: it is only a fallback.
 
+**When updating to 2.3.0: the downtime.** The same as every update (above):
+around one minute of `503`, which the tablet's queue covers. Within that
+window, 2.3.0 adds filling in "how it ended" for each shift (below), which on an
+installation of 100 people with four years of records is in the order of 10
+seconds more.
+
+**When updating to 2.3.0: console commands that sign, by e-mail or by uuid.**
+The commands with legal value run on the server sign their audit entry with a
+management account, identified with `--responsible`. What changes:
+
+- **`--responsible` no longer accepts the account's internal number**: you
+  write its **e-mail or uuid** (given by
+  `docker compose exec app php artisan identity:list-users`). With a number,
+  the command exits with `2`, explains the change and **writes nothing**.
+- **Before confirming, it shows who signs**: `Signed by: name <e-mail> · role ·
+  uuid`. **With `--force` or without a terminal** (a `cron`, a script), it also
+  requires `--responsible-confirm=<e-mail>` with that same account's e-mail.
+- **Whoever can do the same from the panel signs**: an active account with the
+  admin or rrhh role, and only admin for the diagnostics bundle with personal
+  data. An account with another role or deactivated does not sign.
+- **Where you notice it:** `workforce:correct-site-timezone`;
+  `compliance:apply-retention`, which now requires `--responsible` to
+  **execute** the purge (the weekly simulation does not);
+  `compliance:reconcile-work-record` with `--acknowledge` or
+  `--acknowledge-site-change`; `credentials:deliver`, which **no longer accepts
+  `--by`** (rejected with `2`: use `--responsible`); and
+  `product:diagnostics --with-personal-data`, which requires `--responsible`
+  from an admin account.
+- **`restore.sh` asks for `--operator`** with `--yes` when the restore writes
+  its own audit entry, which is the normal case (restoring the installation's
+  database): the e-mail or uuid of whoever restores. It is declared and not
+  checked —the restored database may not have that account— and it is kept in
+  the report as `declared_operator`. Without it, it exits with `1` without
+  touching anything.
+
+**If you have scripts or scheduled tasks of your own with any of those
+commands, change them before updating**: with the account number, with `--by`
+or without `--operator` they exit with an error and do nothing. The complete
+examples are in §3, §9 and §12.3, and in
+[`configuration.md`](configuration.md) (the `APP_TIMEZONE` row).
+
+**When updating to 2.3.0: the site's time zone, fixed in the database too.**
+Since 2.2.1 the panel and the API no longer let you change the zone once there
+are clock-ins. From 2.3.0 **the database does not let anyone writing outside
+the product change it either**: the only way is the console correction
+command, which records each change in a trail the application cannot delete.
+You do not have to do anything. What you may see:
+
+- **The nightly work record reconciliation also checks the zone** against its
+  latest audit entry. If they do not match, it reports it as
+  `site_timezone_differs_from_audit` and `DiscrepanciaEntreRegistroYAuditoria`
+  fires: someone has written outside the product
+  ([`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md),
+  in Spanish).
+- **A discrepancy already investigated is marked as reviewed** with
+  `compliance:reconcile-work-record --acknowledge-site-change=…`, with a reason
+  and `--responsible`, like a reviewed purge (the procedure is in that
+  runbook, §3.1 bis).
+- **Three new alerts** (§10.4): `CambioDeZonaRevisado` (critical) and
+  `DiscrepanciaDeZonaRevisada` fire when someone marks a zone discrepancy as
+  reviewed; `ZonaDelCentroNoVerificable` is informational and does not notify.
+- **What came before 2.3.0 is not reported.** The update sets a baseline: a
+  zone change made from the 2.1.0 or 2.2.0 panel counts as "not verifiable",
+  not as a discrepancy.
+
+**When updating to 2.3.0: a work day only continues into the next day if the
+previous shift ended in a break** (RN-05, ADR-058). Each shift now records
+**how it ended**: with a clock-out or a break. What changes:
+
+- **On the tablet, nothing noticeable.** "Break" closes the shift in a break
+  and coming back continues the work day, as always. What is new is the cap: a
+  return from a break that arrives **later than the day after** the work day,
+  or from someone who is no longer on a break, opens a new work day. **It is
+  never rejected**.
+- **In the panel, when adding or correcting a shift by hand**, there is a new
+  checkbox, "This shift ended in a break". A shift that starts the next day is
+  only accepted in the same work day if the previous one has it ticked, starts
+  before the minimum rest is reached and falls, at the latest, on the next
+  day. Otherwise the panel rejects it and says why. And no shift can start
+  after the person's termination. Each shift's history and its preview show
+  the "How it ended" row.
+- **The update fills in the information** from the "Break" scans. Shifts
+  closed by hand before 2.3.0 are left as ended with a clock-out, which is what
+  the record said about them. **No shift and no work day is touched.** There
+  may be shifts written by hand before 2.3.0 that would be rejected today: the
+  queries to find them, and what to do with each one, are in
+  [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) §3 bis
+  (in Spanish).
+- **The export for the Labour Inspectorate** says in each correction whether
+  the shift ended with a clock-out or a break, before and after: a correction
+  that only declares the break no longer comes out with identical before and
+  after. The full data export (§13) carries the `closed_by` column.
+
+**When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
+it was green.** 2.2.1 added three warnings that an installation coming from
+2.2.0 will see for the first time. **None of them stops clocking or
+updating**, and each one brings its "What to do":
+
+- **"The backups do not leave the server"**: `BACKUP_PATH` is on the same disk
+  as the data. If that disk is lost, the database and all the backups are lost
+  with it (§9, "The backups must leave the server").
+- **"KIOSK_VLAN_CIDR matches the template example"**: if it really is your
+  kiosk VLAN, there is nothing to do; if not, how to check it is in
+  [`installation.md`](installation.md) §6.
+- **"Prometheus has … alert rule(s) from the package not loaded"**: after an
+  update that changes `observability/`, Prometheus has to be recreated; the
+  command comes in the warning itself.
+
+**When updating from 2.2.0: the tablet app may change name and icon.** Since
+2.2.1 the tablet installs with your brand's name and icon, if you have it
+configured ([`installation.md`](installation.md) §1.8). A tablet already
+installed may change them by itself, ask for confirmation on its screen or
+stay as it was: it depends on Chrome. **It does not affect clocking.** If it
+asks, accept.
+
+**When updating from 2.2.0: an audit account with the panel open may see
+"Presence" for a few hours.** Since 2.2.1 that role only sees "Inspectorate"
+(above). If someone with that role had the panel open during the update and
+does not reload it, the menu may keep showing "Presence" until their session
+expires, 12 hours at most (`IDENTITY_SESSION_TOKEN_HOURS`). On opening it, the
+server answers that they lack permission and shows nothing. Reloading the page
+fixes it.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which
