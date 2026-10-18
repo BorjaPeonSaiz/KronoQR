@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Modules\Identity\Application\Port\CardRenderer;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
@@ -11,6 +15,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Shared\InteractiveConsole;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -137,3 +142,63 @@ it('sale con 1 sin escribir si la credencial no existe o ya se entrego', functio
     expect(entregaPorConsolaOrden($credencial, ConsoleSignature::for($rrhh))['code'])->toBe(1)
         ->and(entregaPorConsolaAsientos())->toBe(1);
 })->group('RF-QR-06');
+
+it('con terminal pregunta por la firma y, si se responde que no, sale con 1 sin entregar', function (): void {
+    $credencial = entregaPorConsolaTarjetaImpresa();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $orden = InteractiveConsole::run('credentials:deliver', ['credential' => $credencial, '--responsible' => $rrhh->email], 'no');
+
+    expect($orden['code'])->toBe(1, $orden['output'])
+        ->and($orden['output'])->toContain('Firma: '.$rrhh->name)
+        ->and($orden['output'])->toContain('Cancelado. No se ha escrito nada.')
+        ->and(entregaPorConsolaAsientos())->toBe(0)
+        ->and(DB::table('credentials')->where('uuid', $credencial)->value('delivered_at'))->toBeNull();
+})->group('RF-QR-06', 'RL-04');
+
+/**
+ * Cuentas que la consola ve activas (`find`, de verdad) y que el caso de uso
+ * ya no da por buenas con la cadena tomada: la baja entre la pregunta y la
+ * firma.
+ */
+function entregaPorConsolaBajaAlFirmar(): void
+{
+    app()->instance(ResponsibleAccounts::class, new class implements ResponsibleAccounts
+    {
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return new DatabaseResponsibleAccounts(DB::connection())->find($reference);
+        }
+
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
+        {
+            return false;
+        }
+    });
+}
+
+it('una baja entre la pregunta y la firma no entrega ni deja asiento (salida 2)', function (): void {
+    $credencial = entregaPorConsolaTarjetaImpresa();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    entregaPorConsolaBajaAlFirmar();
+
+    $orden = entregaPorConsolaOrden($credencial, ConsoleSignature::for($rrhh));
+
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('ya no es una cuenta de gestión activa')
+        ->and(entregaPorConsolaAsientos())->toBe(0)
+        ->and(DB::table('credentials')->where('uuid', $credencial)->value('delivered_at'))->toBeNull();
+})->group('RF-QR-06', 'RL-04', 'RS-07');
+
+it('por el panel, una cuenta que ya no puede firmar al entregar recibe 403 sin entrega', function (): void {
+    $credencial = entregaPorConsolaTarjetaImpresa();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+    entregaPorConsolaBajaAlFirmar();
+
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/deliver')
+        ->assertStatus(403)
+        ->assertHeader('Content-Type', 'application/problem+json');
+
+    expect(entregaPorConsolaAsientos())->toBe(0)
+        ->and(DB::table('credentials')->where('uuid', $credencial)->value('delivered_at'))->toBeNull();
+})->group('RF-QR-06', 'RL-04', 'RS-05');

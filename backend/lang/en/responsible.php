@@ -18,4 +18,5 @@ return [
     'confirm_missing' => 'Without a terminal or with --force, confirm who signs with --responsible-confirm=<account e-mail>. Nothing was written.',
     'confirm_mismatch' => '--responsible-confirm does not match the e-mail of the signing account (:email). Nothing was written.',
     'cancelled' => 'Cancelled. Nothing was written.',
+    'no_longer_allowed' => 'The --responsible account is no longer an active management account with the role that signs this action: it was deactivated or changed role while confirming. Nothing was written.',
 ];

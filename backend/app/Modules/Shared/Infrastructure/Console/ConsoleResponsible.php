@@ -135,6 +135,18 @@ final class ConsoleResponsible
     }
 
     /**
+     * La cuenta paso la pregunta pero ya no puede firmar cuando el caso de uso
+     * la vuelve a comprobar con la cadena tomada: se dio de baja o perdio el
+     * rol entre medias. Igual en todas las ordenes.
+     */
+    public static function noLongerAllowed(Command $command): int
+    {
+        $command->error(self::text('responsible.no_longer_allowed'));
+
+        return Command::INVALID;
+    }
+
+    /**
      * @param  list<UserRole>  $roles
      */
     private static function roleList(array $roles): string

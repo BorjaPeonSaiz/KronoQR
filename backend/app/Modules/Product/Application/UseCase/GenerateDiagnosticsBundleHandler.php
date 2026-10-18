@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Exception\DiagnosticsResponsibleNotAllowed;
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
+use App\Modules\Product\Application\Support\DiagnosticsSigners;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
@@ -16,8 +17,8 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Throwable;
 
 /**
@@ -102,6 +103,7 @@ final readonly class GenerateDiagnosticsBundleHandler
         private int $maxBytes,
         private ProbeFailureClassifier $failures,
         private ResponsibleAccounts $accounts,
+        private SerializedLedgerWrite $ledger,
     ) {}
 
     /**
@@ -196,7 +198,15 @@ final readonly class GenerateDiagnosticsBundleHandler
             return;
         }
 
-        if (! $this->accounts->isActiveManagementAccount($responsibleUserId, [UserRole::ADMIN])) {
+        $this->assertActiveAdmin($responsibleUserId);
+    }
+
+    /**
+     * @throws DiagnosticsResponsibleNotAllowed
+     */
+    private function assertActiveAdmin(int $responsibleUserId): void
+    {
+        if (! $this->accounts->isActiveManagementAccount($responsibleUserId, DiagnosticsSigners::ROLES)) {
             throw DiagnosticsResponsibleNotAllowed::notAnActiveAdmin();
         }
     }
@@ -232,6 +242,21 @@ final readonly class GenerateDiagnosticsBundleHandler
             );
         }
 
-        $this->events->publish(...$events);
+        if ($responsibleUserId === null) {
+            $this->events->publish(...$events);
+
+            return;
+        }
+
+        // Por consola, la cuenta que firma se vuelve a comprobar con la cadena
+        // de `audit_log` tomada, y los dos asientos se escriben dentro de esa
+        // misma transaccion: la baja de una cuenta toma la cadena antes de tocar
+        // su fila (ADR-051 §6), asi que una baja durante la generacion no deja
+        // un paquete con datos personales firmado por quien ya no responde. Si
+        // lanza, no hay asiento y el paquete no se entrega.
+        $this->ledger->withChainLock(function () use ($responsibleUserId, $events): void {
+            $this->assertActiveAdmin($responsibleUserId);
+            $this->events->publish(...$events);
+        });
     }
 }

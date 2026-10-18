@@ -107,6 +107,7 @@ use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
@@ -599,6 +600,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 serialized: $app->make(SerializedLedgerWrite::class),
                 telemetry: $app->make(CredentialTelemetry::class),
+                accounts: $app->make(ResponsibleAccounts::class),
             ),
         );
     }

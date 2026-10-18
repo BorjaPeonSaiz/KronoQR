@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Console;
 use App\Modules\Product\Application\Exception\DiagnosticsResponsibleNotAllowed;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
+use App\Modules\Product\Application\Support\DiagnosticsSigners;
 use App\Modules\Product\Application\UseCase\DeliverDiagnosticsBundle;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
@@ -17,7 +18,6 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository as Config;
@@ -59,7 +59,7 @@ use Throwable;
  * |---|---|
  * | `0` | El paquete se genero, o el que se verifico esta integro. |
  * | `1` | No se genero: no se pudo escribir el fichero, no se pudo dejar constancia en `audit_log` (ni ahora ni como pendiente), o se respondio que no a la confirmacion de los datos personales. El mensaje dice cual y que hacer. |
- * | `2` | Con `--verify`: la huella no coincide, o el fichero no es un paquete. Con `--with-personal-data`: falta `--responsible`, la cuenta no es `admin` activa, o sin terminal falta o no cuadra `--responsible-confirm`. |
+ * | `2` | Con `--verify`: la huella no coincide, o el fichero no es un paquete. Con `--with-personal-data`: periodo fuera de rango, falta `--responsible`, la cuenta no es `admin` activa (al preguntar o al firmar), o sin terminal falta o no cuadra `--responsible-confirm`. |
  *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
@@ -106,7 +106,8 @@ final class ProductDiagnosticsCommand extends Command
         $options = $this->requestedOptions($config);
 
         if ($options === null) {
-            return self::SUCCESS;
+            // Periodo fuera de rango: es un error de uso, como el resto (2).
+            return self::INVALID;
         }
 
         $responsible = null;
@@ -130,10 +131,9 @@ final class ProductDiagnosticsCommand extends Command
             $bundle = $diagnostics->handle($options, DiagnosticsActor::Console, $responsible?->id);
         } catch (DiagnosticsResponsibleNotAllowed) {
             // La cuenta se dio de baja o perdio el rol entre la pregunta y la
-            // generacion: no se ha recolectado ni escrito nada.
-            $this->line('La cuenta de --responsible ya no es una cuenta admin activa. No se ha generado nada.');
-
-            return self::INVALID;
+            // generacion —tambien con la cadena tomada, antes de los asientos—:
+            // no se ha escrito ningun asiento ni se entrega el paquete.
+            return ConsoleResponsible::noLongerAllowed($this);
         } catch (Throwable $failure) {
             return $this->notAudited($failure, $options, $failures);
         }
@@ -254,7 +254,7 @@ final class ProductDiagnosticsCommand extends Command
             return ConsoleResponsible::missing($this);
         }
 
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, [UserRole::ADMIN]);
+        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, DiagnosticsSigners::ROLES);
 
         if (is_int($responsible)) {
             return $responsible;

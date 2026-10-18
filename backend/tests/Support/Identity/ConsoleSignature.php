@@ -24,14 +24,37 @@ final class ConsoleSignature
      */
     public static function for(User|int $account): array
     {
-        $email = $account instanceof User
-            ? $account->email
-            : DB::table('users')->where('id', $account)->value('email');
+        [$email] = self::identifiers($account);
 
-        if (! \is_string($email)) {
+        return ['--responsible' => $email, '--responsible-confirm' => $email, '--no-interaction' => true];
+    }
+
+    /**
+     * La misma firma con la cuenta nombrada por su uuid; la confirmacion sigue
+     * siendo su correo.
+     *
+     * @return array{'--responsible': string, '--responsible-confirm': string, '--no-interaction': true}
+     */
+    public static function byUuid(User|int $account): array
+    {
+        [$email, $uuid] = self::identifiers($account);
+
+        return ['--responsible' => $uuid, '--responsible-confirm' => $email, '--no-interaction' => true];
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private static function identifiers(User|int $account): array
+    {
+        $row = DB::table('users')
+            ->where('id', $account instanceof User ? $account->id : $account)
+            ->first(['email', 'uuid']);
+
+        if ($row === null || ! \is_string($row->email) || ! \is_string($row->uuid)) {
             throw new LogicException('No hay ninguna cuenta con ese id.');
         }
 
-        return ['--responsible' => $email, '--responsible-confirm' => $email, '--no-interaction' => true];
+        return [$row->email, $row->uuid];
     }
 }

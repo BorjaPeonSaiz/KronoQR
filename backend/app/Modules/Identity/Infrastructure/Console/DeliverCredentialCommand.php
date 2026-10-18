@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand as DeliverCredential;
+use App\Modules\Identity\Application\Exception\CredentialDeliverySignerNotAllowed;
+use App\Modules\Identity\Application\Support\CredentialManagers;
 use App\Modules\Identity\Application\UseCase\DeliverCredential as DeliverCredentialHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 
@@ -45,15 +46,6 @@ use Illuminate\Console\Command;
  */
 final class DeliverCredentialCommand extends Command
 {
-    /**
-     * Los roles que registran una entrega desde el panel
-     * (`CredentialPolicy::deliver`): la consola no puede ser la via por la que
-     * alguien hace lo que el panel le niega.
-     *
-     * @var list<UserRole>
-     */
-    private const array RESPONSIBLE_ROLES = [UserRole::ADMIN, UserRole::RRHH];
-
     protected $signature = 'credentials:deliver
         {credential : UUID de la credencial}
         {--responsible= : Uuid o correo de la cuenta de gestion (admin o rrhh) que responde de la entrega y la firma. Obligatorio}
@@ -86,6 +78,10 @@ final class DeliverCredentialCommand extends Command
                 // como cuando la entrega se registra desde el panel.
                 actorUserId: $responsible->id,
             ));
+        } catch (CredentialDeliverySignerNotAllowed) {
+            // La cuenta se dio de baja o perdio el rol entre la pregunta y la
+            // firma: no se ha entregado ni escrito nada.
+            return ConsoleResponsible::noLongerAllowed($this);
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
 
@@ -128,7 +124,10 @@ final class DeliverCredentialCommand extends Command
             return ConsoleResponsible::missing($this);
         }
 
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, self::RESPONSIBLE_ROLES);
+        // Los roles que registran una entrega desde el panel
+        // (`CredentialPolicy::deliver`): la consola no es la via por la que
+        // alguien hace lo que el panel le niega.
+        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, CredentialManagers::ROLES);
 
         if (\is_int($responsible)) {
             return $responsible;

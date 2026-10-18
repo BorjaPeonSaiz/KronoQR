@@ -2,7 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -332,3 +336,48 @@ it('--output respeta la ruta que se le da', function (): void {
 
     @unlink($destino);
 })->group('RF-PD-09');
+
+// --- La firma del paquete con datos personales (2.3.0 bloque 3) -------------
+
+it('--with-personal-data acepta la cuenta admin por su uuid y la deja como actor', function (): void {
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    $result = runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::byUuid($admin)]);
+
+    expect($result['code'])->toBe(0, $result['output'])
+        ->and(DB::table('audit_log')->where('action', 'diagnostics.personal_data_included')->value('actor_id'))->toBe($admin->id);
+})->group('RF-PD-09', 'RL-19', 'RL-04');
+
+it('una baja durante la generacion no deja asientos ni paquete (salida 2)', function (): void {
+    app()->setLocale('es');
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $antes = DB::table('audit_log')->count();
+
+    // Activa cuando se pide el paquete; dada de baja cuando se va a firmar, con
+    // la cadena tomada.
+    app()->instance(ResponsibleAccounts::class, new class implements ResponsibleAccounts
+    {
+        private int $preguntas = 0;
+
+        public function find(ResponsibleReference $reference): ?ResponsibleAccount
+        {
+            return new DatabaseResponsibleAccounts(DB::connection())->find($reference);
+        }
+
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
+        {
+            return ++$this->preguntas === 1;
+        }
+    });
+
+    $result = runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for($admin)]);
+
+    expect($result['code'])->toBe(2, $result['output'])
+        ->and($result['output'])->toContain('ya no es una cuenta de gestión activa')
+        ->and(glob(directorioDePaquetes().'/*.json'))->toBe([])
+        ->and(DB::table('audit_log')->count())->toBe($antes);
+})->group('RF-PD-09', 'RL-19', 'RL-04', 'RS-07');
+
+it('rechaza el periodo fuera de rango con codigo de uso', function (): void {
+    expect(runDiagnostics(['--with-personal-data' => true, '--period-days' => 0])['code'])->toBe(2);
+})->group('RF-PD-09', 'RL-19');

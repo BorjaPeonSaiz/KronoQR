@@ -8,6 +8,7 @@ use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
@@ -67,6 +68,13 @@ function diagnosticsDeferralHandler(?string $service, ?Throwable $failure = null
             {
                 // Solo una cuenta admin firma el paquete con datos personales.
                 return $roles === [UserRole::ADMIN];
+            }
+        },
+        ledger: new class implements SerializedLedgerWrite
+        {
+            public function withChainLock(callable $work): mixed
+            {
+                return $work();
             }
         },
     );

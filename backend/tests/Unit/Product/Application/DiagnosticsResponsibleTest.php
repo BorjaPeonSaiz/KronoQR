@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
@@ -26,11 +27,19 @@ use Tests\Support\Time\FixedClock;
  * cuentas en memoria que solo dan por buena la 7 con el rol admin.
  */
 
-/** Lo que el caso de uso ha publicado. */
+/** Lo que el caso de uso ha publicado, y en que orden con el candado. */
 final class DiagnosticsResponsibleEvents
 {
     /** @var list<DomainEvent> */
     public array $published = [];
+
+    /** @var list<string> */
+    public array $steps = [];
+
+    public bool $chainHeld = false;
+
+    /** Cuantas comprobaciones de la cuenta dan por buena a la 7 antes de su baja. */
+    public int $activeFor = PHP_INT_MAX;
 }
 
 function diagnosticsResponsibleHandler(DiagnosticsResponsibleEvents $journal): GenerateDiagnosticsBundleHandler
@@ -43,6 +52,7 @@ function diagnosticsResponsibleHandler(DiagnosticsResponsibleEvents $journal): G
 
             public function publish(DomainEvent ...$events): void
             {
+                $this->journal->steps[] = 'publish:'.($this->journal->chainHeld ? 'chain' : 'free');
                 array_push($this->journal->published, ...$events);
             }
         },
@@ -56,8 +66,10 @@ function diagnosticsResponsibleHandler(DiagnosticsResponsibleEvents $journal): G
                 return null;
             }
         },
-        accounts: new class implements ResponsibleAccounts
+        accounts: new readonly class($journal) implements ResponsibleAccounts
         {
+            public function __construct(private DiagnosticsResponsibleEvents $journal) {}
+
             public function find(ResponsibleReference $reference): ?ResponsibleAccount
             {
                 return null;
@@ -65,7 +77,24 @@ function diagnosticsResponsibleHandler(DiagnosticsResponsibleEvents $journal): G
 
             public function isActiveManagementAccount(int $userId, array $roles = []): bool
             {
-                return $userId === 7 && $roles === [UserRole::ADMIN];
+                $this->journal->steps[] = 'responsible:'.($this->journal->chainHeld ? 'chain' : 'free');
+
+                return $userId === 7 && $roles === [UserRole::ADMIN] && $this->journal->activeFor-- > 0;
+            }
+        },
+        ledger: new readonly class($journal) implements SerializedLedgerWrite
+        {
+            public function __construct(private DiagnosticsResponsibleEvents $journal) {}
+
+            public function withChainLock(callable $work): mixed
+            {
+                $this->journal->chainHeld = true;
+
+                try {
+                    return $work();
+                } finally {
+                    $this->journal->chainHeld = false;
+                }
             }
         },
     );
@@ -123,3 +152,23 @@ it('el anonimizado de consola y el del panel no piden cuenta', function (Diagnos
     'consola anonimizado' => [DiagnosticsActor::Console, DiagnosticsOptions::anonymized()],
     'panel con datos personales: firma la sesion' => [DiagnosticsActor::User, DiagnosticsOptions::withPersonalData(7)],
 ])->group('RL-19');
+
+it('vuelve a comprobar la cuenta con la cadena tomada, y los asientos van dentro', function (): void {
+    $journal = new DiagnosticsResponsibleEvents;
+
+    diagnosticsResponsibleHandler($journal)->handle(DiagnosticsOptions::withPersonalData(7), DiagnosticsActor::Console, 7);
+
+    expect($journal->steps)->toBe(['responsible:free', 'responsible:chain', 'publish:chain']);
+})->group('RL-19', 'RL-04');
+
+it('una baja durante la generacion no deja asientos: la comprobacion con la cadena tomada la ve', function (): void {
+    $journal = new DiagnosticsResponsibleEvents;
+    // Activa al pedir el paquete; dada de baja cuando se va a firmar.
+    $journal->activeFor = 1;
+
+    expect(fn (): mixed => diagnosticsResponsibleHandler($journal)->handle(DiagnosticsOptions::withPersonalData(7), DiagnosticsActor::Console, 7))
+        ->toThrow(DiagnosticsResponsibleNotAllowed::class);
+
+    expect($journal->published)->toBe([])
+        ->and($journal->steps)->toBe(['responsible:free', 'responsible:chain']);
+})->group('RL-19', 'RL-04');

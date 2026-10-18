@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Policy;
 
+use App\Modules\Identity\Application\Support\CredentialManagers;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
@@ -49,7 +50,8 @@ final class CredentialPolicy
      */
     private static function credentialManagers(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH];
+        // La misma lista que la consola y el caso de uso de la entrega.
+        return CredentialManagers::ROLES;
     }
 
     public function create(ManagementActor $actor): bool

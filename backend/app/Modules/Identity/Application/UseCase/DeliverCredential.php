@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Application\UseCase;
 
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand;
+use App\Modules\Identity\Application\Exception\CredentialDeliverySignerNotAllowed;
 use App\Modules\Identity\Application\Port\CredentialRepository;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Application\Support\CredentialManagers;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
@@ -16,6 +18,7 @@ use App\Modules\Identity\Domain\Exception\CredentialNotPrintedYet;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 
 /**
@@ -50,6 +53,7 @@ final readonly class DeliverCredential
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
         private CredentialTelemetry $telemetry,
+        private ResponsibleAccounts $accounts,
     ) {}
 
     /**
@@ -58,6 +62,7 @@ final readonly class DeliverCredential
      * @throws CredentialNotPrintedYet antes de imprimir no hay tarjeta que entregar
      * @throws CredentialAlreadyDelivered
      * @throws CredentialAlreadyRevoked
+     * @throws CredentialDeliverySignerNotAllowed la cuenta ya no puede firmar la entrega
      */
     public function handle(DeliverCredentialCommand $command): ?CredentialView
     {
@@ -90,6 +95,14 @@ final readonly class DeliverCredential
                 $credential,
                 $employeeUuid,
             ): CredentialView {
+                // Con la cadena tomada, la cuenta que firma no puede darse de
+                // baja hasta que esto confirme (ADR-051 §6). Por los dos caminos:
+                // la consola ya la comprobo al preguntar y el panel al autorizar,
+                // pero lo que vale es lo de ahora (2.3.0 bloque 3).
+                if (! $this->accounts->isActiveManagementAccount($command->deliveredByUserId, CredentialManagers::ROLES)) {
+                    throw new CredentialDeliverySignerNotAllowed;
+                }
+
                 $current = $this->credentials->findByUuid($credential->uuid) ?? $credential;
 
                 $delivered = $current->deliveredBy($command->deliveredByUserId, $this->clock->now());

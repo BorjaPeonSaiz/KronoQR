@@ -18,4 +18,5 @@ return [
     'confirm_missing' => 'Sin terminal o con --force, confirma quién firma con --responsible-confirm=<correo de la cuenta>. No se ha escrito nada.',
     'confirm_mismatch' => '--responsible-confirm no coincide con el correo de la cuenta que firma (:email). No se ha escrito nada.',
     'cancelled' => 'Cancelado. No se ha escrito nada.',
+    'no_longer_allowed' => 'La cuenta de --responsible ya no es una cuenta de gestión activa con el rol que firma esta acción: se ha dado de baja o ha cambiado de rol mientras se confirmaba. No se ha escrito nada.',
 ];

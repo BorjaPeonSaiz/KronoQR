@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Policy;
 
+use App\Modules\Product\Application\Support\DiagnosticsSigners;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
@@ -58,6 +59,7 @@ final class DiagnosticsPolicy
 
     public function includePersonalData(ManagementActor $actor): bool
     {
-        return $actor->actsAs(UserRole::ADMIN) && ! $actor->isSupportActor();
+        // La misma lista que la consola y el caso de uso (2.3.0 bloque 3).
+        return $actor->actsAs(...DiagnosticsSigners::ROLES) && ! $actor->isSupportActor();
     }
 }

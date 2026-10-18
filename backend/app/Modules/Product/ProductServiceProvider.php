@@ -2108,6 +2108,7 @@ final class ProductServiceProvider extends ServiceProvider
                 maxBytes: Config::integer('product.diagnostics_max_bytes'),
                 failures: $app->make(ProbeFailureClassifier::class),
                 accounts: $app->make(ResponsibleAccounts::class),
+                ledger: $app->make(SerializedLedgerWrite::class),
             ),
         );
     }
