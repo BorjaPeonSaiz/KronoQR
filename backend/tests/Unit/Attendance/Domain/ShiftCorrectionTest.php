@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use Tests\Support\Domain\RecordedEvents;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Factory\ShiftEntryFactory;
 use Tests\Support\Factory\WorkDayFactory;
@@ -70,6 +71,7 @@ it('crea una version nueva y no muta la anterior', function (): void {
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect($corregido->uuid())->toBe('shift-entry-1-v2')
@@ -97,6 +99,7 @@ it('encadena la version anterior con la nueva y la saca del conjunto vigente', f
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $vigentes = array_map(static fn (ShiftEntry $entry): string => $entry->uuid(), $jornada->entries());
@@ -128,6 +131,7 @@ it('recalcula el total del dia tras corregir la hora de salida', function (): vo
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $eventos = $jornada->releaseEvents();
@@ -159,6 +163,7 @@ it('no genera ningun tramo artificial al corregir un turno que cruza la medianoc
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $marcas = array_map(
@@ -194,6 +199,7 @@ it('cierra un tramo abierto con motivo y deja constancia de como estaba', functi
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->by(42)->at('2026-03-14 16:20')->because(CorrectionReasonCode::OLVIDO_FICHAJE_SALIDA)->build(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -230,6 +236,7 @@ it('distingue modificar la hora de cerrar un tramo abierto', function (): void {
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     expect(recordedCorrection($jornada->releaseEvents())->action)->toBe(CorrectionAction::MODIFIED);
@@ -248,6 +255,7 @@ it('marca como manual solo la marca que se rectifico', function (): void {
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     // La entrada la ficho la persona con su tarjeta y eso no ha dejado de ser
@@ -270,6 +278,7 @@ it('vuelve a clasificar la duracion de la version corregida', function (): void 
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -294,6 +303,7 @@ it('anula un tramo sin crear version nueva y descuenta sus minutos', function ()
     $anulado = $jornada->voidEntry(
         'shift-entry-2',
         CorrectionFactory::new()->because(CorrectionReasonCode::ERROR_DE_ESCANEO_DUPLICADO)->build(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -317,7 +327,7 @@ it('libera el turno abierto al anular el tramo que lo tenia', function (): void 
         ->withOpenShiftSince('2026-03-14 07:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // RN-01 se aplica al conjunto vigente: anular libera el hueco y el empleado
     // puede volver a fichar entrada.
@@ -338,6 +348,7 @@ it('da de alta un tramo que nunca se ficho', function (): void {
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->because(CorrectionReasonCode::CREDENCIAL_NO_ENTREGADA)->build(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -366,6 +377,7 @@ it('fecha el recalculo en el momento de la correccion y no en el del trabajo', f
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->at('2026-04-02 11:15')->build(),
         ClockingPolicyFactory::standard(),
+        ContinuationCeilingFactory::standard(),
     );
 
     $eventos = $jornada->releaseEvents();
@@ -382,7 +394,7 @@ it('nombra el evento de correccion una sola vez y para siempre', function (): vo
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard());
+    $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
 
     // El nombre viaja al bus y de ahi a los listeners de Compliance y
     // Reporting: cambiarlo rompe a quien escucha sin que nada mas se entere.

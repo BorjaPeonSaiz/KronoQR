@@ -204,6 +204,9 @@ it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde s
     'todos los de una tabla desactivados' => [
         'ALTER TABLE shift_entries DISABLE TRIGGER ALL',
         [
+            // El de `closed_by` (2.3.0) no es de la lista de guardas, pero un
+            // trigger desactivado en el registro se avisa igual.
+            'disabled_trigger:shift_entries_closed_by_default',
             'disabled_trigger:shift_entries_guard_insert',
             'disabled_trigger:shift_entries_guard_transition',
             'disabled_trigger:shift_entries_superseded_is_linked',

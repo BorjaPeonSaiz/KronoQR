@@ -193,6 +193,7 @@ final class EmployeeWorkDaysResource extends JsonResource
             'version' => $marks->version,
             'clocked_in_at' => self::utc($marks->clockedInAt),
             'clocked_out_at' => self::utcOrNull($marks->clockedOutAt),
+            'closed_by' => $marks->closedBy,
             'worked_minutes' => $marks->workedMinutes,
         ];
     }

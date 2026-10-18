@@ -76,6 +76,7 @@ describe('CorrectionHistory', () => {
           version: 2,
           clocked_in_at: '2026-03-14T05:00:00.000000Z',
           clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          closed_by: 'clock_out',
           worked_minutes: 485,
         },
         after: null,

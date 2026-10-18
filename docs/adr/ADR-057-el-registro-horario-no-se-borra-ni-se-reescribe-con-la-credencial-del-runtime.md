@@ -7,7 +7,7 @@
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-01 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), residuo de AUD-1 y R4-SC-04) |
 | **Afecta a** | Enmienda [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (lo que de verdad garantiza hoy) · Extiende a las tablas del registro horario el patrón de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) · Respeta [ADR-007](ADR-007-daily-totals-proyeccion-reconstruible.md), [ADR-026](ADR-026-la-correccion-supersede.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/database/migrations/2026_08_19_099000_provision_database_privileges.php` · `Attendance/Infrastructure/Persistence/EloquentWorkDayRepository.php` · `Compliance/Infrastructure/Persistence/DatabaseWorkRecordArchive.php`, `DatabaseIncidentLedger.php`, `DatabaseIncidentNotices.php` · `Compliance/RetentionServiceProvider.php` · `infra/scripts/update.sh` (`verify_privileges`) |
 | **Requisitos** | RL-02, RL-04, RS-07 · reglas duras 5, 6 y 7 |
-| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 · [Enmienda del 13-10-2026](#enmienda-del-13-10-2026) (bloque 6 de la 2.2.1): orden de §1 frente a §3 y §7, el perfil de cumplimiento no se reasigna ni cambia de jurisdicción con la credencial del runtime · [Implementación de §2 y §3](#implementación-de-2-y-3-bloque-7-de-la-221-13-10-2026) (bloque 7 de la 2.2.1): transiciones exactas, *trigger* de `incidents` (extiende §2), el suelo legal en SQL, precisa §3 (`p_batch` acota cada sentencia, no cada llamada) y lo que sigue sin impedirse |
+| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 · [Enmienda del 13-10-2026](#enmienda-del-13-10-2026) (bloque 6 de la 2.2.1): orden de §1 frente a §3 y §7, el perfil de cumplimiento no se reasigna ni cambia de jurisdicción con la credencial del runtime · [Implementación de §2 y §3](#implementación-de-2-y-3-bloque-7-de-la-221-13-10-2026) (bloque 7 de la 2.2.1): transiciones exactas, *trigger* de `incidents` (extiende §2), el suelo legal en SQL, precisa §3 (`p_batch` acota cada sentencia, no cada llamada) y lo que sigue sin impedirse · [Enmienda del 18-10-2026](#enmienda-del-18-10-2026-adr-058-bloque-1-de-la-230) ([ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md)): `closed_by` es la séptima columna de §1 y §2 y entra en la conciliación de §4 |
 
 ## Contexto
 
@@ -230,3 +230,28 @@ Quien tenga la credencial del rol de migración es propietario de las tablas y d
 - `tests/Integration/Schema/WorkRecordPurgeFunctionTest.php`: `EXECUTE` solo para la aplicación (ni `PUBLIC` ni mantenimiento), corte posterior rechazado, también con `retention_years` por debajo del suelo, suelo atado al catálogo, la misma aritmética que `RetentionPolicy`, recuentos por lote y por generaciones, una tabla temporal no la desvía, y `down()`/`up()` reversibles.
 - `tests/Feature/Compliance/ApplyRetentionCommandTest.php`: `compliance:apply-retention` de punta a punta con su asiento, y sin borrar ni asentar nada si el reloj de la aplicación pide un corte que la función no admite.
 - `tests/Integration/Schema/WorkRecordPrivilegesTest.php`: `DELETE` da `42501` en las siete tablas.
+
+## Enmienda del 18-10-2026 (ADR-058, bloque 1 de la 2.3.0)
+
+[ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md) añade a `shift_entries` una **séptima columna que el runtime escribe**, `closed_by` (`clock_out` | `break_start`): cómo terminó el tramo. Decide si el tramo del día civil siguiente continúa la jornada (RN-05), así que se protege como la salida.
+
+### §1, con la séptima columna
+
+| Tabla | `UPDATE` de `fichaje_app` |
+|---|---|
+| `shift_entries` | **solo** `clocked_out_at`, `duration_minutes`, `status`, `clock_out_source`, `closed_by`, `superseded_by_id`, `updated_at` |
+
+El `INSERT` es de tabla y ya cubre la columna. La lista de `infra/scripts/lib/work-record-privileges.sh` lleva `closed_by`, de modo que `update.sh` y `doctor.sh` la exigen y la reparan igual que las otras seis.
+
+### §2, con la séptima columna
+
+`closed_by` entra en el grupo de la salida: **solo cambia al cerrar un tramo abierto**, de `open` a `closed` o `anomalous`, junto con `clocked_out_at`. El *trigger* rechaza con `42501` reescribirla en un tramo cerrado o anómalo, ponerla en uno abierto sin cerrarlo y escribirla al anular un abierto. Un `CHECK` (`shift_entries_chk_closed_by`) añade la invariante: nula si y solo si el tramo sigue abierto, y solo los dos valores. Durante la fase *expand* un *trigger* `shift_entries_closed_by_default` pone `clock_out` a una salida escrita sin cierre (ver ADR-058 §4); corre antes que la guarda y no la rodea.
+
+### §4, con la séptima columna
+
+La conciliación compara `closed_by` con la `action` del asiento `shift_entry.closed` (`clock_out` o `break_start`) o con el `after.closed_by` de la última corrección. Las correcciones anteriores a la 2.3.0 no lo apuntaban: en ellas no se compara. Una discrepancia sale como `entry_differs_from_audit · closed_by`.
+
+### Lo que esto no impide, con la séptima columna
+
+- **Cerrar un tramo abierto en pausa en vez de en salida**, con la credencial del runtime y sin pasar por el dominio. Es la misma escritura que el fichaje necesita, como cerrar con una hora falsa, y la detecta §4 en cuanto no cuadra con el asiento del cierre.
+- **Declarar a mano una pausa que no hubo**, por el camino legítimo. Queda firmada, con motivo, versión nueva y asiento (RN-13): no es una manipulación del registro sino una afirmación de quien corrige.

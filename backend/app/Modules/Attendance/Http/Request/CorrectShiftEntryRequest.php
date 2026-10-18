@@ -47,6 +47,8 @@ final class CorrectShiftEntryRequest extends FormRequest
         return [
             'clocked_in_at' => ['nullable', 'string', 'regex:'.self::UTC_PATTERN],
             'clocked_out_at' => ['nullable', 'string', 'regex:'.self::UTC_PATTERN],
+            // RN-05 (2.3.0): si el tramo termino en pausa; sin el, se conserva.
+            'ends_in_break' => ['sometimes', 'boolean'],
             ...$this->reasonRules(),
         ];
     }
@@ -77,18 +79,22 @@ final class CorrectShiftEntryRequest extends FormRequest
             clockedOutAt: $this->utcInstant('clocked_out_at'),
             reason: $this->correctionReason(),
             performedByUserId: $this->performedByUserId(),
+            endsInBreak: $this->has('ends_in_break') ? $this->boolean('ends_in_break') : null,
         );
     }
 
     private function validateSomethingChanges(Validator $validator): void
     {
-        if ($this->utcInstant('clocked_in_at') !== null || $this->utcInstant('clocked_out_at') !== null) {
+        if ($this->utcInstant('clocked_in_at') !== null
+            || $this->utcInstant('clocked_out_at') !== null
+            || $this->has('ends_in_break')) {
             return;
         }
 
         $validator->errors()->add(
             'clocked_in_at',
-            'Una correccion tiene que traer al menos una de las dos marcas: la de entrada o la de salida.',
+            'Una correccion tiene que traer al menos una de las dos marcas, la de entrada o la de salida, o si el '
+            .'tramo termino en pausa.',
         );
     }
 }

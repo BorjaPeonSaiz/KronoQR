@@ -77,4 +77,9 @@ final class StaleOpenWorkDayRepository implements WorkDayRepository
     {
         return $this->real->closedEntryEndingAfter($employeeUuid, $at);
     }
+
+    public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool
+    {
+        return $this->real->hasEntryOfAnotherWorkDayWithin($employeeUuid, $workDate, $gap);
+    }
 }

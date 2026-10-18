@@ -14,6 +14,7 @@ use App\Modules\Workforce\Domain\ValueObject\ScheduleType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Time\Instants;
 
@@ -137,7 +138,7 @@ final class PeriodReportFixtures
         $day->clockOut(Instants::inMadrid($clockOut), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
         $repository->save($day);
 
-        $day->voidEntry($entry->uuid(), CorrectionFactory::standard());
+        $day->voidEntry($entry->uuid(), CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
         $repository->save($day);
 
         foreach ($day->releaseEvents() as $event) {

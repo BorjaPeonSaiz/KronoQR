@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
@@ -272,6 +273,37 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
     }
 
     /**
+     * RN-05 frente a las otras jornadas de la persona (2.3.0): si algun tramo
+     * vigente de una jornada distinta de `$workDate` pisa el hueco que un tramo
+     * de otro dia civil dice continuar. Ver el puerto.
+     *
+     * Un tramo abierto cuenta —`tstzrange(entrada, NULL)` llega al infinito—:
+     * un turno en curso de otra jornada tambien interrumpe esta. Mismo operador
+     * `&&` y mismo predicado parcial que `shift_entries_no_overlap`, asi que el
+     * indice GiST de la restriccion la sirve.
+     */
+    public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool
+    {
+        $employeeId = $this->employeeIdOf($employeeUuid);
+
+        if ($employeeId === null) {
+            return false;
+        }
+
+        // Mismo rango `[)` que `shift_entries_no_overlap`, con lo que el indice
+        // GiST de la restriccion de exclusion sirve tambien a esta consulta.
+        return ShiftEntry::query()
+            ->where('employee_id', $employeeId)
+            ->whereNotIn('status', self::historicalStatuses())
+            ->where('work_date', '<>', $workDate->isoDate)
+            ->whereRaw(
+                'tstzrange(clocked_in_at, clocked_out_at) && tstzrange(?::timestamptz, ?::timestamptz)',
+                [$this->toTimestamp($gap->start), $this->toTimestamp($gap->end)],
+            )
+            ->exists();
+    }
+
+    /**
      * RN-18 a traves de jornadas (RN-02).
      *
      * **La consulta es la restriccion de exclusion escrita como pregunta.** El
@@ -374,6 +406,11 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             'status',
             'clock_out_source' => new Expression(
                 'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.clock_out_source ELSE shift_entries.clock_out_source END'
+            ),
+            // Como termino el tramo (RN-05, 2.3.0): con la salida, y por la misma
+            // razon solo cuando el tramo estaba abierto.
+            'closed_by' => new Expression(
+                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.closed_by ELSE shift_entries.closed_by END'
             ),
             'updated_at',
         ]);
@@ -481,6 +518,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             'status' => $entry->status()->value,
             'clock_in_source' => $entry->clockInSource()->value,
             'clock_out_source' => $entry->clockOutSource()?->value,
+            'closed_by' => $entry->closure()?->value,
             'version' => $entry->version(),
             'created_at' => $now,
             'updated_at' => $now,
@@ -501,6 +539,8 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
             $clockOutSource === null ? null : ScanOrigin::from($clockOutSource),
             ShiftEntryStatus::from($row->status),
             $row->version,
+            null,
+            $row->closed_by === null ? null : EntryClosure::from($row->closed_by),
         );
     }
 

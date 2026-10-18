@@ -14,6 +14,10 @@ namespace App\Modules\Attendance\Domain\Exception;
  * a las 06:30—, pero corregir la **entrada** cruzando la medianoche local si:
  * esas horas dejarian de pertenecer al dia 14 para pertenecer al 15.
  *
+ * **Tambien al anular** (2.3.0, {@see byVoiding()}): anular el tramo que abre la
+ * jornada deja abriendola al siguiente, y si ese empieza otro dia civil sus
+ * horas serian de otra jornada.
+ *
  * **Por que el agregado se niega en vez de moverlo.** El tramo pasaria a otra
  * jornada, es decir, a **otro agregado**, y con el se moverian los minutos entre
  * dos filas de `daily_totals`. `WorkDay` es la frontera transaccional del
@@ -29,11 +33,34 @@ namespace App\Modules\Attendance\Domain\Exception;
  */
 final class CorrectionWouldChangeWorkDate extends AttendanceDomainException
 {
+    /**
+     * @param  bool  $byVoiding  la causa es anular el tramo que abria la jornada, no mover una entrada
+     */
+    private function __construct(
+        string $message,
+        public readonly bool $byVoiding = false,
+        public readonly string $workDate = '',
+    ) {
+        parent::__construct($message);
+    }
+
     public static function from(string $shiftEntryUuid, string $currentIsoDate, string $correctedIsoDate): self
     {
         return new self(
             'Correcting the clock-in of shift entry '.$shiftEntryUuid.' would move it from work day '
-            .$currentIsoDate.' to '.$correctedIsoDate.' (RN-05). Void it here and create it there instead.'
+            .$currentIsoDate.' to '.$correctedIsoDate.' (RN-05). Void it here and create it there instead.',
+            false,
+            $currentIsoDate,
+        );
+    }
+
+    public static function byVoiding(string $shiftEntryUuid, string $currentIsoDate, string $resultingIsoDate): self
+    {
+        return new self(
+            'Voiding shift entry '.$shiftEntryUuid.' would leave work day '.$currentIsoDate
+            .' opened by a shift entry of '.$resultingIsoDate.' (RN-05). Void the later entries first.',
+            true,
+            $currentIsoDate,
         );
     }
 }

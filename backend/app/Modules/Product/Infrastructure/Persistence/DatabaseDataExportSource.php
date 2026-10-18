@@ -437,6 +437,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                se.status,
                se.clock_in_source,
                se.clock_out_source,
+               se.closed_by,
                se.version::text          AS version,
                sup.uuid::text            AS superseded_by_uuid,
                to_char(se.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,

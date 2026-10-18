@@ -602,17 +602,26 @@ final class ProblemDetails
      * tiene ningun motivo para elegir el `type` de un error de validacion, y
      * poder hacerlo invita a que aparezca un tipo nuevo por endpoint.
      *
+     * `$cause` dice por que (RN-05, ADR-058): el panel enseña su propia pista
+     * solo cuando se movio la apertura, y el texto del servidor en los demas.
+     *
      * @param  array<string, list<string>>  $errors
+     * @param  'opening_moved'|'opening_voided'|'entry_not_continued'|'next_entry_not_continued'  $cause
      */
-    public static function correctionWouldChangeWorkDate(array $errors): JsonResponse
+    public static function correctionWouldChangeWorkDate(array $errors, string $cause): JsonResponse
     {
-        return self::response(
+        $response = self::response(
             self::TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE,
             'Peticion no valida',
             JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
             'Revisa los campos indicados.',
             $errors,
         );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([...$body, 'cause' => $cause]);
     }
 
     /**

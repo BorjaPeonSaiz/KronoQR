@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
+use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\NoOpenShiftEntry;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
@@ -17,8 +18,11 @@ use App\Modules\Attendance\Domain\Exception\ShiftEntryDoesNotBelongToWorkDay;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryNotInWorkDay;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
+use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
+use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
+use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
@@ -34,7 +38,7 @@ use DateTimeImmutable;
  * La **jornada** de un empleado: el conjunto de tramos atribuidos a una fecha
  * civil segun RN-05, y la frontera transaccional del fichaje (doc 01 §5.2).
  *
- * Protege siete invariantes y no delega ninguna:
+ * Protege ocho invariantes y no delega ninguna:
  *
  * | Invariante | Regla | Donde |
  * |---|---|---|
@@ -43,6 +47,7 @@ use DateTimeImmutable;
  * | Salida posterior a entrada | RN-03 | `TimeRange`, al cerrar y al corregir |
  * | Todo instante en UTC | RN-04 | `TimeRange::assertUtc()` |
  * | La jornada no cambia de dia | RN-05 | `guardOpeningStaysOnThisWorkDate()` |
+ * | Un tramo de otro dia civil continua la jornada | RN-05 | `guardContinuesWorkDay()` |
  * | Total recalculado | RN-06 | `totalWorked()`, que **suma**, no acumula |
  * | Version nueva, nunca sobrescritura | RN-13 | `correctEntry()`, `voidEntry()` |
  *
@@ -190,6 +195,17 @@ final class WorkDay
      * los dos casos: una pausa no exime a un tramo de ser demasiado corto ni
      * demasiado largo. Lleva valor por defecto porque las correcciones
      * (RF-PA-04) cierran tramos sin que haya habido pausa ninguna.
+     *
+     * **RN-02 no necesita guarda propia al cerrar**, y por eso no la tiene (M5,
+     * 2.3.0). El intervalo que queda, `[entrada, $at)`, solo podria pisar a un
+     * tramo que siguiera vivo despues de la entrada del abierto; y eso es
+     * justamente un solape con el tramo abierto, que ningun camino deja existir:
+     * `reconstitute()` lo rechaza con `guardNoOverlapsAmongEntries()`,
+     * `clockIn()` con `guardNothingExtendsBeyond()` y el alta o la correccion
+     * con `guardTimesFit()`, que trata un tramo sin salida como infinito. Un
+     * segundo tramo abierto tampoco puede existir (RN-01). Y una salida no
+     * posterior a la entrada la rechaza `ShiftEntry::close()` con la misma
+     * excepcion que daba la guarda (RN-03).
      */
     public function clockOut(
         DateTimeImmutable $at,
@@ -202,9 +218,13 @@ final class WorkDay
         $entry = $this->openEntry()
             ?? throw NoOpenShiftEntry::forEmployeeOn($this->employeeUuid, $this->workDate->isoDate);
 
-        $this->guardClosingDoesNotOverlap($entry, $at);
-
-        $entry->close($at, $origin);
+        // Una pausa deja el tramo cerrado en pausa: es lo que permite que la
+        // vuelta del dia civil siguiente continue la jornada (RN-05, 2.3.0).
+        $entry->close(
+            $at,
+            $origin,
+            $action === ClockingAction::BREAK_START ? EntryClosure::BREAK_START : EntryClosure::CLOCK_OUT,
+        );
 
         // RN-07 y RN-08. El tramo queda cerrado con sus marcas reales pase lo
         // que pase: la anomalia se marca para que una persona lo revise, nunca
@@ -246,7 +266,15 @@ final class WorkDay
      * y es deliberado: la vuelta de una pausa a las 02:30 pertenece a la jornada
      * que empezo ayer a las 22:00 (ADR-024, ADR-006). Lo que si se comprueba es
      * que el alta no cambie **el tramo que abre** la jornada a otro dia civil,
-     * que es lo que si moveria `work_date` (RN-05).
+     * que es lo que si moveria `work_date` (RN-05), y que un tramo de otro dia
+     * civil **continue** la jornada: su entrada queda a menos de la cota de la
+     * salida del tramo anterior, la misma que acota la vuelta de una pausa en el
+     * quiosco (`$continuation`, 2.3.0).
+     *
+     * @throws ShiftAlreadyOpen dejaria dos turnos abiertos (RN-01)
+     * @throws OverlappingShiftEntry pisaria a otro tramo vigente (RN-02)
+     * @throws CorrectionWouldChangeWorkDate el alta abriria la jornada en otro dia civil (RN-05)
+     * @throws EntryDoesNotContinueWorkDay el tramo es de otro dia civil y no continua la jornada (RN-05)
      */
     public function addEntry(
         string $entryUuid,
@@ -254,9 +282,11 @@ final class WorkDay
         ScanOrigin $source,
         Correction $correction,
         ClockingPolicy $policy,
+        ContinuationCeiling $continuation,
     ): ShiftEntry {
         $this->guardTimesFit($times, null);
         $this->guardOpeningStaysOnThisWorkDate($times, null);
+        $this->guardContinuesWorkDay($times, null, $continuation);
 
         $entry = ShiftEntry::declaredManually($entryUuid, $this->employeeUuid, $this->workDate, $times, $source);
         $this->entries[] = $entry;
@@ -297,6 +327,7 @@ final class WorkDay
      * @throws CorrectionWouldChangeWorkDate la correccion moveria la jornada a otro dia civil (RN-05)
      * @throws ShiftAlreadyOpen dejaria dos turnos abiertos (RN-01)
      * @throws OverlappingShiftEntry pisaria a otro tramo vigente (RN-02)
+     * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
     public function correctEntry(
         string $entryUuid,
@@ -305,6 +336,7 @@ final class WorkDay
         ScanOrigin $source,
         Correction $correction,
         ClockingPolicy $policy,
+        ContinuationCeiling $continuation,
     ): ShiftEntry {
         $entry = $this->entry($entryUuid);
         $before = $entry->times();
@@ -318,6 +350,7 @@ final class WorkDay
         // de uso podria seguir usandolo creyendo que no paso nada.
         $this->guardTimesFit($times, $entry);
         $this->guardOpeningStaysOnThisWorkDate($times, $entry);
+        $this->guardContinuesWorkDay($times, $entry, $continuation);
 
         $replacement = $entry->nextVersion($replacementUuid, $times, $source);
 
@@ -352,12 +385,26 @@ final class WorkDay
      * `daily_totals`; recalcularla al anular moveria minutos entre dias sin que
      * nadie lo hubiera pedido, y dejaria una fila huerfana en la proyeccion.
      *
+     * **Respeta la cota de continuacion de RN-05** (2.3.0). Anular un tramo
+     * intermedio deja al que venia detras midiendose contra el anterior que
+     * sigue vigente; si asi queda a la cota o mas alla y empieza en otro dia
+     * civil, sus horas dejarian de ser de esta jornada y la anulacion se
+     * rechaza, en la entrada de ese tramo. Anular el ultimo, o uno cuyo
+     * siguiente es del dia de la jornada, siempre se puede: los datos malos se
+     * arreglan anulando de atras hacia delante. Y si se anula el tramo que
+     * abria la jornada, el mas temprano de los que quedan tiene que empezar en
+     * `work_date`.
+     *
      * @throws ShiftEntryNotInWorkDay el tramo no es de esta jornada, o ya estaba anulado o sustituido
+     * @throws CorrectionWouldChangeWorkDate la jornada quedaria abierta por un tramo de otro dia civil (RN-05)
+     * @throws EntryDoesNotContinueWorkDay el tramo siguiente dejaria de continuar la jornada (RN-05)
      */
-    public function voidEntry(string $entryUuid, Correction $correction): ShiftEntry
+    public function voidEntry(string $entryUuid, Correction $correction, ContinuationCeiling $continuation): ShiftEntry
     {
         $entry = $this->entry($entryUuid);
         $before = $entry->times();
+
+        $this->guardVoidKeepsContinuation($entry, $continuation);
 
         $entry->markVoided();
         $this->retire($entry);
@@ -814,6 +861,317 @@ final class WorkDay
         }
     }
 
+    /**
+     * RN-05 y regla dura 4: un tramo escrito a mano que empieza en **otro dia
+     * civil** solo es de esta jornada si la **continua** (2.3.0, V21-3-AR-1).
+     *
+     * `guardOpeningStaysOnThisWorkDate()` mira solo la entrada mas temprana; un
+     * tramo que no abre la jornada podia empezar dias despues, y sus horas
+     * contaban en el total de otro dia. El fichaje ya lo impedia con la cota de
+     * la vuelta de pausa (`ScanIntentPolicy`); esta guarda aplica **las mismas
+     * reglas** al alta y a la correccion manuales. Tienen que darse las tres:
+     *
+     * - (a) el tramo anterior **termino en pausa** (`EntryClosure::BREAK_START`);
+     * - (b) la entrada queda a menos del descanso minimo entre jornadas de la
+     *   salida de ese tramo ({@see ContinuationCeiling});
+     * - (c) la entrada cae, como mucho, el dia civil siguiente a `work_date`.
+     *
+     * Sin (a) y (c), un responsable podia encadenar los turnos de dias seguidos
+     * en una sola jornada y esconder un descanso insuficiente (RN-10).
+     * Un tramo que empieza en el dia de `work_date` no tiene cota —el turno
+     * 22:00 -> 06:00 sigue siendo un unico tramo del dia de inicio— y uno sin
+     * tramo anterior lo decide `guardOpeningStaysOnThisWorkDate()`.
+     *
+     * **La comprobacion es local**, no de toda la jornada: un dato historico que
+     * ya violase la cota en otro sitio no impide corregir lo demas. Se miran los
+     * tramos cuyo tramo anterior cambia con esta operacion:
+     *
+     * 1. **El tramo escrito**, contra su anterior. Si falla, la marca a corregir
+     *    es su entrada.
+     * 2. **El que le sigue**, contra el escrito: acortar la salida puede dejar la
+     *    vuelta posterior a la cota o mas alla. Si falla, es su salida.
+     * 3. **El que seguia a la version anterior**, en una correccion: mover el
+     *    tramo de sitio cambia el anterior de quien venia detras. Si falla, es
+     *    la entrada que se ha movido.
+     *
+     * Estricta y en segundos reales, como {@see ContinuationCeiling}: inmune al
+     * cambio de hora (RN-09).
+     *
+     * @throws EntryDoesNotContinueWorkDay
+     */
+    private function guardContinuesWorkDay(
+        ShiftTimes $times,
+        ?ShiftEntry $excluding,
+        ContinuationCeiling $continuation,
+    ): void {
+        $marks = $this->marksWith($times, $excluding);
+        $written = $this->writtenIndex($marks);
+
+        $this->guardContinuationAt($marks, $written, FutureMark::ClockIn, true, $continuation);
+        $this->guardContinuationAt($marks, $written + 1, FutureMark::ClockOut, false, $continuation);
+
+        if ($excluding instanceof ShiftEntry) {
+            foreach ($marks as $index => $mark) {
+                if (! $mark['written'] && $mark['in'] > $excluding->clockedInAt()) {
+                    $this->guardContinuationAt($marks, $index, FutureMark::ClockIn, false, $continuation);
+
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * RN-05 frente a **otras jornadas** de la persona: el hueco que un tramo de
+     * otro dia civil dice continuar, de la salida de su tramo anterior a su
+     * entrada, o `null` si el tramo no continua nada (empieza el dia de la
+     * jornada, o no tiene anterior).
+     *
+     * El agregado solo ve sus tramos. Si en ese hueco hay un tramo vigente de
+     * otra jornada —la persona ficho en el quiosco entre medias y eso abrio la
+     * jornada del dia siguiente—, la jornada ya se interrumpio y el tramo
+     * escrito no la continua aunque quede dentro de la cota. Eso lo pregunta el
+     * caso de uso al repositorio con este hueco (2.3.0).
+     *
+     * `$replacingUuid` es el tramo que estas marcas sustituyen en una
+     * correccion; en un alta, ninguno.
+     */
+    public function continuationGapFor(ShiftTimes $times, ?string $replacingUuid = null): ?TimeRange
+    {
+        $excluding = $replacingUuid === null ? null : $this->entry($replacingUuid);
+        $marks = $this->marksWith($times, $excluding);
+
+        return $this->gapAt($marks, $this->writtenIndex($marks));
+    }
+
+    /**
+     * Desde cuando hay una **pausa en curso** en esta jornada a la hora `$at`, o
+     * `null` si no la hay (RN-05, ADR-024; 2.3.0).
+     *
+     * La hay si el ultimo tramo cerrado antes de `$at` termino en pausa y no hay
+     * tramo abierto. El quiosco lo pregunta antes de tratar un escaneo como la
+     * vuelta: su ultimo escaneo fue «Pausa», pero una correccion posterior pudo
+     * declarar que aquel tramo termino en salida.
+     */
+    public function breakInProgressAt(DateTimeImmutable $at): ?DateTimeImmutable
+    {
+        if ($this->hasOpenEntry()) {
+            return null;
+        }
+
+        $last = null;
+
+        foreach ($this->entries as $entry) {
+            $out = $entry->clockedOutAt();
+
+            if ($out !== null && $out <= $at && ($last === null || $out > $last->clockedOutAt())) {
+                $last = $entry;
+            }
+        }
+
+        if (! $last instanceof ShiftEntry || $last->closure() !== EntryClosure::BREAK_START) {
+            return null;
+        }
+
+        return $last->clockedOutAt();
+    }
+
+    /**
+     * El mismo hueco para el tramo que seguia a `$entryUuid` si este se anula:
+     * pasa a continuar desde la salida del anterior que queda vigente.
+     */
+    public function continuationGapAfterVoiding(string $entryUuid): ?TimeRange
+    {
+        $voided = $this->entry($entryUuid);
+        $marks = $this->marksWith(null, $voided);
+
+        foreach ($marks as $index => $mark) {
+            if ($mark['in'] > $voided->clockedInAt()) {
+                return $this->gapAt($marks, $index);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Las marcas de la jornada resultante, ordenadas por entrada: los tramos
+     * vigentes menos `$excluding`, mas `$written` si lo hay.
+     *
+     * RN-02 ya se ha comprobado: no hay dos entradas iguales, asi que el orden
+     * por entrada es total.
+     *
+     * @return list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>
+     */
+    private function marksWith(?ShiftTimes $written, ?ShiftEntry $excluding): array
+    {
+        $marks = $written instanceof ShiftTimes
+            ? [['in' => $written->clockedInAt, 'out' => $written->clockedOutAt, 'breaks' => $written->endsInBreak(), 'written' => true]]
+            : [];
+
+        foreach ($this->entries as $entry) {
+            if ($entry !== $excluding) {
+                $marks[] = [
+                    'in' => $entry->clockedInAt(),
+                    'out' => $entry->clockedOutAt(),
+                    'breaks' => $entry->closure() === EntryClosure::BREAK_START,
+                    'written' => false,
+                ];
+            }
+        }
+
+        usort($marks, static fn (array $one, array $other): int => $one['in'] <=> $other['in']);
+
+        return $marks;
+    }
+
+    /**
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
+     */
+    private function writtenIndex(array $marks): int
+    {
+        foreach ($marks as $index => $mark) {
+            if ($mark['written']) {
+                return $index;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * El hueco que el tramo `$index` dice continuar, si empieza otro dia civil
+     * y tiene un anterior cerrado.
+     *
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
+     */
+    private function gapAt(array $marks, int $index): ?TimeRange
+    {
+        if ($index < 1 || ! isset($marks[$index])) {
+            return null;
+        }
+
+        $start = $marks[$index]['in'];
+        // Un anterior abierto no puede existir: RN-02 ya lo habria rechazado,
+        // porque un tramo sin salida pisa a todo lo que empiece despues.
+        $lastMark = $marks[$index - 1]['out'];
+
+        if (! $lastMark instanceof DateTimeImmutable || $lastMark >= $start) {
+            return null;
+        }
+
+        if (WorkDate::fromInstant($start, $this->workDate->timezone)->equals($this->workDate)) {
+            return null;
+        }
+
+        return new TimeRange($lastMark, $start);
+    }
+
+    /**
+     * RN-05 al anular (2.3.0). Dos cosas, sobre la jornada que quedaria sin el
+     * tramo:
+     *
+     * 1. **La apertura no cambia de dia.** Si hoy la abre un tramo de
+     *    `work_date` y, sin el anulado, la abriria uno de otro dia civil, sus
+     *    horas serian de otra jornada (`CorrectionWouldChangeWorkDate`). Si ya
+     *    la abria uno de otro dia —un dato antiguo—, anular no cambia nada de
+     *    eso y se admite.
+     * 2. **El tramo que le seguia sigue continuandola**, medido contra el
+     *    anterior que queda vigente. Misma comprobacion local que
+     *    `guardContinuesWorkDay()`.
+     *
+     * Anular el ultimo tramo, o uno cuyo siguiente empieza el dia de la
+     * jornada, siempre se puede: los datos se arreglan de atras hacia delante.
+     *
+     * @throws CorrectionWouldChangeWorkDate
+     * @throws EntryDoesNotContinueWorkDay
+     */
+    private function guardVoidKeepsContinuation(ShiftEntry $voided, ContinuationCeiling $continuation): void
+    {
+        $marks = $this->marksWith(null, $voided);
+        $current = $this->marksWith(null, null);
+
+        // Solo si la anulacion CAMBIA la apertura: hoy esta en `work_date` y
+        // despues no. Una jornada que ya estaba abierta por un tramo de otro dia
+        // —un dato anterior a la 2.3.0— se tiene que poder limpiar anulando.
+        if ($marks !== [] && $current !== []) {
+            $opening = WorkDate::fromInstant($marks[0]['in'], $this->workDate->timezone);
+            $openedHere = WorkDate::fromInstant($current[0]['in'], $this->workDate->timezone)->equals($this->workDate);
+
+            if ($openedHere && ! $opening->equals($this->workDate)) {
+                throw CorrectionWouldChangeWorkDate::byVoiding($voided->uuid(), $this->workDate->isoDate, $opening->isoDate);
+            }
+        }
+
+        foreach ($marks as $index => $mark) {
+            if ($mark['in'] > $voided->clockedInAt()) {
+                $this->guardContinuationAt($marks, $index, FutureMark::ClockIn, false, $continuation);
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * La cota de continuacion para el tramo `$index` de la jornada resultante,
+     * ya ordenada por entrada, contra el que le precede.
+     *
+     * `$isWritten` dice si el tramo que no continua es el que se esta escribiendo
+     * o el que le sigue, que es lo que cambia el mensaje.
+     *
+     * @param  list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>  $marks
+     *
+     * @throws EntryDoesNotContinueWorkDay
+     */
+    private function guardContinuationAt(
+        array $marks,
+        int $index,
+        FutureMark $field,
+        bool $isWritten,
+        ContinuationCeiling $continuation,
+    ): void {
+        if ($index < 1 || ! isset($marks[$index])) {
+            return;
+        }
+
+        $start = $marks[$index]['in'];
+        $previous = $marks[$index - 1];
+        // Un anterior abierto no puede existir: RN-02 ya lo habria rechazado,
+        // porque un tramo sin salida pisa a todo lo que empiece despues.
+        $lastMark = $previous['out'];
+
+        if (! $lastMark instanceof DateTimeImmutable) {
+            return;
+        }
+
+        // Un tramo del dia de la jornada no continua nada: no tiene cota.
+        if (WorkDate::fromInstant($start, $this->workDate->timezone)->equals($this->workDate)) {
+            return;
+        }
+
+        $workDate = $this->workDate->isoDate;
+
+        // (c) Como mucho, el dia siguiente: sin tope, una cadena de pausas
+        // encadenaria dias sucesivos en una sola jornada.
+        if ($start >= $this->workDate->next()->endsAt()) {
+            throw EntryDoesNotContinueWorkDay::beyondNextDay($field, $workDate, $this->workDate->next()->isoDate, $start, $isWritten);
+        }
+
+        // (a) Solo continua una pausa, igual que en el quiosco.
+        if (! $previous['breaks']) {
+            throw EntryDoesNotContinueWorkDay::notAfterBreak($field, $workDate, $start, $isWritten);
+        }
+
+        // (b) Y dentro de la cota del descanso minimo entre jornadas.
+        if ($continuation->continues($lastMark, $start)) {
+            return;
+        }
+
+        throw $isWritten
+            ? EntryDoesNotContinueWorkDay::writtenEntry($field, $workDate, $lastMark, $start, $continuation)
+            : EntryDoesNotContinueWorkDay::nextEntry($field, $workDate, $lastMark, $start, $continuation);
+    }
+
     private function dailyTotals(DateTimeImmutable $at): DailyTotalsRecalculated
     {
         return new DailyTotalsRecalculated(
@@ -850,27 +1208,6 @@ final class WorkDay
     {
         foreach ($this->entries as $entry) {
             if ($entry->extendsBeyond($at)) {
-                throw OverlappingShiftEntry::at($this->employeeUuid, $at);
-            }
-        }
-    }
-
-    /**
-     * RN-02 al cerrar: el intervalo que queda definido no puede pisar a ningun
-     * otro tramo de la jornada.
-     */
-    private function guardClosingDoesNotOverlap(ShiftEntry $closing, DateTimeImmutable $at): void
-    {
-        $closed = new TimeRange($closing->clockedInAt(), $at);
-
-        foreach ($this->entries as $entry) {
-            if ($entry === $closing) {
-                continue;
-            }
-
-            $period = $entry->period();
-
-            if ($period === null || $period->overlaps($closed)) {
                 throw OverlappingShiftEntry::at($this->employeeUuid, $at);
             }
         }

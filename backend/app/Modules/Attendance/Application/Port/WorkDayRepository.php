@@ -147,4 +147,19 @@ interface WorkDayRepository
      * `$at`— porque es el que una persona mira primero al trabajar la incidencia.
      */
     public function closedEntryEndingAfter(string $employeeUuid, DateTimeImmutable $at): ?TimeRange;
+
+    /**
+     * Si la persona tiene algun tramo **vigente** de una jornada distinta de
+     * `$workDate` que pisa `$gap` (`[inicio, fin)`; un tramo abierto llega al
+     * infinito).
+     *
+     * Es la mitad de RN-05 que el agregado no puede ver (2.3.0): un tramo de
+     * otro dia civil solo continua su jornada si entre la salida anterior y su
+     * entrada no se interpuso otra jornada. Lo usan
+     * `Application/Support/ContinuationAcrossWorkDays` (alta, correccion y
+     * anulacion) y `RegisterScanHandler::breakStillOpenIn()`, que antes de tratar
+     * un escaneo como la vuelta de una pausa comprueba que ninguna otra jornada
+     * se interpuso desde que empezo.
+     */
+    public function hasEntryOfAnotherWorkDayWithin(string $employeeUuid, WorkDate $workDate, TimeRange $gap): bool;
 }

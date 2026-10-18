@@ -305,6 +305,7 @@ return [
                 'status' => '`open` (no clock-out), `closed` (closed and current), `superseded` (replaced by a later correction) or `voided` (voided, does not count towards hours).',
                 'clock_in_source' => 'How the clock-in was recorded: `qr_kiosk` (card at the kiosk), `pin_fallback` (PIN, when the card fails) or `manual` (a correction made from the panel).',
                 'clock_out_source' => 'The same for the clock-out.',
+                'closed_by' => 'How the shift ended: clock_out or break_start (a break). Empty while it is still open.',
                 'version' => 'Version number. 1 is the original; every correction creates the next one.',
                 'superseded_by_uuid' => 'Entry that replaced this one. Empty for the current version. Following this column reconstructs the full history of a correction.',
                 'created_at' => 'When this version was created.',

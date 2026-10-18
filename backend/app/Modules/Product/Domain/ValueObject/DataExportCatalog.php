@@ -257,6 +257,7 @@ final class DataExportCatalog
                 'status',
                 'clock_in_source',
                 'clock_out_source',
+                'closed_by',
                 'version',
                 'superseded_by_uuid',
                 'created_at',

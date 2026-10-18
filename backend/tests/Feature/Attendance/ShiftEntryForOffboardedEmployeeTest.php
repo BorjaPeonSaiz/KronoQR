@@ -126,3 +126,113 @@ it('sigue rechazando en employee_uuid a una persona suspendida', function (): vo
 
     expect(DB::table('shift_entries')->count())->toBe(0);
 })->group('RN-14', 'RF-PA-04');
+
+// --- RN-05 (2.3.0): las horas escritas a mano no pasan del cese --------------
+
+/**
+ * Escenario «Las horas escritas a mano no pasan del cese» del doc 01 §11: Elena,
+ * de baja con cese el 10 de octubre y un tramo de 08:00 a 15:00 (hora de
+ * Madrid, CEST) en su jornada del 10. El reloj se para el 20 para que ninguna
+ * de estas horas caiga en el futuro (F1).
+ *
+ * @return array{token: string, employee: string, tramo: string}
+ */
+function contextoDeLaCotaDelCese(): array
+{
+    FrozenTime::at('2026-10-20 10:00:00');
+    $contexto = contextoDelTramoDeUnaBaja();
+    DB::table('employees')->where('uuid', $contexto['employee'])->update(['terminated_at' => '2026-10-10']);
+
+    $tramo = Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-10-10',
+            'clocked_in_at' => '2026-10-10T06:00:00Z',
+            'clocked_out_at' => '2026-10-10T13:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidResponse(201)
+        ->json('shift_entry_uuid');
+
+    \assert(\is_string($tramo));
+
+    return [...$contexto, 'tramo' => $tramo];
+}
+
+/** @return array{entries: int, corrections: int, audit: int} */
+function filasDeLaCotaDelCese(): array
+{
+    return [
+        'entries' => DB::table('shift_entries')->count(),
+        'corrections' => DB::table('shift_corrections')->count(),
+        'audit' => DB::table('audit_log')->count(),
+    ];
+}
+
+it('rechaza dar de alta en la jornada del cese un tramo que entra tres dias despues, sin escribir nada', function (): void {
+    $contexto = contextoDeLaCotaDelCese();
+    $antes = filasDeLaCotaDelCese();
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-10-10',
+            'clocked_in_at' => '2026-10-13T06:00:00Z',
+            'clocked_out_at' => '2026-10-13T13:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        ->assertJsonPath('errors.clocked_in_at.0', 'Esta persona cesó el 2026-10-10: esa hora queda fuera de su '
+            .'última jornada. Solo se admiten horas que continúen la jornada del día de cese.')
+        ->assertJsonMissingPath('errors.work_date');
+
+    expect(filasDeLaCotaDelCese())->toBe($antes);
+})->group('RN-05', 'RN-14', 'RF-PA-04');
+
+it('rechaza corregir el tramo del cese para que entre tres dias despues, sin escribir nada', function (): void {
+    $contexto = contextoDeLaCotaDelCese();
+    $antes = filasDeLaCotaDelCese();
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$contexto['tramo'], [
+            'clocked_in_at' => '2026-10-13T06:00:00Z',
+            'clocked_out_at' => '2026-10-13T13:00:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        ->assertJsonStructure(['errors' => ['clocked_in_at']]);
+
+    expect(filasDeLaCotaDelCese())->toBe($antes)
+        ->and(DB::table('shift_entries')->where('uuid', $contexto['tramo'])->value('status'))->toBe('closed');
+})->group('RN-05', 'RN-14', 'RF-PA-04');
+
+it('admite en la jornada del cese el turno de noche y la vuelta de su pausa de madrugada', function (): void {
+    // Regla dura 4: el turno 22:00 -> 02:00 es de la jornada del 10 aunque
+    // acabe el 11, y la vuelta de las 02:30 la continua. Las dos marcas quedan
+    // antes de la cota del dia del cese (12:00 del 11 en Madrid).
+    FrozenTime::at('2026-10-20 10:00:00');
+    $contexto = contextoDelTramoDeUnaBaja();
+    DB::table('employees')->where('uuid', $contexto['employee'])->update(['terminated_at' => '2026-10-10']);
+
+    // El turno termina en pausa: es lo que deja continuarlo al dia siguiente.
+    foreach ([['2026-10-10T20:00:00Z', '2026-10-11T00:00:00Z', 240, true], ['2026-10-11T00:30:00Z', '2026-10-11T04:00:00Z', 450, false]] as [$entrada, $salida, $total, $pausa]) {
+        Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => '2026-10-10',
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'ends_in_break' => $pausa,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->assertJsonPath('work_date', '2026-10-10')
+            ->assertJsonPath('daily_total_minutes', $total);
+    }
+
+    expect(DB::table('shift_entries')->where('work_date', '2026-10-10')->count())->toBe(2);
+})->group('RN-05', 'RN-14', 'RF-PA-04');

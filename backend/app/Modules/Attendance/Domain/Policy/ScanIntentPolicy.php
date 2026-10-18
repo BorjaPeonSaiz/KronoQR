@@ -6,9 +6,10 @@ namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
+use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
-use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
 
 /**
@@ -78,6 +79,7 @@ use DateTimeImmutable;
  * | Si | `break_end` | — | `CLOCK_OUT` | Contradice el estado: **se cierra sin inventar una pausa que nadie declaro** |
  * | No | `break_end` | `break_start` **dentro del techo** | `BREAK_END` | Vuelve de la pausa: continua la jornada de aquel tramo (RN-05) |
  * | No | `break_end` | `break_start` en el techo o mas alla | `CLOCK_IN` | Ha pasado el descanso minimo: por RN-10 ya es otra jornada |
+ * | No | `break_end` o `auto` | `break_start` de una jornada anterior al dia de ayer | `CLOCK_IN` | Tope de RN-05 (2.3.0): una jornada solo se continua hasta el dia siguiente |
  * | No | `break_end` | `break_start` **posterior** a este escaneo | `CLOCK_IN` | Cola desordenada (regla dura 9): no se puede volver de una pausa que aun no empezo |
  * | No | `break_end` | cualquier otro | `CLOCK_IN` | No hay pausa que continuar; contradice el estado y se abre jornada |
  * | No | `auto` | `break_start` dentro del techo | `BREAK_END` | **La vuelta no anade ningun paso**: pasar la tarjeta basta |
@@ -114,25 +116,14 @@ use DateTimeImmutable;
 final readonly class ScanIntentPolicy
 {
     /**
-     * @param  WorkedDuration  $breakContinuationCeiling  RN-10, ya resuelto desde el perfil del
-     *                                                    centro (regla dura 14). Por debajo de el,
-     *                                                    un hueco es una pausa; a partir de el, es
-     *                                                    el descanso entre dos jornadas
+     * @param  ContinuationCeiling  $breakContinuationCeiling  RN-10, ya resuelto desde el perfil del
+     *                                                         centro (regla dura 14). Por debajo de el,
+     *                                                         un hueco es una pausa; a partir de el, es
+     *                                                         el descanso entre dos jornadas. Es la misma
+     *                                                         cota que el alta y la correccion manuales
+     *                                                         aplican en `WorkDay` (RN-05, 2.3.0)
      */
-    public function __construct(public WorkedDuration $breakContinuationCeiling) {}
-
-    /**
-     * El techo de continuacion, escrito como lo que es: el descanso minimo entre
-     * jornadas de RN-10.
-     *
-     * Constructor con nombre para que el punto de construccion se lea como la
-     * regla y no como un numero: `allowingBreaksShorterThan($policy->minimumRest)`
-     * dice de donde sale el limite, `new ScanIntentPolicy($x)` no.
-     */
-    public static function allowingBreaksShorterThan(WorkedDuration $minimumRestBetweenWorkDays): self
-    {
-        return new self($minimumRestBetweenWorkDays);
-    }
+    public function __construct(public ContinuationCeiling $breakContinuationCeiling) {}
 
     /**
      * La accion que corresponde a este escaneo.
@@ -219,10 +210,19 @@ final readonly class ScanIntentPolicy
             return null;
         }
 
+        // RN-05, el tope (2.3.0): una jornada se continua, como mucho, hasta el
+        // dia civil siguiente al suyo. Una vuelta posterior abre jornada nueva;
+        // nunca se rechaza (regla dura 19).
+        $workDate = $lastAccepted->workDate;
+
+        if ($workDate instanceof WorkDate && $scanAt >= $workDate->next()->endsAt()) {
+            return null;
+        }
+
         // Estricto: con 12 h de descanso minimo, 11 h 59 sigue siendo pausa y
         // 12 h 00 exactas ya son dos jornadas. Misma semantica `[inicio, fin)`
-        // que el resto del dominio.
-        return $lastAccepted->distanceInSecondsTo($scanAt) < $this->breakContinuationCeiling->minutes * 60
+        // que el resto del dominio, y la misma cota que el alta manual.
+        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $scanAt)
             ? $continues
             : null;
     }

@@ -847,6 +847,9 @@
       "employeeLabel": "Persona",
       "clockInLabel": "Hora de entrada",
       "clockOutLabel": "Hora de salida",
+      "endsInBreakLegend": "Cómo terminó",
+      "endsInBreakLabel": "Este tramo terminó en pausa",
+      "endsInBreakHint": "Márcalo si la persona salió a descansar y volvió. Sin marcar, el tramo termina en salida y el que empiece al día siguiente es de otra jornada.",
       "zoneHint": "Escribe la hora en la zona horaria del centro ({zone}), no en la de tu ordenador.",
       "clockOutOpenHint": "En blanco si la persona sigue trabajando ahora mismo: el tramo queda abierto.",
       "clockOutCloseHint": "Este turno está abierto. Rellena la salida para cerrarlo.",
@@ -1304,7 +1307,13 @@
         "in": "Entrada",
         "out": "Salida",
         "worked": "Tiempo trabajado",
-        "version": "Versión"
+        "version": "Versión",
+        "closedBy": "Cómo terminó"
+      },
+      "closedBy": {
+        "clock_out": "Salida",
+        "break_start": "Pausa",
+        "unknown": "Sin dato"
       }
     }
   },

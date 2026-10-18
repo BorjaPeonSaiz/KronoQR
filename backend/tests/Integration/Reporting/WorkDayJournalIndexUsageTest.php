@@ -25,7 +25,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * buffers por tramo—, y la cadena de versiones de `clockingMarks()` hacia `Seq
  * Scan` de `scan_events` en el `JOIN` y de `shift_entries` en el paso recursivo,
  * porque `superseded_by_id` no tenia indice. La pantalla seguia siendo correcta;
- * lo que crecia con los años de retencion (RL-02) era lo que tardaba.
+ * lo que crecia con los años de retencion (RL-02) era lo que tardaba. Desde la
+ * 2.3.0 (ADR-058) `opened_by` y `closed_by` salen de `shift_entries.closed_by`
+ * y la consulta recursiva ya no existe.
  *
  * Mismo planteamiento que `ScanLogIndexUsageTest`: el SQL se captura del puerto
  * real ({@see QueryPlans}) y el volumen es deliberado. Aqui con escaneos QUE
@@ -59,8 +61,7 @@ const WORK_DAY_JOURNAL_INDEX_RECHAZOS = 10_000;
  * de cada siete, partido por una pausa (ADR-024): dos tramos, el primero
  * cerrado por `break_start` y el segundo abierto por `break_end`. Uno de cada
  * diez, CORREGIDO (RN-13): la version vigente no tiene escaneos y la sustituida
- * —con `superseded_by_id`— conserva los suyos, que es exactamente lo que hace
- * subir a `clockingMarks()` por la cadena.
+ * —con `superseded_by_id`— conserva los suyos.
  */
 function diarioConVolumen(): string
 {
@@ -152,7 +153,7 @@ function workDayJournalIndexDay(int $employeeId, int $site, int $day, array &$cu
     if ($day % 7 === 3) {
         $first = Str::uuid7()->toString();
         $second = Str::uuid7()->toString();
-        $current[] = workDayJournalIndexEntry($first, $employeeId, $site, $workDate, $at('06:00'), $at('10:00'), 240);
+        $current[] = workDayJournalIndexEntry($first, $employeeId, $site, $workDate, $at('06:00'), $at('10:00'), 240, closedBy: 'break_start');
         $current[] = workDayJournalIndexEntry($second, $employeeId, $site, $workDate, $at('10:30'), $at('14:00'), 210);
         $scansByEntry[$first] = [['clock_in', $at('06:00')], ['break_start', $at('10:00')]];
         $scansByEntry[$second] = [['break_end', $at('10:30')], ['clock_out', $at('14:00')]];
@@ -218,6 +219,7 @@ function workDayJournalIndexEntry(
     string $out,
     int $minutes,
     int $version = 1,
+    string $closedBy = 'clock_out',
 ): array {
     return [
         'uuid' => $uuid,
@@ -230,6 +232,8 @@ function workDayJournalIndexEntry(
         'status' => 'closed',
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => 'qr_kiosk',
+        // Con los triggers en `replica` no se rellena solo (RN-05, 2.3.0).
+        'closed_by' => $closedBy,
         'version' => $version,
         'superseded_by_id' => null,
         'created_at' => $in,
@@ -284,14 +288,14 @@ it('sirve el diario de un mes entero por indices, sin recorrer scan_events ni sh
             && (str_starts_with(ltrim($sql), 'select') || str_starts_with(ltrim($sql), 'with')),
     );
 
-    // Las cinco: jornadas, tramos con sus marcas `recorded_at`, la cadena de
-    // versiones, los escaneos de la cadena y las correcciones. Si alguna
+    // Las tres: jornadas, tramos con sus marcas `recorded_at` y correcciones.
+    // `opened_by` y `closed_by` salen de `shift_entries.closed_by` desde la
+    // 2.3.0 (ADR-058): ya no se sube por la cadena de versiones. Si alguna
     // desaparece o se multiplica, esta prueba ya no esta mirando lo que el
     // diario ejecuta.
-    expect($queries)->toHaveCount(5);
+    expect($queries)->toHaveCount(3);
 
     $porTramo = false;
-    $porCadena = false;
 
     foreach ($queries as $query) {
         $nodes = QueryPlans::nodes($query);
@@ -301,11 +305,9 @@ it('sirve el diario de un mes entero por indices, sin recorrer scan_events ni sh
             ->and(QueryPlans::scansSequentially($nodes, 'shift_entries'))->toBeFalse("Seq Scan de shift_entries en:\n".$query['sql']);
 
         $porTramo = $porTramo || QueryPlans::usesIndex($nodes, 'scan_events_shift_entry_id_occurred_at_index');
-        $porCadena = $porCadena || QueryPlans::usesIndex($nodes, 'shift_entries_superseded_by_id_unique');
     }
 
-    expect($porTramo)->toBeTrue('Ninguna consulta usa scan_events_shift_entry_id_occurred_at_index')
-        ->and($porCadena)->toBeTrue('Ninguna consulta usa shift_entries_superseded_by_id_unique');
+    expect($porTramo)->toBeTrue('Ninguna consulta usa scan_events_shift_entry_id_occurred_at_index');
 
     // Y el contenido sigue siendo el de antes: la pausa se ve en el tramo que
     // abrio, y el tramo corregido conserva la marca de su version sustituida.

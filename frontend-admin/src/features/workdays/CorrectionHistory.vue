@@ -61,7 +61,7 @@ function performedAt(correction: WorkDayCorrection): string {
     : `${formatCivilDate(parts.date, locale.value)}, ${parts.time}`
 }
 
-type MarkField = 'in' | 'out' | 'worked' | 'version'
+type MarkField = 'in' | 'out' | 'closedBy' | 'worked' | 'version'
 
 /**
  * El valor de un campo en una version del tramo.
@@ -82,6 +82,12 @@ function markValue(marks: ShiftMarks | null, field: MarkField, absent: string): 
       return marks.clocked_out_at === null
         ? t('workdays.history.openMark')
         : instant(marks.clocked_out_at)
+    case 'closedBy':
+      // Abierto: no termino de ninguna forma. Las correcciones anteriores a
+      // la 2.3.0 no lo apuntaban (ADR-058).
+      return marks.clocked_out_at === null
+        ? t('workdays.history.openMark')
+        : t(`workdays.history.closedBy.${marks.closed_by ?? 'unknown'}`)
     case 'worked':
       return duration(marks.worked_minutes)
     case 'version':
@@ -97,6 +103,7 @@ function changesOf(correction: WorkDayCorrection): Change[] {
   const fields: readonly { field: MarkField; label: string }[] = [
     { field: 'in', label: t('workdays.history.fields.in') },
     { field: 'out', label: t('workdays.history.fields.out') },
+    { field: 'closedBy', label: t('workdays.history.fields.closedBy') },
     { field: 'worked', label: t('workdays.history.fields.worked') },
     { field: 'version', label: t('workdays.history.fields.version') },
   ]

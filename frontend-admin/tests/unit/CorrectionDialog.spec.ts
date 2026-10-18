@@ -451,6 +451,7 @@ describe('CorrectionDialog, modo «correct»', () => {
     stubFetch(() =>
       problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
         errors: { clocked_in_at: ['texto crudo del servidor que no debe verse'] },
+        cause: 'opening_moved',
       }),
     )
 
@@ -478,6 +479,36 @@ describe('CorrectionDialog, modo «correct»', () => {
     const clockIn = wrapper.find('[data-test="dialog-clock-in"]').element as HTMLInputElement
 
     expect(clockIn.value).toBe('2026-03-15T00:30')
+  })
+
+  it('un 422 de cambio de jornada colgado de la salida enseña el mensaje del servidor junto a la salida (@RN-05)', async () => {
+    // Adelantar la salida dejaria la vuelta siguiente fuera de la jornada: el
+    // campo es la salida y la pista de «hora de entrada» no diria la verdad.
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
+        errors: { clocked_out_at: ['El tramo siguiente dejaria de continuar la jornada.'] },
+      }),
+    )
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T12:00')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain('El tramo siguiente dejaria de continuar la jornada.')
+    expect(wrapper.text()).not.toContain(es.corrections.wouldChangeWorkDate)
   })
 
   it('un 422 generico con el mismo campo, pero sin el `type` de cambio de jornada, NO se confunde con el', async () => {
@@ -620,6 +651,36 @@ describe('CorrectionDialog, modo «correct»', () => {
 })
 
 describe('CorrectionDialog, modo «void»', () => {
+  it('un 422 de cambio de jornada al anular ensena el mensaje del servidor, que no tiene campo de hora (@RN-05)', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
+        errors: { clocked_in_at: ['Anula antes los tramos que vienen detras.'] },
+      }),
+    )
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'void',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('ERROR_DE_ESCANEO_DUPLICADO')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    const notice = wrapper.find('[data-test="dialog-error"]')
+
+    expect(notice.text()).toContain('Anula antes los tramos que vienen detras.')
+    expect(notice.text()).toContain(es.corrections.dialog.workDateLabel)
+    expect(wrapper.text()).not.toContain(es.corrections.wouldChangeWorkDate)
+  })
+
   it('no pide ninguna hora: solo el motivo, y avisa de que el tramo deja de contar', async () => {
     const wrapper = await mountView(CorrectionDialog, {
       props: {
@@ -722,5 +783,130 @@ describe('CorrectionDialog, modo «void»', () => {
     expect(sentRequests(spy).map((request) => request.body)).toEqual([
       { reason_code: 'OTROS', reason_text: 'Fichaje hecho con la tarjeta de un compañero.' },
     ])
+  })
+})
+
+describe('CorrectionDialog, «Este tramo terminó en pausa» (@RN-05 @RF-PA-04)', () => {
+  it('solo aparece con hora de salida, y el alta lo manda', async () => {
+    const spy = stubFetch(() => jsonResponse(CORRECTED))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'add',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: undefined,
+        entry: undefined,
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-03-14')
+    await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-03-14T06:00')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-ends-in-break"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T14:00')
+    await settle(1)
+
+    expect(wrapper.text()).toContain(es.corrections.dialog.endsInBreakLabel)
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)[0]?.body).toMatchObject({ ends_in_break: true })
+  })
+
+  it('marcarla sola en una correccion basta para corregir y manda solo eso', async () => {
+    const spy = stubFetch(() => jsonResponse({ ...CORRECTED, action: 'modified', version: 2 }))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)).toEqual([
+      {
+        path: `/api/v1/shift-entries/${SHIFT_ENTRY_UUID}`,
+        method: 'PATCH',
+        body: { reason_code: 'AJUSTE_ACORDADO_CON_RRHH', reason_text: null, ends_in_break: true },
+      },
+    ])
+  })
+})
+
+describe('CorrectionDialog, causas del 422 de cambio de jornada (@RN-05)', () => {
+  it('si el tramo no continua la jornada, enseña el mensaje del servidor y no la pista de mover la entrada', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:correction-would-change-work-date', {
+        errors: { clocked_in_at: ['Las horas de este tramo son de otra jornada.'] },
+        cause: 'entry_not_continued',
+      }),
+    )
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-03-16T07:00')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain('Las horas de este tramo son de otra jornada.')
+    expect(wrapper.text()).not.toContain(es.corrections.wouldChangeWorkDate)
+  })
+
+  it('la vista previa enseña como termina el tramo cuando solo cambia eso', async () => {
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
+    await settle(1)
+
+    const preview = wrapper.find('[data-test="dialog-preview"]').text()
+
+    expect(preview).toContain(es.workdays.history.fields.closedBy)
+    expect(preview).toContain(es.workdays.history.closedBy.clock_out)
+    expect(preview).toContain(es.workdays.history.closedBy.break_start)
   })
 })

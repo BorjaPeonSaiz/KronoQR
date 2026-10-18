@@ -847,6 +847,9 @@
       "employeeLabel": "Person",
       "clockInLabel": "Clock-in time",
       "clockOutLabel": "Clock-out time",
+      "endsInBreakLegend": "How it ended",
+      "endsInBreakLabel": "This shift ended in a break",
+      "endsInBreakHint": "Tick it if the person went on a break and came back. Unticked, the shift ends with a clock-out and a shift starting the next day belongs to another working day.",
       "zoneHint": "Type the time in the site's time zone ({zone}), not the one on your computer.",
       "clockOutOpenHint": "Leave it blank if the person is still working right now: the entry stays open.",
       "clockOutCloseHint": "This shift is open. Fill in the clock-out time to close it.",
@@ -1304,7 +1307,13 @@
         "in": "Clock in",
         "out": "Clock out",
         "worked": "Time worked",
-        "version": "Version"
+        "version": "Version",
+        "closedBy": "How it ended"
+      },
+      "closedBy": {
+        "clock_out": "Clock-out",
+        "break_start": "Break",
+        "unknown": "Not recorded"
       }
     }
   },

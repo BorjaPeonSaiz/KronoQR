@@ -167,8 +167,8 @@ final readonly class RecordShiftEntryAudit
             'work_date' => $event->workDate->isoDate,
             'action' => $event->action->value,
             'version' => $event->replacementVersion ?? $event->shiftEntryVersion,
-            'before' => self::marks($event->before?->clockedInAt, $event->before?->clockedOutAt),
-            'after' => self::marks($event->after?->clockedInAt, $event->after?->clockedOutAt),
+            'before' => self::marks($event->before?->clockedInAt, $event->before?->clockedOutAt, $event->before?->closure?->value),
+            'after' => self::marks($event->after?->clockedInAt, $event->after?->clockedOutAt, $event->after?->closure?->value),
             'reason_code' => $event->correction->reason->code->value,
             'performed_by_user_id' => $event->correction->performedByUserId,
             'daily_total_minutes' => $event->dailyTotal->minutes,
@@ -197,7 +197,7 @@ final readonly class RecordShiftEntryAudit
      *
      * @return array<string, string|null>|null
      */
-    private static function marks(?DateTimeImmutable $clockedInAt, ?DateTimeImmutable $clockedOutAt): ?array
+    private static function marks(?DateTimeImmutable $clockedInAt, ?DateTimeImmutable $clockedOutAt, ?string $closedBy): ?array
     {
         // Sin entrada no hay version: un tramo siempre tiene hora de entrada, asi
         // que su ausencia solo puede significar que ese lado no existe.
@@ -208,6 +208,9 @@ final readonly class RecordShiftEntryAudit
         return [
             'clocked_in_at' => $clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
             'clocked_out_at' => $clockedOutAt?->format('Y-m-d\TH:i:s.u\Z'),
+            // Como termino (RN-05, 2.3.0): una correccion que solo declara la
+            // pausa cambia esto y nada mas, y el asiento tiene que decirlo.
+            'closed_by' => $closedBy,
         ];
     }
 
