@@ -17,8 +17,9 @@
 #
 # Uso:
 #   restore.sh --dry-run                   comprueba precondiciones, no toca nada
-#   restore.sh --yes                       restaura la ultima copia verificada
-#   restore.sh --file RUTA --yes           restaura una copia concreta
+#   restore.sh --yes --operator CORREO     restaura la ultima copia verificada
+#   restore.sh --file RUTA --yes --operator CORREO
+#                                          restaura una copia concreta
 #   restore.sh --list                      copias disponibles
 #
 # Opciones:
@@ -26,6 +27,12 @@
 #   --database NOMBRE  base de destino. Por defecto, la del .env (DB_DATABASE)
 #   --dry-run          solo comprobaciones; no crea, no borra, no renombra
 #   --yes              confirma. Sin esto no se restaura nada
+#   --operator CORREO  quien restaura: el correo (o el uuid) de tu cuenta de
+#                      gestion. OBLIGATORIO con --yes cuando la restauracion
+#                      escribe su propio asiento (la base de destino es la de la
+#                      instalacion). Se DECLARA y no se verifica —la base
+#                      restaurada puede no tener esa cuenta— y queda en el
+#                      informe como `declared_operator` (R3-PL-09)
 #   --keep-previous N  dias que se conserva la base anterior. Por defecto 7
 #   --audit-by-caller  NO escribe el asiento de auditoria: lo escribe quien
 #                      llama. Solo lo usa update.sh en su vuelta atras, que
@@ -48,6 +55,14 @@
 # el manifiesto autenticado o la copia es de la 2.1.0 sin bandera: salida 6, sin
 # tocar nada. La FECHA que se muestra y se escribe en el asiento es la de la
 # cabecera autenticada: comprueba que es la que esperas.
+#
+# QUIEN RESTAURA (R3-PL-09, 2.3.0 bloque 3). El servicio `restore` corre como el
+# usuario `app` del contenedor: `id -un` no dice quien esta delante. Por eso la
+# persona se declara con --operator y el informe la guarda como
+# `declared_operator`, marcada como declarada y no verificada. El asiento
+# `system.restored_from_backup` sigue siendo de `system` —lo escribe la propia
+# restauracion, no una cuenta— y remite al informe por su `report_id`: su
+# payload no admite correos (regla dura 21, SystemEventPayload).
 #
 # EL ASIENTO DE AUDITORIA (PR1, regla dura 6, RL-04). Restaurar descarta un
 # intervalo del registro horario, y eso ha de constar DENTRO del registro: tras
@@ -97,7 +112,7 @@
 # vive en lib/exit-codes.sh. Aqui significan:
 #
 #   0  Restaurado y verificado. La base anterior se conserva con su marca.
-#   1  Uso incorrecto, o falta --yes. Nada tocado.
+#   1  Uso incorrecto, falta --yes o falta --operator. Nada tocado.
 #   2  Requisitos no cumplidos: no hay copia, no conecta con PostgreSQL, no hay
 #      espacio o el volcado no es legible. NADA se ha tocado.
 #   3  Estado previo incompatible: quedan conexiones abiertas contra la base de
@@ -145,6 +160,8 @@ FICHERO=""
 BASE_DESTINO=""
 SOLO_COMPROBAR=0
 CONFIRMADO=0
+# Quien restaura, declarado con --operator (R3-PL-09). No se verifica.
+OPERADOR=""
 SOLO_LISTAR=0
 DIAS_ANTERIOR=7
 TRABAJO=""
@@ -563,6 +580,43 @@ comprobar_precondiciones() {
 
   decidir_asiento
   comprobar_asiento_posible
+  comprobar_operador
+}
+
+# Con --yes, la restauracion que escribe su propio asiento exige saber quien
+# esta delante (R3-PL-09): el contenedor corre como `app` y eso no identifica a
+# nadie. Antes de leer la copia: sin --operator no se ha tocado nada.
+comprobar_operador() {
+  [ "$AUDITAR" -eq 1 ] || return 0
+  [ "$CONFIRMADO" -eq 1 ] || return 0
+  [ "$SOLO_COMPROBAR" -eq 0 ] || return 0
+  [ -z "$OPERADOR" ] || return 0
+  die "${KQ_EXIT_USAGE}" "$(texto \
+    "falta --operator: el correo (o el uuid) de la cuenta de gestion de quien restaura. Se declara, no se verifica, y queda en el informe de la restauracion. Repite la orden con --operator tu.correo@hotel.es. No se ha tocado nada." \
+    "--operator is missing: the e-mail (or uuid) of the management account of whoever restores. It is declared, not verified, and kept in the restore report. Repeat the command with --operator your.email@hotel.com. Nothing has been touched.")"
+}
+
+# Quien restaura, en el informe (R3-PL-09). `declared_operator=` va en una linea
+# propia para que se pueda buscar; el usuario del sistema y la maquina se
+# conservan, pero en el contenedor `restore` son siempre `app` y su id.
+informar_operador() {
+  local usuario maquina
+  usuario="$(id -un 2>/dev/null || echo desconocido)"
+  maquina="$(hostname 2>/dev/null || echo desconocido)"
+  if [ -n "$OPERADOR" ]; then
+    informar "Restauracion iniciada por '${OPERADOR}' (declarado con --operator, no verificado), usuario del sistema '${usuario}' en '${maquina}'"
+    informar "declared_operator=${OPERADOR}"
+  else
+    informar "Restauracion iniciada sin --operator (nadie declarado), usuario del sistema '${usuario}' en '${maquina}'"
+  fi
+}
+
+# Lo que admite --operator: un correo o un uuid, sin espacios, comillas ni
+# caracteres de control, porque va tal cual al informe.
+validar_operador() {
+  [[ "$1" =~ ^[A-Za-z0-9._%+@-]{1,190}$ ]] || die "${KQ_EXIT_USAGE}" "$(texto \
+    "--operator tiene que ser el correo o el uuid de tu cuenta de gestion, sin espacios ni comillas. No se ha tocado nada." \
+    "--operator must be the e-mail or uuid of your management account, with no spaces or quotes. Nothing has been touched.")"
 }
 
 # Abre la copia: UNA lectura a un directorio privado y todo lo demas (MAC, huella,
@@ -822,7 +876,7 @@ resumen_dry_run() {
   printf '\n'
   printf 'Nada se ha modificado. Para restaurar de verdad:\n'
   printf '  1. docker compose stop app horizon scheduler reverb\n'
-  printf '  2. %s --file %s --yes\n' "${BASH_SOURCE[0]}" "$FICHERO"
+  printf '  2. %s --file %s --yes --operator <tu correo>\n' "${BASH_SOURCE[0]}" "$FICHERO"
   printf '  3. docker compose up -d\n'
   printf 'Procedimiento completo y tiempos: docs/runbooks/restaurar-backup.md\n'
 }
@@ -879,6 +933,16 @@ main() {
       CONFIRMADO=1
       shift
       ;;
+    --operator)
+      OPERADOR="${2:-}"
+      validar_operador "$OPERADOR"
+      shift 2
+      ;;
+    --operator=*)
+      OPERADOR="${1#*=}"
+      validar_operador "$OPERADOR"
+      shift
+      ;;
     -h | --help)
       uso
       return 0
@@ -913,7 +977,7 @@ main() {
   INFORME_TRABAJO="${TRABAJO}/informe.log"
   : >"$INFORME_TRABAJO"
   informar "Integridad de la copia: ${INTEGRIDAD}$([ "$INTEGRIDAD" != "authenticated" ] || printf ', creada el %s (cabecera autenticada)' "$KQE_CREATED")"
-  informar "Restauracion iniciada por '$(id -un 2>/dev/null || echo desconocido)' desde '$(hostname 2>/dev/null || echo desconocido)'"
+  informar_operador
   informar "Copia: ${FICHERO}"
   informar "Destino: ${BASE_DESTINO} en ${PGHOST}:${PGPORT}"
 

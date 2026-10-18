@@ -266,7 +266,7 @@ KQ_MSG_ES[u_rollback_incomplete]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: 
 Que hay que hacer, en este orden:
   1. Parar lo que escribe:       docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
   2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps restore \\
-                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes
+                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <correo>
   3. Relanzar la version %s:   docker compose --env-file %s -f %s up -d --remove-orphans
   4. Comprobar:                  curl -k https://127.0.0.1:%s/api/v1/health  (debe decir %s)
 Procedimiento completo y tiempos: docs/runbooks/restaurar-backup.md §6 y docs/runbooks/actualizacion-cliente.md §5.
@@ -608,7 +608,7 @@ KQ_MSG_EN[u_rollback_incomplete]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: 
 What to do, in this order:
   1. Stop what writes:            docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
   2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps restore \\
-                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes
+                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <email>
   3. Relaunch version %s:       docker compose --env-file %s -f %s up -d --remove-orphans
   4. Check:                       curl -k https://127.0.0.1:%s/api/v1/health  (must report %s)
 Full procedure and timings: docs/runbooks/restaurar-backup.md §6 and docs/runbooks/actualizacion-cliente.md §5.
