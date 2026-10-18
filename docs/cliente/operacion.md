@@ -427,7 +427,7 @@ mensaje, que es lo que hay que leer.**
 | `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie; no es el certificado, sino las sondas `/health` y `/ready`, un `[FALLO]` de `product:doctor` o un paquete sin él, y el mensaje dice cuál ([`instalacion.md`](instalacion.md) §2). `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6. `install.sh` y `update.sh`: la firma de cosign de una imagen del producto **no es válida** (solo se comprueba si tienes cosign instalado, §7.1 de [`instalacion.md`](instalacion.md)); `update.sh` sale en el paso 1 sin tocar nada e `install.sh` deshace lo escrito. No instales esas imágenes y avisa al fabricante con el detalle que imprime el script |
 | `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: **no repitas la restauración**. Si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás |
 | `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. `restore.sh`: una señal ANTES del intercambio de bases elimina la base de trabajo y sale con ellas (la base de destino no se toca); DURANTE el intercambio la señal se difiere hasta dejar la instalación coherente y entonces sale con `8`. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
@@ -435,11 +435,19 @@ mensaje, que es lo que hay que leer.**
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
 muestra y no bloquea, y solo un fallo (`2`) se traduce al `6` de la tabla de
-arriba. En `update.sh` el diagnóstico no se traduce a `6`: es informativo, y
-un fallo de `product:doctor` en la versión nueva provoca la vuelta atrás
-(código `4`) igual que cualquier otro fallo del paso 5, nunca un `6`. La única
-traducción a `6` que sí existe en `update.sh` es otra cosa por completo: el
-asiento `system.updated` que el paso 5 deja en `audit_log` (sección 11).
+arriba. En `update.sh` el diagnóstico **es solo informativo**: ni un aviso ni
+un fallo de `product:doctor` en la versión nueva deshacen la actualización ni
+la convierten en un `6`. Se muestran en pantalla con qué hacer y quedan en el
+informe («correcto», «correcto, con avisos» o «con fallos (informativo, no
+bloquea)»), y la actualización sigue:
+la versión nueva ya está verificada por las sondas, la cadena de auditoría y
+los privilegios, y casi todo lo que `product:doctor` puede encontrar en rojo es
+del servidor (disco, certificado, correo), no de la versión. **Lo único que
+deshace es que la imagen no traiga `product:doctor`**: eso es un paquete roto,
+y vuelve atrás con `4`. Si la actualización termina con un `product:doctor` en
+rojo, corrígelo después con `./doctor.sh` (§12.1). La única traducción a `6`
+que sí existe en `update.sh` es otra cosa por completo: el asiento
+`system.updated` que el paso 5 deja en `audit_log` (sección 11).
 
 ### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
 
@@ -1067,7 +1075,7 @@ que se ha quedado atrás no espera a la ventana»).
 
 ```bash
 cd /opt                                   # el paquete nuevo, AL LADO del actual
-tar xzf kronoqr-<version>.tar.gz
+sudo tar xzf kronoqr-<version>.tar.gz
 cd kronoqr-<version>
 sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta algo
 sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
@@ -1542,6 +1550,127 @@ como estaban. Si nadie usa el inglés, desmárcalo ahí y desaparece el selector
 ([`configuracion.md`](configuracion.md) §2.3). No hace falta tocar
 `APP_SUPPORTED_LOCALES` del `.env`: es solo un respaldo.
 
+**Al actualizar a la 2.3.0: la parada.** La misma de cada actualización
+(arriba): alrededor de un minuto de `503`, que cubre la cola de la tablet. La
+2.3.0 añade dentro de esa ventana el relleno de «cómo terminó» cada tramo (más
+abajo), que en una instalación de 100 personas con cuatro años de registro es
+del orden de 10 segundos más.
+
+**Al actualizar a la 2.3.0: las órdenes de consola que firman, por correo o por
+uuid.** Las órdenes con valor legal que se lanzan en el servidor firman su
+asiento con una cuenta de gestión, y la identifican con `--responsible`. Lo que
+cambia:
+
+- **`--responsible` ya no admite el número interno de la cuenta**: se escribe
+  su **correo o su uuid** (los da
+  `docker compose exec app php artisan identity:list-users`). Con un número, la
+  orden sale con `2`, explica el cambio y **no escribe nada**.
+- **Antes de confirmar, enseña quién firma**: `Firma: nombre <correo> · rol ·
+  uuid`. **Con `--force` o sin terminal** (un `cron`, un guion), exige además
+  `--responsible-confirm=<correo>` con el correo de esa misma cuenta.
+- **Firma quien puede hacer lo mismo desde el panel**: una cuenta activa con
+  rol admin o rrhh, y solo admin para el paquete de diagnóstico con datos
+  personales. Una cuenta de otro rol o dada de baja no firma.
+- **Dónde se nota:** `workforce:correct-site-timezone`;
+  `compliance:apply-retention`, que para **ejecutar** la purga exige ahora
+  `--responsible` (la simulación semanal no); `compliance:reconcile-work-record`
+  con `--acknowledge` o `--acknowledge-site-change`; `credentials:deliver`, que
+  **ya no admite `--by`** (se rechaza con `2`: usa `--responsible`); y
+  `product:diagnostics --with-personal-data`, que exige `--responsible` de una
+  cuenta admin.
+- **`restore.sh` pide `--operator`** con `--yes` cuando la restauración escribe
+  su propio asiento, que es el caso normal (restaurar la base de la
+  instalación): el correo o el uuid de quien restaura. Se declara y no se
+  comprueba —la base restaurada puede no tener esa cuenta—, y queda en el
+  informe como `declared_operator`. Sin él, sale con `1` sin tocar nada.
+
+**Si tienes guiones o tareas programadas propias con alguna de esas órdenes,
+cámbialos antes de actualizar**: con el número de la cuenta, con `--by` o sin
+`--operator` salen con error y no hacen nada. Los ejemplos completos están en
+§3, §9 y §12.3, y en [`configuracion.md`](configuracion.md) (fila
+`APP_TIMEZONE`).
+
+**Al actualizar a la 2.3.0: la zona del centro, fija también en la base de
+datos.** Desde la 2.2.1 el panel y la API ya no dejaban cambiar la zona con
+fichajes hechos. Desde la 2.3.0 **tampoco lo deja la base de datos** a quien
+escriba por fuera del producto: la única vía es la orden de consola de
+corrección, que deja cada cambio en una traza que la aplicación no puede
+borrar. No tienes que hacer nada. Lo que puedes ver:
+
+- **La conciliación nocturna del registro coteja también la zona** con su
+  último asiento. Si no cuadran, lo denuncia como `site_timezone_differs_from_audit`
+  y salta `DiscrepanciaEntreRegistroYAuditoria`: alguien ha escrito por fuera
+  del producto ([`../runbooks/discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md)).
+- **Una discrepancia ya investigada se da por revisada** con
+  `compliance:reconcile-work-record --acknowledge-site-change=…`, con motivo y
+  `--responsible`, igual que una purga revisada (el procedimiento, en ese
+  runbook, §3.1 bis).
+- **Tres alertas nuevas** (§10.4): `CambioDeZonaRevisado` (crítica) y
+  `DiscrepanciaDeZonaRevisada` saltan cuando alguien da por revisada una
+  discrepancia de la zona; `ZonaDelCentroNoVerificable` es informativa y no
+  notifica.
+- **Lo anterior a la 2.3.0 no se denuncia.** La actualización fija una línea
+  base: un cambio de zona hecho desde el panel de la 2.1.0 o la 2.2.0 cuenta
+  como «no verificable», no como discrepancia.
+
+**Al actualizar a la 2.3.0: una jornada solo continúa al día siguiente si el
+tramo anterior terminó en pausa** (RN-05, ADR-058). Cada tramo guarda ahora
+**cómo terminó**: en salida o en pausa. Lo que cambia:
+
+- **En la tablet, nada que se note.** «Pausa» cierra el tramo en pausa y la
+  vuelta continúa la jornada, como siempre. Lo nuevo es el tope: una vuelta de
+  pausa que llega **más allá del día siguiente** a la jornada, o de alguien que
+  ya no está en pausa, abre una jornada nueva. **Nunca se rechaza**.
+- **En el panel, al añadir o corregir un tramo a mano**, hay una casilla nueva,
+  «Este tramo terminó en pausa». Un tramo que empieza el día siguiente solo se
+  admite en la misma jornada si el anterior la tiene marcada, empieza antes de
+  que se cumpla el descanso mínimo y cae, como mucho, el día siguiente. Si no,
+  el panel lo rechaza y dice por qué. Y ningún tramo puede empezar después del
+  cese de la persona. El historial de cada tramo y su vista previa enseñan la
+  fila «Cómo terminó».
+- **La actualización rellena el dato** a partir de los escaneos «Pausa». Los
+  tramos cerrados a mano antes de la 2.3.0 quedan como terminados en salida,
+  que es lo que el registro decía de ellos. **No se toca ningún tramo ni
+  ninguna jornada.** Puede haber tramos escritos a mano antes de la 2.3.0 que
+  hoy se rechazarían: las consultas para encontrarlos, y qué hacer con cada
+  uno, están en
+  [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)
+  §3 bis.
+- **La exportación para la Inspección** dice en cada corrección si el tramo
+  terminaba en salida o en pausa, antes y después: una corrección que solo
+  declara la pausa ya no sale con el antes y el después iguales. La
+  exportación íntegra de datos (§13) trae la columna `closed_by`.
+
+**Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
+ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
+venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,
+y cada uno trae su «Que hacer»:
+
+- **«Las copias no salen del servidor»**: `BACKUP_PATH` está en el mismo disco
+  que los datos. Si ese disco se pierde, se pierden con él la base y todas las
+  copias (§9, «Las copias tienen que salir del servidor»).
+- **«KIOSK_VLAN_CIDR coincide con el ejemplo de la plantilla»**: si de verdad
+  es la VLAN de tus quioscos, no hay nada que hacer; si no, cómo comprobarlo
+  está en [`instalacion.md`](instalacion.md) §6.
+- **«Prometheus no tiene cargadas … regla(s) de alerta del paquete»**: tras
+  una actualización que cambia `observability/` hay que recrear Prometheus; la
+  orden viene en el propio aviso.
+
+**Al actualizar desde la 2.2.0: la aplicación de la tablet puede cambiar de
+nombre y de icono.** Desde la 2.2.1 la tablet se instala con el nombre y el
+icono de tu marca, si la tienes configurada ([`instalacion.md`](instalacion.md)
+§1.8). Una tablet ya instalada puede cambiarlos sola, pedir confirmación en su
+pantalla o quedarse como estaba: depende de Chrome. **No afecta al fichaje.**
+Si lo pide, acéptalo.
+
+**Al actualizar desde la 2.2.0: una cuenta de auditoría con el panel abierto
+puede ver «Presencia» unas horas.** Desde la 2.2.1 ese rol solo ve
+«Inspección» (arriba). Si alguien con ese rol tenía el panel abierto durante
+la actualización y no lo recarga, el menú puede seguir mostrando «Presencia»
+hasta que caduque su sesión, como mucho 12 horas
+(`IDENTITY_SESSION_TOKEN_HOURS`). Al abrirla, el servidor responde que no tiene
+permiso y no enseña nada. Recargar la página lo corrige.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
@@ -1788,8 +1917,11 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
 Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
 nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del resto
-del documento; quien lo reciba puede comprobar que no se alteró por el camino
-con `php artisan product:diagnostics --verify=<fichero>`.
+del documento, y con ella se comprueba que no se alteró ni se cortó por el
+camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
+enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
+comando al generarlo:
+`docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
 
 **Qué lleva:** versión y entorno, configuración **solo de una lista de claves
 permitidas** (nunca `LICENSE_KEY`, claves de firma del QR, de cifrado de
@@ -2144,7 +2276,8 @@ aplicación con el `uuid` de la exportación). Corrige la causa y genera otra.
 Viene **desactivada** y el sistema funciona exactamente igual sin ella. Solo
 se envía si se cumplen **tres** condiciones a la vez: `TELEMETRY_ENABLED=true`,
 un destino `https://` en `TELEMETRY_ENDPOINT` y una licencia que incluya la
-funcionalidad `telemetry` (`php artisan license:show` lo enseña). Si falta
+funcionalidad `telemetry` (`docker compose exec app php artisan license:show`
+lo enseña). Si falta
 cualquiera de las tres, `product:telemetry` lo dice y no se envía nada. Cuando
 se cumplen, los lunes a las 05:40 UTC se envía un informe con
 versiones, estado de la licencia, tamaño de la instalación por tramos y
@@ -2468,6 +2601,17 @@ corrige la causa en el servidor y sigue
 Un fichaje que el servidor **rechaza** —una tarjeta revocada, uno que no cabe en
 la jornada («Fichaje fuera de orden», [`guia-rrhh.md`](guia-rrhh.md) §4.4)— no
 atasca nada: tiene respuesta, y la cola sigue.
+
+**Los fichajes por PIN se vacían despacio, y es a propósito.** Los de tarjeta
+viajan en lotes de hasta 50; los de PIN, **de uno en uno**, y el servidor admite
+como mucho **10 por minuto y por tablet** (`KIOSK_PIN_SCAN_RATE_PER_DEVICE`) y
+60 por minuto desde una misma dirección (`KIOSK_PIN_SCAN_RATE_PER_IP`): es el
+freno contra quien prueba PIN a ciegas. Una tablet que recupera la red con 40
+fichajes por PIN en la cola tarda **unos 4 minutos** en vaciarlos, y lo que se
+fichó detrás de ellos espera su turno. No es un atasco: en el panel,
+«Pendientes» baja, aunque despacio. Ningún fichaje cambia de hora, porque cada
+uno conserva el momento en que se hizo. **No subas esos límites para
+acelerarlo**: debilitan la protección del PIN.
 
 **Dos situaciones nuevas en la pantalla «Quioscos»** (desde la 2.2.0):
 
@@ -3333,6 +3477,35 @@ sudo docker compose logs --tail 100 scheduler horizon
 Si se vuelven a parar, adjunta esos registros al paquete de diagnóstico
 (§12.2). Después de arrancar `scheduler`, comprueba que la última copia es de
 hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2).
+
+### …`./doctor.sh` avisa de «bases de una restauración que no terminó»
+
+**Síntoma.** `[aviso] Hay bases de una restauracion que no termino:
+fichaje_restore_20261012T031500Z`, y en su «Que hacer» una orden con dos huecos,
+`<migrador>` y `<nombre>`.
+
+**Qué es.** Una restauración crea primero una base de trabajo con un nombre
+`<base>_restore_<fecha>`; si muere sin limpiar (`kill -9`, un corte de luz),
+esa base se queda. **No la usa nadie, pero lleva una copia entera de los datos
+personales**, y por eso `doctor.sh` la señala cuando tiene más de un día. Las
+que se llaman `<base>_pre_restore_<fecha>` son otra cosa —la base anterior a
+una restauración que sí terminó— y **no** salen en este aviso.
+
+**Qué hacer.** Primero, asegúrate de que no hay ninguna restauración en marcha
+(`pgrep -af restore.sh` no debe devolver nada). Después, rellena los dos
+huecos: `<migrador>` es el valor de `DB_MIGRATION_USERNAME` de tu `.env`
+(`fichaje_migrator` de serie), y `<nombre>`, cada uno de los nombres que da el
+aviso, de uno en uno. Desde el directorio vigente:
+
+```bash
+sudo grep '^DB_MIGRATION_USERNAME=' .env
+sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
+./doctor.sh
+```
+
+La orden no pide contraseña: se ejecuta dentro del contenedor de PostgreSQL.
+Las comillas dobles alrededor del nombre son necesarias. Si `doctor.sh` ya no
+lo avisa, está resuelto.
 
 ### …la actualización se cortó a mitad (sesión SSH, Ctrl+C) y no sabes cómo acabó
 

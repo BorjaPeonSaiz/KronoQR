@@ -92,8 +92,8 @@ señales técnicas y conviene saber qué significa cada una.
 | `access.denied` | `audit_log` | Alguien autenticado fue a por datos fuera de su alcance y se le negó (RF-ID-03). Uno es un error de interfaz; una serie es tanteo |
 | `auth.lockout_started` | `audit_log` | Se abrió un bloqueo por intentos (RS-12, ADR-039) |
 | `legal_export.generated` | `audit_log` | Se generó una exportación legal. **Los datos salieron del servidor** |
-| `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` | Alertmanager, [`work-record.yml`](../../infra/observability/prometheus/rules/work-record.yml) | Un tramo del registro horario no cuadra con su asiento de auditoría (ADR-057 §4): tramo inventado, cambiado o borrado fuera de la aplicación. Su procedimiento es [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) |
-| `KronoqrAuthFailureBurst` · `KronoqrAuthLockouts` · `KronoqrAuthFailureSpike` | Alertmanager, [`auth.yml`](../../infra/observability/prometheus/rules/auth.yml) | Ataque a credenciales (MITRE ATT&CK T1110 / T1110.004). Su procedimiento es [`ataque-a-credenciales.md`](ataque-a-credenciales.md): **vuelve aquí solo si alguna cuenta llegó a entrar** |
+| `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` | Alertmanager, `work-record.yml` | Un tramo del registro horario no cuadra con su asiento de auditoría (ADR-057 §4): tramo inventado, cambiado o borrado fuera de la aplicación. Su procedimiento es [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) |
+| `KronoqrAuthFailureBurst` · `KronoqrAuthLockouts` · `KronoqrAuthFailureSpike` | Alertmanager, `auth.yml` | Ataque a credenciales (MITRE ATT&CK T1110 / T1110.004). Su procedimiento es [`ataque-a-credenciales.md`](ataque-a-credenciales.md): **vuelve aquí solo si alguna cuenta llegó a entrar** |
 
 Las tres consultas que dicen en un minuto si hay algo raro. Lecturas con el rol
 de la aplicación, que tiene `SELECT` sobre `audit_log` y nada más:
@@ -614,8 +614,9 @@ salvo concesión expresa, temporal y auditada del cliente.
 
 ---
 
-**Relacionado.** Un hallazgo de Semgrep o Trivy en la CI no es una brecha: se tría con
-[`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md). La última revisión de
+**Relacionado.** Un hallazgo de Semgrep o Trivy en la CI no es una brecha: lo tría el
+fabricante con su runbook interno `triaje-hallazgos-seguridad.md`, que no viaja en el
+paquete. La última revisión de
 seguridad del producto (interna, nivel ASVS 2, y la externa que exige RS-11) y su calendario
 viven en el repositorio del fabricante (`docs/seguridad/paquete-revisor.md`), que no forma
 parte de este paquete: si el DPO del cliente la necesita para valorar una brecha, la pide al

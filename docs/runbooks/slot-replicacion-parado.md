@@ -1,7 +1,7 @@
 # Runbook — hay un slot de replicación parado que retiene WAL
 
 **Alerta que lleva aquí:** `SlotDeReplicacionParado`, definida en
-[`infra/observability/prometheus/rules/backup.yml`](../../infra/observability/prometheus/rules/backup.yml).
+`infra/observability/prometheus/rules/backup.yml`.
 
 | Alerta | Umbral | Severidad | Destinatario |
 | --- | --- | --- | --- |

@@ -67,8 +67,8 @@ apartado *Assets*, `kronoqr-<versión>.tar.gz` y `SHA256SUMS`, en `/opt`:
 
 ```bash
 cd /opt
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
@@ -84,7 +84,7 @@ lo publicó.** Baja también `SHA256SUMS.bundle` (tercer fichero del apartado
 porque un paquete sustituido llevaría una a su medida—:
 
 ```bash
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS.bundle
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS.bundle
 cosign verify-blob \
   --bundle SHA256SUMS.bundle \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -107,7 +107,7 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
 
    ```bash
    cd /opt
-   tar xzf kronoqr-2.2.0.tar.gz          # crea /opt/kronoqr-2.2.0
+   sudo tar xzf kronoqr-2.2.0.tar.gz     # crea /opt/kronoqr-2.2.0
    ls /opt                                # kronoqr-2.1.0  kronoqr-2.2.0
    ```
 
@@ -129,7 +129,7 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
    > cd /opt
    > tar xzf kronoqr-2.1.0.tar.gz -O kronoqr-2.1.0/docker-compose.yml | sudo tee /opt/kronoqr-2.1.0/docker-compose.yml >/dev/null
    > # 2. Descomprimir el paquete nuevo AL LADO
-   > tar xzf kronoqr-2.2.0.tar.gz
+   > sudo tar xzf kronoqr-2.2.0.tar.gz
    > # 3. Actualizar desde el directorio nuevo
    > cd /opt/kronoqr-2.2.0 && sudo ./update.sh
    > ```

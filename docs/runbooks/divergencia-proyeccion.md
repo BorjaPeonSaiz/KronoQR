@@ -10,7 +10,7 @@ los números —el comando ya los arregló— sino averiguar cómo se desviaron.
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Divergencia en reconciliación
 nocturna | cualquiera | Crítica | IT del cliente»*), definidas en
-[`infra/observability/prometheus/rules/projection.yml`](../../infra/observability/prometheus/rules/projection.yml):
+`infra/observability/prometheus/rules/projection.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Copia de seguridad fallida o no
 verificada | cualquiera | Crítica | IT del cliente»*), definidas en
-[`infra/observability/prometheus/rules/backup.yml`](../../infra/observability/prometheus/rules/backup.yml):
+`infra/observability/prometheus/rules/backup.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
@@ -662,7 +662,9 @@ antes de decidir qué ocurrió, así que nunca deja la instalación sin base de
 producción por una señal. Una base `<base>_restore_<fecha>` de más de un día en
 `pg_database` es de una restauración que murió sin limpiar (por ejemplo, con
 `kill -9`): `restore.sh` y `doctor.sh` lo avisan y se elimina con
-`DROP DATABASE "<nombre>" WITH (FORCE)`.
+`DROP DATABASE "<nombre>" WITH (FORCE)`. La orden completa, con qué poner en
+cada hueco, está en [`../cliente/operacion.md`](../cliente/operacion.md) §18,
+«…`./doctor.sh` avisa de "bases de una restauración que no terminó"».
 
 Si la restauración la lanzó `update.sh` en su vuelta atrás, la salida `8` cuenta como
 restaurada y la vuelta atrás sigue; `update.sh` ignora una segunda señal mientras
@@ -710,7 +712,7 @@ La ruta lleva la versión porque el directorio vigente cambia con cada actualiza
 El simulacro lee el `.env` que está junto al script (el del directorio vigente, `/opt/kronoqr-<version>/.env`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
 En el repositorio del fabricante lo ejecuta
-[`.github/workflows/backup-drill.yml`](../../.github/workflows/backup-drill.yml)
+`.github/workflows/backup-drill.yml`
 con la misma cadencia, sobre datos de prueba: eso demuestra que **el
 procedimiento** funciona. La entrada de cron demuestra que funcionan **las
 copias de este cliente**, que es lo que preguntará una inspección. Hacen falta

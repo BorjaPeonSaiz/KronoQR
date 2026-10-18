@@ -439,7 +439,7 @@ is in the message, which is what you have to read.**
 | `3` | **Incompatible prior state. NOTHING written** | `install.sh`: there is already an installation (use `update.sh`). `backup.sh`: there is no backup to verify, or the destination already exists. `restore.sh`: there are still open connections against the database. `update.sh`: already on the target version, or there is no installation to update. `doctor.sh`: **there is no installation to diagnose** on this server — if it is a new one, what you need is `install.sh` |
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
-| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`) or because `scheduler` or `horizon` are stopped; with the application stopped, in one of the external checks. The message says what to read |
+| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up; it is not the certificate but the `/health` and `/ready` probes, a `[FAILURE]` from `product:doctor` or a package without it, and the message says which ([`installation.md`](installation.md) §2). `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`) or because `scheduler` or `horizon` are stopped; with the application stopped, in one of the external checks. The message says what to read |
 | `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish). `install.sh` and `update.sh`: the cosign signature of a product image is **not valid** (only checked if you have cosign installed, §7.1 of [`installation.md`](installation.md)); `update.sh` exits at step 1 touching nothing and `install.sh` undoes what it wrote. Do not install those images and tell the vendor with the detail the script prints |
 | `8` | **Restore completed but interrupted by a signal.** `restore.sh` only: the signal arrived during or after the database swap. The restored database is ALREADY in service and the previous one is kept with its mark | `restore.sh`: **do not restore again**. If the audit entry was also left pending, it exits with `6` and the command that writes it. `update.sh` treats it as restored and carries on with its rollback |
 | `129`, `130`, `143` | **Interrupted before writing anything**: `129` dropped SSH session, `130` Ctrl+C, `143` `kill`. NOTHING written | `install.sh` and `update.sh`: only in the phases that have not touched anything yet; once they start writing, an interruption is treated as a failure and exits with `4` or `5` after rolling back. `restore.sh`: a signal BEFORE the database swap drops the working database and exits with them (the target database is not touched); DURING the swap the signal is deferred until the installation is consistent and then it exits with `8`. Run them inside `tmux` or `screen` (`installation.md` §1.4) |
@@ -447,11 +447,19 @@ is in the message, which is what you have to read.**
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
 phase (RF-PD-13): in `install.sh` a warning (`product:doctor` code `1`) is
 shown and does not block, and only a failure (`2`) translates into the `6` of
-the table above. In `update.sh` the diagnostic never translates into `6`: it
-is informational, and a `product:doctor` failure on the new version triggers
-the rollback (code `4`) just like any other failure in step 5, never a `6`.
-The only translation into `6` that does exist in `update.sh` is something
-else entirely: the `system.updated` entry that step 5 leaves in `audit_log`
+the table above. In `update.sh` the diagnostic **is informational only**:
+neither a warning nor a failure from `product:doctor` on the new version undoes
+the update or turns it into a `6`. They are shown on screen with what to do and
+recorded in the report ("ok", "ok, with warnings" or "with failures
+(informational, non-blocking)"), and the
+update goes on: the new version is already verified by the probes, the audit
+chain and the privileges, and almost everything `product:doctor` can find in
+red belongs to the server (disk, certificate, mail), not to the version. **The
+only thing that rolls back is the image not carrying `product:doctor`**: that
+is a broken package, and it rolls back with `4`. If the update finishes with
+`product:doctor` in red, fix it afterwards with `./doctor.sh` (§12.1). The only
+translation into `6` that does exist in `update.sh` is something else
+entirely: the `system.updated` entry that step 5 leaves in `audit_log`
 (section 11).
 
 ### If you had a cron job written against the previous `backup.sh` table
@@ -1080,7 +1088,7 @@ for the window").
 
 ```bash
 cd /opt                                   # the new package, NEXT TO the current one
-tar xzf kronoqr-<version>.tar.gz
+sudo tar xzf kronoqr-<version>.tar.gz
 cd kronoqr-<version>
 sudo ./update.sh --check-only             # without touching anything: what is missing, if anything
 sudo ./update.sh                          # updates, verifies and rolls itself back if it fails
@@ -1557,6 +1565,129 @@ portal stay as they were. If nobody uses English, untick it there and the
 selector disappears ([`configuration.md`](configuration.md) §2.3). There is no
 need to touch `APP_SUPPORTED_LOCALES` in the `.env`: it is only a fallback.
 
+**When updating to 2.3.0: the downtime.** The same as every update (above):
+around one minute of `503`, which the tablet's queue covers. Within that
+window, 2.3.0 adds filling in "how it ended" for each shift (below), which on an
+installation of 100 people with four years of records is in the order of 10
+seconds more.
+
+**When updating to 2.3.0: console commands that sign, by e-mail or by uuid.**
+The commands with legal value run on the server sign their audit entry with a
+management account, identified with `--responsible`. What changes:
+
+- **`--responsible` no longer accepts the account's internal number**: you
+  write its **e-mail or uuid** (given by
+  `docker compose exec app php artisan identity:list-users`). With a number,
+  the command exits with `2`, explains the change and **writes nothing**.
+- **Before confirming, it shows who signs**: `Signed by: name <e-mail> · role ·
+  uuid`. **With `--force` or without a terminal** (a `cron`, a script), it also
+  requires `--responsible-confirm=<e-mail>` with that same account's e-mail.
+- **Whoever can do the same from the panel signs**: an active account with the
+  admin or rrhh role, and only admin for the diagnostics bundle with personal
+  data. An account with another role or deactivated does not sign.
+- **Where you notice it:** `workforce:correct-site-timezone`;
+  `compliance:apply-retention`, which now requires `--responsible` to
+  **execute** the purge (the weekly simulation does not);
+  `compliance:reconcile-work-record` with `--acknowledge` or
+  `--acknowledge-site-change`; `credentials:deliver`, which **no longer accepts
+  `--by`** (rejected with `2`: use `--responsible`); and
+  `product:diagnostics --with-personal-data`, which requires `--responsible`
+  from an admin account.
+- **`restore.sh` asks for `--operator`** with `--yes` when the restore writes
+  its own audit entry, which is the normal case (restoring the installation's
+  database): the e-mail or uuid of whoever restores. It is declared and not
+  checked —the restored database may not have that account— and it is kept in
+  the report as `declared_operator`. Without it, it exits with `1` without
+  touching anything.
+
+**If you have scripts or scheduled tasks of your own with any of those
+commands, change them before updating**: with the account number, with `--by`
+or without `--operator` they exit with an error and do nothing. The complete
+examples are in §3, §9 and §12.3, and in
+[`configuration.md`](configuration.md) (the `APP_TIMEZONE` row).
+
+**When updating to 2.3.0: the site's time zone, fixed in the database too.**
+Since 2.2.1 the panel and the API no longer let you change the zone once there
+are clock-ins. From 2.3.0 **the database does not let anyone writing outside
+the product change it either**: the only way is the console correction
+command, which records each change in a trail the application cannot delete.
+You do not have to do anything. What you may see:
+
+- **The nightly work record reconciliation also checks the zone** against its
+  latest audit entry. If they do not match, it reports it as
+  `site_timezone_differs_from_audit` and `DiscrepanciaEntreRegistroYAuditoria`
+  fires: someone has written outside the product
+  ([`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md),
+  in Spanish).
+- **A discrepancy already investigated is marked as reviewed** with
+  `compliance:reconcile-work-record --acknowledge-site-change=…`, with a reason
+  and `--responsible`, like a reviewed purge (the procedure is in that
+  runbook, §3.1 bis).
+- **Three new alerts** (§10.4): `CambioDeZonaRevisado` (critical) and
+  `DiscrepanciaDeZonaRevisada` fire when someone marks a zone discrepancy as
+  reviewed; `ZonaDelCentroNoVerificable` is informational and does not notify.
+- **What came before 2.3.0 is not reported.** The update sets a baseline: a
+  zone change made from the 2.1.0 or 2.2.0 panel counts as "not verifiable",
+  not as a discrepancy.
+
+**When updating to 2.3.0: a work day only continues into the next day if the
+previous shift ended in a break** (RN-05, ADR-058). Each shift now records
+**how it ended**: with a clock-out or a break. What changes:
+
+- **On the tablet, nothing noticeable.** "Break" closes the shift in a break
+  and coming back continues the work day, as always. What is new is the cap: a
+  return from a break that arrives **later than the day after** the work day,
+  or from someone who is no longer on a break, opens a new work day. **It is
+  never rejected**.
+- **In the panel, when adding or correcting a shift by hand**, there is a new
+  checkbox, "This shift ended in a break". A shift that starts the next day is
+  only accepted in the same work day if the previous one has it ticked, starts
+  before the minimum rest is reached and falls, at the latest, on the next
+  day. Otherwise the panel rejects it and says why. And no shift can start
+  after the person's termination. Each shift's history and its preview show
+  the "How it ended" row.
+- **The update fills in the information** from the "Break" scans. Shifts
+  closed by hand before 2.3.0 are left as ended with a clock-out, which is what
+  the record said about them. **No shift and no work day is touched.** There
+  may be shifts written by hand before 2.3.0 that would be rejected today: the
+  queries to find them, and what to do with each one, are in
+  [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) §3 bis
+  (in Spanish).
+- **The export for the Labour Inspectorate** says in each correction whether
+  the shift ended with a clock-out or a break, before and after: a correction
+  that only declares the break no longer comes out with identical before and
+  after. The full data export (§13) carries the `closed_by` column.
+
+**When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
+it was green.** 2.2.1 added three warnings that an installation coming from
+2.2.0 will see for the first time. **None of them stops clocking or
+updating**, and each one brings its "What to do":
+
+- **"The backups do not leave the server"**: `BACKUP_PATH` is on the same disk
+  as the data. If that disk is lost, the database and all the backups are lost
+  with it (§9, "The backups must leave the server").
+- **"KIOSK_VLAN_CIDR matches the template example"**: if it really is your
+  kiosk VLAN, there is nothing to do; if not, how to check it is in
+  [`installation.md`](installation.md) §6.
+- **"Prometheus has … alert rule(s) from the package not loaded"**: after an
+  update that changes `observability/`, Prometheus has to be recreated; the
+  command comes in the warning itself.
+
+**When updating from 2.2.0: the tablet app may change name and icon.** Since
+2.2.1 the tablet installs with your brand's name and icon, if you have it
+configured ([`installation.md`](installation.md) §1.8). A tablet already
+installed may change them by itself, ask for confirmation on its screen or
+stay as it was: it depends on Chrome. **It does not affect clocking.** If it
+asks, accept.
+
+**When updating from 2.2.0: an audit account with the panel open may see
+"Presence" for a few hours.** Since 2.2.1 that role only sees "Inspectorate"
+(above). If someone with that role had the panel open during the update and
+does not reload it, the menu may keep showing "Presence" until their session
+expires, 12 hours at most (`IDENTITY_SESSION_TOKEN_HOURS`). On opening it, the
+server answers that they lack permission and shows nothing. Reloading the page
+fixes it.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which
@@ -1805,8 +1936,11 @@ through your contract's channel. **Support does not go into your server**
 It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 unencrypted on purpose: **open it before sending it** and check that it carries
 nothing you do not want to send. Its header (`manifest`) carries the
-fingerprint of the rest of the document; whoever receives it can check that it
-was not altered on the way with `php artisan product:diagnostics --verify=<fichero>`.
+fingerprint of the rest of the document, and with it you can check that it was
+not altered or cut short on the way. Support checks it on receipt; to check it
+yourself before sending it, from the installation directory and with the path
+the command printed when it generated it:
+`docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
 
 **What it carries:** version and environment, configuration **only from an
 allow-list of keys** (never `LICENSE_KEY`, QR signing keys, backup encryption
@@ -2171,7 +2305,8 @@ application log with the export's `uuid`). Fix the cause and generate another.
 It ships **disabled** and the system works exactly the same without it. It is
 only sent if **three** conditions are met at once: `TELEMETRY_ENABLED=true`,
 an `https://` destination in `TELEMETRY_ENDPOINT` and a licence that includes
-the `telemetry` feature (`php artisan license:show` shows it). If any of the
+the `telemetry` feature (`docker compose exec app php artisan license:show`
+shows it). If any of the
 three is missing, `product:telemetry` says so and nothing is sent. When they
 are met, on Mondays at 05:40 UTC a report is sent with versions, licence
 status, installation size in bands and aggregate counters; **never** data
@@ -2501,6 +2636,17 @@ tablet's queue**, fix the cause on the server and follow
 (in Spanish). A clock-in the server **rejects** —a revoked card, one that does
 not fit the working day ("Out-of-order clocking", [`hr-guide.md`](hr-guide.md)
 §4.4)— holds nothing up: it has an answer, and the queue moves on.
+
+**PIN clock-ins drain slowly, and on purpose.** Card clock-ins travel in
+batches of up to 50; PIN ones, **one at a time**, and the server accepts at
+most **10 per minute and per tablet** (`KIOSK_PIN_SCAN_RATE_PER_DEVICE`) and 60
+per minute from a single address (`KIOSK_PIN_SCAN_RATE_PER_IP`): it is the
+brake on anyone trying PINs blindly. A tablet that gets its network back with
+40 PIN clock-ins in the queue takes **about 4 minutes** to empty them, and what
+was clocked behind them waits its turn. It is not a jam: in the panel,
+"Pending" goes down, if slowly. No clock-in changes time, because each one
+keeps the moment it was made. **Do not raise those limits to speed it up**:
+they weaken the PIN's protection.
 
 **Two new situations on the "Kiosks" screen** (from 2.2.0):
 
@@ -3386,6 +3532,36 @@ If they stop again, attach those logs to the diagnostics bundle (§12.2). After
 starting `scheduler`, check that the latest backup is from today or last night
 ([`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2,
 in Spanish).
+
+### …`./doctor.sh` warns about "databases from a restore that did not finish"
+
+**Symptom.** `[warn] There are databases from a restore that did not finish:
+fichaje_restore_20261012T031500Z`, and in its "What to do" a command with two
+blanks, `<migrator>` and `<name>`.
+
+**What it is.** A restore first creates a working database named
+`<base>_restore_<date>`; if it dies without cleaning up (`kill -9`, a power
+cut), that database stays. **Nobody uses it, but it holds a whole copy of the
+personal data**, which is why `doctor.sh` points it out once it is more than a
+day old. The ones named `<base>_pre_restore_<date>` are something else —the
+database before a restore that did finish— and do **not** show up in this
+warning.
+
+**What to do.** First, make sure no restore is running (`pgrep -af restore.sh`
+must return nothing). Then fill in the two blanks: `<migrator>` is the value of
+`DB_MIGRATION_USERNAME` in your `.env` (`fichaje_migrator` by default), and
+`<name>` each of the names the warning gives, one at a time. From the current
+directory:
+
+```bash
+sudo grep '^DB_MIGRATION_USERNAME=' .env
+sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
+./doctor.sh
+```
+
+The command does not ask for a password: it runs inside the PostgreSQL
+container. The double quotes around the name are required. If `doctor.sh` no
+longer warns about it, it is solved.
 
 ### …the update was cut off halfway (SSH session, Ctrl+C) and you do not know how it ended
 

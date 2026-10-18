@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Cola offline de un dispositivo
 | > 50 elementos o > 2 h | Alta»*), definidas en
-[`infra/observability/prometheus/rules/kiosk.yml`](../../infra/observability/prometheus/rules/kiosk.yml):
+`infra/observability/prometheus/rules/kiosk.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
@@ -101,6 +101,7 @@ esperar y, si procede, cerrar la causa de raíz para que no se repita.
 
 | Causa | Cómo se confirma | Qué hacer |
 | --- | --- | --- |
+| **Muchos fichajes por PIN en la cola** (no es una avería) | La cola **baja**, pero despacio: unos 10 por minuto. Pasa tras un corte de red en una tablet donde se ha fichado mucho por PIN | Nada: esperar. Los fichajes por PIN viajan de uno en uno —no tienen envío por lotes— y el servidor admite como mucho 10 por minuto y por tablet (`KIOSK_PIN_SCAN_RATE_PER_DEVICE`), el freno contra quien prueba PIN a ciegas. **40 PIN tardan unos 4 minutos**, y lo que se fichó detrás espera su turno con su hora real. No subas ese límite para acelerarlo ([`../cliente/operacion.md`](../cliente/operacion.md) §16.3 bis) |
 | **Corte de red en ese punto** | Sin tráfico de esa tablet en `docker compose logs nginx` | Revisa el wifi de esa zona. Cuando vuelva, la tablet sincroniza sola — no hay nada que forzar |
 | **Token de dispositivo caducado o revocado** | La tablet muestra la pantalla de emparejamiento en vez de la de fichaje | **Antes de volver a emparejar, comprueba la cola con `kiosk:health` desde la consola**: si es distinta de cero, no desvincules todavía — ver la advertencia de §5 |
 | **Borde caído** (`SondaDelBordeFallida`) | Varios quioscos con cola a la vez; `/api/v1/ready` no responde | No es un problema de la tablet. Revisa `docker compose ps`, PostgreSQL y Redis; el runbook de esa alerta es [`errores-en-el-panel.md`](errores-en-el-panel.md) |

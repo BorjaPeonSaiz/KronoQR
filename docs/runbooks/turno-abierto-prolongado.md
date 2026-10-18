@@ -7,7 +7,7 @@ otra persona.
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Turnos abiertos > 12 h |
 cualquiera | Media | RRHH»*), definidas en
-[`infra/observability/prometheus/rules/incidents.yml`](../../infra/observability/prometheus/rules/incidents.yml):
+`infra/observability/prometheus/rules/incidents.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

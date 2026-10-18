@@ -288,8 +288,9 @@ explicárselo a alguien:
   jornada pertenece al día en que empezó.
 - **Pero una pausa no se queda abierta para siempre.** La vuelta continúa la
   jornada anterior solo si llega **antes** del descanso mínimo entre jornadas que
-  tengas puesto en el perfil (`min_rest_hours`, 12 h de serie —§7—). Pasado ese
-  tiempo, el siguiente fichaje **abre una jornada nueva**, que es lo correcto:
+  tengas puesto en el perfil (`min_rest_hours`, 12 h de serie —§7—) y, como
+  tarde, el día siguiente al de la jornada. Pasado ese tiempo, el siguiente
+  fichaje **abre una jornada nueva**, que es lo correcto:
   quien pulsó «Pausa» a las 15:00 y ficha al día siguiente a las 08:00 está
   empezando su turno, no volviendo de un descanso de diecisiete horas.
 - **Una pausa sin vuelta no abre incidencia.** Si alguien pulsa «Pausa», pasa la
@@ -303,7 +304,8 @@ explicárselo a alguien:
   el fichaje de pausa viene a aclarar.
 - **Una pausa mal fichada se corrige como cualquier otro tramo**, desde la misma
   pantalla y con su motivo (§5). No hay un procedimiento aparte: lo que hay que
-  corregir es una hora de entrada o de salida, como siempre.
+  corregir es una hora de entrada o de salida, como siempre. Si escribes a mano
+  un tramo que termina en pausa, marca **«Este tramo terminó en pausa»** (§5.4).
 - **Si el hotel no tiene activado el fichaje de pausa, aquí no cambia nada** y
   no verás ninguna marca.
 
@@ -930,6 +932,53 @@ Dos avisos que verás y qué significan:
 **El empleado no corrige su propio registro**, y por eso el portal es solo de
 consulta. Un registro que la persona interesada puede editar no prueba nada. Lo
 que sí puede hacer es avisar, y RRHH corrige con su firma.
+
+### 5.4 Un turno que sigue al día siguiente: «Este tramo terminó en pausa»
+
+Desde la 2.3.0, cada tramo guarda **cómo terminó**: en una **salida** o en una
+**pausa**. En la tablet lo decide el fichaje («Pausa» cierra el tramo en pausa).
+Cuando añades o corriges un tramo a mano, lo dices tú con la casilla **«Este
+tramo terminó en pausa»**, en el apartado **«Cómo terminó»** del formulario.
+Márcala si la persona salió a descansar y volvió; sin marcar, el tramo termina
+en salida.
+
+**Por qué importa: decide de qué jornada es el tramo siguiente.** La jornada es
+la del día en que empezó el turno, y un tramo cuya entrada cae **el día
+siguiente** solo sigue en esa misma jornada si se cumplen las cuatro cosas:
+
+1. el tramo anterior **terminó en pausa** (la casilla marcada);
+2. su entrada llega **antes del descanso mínimo** entre jornadas del perfil
+   (`min_rest_hours`, 12 h de serie, §7), contado desde que salió a la pausa;
+3. cae **como tarde el día siguiente** a la jornada, nunca dos días después;
+4. entre los dos **no hay ningún tramo vigente de otra jornada** de la misma
+   persona.
+
+Ejemplo: el turno de noche entra el lunes a las 22:00, sale a descansar a las
+02:00 del martes y vuelve a las 02:30. Para que la vuelta cuente en la jornada
+del **lunes**, el tramo de 22:00 a 02:00 tiene que tener la casilla marcada. Sin
+ella, el sistema lo trata como una salida, y las horas de 02:30 en adelante son
+de la jornada del martes.
+
+Si no se cumple alguna de las cuatro, al guardar el panel lo rechaza y dice por
+qué, por ejemplo: *«Las horas que empiezan otro día solo continúan la jornada
+del … si el tramo anterior terminó en pausa, y no terminó así: son de otra
+jornada. Dalas de alta en la jornada en que empiezan, o declara que el tramo
+anterior terminó en pausa.»* Las dos salidas son las que dice el mensaje:
+corregir el tramo anterior para marcar la casilla, si de verdad fue una pausa,
+o dar de alta las horas en la jornada en que empiezan. **A una persona de baja,
+además, ningún tramo le puede empezar después del día de su cese.**
+
+**Marcar o desmarcar la casilla es una corrección como cualquier otra**: lleva
+motivo, crea una versión nueva y queda en el «Historial de correcciones». Allí,
+la fila **«Cómo terminó»** enseña el antes y el después («Salida» o «Pausa»), y
+la misma fila sale en la vista previa del formulario antes de guardar. «Sin
+dato» quiere decir que esa versión no lo registraba. La exportación para la
+Inspección dice también, en cada corrección, si el tramo terminaba en salida o
+en pausa.
+
+Los tramos escritos antes de la 2.3.0 no se tocan. Los que se cerraron con
+«Pausa» en la tablet ya figuran como terminados en pausa, y los cerrados a mano,
+como terminados en salida.
 
 ---
 

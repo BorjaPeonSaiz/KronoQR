@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Espacio en disco | < 20 % |
 Alta»*), definidas en
-[`infra/observability/prometheus/rules/host.yml`](../../infra/observability/prometheus/rules/host.yml):
+`infra/observability/prometheus/rules/host.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

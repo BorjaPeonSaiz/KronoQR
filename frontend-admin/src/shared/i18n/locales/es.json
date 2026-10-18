@@ -856,7 +856,7 @@
       "clockInCannotBeCleared": "La entrada no se puede retirar. Si el tramo no debió registrarse así, anúlalo aquí y dalo de alta otra vez.",
       "clockOutCannotBeCleared": "La salida no se puede retirar. Si el tramo no debió cerrarse, anúlalo aquí y dalo de alta otra vez.",
       "timeDoesNotExist": "Esa hora no existió en esta zona: el reloj saltó al cambiar de horario. Elige otra.",
-      "noChange": "Cambia al menos una de las dos horas para poder guardar: una corrección que no cambia nada es una fila de auditoría que miente.",
+      "noChange": "Cambia al menos una hora o cómo terminó el tramo para poder guardar: una corrección que no cambia nada es una fila de auditoría que miente.",
       "voidSummary": "Este tramo dejará de contar para el total del día. La versión que tenía se conserva y sigue siendo consultable en el historial.",
       "previewCaption": "Lo que cambia en este tramo"
     }
@@ -2229,7 +2229,7 @@
       },
       "site": {
         "heading": "Centro de trabajo",
-        "intro": "El nombre y la zona horaria del centro. La zona horaria decide en qué jornada cuenta cada turno: nunca es la zona del navegador ni la de la aplicación, que es siempre UTC.",
+        "intro": "El nombre y la zona horaria del centro. La zona horaria decide en qué jornada cuenta cada turno: nunca es la zona del navegador ni la de la aplicación, que es siempre UTC. Con el primer fichaje queda fija: después ya no se puede cambiar desde el panel, así que compruébala antes de vincular la primera tablet.",
         "fields": {
           "name": "Nombre del centro",
           "timezone": "Zona horaria"

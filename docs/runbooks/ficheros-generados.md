@@ -1,7 +1,7 @@
 # Runbook — alertas de los ficheros que genera el producto
 
 **Alertas que llevan aquí**, definidas en
-[`infra/observability/prometheus/rules/generated-files.yml`](../../infra/observability/prometheus/rules/generated-files.yml)
+`infra/observability/prometheus/rules/generated-files.yml`
 (decisión: ADR-045, «los ficheros generados viven en un volumen compartido»):
 
 | Alerta | Umbral | Severidad | Destinatario |

@@ -2,9 +2,9 @@
 
 **Alertas que llevan aquí** (OWASP A09, doc 02 §8.2, más una cuarta de la
 tarea 3.8): las tres primeras en
-[`infra/observability/prometheus/rules/auth.yml`](../../infra/observability/prometheus/rules/auth.yml),
+`infra/observability/prometheus/rules/auth.yml`,
 la cuarta en
-[`infra/observability/prometheus/rules/threat-detection.yml`](../../infra/observability/prometheus/rules/threat-detection.yml):
+`infra/observability/prometheus/rules/threat-detection.yml`:
 
 | Alerta | Umbral | Severidad | MITRE ATT&CK | Sección |
 | --- | --- | --- | --- | --- |

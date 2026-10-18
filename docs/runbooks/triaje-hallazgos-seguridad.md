@@ -108,7 +108,7 @@ $now = new DateTimeImmutable();
 ### 2.2 Trivy — `.trivyignore.yaml`
 
 Formato de
-[`infra/docker/.trivyignore.yaml`](../../infra/docker/.trivyignore.yaml)
+`infra/docker/.trivyignore.yaml`
 (hoy sin entradas vigentes; la última fue `CVE-2025-68121` en `gosu`, retirada
 al eliminar el binario):
 
@@ -136,7 +136,7 @@ vulnerabilities:
 ### 2.3 gitleaks — `.gitleaks.toml`
 
 No se reescribe el historial para borrar un falso positivo (§7.7 doc 02): se
-añade a la `allowlist` de [`.gitleaks.toml`](../../.gitleaks.toml), **una
+añade a la `allowlist` de `.gitleaks.toml`, **una
 entrada por cada patrón verificado uno a uno**, nunca una ruta completa "por si
 acaso". Si el hallazgo es un secreto real, no hay excepción posible: es
 [`rotacion-secretos.md`](rotacion-secretos.md) y, si ya se ha publicado el

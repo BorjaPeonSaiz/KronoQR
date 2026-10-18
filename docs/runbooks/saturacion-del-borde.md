@@ -3,7 +3,7 @@
 **Alerta que lleva aquí** (MITRE ATT&CK T1499.002, DoS de punto final:
 inundación de servicio; doc 01 §8.1, tarea 3.8, hallazgo H-10 de
 `docs/seguridad/revision-interna-asvs-2026-09.md`), definida en
-[`infra/observability/prometheus/rules/threat-detection.yml`](../../infra/observability/prometheus/rules/threat-detection.yml):
+`infra/observability/prometheus/rules/threat-detection.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario |
 | --- | --- | --- | --- |

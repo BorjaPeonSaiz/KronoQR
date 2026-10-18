@@ -124,16 +124,24 @@ From each release you need two files, listed under its *Assets* section:
 The third one, `kronoqr-<version>.cdx.json`, is the product's component list
 (SBOM): it is not needed to install.
 
-From the server, in a working folder:
+**Where: in `/opt`.** The package is downloaded and unpacked there, and it
+creates `/opt/kronoqr-2.2.1`: that is the path you will see in the rest of this
+guide and in the sample outputs. Each new version is later unpacked **next to
+it** (`/opt/kronoqr-2.3.0`…), never on top ([`operation.md`](operation.md)
+§11). `/opt` belongs to root, which is why the commands that write there carry
+`sudo`.
+
+From the server:
 
 ```bash
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
+cd /opt
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
 ```
 
 > **If the server has no internet access**, download both files from another
-> computer with a browser and copy them into the same folder on the server
-> (`scp`, WinSCP or a USB stick). That is enough for the package; the
+> computer with a browser and copy them to `/opt` on the server (`scp`, WinSCP
+> or a USB stick). That is enough for the package; the
 > system images arrive separately, as explained in
 > [§7](#7-installing-without-internet-access).
 
@@ -158,8 +166,8 @@ you did not download it.
 > check that protects against a substituted package.
 
 ```bash
-tar xzf kronoqr-2.2.1.tar.gz
-cd kronoqr-2.2.1
+sudo tar xzf kronoqr-2.2.1.tar.gz
+cd /opt/kronoqr-2.2.1
 ls -A
 ```
 
@@ -217,8 +225,8 @@ docs/CHANGELOG.md        What changes in each version.
 ### 1.2 Put the certificate in place and fill in the configuration
 
 ```bash
-cp /ruta/de/tu/certificado.crt certs/tls.crt
-cp /ruta/de/tu/clave.key       certs/tls.key
+sudo cp /ruta/de/tu/certificado.crt certs/tls.crt
+sudo cp /ruta/de/tu/clave.key       certs/tls.key
 
 # ESSENTIAL: the web server runs UNPRIVILEGED, as uid 101,
 # and cannot open a root-owned file.
@@ -226,7 +234,7 @@ sudo chown 101:101 certs/tls.crt certs/tls.key
 sudo chmod 0444 certs/tls.crt
 sudo chmod 0400 certs/tls.key
 
-cp .env.example .env
+sudo cp .env.example .env
 ```
 
 > **Why those three commands, and what happens if you skip them.** `cp` keeps
@@ -248,7 +256,8 @@ cp .env.example .env
 > system **works** and the installer only warns: it is your private key and
 > the decision is yours, but anyone with a session on that machine can copy it.
 
-Open `.env` with your editor. **Every variable carries a tag. You only have to
+Open `.env` with your editor, with `sudo` (for example, `sudo nano .env`).
+**Every variable carries a tag. You only have to
 touch the ones tagged `[CLIENTE]`:**
 
 | Tag | What it means |
@@ -283,13 +292,15 @@ range.** If your kiosk VLAN is exactly that one, leave it: the installer shows
 a `[warn]` saying it matches the template and **goes on installing**. If it is
 not, change it: with a range that does not cover the tablets nothing fails,
 but clocking falls into the request limit meant for the internet and slows
-down at shift change. After installing, check that no tablet is left out:
+down at shift change. After installing, with the tablets switched on, count
+their heartbeats per address:
 
 ```bash
-sudo docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
 
-No line with the IP of a tablet should appear.
+Every line has to end in `1`. How to read the output and what to do if one
+ends in `0`: §6, "`KIOSK_VLAN_CIDR`".
 
 **`METRICS_ALLOW_CIDR=172.29.0.20/32` is left as it is.** It is the fixed
 address of Prometheus, the product's own metrics collector, and it is the right
@@ -316,8 +327,8 @@ by itself.
 commands as they are, after saving the `.env`:
 
 ```bash
-registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
-docker pull "${registro}/php:$(cat VERSION)"
+registro="$(sudo sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
 
 If it ends with `Status: Downloaded newer image` (or `Image is up to date`), all
@@ -384,8 +395,8 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Memory: 7936 MiB (published minimum: 3700 MiB)
   [ok]    Free disk on /var/lib/docker: 92 GiB (published minimum: 40 GiB)
   [ok]    APP_URL filled in the template
-  [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    PORTAL_INTERNAL_CIDR filled in the template
+  [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    BACKUP_PATH filled in the template
   [ok]    TLS_CERT_DIR filled in the template
   [ok]    METRICS_ALLOW_CIDR filled in the template
@@ -396,10 +407,12 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    METRICS_ALLOW_CIDR is a valid IPv4 CIDR (172.29.0.20/32)
   [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 covers a network of this server or the kiosk one
   [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 covers Prometheus (172.29.0.20)
+  [ok]    LOG_RETENTION_HOURS=2160 h (Loki and Tempo)
   [ok]    COMPLIANCE_PROFILE filled in the template
   [ok]    LICENSE_KEY has the expected format
   [ok]    MAIL_HOST points to a mail server of your own
   [ok]    ALERT_EMAIL_*: there is at least one alert recipient
+  [ok]    Signature of the product images verified with cosign (manufacturer's release workflow)
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
   [ok]    TLS certificate in /opt/kronoqr-2.2.1/certs
@@ -411,13 +424,31 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Writable: /opt/kronoqr-2.2.1
   [ok]    Privileges to set the owner of the WAL archive
 
-Requirements met: 38 checks, 0 warnings.
+Requirements met: 40 checks, 0 warnings.
 
 Check only (--check-only): nothing was touched. Run again without the flag to install.
 ```
 
 If something comes out as `[FAIL]`, underneath you have a **"What to do"** line
 with the exact command. Warnings (`[warn]`) do not stop the installation.
+
+**The usual result the first time is 40 checks with some warnings**, not zero.
+The output above is that of a server where everything has been decided. These
+four warnings are the common ones in a first installation, and none of them
+stops it:
+
+- `cosign is not installed`: the images' signature is not checked, and the
+  images are validated by their digest only (§7.1).
+- `LICENSE_KEY empty`: it installs without a licence, which is activated later
+  (§4).
+- `MAIL_HOST=mailpit`: outgoing mail is not configured
+  ([`configuration.md`](configuration.md)).
+- `ALERT_EMAIL_IT, ALERT_EMAIL_RRHH and ALERT_EMAIL_SEGURIDAD are empty`:
+  nobody will receive the alerts ([`operation.md`](operation.md) §10.4).
+
+The exact number depends on your configuration: there is one check more if you
+fill in `TRUSTED_PROXY_CIDR` (§6) and two fewer if you turn observability off
+(§8).
 
 **In English**, with `--lang en` or with the server's locale. Every installer
 message exists in both languages.
@@ -468,9 +499,28 @@ curl -fsS https://fichaje.tuhotel.local/api/v1/health
 curl -fsS https://fichaje.tuhotel.local/api/v1/ready
 ```
 
-Both have to return `200`. **Do it from a kiosk, not only from the server**:
-it is the only way to check that the certificate name resolves where it has
-to resolve.
+Both have to answer without error: `/health` with
+`{"status":"ok","version":"2.2.1",…}` and `/ready` with `{"status":"ready"}`.
+
+**If the certificate comes from a CA internal to the hotel, or is
+self-signed**, the server does not have it among its own and `curl` answers
+`curl: (60) SSL certificate problem: …`. It is not an installation fault: tell
+`curl` to trust your certificate, from the installation directory:
+
+```bash
+curl -fsS --cacert certs/tls.crt https://fichaje.tuhotel.local/api/v1/health
+curl -fsS --cacert certs/tls.crt https://fichaje.tuhotel.local/api/v1/ready
+```
+
+If you have your CA's certificate in a separate file, `--cacert` pointing to
+it works too. **Do not use `--insecure`**: it would answer even with a wrong
+certificate, which is exactly what you want to find out.
+
+**Check it from a tablet as well, not only from the server**: open
+`https://fichaje.tuhotel.local/api/v1/health` in its browser. It has to show
+the same text **without any certificate warning**. It is the only way to check
+that the name resolves where it has to resolve and that the tablet trusts the
+certificate (§5, "…the tablet's browser does not accept the certificate").
 
 ### 1.6 Keep the backup key safe
 
@@ -543,7 +593,7 @@ wizard**. There is nothing to look for in any menu.
 | --- | --- | --- | --- |
 | 1 | **First administrator** | Yes | Creates your account and enables its second factor. |
 | 2 | **Organisation** | Yes | The system's visible name and languages. **Spanish only by default**: leave only Spanish ticked if nobody will use English; if somebody will, tick it here (or later in **Operational settings**). |
-| 3 | **Site** and time zone | Yes | The hotel. **The time zone decides which day each shift goes to.** |
+| 3 | **Site** and time zone | Yes | The hotel. **The time zone decides which day each shift goes to, and becomes fixed with the first clock-in.** |
 | 4 | **Departments** | Can be skipped | The ones you use. They can be created later. |
 | 5 | **Compliance profile** | Yes | The legal thresholds, in plain sight, for you to check them. |
 | 6 | **Staff** | Can be skipped | From CSV or Excel, with prior validation. |
@@ -597,22 +647,34 @@ It is the piece of information the system uses to decide **which day each
 shift belongs to**. A shift from 22:00 to 06:00 counts entirely in the day it
 started, and "the day" is measured in the site's zone.
 
-Get it right the first time. It can be changed later — it is recorded — but
-**changing it does not rewrite the working days already calculated**: from
-that moment on they are calculated with the new one and before that they were
-calculated with the old one, while the panel, the portal and the reports start
-showing the whole history in the new zone. With clock-ins already recorded, do
-not change it without asking support first
-([`configuration.md`](configuration.md) §6.1, `APP_TIMEZONE`).
+> ⚠️ **With the first clock-in, the time zone becomes fixed for good.**
+>
+> While there is no clock-in it can be changed in the panel, on the
+> departments screen, “Site” section. **From the first one on, neither the
+> panel nor the API lets you change it** (RN-23): the panel shows it without
+> letting you edit it and explains why. It is the only start-up setting that
+> cannot be put right later from the panel.
+>
+> If it was set wrongly all the same, there is a console correction on the
+> server, with a reason, a management account with the admin or rrhh role that
+> signs, confirmation and an audit entry. **It does not move any work day
+> already recorded**: each shift stays in the day it was attributed to with the
+> wrong zone, and only the way the history is shown changes. Shifts close to
+> midnight that would have fallen on another day have to be corrected one by
+> one, by hand. How it is used: [`configuration.md`](configuration.md) §6.1,
+> the `APP_TIMEZONE` row.
 
+Get it right the first time and check it **before pairing the first tablet**.
 If the hotel is in the Canary Islands, it is `Atlantic/Canary`, not
 `Europe/Madrid`.
 
-**The time shown on the tablet's screen is the tablet's own**, in the time zone
-the device is set to, not the site's. Set each tablet to the site's zone, with
-automatic date and time. Otherwise the employee will see a time different from
-the one in their record; **the legal record is not affected**: it stores the
-exact instant and always presents it in the site's zone.
+**The tablet shows the site's time, not its own.** The time on the clocking
+screen and on the confirmation is drawn in the zone you set here, even if the
+device has another one configured: the tablet receives it from the server and
+keeps it so it can go on using it without network. Only a tablet that has
+never yet reached the server shows its own zone's time. Even so, leave each
+tablet on **automatic date and time**: what matters about its clock is not the
+zone but that the instant is right.
 
 ![Step 3: site, with its name and the time zone](../img/en/asistente-03-centro.png)
 
@@ -790,8 +852,9 @@ job or a runbook without reading every script.
 | `3` | **There is a previous installation. NOTHING written.** | The installer **does not reinstall on top**: it would destroy the working-time record. To update, `./update.sh` (see [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md), in Spanish). To see how it is, `./doctor.sh`. |
 | `4` | **Failed and undid everything it had done.** The server is back as it was. | The message says the cause. Fix it and run the installer again: it is safe. |
 | `5` | **Failed and could NOT undo everything.** Requires intervention. | The message lists **exactly what is left** and which command removes it. Do it and run again. It is the only code that needs someone in front of it. |
+| `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. The data is safe. | **It is not the certificate or the server name**: phase 5 probes `https://127.0.0.1` without checking the certificate. It exits with `6` for one of three causes, and the message says which: `/api/v1/health` or `/api/v1/ready` did not answer correctly (almost always PostgreSQL or Redis down or not started: §5, "…I installed fine but `/api/v1/ready` returns 503"); `product:doctor` gave at least one `[FAILURE]` (it is printed just above, each with its "What to do"); or the image does not carry `product:doctor`, which is a broken package (tell the manufacturer). Fix the cause and check with `sudo ./doctor.sh`. **Do not run `install.sh` again**: the installation exists and it would exit with `3`. |
+| `7` | **The cosign signature of a product image is not valid.** It can only happen if you have cosign installed (§7.1). Nothing has been installed: in phase 1 nothing had been written yet, and later what was written is undone, as with `4`. | **First, `IMAGE_REGISTRY`**: if it is misspelt, the registry answers `denied` and cosign cannot read the signature, which counts as an invalid signature. Check it with the `docker pull` in §1.2 and run again. If the image downloads fine and it still exits with `7`, **do not install**: tell the manufacturer with the cosign detail the script prints. Do not use `--skip-signature-check` to get past the step. |
 | `129`, `130`, `143` | **Interrupted before writing anything** (phases 1 and 2): `129` is a dropped SSH session, `130` a Ctrl+C and `143` a `kill`. NOTHING written. | Run it again, preferably inside `tmux` (§1.4). From phase 3 on, an interruption does **not** exit with these codes: it is treated as a failure, what was done is undone and it exits with `4` (or `5` if something could not be undone). |
-| `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. | Almost always the certificate or the server name. Check `docker compose logs nginx app` and the "does not respond" item in §5. The data is safe. |
 
 ---
 
@@ -943,9 +1006,9 @@ in `TRUSTED_PROXY_CIDR` (§6).
 There are three possible causes, and a single test download tells them apart:
 
 ```bash
-registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+registro="$(sudo sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
 echo "${registro}"
-docker pull "${registro}/php:$(cat VERSION)"
+sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
 
 | What it answers | What is going on | What to do |
@@ -1241,12 +1304,39 @@ appears**: the symptom is *"the kiosk is slow at 06:00"*, right when 500
 people clock in at once. If someone describes that symptom, this variable is
 the first thing to check.
 
-**How to check it.** From an already installed kiosk:
+**How to check it.** On the server, not on the tablet: a tablet has no
+console, and the address that matters is not the one it thinks it has but
+**the one the server sees** (with NAT or a router in between, they differ).
+Each paired tablet sends one heartbeat a minute, and the edge records on every
+request whether it came in through the kiosk VLAN (`"from_kiosk_vlan":1`) or
+not (`0`). With the tablets switched on for a few minutes, from the
+installation directory:
 
 ```bash
-# The IP the kiosk presents to the server must fall inside KIOSK_VLAN_CIDR
-ip -4 addr show | grep inet
+sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '"remote_addr":"[^"]*","from_kiosk_vlan":[01]' | sort | uniq -c
 ```
+
+There is one line for each address heartbeats arrive from, with how many have
+arrived in those ten minutes:
+
+```
+     10 "remote_addr":"10.0.30.21","from_kiosk_vlan":1
+     10 "remote_addr":"10.0.30.22","from_kiosk_vlan":1
+```
+
+- **All end in `1`**: fine, every tablet is inside the range.
+- **Some end in `0`**: that address is outside. Widen `KIOSK_VLAN_CIDR` so it
+  covers it (or set one that covers them all) and apply it with
+  `sudo docker compose up -d`, which recreates only the services whose
+  configuration changed. If all the tablets go out through the same address
+  (NAT), that is the one that has to be inside.
+- **Nothing comes out**: no heartbeat arrived in those ten minutes. Either no
+  tablet is paired yet, or they do not reach the server:
+  [`quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md) (in
+  Spanish).
+
+`./doctor.sh` does the reverse check: it warns if requests for the panel or the
+portal arrive from the kiosk range, a sign that the range is too wide.
 
 **The internal limit is raised, not removed.** The product also limits by IP
 inside the VLAN: a compromised device plugged into that network cannot be left

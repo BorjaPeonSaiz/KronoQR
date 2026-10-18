@@ -26,13 +26,13 @@ $probe = [
 $probeFix = [
     'failure' => "This is a product defect, not a problem with your installation.\n"
         ."Generate the diagnostics bundle and send it to support:\n"
-        .'  php artisan product:diagnostics',
+        .'  docker compose exec app php artisan product:diagnostics',
     'failure_redis' => "Fix Redis first: look at the «queue.redis» check in this same report.\n"
         ."Then run this command again:\n"
-        .'  php artisan product:doctor',
+        .'  docker compose exec app php artisan product:doctor',
     'failure_database' => "Fix the database first: look at the «database.connection» check in this same report.\n"
         ."Then run this command again:\n"
-        .'  php artisan product:doctor',
+        .'  docker compose exec app php artisan product:doctor',
 ];
 
 return [
@@ -62,7 +62,7 @@ return [
         'meaning_warning' => 'Nothing is broken. People clock in and the record can be read as usual; look at the '
             .'above when you can. Installation and updates are NOT stopped by this.',
         'meaning_failure' => 'Something needs fixing. Follow the «What to do» of each failure and run this command '
-            .'again. If you need help, generate the diagnostics bundle with `php artisan product:diagnostics` and '
+            .'again. If you need help, generate the diagnostics bundle with `docker compose exec app php artisan product:diagnostics` and '
             .'send it to support.',
     ],
 
@@ -591,8 +591,8 @@ return [
                     .'(DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD).',
             ],
             'migrations_pending' => [
-                'failure' => "Apply them with:\n"
-                    ."  php artisan migrate --force\n"
+                'failure' => "Apply them from the installation directory with:\n"
+                    ."  docker compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force\n"
                     ."If this shows up right after an update, the update did not finish: check the report in\n"
                     .'the backup directory, under reports/update-*.log.',
             ],
@@ -602,26 +602,26 @@ return [
                     ."  REVOKE UPDATE, DELETE ON audit_log FROM :user;\n"
                     ."This usually happens after restoring a backup with the wrong user. If you do not know how\n"
                     .'they got there, tell support before changing anything: it may be relevant.',
-                'warning_unknown' => "Run `php artisan product:doctor` again once the database responds. If it\n"
+                'warning_unknown' => "Run `docker compose exec app php artisan product:doctor` again once the database responds. If it\n"
                     .'still cannot be checked, generate the diagnostics bundle.',
             ],
             'work_record_privileges' => [
                 'warning_excess' => "Most likely the database provisioning was run again (it grants everything) or\n"
                     ."someone ran a GRANT by hand. The next update with update.sh sets them right with the\n"
                     ."migration role. Do not change them by hand: generate the diagnostics bundle with\n"
-                    ."`php artisan product:diagnostics`, send it to support and check who has access to the\n"
+                    ."`docker compose exec app php artisan product:diagnostics`, send it to support and check who has access to the\n"
                     .'migration role.',
                 'warning_guards' => "Only the migration role can disable or change those protections: someone used it,\n"
                     ."or a restore left them half done. doctor.sh and update.sh detect it too. Do not change\n"
-                    ."them by hand: generate the diagnostics bundle with `php artisan product:diagnostics`,\n"
+                    ."them by hand: generate the diagnostics bundle with `docker compose exec app php artisan product:diagnostics`,\n"
                     ."send it to support, check who has access to the migration role and run the reconciliation:\n"
-                    .'php artisan compliance:reconcile-work-record --full',
-                'warning_unknown' => "Run `php artisan product:doctor` again once the database responds. If it\n"
+                    .'docker compose exec app php artisan compliance:reconcile-work-record --full',
+                'warning_unknown' => "Run `docker compose exec app php artisan product:doctor` again once the database responds. If it\n"
                     .'still cannot be checked, generate the diagnostics bundle.',
             ],
             'audit_chain' => [
                 'failure' => "Verify the whole chain to find where the break is:\n"
-                    ."  php artisan compliance:verify-audit-chain\n"
+                    ."  docker compose exec app php artisan compliance:verify-audit-chain\n"
                     ."DO NOT delete or edit anything. Save that output, generate the diagnostics bundle and\n"
                     .'tell support: this may have legal consequences and when it happened must be documented.',
                 'warning_unknown' => 'Run it again once the database responds.',
@@ -645,7 +645,7 @@ return [
                     ."  docker compose restart horizon\n"
                     ."  docker compose logs --tail=100 horizon\n"
                     ."If jobs are failing rather than piling up, list the failed ones with:\n"
-                    .'  php artisan queue:failed',
+                    .'  docker compose exec app php artisan queue:failed',
                 'warning_unknown' => 'Check that Redis responds and run this command again.',
             ],
             'worker' => [
@@ -659,7 +659,7 @@ return [
                     ."  docker compose logs --tail=100 horizon\n"
                     .'If you have just updated, it may not have started yet: check again in a minute.',
                 'warning_paused' => "Unless someone paused it on purpose for maintenance, resume it:\n"
-                    .'  docker compose exec horizon php artisan horizon:continue',
+                    .'  docker compose exec horizon docker compose exec app php artisan horizon:continue',
                 'warning_unknown' => 'Check that Redis responds and run this command again.',
             ],
         ],
@@ -692,16 +692,18 @@ return [
                     ."  MAIL_MAILER=smtp\n"
                     ."  MAIL_HOST=...\n"
                     ."  MAIL_PORT=587\n"
-                    ."then restart the application:\n"
-                    ."  docker compose up -d app\n"
+                    ."then recreate the three services that send mail (with app alone, deferred\n"
+                    ."notices and the weekly summary would keep using the previous server):\n"
+                    ."  docker compose up -d app horizon scheduler\n"
                     .'If you do not want email notifications, leave it as it is: nothing else is affected.',
             ],
             'reachable' => [
                 'warning' => "Check MAIL_HOST and MAIL_PORT in the .env file and that the hotel firewall allows\n"
-                    ."outbound traffic on that port. Then:\n"
-                    .'  docker compose up -d app',
+                    ."outbound traffic on that port. Then recreate the three services that send mail:\n"
+                    .'  docker compose up -d app horizon scheduler',
                 'warning_not_configured' => "If you want email notifications, fill in MAIL_MAILER, MAIL_HOST and\n"
-                    ."MAIL_PORT in the .env file and restart with `docker compose up -d app`.\n"
+                    ."MAIL_PORT in the .env file and recreate the three services that send mail with\n"
+                    ."`docker compose up -d app horizon scheduler`.\n"
                     .'If you do not want them, there is nothing to do.',
             ],
             'alert_recipients' => [
@@ -985,7 +987,7 @@ return [
             'pending_audit' => [
                 'warning' => "If the «database.connection» check of this report is fine, write them now (inside\n"
                     ."the application container):\n"
-                    ."  php artisan product:diagnostics:record-pending\n"
+                    ."  docker compose exec app php artisan product:diagnostics:record-pending\n"
                     ."If the database still does not answer, fix it first: the entry will be written automatically.\n"
                     ."If the database answers and the warning has not gone in five minutes, look at the\n"
                     ."«scheduler.heartbeat» check.\n"
@@ -1052,10 +1054,11 @@ return [
             'timezone_utc' => [
                 'failure' => "Set in the .env file:\n"
                     ."  APP_TIMEZONE=UTC\n"
-                    ."and restart the application:\n"
-                    ."  docker compose up -d app\n"
-                    ."The screens will keep showing the hotel time: the site time zone is configured in the\n"
-                    .'panel, under Settings, not here.',
+                    ."and recreate the three services that receive it:\n"
+                    ."  docker compose up -d app horizon scheduler\n"
+                    ."The screens will keep showing the hotel time: the site time zone is something else. It\n"
+                    ."is chosen in the panel, under Departments, «Site» section, and becomes fixed with the\n"
+                    .'first clock-in (docs/cliente/en/configuration.md §6.1, APP_TIMEZONE row).',
             ],
             'debug_in_production' => [
                 'failure' => "Set in the .env file:\n"
@@ -1066,25 +1069,25 @@ return [
             'error_history' => [
                 'warning' => "Open the panel, go to Settings -> Errors, and deal with or mark as resolved the\n"
                     ."errors from that source. To see them from here:\n"
-                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    ."  docker compose exec app php artisan product:errors --since=30d --source=:source\n"
                     .'Raising the maximum fixes nothing: what those errors need is someone looking at them.',
                 'failure' => "You are losing detail about what is failing. Open the panel, go to Settings ->\n"
                     ."Errors, filter by source \":source\" and mark as resolved the ones you have already\n"
                     ."dealt with; as soon as they drop below the maximum, new errors are stored separately\n"
                     ."again. To see them from here:\n"
-                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    ."  docker compose exec app php artisan product:errors --since=30d --source=:source\n"
                     ."If you really need to store more, raise the limit in the .env file:\n"
                     ."  PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE=1000\n"
                     .'and restart with  docker compose up -d app',
                 'warning_busy' => "Check whether an error repeats with a different text each time: that creates\n"
                     ."a new line per repetition instead of adding up in one. Look at it with:\n"
-                    ."  php artisan product:errors --since=7d\n"
+                    ."  docker compose exec app php artisan product:errors --since=7d\n"
                     ."Clearing out the ones older than 90 days happens on its own every night; to run it\n"
                     ."now:\n"
-                    .'  php artisan product:errors:prune',
+                    .'  docker compose exec app php artisan product:errors:prune',
                 'warning_unavailable' => "Check that the database responds and that the installation is fully\n"
                     ."up to date:\n"
-                    .'  php artisan migrate --force',
+                    .'  docker compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force',
             ],
         ],
 
@@ -1110,7 +1113,7 @@ return [
                     ."«Kiosk service code». The tablets pick it up on their own in under a minute.\n"
                     ."Write it down wherever whoever maintains the kiosks keeps it, and do not stick it on the\n"
                     .'tablet itself. If you would rather leave the screen open to everyone, ignore this warning.',
-                'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
+                'warning_unavailable' => "Run `docker compose exec app php artisan product:doctor` again once the database responds.\n"
                     .'If it persists, look first at the database checks in this same report.',
             ],
             'app_version' => [
@@ -1129,7 +1132,7 @@ return [
                     ."clear the site data: with an in-memory queue, reloading deletes the clock-ins not yet sent.\n"
                     ."Check in the panel, under Kiosks, that they are online and that their pending queue drops to 0;\n"
                     ."if the «in-memory queue» warning shows, follow the stuck queue runbook, section 7.\n"
-                    .'Once the queue is at 0 and on disk, run `php artisan product:doctor` again.',
+                    .'Once the queue is at 0 and on disk, run `docker compose exec app php artisan product:doctor` again.',
                 'warning_mixed' => "Those with unsent clock-ins or an in-memory queue: wait. Do NOT reload them, do NOT\n"
                     ."unregister their service worker and do NOT clear the site data, or clock-ins would be lost; if the\n"
                     ."«in-memory queue» warning shows, follow the stuck queue runbook, section 7.\n"
@@ -1143,8 +1146,8 @@ return [
                     .'Do NOT clear the site data: it holds the clock-in queue and the tablet pairing.',
                 'warning_unchecked' => "Check the server's APP_VERSION (or IMAGE_TAG) variable: it must be the published\n"
                     ."version, for example 2.2.1. An image built without it reports 0.0.0-dev.\n"
-                    .'Redeploy with the image of the published version and run `php artisan product:doctor` again.',
-                'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
+                    .'Redeploy with the image of the published version and run `docker compose exec app php artisan product:doctor` again.',
+                'warning_unavailable' => "Run `docker compose exec app php artisan product:doctor` again once the database responds.\n"
                     .'If it persists, look first at the database checks in this same report.',
             ],
         ],
@@ -1155,17 +1158,17 @@ return [
                 'warning_plan_exceeded' => 'Talk to your provider about extending the plan whenever it suits '
                     .'you. There is no hurry and nothing is blocked.',
                 'warning_expiring_soon' => "Ask your provider for a renewal. Once the new key arrives:\n"
-                    ."  php artisan license:activate \"KQL1....\"\n"
+                    ."  docker compose exec app php artisan license:activate \"KQL1....\"\n"
                     .'or paste it in the panel, under Settings > Licence.',
                 'warning_expired' => "Ask your provider for a renewal and activate the new key:\n"
-                    ."  php artisan license:activate \"KQL1....\"\n"
+                    ."  docker compose exec app php artisan license:activate \"KQL1....\"\n"
                     .'Meanwhile clocking in and exporting the record keep working normally.',
                 'warning_absent' => "Activate the key your provider gave you:\n"
-                    ."  php artisan license:activate \"KQL1....\"\n"
+                    ."  docker compose exec app php artisan license:activate \"KQL1....\"\n"
                     .'If you cannot find it, ask for it: it is a string starting with KQL1.',
                 'warning_not_yet_valid' => 'Nothing. The optional features switch on by themselves on the day '
                     .'the validity period starts.',
-                'warning_unverifiable' => "Run `php artisan license:show`, which explains the exact reason and\n"
+                'warning_unverifiable' => "Run `docker compose exec app php artisan license:show`, which explains the exact reason and\n"
                     .'what to do about it. If it says the key is truncated, copy it again in full and activate it.',
             ],
             'white_label_without_plan' => [
