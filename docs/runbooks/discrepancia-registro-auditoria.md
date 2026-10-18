@@ -6,7 +6,7 @@ en el registro horario por fuera de la aplicación. Antes de tocar nada, lee la
 procedimiento de 72 h es [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 
 **Alertas que llevan aquí** (ADR-057 §4), definidas en
-[`infra/observability/prometheus/rules/work-record.yml`](../../infra/observability/prometheus/rules/work-record.yml):
+`infra/observability/prometheus/rules/work-record.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

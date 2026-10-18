@@ -1,7 +1,7 @@
 # Runbook — el almacén de métricas (Redis) no responde: las alertas de quiosco y cola no son fiables
 
 **Alertas que llevan aquí**, definidas en
-[`infra/observability/prometheus/rules/metrics-store.yml`](../../infra/observability/prometheus/rules/metrics-store.yml)
+`infra/observability/prometheus/rules/metrics-store.yml`
 (bloque 22 de la 2.2.0, hallazgo R4-DV-01):
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |

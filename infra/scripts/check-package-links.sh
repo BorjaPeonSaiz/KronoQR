@@ -26,9 +26,14 @@
 #   2  el directorio indicado no existe
 #   6  hay enlaces rotos; se enumeran uno a uno
 #
-# Solo mira enlaces RELATIVOS a documentos .md y a imagenes .png, .svg, .jpg y
-# .jpeg. Los absolutos y los http quedan fuera a proposito: un enlace a la web
-# del fabricante es legitimo.
+# Mira CUALQUIER destino relativo, sea cual sea su extension (V6-DV-2, 2.3.0).
+# Hasta la 2.3.0 solo miraba .md y las imagenes, y diecisiete runbooks
+# enlazaban a reglas de Prometheus, workflows y ficheros de configuracion del
+# repositorio (`../../infra/...`, `.github/...`, `.gitleaks.toml`) que no viajan:
+# este script los daba por buenos. Quedan fuera a proposito los absolutos, los
+# que llevan esquema (`https:`, `mailto:`: un enlace a la web del fabricante es
+# legitimo) y los que solo son un ancla dentro del mismo documento (`#seccion`).
+# Las anclas no se comprueban: solo que el fichero exista.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -44,15 +49,16 @@ readonly SCRIPT_DIR
 # Un solo patron para los dos casos: `[texto](destino)` y `![alt](destino)`
 # terminan igual, asi que la imagen se reconoce por su EXTENSION y no por el
 # signo de admiracion. Asi tambien se cazan las capturas enlazadas como texto
-# —«ver la captura»— que tambien tienen que viajar.
+# —«ver la captura»— que tambien tienen que viajar. El destino termina en el
+# primer espacio: de `[texto](destino "titulo")` se queda `destino`.
 #
 # El `|| true` final es obligatorio: `grep` sale 1 cuando no encuentra nada, y un
 # documento sin un solo enlace es normal. Con `set -e` seria un fallo.
 destinos_de() {
   local doc="$1"
 
-  grep -oiE '\]\([^)]+\.(md|png|svg|jpe?g)[^)]*\)' "${doc}" 2>/dev/null |
-    sed -E 's/^\]\(//; s/\)$//; s/[#?].*$//' || true
+  grep -oE '\]\([^)[:space:]]+' "${doc}" 2>/dev/null |
+    sed -E 's/^\]\(//; s/[#?].*$//' || true
 }
 
 main() {
@@ -73,8 +79,10 @@ main() {
 
     while IFS= read -r destino; do
       [ -n "${destino}" ] || continue
+      # Absoluto o con esquema (`https:`, `mailto:`): fuera del paquete a
+      # proposito. Un destino vacio era solo un ancla y ya lo salta el `-n`.
       case "${destino}" in
-      http* | /*) continue ;;
+      /* | [A-Za-z]*:*) continue ;;
       esac
 
       total=$((total + 1))

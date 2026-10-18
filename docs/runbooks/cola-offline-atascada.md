@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Cola offline de un dispositivo
 | > 50 elementos o > 2 h | Alta»*), definidas en
-[`infra/observability/prometheus/rules/kiosk.yml`](../../infra/observability/prometheus/rules/kiosk.yml):
+`infra/observability/prometheus/rules/kiosk.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

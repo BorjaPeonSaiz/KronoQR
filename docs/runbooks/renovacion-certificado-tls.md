@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Certificado TLS próximo a
 expirar | < 21 días | Alta»*, más una tercera de la tarea 3.8), definidas en
-[`infra/observability/prometheus/rules/tls.yml`](../../infra/observability/prometheus/rules/tls.yml):
+`infra/observability/prometheus/rules/tls.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

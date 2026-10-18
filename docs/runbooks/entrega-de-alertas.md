@@ -7,7 +7,7 @@ entregar — es el hueco que cerró la revisión de seguridad de la tarea 3.2
 vez habrían dejado a alguien sin saberlo.
 
 **Alertas que llevan aquí**, definidas en
-[`infra/observability/prometheus/rules/alerting.yml`](../../infra/observability/prometheus/rules/alerting.yml):
+`infra/observability/prometheus/rules/alerting.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

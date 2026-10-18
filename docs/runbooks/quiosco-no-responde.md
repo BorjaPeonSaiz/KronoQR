@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Quiosco sin latido | > 10 min |
 Crítica (operaciones)»*), definida en
-[`infra/observability/prometheus/rules/kiosk.yml`](../../infra/observability/prometheus/rules/kiosk.yml):
+`infra/observability/prometheus/rules/kiosk.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

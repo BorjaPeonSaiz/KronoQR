@@ -5,7 +5,7 @@ la §2: hay evidencia que se pierde sola.
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Rotura de la cadena de hash de
 auditoría | cualquiera | Crítica (seguridad)»*), definidas en
-[`infra/observability/prometheus/rules/audit.yml`](../../infra/observability/prometheus/rules/audit.yml):
+`infra/observability/prometheus/rules/audit.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |

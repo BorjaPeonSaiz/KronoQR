@@ -2,7 +2,7 @@
 
 **Alertas que llevan aquí** (doc 01 §9.3, fila *«Copia de seguridad fallida o no
 verificada | cualquiera | Crítica | IT del cliente»*), definidas en
-[`infra/observability/prometheus/rules/backup.yml`](../../infra/observability/prometheus/rules/backup.yml):
+`infra/observability/prometheus/rules/backup.yml`:
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
@@ -710,7 +710,7 @@ La ruta lleva la versión porque el directorio vigente cambia con cada actualiza
 El simulacro lee el `.env` que está junto al script (el del directorio vigente, `/opt/kronoqr-<version>/.env`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
 En el repositorio del fabricante lo ejecuta
-[`.github/workflows/backup-drill.yml`](../../.github/workflows/backup-drill.yml)
+`.github/workflows/backup-drill.yml`
 con la misma cadencia, sobre datos de prueba: eso demuestra que **el
 procedimiento** funciona. La entrada de cron demuestra que funcionan **las
 copias de este cliente**, que es lo que preguntará una inspección. Hacen falta

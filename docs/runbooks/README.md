@@ -64,6 +64,13 @@ vigila que los documentos no se contradigan.
 Las 61 reglas de `infra/observability/prometheus/rules/` y el runbook al que
 apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
+**En tu servidor no hay `infra/`.** Los runbooks citan los ficheros con su ruta
+en el repositorio del fabricante. Las reglas, los cuadros de mando y el resto de
+`infra/observability/` están en `observability/`, dentro del directorio de la
+instalación (por ejemplo, `observability/prometheus/rules/kiosk.yml`). Lo que
+está en `.github/`, `infra/docker/` o en `.gitleaks.toml` no viaja en el
+paquete: es de la integración continua del fabricante.
+
 | Runbook | Alertas |
 | --- | --- |
 | [`quiosco-no-responde.md`](quiosco-no-responde.md) | `QuioscoSinLatido` |
