@@ -98,7 +98,7 @@ la plantilla; van **al responsable de cada departamento** y **solo con su
   mucho 50 líneas; el resto se lee en el panel. Ni RRHH ni administración lo
   reciben: tienen el panel entero.
 
-Los otros dos no llevan datos de la plantilla:
+Los otros dos no llevan ningún nombre ni registro horario de la plantilla:
 
 - **«Tu informe ya se puede descargar».** Cuando un informe pedido desde el
   panel termina de generarse, avisa **a quien lo pidió**, a la dirección de su
@@ -107,15 +107,18 @@ Los otros dos no llevan datos de la plantilla:
   descarga**: la descarga se pide desde el panel. Ese envío no tiene asiento
   propio en la auditoría, aunque la petición y la generación del informe sí lo
   tienen.
-- **Las alertas del sistema de vigilancia**, si rellenas sus destinatarios
-  (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`): llevan el
+- **Las alertas del sistema de vigilancia**, si rellenas sus destinatarios de
+  correo (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`) o sus
+  webhooks (`ALERT_WEBHOOK_IT`, `ALERT_WEBHOOK_RRHH`, `ALERT_WEBHOOK_SEGURIDAD`),
+  que las envían a un servicio que tú eliges. Llevan el
   nombre de la alerta, el centro, el dispositivo o componente afectado y una
   descripción técnica. Nunca nombres de personas: como mucho, el identificador
   interno de una (ver [`operacion.md`](operacion.md) §10.4, «Cómo llegan las
   alertas»).
 
 Tres consecuencias que son tuyas, no del fabricante. Las dos primeras valen
-para todos los correos, y la tercera para los dos resúmenes:
+para todos los correos (la primera, también para un webhook que apunte a un
+servicio externo), y la tercera para los dos resúmenes:
 
 1. **Si el correo lo entrega un servidor de un tercero** —Microsoft 365, Google
    Workspace, el SMTP de tu proveedor de hosting—, ese tercero es un **encargado

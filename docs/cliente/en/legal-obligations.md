@@ -99,7 +99,7 @@ and **only with their scope**:
   50 lines; the rest is read in the panel. Neither HR nor administration
   receive it: they have the whole panel.
 
-The other two carry no staff data:
+The other two carry no staff name or working-time record:
 
 - **"Your report is ready to download".** When a report requested from the
   panel finishes generating, it notifies **whoever requested it**, at the
@@ -108,14 +108,17 @@ The other two carry no staff data:
   neither the file nor the download link**: the download is requested from the
   panel. That send has no audit entry of its own, although the request and the
   generation of the report do.
-- **The monitoring system's alerts**, if you fill in their recipients
-  (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`): they carry
+- **The monitoring system's alerts**, if you fill in their email recipients
+  (`ALERT_EMAIL_IT`, `ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`) or their
+  webhooks (`ALERT_WEBHOOK_IT`, `ALERT_WEBHOOK_RRHH`, `ALERT_WEBHOOK_SEGURIDAD`),
+  which send them to a service you choose. They carry
   the alert name, the site, the affected device or component and a technical
   description. Never people's names: at most, a person's internal identifier
   (see [`operation.md`](operation.md) §10.4, "How alerts reach you").
 
 Three consequences that are yours, not the vendor's. The first two apply to
-every email, and the third to the two summaries:
+every email (the first one, also to a webhook pointing to an external
+service), and the third to the two summaries:
 
 1. **If the email is delivered by a third party's server** — Microsoft 365,
    Google Workspace, your hosting provider's SMTP — that third party is a
