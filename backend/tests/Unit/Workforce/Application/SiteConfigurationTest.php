@@ -43,13 +43,16 @@ use Tests\Support\Time\FixedClock;
  */
 
 /**
- * @return SiteRepository&object{stored: ?Site, saves: int}
+ * @return SiteRepository&object{stored: ?Site, saves: int, corrections: list<string>}
  */
 function siteRepositoryHolding(?Site $site): SiteRepository
 {
     return new class($site) implements SiteRepository
     {
         public int $saves = 0;
+
+        /** @var list<string> */
+        public array $corrections = [];
 
         public function __construct(public ?Site $stored) {}
 
@@ -64,6 +67,15 @@ function siteRepositoryHolding(?Site $site): SiteRepository
         {
             $this->saves++;
             $this->stored = $site;
+        }
+
+        public function saveTimezoneCorrection(Site $corrected, SiteTimezone $previous): int
+        {
+            $this->saves++;
+            $this->corrections[] = $previous->identifier.'->'.$corrected->timezone->identifier;
+            $this->stored = $corrected;
+
+            return count($this->corrections);
         }
 
         public function installationSite(): ?Site
@@ -407,6 +419,9 @@ it('comprueba al responsable con los roles del centro y con la cadena tomada', f
         ->and($report->shiftEntryCount)->toBe(1)
         ->and($journal->steps)->toBe(['responsible:chain:admin,rrhh'])
         ->and($repository->stored?->timezone->identifier)->toBe('Atlantic/Canary')
+        // Por la puerta de la correccion, con la zona de partida: la unica
+        // que la base de datos deja abierta con registro horario.
+        ->and($repository->corrections)->toBe(['Europe/Madrid->Atlantic/Canary'])
         ->and(SiteMaintainers::ROLES)->toBe([UserRole::ADMIN, UserRole::RRHH]);
 })->group('RN-23', 'RL-04');
 

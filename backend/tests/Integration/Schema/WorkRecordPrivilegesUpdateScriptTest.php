@@ -30,6 +30,26 @@ use Tests\Support\Database\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+/**
+ * Si `work_record_privileges_tampered` toma `$drift` por manipulacion (no se
+ * repara: update.sh deshace y doctor.sh avisa) o por deriva reparable.
+ */
+function privilegiosActualizadorManipulado(string $drift): bool
+{
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'if work_record_privileges_tampered '.escapeshellarg($drift).'; then echo si; else echo no; fi'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    return trim($process->getOutput()) === 'si';
+}
+
 function privilegiosActualizadorSql(string $role): string
 {
     $process = Process::fromShellCommandline(
@@ -59,6 +79,114 @@ it('el SQL de update.sh da ok contra el esquema migrado', function (): void {
 
     expect($values)->toHaveCount(1)
         ->and($values[0])->toBe('ok');
+})->group('RS-07', 'RL-04');
+
+it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da por buena sin su migracion', function (string $statement, string $expected, bool $tampered): void {
+    // RN-23, bloque 2 de la 2.3.0: el trigger de `sites` y la funcion de la
+    // correccion de consola. En una transaccion del rol de migracion que se
+    // deshace, como la prueba de abajo.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(str_replace(':app', '"'.Config::string('database.roles.application').'"', $statement));
+        $row = $migrator->selectOne($sql);
+
+        $migrator->table('migrations')->where('migration', '2026_10_18_120000_guard_site_timezone_in_database')->delete();
+        $without = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row) && is_object($without));
+
+    expect(array_values((array) $row)[0])->toBe($expected)
+        ->and(array_values((array) $without)[0])->toBe('ok')
+        // Manipulacion (no se repara: update.sh deshace) o deriva que se repara.
+        ->and(privilegiosActualizadorManipulado($expected))->toBe($tampered);
+})->with([
+    'traza escribible por la aplicacion' => ['GRANT INSERT ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:INSERT', false],
+    'traza con la secuencia para la aplicacion' => ['GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO :app', 'site_timezone_changes:SECUENCIA', false],
+    'traza sin lectura' => ['REVOKE SELECT ON TABLE site_timezone_changes FROM :app', 'site_timezone_changes:SELECT', false],
+    'traza borrada' => ['DROP TABLE site_timezone_changes', 'site_timezone_changes:AUSENTE', true],
+    'linea base con INSERT para la aplicacion' => ['GRANT INSERT ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:INSERT', false],
+    'linea base reescribible por la aplicacion' => ['GRANT UPDATE ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:UPDATE', true],
+    'traza borrable por la aplicacion' => ['GRANT DELETE ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:DELETE', true],
+    'traza vaciable por la aplicacion' => ['GRANT TRUNCATE ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:TRUNCATE', true],
+    'linea base borrada' => ['DROP TABLE site_timezone_audit_baseline', 'site_timezone_audit_baseline:AUSENTE', true],
+    'trigger desactivado' => ['ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone', 'trigger:zz_sites_guard_timezone:DESACTIVADO', true],
+    'trigger borrado' => ['DROP TRIGGER zz_sites_guard_timezone ON sites', 'trigger:zz_sites_guard_timezone:AUSENTE', true],
+    'funcion sin SECURITY DEFINER' => ['ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER', 'site_correct_timezone:DEFINER', true],
+    'funcion para PUBLIC' => ['GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC', 'site_correct_timezone:PUBLIC', false],
+    'funcion borrada' => ['DROP FUNCTION public.site_correct_timezone(bigint, text, text)', 'site_correct_timezone:AUSENTE', true],
+])->group('RS-07', 'RN-23');
+
+it('la reparacion de update.sh deja la traza y la linea base de la zona en solo lectura', function (): void {
+    // Privilegios de mas sobre la traza, su secuencia y la linea base, y el
+    // SELECT de la traza retirado: es deriva, y la reparacion la deshace. En
+    // una transaccion del rol de migracion que se deshace.
+    $application = Config::string('database.roles.application');
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql($application);
+
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'CFG_DB_USERNAME='.escapeshellarg($application).'; KQ_WORK_RECORD_STAGE=b7; work_record_privileges_repair_sql'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    $migrator->beginTransaction();
+
+    try {
+        foreach ([
+            'GRANT INSERT ON TABLE site_timezone_changes TO "'.$application.'"',
+            'REVOKE SELECT ON TABLE site_timezone_changes FROM "'.$application.'"',
+            'GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO "'.$application.'"',
+            'GRANT INSERT ON TABLE site_timezone_audit_baseline TO "'.$application.'"',
+        ] as $statement) {
+            $migrator->statement($statement);
+        }
+
+        $before = $migrator->selectOne($sql);
+        $migrator->getPdo()->exec($process->getOutput());
+        $after = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($before) && is_object($after));
+
+    expect(array_values((array) $before)[0])->toBe('site_timezone_audit_baseline:INSERT,site_timezone_changes:INSERT,site_timezone_changes:SECUENCIA,site_timezone_changes:SELECT')
+        ->and(array_values((array) $after)[0])->toBe('ok');
+})->group('RS-07', 'RN-23');
+
+it('toma por manipulacion la funcion de purga borrada, y no la repara', function (): void {
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement('DROP FUNCTION public.work_record_purge_batch(date, integer)');
+        $row = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row));
+
+    expect(array_values((array) $row)[0])->toBe('work_record_purge_batch:AUSENTE')
+        ->and(privilegiosActualizadorManipulado('work_record_purge_batch:AUSENTE'))->toBeTrue()
+        ->and(privilegiosActualizadorManipulado('site_correct_timezone:AUSENTE'))->toBeTrue()
+        ->and(privilegiosActualizadorManipulado('scan_events:UPDATE'))->toBeFalse()
+        ->and(privilegiosActualizadorManipulado('work_record_purge_batch:PUBLIC'))->toBeFalse();
 })->group('RS-07', 'RL-04');
 
 it('el SQL de update.sh detecta un privilegio que sobra', function (): void {

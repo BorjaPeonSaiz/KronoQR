@@ -234,6 +234,141 @@ it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde s
     ],
 ])->group('RF-PD-13', 'RS-07', 'RL-04');
 
+// --- La zona del centro, fija tambien en la base (RN-23, bloque 2 de la 2.3.0) ---
+
+it('avisa si falta o esta desactivada la guarda de la zona, o su funcion pierde la forma', function (string $statement, array $expected): void {
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        // `:app`, el rol de la aplicacion: el conjunto de datos se lee antes
+        // de que arranque la configuracion.
+        $migrator->statement(str_replace(':app', '"'.Config::string('database.roles.application').'"', $statement));
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe($expected);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->with([
+    'el trigger de sites desactivado' => [
+        'ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone',
+        ['disabled_trigger:zz_sites_guard_timezone'],
+    ],
+    'el trigger de sites borrado' => [
+        'DROP TRIGGER zz_sites_guard_timezone ON sites',
+        ['missing_trigger:zz_sites_guard_timezone'],
+    ],
+    'la correccion sin SECURITY DEFINER' => [
+        'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) SECURITY INVOKER',
+        ['site_timezone_function:not_security_definer'],
+    ],
+    'la correccion sin search_path' => [
+        'ALTER FUNCTION public.site_correct_timezone(bigint, text, text) RESET search_path',
+        ['site_timezone_function:no_search_path'],
+    ],
+    'la correccion borrada' => [
+        'DROP FUNCTION public.site_correct_timezone(bigint, text, text)',
+        ['site_timezone_function:missing'],
+    ],
+    'la correccion para PUBLIC' => [
+        'GRANT EXECUTE ON FUNCTION public.site_correct_timezone(bigint, text, text) TO PUBLIC',
+        ['site_timezone_function:public_execute'],
+    ],
+    'la purga para PUBLIC' => [
+        'GRANT EXECUTE ON FUNCTION public.work_record_purge_batch(date, integer) TO PUBLIC',
+        ['purge_function:public_execute'],
+    ],
+    'la traza borrada' => [
+        'DROP TABLE site_timezone_changes',
+        ['site_timezone_trace:missing'],
+    ],
+    'la linea base borrada' => [
+        'DROP TABLE site_timezone_audit_baseline',
+        ['site_timezone_baseline:missing'],
+    ],
+])->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('avisa si la aplicacion puede escribir la traza de cambios de zona o usar su secuencia', function (): void {
+    // Con el rol de la aplicacion, que es el que mira la sonda en produccion:
+    // el propietario los tiene todos por serlo. Los GRANT se confirman y el
+    // `finally` los retira, como en la prueba de lo que sobra.
+    $migrator = privilegiosRegistroMigrador();
+    $application = '"'.Config::string('database.roles.application').'"';
+    $grants = [
+        'INSERT, DELETE ON TABLE site_timezone_changes',
+        'USAGE ON SEQUENCE site_timezone_changes_id_seq',
+    ];
+
+    try {
+        foreach ($grants as $grant) {
+            $migrator->statement('GRANT '.$grant.' TO '.$application);
+        }
+
+        $findings = privilegiosRegistroDoctor();
+    } finally {
+        foreach ($grants as $grant) {
+            $migrator->statement('REVOKE '.$grant.' FROM '.$application);
+        }
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe([
+            'site_timezone_trace:DELETE',
+            'site_timezone_trace:INSERT',
+            'site_timezone_trace:sequence',
+        ]);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('avisa si la aplicacion hereda del propietario de la traza en vez de omitir sus privilegios', function (): void {
+    // Miembro del rol propietario: con un SET ROLE es el propietario (la
+    // aplicacion es NOINHERIT). La sonda no lo puede dar por bueno.
+    $migrator = privilegiosRegistroMigrador();
+    $application = '"'.Config::string('database.roles.application').'"';
+    $owner = '"'.Config::string('database.roles.migration').'"';
+
+    try {
+        $migrator->statement('GRANT '.$owner.' TO '.$application);
+
+        $findings = privilegiosRegistroDoctor();
+    } finally {
+        $migrator->statement('REVOKE '.$owner.' FROM '.$application);
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->details['guard_issues'])
+        ->toContain('site_timezone_trace:owner_membership', 'site_timezone_baseline:owner_membership');
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RN-23');
+
+it('no mira la guarda de la zona mientras su migracion no este aplicada', function (): void {
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->table('migrations')->where('migration', ServiceInspector::SITE_TIMEZONE_GUARD_MIGRATION)->delete();
+        $migrator->statement('ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone');
+
+        $details = privilegiosRegistroDoctor($migrator)[0]->details;
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RN-23');
+
 it('avisa si la aplicacion recupera DELETE sobre el registro', function (): void {
     $migrator = privilegiosRegistroMigrador();
     $application = '"'.Config::string('database.roles.application').'"';

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Implementada en la 2.2.1** (bloque 20). Aceptada por el propietario el 08-10-2026. La regla es RN-23 del doc 01 §4. `PATCH /site` responde `409` (`urn:kronoqr:problem:site-time-zone-locked`) en cuanto hay registro horario, y `Site.timezone_locked` lo anuncia. La corrección es la orden `workforce:correct-site-timezone`, con motivo, cuenta responsable, confirmación y asiento. El portal ya no tiene la rama `otherTimeZone`. Dos precisiones a lo decidido, en la [nota de la implementación](#nota-15-10-2026-221-bloque-20-implementada) |
+| **Estado** | **Implementada en la 2.2.1** (bloque 20). Aceptada por el propietario el 08-10-2026. La regla es RN-23 del doc 01 §4. `PATCH /site` responde `409` (`urn:kronoqr:problem:site-time-zone-locked`) en cuanto hay registro horario, y `Site.timezone_locked` lo anuncia. La corrección es la orden `workforce:correct-site-timezone`, con motivo, cuenta responsable, confirmación y asiento. El portal ya no tiene la rama `otherTimeZone`. Dos precisiones a lo decidido, en la [nota de la implementación](#nota-15-10-2026-221-bloque-20-implementada). **Desde la 2.3.0 (bloque 2) la regla también vive en el motor**: *trigger* `zz_sites_guard_timezone` y función `SECURITY DEFINER` `site_correct_timezone`, con una traza solo-append de cada cambio y la conciliación cotejando la zona y la traza con la auditoría ([enmienda del 18-10-2026](#enmienda-del-18-10-2026-230-bloque-2-la-regla-también-en-el-motor)) |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-02 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), que registra como decisión pendiente el F3 de la tanda 4) |
 | **Afecta a** | Enmienda [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md) (punto 3: el `PATCH /site` ya no cambia la zona en cualquier momento) · Precisa [ADR-004](ADR-004-utc-en-almacenamiento.md) (de dónde sale la zona de presentación de un instante pasado) · Respeta [ADR-006](ADR-006-los-turnos-no-se-parten-a-medianoche.md), [ADR-012](ADR-012-api-versionada-en-la-ruta.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/app/Modules/Workforce/Application/UseCase/UpdateSiteHandler.php`, `Workforce/Domain/Model/Site.php` · `Reporting/Infrastructure/Persistence/DatabaseWorkDayJournalReader.php`, `Reporting/Http/Resource/EmployeeWorkDaysResource.php` · `Compliance/Infrastructure/Persistence/DatabaseLegalExportSource.php` · `frontend-portal/src/features/my-records/ShiftEntryTable.vue` · `docs/api/openapi.yaml` (`PATCH /site`, `time_zone` por jornada y por tramo) |
@@ -81,6 +81,75 @@ El doc 01 §4 recoge la regla como **RN-23** (Anexo A, fase 5, con la tarea 5.5 
 
 **Contrato.** Además del `409`, `Site.timezone_locked` (aditivo, compatible con `v1`) dice al panel si la zona ya está fija, para que no ofrezca un cambio que el servidor va a rechazar. El panel deja cambiarla antes del primer fichaje y, después, la muestra sin edición y explica por qué.
 
-**Sin *trigger* de defensa en `sites`, y por tanto sin migración.** No cerraría la carrera, porque un fichaje sin confirmar no es visible para el *trigger*; la consola tendría que saltárselo con un ajuste de sesión que el runtime también puede poner, así que tampoco sería una barrera de seguridad; y retirar a la aplicación el `UPDATE` de la columna, como hace [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) §1 con el registro, no se puede: el cambio de antes del primer fichaje lo necesita. El cambio queda vigilado por su asiento `site.updated` y por la prueba de concurrencia.
+**Sin *trigger* de defensa en `sites`, y por tanto sin migración** (enmendado el 18-10-2026: desde la 2.3.0 sí lo hay, ver la [enmienda](#enmienda-del-18-10-2026-230-bloque-2-la-regla-también-en-el-motor)). No cerraría la carrera, porque un fichaje sin confirmar no es visible para el *trigger*; la consola tendría que saltárselo con un ajuste de sesión que el runtime también puede poner, así que tampoco sería una barrera de seguridad; y retirar a la aplicación el `UPDATE` de la columna, como hace [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) §1 con el registro, no se puede: el cambio de antes del primer fichaje lo necesita. El cambio queda vigilado por su asiento `site.updated` y por la prueba de concurrencia.
 
 **La enmienda de [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md) pasa a vigente.**
+
+## Enmienda del 18-10-2026 (2.3.0, bloque 2): la regla también en el motor
+
+**Enmienda la nota del 15-10-2026 en un punto: ahora sí hay *trigger* de defensa en `sites`.** La decisión (§1–§4) no cambia. Lo decide el plan de la 2.3.0 aprobado por el propietario (D2, residuo de la tanda 4 de la verificación final de la 2.2.1): con la regla solo en la aplicación, la credencial del runtime cambiaba `sites.timezone` con fichajes hechos con un `UPDATE` directo, sin `409` y sin asiento.
+
+### Por qué el argumento de la nota del 15-10-2026 ya no vale
+
+La nota daba tres razones para no poner *trigger*. Se revisan una a una:
+
+1. **«No cerraría la carrera con el primer fichaje.»** Sigue siendo cierto, y no es lo que hace. La carrera la siguen cerrando `FOR UPDATE` frente a `FOR KEY SHARE`. El *trigger* es para la escritura que **no pasa por el caso de uso**, la de D2, y para esa sí es una barrera.
+2. **«La consola tendría que saltárselo con un ajuste de sesión que el runtime también puede poner.»** Ya no hay ajuste de sesión. El *trigger* deja pasar solo al **propietario de la tabla**: compara `current_user` con `pg_class.relowner`, sin nombres de rol en el SQL. La consola no se lo salta: pasa por la función `site_correct_timezone(p_site_id, p_from, p_to)`, `SECURITY DEFINER` y propiedad del rol de migración, que es el propietario. Es el patrón de ADR-057 §2 y §3, y la credencial de ese rol no llega a ningún contenedor de runtime (ADR-042).
+3. **«Retirar a la aplicación el `UPDATE` de la columna no se puede.»** Sigue siendo cierto: el cambio de antes del primer fichaje lo necesita. Por eso el *trigger* no retira el privilegio: condiciona el cambio a que el centro no tenga tramos.
+
+### Lo que se ha implementado
+
+Migración `2026_10_18_120000_guard_site_timezone_in_database`, reversible, sin expand/contract (una tabla nueva y vacía, funciones y un *trigger*; no toca filas existentes):
+
+- **`zz_sites_guard_timezone`, `BEFORE UPDATE ON sites FOR EACH ROW`.** Rechaza con `42501` si a la vez la zona cambia (`IS DISTINCT FROM`), el centro tiene algún tramo en cualquier estado y quien escribe no es el propietario de la tabla. No lleva `OF timezone`: la condición ya filtra. El prefijo `zz_` lo hace el último de los `BEFORE` de `sites` (PostgreSQL los ordena por nombre), así que ve la fila como la dejan los demás. La función del *trigger* no es `SECURITY DEFINER`: si lo fuera, `current_user` sería siempre el propietario. La misma zona y el nombre se siguen guardando con fichajes hechos.
+- **`site_correct_timezone`**, `SECURITY DEFINER`, `SET search_path = pg_catalog, pg_temp`, `EXECUTE` retirado a `PUBLIC` y concedido solo a la aplicación. Bloquea la fila del centro y responde `P0002` si el centro no existe o su zona no es `p_from`, `42501` si no tiene tramos (entonces la zona va por el camino normal, con su asiento) y `22023` si falta un argumento. **Cada cambio que hace lo apunta en la traza y devuelve el `id` de la fila**, que la orden guarda en su asiento.
+- **`site_timezone_changes`, la traza solo-append** (`id`, `site_id`, `from_tz`, `to_tz`, `changed_at`, `txid`, `audit_log_id`: el último asiento al cambiar), propiedad del rol de migración. Solo la escribe la función; la aplicación tiene `SELECT` y ningún otro privilegio, tampoco sobre su secuencia. `changed_at` y `txid` los pone la base.
+- **`site_timezone_audit_baseline`, la línea base**: una fila del rol de migración, solo lectura para la aplicación, con el último `audit_log.id` al aplicar la migración (ver «Qué garantiza ahora»). `down()` se niega si la traza tiene filas, como `2026_10_03_100100` con sus avisos: son la única constancia de que la zona cambió.
+- **En la aplicación**, `SiteRepository::saveTimezoneCorrection()` llama a la función, y solo la usa `CorrectSiteTimezoneHandler` (`SiteTimezoneLockBoundaryTest`). `save()` traduce el `42501` del *trigger* a `SiteTimezoneLocked`, así que el `PATCH /site` sigue respondiendo `409` aunque la comprobación del caso de uso faltara.
+- **`Site::correctTimezone(SiteTimezone $to, SiteTimezoneCorrection $correction)`** (V21-1-AR-5): la firma de la corrección va en la firma del método. El compilador obliga a tenerla, y el método rechaza una firma sin tramos.
+- **Vigilancia.** Con la migración aplicada, `update.sh`, `doctor.sh` y `product:doctor` comprueban tres cosas (`infra/scripts/lib/work-record-privileges.sh`). Que el *trigger* existe y está activo. Que la función sigue `SECURITY DEFINER` con `search_path` y sin `EXECUTE` para `PUBLIC`. Y que la traza y la línea base existen, son del mismo propietario que `sites` y la aplicación solo las lee. Un *trigger* o una función ausentes o alterados, o una traza o una línea base ausentes o de otro propietario, son manipulación: no se reparan solos; `update.sh` deshace y `doctor.sh` avisa, como con los de ADR-057 §2. `DELETE`, `UPDATE` o `TRUNCATE` de la aplicación sobre la traza o la línea base también es manipulación, porque con ellos se borra o se reescribe un cambio de zona. Un `INSERT` de más o el `SELECT` que falte es deriva y `update.sh` lo repara, como en el resto de tablas. `product:doctor` avisa además si la aplicación es miembro del rol propietario (`owner_membership`).
+
+### Qué garantiza ahora, y qué no
+
+**Garantiza**, frente a quien solo tiene la credencial del runtime:
+
+1. **No puede cambiar la zona con fichajes hechos sin pasar por `site_correct_timezone`.** Un `UPDATE` directo da `42501`.
+2. **Todo cambio por esa función deja una fila en la traza que no puede borrar ni reescribir.** Un A→B→A entre dos conciliaciones deja dos filas.
+3. **La conciliación de ADR-057 §4 lo coteja con la auditoría** y saca `site_timezone_differs_from_audit` en tres casos, cada uno con su campo:
+   - `timezone`: la zona de `sites` no es la de su último asiento `site.*`;
+   - `site_timezone_changes #<id>`: una fila de la traza no tiene **su** `site.updated` firmado. La función devuelve el `id` de la fila, la orden lo guarda en el asiento (`site_timezone_change_id`) y la conciliación empareja fila y asiento **por identidad**, además de por el mismo antes y después y la firma (motivo, recuento y cuenta). Así una fila revisada no se come el asiento de una corrección legítima posterior, y una corrección legítima no tapa la fila de un ataque con el mismo antes y después;
+   - `correction`: un `site.updated` cambia la zona después del primer tramo sin esa firma. «Después» se decide por el orden de la cadena (ADR-010), no por relojes. Desde la 2.2.1 el panel no puede escribir un asiento así (`409`); antes sí podía.
+
+   **La línea base.** La migración fija en `site_timezone_audit_baseline` (una fila del rol de migración, solo lectura para la aplicación) el último asiento de `audit_log` al aplicarse. Un `site.updated` sin firma hasta ella es de una instalación que viene de la 2.1.0 o la 2.2.0, cuando el panel cambiaba la zona con fichajes legítimamente: cuenta como no verificable, no como discrepancia. Una corrección firmada hasta ella (las de la 2.2.1, que no dejaban fila) no sirve para justificar una fila de la traza.
+4. **Una discrepancia de la traza o de un asiento sin firma solo deja de contarse si alguien la firma como revisada.** Lo hace `compliance:reconcile-work-record --acknowledge-site-change=change:<id>|audit:<id>`, con motivo y una cuenta activa con rol admin o rrhh, y escribe el asiento `site.timezone_discrepancy_reviewed`. La revisión de una fila solo cuenta si su asiento es posterior al último asiento que había al escribirse la fila (`site_timezone_changes.audit_log_id`), así que no se puede revisar de antemano. Lo revisado pasa a la métrica de revisadas, separada por tipo: la de una fila (`target="change"`) dispara `CambioDeZonaRevisado`, crítica y de integridad, porque es un cambio de zona que ocurrió de verdad; la de un asiento sin firma (`target="audit"`), `DiscrepanciaDeZonaRevisada`, de aviso. La de la zona actual no se revisa: se devuelve la zona por el producto.
+
+**No garantiza:**
+
+- **Que la función solo la llame la orden.** La aplicación tiene `EXECUTE`, y la función no escribe asiento porque no puede firmar por nadie. Con la credencial del runtime se puede llamar sin pasar por la orden: la zona cambia. Lo que queda es la fila en la traza, y que la conciliación la denuncia **en su siguiente pasada** (diaria). No lo impide, lo detecta. Es el mismo residuo que `work_record_purge_batch` (ADR-057, «Lo que esto no impide»).
+- **Detectar una fila acompañada de un asiento firmado falsificado.** La aplicación puede insertar en `audit_log`, y un `site.updated` con `via: console`, motivo, recuento y una cuenta existente con el mismo antes y después hace que la fila cuadre. Es el límite general de §4 («una escritura acompañada de un asiento falsificado»). La cadena de hash no lo impide, porque el asiento se encadena como cualquier otro.
+- **Verificar lo que ya no tiene auditoría o se escribió con las reglas de antes.** Hay tres casos:
+  - un centro sin ningún asiento `site.*`: una instalación anterior a la tarea 5.5, o un asiento que se fue con la partición purgada de su año (ADR-027);
+  - una fila de la traza de un año cuya partición de `audit_log` ya se purgó;
+  - un `site.updated` sin firma anterior a la línea base.
+
+  No se denuncian. Se cuentan como **no verificables**, con una línea informativa en la orden y la métrica `work_record_reconciliation_unverifiable`, para que la comprobación no quede en cero en silencio. La alerta `ZonaDelCentroNoVerificable` es informativa, no notifica y solo salta cuando la cifra sube respecto a hace un día. No son una alerta de integridad.
+- **Lo que haga el rol de migración.** Es el propietario: cambia la zona sin pasar por el *trigger* y sin dejar fila, y puede soltar las guardas. Esa credencial no llega al runtime (ADR-042). Si al conciliar la zona ya no es la de su último asiento, lo ve la comparación de `timezone`; un cambio que deshizo antes de la pasada, no.
+- **Que una revisión sea legítima.** Con la credencial del runtime también se puede insertar un `site.timezone_discrepancy_reviewed`, como un `retention.purge_reviewed`. Por eso una revisión nunca es silenciosa: la de una fila dispara `CambioDeZonaRevisado` (crítica) y la de un asiento, `DiscrepanciaDeZonaRevisada`, para que alguien compruebe quién firmó y por qué. Sin revisión, la discrepancia se repite en cada pasada.
+
+**Verificación:**
+
+- `tests/Integration/Schema/SiteTimezoneGuardTest.php`, con SQL directo:
+  - `42501` con tramos; pasa sin ellos; el nombre y la misma zona pasan siempre; el propietario pasa;
+  - la función con y sin tramos, `P0002` y su traza, A→B→A incluido;
+  - la aplicación no escribe, borra ni vacía la traza, ni usa su secuencia;
+  - la forma del *trigger*, los privilegios y la forma de la función; la aplicación no puede desactivar ni reescribir la guarda;
+  - la línea base;
+  - `down()`/`up()`, y `down()` se niega con filas en la traza.
+- `Feature/Workforce/CorrectSiteTimezoneCommandTest.php`: la orden de punta a punta, ya por la función.
+- `Unit/Workforce/Domain/SiteTimezoneLockTest.php`.
+- `Unit/Compliance/Domain/AuditedSiteTimezoneTest.php`: las tres comprobaciones y lo no verificable, con y sin año sellado.
+- `Integration/Compliance/WorkRecordReconciliationTest.php`:
+  - la función fuera de la orden, la ida y vuelta, el asiento sin firma y la zona no verificable;
+  - el cambio por el panel antes del primer tramo y el caso anterior a la línea base;
+  - la revisión por fila y por asiento, con la negativa de rol y los rechazos.
+- `Integration/Product/WorkRecordPrivilegesDoctorCheckTest.php`, `Integration/Schema/WorkRecordPrivilegesUpdateScriptTest.php` e `Integration/Install/DoctorScriptTest.php`.

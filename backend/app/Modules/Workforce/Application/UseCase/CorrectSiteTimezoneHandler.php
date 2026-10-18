@@ -67,6 +67,12 @@ use Illuminate\Database\ConnectionInterface;
  * cadena de `audit_log` (ADR-046: filas padre antes que la cadena), con la
  * cuenta, el recuento, el guardado y el asiento.
  *
+ * **El guardado pasa por la base de datos.** Con registro horario, el
+ * *trigger* `zz_sites_guard_timezone` niega cualquier `UPDATE` de la zona con la
+ * credencial del runtime; la unica puerta es la funcion `SECURITY DEFINER`
+ * `site_correct_timezone`, que llama `SiteRepository::saveTimezoneCorrection()`
+ * con la zona de partida (migracion `2026_10_18_120000`, bloque 2 de la 2.3.0).
+ *
  * **Mientras el centro esta bloqueado, los fichajes esperan** (leen la zona con
  * `FOR KEY SHARE`). Por eso dentro solo va lo imprescindible para el asiento:
  * el recuento de tramos (`WorkRecordPresence::count()`), que es un barrido del
@@ -159,15 +165,22 @@ final readonly class CorrectSiteTimezoneHandler
                     return $report;
                 }
 
-                $corrected = $current->correctTimezone($requested);
-                $this->sites->save($corrected);
+                // La firma primero: sin ella el dominio no corrige (V21-1-AR-5).
+                $correction = SiteTimezoneCorrection::of($reason, $count, $command->responsibleUserId);
+                $corrected = $current->correctTimezone($requested, $correction);
+
+                // Por la funcion de la base de datos y no por `save()`: con
+                // registro horario, el *trigger* `zz_sites_guard_timezone` niega
+                // cualquier otro `UPDATE` de la zona.
+                $changeId = $this->sites->saveTimezoneCorrection($corrected, $current->timezone);
 
                 $this->events->publish(SiteConfigured::corrected(
                     siteId: (int) $corrected->id,
                     name: $corrected->name,
                     timezone: $corrected->timezone->identifier,
                     previousTimezone: $current->timezone->identifier,
-                    correction: SiteTimezoneCorrection::of($reason, $count, $command->responsibleUserId),
+                    correction: $correction,
+                    siteTimezoneChangeId: $changeId,
                     occurredAt: $this->clock->now(),
                 ));
 

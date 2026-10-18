@@ -89,6 +89,22 @@ final readonly class ServiceInspector
         'sites',
     ];
 
+    /**
+     * La migracion que fija la zona del centro tambien en la base de datos
+     * (RN-23, ADR-056, bloque 2 de la 2.3.0): el *trigger* de `sites` y la
+     * funcion de la correccion de consola. Sin ella aplicada no se vigilan.
+     */
+    public const string SITE_TIMEZONE_GUARD_MIGRATION = '2026_10_18_120000_guard_site_timezone_in_database';
+
+    /** El *trigger* de esa migracion, el mismo que mira `infra/scripts/lib/work-record-privileges.sh`. */
+    public const string SITE_TIMEZONE_GUARD_TRIGGER = 'zz_sites_guard_timezone';
+
+    /** La traza solo-append de los cambios de zona por la funcion de la correccion; la aplicacion solo la lee. */
+    public const string SITE_TIMEZONE_TRACE = 'site_timezone_changes';
+
+    /** La linea base de la conciliacion de la zona; la aplicacion solo la lee. */
+    public const string SITE_TIMEZONE_BASELINE = 'site_timezone_audit_baseline';
+
     public function __construct(
         private ConnectionInterface $database,
         private Redis $redis,
@@ -303,6 +319,11 @@ final readonly class ServiceInspector
                 ->exists();
 
             $guards = $guarded ? $this->workRecordGuards() : ['excess' => [], 'issues' => []];
+
+            if ($guarded && $this->database->table('migrations')->where('migration', self::SITE_TIMEZONE_GUARD_MIGRATION)->exists()) {
+                $guards['issues'] = [...$guards['issues'], ...$this->siteTimezoneGuards()];
+            }
+
             $excess = [...$excess, ...$guards['excess']];
             sort($excess);
 
@@ -331,9 +352,8 @@ final readonly class ServiceInspector
      *   con el rol de migracion los apaga sin borrarlos, y un *trigger* que se
      *   añada mañana queda cubierto sin tocar esta lista. Los internos son los de
      *   las claves ajenas;
-     * - que `work_record_purge_batch` siga siendo `SECURITY DEFINER` y con su
-     *   `search_path` fijado: sin lo primero no puede borrar, sin lo segundo una
-     *   tabla temporal con el mismo nombre la desviaria;
+     * - que `work_record_purge_batch` siga como debe
+     *   ({@see self::definerFunctionIssues()});
      * - que la aplicacion no tenga `DELETE` sobre las siete tablas.
      *
      * Solo lee el catalogo; ninguna fila del registro.
@@ -342,7 +362,7 @@ final readonly class ServiceInspector
      */
     private function workRecordGuards(): array
     {
-        /** @var object{missing: string, disabled: string, definer: bool|null, search_path: bool|null, deletable: string} $row */
+        /** @var object{missing: string, disabled: string, deletable: string} $row */
         $row = $this->database->selectOne(
             <<<'SQL'
             SELECT
@@ -363,11 +383,6 @@ final readonly class ServiceInspector
                        AND NOT g.tgisinternal
                        AND g.tgenabled <> 'O'
                 ), '') AS disabled,
-                (SELECT p.prosecdef FROM pg_catalog.pg_proc p
-                  WHERE p.oid = to_regprocedure('public.work_record_purge_batch(date, integer)')) AS definer,
-                (SELECT coalesce(bool_or(setting LIKE 'search_path=%'), false)
-                   FROM pg_catalog.pg_proc p, unnest(p.proconfig) AS setting
-                  WHERE p.oid = to_regprocedure('public.work_record_purge_batch(date, integer)')) AS search_path,
                 coalesce((
                     SELECT string_agg(t.tbl || ':DELETE', ',' ORDER BY t.tbl)
                       FROM unnest(?::text[]) AS t(tbl)
@@ -390,22 +405,181 @@ final readonly class ServiceInspector
             $issues[] = 'disabled_trigger:'.$trigger;
         }
 
-        if ($row->definer === null) {
-            $issues[] = 'purge_function:missing';
-        } else {
-            if ($row->definer !== true) {
-                $issues[] = 'purge_function:not_security_definer';
-            }
+        return [
+            'excess' => array_values(array_filter(explode(',', $row->deletable))),
+            'issues' => [...$issues, ...$this->definerFunctionIssues('public.work_record_purge_batch(date, integer)', 'purge_function')],
+        ];
+    }
 
-            if ($row->search_path !== true) {
-                $issues[] = 'purge_function:no_search_path';
-            }
+    /**
+     * Las guardas de la zona del centro (RN-23, ADR-056, migracion
+     * `2026_10_18_120000`), mirando lo mismo que `update.sh` y `doctor.sh`:
+     *
+     * - que exista {@see self::SITE_TIMEZONE_GUARD_TRIGGER} y que **ningun**
+     *   *trigger* no interno de `sites` este desactivado;
+     * - que `site_correct_timezone` siga como debe
+     *   ({@see self::definerFunctionIssues()}): sin `SECURITY DEFINER`, la
+     *   correccion de consola chocaria con el *trigger* y no podria escribir la
+     *   traza;
+     * - que la traza {@see self::SITE_TIMEZONE_TRACE} y la linea base
+     *   {@see self::SITE_TIMEZONE_BASELINE} existan, sean del mismo propietario
+     *   que `sites` y la aplicacion solo las pueda leer
+     *   ({@see self::readOnlyTableIssues()}).
+     *
+     * Solo lee el catalogo.
+     *
+     * @return list<string>
+     */
+    private function siteTimezoneGuards(): array
+    {
+        /** @var object{missing: bool, disabled: string} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT
+                NOT EXISTS (
+                    SELECT 1 FROM pg_catalog.pg_trigger g
+                     WHERE g.tgrelid = 'public.sites'::regclass AND g.tgname = ? AND NOT g.tgisinternal
+                ) AS missing,
+                coalesce((
+                    SELECT string_agg(g.tgname, ',' ORDER BY g.tgname)
+                      FROM pg_catalog.pg_trigger g
+                     WHERE g.tgrelid = 'public.sites'::regclass AND NOT g.tgisinternal AND g.tgenabled <> 'O'
+                ), '') AS disabled
+            SQL,
+            [self::SITE_TIMEZONE_GUARD_TRIGGER],
+        );
+
+        $issues = $row->missing ? ['missing_trigger:'.self::SITE_TIMEZONE_GUARD_TRIGGER] : [];
+
+        foreach (array_filter(explode(',', $row->disabled)) as $trigger) {
+            $issues[] = 'disabled_trigger:'.$trigger;
         }
 
         return [
-            'excess' => array_values(array_filter(explode(',', $row->deletable))),
-            'issues' => $issues,
+            ...$issues,
+            ...$this->definerFunctionIssues('public.site_correct_timezone(bigint, text, text)', 'site_timezone_function'),
+            ...$this->readOnlyTableIssues(self::SITE_TIMEZONE_TRACE, 'site_timezone_trace', self::SITE_TIMEZONE_TRACE.'_id_seq'),
+            ...$this->readOnlyTableIssues(self::SITE_TIMEZONE_BASELINE, 'site_timezone_baseline', null),
         ];
+    }
+
+    /**
+     * Lo que le falta a una tabla que la aplicacion solo debe leer, con el
+     * prefijo `$label`:
+     *
+     * - `missing`: no existe;
+     * - `owner`: no es del propietario de `sites` (el rol de migracion);
+     * - `owner_membership`: quien pregunta no es el propietario pero es miembro
+     *   de su rol: con herencia tiene todos sus privilegios, y sin ella
+     *   (`NOINHERIT`, como la aplicacion) le basta un `SET ROLE` para ser el
+     *   propietario. En produccion la sonda corre con la aplicacion: que sea
+     *   miembro del propietario es justo lo que no puede pasar;
+     * - `<PRIVILEGIO>`: un privilegio de escritura sobre la tabla;
+     * - `sequence`: `USAGE` sobre su secuencia.
+     *
+     * Si quien pregunta **es** el propietario no se miran los privilegios: los
+     * tiene todos por serlo.
+     *
+     * @return list<string>
+     */
+    private function readOnlyTableIssues(string $table, string $label, ?string $sequence): array
+    {
+        $qualified = 'public.'.$table;
+
+        /** @var object{present: bool, owner: bool, is_owner: bool, member: bool, writable: string, sequence: bool} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT c.oid IS NOT NULL AS present,
+                   coalesce(c.relowner = (SELECT s.relowner FROM pg_catalog.pg_class s WHERE s.oid = 'public.sites'::regclass), true) AS owner,
+                   coalesce(c.relowner = (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = current_user), false) AS is_owner,
+                   coalesce(pg_has_role(current_user, c.relowner, 'MEMBER'), false) AS member,
+                   coalesce((
+                       SELECT string_agg(p.priv, ',' ORDER BY p.priv)
+                         FROM unnest(ARRAY['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) AS p(priv)
+                        WHERE has_table_privilege(current_user, c.oid, p.priv)
+                   ), '') AS writable,
+                   coalesce(has_sequence_privilege(current_user, to_regclass(?), 'USAGE'), false) AS sequence
+              FROM (SELECT to_regclass(?) AS oid) AS wanted
+              LEFT JOIN pg_catalog.pg_class c ON c.oid = wanted.oid
+            SQL,
+            [$sequence === null ? null : 'public.'.$sequence, $qualified],
+        );
+
+        if (! $row->present) {
+            return [$label.':missing'];
+        }
+
+        $issues = $row->owner ? [] : [$label.':owner'];
+
+        if ($row->is_owner) {
+            return $issues;
+        }
+
+        if ($row->member) {
+            return [...$issues, $label.':owner_membership'];
+        }
+
+        foreach (array_filter(explode(',', $row->writable)) as $privilege) {
+            $issues[] = $label.':'.$privilege;
+        }
+
+        if ($row->sequence) {
+            $issues[] = $label.':sequence';
+        }
+
+        return $issues;
+    }
+
+    /**
+     * Lo que le falta a una funcion `SECURITY DEFINER` del registro para ser
+     * lo que su migracion dejo, con el prefijo `$label`:
+     *
+     * - `missing`: no existe;
+     * - `not_security_definer`: sin el, no puede hacer lo que la aplicacion no
+     *   puede;
+     * - `no_search_path`: sin `search_path` fijado, una tabla temporal con el
+     *   mismo nombre la desviaria;
+     * - `public_execute`: `PUBLIC` la puede ejecutar (`aclexplode`, `grantee = 0`),
+     *   y con ella cualquier rol de la base, no solo la aplicacion.
+     *
+     * @return list<string>
+     */
+    private function definerFunctionIssues(string $signature, string $label): array
+    {
+        /** @var object{definer: bool|null, search_path: bool|null, public_execute: bool|null} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT p.prosecdef AS definer,
+                   coalesce((SELECT bool_or(setting LIKE 'search_path=%') FROM unnest(p.proconfig) AS setting), false) AS search_path,
+                   EXISTS (
+                       SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) AS a
+                        WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+                   ) AS public_execute
+              FROM (SELECT to_regprocedure(?) AS oid) AS wanted
+              LEFT JOIN pg_catalog.pg_proc p ON p.oid = wanted.oid
+            SQL,
+            [$signature],
+        );
+
+        if ($row->definer === null) {
+            return [$label.':missing'];
+        }
+
+        $issues = [];
+
+        if ($row->definer !== true) {
+            $issues[] = $label.':not_security_definer';
+        }
+
+        if ($row->search_path !== true) {
+            $issues[] = $label.':no_search_path';
+        }
+
+        if ($row->public_execute === true) {
+            $issues[] = $label.':public_execute';
+        }
+
+        return $issues;
     }
 
     /**

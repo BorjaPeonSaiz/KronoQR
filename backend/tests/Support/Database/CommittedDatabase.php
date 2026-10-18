@@ -86,6 +86,9 @@ trait CommittedDatabase
         'roles',
         'permissions',
         'role_has_permissions',
+        // La linea base de la conciliacion de la zona (RN-23, bloque 2 de la
+        // 2.3.0): la fija su migracion y ninguna prueba la escribe.
+        'site_timezone_audit_baseline',
     ];
 
     /**

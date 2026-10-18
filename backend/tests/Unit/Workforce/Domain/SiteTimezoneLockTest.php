@@ -26,6 +26,12 @@ function siteLockMadrid(): Site
     return Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1);
 }
 
+/** La firma de una correccion de consola: motivo, tramos que ya existian y cuenta que responde. */
+function siteLockFirma(): SiteTimezoneCorrection
+{
+    return SiteTimezoneCorrection::of('Se puso Madrid y el hotel esta en Tenerife', 3, 7);
+}
+
 it('cambia la zona mientras no hay registro horario', function (): void {
     $site = siteLockMadrid()->relocateTo(SiteTimezone::fromString('Atlantic/Canary'), SiteTimezoneLock::Open);
 
@@ -65,7 +71,7 @@ it('acepta la misma zona con registro horario o sin el, y devuelve el mismo cent
 ])->group('RN-23');
 
 it('corrige la zona por consola aunque haya registro horario, sin tocar nada mas', function (): void {
-    $site = siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Atlantic/Canary'));
+    $site = siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Atlantic/Canary'), siteLockFirma());
 
     expect($site->timezone->identifier)->toBe('Atlantic/Canary')
         ->and($site->name)->toBe('Hotel Marina')
@@ -75,7 +81,41 @@ it('corrige la zona por consola aunque haya registro horario, sin tocar nada mas
 it('no corrige a la misma zona: devuelve el mismo centro', function (): void {
     $site = siteLockMadrid();
 
-    expect($site->correctTimezone(SiteTimezone::fromString('Europe/Madrid')))->toBe($site);
+    expect($site->correctTimezone(SiteTimezone::fromString('Europe/Madrid'), siteLockFirma()))->toBe($site);
+})->group('RN-23');
+
+it('no corrige con una firma que no habla de ningun tramo, aunque se cuele saltandose su fabrica', function (): void {
+    // `SiteTimezoneCorrection::of` ya lo niega; esto es la segunda linea, la
+    // del propio centro. Se construye por su constructor privado para probarla.
+    $firmaSinTramos = Closure::bind(
+        static fn (): SiteTimezoneCorrection => new SiteTimezoneCorrection('Se puso Madrid y era Canarias', 0, 7),
+        null,
+        SiteTimezoneCorrection::class,
+    )();
+
+    expect(fn (): Site => siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Atlantic/Canary'), $firmaSinTramos))
+        ->toThrow(InvalidArgumentException::class, 'only for a site with a work record')
+        // La misma zona no es una correccion y no llega a mirarla.
+        ->and(siteLockMadrid()->correctTimezone(SiteTimezone::fromString('Europe/Madrid'), $firmaSinTramos)->timezone->identifier)
+        ->toBe('Europe/Madrid');
+})->group('RN-23');
+
+it('no se puede corregir la zona sin la firma de la correccion: la exige el tipo', function (): void {
+    // V21-1-AR-5: que la firma no sea opcional lo dice la firma del metodo,
+    // no una revision. Un segundo parametro anulable o con valor por defecto
+    // dejaria corregir sin motivo ni responsable.
+    $parametros = new ReflectionMethod(Site::class, 'correctTimezone')->getParameters();
+
+    expect($parametros)->toHaveCount(2);
+
+    $firma = $parametros[1]->getType();
+
+    expect($firma)->toBeInstanceOf(ReflectionNamedType::class);
+    \assert($firma instanceof ReflectionNamedType);
+
+    expect($firma->getName())->toBe(SiteTimezoneCorrection::class)
+        ->and($firma->allowsNull())->toBeFalse()
+        ->and($parametros[1]->isOptional())->toBeFalse();
 })->group('RN-23');
 
 it('deriva el bloqueo de si existe registro horario', function (): void {

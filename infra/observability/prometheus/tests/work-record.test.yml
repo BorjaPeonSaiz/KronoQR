@@ -31,14 +31,53 @@ tests:
               destinatario: seguridad
               component: audit
             exp_annotations:
-              summary: "El registro horario no cuadra con su auditoria (recent): 2 tramo(s)"
+              summary: "El registro horario no cuadra con su auditoria (recent): 2 discrepancia(s)"
               description: >-
-                La conciliacion ha encontrado tramos de shift_entries que no
-                coinciden con el ultimo asiento que la aplicacion escribio sobre
-                ellos en audit_log: un tramo sin asiento, una hora o una persona
-                cambiadas, un tramo anulado sin correccion o un asiento cuyo
-                tramo ya no existe. Alguien ha escrito en el registro horario por
-                fuera de la aplicacion. El fichaje NO esta afectado y no hay que
+                La conciliacion ha encontrado discrepancias entre el registro
+                horario y su auditoria en audit_log: un tramo sin asiento, una hora
+                o una persona cambiadas, un tramo anulado sin correccion, un asiento
+                cuyo tramo ya no existe, o una zona horaria del centro que no es la
+                de su ultimo asiento o que cambio sin una correccion firmada.
+                Alguien ha escrito en el registro horario por fuera de la
+                aplicacion. El fichaje NO esta afectado y no hay que
+                parar nada: preserva la evidencia antes de tocar ninguna fila y
+                no generes exportaciones legales del periodo hasta aclararlo.
+                Una purga no admisible que una persona ya ha dado por revisada
+                (retention.purge_reviewed) no cuenta aqui: eso lo avisa
+                PurgaFueraDeLimitesRevisada.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # La zona del centro (RN-23, bloque 2 de la 2.3.0) es una clase mas: dispara
+  # sola, con el mismo destinatario.
+  #-----------------------------------------------------------------------------
+  - name: discrepancia_zona_del_centro_dispara
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_discrepancies{scope="full",kind="site_timezone_differs_from_audit"}'
+        values: "1x10"
+      - series: 'work_record_reconciliation_discrepancies{scope="full",kind="entry_without_audit"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DiscrepanciaEntreRegistroYAuditoria
+        exp_alerts:
+          - exp_labels:
+              scope: full
+              severity: critical
+              integrity: "true"
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "El registro horario no cuadra con su auditoria (full): 1 discrepancia(s)"
+              description: >-
+                La conciliacion ha encontrado discrepancias entre el registro
+                horario y su auditoria en audit_log: un tramo sin asiento, una hora
+                o una persona cambiadas, un tramo anulado sin correccion, un asiento
+                cuyo tramo ya no existe, o una zona horaria del centro que no es la
+                de su ultimo asiento o que cambio sin una correccion firmada.
+                Alguien ha escrito en el registro horario por fuera de la
+                aplicacion. El fichaje NO esta afectado y no hay que
                 parar nada: preserva la evidencia antes de tocar ninguna fila y
                 no generes exportaciones legales del periodo hasta aclararlo.
                 Una purga no admisible que una persona ya ha dado por revisada
@@ -362,4 +401,142 @@ tests:
     alert_rule_test:
       - eval_time: 1442m
         alertname: PurgaRevisadaQueExplicaBorrados
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Revisiones de la zona del centro (RN-23, bloque 2 de la 2.3.0): como la
+  # purga revisada, disparan cuando el gauge sube respecto a hace un dia y se
+  # apagan solas. `target="change"` (una fila de la traza) es critica y de
+  # integridad; `target="audit"` (un asiento sin firma), aviso. Ninguna cuenta
+  # como discrepancia pendiente.
+  #-----------------------------------------------------------------------------
+  - name: cambio_de_zona_revisado_es_critico
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="change"}'
+        values: "0x1440 1x1500"
+      - series: 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="audit"}'
+        values: "0x2940"
+      - series: 'work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"}'
+        values: "0x2940"
+    alert_rule_test:
+      - eval_time: 1440m
+        alertname: CambioDeZonaRevisado
+        exp_alerts: []
+      - eval_time: 1442m
+        alertname: CambioDeZonaRevisado
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              integrity: "true"
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Se ha dado por revisado un cambio de la zona del centro hecho por fuera de la orden"
+              description: >-
+                Alguien ha ejecutado compliance:reconcile-work-record
+                --acknowledge-site-change sobre una fila de site_timezone_changes
+                sin asiento firmado (1 en la ultima pasada diaria): un
+                cambio de la zona del centro que ocurrio por fuera de la orden de
+                consola deja de contarse como discrepancia. Verifica HOY con la
+                persona que firma (responsible) que lo hizo ella, contrasta quien
+                tenia acceso por shell al servidor y que la zona actual es la
+                correcta. Si nadie lo reconoce, es un cambio de zona tapado con
+                una revision escrita con la credencial de la aplicacion: trata el
+                caso como un incidente de integridad.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+      - eval_time: 1442m
+        alertname: DiscrepanciaDeZonaRevisada
+        exp_alerts: []
+      - eval_time: 1442m
+        alertname: DiscrepanciaEntreRegistroYAuditoria
+        exp_alerts: []
+      - eval_time: 2882m
+        alertname: CambioDeZonaRevisado
+        exp_alerts: []
+
+  - name: asiento_de_zona_revisado_es_aviso
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="audit"}'
+        values: "0x1440 1x1500"
+      - series: 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="recent",target="change"}'
+        values: "0x2940"
+    alert_rule_test:
+      - eval_time: 1442m
+        alertname: DiscrepanciaDeZonaRevisada
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Se ha dado por revisada una discrepancia de la zona del centro"
+              description: >-
+                El numero de asientos site.updated sin firma dados por revisados ha
+                subido en el ultimo dia (1 en la ultima pasada diaria).
+                No es una discrepancia pendiente: alguien ha ejecutado
+                compliance:reconcile-work-record --acknowledge-site-change.
+                Comprueba en audit_log el asiento
+                site.timezone_discrepancy_reviewed (quien responde, el motivo) y
+                que cuadra con un incidente ya investigado. Si nadie lo reconoce,
+                es un posible uso de la credencial de la aplicacion: trata el caso
+                como el de DiscrepanciaEntreRegistroYAuditoria.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+      - eval_time: 1442m
+        alertname: CambioDeZonaRevisado
+        exp_alerts: []
+      - eval_time: 2882m
+        alertname: DiscrepanciaDeZonaRevisada
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ZonaDelCentroNoVerificable: informativa, solo cuando la cifra (suma de los
+  # dos tipos) sube respecto a hace un dia. Constante, nunca.
+  #-----------------------------------------------------------------------------
+  - name: zona_no_verificable_informa_al_subir
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_unverifiable{scope="full",subject="site_timezone"}'
+        values: "1x2940"
+      - series: 'work_record_reconciliation_unverifiable{scope="full",subject="site_timezone_change"}'
+        values: "0x1440 2x1500"
+    alert_rule_test:
+      - eval_time: 1440m
+        alertname: ZonaDelCentroNoVerificable
+        exp_alerts: []
+      - eval_time: 1442m
+        alertname: ZonaDelCentroNoVerificable
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Parte de la historia de la zona del centro no se puede verificar"
+              description: >-
+                La conciliacion completa no ha podido cotejar con la auditoria
+                3 elemento(s) de la zona horaria del centro, mas que
+                hace un dia: un centro sin asiento site.*, cambios sin firma
+                anteriores a la linea base de la 2.3.0 o cambios de un año cuya
+                auditoria ya se purgo. No es una discrepancia ni hay nada que
+                hacer: es informativo.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+      - eval_time: 2882m
+        alertname: ZonaDelCentroNoVerificable
+        exp_alerts: []
+
+  - name: zona_no_verificable_constante_o_a_cero_no_informa
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_unverifiable{scope="full",subject="site_timezone_change"}'
+        values: "4x2940"
+      - series: 'work_record_reconciliation_unverifiable{scope="recent",subject="site_timezone"}'
+        values: "0x1440 3x1500"
+    alert_rule_test:
+      - eval_time: 1442m
+        alertname: ZonaDelCentroNoVerificable
+        exp_alerts: []
+      - eval_time: 2882m
+        alertname: ZonaDelCentroNoVerificable
         exp_alerts: []

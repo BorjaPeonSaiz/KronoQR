@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Application\UseCase;
 
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
+use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 use App\Modules\Compliance\Domain\ValueObject\PurgeFloors;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
@@ -28,8 +29,10 @@ use Throwable;
  * Cruza cada tramo de `shift_entries` con sus asientos `shift_entry.*` de
  * `audit_log` y cuenta lo que no cuadra: tramos sin asiento, marcas, origenes o
  * correcciones que no son las del asiento, tramos retirados sin su correccion,
- * asientos sin tramo y asientos de purga que no se pueden creer. La regla es
- * {@see WorkRecordReconciliation} y {@see WorkRecordPurgeBoundary}; aqui solo se
+ * asientos sin tramo y asientos de purga que no se pueden creer; y, desde el
+ * bloque 2 de la 2.3.0, un centro cuya zona horaria no es la de su ultimo
+ * asiento `site.*` (RN-23). La regla es {@see WorkRecordReconciliation},
+ * {@see WorkRecordPurgeBoundary} y {@see AuditedSiteTimezone}; aqui solo se
  * recorre, se cuenta y se publica.
  *
  * **Es lo que hace verdad lo que el cliente tiene escrito** (doc 05 §7,
@@ -100,6 +103,10 @@ final readonly class ReconcileWorkRecordWithAudit
             'discrepancies' => $result->discrepancyCount(),
             'reviewed_purges' => $result->reviewedPurges,
             'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
+            'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
+            'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
+            'reviewed_site_timezone_changes' => $result->reviewedSiteTimezoneChanges,
+            'reviewed_site_timezone_entries' => $result->reviewedSiteTimezoneEntries,
         ]);
 
         return $result;
@@ -111,6 +118,10 @@ final readonly class ReconcileWorkRecordWithAudit
         /** @var list<WorkRecordDiscrepancy> $detailed */
         $detailed = [];
         $checked = 0;
+        $unverifiableSites = 0;
+        $unverifiableChanges = 0;
+        $reviewedChanges = 0;
+        $reviewedEntries = 0;
         $boundary = WorkRecordPurgeBoundary::none();
 
         foreach ($this->source->read($window, $chunkSize) as $item) {
@@ -120,6 +131,18 @@ final readonly class ReconcileWorkRecordWithAudit
                 // salen ademas como discrepancia propia.
                 $boundary = WorkRecordPurgeBoundary::assess($item, $runAt, $this->floorsFor($item));
                 $found = $boundary->rejected;
+
+                // Y la zona de cada centro frente a su auditoria (RN-23): en las
+                // dos pasadas, porque es la historia entera de una fila y no una
+                // ventana. Lo que no se puede verificar se cuenta aparte.
+                foreach ($item->sites as $site) {
+                    $assessment = $site->assess($item->sealedAuditYears);
+                    $found = [...$found, ...$assessment->discrepancies];
+                    $unverifiableSites += $assessment->unverifiableTimezone ? 1 : 0;
+                    $unverifiableChanges += $assessment->unverifiableChanges;
+                    $reviewedChanges += $assessment->reviewedChanges;
+                    $reviewedEntries += $assessment->reviewedEntries;
+                }
             } else {
                 $checked++;
                 $found = [WorkRecordReconciliation::compare($item, $boundary)];
@@ -146,6 +169,10 @@ final readonly class ReconcileWorkRecordWithAudit
             truncated: array_sum($counts) > \count($detailed),
             reviewedPurges: \count($boundary->reviewedPurgeIds),
             reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
+            unverifiableSiteTimezones: $unverifiableSites,
+            unverifiableSiteTimezoneChanges: $unverifiableChanges,
+            reviewedSiteTimezoneChanges: $reviewedChanges,
+            reviewedSiteTimezoneEntries: $reviewedEntries,
         );
     }
 

@@ -194,7 +194,9 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
             // Purgas y revisiones en la misma instantanea: una revision
             // confirmada entre dos lecturas no puede tapar una purga que la
             // primera no vio, ni al reves.
-            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears(), $this->reviews());
+            $siteTimezones = new DatabaseSiteTimezoneAuditReader($this->connection);
+
+            yield new WorkRecordAuditContext($this->purges(), $siteTimezones->sealedAuditYears(), $this->reviews(), $siteTimezones->sites());
 
             $cursor = $this->declareCursor($window);
             $size = max(1, $chunkSize > 0 ? $chunkSize : $this->fetchSize);
@@ -277,20 +279,6 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
         }
 
         return $reviews;
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function sealedAuditYears(): array
-    {
-        $years = [];
-
-        foreach ($this->connection->select('SELECT partition_year FROM '.AuditLogSchema::ANCHORS_TABLE.' ORDER BY partition_year') as $row) {
-            $years[] = Row::of((object) $row)->int('partition_year');
-        }
-
-        return $years;
     }
 
     /**

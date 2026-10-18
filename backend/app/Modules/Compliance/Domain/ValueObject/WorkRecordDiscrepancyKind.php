@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 /**
- * Las cinco formas en las que el registro horario puede dejar de cuadrar con su
- * auditoria (ADR-057 §4).
+ * Las seis formas en las que el registro horario puede dejar de cuadrar con su
+ * auditoria (ADR-057 §4; la sexta, la zona del centro, desde el bloque 2 de la
+ * 2.3.0, RN-23).
  *
  * Cada una es la huella de un ataque distinto con la credencial de la
  * aplicacion, y por eso tienen nombre propio y no un «no cuadra» generico: el
@@ -19,6 +20,7 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * | `retired_without_correction` | Un tramo anulado o sustituido sin la correccion que lo justifica | Un `UPDATE status` que hace desaparecer horas de la exportacion |
  * | `audit_without_entry` | Un asiento cuyo tramo ya no existe y que ninguna purga admisible explica | Un `DELETE` |
  * | `purge_out_of_bounds` | Un asiento `retention.purge_executed` con un corte que la purga real no podia usar | Un asiento de purga añadido para tapar un borrado |
+ * | `site_timezone_differs_from_audit` | La zona de `sites` no es la del ultimo asiento `site.created` o `site.updated` | Un `UPDATE sites SET timezone` sin tramos, o `site_correct_timezone` llamada fuera de la orden de consola, que repintan el historico con otra zona |
  */
 enum WorkRecordDiscrepancyKind: string
 {
@@ -27,4 +29,5 @@ enum WorkRecordDiscrepancyKind: string
     case RetiredWithoutCorrection = 'retired_without_correction';
     case AuditWithoutEntry = 'audit_without_entry';
     case PurgeOutOfBounds = 'purge_out_of_bounds';
+    case SiteTimezoneDiffersFromAudit = 'site_timezone_differs_from_audit';
 }

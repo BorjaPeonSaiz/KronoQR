@@ -10,7 +10,7 @@ procedimiento de 72 h es [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
-| `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-cinco-discrepancias) |
+| `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-seis-discrepancias) |
 | `ConciliacionDelRegistroAusente` | > 26 h sin la pasada diaria, `for: 30m` | Crítica (seguridad) | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la pasada completa, `for: 30m` | Alta | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `PurgaFueraDeLimitesRevisada` | `work_record_reconciliation_reviewed_purges` sube respecto a hace un día; se apaga sola al cabo de un día | Aviso (`warning`) | Responsable de seguridad | [§3.1](#31-dar-por-revisada-una-purga-no-admisible) |
@@ -150,9 +150,9 @@ como cualquier copia.
 
 ---
 
-## 3. Las cinco discrepancias
+## 3. Las seis discrepancias
 
-Cada línea de la salida dice el tramo, el tipo y, cuando lo hay, el asiento:
+Cada línea de la salida dice el tramo (o el centro), el tipo y, cuando lo hay, el asiento:
 
 ```text
 shift_entries 0199a1b2-…-a001 · entry_differs_from_audit · clocked_in_at · audit_log #48211
@@ -312,6 +312,67 @@ conciliación lo seguirá contando en cada pasada: **la alerta no se apaga sola*
 hasta que la investigación termine y se dé por revisado (§3.1). Mientras tanto,
 anótalo en el registro del incidente.
 
+### `site_timezone_differs_from_audit` — la historia de la zona del centro no cuadra con su auditoría
+
+Desde la 2.3.0 la base de datos no deja cambiar la zona con fichajes hechos
+(RN-23, ADR-056: *trigger* `zz_sites_guard_timezone`) salvo por la función
+`site_correct_timezone`. La usa `workforce:correct-site-timezone`, **no
+escribe asiento** (el asiento lo deja la orden) y **apunta cada cambio** en la
+traza solo-append `site_timezone_changes`, que la aplicación solo puede leer.
+La línea dice el centro, lo que no cuadra y, si lo hay, el asiento; **nunca las
+zonas**:
+
+```text
+sites #1 · site_timezone_differs_from_audit · timezone · audit_log #48502
+sites #1 · site_timezone_differs_from_audit · site_timezone_changes #7
+sites #1 · site_timezone_differs_from_audit · correction · audit_log #48510
+```
+
+| Campo | Qué ha pasado |
+|---|---|
+| `timezone` | La zona de `sites` no es la del último asiento `site.created` o `site.updated` (`new_value.timezone`) |
+| `site_timezone_changes #<id>` | La fila `<id>` de la traza no tiene **su** `site.updated` firmado: el que la nombra por `site_timezone_change_id` (lo escribe la orden con el id que devuelve la función), con el mismo antes y después, motivo, recuento y cuenta, y posterior a la línea base. Se empareja por identidad: una corrección legítima no tapa la fila de un ataque con el mismo antes y después. Es la función llamada con la credencial de la aplicación sin pasar por la orden; sale también si la zona ya ha vuelto a la de antes (A→B→A) |
+| `correction` | Un `site.updated` que cambia la zona **después del primer tramo** sin esa firma y **posterior a la línea base** de la 2.3.0. Desde la 2.2.1 el panel no lo puede escribir (`409`): alguien lo insertó en `audit_log`. Los anteriores a la línea base (el panel de la 2.1.0 y la 2.2.0 sí cambiaba la zona con fichajes) no se denuncian: cuentan como no verificables |
+
+En los tres casos alguien ha escrito por fuera del producto, y mientras la zona
+sea otra todo el histórico se presenta y se exporta con ella (RN-05).
+
+```sql
+-- La zona de ahora, los asientos del centro y la traza, en orden.
+SELECT id, name, timezone FROM sites;
+SELECT id, occurred_at, action, actor_type, actor_id, payload
+  FROM audit_log WHERE subject_type = 'site' ORDER BY id;
+SELECT id, site_id, from_tz, to_tz, changed_at, txid FROM site_timezone_changes ORDER BY id;
+```
+
+El `txid` de la fila es la transacción que llamó a la función: cotéjalo con el
+registro del motor del paso 4 de la §2.
+
+**Resolución:** trata el cambio como evidencia del ataque
+([`brecha-de-seguridad.md`](brecha-de-seguridad.md)) y no exportes nada para la
+Inspección hasta devolver la zona. Se devuelve **por el producto**, a la zona
+del último asiento legítimo, y eso deja el asiento que falta: con fichajes,
+`workforce:correct-site-timezone <zona del asiento> --reason=… --responsible=…`
+(el motivo cita el incidente, sin nombres de la plantilla); sin fichajes, desde
+Panel → **Centro**. Ninguno de los dos mueve ninguna jornada. Después, la
+conciliación de «Al terminar».
+
+**La fila sin firma no se va sola.** La traza es solo-append y el asiento
+firmado no se puede inventar después: una `site_timezone_changes #<id>` o una
+`correction` **se siguen contando en cada pasada** hasta que, investigadas, se
+dan por revisadas (§3.1 bis), igual que un `purge_out_of_bounds`. La de
+`timezone` no se revisa: se resuelve devolviendo la zona.
+
+**Zona no verificable** (línea `zona del centro no verificable: …` y métrica
+`work_record_reconciliation_unverifiable`, **no** es una alerta de integridad).
+Un centro sin ningún asiento `site.*` (instalación anterior a la puesta en
+marcha guiada, o su asiento se fue con la partición purgada de su año, ADR-027)
+no tiene con qué compararse; una fila de la traza de un año cuya auditoría ya
+se purgó tampoco, ni un `site.updated` sin firma anterior a la línea base
+(`site_timezone_audit_baseline`, el último asiento cuando se instaló la 2.3.0).
+La alerta `ZonaDelCentroNoVerificable` es informativa, no notifica y solo salta cuando la cifra sube respecto a hace un día. No se denuncian: se cuentan para que se vea que esa parte no
+se ha mirado.
+
 ### 3.1 Dar por revisada una purga no admisible
 
 Un asiento `retention.purge_executed` fuera de límites **no se puede quitar**
@@ -412,6 +473,48 @@ siguiente. La tercera recalcula `daily_totals` de los días tocados: la
 proyección se construye desde `shift_entries` y estará contando lo manipulado.
 Y comprueba que los triggers siguen activos (§3.2).
 
+### 3.1 bis Dar por revisada una discrepancia de la zona del centro
+
+Solo para una `site_timezone_changes #<id>` o una `correction` **ya
+investigada**, con el informe del incidente abierto y la zona ya devuelta por
+el producto si hacía falta. Como la §3.1: no borra ni repara nada, escribe un
+asiento `site.timezone_discrepancy_reviewed` con el objetivo, el motivo y la
+cuenta que responde, que tiene que ser una cuenta de gestión **activa con rol
+admin o rrhh**. Una revisión no se repite ni se corrige.
+
+```bash
+# 1. Sin --reason: comprueba que es una discrepancia pendiente y de qué centro.
+docker compose exec -T app php artisan compliance:reconcile-work-record \
+  --acknowledge-site-change=change:7 --responsible=<id de la cuenta>
+
+# 2. Revisión de verdad: change:<id> para una fila de la traza,
+#    audit:<id> para un site.updated sin firma. Motivo de 10 a 1000
+#    caracteres, SIN nombres de la plantilla.
+docker compose exec -T app php artisan compliance:reconcile-work-record \
+  --acknowledge-site-change=change:7 --responsible=<id de la cuenta> \
+  --reason="Incidente 2026-14: la llamada a la función fue de soporte; zona devuelta con la orden"
+```
+
+Sale con 2 si la cuenta no puede firmar o algo está mal escrito, con 1 si no es
+una discrepancia pendiente o ya está revisada, y con 0 si escribe. Una
+revisión de una fila solo cuenta si su asiento es **posterior** al último
+asiento que había cuando la fila se escribió (`site_timezone_changes.audit_log_id`):
+no se puede revisar de antemano. Desde la siguiente pasada, la discrepancia sale
+como `discrepancias de la zona del centro revisadas: N de la traza, M de
+asientos sin firma` y en
+`work_record_reconciliation_reviewed_site_timezone_discrepancies{target="change"|"audit"}`.
+Eso dispara una alerta según lo revisado:
+
+- **`CambioDeZonaRevisado`** (crítica, integridad) para una fila de la traza:
+  un cambio de zona que ocurrió por fuera de la orden deja de contarse.
+  Verifica **hoy** con quien firma que lo hizo y que la zona actual es la
+  correcta;
+- **`DiscrepanciaDeZonaRevisada`** (aviso) para un `site.updated` sin firma.
+
+En los dos casos, comprueba en `audit_log` que la revisión la firmó quien
+debía y que el motivo cuadra con el incidente. Si nadie la reconoce, trátala
+como la §1.1.
+
 ### 3.2 Reactivar los triggers: cómo se escribe en el registro a mano
 
 Desde la 2.2.1 la base lleva triggers en `shift_entries` e `incidents` (ADR-057
@@ -499,6 +602,26 @@ misma comprobación (avisa con `trigger:<nombre>:DESACTIVADO` o `AUSENTE`) y
 `./update.sh` **deshace la actualización** si la ve, sin reactivarlos él: una
 actualización limpia nunca los deja así, y reactivarlos sin saber quién los
 tocó taparía la causa.
+
+**`sites`, desde la 2.3.0.** `zz_sites_guard_timezone` niega cambiar la zona
+horaria del centro con fichajes hechos (RN-23), pero **no al propietario de la
+tabla**: el rol de migración la puede cambiar a mano sin desactivar nada, y no
+debe hacerlo. La corrección es `workforce:correct-site-timezone`, que deja
+asiento. Un cambio hecho así tampoco deja fila en la traza
+`site_timezone_changes`: solo la escribe la función. Si `./doctor.sh` avisa con
+`trigger:zz_sites_guard_timezone:DESACTIVADO` o `AUSENTE`, con
+`site_correct_timezone:DEFINER` o `AUSENTE` (la función de la corrección falta o
+perdió `SECURITY DEFINER` o su `search_path`), o con
+`site_timezone_changes:AUSENTE`/`PROPIETARIO` o
+`site_timezone_audit_baseline:AUSENTE`/`PROPIETARIO` (la traza o la línea base
+faltan o cambiaron de propietario; un privilegio de más sobre ellas no es
+manipulación y lo repara `./update.sh`), reactívalo con
+`ALTER TABLE sites ENABLE TRIGGER zz_sites_guard_timezone` en una transacción
+anotada —una función alterada se repone, con el rol de migración y en la misma
+transacción, con su definición de la migración
+`2026_10_18_120000_guard_site_timezone_in_database`— y concilia: un cambio
+de zona hecho mientras la guarda estaba apagada sale como
+`site_timezone_differs_from_audit` (§3).
 
 ---
 

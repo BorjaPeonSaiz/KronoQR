@@ -289,6 +289,20 @@ enum AuditAction: string
     case SiteUpdated = 'site.updated';
 
     /**
+     * Una discrepancia de la zona del centro que la conciliacion no puede dejar
+     * de contar —una fila de `site_timezone_changes` sin su asiento firmado, o
+     * un `site.updated` que cambio la zona sin firma— se da por investigada
+     * (RN-23, ADR-056; bloque 2 de la 2.3.0).
+     *
+     * Misma forma que `retention.purge_reviewed`: no borra nada (la traza es
+     * solo-append y la regla dura 6 vale para la cadena), la firma una cuenta
+     * de administracion o RRHH con motivo, desde la consola, y la conciliacion
+     * pasa a contar esa discrepancia como revisada, con su propia alerta: una
+     * revision, legitima o no, nunca pasa en silencio.
+     */
+    case SiteTimezoneDiscrepancyReviewed = 'site.timezone_discrepancy_reviewed';
+
+    /**
      * Se ha cerrado el asistente de puesta en marcha (RF-PD-03, tarea 5.5).
      *
      * **Se audita porque es irreversible.** El asistente no se reabre, y la razon

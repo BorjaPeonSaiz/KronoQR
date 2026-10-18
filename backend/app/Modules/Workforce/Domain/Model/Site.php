@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Domain\Model;
 
 use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
+use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneCorrection;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneLock;
 use InvalidArgumentException;
 
@@ -91,15 +92,31 @@ final readonly class Site
      * consola que exige motivo, responsable y confirmacion y deja asiento
      * (`SiteTimezoneLockBoundaryTest`).
      *
+     * **La firma de la correccion va en la firma del metodo** (V21-1-AR-5):
+     * sin un {@see SiteTimezoneCorrection} —motivo valido, tramos que ya
+     * existian y cuenta que responde— no se puede llamar, y eso lo comprueba el
+     * compilador y no una revision. Una firma valida ya dice que hay registro
+     * horario (`SiteTimezoneCorrection::of` exige al menos un tramo), y el metodo
+     * lo vuelve a exigir: sin tramos no hay nada que corregir. No la guarda:
+     * viaja en el asiento `site.updated` que publica el caso de uso, que es
+     * quien la construye y se la pasa.
+     *
      * La misma zona devuelve `$this`.
      */
-    public function correctTimezone(SiteTimezone $timezone): self
+    public function correctTimezone(SiteTimezone $to, SiteTimezoneCorrection $correction): self
     {
-        if ($timezone->equals($this->timezone)) {
+        if ($to->equals($this->timezone)) {
             return $this;
         }
 
-        return new self($this->id, $this->name, $timezone);
+        // Sin registro horario esto no es una correccion: la zona se cambia
+        // con `relocateTo()`, con su asiento normal. La firma lo dice; si
+        // llegara una que no lo dice, es un defecto y no se corrige nada.
+        if ($correction->shiftEntryCount < 1) {
+            throw new InvalidArgumentException('A site time zone correction is only for a site with a work record (RN-23).');
+        }
+
+        return new self($this->id, $this->name, $to);
     }
 
     public function withId(int $id): self

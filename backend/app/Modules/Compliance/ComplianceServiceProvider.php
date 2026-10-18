@@ -28,6 +28,7 @@ use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\Port\PurgeReviewLedger;
+use App\Modules\Compliance\Application\Port\SiteTimezoneAuditReader;
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
@@ -95,6 +96,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportEmployeeDirectory;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePurgeReviewLedger;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseSiteTimezoneAuditReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
 use App\Modules\Identity\Domain\Event\CredentialIssued;
@@ -246,6 +248,17 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->bind(
             PurgeReviewLedger::class,
             static fn (): DatabasePurgeReviewLedger => new DatabasePurgeReviewLedger(DB::connection()),
+        );
+
+        /*
+         * La zona del centro con su auditoria (RN-23, bloque 2 de la 2.3.0),
+         * para revisar una de sus discrepancias. Por la conexion de la
+         * aplicacion, como la revision de una purga: la lectura cae dentro del
+         * candado de la cadena.
+         */
+        $this->app->bind(
+            SiteTimezoneAuditReader::class,
+            static fn (): DatabaseSiteTimezoneAuditReader => new DatabaseSiteTimezoneAuditReader(DB::connection()),
         );
 
         /*

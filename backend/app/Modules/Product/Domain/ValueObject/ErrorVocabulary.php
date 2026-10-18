@@ -875,6 +875,7 @@ final readonly class ErrorVocabulary
         'discards',
         'disco',
         'disconnected',
+        'discrepancy',
         'disk',
         'dismissed',
         'dispatch',
