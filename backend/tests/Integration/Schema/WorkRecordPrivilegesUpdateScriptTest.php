@@ -111,7 +111,10 @@ it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da 
     'traza con la secuencia para la aplicacion' => ['GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO :app', 'site_timezone_changes:SECUENCIA', false],
     'traza sin lectura' => ['REVOKE SELECT ON TABLE site_timezone_changes FROM :app', 'site_timezone_changes:SELECT', false],
     'traza borrada' => ['DROP TABLE site_timezone_changes', 'site_timezone_changes:AUSENTE', true],
-    'linea base escribible por la aplicacion' => ['GRANT UPDATE ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:UPDATE', false],
+    'linea base con INSERT para la aplicacion' => ['GRANT INSERT ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:INSERT', false],
+    'linea base reescribible por la aplicacion' => ['GRANT UPDATE ON TABLE site_timezone_audit_baseline TO :app', 'site_timezone_audit_baseline:UPDATE', true],
+    'traza borrable por la aplicacion' => ['GRANT DELETE ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:DELETE', true],
+    'traza vaciable por la aplicacion' => ['GRANT TRUNCATE ON TABLE site_timezone_changes TO :app', 'site_timezone_changes:TRUNCATE', true],
     'linea base borrada' => ['DROP TABLE site_timezone_audit_baseline', 'site_timezone_audit_baseline:AUSENTE', true],
     'trigger desactivado' => ['ALTER TABLE sites DISABLE TRIGGER zz_sites_guard_timezone', 'trigger:zz_sites_guard_timezone:DESACTIVADO', true],
     'trigger borrado' => ['DROP TRIGGER zz_sites_guard_timezone ON sites', 'trigger:zz_sites_guard_timezone:AUSENTE', true],
@@ -143,10 +146,10 @@ it('la reparacion de update.sh deja la traza y la linea base de la zona en solo 
 
     try {
         foreach ([
-            'GRANT INSERT, DELETE ON TABLE site_timezone_changes TO "'.$application.'"',
+            'GRANT INSERT ON TABLE site_timezone_changes TO "'.$application.'"',
             'REVOKE SELECT ON TABLE site_timezone_changes FROM "'.$application.'"',
             'GRANT USAGE ON SEQUENCE site_timezone_changes_id_seq TO "'.$application.'"',
-            'GRANT UPDATE ON TABLE site_timezone_audit_baseline TO "'.$application.'"',
+            'GRANT INSERT ON TABLE site_timezone_audit_baseline TO "'.$application.'"',
         ] as $statement) {
             $migrator->statement($statement);
         }
@@ -160,7 +163,7 @@ it('la reparacion de update.sh deja la traza y la linea base de la zona en solo 
 
     \assert(is_object($before) && is_object($after));
 
-    expect(array_values((array) $before)[0])->toBe('site_timezone_audit_baseline:UPDATE,site_timezone_changes:DELETE,site_timezone_changes:INSERT,site_timezone_changes:SECUENCIA,site_timezone_changes:SELECT')
+    expect(array_values((array) $before)[0])->toBe('site_timezone_audit_baseline:INSERT,site_timezone_changes:INSERT,site_timezone_changes:SECUENCIA,site_timezone_changes:SELECT')
         ->and(array_values((array) $after)[0])->toBe('ok');
 })->group('RS-07', 'RN-23');
 

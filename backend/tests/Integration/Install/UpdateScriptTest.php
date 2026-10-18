@@ -987,6 +987,7 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         work_record_privileges_tampered "work_record_purge_batch:AUSENTE" && work_record_privileges_tampered "site_correct_timezone:AUSENTE" && printf 'funcion-ausente-manipulada\n'
         work_record_privileges_tampered "site_timezone_changes:PROPIETARIO" && work_record_privileges_tampered "site_timezone_audit_baseline:AUSENTE" && printf 'traza-manipulada\n'
         work_record_privileges_tampered "site_timezone_changes:INSERT" || printf 'traza-se-repara\n'
+        work_record_privileges_tampered "site_timezone_changes:DELETE" && work_record_privileges_tampered "site_timezone_audit_baseline:TRUNCATE" && printf 'traza-borrable-manipulada\n'
         grep -q "site_timezone_audit_baseline" "${d}/repara.txt" && printf 'repara-la-traza\n'
         grep -q "site_timezone_changes" "${d}/sql.txt" && printf 'con-traza-de-zona\n'
         grep -q "zz_sites_guard_timezone" "${d}/sql.txt" && grep -q "2026_10_18_120000_guard_site_timezone_in_database" "${d}/sql.txt" && printf 'con-guarda-de-zona\n'
@@ -1030,6 +1031,7 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('funcion-ausente-manipulada')
         ->and($proceso->getOutput())->toContain('traza-manipulada')
         ->and($proceso->getOutput())->toContain('traza-se-repara')
+        ->and($proceso->getOutput())->toContain('traza-borrable-manipulada')
         ->and($proceso->getOutput())->toContain('repara-la-traza')
         ->and($proceso->getOutput())->toContain('con-traza-de-zona')
         ->and($proceso->getOutput())->toContain('con-guarda-de-zona')

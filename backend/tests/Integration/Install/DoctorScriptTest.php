@@ -233,6 +233,7 @@ it('doctor.sh separa la manipulacion de las guardas de la deriva que update.sh r
     'funcion de la zona borrada' => ['site_correct_timezone:AUSENTE', 'update.sh NO lo repara'],
     'traza de la zona de otro propietario' => ['site_timezone_changes:PROPIETARIO', 'update.sh NO lo repara'],
     'linea base de la zona borrada' => ['site_timezone_audit_baseline:AUSENTE', 'update.sh NO lo repara'],
+    'traza de la zona borrable' => ['site_timezone_changes:DELETE', 'update.sh NO lo repara'],
     // Deriva: la traza escribible por la aplicacion la repara update.sh.
     'traza de la zona escribible' => ['site_timezone_changes:INSERT', 'Ejecuta sudo ./update.sh (los repara)'],
     'trigger de la zona desactivado' => ['trigger:zz_sites_guard_timezone:DESACTIVADO', 'update.sh NO lo repara'],

@@ -89,7 +89,8 @@ work_record_privileges_stage() {
 # Devuelve 0 si la deriva (salida de work_record_privileges_sql) incluye un trigger ausente
 # o desactivado, una funcion SECURITY DEFINER (la purga o la correccion de la zona) ausente
 # o sin SECURITY DEFINER / search_path, o la traza o la linea base de la zona ausentes o de
-# otro propietario (sus privilegios de mas, o el SELECT que falte, si se reparan). Eso NO
+# otro propietario, o con DELETE, UPDATE o TRUNCATE para el rol: con ellos se borra o se
+# reescribe un cambio de zona (un INSERT de mas, o el SELECT que falte, si se reparan). Eso NO
 # se repara solo: lo hace un superusuario o una migracion rota, y reactivarlo en silencio taparia
 # justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
 work_record_privileges_tampered() {
@@ -97,7 +98,9 @@ work_record_privileges_tampered() {
   *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"* | \
     *"${KQ_WORK_RECORD_PURGE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:AUSENTE"* | \
     *"${KQ_SITE_TIMEZONE_TRACE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO"* | \
-    *"${KQ_SITE_TIMEZONE_BASELINE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:PROPIETARIO"*) return 0 ;;
+    *"${KQ_SITE_TIMEZONE_BASELINE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:PROPIETARIO"* | \
+    *"${KQ_SITE_TIMEZONE_TRACE}:DELETE"* | *"${KQ_SITE_TIMEZONE_TRACE}:UPDATE"* | *"${KQ_SITE_TIMEZONE_TRACE}:TRUNCATE"* | \
+    *"${KQ_SITE_TIMEZONE_BASELINE}:DELETE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:UPDATE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:TRUNCATE"*) return 0 ;;
   esac
   return 1
 }
