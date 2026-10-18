@@ -9,8 +9,10 @@ use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -40,7 +42,11 @@ beforeEach(function (): void {
 
 function generarPaquete(DiagnosticsOptions $options): void
 {
-    app(GenerateDiagnosticsBundleHandler::class)->handle($options, DiagnosticsActor::Console);
+    // Con datos personales, la consola exige una cuenta admin que firme
+    // (2.3.0 bloque 3, doc 01 §7.2 «Firmas por consola»).
+    $responsible = $options->includePersonalData ? ManagementUsers::withRole(UserRole::ADMIN)->id : null;
+
+    app(GenerateDiagnosticsBundleHandler::class)->handle($options, DiagnosticsActor::Console, $responsible);
 }
 
 /**
