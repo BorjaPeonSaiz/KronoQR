@@ -124,16 +124,24 @@ From each release you need two files, listed under its *Assets* section:
 The third one, `kronoqr-<version>.cdx.json`, is the product's component list
 (SBOM): it is not needed to install.
 
-From the server, in a working folder:
+**Where: in `/opt`.** The package is downloaded and unpacked there, and it
+creates `/opt/kronoqr-2.2.1`: that is the path you will see in the rest of this
+guide and in the sample outputs. Each new version is later unpacked **next to
+it** (`/opt/kronoqr-2.3.0`…), never on top ([`operation.md`](operation.md)
+§11). `/opt` belongs to root, which is why the commands that write there carry
+`sudo`.
+
+From the server:
 
 ```bash
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
+cd /opt
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
 ```
 
 > **If the server has no internet access**, download both files from another
-> computer with a browser and copy them into the same folder on the server
-> (`scp`, WinSCP or a USB stick). That is enough for the package; the
+> computer with a browser and copy them to `/opt` on the server (`scp`, WinSCP
+> or a USB stick). That is enough for the package; the
 > system images arrive separately, as explained in
 > [§7](#7-installing-without-internet-access).
 
@@ -158,8 +166,8 @@ you did not download it.
 > check that protects against a substituted package.
 
 ```bash
-tar xzf kronoqr-2.2.1.tar.gz
-cd kronoqr-2.2.1
+sudo tar xzf kronoqr-2.2.1.tar.gz
+cd /opt/kronoqr-2.2.1
 ls -A
 ```
 
@@ -185,6 +193,13 @@ docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
                          Labour Inspectorate request, GDPR…
 docs/CHANGELOG.md        What changes in each version.
 ```
+
+Two internal procedures of the manufacturer also travel in `docs/runbooks/`
+(in Spanish, like the rest of the runbooks): `fallo-de-ci.md` and
+`triaje-hallazgos-seguridad.md`. They are about its continuous integration,
+not about your installation, and you do not need to read them. The index
+(`docs/runbooks/README.md`) sets them apart under «Solo del fabricante»
+(manufacturer only).
 
 > **`./doctor.sh`, for when something is not right.** It locates the
 > installation on its own (like `update.sh`; `--current PATH` pins it by hand
@@ -217,8 +232,8 @@ docs/CHANGELOG.md        What changes in each version.
 ### 1.2 Put the certificate in place and fill in the configuration
 
 ```bash
-cp /ruta/de/tu/certificado.crt certs/tls.crt
-cp /ruta/de/tu/clave.key       certs/tls.key
+sudo cp /ruta/de/tu/certificado.crt certs/tls.crt
+sudo cp /ruta/de/tu/clave.key       certs/tls.key
 
 # ESSENTIAL: the web server runs UNPRIVILEGED, as uid 101,
 # and cannot open a root-owned file.
@@ -226,7 +241,7 @@ sudo chown 101:101 certs/tls.crt certs/tls.key
 sudo chmod 0444 certs/tls.crt
 sudo chmod 0400 certs/tls.key
 
-cp .env.example .env
+sudo cp .env.example .env
 ```
 
 > **Why those three commands, and what happens if you skip them.** `cp` keeps
@@ -248,7 +263,8 @@ cp .env.example .env
 > system **works** and the installer only warns: it is your private key and
 > the decision is yours, but anyone with a session on that machine can copy it.
 
-Open `.env` with your editor. **Every variable carries a tag. You only have to
+Open `.env` with your editor, with `sudo` (for example, `sudo nano .env`).
+**Every variable carries a tag. You only have to
 touch the ones tagged `[CLIENTE]`:**
 
 | Tag | What it means |
@@ -317,7 +333,7 @@ commands as they are, after saving the `.env`:
 
 ```bash
 registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
-docker pull "${registro}/php:$(cat VERSION)"
+sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
 
 If it ends with `Status: Downloaded newer image` (or `Image is up to date`), all
@@ -384,8 +400,8 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Memory: 7936 MiB (published minimum: 3700 MiB)
   [ok]    Free disk on /var/lib/docker: 92 GiB (published minimum: 40 GiB)
   [ok]    APP_URL filled in the template
-  [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    PORTAL_INTERNAL_CIDR filled in the template
+  [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    BACKUP_PATH filled in the template
   [ok]    TLS_CERT_DIR filled in the template
   [ok]    METRICS_ALLOW_CIDR filled in the template
@@ -396,10 +412,12 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    METRICS_ALLOW_CIDR is a valid IPv4 CIDR (172.29.0.20/32)
   [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 covers a network of this server or the kiosk one
   [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 covers Prometheus (172.29.0.20)
+  [ok]    LOG_RETENTION_HOURS=2160 h (Loki and Tempo)
   [ok]    COMPLIANCE_PROFILE filled in the template
   [ok]    LICENSE_KEY has the expected format
   [ok]    MAIL_HOST points to a mail server of your own
   [ok]    ALERT_EMAIL_*: there is at least one alert recipient
+  [ok]    Signature of the product images verified with cosign (manufacturer's release workflow)
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
   [ok]    TLS certificate in /opt/kronoqr-2.2.1/certs
@@ -411,13 +429,31 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Writable: /opt/kronoqr-2.2.1
   [ok]    Privileges to set the owner of the WAL archive
 
-Requirements met: 38 checks, 0 warnings.
+Requirements met: 40 checks, 0 warnings.
 
 Check only (--check-only): nothing was touched. Run again without the flag to install.
 ```
 
 If something comes out as `[FAIL]`, underneath you have a **"What to do"** line
 with the exact command. Warnings (`[warn]`) do not stop the installation.
+
+**The usual result the first time is 40 checks with some warnings**, not zero.
+The output above is that of a server where everything has been decided. These
+four warnings are the common ones in a first installation, and none of them
+stops it:
+
+- `cosign is not installed`: the images' signature is not checked, and the
+  images are validated by their digest only (§7.1).
+- `LICENSE_KEY empty`: it installs without a licence, which is activated later
+  (§4).
+- `MAIL_HOST=mailpit`: outgoing mail is not configured
+  ([`configuration.md`](configuration.md)).
+- `ALERT_EMAIL_IT, ALERT_EMAIL_RRHH and ALERT_EMAIL_SEGURIDAD are empty`:
+  nobody will receive the alerts ([`operation.md`](operation.md) §10.4).
+
+The exact number depends on your configuration: there is one check more if you
+fill in `TRUSTED_PROXY_CIDR` (§6) and two fewer if you turn observability off
+(§8).
 
 **In English**, with `--lang en` or with the server's locale. Every installer
 message exists in both languages.
@@ -468,9 +504,28 @@ curl -fsS https://fichaje.tuhotel.local/api/v1/health
 curl -fsS https://fichaje.tuhotel.local/api/v1/ready
 ```
 
-Both have to return `200`. **Do it from a kiosk, not only from the server**:
-it is the only way to check that the certificate name resolves where it has
-to resolve.
+Both have to answer without error: `/health` with
+`{"status":"ok","version":"2.2.1",…}` and `/ready` with `{"status":"ready"}`.
+
+**If the certificate comes from a CA internal to the hotel, or is
+self-signed**, the server does not have it among its own and `curl` answers
+`curl: (60) SSL certificate problem: …`. It is not an installation fault: tell
+`curl` to trust your certificate, from the installation directory:
+
+```bash
+curl -fsS --cacert certs/tls.crt https://fichaje.tuhotel.local/api/v1/health
+curl -fsS --cacert certs/tls.crt https://fichaje.tuhotel.local/api/v1/ready
+```
+
+If you have your CA's certificate in a separate file, `--cacert` pointing to
+it works too. **Do not use `--insecure`**: it would answer even with a wrong
+certificate, which is exactly what you want to find out.
+
+**Check it from a tablet as well, not only from the server**: open
+`https://fichaje.tuhotel.local/api/v1/health` in its browser. It has to show
+the same text **without any certificate warning**. It is the only way to check
+that the name resolves where it has to resolve and that the tablet trusts the
+certificate (§5, "…the tablet's browser does not accept the certificate").
 
 ### 1.6 Keep the backup key safe
 
@@ -802,8 +857,9 @@ job or a runbook without reading every script.
 | `3` | **There is a previous installation. NOTHING written.** | The installer **does not reinstall on top**: it would destroy the working-time record. To update, `./update.sh` (see [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md), in Spanish). To see how it is, `./doctor.sh`. |
 | `4` | **Failed and undid everything it had done.** The server is back as it was. | The message says the cause. Fix it and run the installer again: it is safe. |
 | `5` | **Failed and could NOT undo everything.** Requires intervention. | The message lists **exactly what is left** and which command removes it. Do it and run again. It is the only code that needs someone in front of it. |
+| `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. The data is safe. | **It is not the certificate or the server name**: phase 5 probes `https://127.0.0.1` without checking the certificate. It exits with `6` for one of three causes, and the message says which: `/api/v1/health` or `/api/v1/ready` did not answer correctly (almost always PostgreSQL or Redis down or not started: §5, "…I installed fine but `/api/v1/ready` returns 503"); `product:doctor` gave at least one `[FAILURE]` (it is printed just above, each with its "What to do"); or the image does not carry `product:doctor`, which is a broken package (tell the manufacturer). Fix the cause and check with `sudo ./doctor.sh`. **Do not run `install.sh` again**: the installation exists and it would exit with `3`. |
+| `7` | **The cosign signature of a product image is not valid.** It can only happen if you have cosign installed (§7.1). Nothing has been installed: in phase 1 nothing had been written yet, and later what was written is undone, as with `4`. | **First, `IMAGE_REGISTRY`**: if it is misspelt, the registry answers `denied` and cosign cannot read the signature, which counts as an invalid signature. Check it with the `docker pull` in §1.2 and run again. If the image downloads fine and it still exits with `7`, **do not install**: tell the manufacturer with the cosign detail the script prints. Do not use `--skip-signature-check` to get past the step. |
 | `129`, `130`, `143` | **Interrupted before writing anything** (phases 1 and 2): `129` is a dropped SSH session, `130` a Ctrl+C and `143` a `kill`. NOTHING written. | Run it again, preferably inside `tmux` (§1.4). From phase 3 on, an interruption does **not** exit with these codes: it is treated as a failure, what was done is undone and it exits with `4` (or `5` if something could not be undone). |
-| `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. | Almost always the certificate or the server name. Check `docker compose logs nginx app` and the "does not respond" item in §5. The data is safe. |
 
 ---
 
@@ -957,7 +1013,7 @@ There are three possible causes, and a single test download tells them apart:
 ```bash
 registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
 echo "${registro}"
-docker pull "${registro}/php:$(cat VERSION)"
+sudo docker pull "${registro}/php:$(cat VERSION)"
 ```
 
 | What it answers | What is going on | What to do |
