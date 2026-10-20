@@ -42,6 +42,12 @@ export interface PrivacyNotice {
   readonly controllerName: string | null
   /** Politica completa (capa 2). SOLO `https`: acaba en texto y en un QR, nunca en un enlace. */
   readonly policyUrl: string | null
+  /**
+   * Anos que el perfil de cumplimiento conserva el registro (`retention_years`,
+   * >= 1). `null` o ausente = no se sabe (copia anterior a la 2.3.0): el aviso
+   * usa entonces la redaccion generica, sin cifra.
+   */
+  readonly retentionYears?: number | null
 }
 
 /** La marca tal como la entrega `GET /api/v1/branding`, en camelCase. */
@@ -70,7 +76,7 @@ export const PRODUCT_BRANDING: Branding = Object.freeze({
   accentColor: null,
   logoUrl: null,
   locales: Object.freeze({ default: 'es', available: Object.freeze(['es']) }),
-  privacyNotice: Object.freeze({ controllerName: null, policyUrl: null }),
+  privacyNotice: Object.freeze({ controllerName: null, policyUrl: null, retentionYears: null }),
 })
 
 /**
@@ -128,6 +134,13 @@ function parsePolicyUrl(value: unknown): string | null {
   }
 }
 
+/** Entero >= 1 y razonable; cualquier otra cosa (copia manipulada incluida) es «sin cifra». */
+function parseRetentionYears(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 100
+    ? value
+    : null
+}
+
 function parseControllerName(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -144,12 +157,13 @@ function parseControllerName(value: unknown): string | null {
  */
 function parsePrivacyNotice(value: unknown): PrivacyNotice {
   if (typeof value !== 'object' || value === null) {
-    return { controllerName: null, policyUrl: null }
+    return { controllerName: null, policyUrl: null, retentionYears: null }
   }
   const record = value as Record<string, unknown>
   return {
     controllerName: parseControllerName(record['controller_name']),
     policyUrl: parsePolicyUrl(record['policy_url']),
+    retentionYears: parseRetentionYears(record['retention_years']),
   }
 }
 

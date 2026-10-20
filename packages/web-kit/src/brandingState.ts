@@ -79,6 +79,7 @@ function toContract(branding: Branding): Record<string, unknown> {
     privacy_notice: {
       controller_name: branding.privacyNotice.controllerName,
       policy_url: branding.privacyNotice.policyUrl,
+      retention_years: branding.privacyNotice.retentionYears ?? null,
     },
   }
 }
