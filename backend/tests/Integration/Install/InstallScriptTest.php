@@ -578,3 +578,56 @@ it('la salida final no habla de la 2.0.0 y apunta a las guias del cliente del pa
         ->and($proceso->getOutput())->not->toContain('2.0.0')
         ->and($proceso->getOutput())->not->toContain('a partir de la version 2.1');
 })->group('RF-PD-02');
+
+it('sin internet, una imagen cargada que ha perdido su digest no manda repetir el docker load: da las tres lineas IMAGE_DIGEST_* (V1-PL-02)', function (): void {
+    $dir = sys_get_temp_dir().'/kq-digest-'.bin2hex(random_bytes(4));
+    mkdir($dir);
+    file_put_contents($dir.'/.env', "IMAGE_REGISTRY=ghcr.io/acme/kronoqr\n");
+    touch($dir.'/docker-compose.yml');
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; '
+        .'PRODUCT_VERSION=2.3.0; KQ_SKIP_SIGNATURE_CHECK=1; '
+        .'docker() { local IFS=" "; case "$*" in '
+        .'*"config --images"*) printf "ghcr.io/acme/kronoqr/php:2.3.0@sha256:%064d\n" 0 ;; '
+        .'"image inspect ghcr.io/acme/kronoqr/php:2.3.0") return 0 ;; '
+        .'*"image inspect"*) return 1 ;; '
+        .'*pull*) echo SE-HA-INTENTADO-DESCARGAR >&2; return 1 ;; esac; return 0; }; '
+        .'pull_images_if_needed'
+    );
+    foreach (['.env', 'docker-compose.yml', '.kronoqr-signature-check'] as $fichero) {
+        @unlink($dir.'/'.$fichero);
+    }
+    @rmdir($dir);
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('esta cargada en este servidor, pero sin su digest')
+        ->and($proceso->getErrorOutput())->toContain('IMAGE_DIGEST_PHP=, IMAGE_DIGEST_NGINX= e IMAGE_DIGEST_POSTGRES=')
+        ->and($proceso->getErrorOutput())->not->toContain('SE-HA-INTENTADO-DESCARGAR')
+        ->and($proceso->getErrorOutput())->not->toContain('docker login');
+})->group('RF-PD-02');
+
+it('ensena el registro de los servicios que fallan ANTES de deshacer, y los mensajes ya no mandan a docker compose logs (V1-PL-04, R3-PL-04)', function (): void {
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; compose() { local IFS=" "; printf "COMPOSE %s\n" "$*"; }; show_service_logs nginx'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('Estado y ultimas lineas del registro de: nginx (antes de deshacer)')
+        ->and($proceso->getErrorOutput())->toContain('COMPOSE logs --no-color --tail 40 nginx')
+        ->and($proceso->getErrorOutput())->toContain('fin del registro');
+
+    $instalador = Repo::contents('infra/scripts/install.sh');
+    $mensajes = Repo::contents('infra/scripts/lib/messages.sh');
+    expect($instalador)->toContain("show_service_logs nginx\n    rollback_and_die")
+        ->and($instalador)->toContain('rollback_and_die "$(kq_text f_migrating)"')
+        // Cada subdirectorio de BACKUP_PATH con su nombre en la lista de lo deshecho.
+        ->and($instalador)->toContain('*/metrics) label="$(kq_format undo_metrics_dir "${dir}")" ;;')
+        ->and($instalador)->toContain('*/daily | */base) label="$(kq_format undo_backup_dir "${dir}")" ;;');
+    foreach (['f_migrating', 'f_waiting', 'f_services_up', 'f_images'] as $clave) {
+        preg_match('/^KQ_MSG_ES\['.$clave.'\]="([^\n]*)"$/m', $mensajes, $m);
+        expect($m[1] ?? '')->not->toBe('')
+            ->and($m[1] ?? '')->not->toContain('docker compose -f %s logs')
+            ->and($m[1] ?? '')->not->toContain('docker login %s');
+    }
+})->group('RF-PD-02');

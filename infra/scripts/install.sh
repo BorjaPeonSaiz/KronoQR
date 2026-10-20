@@ -1237,6 +1237,23 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+# El estado y las ultimas lineas del registro de los servicios que han fallado, en
+# pantalla y ANTES de deshacer (V1-PL-04, R3-PL-04): la vuelta atras hace `down -v`
+# y se lleva los contenedores con su registro, asi que un «mira docker compose
+# logs» despues ya no ensena nada (y sin IMAGE_TAG en el .env restaurado, ni
+# siquiera funciona). Son registros tecnicos del producto, sin secretos ni nombres
+# (regla dura 21). Nunca falla.
+#   show_service_logs SERVICIO...
+show_service_logs() {
+  local IFS=' '
+  err ""
+  err "$(kq_format service_logs_header "$*")"
+  compose ps -a "$@" >&2 2>/dev/null || true
+  compose logs --no-color --tail 40 "$@" >&2 2>/dev/null || true
+  err "$(kq_text service_logs_footer)"
+  return 0
+}
+
 # Espera a que un servicio declare estar sano. POR CONDICION: se pregunta por el
 # estado cada KQ_POLL_SECONDS y se abandona al llegar al techo. Un `sleep 30`
 # seria a la vez demasiado en una maquina rapida y poco en una lenta, y el
@@ -1341,7 +1358,7 @@ ensure_backup_directories() {
 # BLOQUEANTE desde la 2.2.0: compose.prod.yaml monta cada uno con
 # `create_host_path: false` y, si falta, `up` falla. Mejor fallar aqui, con el motivo.
 ensure_backup_subdirectories() {
-  local dir status
+  local dir status label
 
   for dir in "${CFG_BACKUP_PATH}/metrics" "${CFG_BACKUP_PATH}/daily" "${CFG_BACKUP_PATH}/base" \
     "${CFG_BACKUP_PATH}/reports" "${CFG_BACKUP_PATH}/reports/retention"; do
@@ -1351,7 +1368,14 @@ ensure_backup_subdirectories() {
       rollback_and_die "$(kq_format f_backup_subdir "${dir}" "${dir}")"
     fi
     if [ "${KQ_DIR_CREATED}" -eq 1 ]; then
-      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
+      # Cada uno con su nombre en la lista de lo deshecho (V1-PL-04 b): antes los
+      # cinco salian como «directorio de informes».
+      case "${dir}" in
+      */metrics) label="$(kq_format undo_metrics_dir "${dir}")" ;;
+      */daily | */base) label="$(kq_format undo_backup_dir "${dir}")" ;;
+      *) label="$(kq_format undo_retention_dir "${dir}")" ;;
+      esac
+      register_undo "${label}" "rm -rf '${dir}'"
     fi
   done
   return 0
@@ -1471,9 +1495,19 @@ pull_images_if_needed() {
       announced=1
     fi
 
+    # La imagen fijada por digest falta, pero la MISMA etiqueta esta en local: se
+    # cargo con `docker load` en un Docker sin almacen containerd, que no conserva
+    # el digest (V1-PL-02). Descargar no va a funcionar sin internet, y repetir el
+    # `docker load` tampoco: el mensaje da la salida de verdad, sin intentarlo.
+    case "${image}" in
+    *@sha256:*)
+      if docker image inspect "${image%@*}" >/dev/null 2>&1; then
+        rollback_and_die "$(kq_format f_images_digest_lost "${image%@*}")"
+      fi
+      ;;
+    esac
     if ! docker pull --quiet "${image}" >/dev/null; then
-      rollback_and_die "$(kq_format f_images \
-        "${PRODUCT_VERSION}" "${registry}" "${registry}" "${PRODUCT_VERSION}")"
+      rollback_and_die "$(kq_format f_images "${PRODUCT_VERSION}" "${registry}")"
     fi
   done
 
@@ -1513,20 +1547,21 @@ phase_bootstrap() {
     "docker compose --env-file '${ENV_FILE}' -f '${COMPOSE_FILE}' down -v --remove-orphans"
 
   if ! compose up -d; then
-    rollback_and_die "$(kq_format f_services_up "${COMPOSE_FILE}")"
+    show_service_logs
+    rollback_and_die "$(kq_text f_services_up)"
   fi
 
   local service
   for service in postgres redis; do
     if ! wait_for_healthy "${service}" "${KQ_WAIT_DEPENDENCIES}"; then
-      rollback_and_die "$(kq_format f_waiting \
-        "${service}" "${KQ_WAIT_DEPENDENCIES}" "${COMPOSE_FILE}" "${service}")"
+      show_service_logs "${service}"
+      rollback_and_die "$(kq_format f_waiting "${service}" "${KQ_WAIT_DEPENDENCIES}")"
     fi
   done
 
   if ! wait_for_healthy app "${KQ_WAIT_APPLICATION}"; then
-    rollback_and_die "$(kq_format f_waiting \
-      "app" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "app")"
+    show_service_logs app
+    rollback_and_die "$(kq_format f_waiting "app" "${KQ_WAIT_APPLICATION}")"
   fi
 
   # EL BORDE TAMBIEN, y no es simetria: es donde se descubre el error de
@@ -1544,8 +1579,8 @@ phase_bootstrap() {
   # espera agota su plazo y termina igual en 4. Es el resultado correcto por
   # los dos caminos.
   if ! wait_for_healthy nginx "${KQ_WAIT_APPLICATION}"; then
-    rollback_and_die "$(kq_format f_waiting \
-      "nginx" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "nginx")"
+    show_service_logs nginx
+    rollback_and_die "$(kq_format f_waiting "nginx" "${KQ_WAIT_APPLICATION}")"
   fi
 
   say ""
@@ -1562,7 +1597,7 @@ phase_bootstrap() {
   # migraciones antes seria seguro, pero la espera del borde de arriba es la que
   # cubre el fallo de certificado y no conviene reordenar dos cosas a la vez.
   if ! compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force; then
-    rollback_and_die "$(kq_format f_migrating "${COMPOSE_FILE}")"
+    rollback_and_die "$(kq_text f_migrating)"
   fi
 
   say "$(kq_text seed_note)"
