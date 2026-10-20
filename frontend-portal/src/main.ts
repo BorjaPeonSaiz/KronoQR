@@ -1,11 +1,7 @@
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
-import {
-  setAuthTokenProvider,
-  setLocaleProvider,
-  setUnauthenticatedHandler,
-} from '@kronoqr/web-kit/http'
+import { setAuthTokenProvider, setLocaleProvider } from '@kronoqr/web-kit/http'
 import { createPinia } from 'pinia'
 import { createApp, watch } from 'vue'
 import App from './App.vue'
@@ -16,6 +12,7 @@ import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n } from './shared/i18n'
 import { bindPortalLocale } from './shared/i18n/portalLocale'
+import { bindSessionLifecycle } from './shared/session/sessionLifecycle'
 
 const app = createApp(App)
 
@@ -41,10 +38,7 @@ const i18n = createAppI18n()
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
 setAuthTokenProvider(() => session.token)
-setUnauthenticatedHandler(() => {
-  session.clear()
-  void router.push({ name: 'login' })
-})
+bindSessionLifecycle({ router, session })
 
 // Vacia el buffer de errores del portal hacia `error_events` (tarea 5.12,
 // RF-PD-15): al pasar a autenticado, cada 60 s si hay pendientes y al

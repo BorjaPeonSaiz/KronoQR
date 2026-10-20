@@ -18,6 +18,10 @@
     "submit": "Sign in",
     "submitting": "Signing in…",
     "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link.",
+    "sessionExpired": {
+      "title": "Your session has expired",
+      "advice": "For security, the session closes after a few hours. Sign in again with your code and PIN and you will be back where you were."
+    },
     "originLocked": {
       "title": "Too many attempts from this connection",
       "advice": "Try again in {minutes} minute. | Try again in {minutes} minutes.",

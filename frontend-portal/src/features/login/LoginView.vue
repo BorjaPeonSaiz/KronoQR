@@ -98,7 +98,15 @@ const canSubmit = computed(
 function redirectTarget(): string {
   const redirect = route.query['redirect']
 
-  return typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/records'
+  // Solo rutas del propio portal: `//otro-sitio` o `/\otro-sitio` serian un
+  // salto a otro origen, y volver al acceso seria un bucle.
+  return typeof redirect === 'string' &&
+    redirect.startsWith('/') &&
+    !redirect.startsWith('//') &&
+    !redirect.startsWith('/\\') &&
+    !redirect.startsWith('/login')
+    ? redirect
+    : '/records'
 }
 
 async function submit(): Promise<void> {
@@ -142,6 +150,19 @@ async function submit(): Promise<void> {
       </div>
 
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('login.heading') }}</h1>
+
+      <!-- La sesion termino sola (caducidad o 401): se dice, no se deja a la
+           persona delante de un acceso en blanco sin saber por que. Al entrar
+           vuelve a la pantalla en la que estaba (`redirect`). -->
+      <div
+        v-if="session.endedReason === 'expired'"
+        role="alert"
+        data-test="session-expired"
+        class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+      >
+        <p class="font-semibold">{{ t('login.sessionExpired.title') }}</p>
+        <p class="mt-1">{{ t('login.sessionExpired.advice') }}</p>
+      </div>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
