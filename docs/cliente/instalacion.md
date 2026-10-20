@@ -216,7 +216,10 @@ docs/CHANGELOG.md        Qué cambia en cada versión.
 >   que lo reparan ([`operacion.md`](operacion.md) §18).
 >
 > Nunca imprime un secreto: del `.env` solo lee rutas, puertos y nombres de
-> fichero. Sus códigos de salida están en la sección 2, más abajo.
+> fichero. Sale con `0` si no hay ningún fallo (puede haber avisos) y con `6`
+> si hay alguno; el «código de salida» que imprime dentro es el de
+> `product:doctor` (0, 1 o 2), no el suyo. La tabla de cada script está en
+> [`operacion.md`](operacion.md) §8; la de la sección 2 es la del instalador.
 
 ### 1.2 Coloca el certificado y rellena la configuración
 
@@ -823,7 +826,11 @@ KronoQR. Detalle en [`configuracion.md`](configuracion.md) §2.2.
 Los scripts de operación (`install.sh`, `update.sh`, `doctor.sh`,
 `backup.sh`, `restore.sh`, `restore-drill.sh`) usan **la misma tabla**
 ([`operacion.md`](operacion.md) §8). Sirve para escribir un cron
-o un runbook sin leerse cada script.
+o un runbook sin leerse cada script. **Lo que sigue es lo que significa cada
+código en `install.sh`**; en los demás el mismo número dice lo mismo en
+general, pero el caso concreto cambia (en `doctor.sh`, por ejemplo, el `3` es
+«no hay instalación que diagnosticar» y el `6`, «el diagnóstico ha encontrado
+un fallo»): está en esa §8.
 
 | Código | Significa | Qué hacer |
 | --- | --- | --- |

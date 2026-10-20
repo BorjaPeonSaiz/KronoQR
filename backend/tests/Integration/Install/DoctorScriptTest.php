@@ -287,3 +287,41 @@ it('doctor.sh da por bueno el registro sin deriva', function (): void {
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and($proceso->getOutput())->toContain('fallos=0 avisos=0');
 })->group('RF-PD-13', 'RS-07');
+
+/**
+ * Carga doctor.sh y ejecuta `check_redis_restart_loop` con el contenedor de
+ * Redis en el estado $estado (y $reinicios reinicios).
+ */
+function doctorConRedis(string $estado, int $reinicios = 0): string
+{
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_COMPOSE=/opt/kronoqr-2.3.0/docker-compose.yml; '
+        .'compose_current() { case "$*" in *redis*) printf "c0ffee\n" ;; esac; return 0; }; '
+        .'docker() { printf "%s|%s|2026-10-20T08:00:00.000Z" '.escapeshellarg($estado).' '.$reinicios.'; }; '
+        .'check_redis_restart_loop; printf "fallos=%s\n" "${CHECKS_FAILED}"';
+
+    $process = new Process(['bash', '-c', $script], timeout: 30.0);
+    $process->run();
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    return $process->getOutput();
+}
+
+it('da [FALLA] con Redis parado, no «[ok] Redis: exited» (R3-PL-05)', function (string $estado): void {
+    $salida = doctorConRedis($estado);
+
+    expect($salida)->toContain('[FALLA] Redis esta parado ('.$estado.')')
+        ->and($salida)->toContain('up -d redis')
+        ->and($salida)->toContain('fallos=1')
+        ->and($salida)->not->toContain('[ok]');
+})->with(['exited', 'dead', 'created'])->group('RF-PD-13');
+
+it('con la aplicacion en marcha recuerda tambien los digests anulados y explica de quien es el codigo impreso (V1-PL-03, I13)', function (): void {
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+    $delegado = substr($doctor, (int) strpos($doctor, "\nrun_delegated_doctor() {"), 4000);
+
+    expect($delegado)->toContain('check_image_digest_overrides "${CURRENT_ENV}"')
+        ->and($delegado)->toContain('d_doctor_code_note')
+        // Y en las dos ramas: con la aplicacion parada ya estaba.
+        ->and(substr_count($doctor, 'check_image_digest_overrides "${CURRENT_ENV}"'))->toBe(2);
+})->group('RF-PD-13');

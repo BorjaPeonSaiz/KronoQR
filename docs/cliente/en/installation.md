@@ -220,7 +220,10 @@ docs/CHANGELOG.md        What changes in each version.
 >   three commands that repair it ([`operation.md`](operation.md) §18).
 >
 > It never prints a secret: from the `.env` it only reads paths, ports and
-> file names. Its exit codes are in section 2, below.
+> file names. It exits `0` if there is no failure (there may be warnings) and
+> `6` if there is any; the "exit code" it prints inside is `product:doctor`'s
+> (0, 1 or 2), not its own. Each script's table is in
+> [`operation.md`](operation.md) §8; the one in section 2 is the installer's.
 
 ### 1.2 Put the certificate in place and fill in the configuration
 
@@ -842,7 +845,11 @@ shown. Detail in [`configuration.md`](configuration.md) §2.2.
 The operation scripts (`install.sh`, `update.sh`, `doctor.sh`,
 `backup.sh`, `restore.sh`, `restore-drill.sh`) use **the same table**
 ([`operation.md`](operation.md) §8). It lets you write a cron
-job or a runbook without reading every script.
+job or a runbook without reading every script. **What follows is what each
+code means in `install.sh`**; in the others the same number means the same in
+general, but the concrete case changes (in `doctor.sh`, for example, `3` is
+"no installation to diagnose" and `6` "the diagnosis found a failure"): it is
+in that §8.
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
