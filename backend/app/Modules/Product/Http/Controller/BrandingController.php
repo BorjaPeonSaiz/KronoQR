@@ -6,6 +6,7 @@ namespace App\Modules\Product\Http\Controller;
 
 use App\Exceptions\ProblemDetails;
 use App\Http\Controllers\Controller;
+use App\Modules\Product\Application\Query\ReadRecordRetentionYears;
 use App\Modules\Product\Application\UseCase\GetBrandingHandler;
 use App\Modules\Product\Application\UseCase\GetKioskManifestHandler;
 use App\Modules\Product\Http\Resource\BrandingResource;
@@ -55,13 +56,16 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class BrandingController extends Controller
 {
-    public function show(GetBrandingHandler $handler, BrandingTelemetry $telemetry): JsonResponse
-    {
+    public function show(
+        GetBrandingHandler $handler,
+        ReadRecordRetentionYears $retention,
+        BrandingTelemetry $telemetry,
+    ): JsonResponse {
         $branding = $telemetry->measureRead(
             static fn () => $handler->handle(),
         );
 
-        return (new BrandingResource($branding))->response();
+        return (new BrandingResource($branding, $retention->handle()))->response();
     }
 
     /**
