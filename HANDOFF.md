@@ -89,14 +89,14 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 5 integrados (#182 a #187). **Bloque 6 en curso** en `fix/update-sh-interrupcion` (sin push): 6.1–6.8 commiteadas; ⑧b tiene pasos nuevos (U3s, U3i+U1b, U3m, chain-check en `.github/scripts/update-faults-e2e.sh`, `timeout-minutes` 120) **sin ejecutar nunca**: medir y ajustar el timeout con la primera CI. Lo que conviene saber del bloque 5:
+**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 5 integrados (#182 a #187). **Bloque 6 en curso** en `fix/update-sh-interrupcion` (sin push): 6.1–6.7 ✅ y revisiones de código y seguridad aplicadas. **Decisión del propietario (20-10-2026): tras el 401 de la versión nueva no se restaura** (`ROLLBACK_ARMED=3`, salida 5 sin tocar nada; Engram `2.3.0/b6-sin-restaurar-tras-up`). La 6.8 queda ⬜ hasta ⑧b en verde: escenarios U3s, U3i+U1b, U3m, U3n, U3p y chain-check en `.github/scripts/update-faults-e2e.sh`, **sin ejecutar nunca**, estimados en ~45–50 min (`timeout-minutes` 120, a medir). U3p sustituye al reintento tras la vuelta atrás, que ya cubre P3. Riesgo principal: el 503 antes del 3b en U3m y U3n. Lo que conviene saber del bloque 5:
 - **Las notas de la 2.3.0 viven en `operacion.md` §11** (es/en), en párrafos «Al actualizar a la 2.3.0» y «Al actualizar desde la 2.2.0», como las de versiones anteriores; el resumen del CHANGELOG se escribe en el bloque final. **Cada bloque que cambie algo visible para el hotel añade allí su párrafo.** D6 (400 `problem+json`) entra con el bloque 10.
 - `check-package-links.sh` comprueba ya cualquier destino relativo, no solo `.md` e imágenes. Un enlace de un runbook a `../../infra/…`, `.github/…` o `.gitleaks.toml` rompe ⑧ y `release.yml`.
 - La guía de instalación descomprime en `/opt` con `sudo`, como las actualizaciones.
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** bloque 6: push, CI manual completa (vigilar en U3m «antes del 3b … 503» y el INT de U3i), aplicar las revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge; luego bloque 7. Ojo: `docs/cliente/instalacion.md` y `en/installation.md` tienen cambios locales sin commit que dicen que los runbooks internos viajan (falso desde I10): descartarlos, no commitearlos.
+**Siguiente acción:** bloque 6: push, CI manual completa (vigilar en U3m y U3n «antes del 3b … 503», el INT de U3i y U3p), ajustar el timeout, marcar la 6.8, PR y merge; luego bloque 7. Ojo: `docs/cliente/instalacion.md` y `en/installation.md` tienen cambios locales sin commit que dicen que los runbooks internos viajan (falso desde I10): descartarlos, no commitearlos.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
