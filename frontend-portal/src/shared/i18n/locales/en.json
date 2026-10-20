@@ -166,6 +166,7 @@
       "reason": "Reason",
       "caption": "What the correction on {moment} changed",
       "fields": {
+        "moment": "Shift version",
         "in": "Clock in",
         "out": "Clock out",
         "worked": "Time worked"

@@ -166,6 +166,7 @@
       "reason": "Motivo",
       "caption": "Qué cambió la corrección del {moment}",
       "fields": {
+        "moment": "Versión del tramo",
         "in": "Entrada",
         "out": "Salida",
         "worked": "Tiempo trabajado"

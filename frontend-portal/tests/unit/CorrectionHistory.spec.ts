@@ -157,3 +157,18 @@ describe('CorrectionHistory', () => {
     expect(items[1]?.text()).toContain('CET')
   })
 })
+
+describe('CorrectionHistory, tabla accesible (V7-QA-2)', () => {
+  it('ninguna cabecera de columna esta vacia: la primera dice que es la version del tramo', async () => {
+    const wrapper = await mountHistory([correction()])
+    const headers = wrapper.findAll('thead th')
+
+    expect(headers).toHaveLength(4)
+
+    for (const header of headers) {
+      expect(header.text().trim()).not.toBe('')
+    }
+
+    expect(headers[0]?.text()).toBe(es.myRecords.history.fields.moment)
+  })
+})
