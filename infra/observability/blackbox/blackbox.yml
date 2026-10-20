@@ -91,4 +91,4 @@ modules:
       # redireccion: un modulo en texto plano que sigue redirecciones podria acabar leyendo
       # otro sitio que el que se declaro.
       valid_status_codes: [200]
-      no_follow_redirects: true
+      follow_redirects: false

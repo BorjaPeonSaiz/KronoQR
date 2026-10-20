@@ -123,7 +123,7 @@ it('sondea Loki desde Blackbox porque su imagen no trae shell', function (): voi
     // ninguna redireccion; y el UNICO job que lo usa es el de Loki, contra su `/ready`.
     $modulos = Yaml::parse($blackbox)['modules'];
     expect($modulos['http_2xx_internal']['http']['valid_status_codes'] ?? null)->toBe([200])
-        ->and($modulos['http_2xx_internal']['http']['no_follow_redirects'] ?? null)->toBeTrue();
+        ->and($modulos['http_2xx_internal']['http']['follow_redirects'] ?? null)->toBeFalse();
 
     $trabajos = Yaml::parse((string) preg_replace('/^@@[A-Z_]+@@$/m', '', $prometheus))['scrape_configs'];
     $conModuloInterno = array_values(array_filter(
