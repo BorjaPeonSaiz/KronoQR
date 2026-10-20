@@ -9,6 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Reporting\Infrastructure\Export\PersonalRecordRows;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -192,29 +193,20 @@ final readonly class PersonalRecordCsv
      */
     private static function dataRows(WorkDayJournal $journal): array
     {
-        $rows = [];
-
-        foreach ($journal->days as $day) {
-            $total = self::duration($day->totalMinutes());
-
-            foreach ($day->shiftEntries as $entry) {
-                $rows[] = self::shiftRow($day, $entry, $total);
-            }
-
-            // Una jornada sin tramos vigentes **no desaparece** (regla dura 5):
-            // si se anularon todos, sigue apareciendo con su total a cero y su
-            // historico intacto. Ocultarla haria desaparecer del fichero justo
-            // el dia sobre el que alguien quiere preguntar.
-            if ($day->shiftEntries === []) {
-                $rows[] = self::emptyDayRow($day, $total);
-            }
-
-            foreach ($day->corrections as $correction) {
-                $rows[] = self::correctionRow($day, $correction);
-            }
-        }
-
-        return $rows;
+        // Cuales filas hay —tramos, jornadas sin tramos, que no desaparecen
+        // (regla dura 5), y correcciones— lo decide PersonalRecordRows, el mismo
+        // recorrido que el PDF: asi los dos formatos cuentan lo mismo en
+        // `X-Kronoqr-Report-Rows`. Aqui solo se decide como se escribe cada tipo.
+        return PersonalRecordRows::map(
+            $journal,
+            static fn (JournalWorkDay $day, JournalShiftEntry $entry): array => self::shiftRow(
+                $day,
+                $entry,
+                self::duration($day->totalMinutes()),
+            ),
+            static fn (JournalWorkDay $day): array => self::emptyDayRow($day, self::duration($day->totalMinutes())),
+            static fn (JournalWorkDay $day, JournalCorrection $correction): array => self::correctionRow($day, $correction),
+        );
     }
 
     /**
