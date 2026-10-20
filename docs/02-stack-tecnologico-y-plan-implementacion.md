@@ -1565,6 +1565,8 @@ Un cliente puede estar en la 1.2.0 cuando ya va la 1.6.0. El actualizador debe e
 
 Se publica y se cumple: la versión menor vigente y las dos anteriores reciben correcciones de seguridad; el salto de versión mayor tiene ventana de migración anunciada con antelación. Sin esta disciplina, con veinte clientes se acaba manteniendo veinte productos.
 
+**Y nunca desde antes de la 2.2.0** (decisión D3 del propietario, 18-10-2026; V21-6-PL-02): `update.sh` no admite como origen una versión anterior a `KQ_MIN_SOURCE_VERSION` (2.2.0) aunque caiga dentro de la ventana, porque los saltos desde la 2.0.0 y la 2.1.0 nunca se ejecutaron de verdad. Una instalación más antigua pasa antes por una intermedia: la más alta que la admita, que tiene que ser anterior a `KQ_MIN_SOURCE_SINCE` (2.3.0, la primera publicada con el suelo). `versions.txt` sigue listando esas versiones como fronteras de migraciones; el suelo es un dato del producto en `update.sh`.
+
 **Revisión de seguridad externa (RS-11).** Se repite **cada 12 meses y en cada versión mayor**; la primera, **antes de la primera versión comercial**, y la siguiente a los 12 meses de esa fecha. El calendario y la fecha límite vigente viven en `docs/seguridad/paquete-revisor.md` (hoy: revisión interna previa hecha el 22-09-2026, externa inicial pendiente del tercero, límite de la siguiente 2027-09-22) y los vigila `SecurityReviewEvidenceTest`: pasado el límite sin un informe más reciente, la prueba falla y RS-11 se queda sin evidencia en `qa:traceability --check`. No es un cron: es un compromiso de publicación (tarea 3.8, decisión 8).
 
 ### 11.6.6 Paquete de diagnóstico
