@@ -188,10 +188,8 @@ readonly KQ_BACKUP_FINGERPRINT_TIMEOUT_SECONDS=20
 # y validas (doc 02 §9.4, invariantes de base de datos).
 readonly KQ_RN01_INDEX="one_open_shift_per_employee"
 readonly KQ_RN02_CONSTRAINT="shift_entries_no_overlap"
-# Una ruta de gestion cualquiera: sin sesion responde 401. Es la que demuestra
-# que el mantenimiento se ha retirado de verdad, porque las dos sondas quedan
-# fuera del 503 a proposito y no lo distinguen.
-readonly KQ_MANAGEMENT_PROBE="/api/v1/auth/me"
+# KQ_MANAGEMENT_PROBE (la ruta de gestion que da 401 o 503) vive en lib/checks.sh:
+# la comparte doctor.sh.
 
 #------------------------------------------------------------------------------
 # Estado
@@ -1001,10 +999,7 @@ edge_probe() {
 
 # Codigo HTTP de una ruta por loopback, sin exigir exito.
 edge_status() {
-  local path="$1"
-  curl --silent --insecure --max-time 15 --output /dev/null --write-out '%{http_code}' \
-    --header 'Accept: application/json' \
-    "https://127.0.0.1:${CFG_HTTPS_PORT}${path}" 2>/dev/null || printf '000'
+  kq_edge_status "${CFG_HTTPS_PORT}" "$1"
 }
 
 # Sonda DESDE DENTRO del contenedor de la aplicacion, por FastCGI, sin borde.

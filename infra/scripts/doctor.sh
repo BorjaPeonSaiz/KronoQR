@@ -1104,8 +1104,7 @@ check_maintenance_mode() {
     check_warn "$(kq_format d_c_maintenance_unknown "${https_port}")" "$(kq_text d_w_maintenance_no_curl)"
     return 0
   fi
-  status="$(curl --silent --insecure --max-time 15 --output /dev/null --write-out '%{http_code}' \
-    --header 'Accept: application/json' "https://127.0.0.1:${https_port}/api/v1/auth/me" 2>/dev/null || true)"
+  status="$(kq_edge_status "${https_port}" "${KQ_MANAGEMENT_PROBE}")"
 
   case "${status}" in
   401) check_pass "$(kq_format d_c_maintenance "${https_port}" "${status}")" ;;
