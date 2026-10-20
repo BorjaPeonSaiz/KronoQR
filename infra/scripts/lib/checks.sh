@@ -583,3 +583,19 @@ kq_edge_status() {
     "https://127.0.0.1:${port}${path}" 2>/dev/null)" || true
   printf '%s' "${code:-000}"
 }
+
+# Lo que significa el codigo de `php artisan license:show`, para install.sh y
+# update.sh: `ok` (0, vigente y dentro del plan), `attention` (3,
+# LicenseShowCommand::ATTENTION: sin licencia, caducada, no verifica o un limite
+# superado, que NO es un error y no bloquea nada, regla dura 15) o `error` (la
+# consulta en si ha fallado; el 1 es lo que da una excepcion no capturada). Antes de
+# la 2.3.0 «hay algo que mirar» tambien era 1; los dos scripts llaman siempre al
+# `license:show` de su propia imagen, asi que no hay mezcla de versiones.
+#   kq_license_status_class CODIGO
+kq_license_status_class() {
+  case "$1" in
+  0) printf 'ok' ;;
+  3) printf 'attention' ;;
+  *) printf 'error' ;;
+  esac
+}

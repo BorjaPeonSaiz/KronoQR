@@ -41,9 +41,17 @@ use Illuminate\Console\Command;
  * | Codigo | Significado |
  * |---|---|
  * | `0` | La licencia esta vigente y no hay ningun exceso de plan. |
- * | `1` | **Hay algo que mirar**: no hay licencia, no verifica, ha caducado, caduca pronto, su vigencia no ha empezado, o se ha superado una cifra del plan. |
+ * | `3` | **Hay algo que mirar** ({@see self::ATTENTION}): no hay licencia, no verifica, ha caducado, caduca pronto, su vigencia no ha empezado, o se ha superado una cifra del plan. |
+ * | `1` | La orden en si ha fallado (una excepcion no capturada, que es lo que da Symfony Console). |
  *
- * **`1` no significa que el sistema este parado**, y el comando lo dice en su
+ * **Hasta la 2.3.0 «hay algo que mirar» era `1`**, el mismo codigo que una
+ * excepcion no capturada, y quien llamaba (install.sh, update.sh) no podia
+ * distinguir «sin licencia», que es lo normal recien instalado, de «la consulta ha
+ * fallado» (revision del bloque 7). Quien lo consume es el `install.sh` y el
+ * `update.sh` del MISMO paquete (lo ejecutan contra su propia imagen), asi que el
+ * cambio no rompe nada entre versiones.
+ *
+ * **`3` no significa que el sistema este parado**, y el comando lo dice en su
  * propia salida. Se ficha, se consulta el registro, se exporta para la
  * Inspeccion, se corrige y se hace copia exactamente igual (regla dura 15,
  * ADR-019). El codigo existe para que `doctor` (5.9) y una tarea programada
@@ -54,6 +62,9 @@ use Illuminate\Console\Command;
  */
 final class LicenseShowCommand extends Command
 {
+    /** «Hay algo que mirar», distinto del `1` de una excepcion no capturada. */
+    public const int ATTENTION = 3;
+
     protected $signature = 'license:show';
 
     protected $description = 'Estado de la licencia: cliente, plan, limites contratados frente a reales, vigencia y que esta degradado';
@@ -81,7 +92,7 @@ final class LicenseShowCommand extends Command
 
         return $status->state === LicenseState::Valid && $overview->exceeded() === []
             ? self::SUCCESS
-            : self::FAILURE;
+            : self::ATTENTION;
     }
 
     private function summary(LicenseOverview $overview): void

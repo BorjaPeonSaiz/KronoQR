@@ -1695,17 +1695,17 @@ phase_verify() {
   verify_license_status
 }
 
-# `license:show` sale con 0 si la licencia esta vigente y dentro del plan, con 1
+# `license:show` sale con 0 si la licencia esta vigente y dentro del plan, con 3
 # si «hay algo que mirar» —tambien SIN licencia, que es lo normal en una
 # instalacion recien hecha: la licencia llega aparte y se puede activar despues
-# (doc 05 §10)— y con otro codigo solo si la consulta en si falla (I7). Ninguno
-# deshace nada ni degrada el registro (regla dura 15, ADR-019).
+# (doc 05 §10)— y con otro codigo si la consulta en si falla (I7; ver
+# kq_license_status_class). Ninguno deshace nada ni degrada el registro (ADR-019).
 verify_license_status() {
   local license_status=0
   compose exec -T app php artisan license:show >/dev/null 2>&1 || license_status=$?
-  case "${license_status}" in
-  0) kq_msg check_ok "$(kq_text verify_license)" ;;
-  1)
+  case "$(kq_license_status_class "${license_status}")" in
+  ok) kq_msg check_ok "$(kq_text verify_license)" ;;
+  attention)
     kq_msg check_warn "$(kq_format verify_license_attention "${COMPOSE_FILE}" "${COMPOSE_FILE}")"
     ;;
   *)

@@ -535,8 +535,9 @@ it('una instalacion sin licencia no es un error: license:show con 1 es un aviso 
         ->and($proceso->getOutput())->not->toContain($ausente);
 })->with([
     'vigente' => [0, 'Licencia vigente y dentro del plan', 'AVISO'],
-    'sin licencia o con algo que mirar' => [1, 'NO es un error de la instalacion', 'ha terminado'],
-    'la consulta falla' => [2, 'codigo inesperado', 'NO es un error de la instalacion'],
+    'sin licencia o con algo que mirar' => [3, 'NO es un error de la instalacion', 'ha terminado'],
+    'la consulta falla (excepcion no capturada: 1)' => [1, 'codigo inesperado', 'NO es un error de la instalacion'],
+    'la consulta falla (otro codigo)' => [2, 'codigo inesperado', 'NO es un error de la instalacion'],
 ])->group('RF-PD-02', 'RF-PD-05');
 
 it('la vuelta atras retira tambien los padres de BACKUP_PATH que creo y no otros (I9)', function (): void {
