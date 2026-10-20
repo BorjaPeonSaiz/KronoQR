@@ -112,8 +112,13 @@ final readonly class PersonalRecordCsv
     {
         $filename = 'mi-registro-horario-'.$journal->range->isoFrom().'_'.$journal->range->isoTo().'.csv';
 
+        // Las filas se componen ANTES de responder, porque su numero viaja en
+        // `X-Kronoqr-Report-Rows` y las cabeceras salen antes que el cuerpo. El
+        // volumen esta acotado por el techo de 366 dias de `DateRange`.
+        $rows = self::dataRows($journal);
+
         return new StreamedResponse(
-            static function () use ($journal): void {
+            static function () use ($journal, $rows): void {
                 $handle = fopen('php://output', 'wb');
 
                 if ($handle === false) {
@@ -126,8 +131,8 @@ final readonly class PersonalRecordCsv
 
                 self::writeHeader($handle, $journal);
 
-                foreach ($journal->days as $day) {
-                    self::writeDay($handle, $day);
+                foreach ($rows as $row) {
+                    self::row($handle, $row);
                 }
 
                 fclose($handle);
@@ -139,6 +144,10 @@ final readonly class PersonalRecordCsv
                 // El cuerpo es el registro horario de una persona: ni un proxy
                 // ni un navegador compartido pueden guardarlo.
                 'Cache-Control' => 'no-store, private',
+                // Filas de datos, sin la cabecera de criterios ni los rotulos:
+                // tramos, jornadas sin tramos y correcciones, como el PDF. Con
+                // `0` el portal dice que el periodo no tiene jornadas.
+                'X-Kronoqr-Report-Rows' => (string) \count($rows),
             ],
         );
     }
@@ -177,27 +186,35 @@ final readonly class PersonalRecordCsv
     }
 
     /**
-     * @param  resource  $handle
+     * Todas las filas de datos de la tabla, en el orden del registro.
+     *
+     * @return list<array<string, string>>
      */
-    private static function writeDay($handle, JournalWorkDay $day): void
+    private static function dataRows(WorkDayJournal $journal): array
     {
-        $total = self::duration($day->totalMinutes());
+        $rows = [];
 
-        foreach ($day->shiftEntries as $entry) {
-            self::row($handle, self::shiftRow($day, $entry, $total));
+        foreach ($journal->days as $day) {
+            $total = self::duration($day->totalMinutes());
+
+            foreach ($day->shiftEntries as $entry) {
+                $rows[] = self::shiftRow($day, $entry, $total);
+            }
+
+            // Una jornada sin tramos vigentes **no desaparece** (regla dura 5):
+            // si se anularon todos, sigue apareciendo con su total a cero y su
+            // historico intacto. Ocultarla haria desaparecer del fichero justo
+            // el dia sobre el que alguien quiere preguntar.
+            if ($day->shiftEntries === []) {
+                $rows[] = self::emptyDayRow($day, $total);
+            }
+
+            foreach ($day->corrections as $correction) {
+                $rows[] = self::correctionRow($day, $correction);
+            }
         }
 
-        // Una jornada sin tramos vigentes **no desaparece** (regla dura 5): si
-        // se anularon todos, sigue apareciendo con su total a cero y su
-        // historico intacto. Ocultarla haria desaparecer del fichero justo el
-        // dia sobre el que alguien quiere preguntar.
-        if ($day->shiftEntries === []) {
-            self::row($handle, self::emptyDayRow($day, $total));
-        }
-
-        foreach ($day->corrections as $correction) {
-            self::row($handle, self::correctionRow($day, $correction));
-        }
+        return $rows;
     }
 
     /**

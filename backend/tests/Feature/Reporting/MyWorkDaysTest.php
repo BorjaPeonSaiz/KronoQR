@@ -232,6 +232,34 @@ it('descarga el historico propio en CSV con la suma cuadrando', function (): voi
         ->toBe('attachment; filename=mi-registro-horario-2026-03-01_2026-03-31.csv');
 })->group('RF-ID-05', 'RL-05', 'RL-03');
 
+it('dice en X-Kronoqr-Report-Rows cuantas filas de datos lleva el CSV, y 0 en un periodo vacio', function (): void {
+    // 2.3.0, bloque 8: el portal lee la cabecera para decir que un periodo no
+    // tiene jornadas en vez de anunciar una descarga vacia. Cuenta filas de
+    // DATOS: la cabecera de criterios y los rotulos van siempre.
+    $contexto = miPortal();
+
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-16', '2026-03-16 07:00', '2026-03-16 15:30');
+
+    $conDatos = Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2026-03-01', 'to' => '2026-03-31'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '2');
+
+    // Las dos filas que dice la cabecera son las dos que hay en el fichero.
+    expect(substr_count($conDatos->streamedContent(), "\r\nTRAMO;"))->toBe(2);
+
+    $vacio = Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2026-02-01', 'to' => '2026-02-28', 'format' => 'csv'])
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '0');
+
+    // Y aun asi es un fichero: lleva su cabecera de criterios.
+    expect($vacio->streamedContent())->toStartWith("\u{FEFF}")
+        ->and($vacio->streamedContent())->not->toContain('TRAMO;');
+})->group('RF-ID-05', 'RL-05', 'RL-03');
+
 it('no mete a nadie mas en el fichero del historico propio', function (): void {
     // El alcance del fichero es exactamente el del token que lo pidio. Sin esta
     // prueba, un `JOIN` de mas en la consulta pasaria desapercibido hasta que

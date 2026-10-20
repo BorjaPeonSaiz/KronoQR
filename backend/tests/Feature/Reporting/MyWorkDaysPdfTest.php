@@ -233,6 +233,40 @@ it('incluye cada correccion con su autor y su motivo, y la jornada que se quedo 
     expect($html)->toContain('09:00');
 })->group('RF-ID-05', 'RN-13', 'RL-04');
 
+it('cuenta las mismas filas en el CSV y en el PDF, con correcciones y jornadas sin tramos', function (): void {
+    // `X-Kronoqr-Report-Rows` llega al CSV en la 2.3.0 (bloque 8) y el contrato
+    // promete que los dos formatos del mismo registro dan el mismo numero. El
+    // 14 se queda sin tramos (una fila) y con su anulacion (otra); el 16 tiene
+    // su tramo corregido (una) y la correccion (otra): cuatro.
+    $contexto = pdfPropioContexto();
+
+    $anulado = pdfPropioJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 07:00', '2026-03-14 15:00');
+    $abierto = pdfPropioJornada($contexto['site'], $contexto['employee'], '2026-03-16', '2026-03-16 06:00', null);
+
+    Api::as($contexto['rrhh'])
+        ->patch('/api/v1/shift-entries/'.$abierto, [
+            'clocked_out_at' => '2026-03-16T14:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
+        ])
+        ->assertStatus(200);
+
+    Api::as($contexto['rrhh'])
+        ->post('/api/v1/shift-entries/'.$anulado.'/void', ['reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO'])
+        ->assertStatus(200);
+
+    $rango = ['from' => '2026-03-01', 'to' => '2026-03-31'];
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/export', [...$rango, 'format' => 'csv'])
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '4');
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/export', [...$rango, 'format' => 'pdf'])
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '4');
+})->group('RF-ID-05', 'RL-05', 'RN-13');
+
 it('pide al motor el PDF etiquetado siempre, aunque la instalacion no etiquete los informes de gestion', function (bool $etiquetarInformes): void {
     // V21-3-PO-1 (2.3.0) y doc 01 §6.5: el registro propio es el documento que
     // una persona presenta en una reclamacion, y sale SIEMPRE etiquetado para
