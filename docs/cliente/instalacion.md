@@ -314,7 +314,10 @@ no contiene ninguna red de este servidor ni la de los quioscos (el portal daría
 o ningún destinatario de alertas. **En cambio, `MAIL_HOST=mailpit` (el buzón
 de pruebas del fabricante) y un `MAIL_FROM_ADDRESS` en `kronoqr.local` paran la
 instalación**: son la plantilla sin rellenar. Si el hotel no tiene relevo de
-correo, pon `MAIL_MAILER=log`: se instala igual y los avisos quedan en el log. `update.sh` y
+correo, pon `MAIL_MAILER=array`, el modo «sin correo»: se instala igual, no sale
+ni se guarda ningún correo, y las incidencias y el resumen se consultan en el
+panel. **No uses `MAIL_MAILER=log`**: copiaría cada correo entero, con nombres de
+empleados, al log técnico. `update.sh` y
 `./doctor.sh` repiten las comprobaciones de redes en cada ejecución.
 
 **`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y no descarga

@@ -319,8 +319,10 @@ one (the portal would answer `403` to everyone), a range open to the whole
 internet, an empty `MAIL_HOST`, an empty licence or no alert recipient.
 **On the other hand, `MAIL_HOST=mailpit` (the vendor's test mailbox) and a
 `MAIL_FROM_ADDRESS` in `kronoqr.local` stop the installation**: they are the
-template left unfilled. If the hotel has no mail relay, set `MAIL_MAILER=log`:
-it installs all the same and notices stay in the log. `update.sh` and
+template left unfilled. If the hotel has no mail relay, set `MAIL_MAILER=array`,
+the "no mail" mode: it installs all the same, no mail is sent or stored, and
+incidents and the digest are read in the panel. **Do not use `MAIL_MAILER=log`**:
+it would copy every email in full, with employee names, into the technical log. `update.sh` and
 `./doctor.sh` repeat the network checks on every run.
 
 **`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and it downloads

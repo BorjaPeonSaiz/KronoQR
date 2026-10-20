@@ -447,7 +447,9 @@ check_trusted_proxy_cidr() {
 #                       (`MAIL_HOST=mailpit`, remitente en `kronoqr.local`): no
 #                       son una eleccion, son la plantilla sin rellenar. AVISO si
 #                       MAIL_HOST esta vacio. Un hotel sin relevo SMTP pone
-#                       MAIL_MAILER=log: el producto no depende del correo (regla 12).
+#                       MAIL_MAILER=array (sin correo; `log` no, que copia cada
+#                       correo con nombres al log tecnico). El producto no depende
+#                       del correo (regla 12).
 #   ALERT_*             AVISO si ningun destinatario de alertas, o uno mal
 #                       escrito. Solo importa con la observabilidad encendida,
 #                       que es la que tiene Alertmanager.

@@ -319,7 +319,7 @@ it('I3: el correo de desarrollo de la plantilla impide instalar; alertas sin des
 
     expect($fase1['codigo'])->toBe(2)
         ->and($fase1['salida'])->toContain('[FALLA] MAIL_HOST=mailpit: es el servidor de correo de DESARROLLO de la plantilla')
-        ->and($fase1['salida'])->toContain('MAIL_MAILER=log')
+        ->and($fase1['salida'])->toContain('MAIL_MAILER=array')
         ->and($fase1['salida'])->toContain('[FALLA] MAIL_FROM_ADDRESS=no-reply@kronoqr.local: es el remitente de la plantilla')
         ->and($fase1['salida'])->toContain('[aviso] ALERT_EMAIL_IT, ALERT_EMAIL_RRHH y ALERT_EMAIL_SEGURIDAD estan vacias')
         ->and($fase1['salida'])->toContain('[aviso] LICENSE_KEY vacia: el producto se instala sin licencia')
@@ -328,10 +328,10 @@ it('I3: el correo de desarrollo de la plantilla impide instalar; alertas sin des
     redesBorrar($paquete['dir']);
 })->group('RF-PD-02', 'RF-PD-11', 'RQ-11');
 
-it('I3: un hotel sin relevo de correo instala con MAIL_MAILER=log', function (): void {
+it('I3: un hotel sin relevo de correo instala con MAIL_MAILER=array (sin correo)', function (): void {
     $resultado = redesComprobar('check_operational_settings "$ENV_FILE" /srv/kq/docker-compose.yml', [
         'COMPLIANCE_PROFILE' => 'ES-hosteleria',
-        'MAIL_MAILER' => 'log',
+        'MAIL_MAILER' => 'array',
     ]);
 
     expect($resultado['fallos'])->toBe(0)
