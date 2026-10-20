@@ -899,7 +899,8 @@ kronoqr_backup_copies_total{type}                        gauge
 kronoqr_backup_last_verify_result                        gauge
 kronoqr_backup_last_verified_timestamp_seconds           gauge
 kronoqr_backup_verified_copy_age_seconds                 gauge
-kronoqr_wal_unarchived_age_seconds                       gauge   # exposicion real del RPO (ADR-049), cada minuto desde `scheduler`
+# Exposicion real del RPO (ADR-049): kronoqr_wal_unarchived_age_seconds, cada minuto desde `scheduler`
+kronoqr_wal_unarchived_age_seconds                       gauge
 kronoqr_wal_unarchived_segments                          gauge
 kronoqr_wal_unarchived_bytes                             gauge
 kronoqr_wal_last_archived_age_seconds                    gauge

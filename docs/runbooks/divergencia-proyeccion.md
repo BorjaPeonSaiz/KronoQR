@@ -105,6 +105,15 @@ lleve.
 
 ### Diagnóstico
 
+**0) Desde cuándo.** `projection_divergence_total` es un acumulado: un valor
+distinto de cero no dice cuándo subió. El cuadro «KronoQR · Integridad del dato» tiene
+el panel **«Divergencia de proyección: desde cuándo»**, con la primera vez que el
+contador valió más de cero y la última vez que subió (dentro de los 90 días que guarda
+Prometheus). Sin Prometheus, o más atrás, la fecha exacta está en `audit_log`: los
+asientos de la corrección (`subject_type = 'daily_totals'`, consulta de la §2). Si el
+contador vale más de cero pero la fecha es antigua y ya la investigaste, no hay
+nada nuevo: la alerta mira lo que sube en 24 h, no el valor.
+
 **a) Qué días y qué campos.** El log de la §2 lo dice sin necesidad de consultar
 nada:
 

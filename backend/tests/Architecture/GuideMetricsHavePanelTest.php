@@ -49,16 +49,10 @@ $guiasSinPanel = [
     'kiosk_token_rotations_total',
     'kronoqr_auth_attempts_total',
     'kronoqr_management_account_changes_total',
-    'kronoqr_metrics_store_up',
-    'kronoqr_wal_archive_failing',
     'kronoqr_wal_last_archived_age_seconds',
-    'kronoqr_wal_replication_slots_inactive',
-    'kronoqr_wal_unarchived_segments',
     'projection_reconciliation_last_run_timestamp_seconds',
     'scan_batch_items_not_processed_total',
     'scan_processing_duration_seconds',
-    'work_record_reconciliation_discrepancies',
-    'work_record_reconciliation_last_run_timestamp_seconds',
     'work_record_reconciliation_reviewed_purges',
 ];
 

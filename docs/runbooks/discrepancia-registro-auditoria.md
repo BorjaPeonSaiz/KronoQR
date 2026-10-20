@@ -20,6 +20,11 @@ nada. Lo que está en juego es que el registro que se entrega a la Inspección
 diga lo que de verdad pasó (RL-04). **Mientras no lo aclares, no generes
 exportaciones legales del periodo afectado**: saldrían con lo manipulado.
 
+**Dónde se ve.** El cuadro «KronoQR · Integridad del dato» (Grafana) tiene tres paneles de la
+conciliación: las **discrepancias por alcance** (siempre cero), los **tramos comprobados** de
+cada pasada y la **antigüedad de la última pasada** diaria y completa. Una cifra de tramos
+comprobados que cae a cero de un día para otro es una pasada que no lee el registro.
+
 ---
 
 ## 1. Qué hay montado, en 30 segundos

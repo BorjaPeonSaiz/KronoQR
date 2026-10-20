@@ -879,6 +879,44 @@
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
 
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Almacén de métricas (Redis): 1 responde, 0 no",
+      "description": "kronoqr_metrics_store_up: con 0 las series que viven en Redis (quioscos, 5xx, latencia, colas) han desaparecido y su ausencia no significa cero. Salta AlmacenDeMetricasCaido (crítica, 15 s). Con Redis caído también fallan en cerrado el acceso al panel y al portal, el latido y el padrón del quiosco (almacen-de-metricas-caido.md). El fichaje sigue.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 76 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_metrics_store_up",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null }, { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+
     }
   ]
 }
