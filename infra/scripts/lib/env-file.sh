@@ -164,17 +164,43 @@ kq_env_has_rollback_digests() {
   [ -f "$1" ] && grep -qxF "${KQ_ROLLBACK_DIGESTS_MARKER}" "$1"
 }
 
-# Vacia IMAGE_DIGEST_* y pone la marca. Mismo escritor atomico que kq_env_set.
+# Vacia IMAGE_DIGEST_* y pone la marca, en UNA sola pasada a un temporal junto al
+# destino y un `mv` (V7-RV-5), como kq_env_set y kq_env_drop_rollback_digests.
+# Hasta la 2.3.0 la marca se anadia con `printf >>` tras tres escrituras sueltas:
+# un `kill` entre medias dejaba las vacias SIN la marca, que es exactamente el
+# opt-out del operador, y la instalacion dejaba de fijar sus imagenes por digest
+# para siempre. Ahora el fichero pasa de «sin vacias ni marca» a «con las tres
+# vacias y la marca» de golpe. Conserva dueno y modo (0600). Idempotente: las
+# vacias y la marca que ya estuvieran se sustituyen, no se duplican.
 #
 #   kq_env_mark_rollback_digests RUTA
 kq_env_mark_rollback_digests() {
-  local file="$1" var
+  local file="$1" temp
 
-  for var in IMAGE_DIGEST_PHP IMAGE_DIGEST_NGINX IMAGE_DIGEST_POSTGRES; do
-    kq_env_set "${file}" "${var}" "" || return 1
-  done
-  kq_env_has_rollback_digests "${file}" && return 0
-  printf '%s\n' "${KQ_ROLLBACK_DIGESTS_MARKER}" >>"${file}"
+  temp="$(mktemp "${file}.XXXXXX")" || return 1
+  chmod 0600 "${temp}" 2>/dev/null || true
+
+  if ! KQ_MARKER="${KQ_ROLLBACK_DIGESTS_MARKER}" awk '
+    $0 == ENVIRON["KQ_MARKER"] { next }
+    $0 ~ /^[[:space:]]*(export[[:space:]]+)?IMAGE_DIGEST_(PHP|NGINX|POSTGRES)=/ { next }
+    { print }
+    END {
+      print "IMAGE_DIGEST_PHP="
+      print "IMAGE_DIGEST_NGINX="
+      print "IMAGE_DIGEST_POSTGRES="
+      print ENVIRON["KQ_MARKER"]
+    }
+  ' "${file}" >"${temp}"; then
+    rm -f "${temp}"
+    return 1
+  fi
+
+  chown --reference="${file}" "${temp}" 2>/dev/null || true
+  chmod --reference="${file}" "${temp}" 2>/dev/null || true
+  mv -f "${temp}" "${file}" || {
+    rm -f "${temp}"
+    return 1
+  }
 }
 
 # Si la marca esta, retira la marca y las tres IMAGE_DIGEST_*: el paquete
