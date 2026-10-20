@@ -1099,10 +1099,10 @@ Los siete pasos y lo que pasa si falla cada uno:
 | --- | --- | --- | --- |
 | 1 · Precondiciones | Sale `2` | **Nada tocado.** Sigue en su versión | La línea «Que hacer» de cada `[FALLA]`. Si dice que la versión instalada está fuera de la matriz, actualiza primero a la intermedia que indica |
 | 2 · Mantenimiento | Sale `4` | Mantenimiento retirado; nada tocado | Reintentar. Si se repite, `docker compose logs app` |
-| 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
-| 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
+| 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | La causa está en el detalle, `/var/log/kronoqr/update-<fecha>.detalle.log` (el mensaje da la ruta). [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
+| 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró y qué migración falló |
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
-| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
+| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (las órdenes, con la ruta de la copia, terminan en retirar el mantenimiento y comprobar que `/api/v1/auth/me` da `401`) | Runbook §5. Los quioscos siguen encolando mientras tanto |
 | 7 · Informe | — | El **informe** en `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), siempre. El **detalle** (`update-<fecha>.detalle.log`: salida cruda, **puede llevar datos personales**) **no está ahí**: vive solo en `/var/log/kronoqr/` (`root:root 0600`, directorio `0700`), junto a una copia local del informe. El informe aparece en `reports/` **al terminar, no mientras corre**; si no se puede publicar, el script avisa y dice que queda a salvo en `/var/log/kronoqr/`. Hace falta `setpriv` (paquete `util-linux`). **Cuánto se guardan** (desde la 2.2.0): el detalle, **30 días** (`KRONOQR_LOG_RETENTION_DAYS` en el entorno de quien ejecuta el script, mínimo 7); el resumen local `update-<fecha>.log`, sin datos personales, **90 días**. Los borra `update.sh` al arrancar y `./doctor.sh` si lo ejecutas con `sudo`; si no actualizas ni ejecutas `doctor.sh` en meses, el borrado espera a la siguiente vez | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
@@ -1641,6 +1641,35 @@ tramo anterior terminó en pausa** (RN-05, ADR-058). Cada tramo guarda ahora
   declara la pausa ya no sale con el antes y el después iguales. La
   exportación íntegra de datos (§13) trae la columna `closed_by`.
 
+**Al actualizar a la 2.3.0: desde qué versión.** La 2.3.0 se actualiza desde
+la **2.2.0 o la 2.2.1**. Una instalación en la 2.1.0 o anterior no salta
+directamente aunque esté dentro de la regla de «la menor vigente y las dos
+anteriores»: esos saltos nunca se han probado de verdad. El paso 1 sale con `2`
+sin tocar nada y dice «actualiza PRIMERO a la 2.2.1»; después, a la 2.3.0.
+`./update.sh --chain <tu versión>` da ya la misma respuesta, con el mismo `2`,
+en lugar de enseñar una cadena que la actualización no iba a recorrer.
+
+**Al actualizar a la 2.3.0: si la vuelta atrás automática se queda a medias.**
+Es el caso raro de la salida `5` (§11, paso 6), y cambian tres cosas:
+
+- **Un Ctrl+C ya no la corta.** Mientras dura la vuelta atrás, la pantalla
+  dice «NO LA INTERRUMPAS» y ahora es verdad: ni el script ni las órdenes de
+  Docker que lanza reciben la señal. Si pulsas Ctrl+C **antes**, durante las
+  migraciones, el informe y el asiento de auditoría dicen «interrumpido por el
+  operador», no «la migración ha fallado».
+- **Las órdenes para terminarla a mano acaban en dos pasos nuevos**: retirar el
+  mantenimiento (`php artisan up`) y comprobar que `/api/v1/auth/me` responde
+  `401`. Sin ellos la versión anterior quedaba en pie pero en mantenimiento: el
+  quiosco encolaba, y el panel, el portal y la exportación del registro no
+  respondían. Si el `curl` da `503`, repite el `artisan up`.
+- **`./doctor.sh` da `[FALLA]` con la aplicación en mantenimiento**, por
+  dentro (`app.maintenance_mode`) y por el borde, con la orden para retirarlo.
+  Hasta ahora salía en verde.
+
+Y si una migración falla, la pantalla y el informe dicen **cuál**, y el motivo
+de una copia previa fallida remite al detalle técnico de `/var/log/kronoqr/`,
+que es donde está la causa.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,
@@ -1673,7 +1702,8 @@ permiso y no enseña nada. Recargar la página lo corrige.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
-dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
+dos anteriores, y nunca desde antes de la 2.2.0; desde una más antigua, el
+script te dice a cuál ir primero.
 
 **Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
 en la versión», y no toca nada.

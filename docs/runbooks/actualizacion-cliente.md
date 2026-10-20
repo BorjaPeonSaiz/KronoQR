@@ -46,12 +46,15 @@ paquete que tienes, sin tocar nada:
 
 ```bash
 ./update.sh --supported-sources      # versiones desde las que se actualiza directo
-./update.sh --chain 2.1.0            # qué intermedias se aplicarían desde la 2.1.0
+./update.sh --chain 2.2.0            # qué intermedias se aplicarían desde la 2.2.0
 ```
 
 La regla es la del fabricante (doc 02 §11.6.5): **la versión menor vigente y
-las dos anteriores** se actualizan directamente. Desde una más antigua, el
-script te dice a cuál ir primero y no intenta el salto. La matriz es un dato
+las dos anteriores** se actualizan directamente, y **nunca desde antes de la
+2.2.0** (decisión D3 de la 2.3.0: los saltos desde la 2.0.0 y la 2.1.0 nunca se
+probaron de verdad). Desde una más antigua, el script te dice a cuál ir primero
+y no intenta el salto; `--chain` da esa misma respuesta y sale con `2` en vez de
+enseñar una cadena que la actualización rechazaría. La matriz es un dato
 del paquete, `versions.txt`; no se edita.
 
 ---
@@ -547,7 +550,7 @@ copia que restaurar**: restaurar la de anoche borraría los fichajes del día.
 Lo único que hay que hacer:
 
 ```bash
-ACTUAL=/opt/kronoqr-2.1.0
+ACTUAL=/opt/kronoqr-2.2.1
 sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml exec -T app php artisan up
 sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml start horizon scheduler
 curl -k https://127.0.0.1/api/v1/auth/me     # 401 = atiende; 503 = sigue en mantenimiento
@@ -567,8 +570,8 @@ en este orden, y cada una se puede repetir:
 
 ```bash
 # Rutas de ejemplo: el mensaje del script trae las tuyas.
-NUEVO=/opt/kronoqr-2.2.0
-ANTERIOR=/opt/kronoqr-2.1.0
+NUEVO=/opt/kronoqr-2.3.0
+ANTERIOR=/opt/kronoqr-2.2.1
 COPIA=/var/backups/fichaje/daily/kronoqr-20260907T031500Z.dump.enc   # la del informe
 
 # 1. Parar lo que escribe (postgres se queda)
@@ -586,11 +589,33 @@ sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm
 #    su IMAGE_TAG). --remove-orphans retira lo que la versión nueva creó.
 sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml up -d --remove-orphans
 
+# 3b. Retirar el mantenimiento. La versión anterior arranca en contenedores
+#     nuevos, pero el estado de mantenimiento puede sobrevivir (vive en el
+#     almacenamiento de la aplicación): sin esto, la API sigue en 503.
+sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml exec -T app php artisan up
+
 # 4. Comprobar: la versión que publica la sonda es la anterior
 curl -k https://127.0.0.1/api/v1/health
 curl -k https://127.0.0.1/api/v1/ready
 sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml exec -T app php artisan compliance:verify-audit-chain
+
+# 4b. Y que atiende de verdad: 401 (sin sesión). 503 = sigue en mantenimiento,
+#     repite el 3b. Con HTTPS_PORT distinto de 443, añade :<puerto> a la URL.
+curl -k -o /dev/null -w '%{http_code}\n' https://127.0.0.1/api/v1/auth/me
 ```
+
+**El 4b no es opcional.** Sin el `artisan up`, la versión anterior queda en pie
+pero en mantenimiento: `health` y `ready` responden bien (no pasan por el
+mantenimiento), el quiosco encola sin quejarse, y el panel, el portal y la
+exportación del registro dan `503` sin que nada más lo diga. Desde la 2.3.0,
+`doctor.sh` y `product:doctor` lo marcan como `[FALLA]` (`app.maintenance_mode`).
+
+**Si actualizaste in place** (el paquete nuevo se descomprimió encima), `$NUEVO` y
+`$ANTERIOR` son el mismo directorio y el mensaje del script usa para los pasos 3
+y 3b el fichero `.env.kronoqr-pre-update`: es el `.env` de la versión anterior.
+Cuando el `curl` del 4b dé `401`, ponlo en su sitio con
+`sudo mv $ANTERIOR/.env.kronoqr-pre-update $ANTERIOR/.env`; así un
+`docker compose up` posterior levanta la versión que está en pie y no la nueva.
 
 Si `restore.sh` se niega por **conexiones abiertas** (salida `3`), algún
 contenedor de aplicación sigue en pie. Antes de rendirse espera diez segundos a que se cierren las que acaban de

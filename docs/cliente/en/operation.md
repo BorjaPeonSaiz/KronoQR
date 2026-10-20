@@ -1117,10 +1117,10 @@ The seven steps and what happens if each one fails:
 | --- | --- | --- | --- |
 | 1 · Preconditions | Exits `2` | **Nothing touched.** Stays on its version | The «Que hacer» (what to do) line of each `[FALLA]` (failure). If it says the installed version is outside the matrix, update first to the intermediate version it names |
 | 2 · Maintenance | Exits `4` | Maintenance lifted; nothing touched | Retry. If it happens again, `docker compose logs app` |
-| 3 · Pre-update backup | Exits `2` | Maintenance lifted; nothing touched. **No backup, no update** | [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) §2 and run again |
-| 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
+| 3 · Pre-update backup | Exits `2` | Maintenance lifted; nothing touched. **No backup, no update** | The cause is in the detail, `/var/log/kronoqr/update-<date>.detalle.log` (the message gives the path). [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) §2 and run again |
+| 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped and which migration failed |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
-| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
+| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (the commands, with the path of the backup, end by lifting maintenance and checking that `/api/v1/auth/me` gives `401`) | Runbook §5. The kiosks keep queueing meanwhile |
 | 7 · Report | — | The **report** at `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), always. The **detail** (`update-<fecha>.detalle.log`: raw output, **may contain personal data**) is **not there**: it lives only in `/var/log/kronoqr/` (`root:root 0600`, directory `0700`), next to a local copy of the report. The report appears in `reports/` **when the script finishes, not while it runs**; if it cannot be published, the script warns and says it is safe in `/var/log/kronoqr/`. `setpriv` (`util-linux` package) is required. **How long they are kept** (since 2.2.0): the detail, **30 days** (`KRONOQR_LOG_RETENTION_DAYS` in the environment of whoever runs the script, minimum 7); the local summary `update-<fecha>.log`, without personal data, **90 days**. `update.sh` deletes them when it starts and `./doctor.sh` does too if you run it with `sudo`; if you neither update nor run `doctor.sh` for months, the deletion waits for the next run | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
@@ -1658,6 +1658,35 @@ previous shift ended in a break** (RN-05, ADR-058). Each shift now records
   that only declares the break no longer comes out with identical before and
   after. The full data export (§13) carries the `closed_by` column.
 
+**When updating to 2.3.0: from which version.** 2.3.0 is updated from **2.2.0
+or 2.2.1**. An installation on 2.1.0 or older does not jump straight, even
+though it falls within the "current minor and the two before it" rule: those
+jumps have never really been tested. Step 1 exits `2` without touching anything
+and says "Update FIRST to 2.2.1"; then, to 2.3.0. `./update.sh --chain <your
+version>` now gives the same answer, with the same `2`, instead of showing a
+chain the update would not follow.
+
+**When updating to 2.3.0: if the automatic rollback is left half-done.** It is
+the rare case of exit `5` (§11, step 6), and three things change:
+
+- **A Ctrl+C no longer cuts it.** While the rollback runs, the screen says "DO
+  NOT INTERRUPT IT" and now it is true: neither the script nor the Docker
+  commands it launches receive the signal. If you press Ctrl+C **before**,
+  during the migrations, the report and the audit entry say "interrupted by the
+  operator", not "the migration failed".
+- **The commands to finish it by hand end in two new steps**: lift maintenance
+  (`php artisan up`) and check that `/api/v1/auth/me` answers `401`. Without
+  them the previous version was left up but under maintenance: the kiosk
+  queued, and the panel, the portal and the time record export did not answer.
+  If the `curl` gives `503`, repeat the `artisan up`.
+- **`./doctor.sh` gives `[FAIL]` with the application under maintenance**, from
+  inside (`app.maintenance_mode`) and through the edge, with the command to
+  lift it. Until now it came out green.
+
+And if a migration fails, the screen and the report say **which one**, and the
+reason for a failed pre-update backup points to the technical detail in
+`/var/log/kronoqr/`, which is where the cause is.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or
@@ -1690,8 +1719,8 @@ fixes it.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
-version and the two before it; from an older one, the script tells you which
-one to go to first.
+version and the two before it, and never from before 2.2.0; from an older one,
+the script tells you which one to go to first.
 
 **A second run** on an already updated installation: exits `3`, "already on the
 version", and touches nothing.
