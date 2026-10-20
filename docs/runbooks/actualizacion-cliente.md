@@ -46,12 +46,15 @@ paquete que tienes, sin tocar nada:
 
 ```bash
 ./update.sh --supported-sources      # versiones desde las que se actualiza directo
-./update.sh --chain 2.1.0            # qué intermedias se aplicarían desde la 2.1.0
+./update.sh --chain 2.2.0            # qué intermedias se aplicarían desde la 2.2.0
 ```
 
 La regla es la del fabricante (doc 02 §11.6.5): **la versión menor vigente y
-las dos anteriores** se actualizan directamente. Desde una más antigua, el
-script te dice a cuál ir primero y no intenta el salto. La matriz es un dato
+las dos anteriores** se actualizan directamente, y **nunca desde antes de la
+2.2.0** (decisión D3 de la 2.3.0: los saltos desde la 2.0.0 y la 2.1.0 nunca se
+probaron de verdad). Desde una más antigua, el script te dice a cuál ir primero
+y no intenta el salto; `--chain` da esa misma respuesta y sale con `2` en vez de
+enseñar una cadena que la actualización rechazaría. La matriz es un dato
 del paquete, `versions.txt`; no se edita.
 
 ---
@@ -136,7 +139,8 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
    >
    > **Desde la 2.2.0**, encima funciona: avisa y sigue. La vuelta atrás usa el
    > compose nuevo con las imágenes antiguas, y la copia previa del paso 3 la
-   > hace la imagen del paquete nuevo (el compose nuevo la fija por digest). Si
+   > hace también la imagen de la versión instalada (desde la 2.3.0; antes la
+   > hacía la nueva contra el esquema antiguo). Si
    > la copia falla, el script vuelve a **arrancar** `horizon` y `scheduler` tal
    > como estaban, sin recrearlos, así que la versión anterior sigue entera. Aun
    > así, la próxima vez, al lado.
@@ -214,10 +218,10 @@ Lo que verás, y lo que significa cada paso:
 | --- | --- | --- |
 | 1 · Precondiciones | Lo mismo que `--check-only`, incluida la ruta de gestión que debe responder `401` sin sesión: es lo que el paso 5 y la vuelta atrás exigirán, y tiene que ser verdad ya. Si algo falla, sale `2` y no ha tocado nada | Nada |
 | 2 · Mantenimiento | El panel, el portal y la API de gestión responden «en mantenimiento» (503). `horizon` y `scheduler` se paran para que nada escriba | **Los quioscos siguen fichando**: confirman en local y encolan. Es invisible para quien ficha |
-| 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual (si descomprimiste encima, cosa que solo se admite desde la 2.2.0, con la imagen del paquete nuevo: §2). **Bloqueante**: si falla, sale `2`, retira el mantenimiento, vuelve a arrancar `horizon` y `scheduler` **tal como estaban** (`start`, sin recrear nada) y no ha tocado nada más. No hay bandera para saltárselo | Igual |
+| 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual (también si descomprimiste encima, cosa que solo se admite desde la 2.2.0: §2). **Bloqueante**: si falla, sale `2`, retira el mantenimiento, vuelve a arrancar `horizon` y `scheduler` **tal como estaban** (`start`, sin recrear nada) y no ha tocado nada más. No hay bandera para saltárselo | Igual |
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |
 | 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02, privilegios del rol de la aplicación sobre el registro horario (sin `DELETE` de tabla; solo `EXECUTE` sobre la función de purga) y **triggers del registro presentes y activos** (si falta uno o está desactivado, o la función de purga ha perdido `SECURITY DEFINER`, **deshace la actualización sin reactivarlos él**: una actualización limpia nunca los deja así; sigue la §3.2 de [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md)), **conciliación completa del registro con su auditoría** (`compliance:reconcile-work-record --full`, con tope de 300 s; **solo informa**: una discrepancia, un corte por tiempo o un fallo del comando se leen en el informe, línea `work-record-reconciliation`, y se siguen con [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) sin deshacer la actualización) y `product:doctor` (**informativo**: se muestra y se resume en el informe; solo deshace si el comando ni siquiera existe en la imagen). Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
-| 6 · Vuelta atrás | Solo si el 4 o el 5 fallan: restaura la copia del paso 3 y relanza la versión anterior, sin preguntar (§5) | Igual: nada de lo encolado se pierde |
+| 6 · Vuelta atrás | Solo si el 4 o el 5 fallan **antes** de que la versión nueva atienda (el `401` tras retirar su mantenimiento): restaura la copia del paso 3 y relanza la versión anterior, sin preguntar. **Después del `401` ya no se vuelve atrás**: los quioscos ya le han entregado fichajes, y un fallo posterior sale con `5` dejándola en servicio (§5, caso C) | Igual: nada de lo encolado se pierde |
 | 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás (uid 1000, `0640`). **El detalle** `update-<fecha>.detalle.log` (salida cruda de migraciones, copia, restauración y logs; **puede llevar datos personales**) **no se publica ahí**: vive solo en `/var/log/kronoqr/`, `root:root 0600` en un directorio `0700`, junto a una copia local del informe. El informe aparece en `reports/` **al terminar** (o al salir por cualquier camino), **no mientras corre**: durante la ejecución se escribe en `/var/log/kronoqr/` y al final se publica como el uid de la aplicación con `setpriv` (paquete `util-linux`; la fase 1 avisa si falta). Si no se puede publicar, el script lo avisa y el informe queda a salvo en `/var/log/kronoqr/`: cópialo con la orden que indica el aviso | — |
 
 **Por qué el mantenimiento va antes de la copia**, y no al revés como lo
@@ -477,7 +481,7 @@ La tabla es **la misma de los cinco scripts**, publicada en
 | `2` | **Una precondición no se cumple, o la copia previa ha fallado.** La instalación no se ha tocado y sigue en su versión; si ya estaba en mantenimiento, se ha retirado | La línea «Que hacer» de cada `[FALLA]`. Cuatro merecen párrafo: versión de origen fuera de la matriz (§1), cadena de auditoría rota (§4 bis), perfil de cumplimiento bajo el suelo legal (§4 ter) y copia fallida ([`restaurar-backup.md`](restaurar-backup.md) §2) |
 | `3` | **Ya está en la versión de destino**, o no hay instalación que actualizar. Nada tocado | Nada. Si de verdad no hay instalación, lo que quieres es `install.sh` |
 | `4` | **Falló y volvió a la versión anterior.** Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante **antes** de reintentar: dice en qué paso y por qué |
-| `5` | **Falló y la vuelta atrás quedó incompleta.** Nada más se toca | §5. Es el único código que exige a una persona delante |
+| `5` | **Falló y la vuelta atrás quedó incompleta**, o falló algo **después** de que la versión nueva atendiera y no se vuelve atrás. Nada más se toca | §5. Es el único código que exige a una persona delante |
 | `6` | **Casi nunca**: toda verificación fallida deshace (RF-PD-10). La única excepción es una actualización que SÍ terminó, con la versión nueva en marcha, pero cuyo asiento `system.updated` de la auditoría no se pudo escribir: el trabajo no se deshace por eso | Leer el informe: dice qué orden escribe el asiento que falta |
 | `7` | **La firma de cosign de una imagen del producto no es válida.** Sale en el paso 1: la instalación no se ha tocado y sigue en su versión. Solo ocurre si tienes cosign 3.0.0 o posterior instalado y la imagen va fijada por digest ([`instalacion.md`](../cliente/instalacion.md) §7.1). Si cosign no pudo consultar Sigstore o el registro, **no** es esto: avisa y sigue | **No sigas con ese paquete.** Envía al fabricante el detalle que imprime el script y el informe (línea `image-signature`). No uses `--skip-signature-check` con las imágenes del fabricante |
 
@@ -537,8 +541,14 @@ jurisdicción decide el suelo legal de conservación del registro.
 
 Con `4` no hay nada que hacer: el script ya volvió. Con `5`, el script se ha
 detenido **sin tocar nada más** y ha impreso las órdenes exactas con las rutas
-reales de tu servidor. **Lee primero cuál de los dos casos es**, porque las
-órdenes son distintas:
+reales de tu servidor. **Lee primero cuál de los tres casos es**, porque las
+órdenes son distintas, y en el B pueden ser menos de las de abajo:
+
+| Lo que dice la pantalla | Caso | ¿Se restaura alguna copia? |
+| --- | --- | --- |
+| «VUELTA ATRAS INCOMPLETA, pero SOLO en una cosa» | A | **No** |
+| «VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS» | B | Solo si el mensaje trae el paso `2` |
+| «ACTUALIZACION HECHA, PERO INCOMPLETA» | C | **Nunca** |
 
 **Caso A — «solo ha quedado a medias el modo mantenimiento».** Falló algo
 antes de la copia previa (pasos 2 o 3) y no se pudo retirar el mantenimiento.
@@ -547,7 +557,7 @@ copia que restaurar**: restaurar la de anoche borraría los fichajes del día.
 Lo único que hay que hacer:
 
 ```bash
-ACTUAL=/opt/kronoqr-2.1.0
+ACTUAL=/opt/kronoqr-2.2.1
 sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml exec -T app php artisan up
 sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml start horizon scheduler
 curl -k https://127.0.0.1/api/v1/auth/me     # 401 = atiende; 503 = sigue en mantenimiento
@@ -563,22 +573,36 @@ base **sin migrar** (y, sin `--no-deps`, recrearía también PostgreSQL y Redis
 si su definición cambió).
 
 **Caso B — la vuelta atrás con la copia quedó incompleta.** Son estas órdenes,
-en este orden, y cada una se puede repetir:
+en este orden, y cada una se puede repetir. **Sigue las que imprime el script,
+no las de aquí**: si la restauración automática **sí terminó**, el mensaje lo
+dice («La copia previa … YA ESTA RESTAURADA … empieza en el 3») y no trae los
+pasos 1 a 2. **No restaures dos veces**: la segunda restauración volvería a
+descartar lo que haya entrado desde la primera.
 
 ```bash
 # Rutas de ejemplo: el mensaje del script trae las tuyas.
-NUEVO=/opt/kronoqr-2.2.0
-ANTERIOR=/opt/kronoqr-2.1.0
+NUEVO=/opt/kronoqr-2.3.0
+ANTERIOR=/opt/kronoqr-2.2.1
 COPIA=/var/backups/fichaje/daily/kronoqr-20260907T031500Z.dump.enc   # la del informe
 
 # 1. Parar lo que escribe (postgres se queda)
 sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml stop app horizon scheduler reverb nginx
 
-# 2. Restaurar la copia previa. Restaura en una base NUEVA y solo al final
-#    intercambia los nombres; la base fallida se conserva 7 días como
-#    <base>_pre_restore_<marca> para el diagnóstico.
-#    Va por el servicio de un solo uso `restore` del paquete NUEVO: es el único
-#    que recibe la credencial del rol de migración, que restaurar necesita.
+# 1b. Y lo que quede de esta actualización: los contenedores de un solo uso
+#     (`docker compose run`). Una migración interrumpida sigue viva en el suyo:
+#     PHP es el proceso principal del contenedor e ignora el Ctrl+C.
+sudo docker ps -q --filter label=com.docker.compose.project=kronoqr --filter label=com.docker.compose.oneoff=True | xargs -r sudo docker kill
+
+# 1c. Cerrar las sesiones que queden abiertas contra la base: con una abierta,
+#     restore.sh se niega (sale con 3). Usuario y base, los de tu .env
+#     (DB_MIGRATION_USERNAME y DB_DATABASE); el mensaje del script ya los trae.
+sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml exec -T postgres psql -U fichaje_migrator -d fichaje -Atc "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE datname = 'fichaje' AND pid <> pg_backend_pid()"
+
+# 2. SOLO SI EL MENSAJE LO TRAE (la restauración automática no terminó).
+#    Restaura en una base NUEVA y solo al final intercambia los nombres; la base
+#    fallida se conserva 7 días como <base>_pre_restore_<marca> para el
+#    diagnóstico. Va por el servicio de un solo uso `restore` del paquete NUEVO:
+#    es el único que recibe la credencial del rol de migración.
 sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm --no-deps restore \
   bash /opt/kronoqr/scripts/restore.sh --file $COPIA --yes --operator <tu correo>
 
@@ -586,15 +610,48 @@ sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm
 #    su IMAGE_TAG). --remove-orphans retira lo que la versión nueva creó.
 sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml up -d --remove-orphans
 
+# 3b. Retirar el mantenimiento. El fichero que lo marca vive DENTRO del
+#     contenedor `app` (storage/framework/down). Si el paso 3 no recrea el de la
+#     versión anterior —lado a lado con un fallo en las migraciones, su
+#     definición no ha cambiado y solo se arranca—, conserva el que le puso la
+#     actualización y la API sigue en 503.
+sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml exec -T app php artisan up
+
 # 4. Comprobar: la versión que publica la sonda es la anterior
 curl -k https://127.0.0.1/api/v1/health
 curl -k https://127.0.0.1/api/v1/ready
+
+# 4b. Y que atiende de verdad: 401 (sin sesión). 503 = sigue en mantenimiento,
+#     repite el 3b. Con HTTPS_PORT distinto de 443, añade :<puerto> a la URL.
+curl -k -o /dev/null -w '%{http_code}\n' https://127.0.0.1/api/v1/auth/me
+
+# 4c. Y la cadena de auditoría: tiene que terminar sin error.
 sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml exec -T app php artisan compliance:verify-audit-chain
 ```
 
-Si `restore.sh` se niega por **conexiones abiertas** (salida `3`), algún
-contenedor de aplicación sigue en pie. Antes de rendirse espera diez segundos a que se cierren las que acaban de
-pararse y, si no, lista el rol y la aplicación de cada una: `docker ps` y párralo. Si sale `2`, la
+**El 4b no es opcional.** Sin el `artisan up`, la versión anterior queda en pie
+pero en mantenimiento: `health` y `ready` responden bien (no pasan por el
+mantenimiento), el quiosco encola sin quejarse, y el panel, el portal y la
+exportación del registro dan `503` sin que nada más lo diga. Desde la 2.3.0,
+`doctor.sh` y `product:doctor` lo marcan como `[FALLA]` (`app.maintenance_mode`).
+
+**El asiento de la vuelta atrás.** Si la copia ya estaba restaurada, el script
+intenta escribir él mismo el asiento `system.restored_from_backup`, que deja
+dentro del registro la prueba de que se descartó un intervalo. Si no ha podido,
+el mensaje trae un paso **5** con la orden completa (`compliance:record-system-event`
+con su `--data`): ejecútala tal cual, después del 4c. Y, pase lo que pase, el
+informe lleva el motivo, el paso, la punta de la cadena descartada
+(`chain-discarded`) y el identificador del informe.
+
+**Si actualizaste in place** (el paquete nuevo se descomprimió encima), `$NUEVO` y
+`$ANTERIOR` son el mismo directorio y el mensaje del script usa para los pasos 3,
+3b y 4c el fichero `.env.kronoqr-pre-update`: es el `.env` de la versión anterior.
+El mensaje trae además un paso **6**: cuando el `curl` del 4b dé `401`, ponlo en
+su sitio con `sudo mv $ANTERIOR/.env.kronoqr-pre-update $ANTERIOR/.env`; así un
+`docker compose up` posterior levanta la versión que está en pie y no la nueva.
+
+Si `restore.sh` se niega aún por **conexiones abiertas** (salida `3`) tras el 1b y
+el 1c, algo vuelve a conectarse: `docker ps` y párralo. Si sale `2`, la
 copia no se descifra o no se lee: prueba con la anterior (`restore.sh --list`, por el mismo servicio `restore`) y
 lee [`restaurar-backup.md`](restaurar-backup.md) §6, que tiene los tiempos que
 caben en el RTO de 4 h.
@@ -624,6 +681,32 @@ pierde, pero la tablet no lo ve ni lo drena. Por eso:
 - **Tras la vuelta atrás**, en cada tablet que había actualizado: borra los datos
   del sitio y vuelve a emparejarla ([`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md)),
   solo con la cola ya a cero.
+
+**Caso C — «ACTUALIZACION HECHA, PERO INCOMPLETA».** La versión nueva **ya
+atiende**: pasó todas las verificaciones, se retiró su mantenimiento, la API
+respondió `401` y los quioscos empezaron a entregarle sus fichajes. Lo que falló
+fue posterior —arrancar `horizon`, `scheduler` o `reverb`, o que la imagen no
+traiga `product:doctor`—, y **desde ese punto el script ya no vuelve atrás**
+(decisión del fabricante): restaurar la copia previa borraría los fichajes que
+entraron después. Los datos están intactos y en la versión nueva, el asiento
+`system.updated` está escrito, y el directorio anterior (o, in place, la copia
+`.env.kronoqr-pre-update`) se ha retirado como al terminar bien.
+
+**NO RESTAURES NINGUNA COPIA.** Lo que hay que hacer es arreglar el proceso que
+falta, desde el directorio vigente (el del paquete nuevo):
+
+```bash
+cd /opt/kronoqr-2.3.0
+sudo docker compose ps horizon scheduler reverb                      # cuál no está en marcha
+sudo docker compose logs --tail 100 horizon scheduler reverb         # por qué
+sudo docker compose up -d horizon scheduler reverb                   # cuando esté resuelto
+sudo docker compose exec -T app php artisan product:doctor
+sudo ./doctor.sh
+```
+
+Mientras `horizon` o `scheduler` estén parados no hay copia nocturna, ni
+exportaciones en cola, ni verificación nocturna de la cadena: resuélvelo el mismo
+día. Si no sabes por qué fallan, envía el informe al fabricante.
 
 ### 5.1 Volver a la versión anterior después de una actualización que terminó bien
 

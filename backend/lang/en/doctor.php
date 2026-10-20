@@ -488,6 +488,13 @@ return [
                 'failure' => 'Debug mode (APP_DEBUG) is on in production. Any error shows the database '
                     .'passwords and the signing keys of the system to whoever triggers it.',
             ],
+            'maintenance_mode' => [
+                'ok' => 'The application is serving: it is not in maintenance mode.',
+                'failure' => 'The application is IN MAINTENANCE MODE and answers 503 to everything. Kiosks '
+                    .'keep clocking (they queue locally), but the panel, the employee portal and the time '
+                    .'record export do not work until it is lifted.',
+                'warning_unknown' => 'Could not tell whether the application is in maintenance mode.',
+            ],
             'error_history' => [
                 'ok' => 'The error history is a normal size (:total lines in total; the source with the most '
                     .'unresolved errors has :open).',
@@ -1065,6 +1072,20 @@ return [
                     ."  APP_DEBUG=false\n"
                     ."and restart the application:\n"
                     .'  docker compose up -d app',
+            ],
+            'maintenance_mode' => [
+                'failure' => "If update.sh is running right now, wait for it to finish: it lifts it. Otherwise,\n"
+                    ."lift it from the installation directory:\n"
+                    ."  docker compose exec -T app php artisan up\n"
+                    ."and check that the API answers 401 (no session) and not 503:\n"
+                    ."  curl -k -o /dev/null -w '%{http_code}' https://127.0.0.1/api/v1/auth/me\n"
+                    ."(with HTTPS_PORT other than 443, add the port: https://127.0.0.1:<port>/...).\n"
+                    ."If you come from an update.sh rollback that exited with 5, first finish the other\n"
+                    .'commands it printed (docs/runbooks/actualizacion-cliente.md §5).',
+                'warning_unknown' => "Check APP_MAINTENANCE_DRIVER and APP_MAINTENANCE_STORE in the .env (they are\n"
+                    ."normally left empty). To tell from outside: if\n"
+                    ."  curl -k -o /dev/null -w '%{http_code}' https://127.0.0.1/api/v1/auth/me\n"
+                    .'answers 503, it is in maintenance; 401 is correct.',
             ],
             'error_history' => [
                 'warning' => "Open the panel, go to Settings -> Errors, and deal with or mark as resolved the\n"

@@ -382,6 +382,7 @@ run_delegated_doctor() {
   check_redis_restart_loop
   check_prometheus_rules
   check_app_storage
+  check_maintenance_mode
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -1083,6 +1084,39 @@ port_listening() {
   fi
 
   return 2
+}
+
+# EL MANTENIMIENTO VISTO DESDE FUERA (V21-3-PL-02), con `app` en marcha: la API de
+# gestion por el borde y por loopback, como la sonda de update.sh. 401 (sin sesion)
+# es lo correcto; 503 es la aplicacion en mantenimiento, el estado en que queda una
+# vuelta atras de update.sh que sale con 5 si a mano se salta el `artisan up`: el
+# quiosco encola, pero el panel, el portal y la exportacion legal no responden, y
+# hasta la 2.3.0 este script salia con 0. `product:doctor` lo ve desde dentro
+# (app.maintenance_mode); esto lo confirma por donde entra el hotel. Cualquier otra
+# respuesta (borde caido, sin curl) es un aviso: lo dicen las demas comprobaciones.
+check_maintenance_mode() {
+  local https_port status
+
+  https_port="$(env_value "${CURRENT_ENV}" "HTTPS_PORT")"
+  [ -n "${https_port}" ] || https_port="443"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    check_warn "$(kq_format d_c_maintenance_unknown "${https_port}")" "$(kq_text d_w_maintenance_no_curl)"
+    return 0
+  fi
+  status="$(kq_edge_status "${https_port}" "${KQ_MANAGEMENT_PROBE}")"
+
+  case "${status}" in
+  401) check_pass "$(kq_format d_c_maintenance "${https_port}" "${status}")" ;;
+  503)
+    check_fail "$(kq_format d_c_maintenance "${https_port}" "${status}")" \
+      "$(kq_format d_f_maintenance "${CURRENT_COMPOSE}" "${https_port}")"
+    ;;
+  *)
+    check_warn "$(kq_format d_c_maintenance "${https_port}" "${status:-000}")" \
+      "$(kq_format d_w_maintenance_unknown "${status:-000}" "${CURRENT_COMPOSE}")"
+    ;;
+  esac
 }
 
 check_listening_ports() {

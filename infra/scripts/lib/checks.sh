@@ -543,3 +543,24 @@ kq_retry_probe() {
     sleep "${KQ_POLL_SECONDS}"
   done
 }
+
+# La ruta de gestion SIN sesion que distingue «atiende» de «en mantenimiento»: 401
+# si la aplicacion atiende, 503 si sigue en mantenimiento. Las sondas de salud
+# (/api/v1/health y /ready) no pasan por el mantenimiento y no lo distinguen.
+# La usan update.sh (verificacion del paso 5 y de la vuelta atras) y doctor.sh
+# (V21-3-PL-02).
+# shellcheck disable=SC2034 # la leen update.sh y doctor.sh, no este fichero.
+readonly KQ_MANAGEMENT_PROBE="/api/v1/auth/me"
+
+# Codigo HTTP de una ruta por el borde y por loopback, sin exigir exito. Sin
+# respuesta, `000`. Nunca falla.
+#   kq_edge_status PUERTO RUTA
+kq_edge_status() {
+  local port="$1" path="$2" code
+  # curl ya escribe 000 cuando no hay respuesta, y sale con error: `|| true`, no un
+  # segundo `printf 000` que dejaria 000000.
+  code="$(curl --silent --insecure --max-time 15 --output /dev/null --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
+    "https://127.0.0.1:${port}${path}" 2>/dev/null)" || true
+  printf '%s' "${code:-000}"
+}

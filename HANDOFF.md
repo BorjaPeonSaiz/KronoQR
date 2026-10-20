@@ -89,14 +89,20 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (18-10-2026):** bloques 0 a 4 integrados (#182 a #186). **Bloque 5 «Guía de instalación y documentación del cliente» en curso** en la rama `docs/guias-cliente-2.3.0`, sin push: tareas 5.1 a 5.5 hechas, un commit por tarea (la 5.3 en dos). Lo que conviene saber:
+**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 5 integrados (#182 a #187). **Bloque 6** (`fix/update-sh-interrupcion`): 6.1–6.8 ✅, revisiones de código y seguridad aplicadas, CI manual 39429187854 en verde (⑧b en 24 min, `timeout-minutes` 90). Lo que conviene saber:
+- **Decisión del propietario (20-10-2026): tras el 401 de la versión nueva no se restaura** (`ROLLBACK_ARMED=3`, salida 5 sin tocar nada; Engram `2.3.0/b6-sin-restaurar-tras-up`).
+- ⑧b ejercita los fallos con `.github/scripts/update-faults-e2e.sh` (U3s, U3i+U1b, U3m, U3n, U3p, chain-check). U3p sustituye al reintento tras la vuelta atrás, que ya cubre P3.
+- En U3m la vuelta atrás ya hizo `artisan up` antes de fallar (401 tras el paso 3); el 503 antes del 3b solo se da si falla la restauración (U3n).
+- Ficheros sacados de una imagen con `docker cp` bajo `sudo` son de root: nada de `chmod` sin `sudo` sobre ellos.
+
+Lo que conviene saber del bloque 5:
 - **Las notas de la 2.3.0 viven en `operacion.md` §11** (es/en), en párrafos «Al actualizar a la 2.3.0» y «Al actualizar desde la 2.2.0», como las de versiones anteriores; el resumen del CHANGELOG se escribe en el bloque final. **Cada bloque que cambie algo visible para el hotel añade allí su párrafo.** D6 (400 `problem+json`) entra con el bloque 10.
 - `check-package-links.sh` comprueba ya cualquier destino relativo, no solo `.md` e imágenes. Un enlace de un runbook a `../../infra/…`, `.github/…` o `.gitleaks.toml` rompe ⑧ y `release.yml`.
 - La guía de instalación descomprime en `/opt` con `sudo`, como las actualizaciones.
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** cerrar el bloque 5 (CI manual, revisiones, PR y merge) y seguir con el bloque 6 (`update.sh` a prueba de Ctrl+C, rama `fix/update-sh-interrupcion`).
+**Siguiente acción:** si el bloque 6 no está ya integrado, PR y merge con la CI en verde; después bloque 7 (instalador: mensajes y comprobaciones, rama `fix/instalador-mensajes` desde `origin/main`), marcando el título del bloque 6 ✅ en su primer commit. Ojo: `docs/cliente/instalacion.md` y `en/installation.md` tienen cambios locales sin commit que dicen que los runbooks internos viajan (falso desde I10): descartarlos, no commitearlos.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -173,7 +179,7 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
-- **Para el propietario (abierto):** las órdenes de consola con asiento que siguen firmando como `system` (`product:export-all`, `compliance:legal-export`, `credentials:revoke` y otras). Están en la fila del doc 07 §6. La propuesta es extender `ConsoleResponsible` a las tres prioritarias.
+- **Decidido (18-10-2026):** firma `--responsible` para `product:export-all`, `compliance:legal-export` y `credentials:revoke` en el bloque 35 de la 2.3.0 (tras el B7). El resto sigue como `system` (doc 07 §6).
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
 

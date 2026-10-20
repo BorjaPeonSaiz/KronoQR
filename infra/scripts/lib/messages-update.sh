@@ -96,7 +96,6 @@ KQ_MSG_ES[u_c_versions_file]="Matriz de versiones %s (%d versiones publicadas)"
 KQ_MSG_ES[u_f_versions_file]="%s no se puede leer o esta mal formado (%s). Es un fichero del paquete, no lo edites: vuelve a descomprimir el paquete."
 KQ_MSG_ES[u_c_target_version]="Version de destino %s (fichero VERSION del paquete)"
 KQ_MSG_ES[u_f_target_unlisted]="la version de este paquete, %s, no figura en %s. Es un defecto del paquete, no de tu servidor: no actualices con el y avisa al fabricante."
-KQ_MSG_ES[u_c_docker_root]="Directorio de datos de Docker %s"
 
 KQ_MSG_ES[u_c_installation]="Instalacion actual en %s"
 KQ_MSG_ES[u_f_installation_missing]="no se ha encontrado ninguna instalacion de KronoQR en este servidor: Docker no tiene ningun contenedor 'app' del proyecto '%s'. Si es un servidor nuevo, lo que quieres es install.sh. Si la instalacion existe pero sus contenedores fueron eliminados, indica su directorio con --current RUTA."
@@ -111,10 +110,11 @@ KQ_MSG_ES[u_f_env_conflict]="este paquete ya tiene un .env con secretos (%s) que
 KQ_MSG_ES[u_c_source_version]="Version instalada %s (IMAGE_TAG de %s)"
 KQ_MSG_ES[u_f_source_version_missing]="el .env de la instalacion (%s) no dice que version corre: IMAGE_TAG esta vacio o no es una version. Mira la que publica la sonda (curl -k https://127.0.0.1:%s/api/v1/health), escribe IMAGE_TAG=<esa version> en ese .env y vuelve a ejecutar."
 KQ_MSG_ES[u_f_source_unlisted]="la version instalada, %s, no es ninguna version publicada de KronoQR (no esta en %s). Comprueba IMAGE_TAG en %s y, si es correcta, avisa al fabricante antes de actualizar."
+KQ_MSG_ES[u_f_chain_unlisted]="%s no es ninguna version publicada de KronoQR (no esta en %s): no hay cadena de actualizacion desde ella. Comprueba la version que tienes instalada (IMAGE_TAG en el .env de la instalacion, o lo que responde /api/v1/health) y repite con ella."
 KQ_MSG_ES[u_c_already_target]="La instalacion YA esta en la version %s. No hay nada que hacer y no se ha tocado nada."
 KQ_MSG_ES[u_f_downgrade]="la instalacion esta en la %s, POSTERIOR a la %s de este paquete. Este script no retrocede versiones: una version anterior no sabe leer el esquema de una posterior. Usa el paquete de una version igual o mas nueva."
 KQ_MSG_ES[u_c_supported]="Salto %s → %s dentro de la matriz de versiones soportadas"
-KQ_MSG_ES[u_f_unsupported_hop]="desde la %s no se puede saltar directamente a la %s: solo se soporta la version menor vigente y las dos anteriores (%s). Actualiza PRIMERO a la %s con su paquete, verifica, y despues a esta."
+KQ_MSG_ES[u_f_unsupported_hop]="desde la %s no se puede saltar directamente a la %s: solo se actualiza directamente desde estas versiones: %s. Actualiza PRIMERO a la %s con su paquete, verifica, y despues a esta."
 KQ_MSG_ES[u_f_unsupported_major]="la %s es de la serie %s.x y este paquete es de la %s.x. El salto de version mayor no es automatico: tiene una ventana de migracion anunciada por el fabricante. Actualiza primero a la ultima de tu serie (%s) y consulta las instrucciones del salto en docs/runbooks/actualizacion-cliente.md."
 KQ_MSG_ES[u_f_unsupported_none]="desde la %s no hay camino de actualizacion publicado hacia la %s. Contacta con el fabricante indicando las dos versiones."
 KQ_MSG_ES[u_c_chain]="Versiones intermedias que se aplicaran en orden: %s"
@@ -189,6 +189,7 @@ KQ_MSG_ES[u_w_obs_copy_failed]="no se han podido copiar todos tus cambios de obs
 
 KQ_MSG_ES[u_maintenance_on]="Panel, portal y API de gestion en mantenimiento (responden 503 con Retry-After). Los quioscos encolan en local y sincronizaran al terminar: la hora real de cada fichaje se conserva."
 KQ_MSG_ES[u_f_maintenance_on]="no se ha podido poner la aplicacion en mantenimiento ('php artisan down' ha fallado). Revisa 'docker compose -f %s logs app'. No se ha tocado nada mas."
+KQ_MSG_ES[u_f_maintenance_on_new]="no se ha podido poner en mantenimiento la version nueva antes de abrir el borde ('php artisan down' ha fallado). Se deshace a la copia previa. Los logs de app y nginx de la version que fallo quedan en el detalle tecnico (ruta mas abajo): tras la vuelta atras, 'docker compose logs' ensena los de la version anterior."
 KQ_MSG_ES[u_stop_workers]="Parando horizon y scheduler de la version %s para que nada escriba durante la migracion."
 KQ_MSG_ES[u_f_stop_workers]="no se han podido parar horizon y scheduler. Revisa 'docker compose -f %s ps'."
 KQ_MSG_ES[u_report_not_published]="El informe de la actualizacion no se ha podido copiar a BACKUP_PATH/reports. Esta a salvo en %s (directorio de root)."
@@ -204,7 +205,7 @@ KQ_MSG_ES[u_maintenance_off]="Mantenimiento retirado: la version %s vuelve a ate
 
 KQ_MSG_ES[u_backup_start]="Copia logica cifrada y verificada, con la version %s (php artisan backup:run)..."
 KQ_MSG_ES[u_backup_done]="Copia previa verificada: %s"
-KQ_MSG_ES[u_f_backup]="LA COPIA PREVIA HA FALLADO (backup.sh salio con %d: %s). RF-PD-10: sin copia verificada la actualizacion no continua, y no hay bandera para saltarselo. La instalacion no se ha tocado y sigue en la %s, con el mantenimiento retirado. Si coincide con la copia nocturna (backup.sh toma su propio candado), espera a que termine. Si no, resuelve la copia (docs/runbooks/restaurar-backup.md §2) y vuelve a ejecutar."
+KQ_MSG_ES[u_f_backup]="LA COPIA PREVIA HA FALLADO (backup:run ha salido con %d). RF-PD-10: sin copia verificada la actualizacion no continua, y no hay bandera para saltarselo. La instalacion no se ha tocado y sigue en la %s, con el mantenimiento retirado. La causa (permisos del destino de copias, disco lleno, la clave de cifrado...) esta en el detalle tecnico %s (solo root), tras la linea '--- backup:run --mode dump ---'. Resuelvela (docs/runbooks/restaurar-backup.md §2) y vuelve a ejecutar."
 KQ_MSG_ES[u_f_backup_pointer]="backup.sh ha terminado bien pero no deja rastro de que fichero escribio (%s no apunta a ninguna copia). No se continua sin saber que copia restauraria la vuelta atras."
 
 KQ_MSG_ES[u_infra_up]="Relanzando postgres y redis con las imagenes de la version %s (los datos estan en volumenes y no se tocan)."
@@ -212,14 +213,13 @@ KQ_MSG_ES[u_f_infra_up]="postgres o redis no han arrancado con las imagenes de l
 KQ_MSG_ES[u_migrations_list]="Migraciones que trae la version %s: %d; pendientes de aplicar en esta instalacion: %d."
 KQ_MSG_ES[u_f_migrations_list]="no se ha podido leer la lista de migraciones de la imagen de la version %s."
 KQ_MSG_ES[u_migrating_version]="Version %s: %d migraciones..."
-KQ_MSG_ES[u_migrating_version_none]="Version %s: sin migraciones nuevas (punto de control)."
 KQ_MSG_ES[u_checkpoint]="PUNTO DE CONTROL %s alcanzado: %d migraciones aplicadas en %d s (lote %s de la tabla migrations)."
 KQ_MSG_ES[u_f_migrating_version]="la migracion de la version %s ha fallado. Ultimo punto de control alcanzado: %s. Se deshace a la copia previa."
 KQ_MSG_ES[u_no_pending]="Ninguna migracion pendiente tras la cadena: el esquema esta en la version %s."
 KQ_MSG_ES[u_backup_role_start]="Rol de las copias: comprobando que PostgreSQL tiene el rol de solo lectura (fichaje_backup)..."
 KQ_MSG_ES[u_backup_role_switched]="Las copias pasan al rol %s, de solo lectura. BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD reescritas en %s (0600). El rol de migracion ya no viaja al planificador."
 KQ_MSG_ES[u_backup_role_kept]="Las copias ya usan el rol %s: aprovisionamiento repetido sin cambiar credenciales."
-KQ_MSG_ES[u_f_backup_role_openssl]="falta 'openssl' en este servidor y hace falta para generar la contraseña del rol de las copias. Instalalo (apt install openssl) y repite: no se ha tocado la instalacion. Se deshace a la copia previa."
+KQ_MSG_ES[u_f_backup_role_openssl]="falta 'openssl' en este servidor y hace falta para generar la contraseña del rol de las copias. Se deshace a la copia previa. Instalalo (apt install openssl) y vuelve a ejecutar la actualizacion."
 KQ_MSG_ES[u_f_backup_role]="no se ha podido crear el rol de copias %s en PostgreSQL. El detalle esta en el informe. Se deshace a la copia previa; la version anterior sigue haciendo sus copias como hasta ahora."
 KQ_MSG_ES[u_f_backup_role_env]="no se ha podido escribir el rol de copias en %s. Comprueba que se puede escribir en ese fichero. Se deshace a la copia previa."
 KQ_MSG_ES[u_f_pending_left]="tras aplicar la cadena quedan migraciones pendientes: %s. La matriz de versiones (versions.txt) no las atribuye a ninguna version y el actualizador no adivina. Se deshace. Avisa al fabricante con este informe."
@@ -245,10 +245,11 @@ KQ_MSG_ES[u_verify_license_warn]="license:show ha fallado. No bloquea: el regist
 KQ_MSG_ES[u_edge_up]="Verificacion superada. Arrancando nginx, horizon, scheduler y reverb de la version %s."
 KQ_MSG_ES[u_f_edge_up]="el borde o los procesos de fondo de la version %s no han arrancado sanos. Se deshace."
 KQ_MSG_ES[u_edge_probe_ok]="%s responde por loopback a traves del borde de la version %s"
-KQ_MSG_ES[u_f_edge_probe]="la aplicacion esta sana pero %s no responde a traves del borde (https://127.0.0.1:%s). Se deshace: revisa despues 'docker compose -f %s logs nginx'."
+KQ_MSG_ES[u_f_edge_probe]="la aplicacion esta sana pero %s no responde a traves del borde (https://127.0.0.1:%s). Se deshace a la copia previa. Los logs de app y nginx de la version que fallo quedan en el detalle tecnico (ruta mas abajo): tras la vuelta atras, 'docker compose logs' ensena los de la version anterior."
 KQ_MSG_ES[u_reconcile]="attendance:reconcile sobre las jornadas de la ventana de mantenimiento (daily_totals es una proyeccion reconstruible)."
 
 KQ_MSG_ES[u_rollback_reason]="MOTIVO: %s"
+KQ_MSG_ES[u_rollback_failed_migration]="MIGRACION QUE FALLABA (o en curso al pararse): %s. Su error esta en el detalle tecnico %s (solo root)."
 KQ_MSG_ES[u_rollback_evidence]="Estado fallido preservado en el informe (contenedores y ultimas lineas de log) para el diagnostico."
 KQ_MSG_ES[u_rollback_stop]="Parando la version %s."
 KQ_MSG_ES[u_rollback_restore]="Restaurando la copia previa %s con restore.sh (la base fallida se conserva como <base>_pre_restore_<marca> durante 7 dias)."
@@ -261,18 +262,28 @@ KQ_MSG_ES[u_rollback_dont_interrupt]="VUELTA ATRAS EN CURSO. NO LA INTERRUMPAS: 
 KQ_MSG_ES[u_w_rollback_restore_interrupted]="restore.sh salio con %d: la copia previa SI se restauro y esta en servicio, pero una senal le llego durante el intercambio de bases. Se sigue con la vuelta atras."
 KQ_MSG_ES[u_rollback_lifted_only]="ACTUALIZACION DESHECHA. Solo estaba puesto el mantenimiento y se ha retirado: la instalacion sigue en la version %s con sus datos, sin tocar. Informe: %s."
 KQ_MSG_ES[u_rollback_done]="VUELTA ATRAS COMPLETADA. La instalacion esta operativa en la version %s con los datos de la copia previa. Los fichajes hechos durante la ventana siguen en las colas de los quioscos y entraran ahora. Envia el informe %s al fabricante para saber por que fallo antes de reintentar."
-KQ_MSG_ES[u_rollback_incomplete]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: hace falta una persona delante.
+KQ_MSG_ES[u_ri_head]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: hace falta una persona delante.
 
-Que hay que hacer, en este orden:
-  1. Parar lo que escribe:       docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps restore \\
-                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <correo>
-  3. Relanzar la version %s:   docker compose --env-file %s -f %s up -d --remove-orphans
-  4. Comprobar:                  curl -k https://127.0.0.1:%s/api/v1/health  (debe decir %s)
-Procedimiento completo y tiempos: docs/runbooks/restaurar-backup.md §6 y docs/runbooks/actualizacion-cliente.md §5.
+Que hay que hacer, en este orden:"
+KQ_MSG_ES[u_ri_stop]="  1. Parar lo que escribe:       docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx"
+KQ_MSG_ES[u_ri_stop_oneoff]="  1b. Parar lo que quede de esta actualizacion (contenedores de un solo uso):  docker ps -q --filter label=com.docker.compose.project=%s --filter label=com.docker.compose.oneoff=True | xargs -r docker kill"
+KQ_MSG_ES[u_ri_stop_sessions]="  1c. Cerrar las sesiones que queden abiertas contra la base:  docker compose --env-file %s -f %s exec -T postgres psql -U %s -d %s -Atc \"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid()\""
+KQ_MSG_ES[u_ri_restore]="  2. Restaurar la copia previa (la vuelta atras automatica NO llego a restaurarla):  docker compose --env-file %s -f %s run --rm --no-deps restore \\
+                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <correo>"
+KQ_MSG_ES[u_ri_restored]="  1-2. La copia previa (%s) YA ESTA RESTAURADA por la vuelta atras automatica. NO la restaures otra vez: empieza en el 3."
+KQ_MSG_ES[u_ri_relaunch]="  3. Relanzar la version %s:   docker compose --env-file %s -f %s up -d --remove-orphans"
+KQ_MSG_ES[u_ri_lift]="  3b. Retirar el mantenimiento:  docker compose --env-file %s -f %s exec -T app php artisan up"
+KQ_MSG_ES[u_ri_health]="  4. Comprobar:                  curl -k https://127.0.0.1:%s/api/v1/health  (debe decir %s)"
+KQ_MSG_ES[u_ri_serving]="  4b. Y que atiende:             curl -k -o /dev/null -w '%%{http_code}' https://127.0.0.1:%s/api/v1/auth/me  (debe dar 401; 503 es que sigue en mantenimiento: repite 3b)"
+KQ_MSG_ES[u_ri_chain]="  4c. Y la cadena de auditoria:  docker compose --env-file %s -f %s exec -T app php artisan compliance:verify-audit-chain  (debe terminar sin error)"
+KQ_MSG_ES[u_ri_audit]="  5. Escribir el asiento de la vuelta atras (no se pudo automaticamente):  docker compose --env-file %s -f %s run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data='%s'"
+KQ_MSG_ES[u_ri_in_place_env]="  6. Solo in place y cuando el 4b de 401, dejar el .env de la version anterior en su sitio:  mv %s %s"
+KQ_MSG_ES[u_ri_tail]="Procedimiento completo y tiempos: docs/runbooks/restaurar-backup.md §6 y docs/runbooks/actualizacion-cliente.md §5.
 Los quioscos siguen fichando mientras tanto: encolan en local."
 KQ_MSG_ES[u_f_unexpected]="fallo inesperado en la linea %s del actualizador. Es un defecto del producto: guarda el informe entero y envialo al fabricante."
 KQ_MSG_ES[u_interrupted]="interrumpido por el operador (senal %s)."
+KQ_MSG_ES[u_c_setsid]="Aislamiento de la vuelta atras frente a un Ctrl+C (setsid -w)"
+KQ_MSG_ES[u_w_setsid]="este servidor no tiene 'setsid' con la opcion -w (paquete util-linux). La actualizacion sigue, pero durante una vuelta atras un Ctrl+C podria cortar las ordenes de Docker a medias y dejarla incompleta (salida 5). Instala util-linux (apt install util-linux) o, si no puedes, no pulses Ctrl+C mientras dure la vuelta atras."
 
 KQ_MSG_ES[u_done_title]="KronoQR actualizado y verificado: %s → %s"
 KQ_MSG_ES[u_done_report]="Informe guardado en %s: es lo que hay que adjuntar si se abre un caso con el fabricante. El detalle tecnico esta en %s, solo de root, y PUEDE CONTENER DATOS PERSONALES: no lo envies sin revisarlo."
@@ -302,9 +313,9 @@ KQ_MSG_ES[u_report_maintenance_laps]="Ventana de mantenimiento, por fases: %s"
 KQ_MSG_ES[u_report_checkpoint]="Punto de control %s: %s (%d migraciones, %d s, lote %s)"
 KQ_MSG_ES[u_report_check]="Comprobacion · %s: %s"
 KQ_MSG_ES[u_report_rollback]="Vuelta atras: en el paso %s, motivo: %s · resultado: %s"
+KQ_MSG_ES[u_report_forward_only]="Vuelta atras: NO aplicada en el paso %s (la version nueva ya atendia y habia recibido fichajes), motivo: %s · resultado: %s"
 KQ_MSG_ES[u_report_final]="Estado final: version %s · %s"
 KQ_MSG_ES[u_report_exit]="Salida %d (%s)"
-KQ_MSG_ES[u_report_no_pii]="Este informe no contiene secretos ni datos personales y se puede adjuntar al paquete de diagnostico."
 KQ_MSG_ES[u_report_none]="(ninguna)"
 KQ_MSG_ES[u_report_ok]="correcto"
 KQ_MSG_ES[u_report_warned]="correcto, con avisos"
@@ -326,13 +337,25 @@ KQ_MSG_ES[u_rollback_incomplete_maintenance]="VUELTA ATRAS INCOMPLETA, pero SOLO
 Que hacer:
   1. Retirar el mantenimiento:   docker compose --env-file %s -f %s exec -T app php artisan up
   2. Arrancar los procesos:      docker compose --env-file %s -f %s start horizon scheduler
-  3. Comprobar:                  curl -k https://127.0.0.1/api/v1/auth/me   (debe responder 401, no 503)"
+  3. Comprobar:                  curl -k -o /dev/null -w '%%{http_code}' https://127.0.0.1:%s/api/v1/auth/me   (debe responder 401, no 503)"
+KQ_MSG_ES[u_forward_heading]="Paso 6 de 7 — SIN VUELTA ATRAS: la version nueva ya atiende y no se deshace."
+KQ_MSG_ES[u_forward_incomplete]="ACTUALIZACION HECHA, PERO INCOMPLETA. La version %s YA ESTA EN SERVICIO: paso todas las verificaciones, atiende, y los quioscos le estan entregando sus fichajes. Lo que ha fallado despues (el motivo, arriba) NO se ha deshecho, a proposito: los datos estan intactos y en la version nueva.
+
+NO RESTAURES NINGUNA COPIA: borrarias los fichajes entregados desde que se abrio la version nueva.
+
+Que hacer:
+  1. Ver que proceso de fondo falla:   docker compose --env-file %s -f %s ps horizon scheduler reverb
+  2. Sus ultimas lineas:               docker compose --env-file %s -f %s logs --tail 100 horizon scheduler reverb
+  3. Arrancarlos cuando este resuelto: docker compose --env-file %s -f %s up -d horizon scheduler reverb
+  4. Diagnostico completo:             docker compose --env-file %s -f %s exec -T app php artisan product:doctor
+     y, desde %s: sudo ./doctor.sh
+Mientras horizon o scheduler esten parados no hay copia nocturna, ni exportaciones, ni verificacion de la cadena de auditoria: resuelvelo hoy. Si no sabes por que fallan, envia el informe al fabricante (docs/runbooks/actualizacion-cliente.md §5, caso C)."
 KQ_MSG_ES[u_f_unsupported_major_last]="la %s es la ultima de la serie %s.x y este paquete es de la %s.x. El salto de version mayor no es automatico: tiene una ventana de migracion anunciada por el fabricante, con sus instrucciones en docs/runbooks/actualizacion-cliente.md §7. No se ha tocado nada."
 KQ_MSG_ES[u_f_backup_stale]="la copia que backup.sh declara como ultima (%s) es ANTERIOR al arranque de esta actualizacion: no es la copia previa de esta ejecucion y una vuelta atras con ella perderia los fichajes del dia. Suele pasar si BACKUP_DAILY_MODE no es 'dump' o si otra copia estaba en curso (la nocturna): espera a que termine y vuelve a ejecutar. La instalacion no se ha tocado y el mantenimiento se ha retirado."
 KQ_MSG_ES[u_f_rollback_env]="no se ha podido mover %s sobre %s. La version anterior esta en pie con el primero; hazlo a mano (mv) antes de cualquier docker compose: el segundo levantaria la version nueva sobre la base restaurada."
 KQ_MSG_ES[u_f_prepare_env]="no se ha podido escribir %s (disco lleno, permisos o /tmp sin espacio). La instalacion no se ha tocado; retira ese fichero si ha quedado a medias y vuelve a ejecutar."
 KQ_MSG_ES[u_maintenance_new]="Poniendo la version %s en mantenimiento ANTES de publicar el borde: hasta que la verificacion por loopback pase, ningun fichaje sale de las colas de los quioscos."
-KQ_MSG_ES[u_f_maintenance_off]="no se ha podido retirar el mantenimiento de la version nueva ('php artisan up' ha fallado). Se deshace. Revisa despues 'docker compose -f %s logs app'."
+KQ_MSG_ES[u_f_maintenance_off]="no se ha podido retirar el mantenimiento de la version nueva ('php artisan up' ha fallado). Se deshace a la copia previa. Los logs de app y nginx de la version que fallo quedan en el detalle tecnico (ruta mas abajo): tras la vuelta atras, 'docker compose logs' ensena los de la version anterior."
 KQ_MSG_ES[u_verify_lifted_ok]="Mantenimiento retirado de verdad: %s responde 401 (sin sesion), no 503"
 KQ_MSG_ES[u_f_verify_lifted]="%s responde %s tras retirar el mantenimiento y se esperaba 401: la version nueva no atiende. Se deshace."
 KQ_MSG_ES[u_f_rollback_management]="tras relanzar la version %s, %s responde %s y se esperaba 401: la version anterior no atiende a la API de gestion."
@@ -438,7 +461,6 @@ KQ_MSG_EN[u_c_versions_file]="Version matrix %s (%d published versions)"
 KQ_MSG_EN[u_f_versions_file]="%s cannot be read or is malformed (%s). It is a package file, do not edit it: unpack the package again."
 KQ_MSG_EN[u_c_target_version]="Target version %s (package VERSION file)"
 KQ_MSG_EN[u_f_target_unlisted]="this package's version, %s, is not listed in %s. That is a defect of the package, not of your server: do not update with it and tell the manufacturer."
-KQ_MSG_EN[u_c_docker_root]="Docker data directory %s"
 
 KQ_MSG_EN[u_c_installation]="Current installation at %s"
 KQ_MSG_EN[u_f_installation_missing]="no KronoQR installation was found on this server: Docker has no 'app' container of project '%s'. On a new server what you want is install.sh. If the installation exists but its containers were removed, point to its directory with --current PATH."
@@ -453,10 +475,11 @@ KQ_MSG_EN[u_f_env_conflict]="this package already holds a .env with secrets (%s)
 KQ_MSG_EN[u_c_source_version]="Installed version %s (IMAGE_TAG of %s)"
 KQ_MSG_EN[u_f_source_version_missing]="the installation's .env (%s) does not say which version runs: IMAGE_TAG is empty or not a version. Look at what the probe publishes (curl -k https://127.0.0.1:%s/api/v1/health), write IMAGE_TAG=<that version> in that .env and run again."
 KQ_MSG_EN[u_f_source_unlisted]="the installed version, %s, is not a published KronoQR version (not in %s). Check IMAGE_TAG in %s and, if it is right, tell the manufacturer before updating."
+KQ_MSG_EN[u_f_chain_unlisted]="%s is not a published KronoQR version (it is not in %s): there is no update chain from it. Check the version you have installed (IMAGE_TAG in the installation's .env, or what /api/v1/health answers) and repeat with it."
 KQ_MSG_EN[u_c_already_target]="The installation is ALREADY at version %s. Nothing to do and nothing was touched."
 KQ_MSG_EN[u_f_downgrade]="the installation is at %s, LATER than this package's %s. This script does not downgrade: an older version cannot read a newer schema. Use the package of an equal or newer version."
 KQ_MSG_EN[u_c_supported]="Jump %s → %s within the supported version matrix"
-KQ_MSG_EN[u_f_unsupported_hop]="from %s you cannot jump straight to %s: only the current minor version and the two previous ones are supported (%s). Update FIRST to %s with its package, verify, and then to this one."
+KQ_MSG_EN[u_f_unsupported_hop]="from %s you cannot jump straight to %s: a direct update is only possible from these versions: %s. Update FIRST to %s with its package, verify, and then to this one."
 KQ_MSG_EN[u_f_unsupported_major]="%s belongs to the %s.x series and this package to %s.x. A major version jump is not automatic: it has a migration window announced by the manufacturer. Update first to the last of your series (%s) and read the jump instructions in docs/runbooks/actualizacion-cliente.md."
 KQ_MSG_EN[u_f_unsupported_none]="there is no published update path from %s to %s. Contact the manufacturer quoting both versions."
 KQ_MSG_EN[u_c_chain]="Intermediate versions that will be applied in order: %s"
@@ -531,6 +554,7 @@ KQ_MSG_EN[u_w_obs_copy_failed]="not all your observability/ changes could be cop
 
 KQ_MSG_EN[u_maintenance_on]="Panel, portal and management API under maintenance (they answer 503 with Retry-After). Kiosks queue locally and will sync when done: the real time of every clocking is preserved."
 KQ_MSG_EN[u_f_maintenance_on]="could not put the application under maintenance ('php artisan down' failed). Check 'docker compose -f %s logs app'. Nothing else was touched."
+KQ_MSG_EN[u_f_maintenance_on_new]="could not put the new version under maintenance before opening the edge ('php artisan down' failed). Rolling back to the pre-update backup. The app and nginx logs of the failed version are kept in the technical detail (path below): after the rollback, 'docker compose logs' shows those of the previous version."
 KQ_MSG_EN[u_stop_workers]="Stopping horizon and scheduler of version %s so nothing writes during the migration."
 KQ_MSG_EN[u_f_stop_workers]="could not stop horizon and scheduler. Check 'docker compose -f %s ps'."
 KQ_MSG_EN[u_report_not_published]="The update report could not be copied to BACKUP_PATH/reports. It is safe at %s (root-owned directory)."
@@ -546,7 +570,7 @@ KQ_MSG_EN[u_maintenance_off]="Maintenance lifted: version %s is serving again."
 
 KQ_MSG_EN[u_backup_start]="Encrypted, verified logical backup with version %s (php artisan backup:run)..."
 KQ_MSG_EN[u_backup_done]="Pre-update backup verified: %s"
-KQ_MSG_EN[u_f_backup]="THE PRE-UPDATE BACKUP FAILED (backup.sh exited %d: %s). RF-PD-10: without a verified backup the update does not continue, and there is no flag to skip it. The installation was not touched and stays at %s, with maintenance lifted. If it overlaps the nightly backup (backup.sh takes its own lock), wait for it to finish. Otherwise fix the backup (docs/runbooks/restaurar-backup.md §2) and run again."
+KQ_MSG_EN[u_f_backup]="THE PRE-UPDATE BACKUP FAILED (backup:run exited %d). RF-PD-10: without a verified backup the update does not continue, and there is no flag to skip it. The installation was not touched and stays at %s, with maintenance lifted. The cause (permissions on the backup destination, a full disk, the encryption key...) is in the technical detail %s (root only), after the line '--- backup:run --mode dump ---'. Fix it (docs/runbooks/restaurar-backup.md §2) and run again."
 KQ_MSG_EN[u_f_backup_pointer]="backup.sh finished fine but left no trace of which file it wrote (%s points to no backup). Not continuing without knowing which backup a rollback would restore."
 
 KQ_MSG_EN[u_infra_up]="Relaunching postgres and redis with the images of version %s (data lives in volumes and is not touched)."
@@ -554,14 +578,13 @@ KQ_MSG_EN[u_f_infra_up]="postgres or redis did not come up with the images of %s
 KQ_MSG_EN[u_migrations_list]="Migrations shipped by version %s: %d; pending on this installation: %d."
 KQ_MSG_EN[u_f_migrations_list]="could not read the migration list from the image of version %s."
 KQ_MSG_EN[u_migrating_version]="Version %s: %d migrations..."
-KQ_MSG_EN[u_migrating_version_none]="Version %s: no new migrations (checkpoint)."
 KQ_MSG_EN[u_checkpoint]="CHECKPOINT %s reached: %d migrations applied in %d s (batch %s of the migrations table)."
 KQ_MSG_EN[u_f_migrating_version]="the migration of version %s failed. Last checkpoint reached: %s. Rolling back to the previous backup."
 KQ_MSG_EN[u_no_pending]="No pending migration after the chain: the schema is at version %s."
 KQ_MSG_EN[u_backup_role_start]="Backup role: checking that PostgreSQL has the read-only role (fichaje_backup)..."
 KQ_MSG_EN[u_backup_role_switched]="Backups move to role %s, which is read-only. BACKUP_DB_USERNAME and BACKUP_DB_PASSWORD rewritten in %s (0600). The migration role no longer travels to the scheduler."
 KQ_MSG_EN[u_backup_role_kept]="Backups already use role %s: provisioning repeated without changing any credential."
-KQ_MSG_EN[u_f_backup_role_openssl]="'openssl' is missing on this server and is needed to generate the backup role password. Install it (apt install openssl) and retry: the installation was not touched. Rolling back to the previous backup."
+KQ_MSG_EN[u_f_backup_role_openssl]="'openssl' is missing on this server and is needed to generate the backup role password. Rolling back to the pre-update backup. Install it (apt install openssl) and run the update again."
 KQ_MSG_EN[u_f_backup_role]="the backup role %s could not be created in PostgreSQL. The detail is in the report. Rolling back to the previous backup; the previous version keeps taking its backups as before."
 KQ_MSG_EN[u_f_backup_role_env]="the backup role could not be written to %s. Check that the file is writable. Rolling back to the previous backup."
 KQ_MSG_EN[u_f_pending_left]="after applying the chain there are still pending migrations: %s. The version matrix (versions.txt) assigns them to no version and the updater does not guess. Rolling back. Tell the manufacturer, attaching this report."
@@ -587,10 +610,11 @@ KQ_MSG_EN[u_verify_license_warn]="license:show failed. Not blocking: the time re
 KQ_MSG_EN[u_edge_up]="Verification passed. Starting nginx, horizon, scheduler and reverb of version %s."
 KQ_MSG_EN[u_f_edge_up]="the edge or the background processes of version %s did not come up healthy. Rolling back."
 KQ_MSG_EN[u_edge_probe_ok]="%s answers over loopback through the edge of version %s"
-KQ_MSG_EN[u_f_edge_probe]="the application is healthy but %s does not answer through the edge (https://127.0.0.1:%s). Rolling back: check 'docker compose -f %s logs nginx' afterwards."
+KQ_MSG_EN[u_f_edge_probe]="the application is healthy but %s does not answer through the edge (https://127.0.0.1:%s). Rolling back to the pre-update backup. The app and nginx logs of the failed version are kept in the technical detail (path below): after the rollback, 'docker compose logs' shows those of the previous version."
 KQ_MSG_EN[u_reconcile]="attendance:reconcile over the work days of the maintenance window (daily_totals is a rebuildable projection)."
 
 KQ_MSG_EN[u_rollback_reason]="REASON: %s"
+KQ_MSG_EN[u_rollback_failed_migration]="MIGRATION THAT FAILED (or was running when it stopped): %s. Its error is in the technical detail %s (root only)."
 KQ_MSG_EN[u_rollback_evidence]="Failed state preserved in the report (containers and last log lines) for diagnosis."
 KQ_MSG_EN[u_rollback_stop]="Stopping version %s."
 KQ_MSG_EN[u_rollback_restore]="Restoring the pre-update backup %s with restore.sh (the failed database is kept as <db>_pre_restore_<stamp> for 7 days)."
@@ -603,18 +627,28 @@ KQ_MSG_EN[u_rollback_dont_interrupt]="ROLLBACK IN PROGRESS. DO NOT INTERRUPT IT:
 KQ_MSG_EN[u_w_rollback_restore_interrupted]="restore.sh exited with %d: the pre-update backup WAS restored and is in service, but a signal reached it during the database swap. The rollback goes on."
 KQ_MSG_EN[u_rollback_lifted_only]="UPDATE UNDONE. Only maintenance mode was on and it has been lifted: the installation stays at version %s with its data, untouched. Report: %s."
 KQ_MSG_EN[u_rollback_done]="ROLLBACK COMPLETED. The installation is operational at version %s with the data of the pre-update backup. Clockings made during the window are still in the kiosk queues and will come in now. Send the report %s to the manufacturer to learn why it failed before retrying."
-KQ_MSG_EN[u_rollback_incomplete]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: a person is needed.
+KQ_MSG_EN[u_ri_head]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: a person is needed.
 
-What to do, in this order:
-  1. Stop what writes:            docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps restore \\
-                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <email>
-  3. Relaunch version %s:       docker compose --env-file %s -f %s up -d --remove-orphans
-  4. Check:                       curl -k https://127.0.0.1:%s/api/v1/health  (must report %s)
-Full procedure and timings: docs/runbooks/restaurar-backup.md §6 and docs/runbooks/actualizacion-cliente.md §5.
+What to do, in this order:"
+KQ_MSG_EN[u_ri_stop]="  1. Stop what writes:            docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx"
+KQ_MSG_EN[u_ri_stop_oneoff]="  1b. Stop whatever is left of this update (one-off containers):  docker ps -q --filter label=com.docker.compose.project=%s --filter label=com.docker.compose.oneoff=True | xargs -r docker kill"
+KQ_MSG_EN[u_ri_stop_sessions]="  1c. Close the sessions still open against the database:  docker compose --env-file %s -f %s exec -T postgres psql -U %s -d %s -Atc \"SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid()\""
+KQ_MSG_EN[u_ri_restore]="  2. Restore the pre-update backup (the automatic rollback did NOT get to restore it):  docker compose --env-file %s -f %s run --rm --no-deps restore \\
+                                   bash /opt/kronoqr/scripts/restore.sh --file %s --yes --operator <email>"
+KQ_MSG_EN[u_ri_restored]="  1-2. The pre-update backup (%s) IS ALREADY RESTORED by the automatic rollback. Do NOT restore it again: start at 3."
+KQ_MSG_EN[u_ri_relaunch]="  3. Relaunch version %s:       docker compose --env-file %s -f %s up -d --remove-orphans"
+KQ_MSG_EN[u_ri_lift]="  3b. Lift maintenance:           docker compose --env-file %s -f %s exec -T app php artisan up"
+KQ_MSG_EN[u_ri_health]="  4. Check:                       curl -k https://127.0.0.1:%s/api/v1/health  (must report %s)"
+KQ_MSG_EN[u_ri_serving]="  4b. And that it serves:         curl -k -o /dev/null -w '%%{http_code}' https://127.0.0.1:%s/api/v1/auth/me  (must give 401; 503 means still under maintenance: repeat 3b)"
+KQ_MSG_EN[u_ri_chain]="  4c. And the audit chain:        docker compose --env-file %s -f %s exec -T app php artisan compliance:verify-audit-chain  (must finish without error)"
+KQ_MSG_EN[u_ri_audit]="  5. Write the rollback audit entry (it could not be done automatically):  docker compose --env-file %s -f %s run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data='%s'"
+KQ_MSG_EN[u_ri_in_place_env]="  6. Only in place and once 4b gives 401, put the previous version's .env back in place:  mv %s %s"
+KQ_MSG_EN[u_ri_tail]="Full procedure and timings: docs/runbooks/restaurar-backup.md §6 and docs/runbooks/actualizacion-cliente.md §5.
 Kiosks keep clocking meanwhile: they queue locally."
 KQ_MSG_EN[u_f_unexpected]="unexpected failure on line %s of the updater. This is a product defect: keep the whole report and send it to the manufacturer."
 KQ_MSG_EN[u_interrupted]="interrupted by the operator (signal %s)."
+KQ_MSG_EN[u_c_setsid]="Rollback isolation from a Ctrl+C (setsid -w)"
+KQ_MSG_EN[u_w_setsid]="this server has no 'setsid' with the -w option (util-linux package). The update goes on, but during a rollback a Ctrl+C could cut Docker commands half-way and leave it incomplete (exit 5). Install util-linux (apt install util-linux) or, if you cannot, do not press Ctrl+C while the rollback runs."
 
 KQ_MSG_EN[u_done_title]="KronoQR updated and verified: %s → %s"
 KQ_MSG_EN[u_done_report]="Report saved at %s: it is what to attach if a case is opened with the manufacturer. The technical detail is at %s, root-only, and MAY CONTAIN PERSONAL DATA: do not send it without reviewing it."
@@ -644,9 +678,9 @@ KQ_MSG_EN[u_report_maintenance_laps]="Maintenance window, by phase: %s"
 KQ_MSG_EN[u_report_checkpoint]="Checkpoint %s: %s (%d migrations, %d s, batch %s)"
 KQ_MSG_EN[u_report_check]="Check · %s: %s"
 KQ_MSG_EN[u_report_rollback]="Rollback: at step %s, reason: %s · result: %s"
+KQ_MSG_EN[u_report_forward_only]="Rollback: NOT applied at step %s (the new version was already serving and had received clockings), reason: %s · result: %s"
 KQ_MSG_EN[u_report_final]="Final state: version %s · %s"
 KQ_MSG_EN[u_report_exit]="Exit %d (%s)"
-KQ_MSG_EN[u_report_no_pii]="This report holds no secrets and no personal data and can be attached to the diagnostic package."
 KQ_MSG_EN[u_report_none]="(none)"
 KQ_MSG_EN[u_report_ok]="ok"
 KQ_MSG_EN[u_report_warned]="ok, with warnings"
@@ -668,13 +702,25 @@ KQ_MSG_EN[u_rollback_incomplete_maintenance]="ROLLBACK INCOMPLETE, but ONLY in o
 What to do:
   1. Lift maintenance:        docker compose --env-file %s -f %s exec -T app php artisan up
   2. Start the workers:       docker compose --env-file %s -f %s start horizon scheduler
-  3. Check:                   curl -k https://127.0.0.1/api/v1/auth/me   (must answer 401, not 503)"
+  3. Check:                   curl -k -o /dev/null -w '%%{http_code}' https://127.0.0.1:%s/api/v1/auth/me   (must answer 401, not 503)"
+KQ_MSG_EN[u_forward_heading]="Step 6 of 7 — NO ROLLBACK: the new version is already serving and is not undone."
+KQ_MSG_EN[u_forward_incomplete]="UPDATE DONE, BUT INCOMPLETE. Version %s IS ALREADY IN SERVICE: it passed every check, it serves, and the kiosks are handing it their clockings. What failed afterwards (the reason, above) was NOT undone, on purpose: the data is intact and on the new version.
+
+DO NOT RESTORE ANY BACKUP: you would erase the clockings handed over since the new version opened.
+
+What to do:
+  1. See which background process fails: docker compose --env-file %s -f %s ps horizon scheduler reverb
+  2. Its last lines:                     docker compose --env-file %s -f %s logs --tail 100 horizon scheduler reverb
+  3. Start them once it is fixed:        docker compose --env-file %s -f %s up -d horizon scheduler reverb
+  4. Full diagnosis:                     docker compose --env-file %s -f %s exec -T app php artisan product:doctor
+     and, from %s: sudo ./doctor.sh
+While horizon or scheduler are stopped there is no nightly backup, no exports and no audit chain verification: fix it today. If you do not know why they fail, send the report to the manufacturer (docs/runbooks/actualizacion-cliente.md §5, case C)."
 KQ_MSG_EN[u_f_unsupported_major_last]="%s is the last of the %s.x series and this package belongs to %s.x. A major version jump is not automatic: it has a migration window announced by the manufacturer, with its instructions in docs/runbooks/actualizacion-cliente.md §7. Nothing was touched."
 KQ_MSG_EN[u_f_backup_stale]="the backup that backup.sh declares as latest (%s) is OLDER than the start of this update: it is not this run's backup and rolling back to it would lose the day's clockings. It usually means BACKUP_DAILY_MODE is not 'dump' or another backup was running (the nightly one): wait for it to finish and run again. The installation was not touched and maintenance was lifted."
 KQ_MSG_EN[u_f_rollback_env]="could not move %s over %s. The previous version is running with the first one; do it by hand (mv) before any docker compose: the second one would start the new version on the restored database."
 KQ_MSG_EN[u_f_prepare_env]="could not write %s (disk full, permissions or /tmp without space). The installation was not touched; remove that file if it was left half-written and run again."
 KQ_MSG_EN[u_maintenance_new]="Putting version %s under maintenance BEFORE publishing the edge: until the loopback verification passes, no clocking leaves the kiosk queues."
-KQ_MSG_EN[u_f_maintenance_off]="could not lift maintenance on the new version ('php artisan up' failed). Rolling back. Check 'docker compose -f %s logs app' afterwards."
+KQ_MSG_EN[u_f_maintenance_off]="could not lift maintenance on the new version ('php artisan up' failed). Rolling back to the pre-update backup. The app and nginx logs of the failed version are kept in the technical detail (path below): after the rollback, 'docker compose logs' shows those of the previous version."
 KQ_MSG_EN[u_verify_lifted_ok]="Maintenance really lifted: %s answers 401 (no session), not 503"
 KQ_MSG_EN[u_f_verify_lifted]="%s answers %s after lifting maintenance and 401 was expected: the new version is not serving. Rolling back."
 KQ_MSG_EN[u_f_rollback_management]="after relaunching version %s, %s answers %s and 401 was expected: the previous version is not serving the management API."

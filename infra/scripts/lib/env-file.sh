@@ -101,14 +101,11 @@ kq_env_load() {
   done <"${file}"
 }
 
-# Escribe (o sustituye) UNA clave en un fichero .env conservando todo lo demas:
-# comentarios, orden y las claves que no se tocan. Si la clave aparece varias
-# veces se deja una sola; si no aparece, se anade al final.
-#
-#   kq_env_set RUTA CLAVE VALOR
-#
-# El valor viaja por el ENTORNO de awk y no por su linea de ordenes: los
-# secretos del instalador pasan por aqui y `ps` no debe verlos.
+# EL ESCRITOR ATOMICO de los tres de abajo: pasa RUTA por el programa de awk y
+# sustituye el fichero por el resultado. Los datos (valores, la marca) viajan por
+# el ENTORNO de awk (`ENVIRON[...]`) y no por su linea de ordenes: los secretos del
+# instalador pasan por aqui y `ps` no debe verlos. Quien llama los pone delante:
+# `KQ_VALUE=... kq_env_rewrite RUTA 'programa'`.
 #
 # ATOMICO Y EN EL MISMO DIRECTORIO. El temporal nace junto al destino, con su
 # mismo propietario y modo, y lo sustituye con `mv`: un corte de luz a mitad
@@ -118,23 +115,15 @@ kq_env_load() {
 # truncado era una perdida de secretos irrecuperable, y el temporal en /tmp una
 # copia integra de todos ellos que un `kill` dejaba huerfana en un directorio
 # que nadie audita. Si algo falla, el temporal se retira antes de volver.
-kq_env_set() {
-  local file="$1" key="$2" value="$3" temp
+#
+#   kq_env_rewrite RUTA PROGRAMA_AWK
+kq_env_rewrite() {
+  local file="$1" program="$2" temp
 
   temp="$(mktemp "${file}.XXXXXX")" || return 1
   chmod 0600 "${temp}" 2>/dev/null || true
 
-  if ! KQ_VALUE="${value}" awk -v key="${key}" '
-    BEGIN { written = 0 }
-    {
-      if ($0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "=") {
-        if (!written) { printf "%s=%s\n", key, ENVIRON["KQ_VALUE"]; written = 1 }
-      } else {
-        print
-      }
-    }
-    END { if (!written) printf "%s=%s\n", key, ENVIRON["KQ_VALUE"] }
-  ' "${file}" >"${temp}"; then
+  if ! awk "${program}" "${file}" >"${temp}"; then
     rm -f "${temp}"
     return 1
   fi
@@ -151,6 +140,27 @@ kq_env_set() {
   }
 }
 
+# Escribe (o sustituye) UNA clave en un fichero .env conservando todo lo demas:
+# comentarios, orden y las claves que no se tocan. Si la clave aparece varias
+# veces se deja una sola; si no aparece, se anade al final. Atomico
+# (kq_env_rewrite).
+#
+#   kq_env_set RUTA CLAVE VALOR
+kq_env_set() {
+  # shellcheck disable=SC2016 # el programa es de awk, no de este shell.
+  KQ_KEY="$2" KQ_VALUE="$3" kq_env_rewrite "$1" '
+    BEGIN { written = 0; key = ENVIRON["KQ_KEY"] }
+    {
+      if ($0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "=") {
+        if (!written) { printf "%s=%s\n", key, ENVIRON["KQ_VALUE"]; written = 1 }
+      } else {
+        print
+      }
+    }
+    END { if (!written) printf "%s=%s\n", key, ENVIRON["KQ_VALUE"] }
+  '
+}
+
 # VUELTA ATRAS IN PLACE (A6-2). La version anterior solo arranca con el
 # docker-compose.yml nuevo si IMAGE_DIGEST_* van vacias en su .env (el compose
 # trae el digest NUEVO como valor por defecto). Tras una vuelta atras
@@ -164,17 +174,28 @@ kq_env_has_rollback_digests() {
   [ -f "$1" ] && grep -qxF "${KQ_ROLLBACK_DIGESTS_MARKER}" "$1"
 }
 
-# Vacia IMAGE_DIGEST_* y pone la marca. Mismo escritor atomico que kq_env_set.
+# Vacia IMAGE_DIGEST_* y pone la marca, en UNA sola pasada (V7-RV-5). Hasta la
+# 2.3.0 la marca se anadia con `printf >>` tras tres escrituras sueltas: un `kill`
+# entre medias dejaba las vacias SIN la marca, que es exactamente el opt-out del
+# operador, y la instalacion dejaba de fijar sus imagenes por digest para
+# siempre. Ahora el fichero pasa de «sin vacias ni marca» a «con las tres vacias y
+# la marca» de golpe. Idempotente: las vacias y la marca que ya estuvieran se
+# sustituyen, no se duplican.
 #
 #   kq_env_mark_rollback_digests RUTA
 kq_env_mark_rollback_digests() {
-  local file="$1" var
-
-  for var in IMAGE_DIGEST_PHP IMAGE_DIGEST_NGINX IMAGE_DIGEST_POSTGRES; do
-    kq_env_set "${file}" "${var}" "" || return 1
-  done
-  kq_env_has_rollback_digests "${file}" && return 0
-  printf '%s\n' "${KQ_ROLLBACK_DIGESTS_MARKER}" >>"${file}"
+  # shellcheck disable=SC2016 # el programa es de awk, no de este shell.
+  KQ_MARKER="${KQ_ROLLBACK_DIGESTS_MARKER}" kq_env_rewrite "$1" '
+    $0 == ENVIRON["KQ_MARKER"] { next }
+    $0 ~ /^[[:space:]]*(export[[:space:]]+)?IMAGE_DIGEST_(PHP|NGINX|POSTGRES)=/ { next }
+    { print }
+    END {
+      print "IMAGE_DIGEST_PHP="
+      print "IMAGE_DIGEST_NGINX="
+      print "IMAGE_DIGEST_POSTGRES="
+      print ENVIRON["KQ_MARKER"]
+    }
+  '
 }
 
 # Si la marca esta, retira la marca y las tres IMAGE_DIGEST_*: el paquete
@@ -182,25 +203,11 @@ kq_env_mark_rollback_digests() {
 #
 #   kq_env_drop_rollback_digests RUTA
 kq_env_drop_rollback_digests() {
-  local file="$1" temp
-
-  kq_env_has_rollback_digests "${file}" || return 0
-  temp="$(mktemp "${file}.XXXXXX")" || return 1
-  chmod 0600 "${temp}" 2>/dev/null || true
-
-  if ! KQ_MARKER="${KQ_ROLLBACK_DIGESTS_MARKER}" awk '
+  kq_env_has_rollback_digests "$1" || return 0
+  # shellcheck disable=SC2016 # el programa es de awk, no de este shell.
+  KQ_MARKER="${KQ_ROLLBACK_DIGESTS_MARKER}" kq_env_rewrite "$1" '
     $0 == ENVIRON["KQ_MARKER"] { next }
     $0 ~ /^[[:space:]]*(export[[:space:]]+)?IMAGE_DIGEST_(PHP|NGINX|POSTGRES)=/ { next }
     { print }
-  ' "${file}" >"${temp}"; then
-    rm -f "${temp}"
-    return 1
-  fi
-
-  chown --reference="${file}" "${temp}" 2>/dev/null || true
-  chmod --reference="${file}" "${temp}" 2>/dev/null || true
-  mv -f "${temp}" "${file}" || {
-    rm -f "${temp}"
-    return 1
-  }
+  '
 }

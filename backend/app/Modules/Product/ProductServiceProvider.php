@@ -1999,6 +1999,7 @@ final class ProductServiceProvider extends ServiceProvider
                         timezone: Config::string('app.timezone'),
                         debug: Config::boolean('app.debug'),
                         environment: Config::string('app.env'),
+                        maintenance: $app->maintenanceMode(),
                     ),
                     /*
                      * El tamano del historico de errores (RF-PD-15, decision

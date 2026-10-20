@@ -2133,7 +2133,10 @@ jobs:
     runs-on: ubuntu-24.04
     # Dos juegos de imagenes (la version anterior y esta), una instalacion, una
     # actualizacion, una reinstalacion y una actualizacion con vuelta atras
-    # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min.
+    # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min. Desde la 2.3.0
+    # (tarea 6.8) suma cinco escenarios de fallo (U3s, U3i, U3m, U3n, U3p). Medido en la CI manual
+    # 39412494631: U3s 1,3 min, U3i 1,5 y U3m 1,3 (la espera de 180 s al borde no se agota: la sonda de
+    # /health falla antes). Por eso el tope vuelve a 90.
     timeout-minutes: 90
     # Ver el comentario de `clean-install`: sin excluir `schedule` a proposito,
     # la entrada de cron de `coverage` habria arrastrado esta etapa de 45-60
@@ -2307,6 +2310,9 @@ jobs:
           # escenario no prueba lo que dice probar.
           bash paquete-nuevo/update.sh --supported-sources | grep -qx "${old}"
           bash paquete-nuevo/update.sh --chain "${old}"
+          # Y un origen que el flujo real rechaza (la 2.1.0, D3) no tiene cadena: sale con 2
+          # y dice a que version ir PRIMERO (V6-PL-04, tarea 6.6).
+          bash .github/scripts/update-faults-e2e.sh chain-check "${old}" "${new}"
           test ! -e paquete-nuevo/.env
           test ! -e paquete-anterior/tools
           test ! -e paquete-nuevo/tools
@@ -2832,16 +2838,84 @@ jobs:
           sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml \
             exec -T app php artisan compliance:verify-audit-chain
 
-      - name: "U3 · Y tras la vuelta atras se puede reintentar: salida 0"
+      - name: "U3s · Ctrl+C al GRUPO de procesos DURANTE LA VUELTA ATRAS: tres senales y salida 4, no 5 (V21-3-PL-01, V21-3-PL-03)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Un terminal manda Ctrl+C a TODO el grupo en primer plano: a update.sh, a sudo y a cada
+        # `docker compose` que lance. El escenario anterior solo se la mandaba al `bash` del
+        # actualizador, y eso no ve lo que la 2.3.0 corrige (cada orden de la vuelta atras corre
+        # en su propia sesion). Se provoca una migracion que falla (imagen `php` con una migracion
+        # de prueba, sin tocar el producto) y se mandan TRES SIGINT al grupo, de verdad: al
+        # empezar la vuelta atras, durante la restauracion y al relanzar. Se exige salida 4,
+        # VUELTA ATRAS COMPLETADA, el motivo intacto (migration_failed), la migracion nombrada
+        # en pantalla y en el informe, el asiento de auditoria y la API atendiendo (401).
+        # Detalle de como se arranca en la cabecera de .github/scripts/update-faults-e2e.sh.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh rollback-sigint "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3i · Ctrl+C al grupo DURANTE LAS MIGRACIONES (migracion lenta): salida 4 y motivo interrupted; U1b · doctor.sh con el mantenimiento puesto (V21-3-PL-02, V21-3-PL-03, V21-3-PL-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Imagen `php` con una migracion que duerme 120 s y falla. Con ella en marcha (el
+        # mantenimiento esta puesto) se ejecuta doctor.sh: tiene que salir 6 y marcar [FALLA] la
+        # API de gestion en 503. Despues, SIGINT al grupo: salida 4, «interrumpido por el operador
+        # (senal INT)», la migracion en curso nombrada, `reason=interrupted` en el asiento.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh migration-sigint "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3m · Salida 5 y camino manual: las ordenes impresas, en orden, hasta el 401 (V21-3-PL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La vuelta atras no consigue relanzar la version anterior (su imagen de nginx termina al
+        # arrancar): salida 5. Se corrige la causa y se EJECUTAN las ordenes que imprime, tal como
+        # salen. La vuelta atras automatica ya retiro el mantenimiento (`artisan up`) antes de fallar:
+        # la API da 401 ya antes del 3b. El 503 y la FALLA de doctor.sh se prueban en U3n.
+        # La sonda `app.maintenance_mode` de la imagen nueva se comprueba aparte, en un contenedor
+        # suelto con `artisan down`. Espera 3 minutos al borde que no arranca (KQ_WAIT_APPLICATION).
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh manual-path "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3n · Salida 5 con la copia SIN restaurar: las ordenes 1, 1b, 1c y 2 impresas, hasta el 4c (V21-3-PL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La restauracion automatica no termina (el restore.sh de la imagen de prueba rechaza la de
+        # update.sh): salida 5 con el bloque completo, sin la linea «1-2» y sin el paso 5. Se ejecutan
+        # TODAS las ordenes impresas, en orden: parar, matar los contenedores de un solo uso, cerrar las
+        # sesiones, restaurar de verdad, relanzar, retirar el mantenimiento, 401 y cadena de auditoria.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh manual-path-restore "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3p · Un fallo DESPUES del 401 no se deshace: salida 5 sin vuelta atras, version nueva en servicio (decision del 20-10-2026)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Horizon no arranca (punto de entrada de la imagen de prueba). La actualizacion llega al 401 y
+        # falla despues: salida 5, SIN VUELTA ATRAS, la version NUEVA en servicio, ningun asiento de vuelta
+        # atras y los mismos recuentos. Dos SIGINT al grupo durante la espera no cambian nada. Despues se
+        # arregla la causa y se ejecuta la orden 3 impresa. Sustituye al antiguo «reintentar tras la vuelta
+        # atras» (que dejaba la version nueva en servicio): esta etapa termina igual, con la nueva en pie, y el
+        # reintento tras una vuelta atras sigue cubierto por P3.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh forward-only "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3 · Y con la version nueva ya en servicio, repetir update.sh dice que ya esta en ella: salida 3"
         if: steps.anterior.outputs.skip != 'true'
         run: |
           set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
           new="${{ steps.anterior.outputs.new_version }}"
-          docker tag "kronoqr/nginx:${new}-sana" "kronoqr/nginx:${new}"
+          # Las imagenes y la matriz que dejaron los escenarios U3s, U3i, U3m, U3n y U3p (migracion de
+          # prueba, nginx de la version anterior roto, horizon roto): P0 en adelante parte de las buenas.
+          bash .github/scripts/update-faults-e2e.sh restore-images "${old}" "${new}"
           cd paquete-nuevo
-          sudo ./update.sh >salida-u3b.log 2>&1 || { tail -60 salida-u3b.log; exit 1; }
-          grep -q 'actualizado y verificado' salida-u3b.log
+          set +e
+          sudo ./update.sh >salida-u3b.log 2>&1
+          codigo=$?
+          set -e
+          tail -20 salida-u3b.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'YA esta en la version' salida-u3b.log
           curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
       - name: "U4 · La copia previa de la actualizacion se restaura en una base limpia (RF-PR-04, RQ-09)"
         if: steps.anterior.outputs.skip != 'true'
@@ -3196,6 +3270,21 @@ jobs:
             paquete-nuevo/salida-u1.log
             paquete-nuevo/salida-u2.log
             paquete-nuevo/salida-u3.log
+            paquete-nuevo/salida-u3r.log
+            paquete-nuevo/err-u3r.log
+            paquete-nuevo/salida-u3i.log
+            paquete-nuevo/err-u3i.log
+            paquete-nuevo/doctor-u1b.log
+            paquete-nuevo/salida-u3m.log
+            paquete-nuevo/err-u3m.log
+            paquete-nuevo/salida-u3n.log
+            paquete-nuevo/err-u3n.log
+            paquete-nuevo/salida-u3p.log
+            paquete-nuevo/err-u3p.log
+            paquete-nuevo/doctor-u3m-antes.log
+            paquete-nuevo/doctor-u3m-despues.log
+            paquete-nuevo/product-doctor-u3m-antes.log
+            paquete-nuevo/product-doctor-u3m.log
             paquete-nuevo/salida-u3b.log
             paquete-fijado-sano/salida-p1.log
             paquete-anterior/salida-p2-instalacion.log
