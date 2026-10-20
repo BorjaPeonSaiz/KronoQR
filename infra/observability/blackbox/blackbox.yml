@@ -87,3 +87,8 @@ modules:
       valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
       method: GET
       preferred_ip_protocol: "ip4"
+      # Solo un 200 es «listo» (Loki devuelve 503 mientras arranca) y NUNCA se sigue una
+      # redireccion: un modulo en texto plano que sigue redirecciones podria acabar leyendo
+      # otro sitio que el que se declaro.
+      valid_status_codes: [200]
+      no_follow_redirects: true

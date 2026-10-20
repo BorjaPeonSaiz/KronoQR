@@ -119,7 +119,23 @@ it('sondea Loki desde Blackbox porque su imagen no trae shell', function (): voi
         ->toContain('http://loki:3100/ready');
     expect($blackbox)->toContain('http_2xx_internal:');
 
+    // El modulo en texto plano es una excepcion acotada (revision del bloque 9): un 200 y
+    // ninguna redireccion; y el UNICO job que lo usa es el de Loki, contra su `/ready`.
+    $modulos = Yaml::parse($blackbox)['modules'];
+    expect($modulos['http_2xx_internal']['http']['valid_status_codes'] ?? null)->toBe([200])
+        ->and($modulos['http_2xx_internal']['http']['no_follow_redirects'] ?? null)->toBeTrue();
+
+    $trabajos = Yaml::parse((string) preg_replace('/^@@[A-Z_]+@@$/m', '', $prometheus))['scrape_configs'];
+    $conModuloInterno = array_values(array_filter(
+        $trabajos,
+        static fn (array $trabajo): bool => ($trabajo['params']['module'] ?? []) === ['http_2xx_internal'],
+    ));
+    expect($conModuloInterno)->toHaveCount(1)
+        ->and($conModuloInterno[0]['job_name'])->toBe('kronoqr-loki')
+        ->and($conModuloInterno[0]['static_configs'][0]['targets'])->toBe(['http://loki:3100/ready']);
+
     // Y la alerta de esa sonda existe y apunta a su runbook.
+
     $regla = AlertRules::named('LokiSinRespuesta');
     expect($regla)->not->toBeNull();
     expect($regla['expr'] ?? '')->toContain('kronoqr-loki');
