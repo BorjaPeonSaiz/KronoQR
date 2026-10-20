@@ -66,7 +66,7 @@ simulacro evita.
 | `CertificadoTlsNoVerificable` | sonda verificada a 0 con la sonda básica a 1 | it-cliente | cadena incompleta o nombre que no coincide |
 | `CertificadoTlsProximoACaducar` | caducidad a 10 días | it-cliente | certificado a punto de vencer |
 | `ColaDeTrabajosAcumulada` | `queue_jobs_pending{queue="default"}` 80 | it-cliente | Horizon no da abasto o parado con tráfico |
-| `ColaDeTrabajosSinProcesar` | `queue_jobs_pending{queue="default"}` 1 sin trabajos terminados | it-cliente | `horizon` parado con una exportación esperando |
+| `ColaDeTrabajosSinProcesar` | `queue_jobs_waiting{queue="default"}` 1 sin trabajos terminados | it-cliente | `horizon` parado con una exportación esperando |
 | `ColaOfflineAtascada` | `kiosk_offline_queue_size` 80 | it-cliente | quiosco con red caída varias horas |
 | `ConciliacionCompletaDelRegistroAusente` | última conciliación completa hace 9 días | seguridad | `scheduler` parado más de una semana |
 | `ConciliacionDelRegistroAusente` | retira la serie de la conciliación reciente | seguridad | `scheduler` parado o tarea sin ejecutarse |
@@ -113,7 +113,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 ## Cómo añadir una receta
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
-2. Una línea en `faults.tsv` (`ALERTA<TAB>set|del|none<TAB>argumento`).
+2. Una línea en `faults.tsv` (`ALERTA<TAB>set|add|del|none<TAB>argumento`; `add` crea una serie que el estado sano no publica (un contador que nace en su primer suceso)).
 3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 43).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 

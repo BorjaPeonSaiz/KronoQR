@@ -25,6 +25,7 @@ tests:
               severity: critical
               destinatario: it-cliente
               component: api
+              family: fichaje
             exp_annotations:
               summary: "Mas del 1 % de las peticiones de fichaje han fallado en los ultimos 5 min"
               description: >-
@@ -380,6 +381,7 @@ tests:
               severity: high
               destinatario: it-cliente
               component: api
+              family: gestion
             exp_annotations:
               summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
               description: >-
@@ -450,6 +452,7 @@ tests:
               severity: high
               destinatario: it-cliente
               component: api
+              family: portal
             exp_annotations:
               summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
               description: >-
@@ -471,3 +474,109 @@ tests:
       - eval_time: 30m
         alertname: ErroresDeServidorEnElPortal
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # CONTADORES QUE NACEN EN SU PRIMER VALOR (revision del bloque 9). En Redis un
+  # contador no existe hasta su primer incremento: la serie de 5xx nace con valor
+  # 1 (o mas) y `increase()` no ve ese primer salto. Aqui las series NO existen
+  # hasta el minuto 3 (`_`) y nacen ya con su valor.
+  #-----------------------------------------------------------------------------
+  # Fichaje: el primer 5xx de la historia (1) sobre 50 peticiones correctas = 1,96 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="200"}'
+        values: "_ _ _ 50x30"
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="500"}'
+        values: "_ _ _ 1x30"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ErroresDeServidorEnElFichaje
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: api
+              family: fichaje
+            exp_annotations:
+              summary: "Mas del 1 % de las peticiones de fichaje han fallado en los ultimos 5 min"
+              description: >-
+                Las rutas attendance.scan, attendance.scan.batch y
+                attendance.scan.pin estan devolviendo 5xx por encima del 1 %
+                de sus peticiones. El quiosco encola y confirma localmente
+                (regla dura 19: nunca bloquea al empleado), pero esos
+                fichajes no llegan al servidor hasta que el fallo se
+                resuelva. Revisa el estado de la base de datos, Redis y el
+                ultimo despliegue.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+      # Pasada la ventana de 5 min el suceso ya no cuenta y la alerta se apaga sola.
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElFichaje
+        exp_alerts: []
+
+  # Panel: 3 errores nacidos de golpe (3) sobre 20 peticiones correctas nacidas de golpe = 13 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "_ _ _ 20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "_ _ _ 3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: gestion
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+              description: >-
+                Las rutas de gestion (el panel, la configuracion, la gestion de
+                quioscos y sus rutas de padron, latido y emparejamiento) estan
+                devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+                rutas, con su propia alerta. Mira el historico de errores del panel
+                y product:doctor; la causa habitual es la base de datos, el disco o
+                un despliegue reciente.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+      - eval_time: 35m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Panel: un solo error nacido en 1 no llega al minimo de 3, por mucho que sea el 50 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "_ _ _ 1x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "_ _ _ 1x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Portal: igual, tres errores nacidos de golpe.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="200"}'
+        values: "_ _ _ 20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "_ _ _ 3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: portal
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+              description: >-
+                El portal del empleado (acceso con codigo y PIN, consulta de su
+                registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+                afectado, pero las personas no pueden consultar su registro ni
+                ejercer su derecho de acceso. Mira el historico de errores del
+                panel y product:doctor.
+              runbook_url: docs/runbooks/errores-en-el-panel.md

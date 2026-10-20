@@ -10,8 +10,15 @@
 #   @NOW@               el instante actual en segundos Unix
 #   @NOW-N@ / @NOW+N@   ese instante menos o mas N segundos
 #
-# Los contadores arrancan en 0 a proposito: `increase()` necesita una muestra
-# anterior para ver el salto.
+# Los contadores de aqui arrancan en 0 a proposito: `increase()` necesita una muestra anterior
+# para ver el salto. Es una SIMPLIFICACION: en Redis un contador no existe hasta su primer
+# incremento, y el producto lo publica ya con valor 1.
+#
+# LOS QUE ESE DETALLE HARIA ENGANOSOS NO ESTAN AQUI (los de 5xx por familia y el de trabajos
+# terminados, cuyas reglas tienen una rama especifica para la serie recien nacida). En Redis un contador no existe hasta su
+# primer incremento (p. ej. la serie de 5xx de una ruta, o `queue_job_duration_seconds_count`):
+# no se declara un 0 que el producto no publica, y la falla la CREA con `add` (faults.tsv). Asi
+# el simulacro ejercita la rama de «serie nacida» de las reglas, que es la que vale el primer dia.
 #
 # Si una regla nueva lee una serie y esa serie no esta aqui, las alertas de tipo
 # `absent()` dispararan en el estado sano y el simulacro lo dira.
@@ -86,20 +93,19 @@ http_requests_total{route="attendance.scan",status="429"} 0
 # --- Cola de trabajos y tiempo real (queue.yml, bloque 9 de la 2.3.0) ------------
 # Cola vacia y Reverb contestando a la tarea de presencia, que acaba de correr.
 queue_jobs_pending{queue="default"} 0
+queue_jobs_waiting{queue="default"} 0
 presence_metrics_timestamp_seconds @NOW@
 websocket_connections_active 2
 probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 1
 
 # --- 5xx del panel y del portal (api.yml, bloque 9 de la 2.3.0) ------------------
 http_requests_total{route="employees.index",status="200"} 100
-http_requests_total{route="employees.index",status="500"} 0
 http_requests_total{route="portal.workdays",status="200"} 100
-http_requests_total{route="portal.workdays",status="500"} 0
 
 # --- Latencia del fichaje, una serie por ruta (api.yml, bloque 9 de la 2.3.0) ----
 # Los cubos son los del middleware (0,4 s, 1 s, 3 s y +Inf, con las etiquetas `le` que expone el
 # producto). Todo el trafico por debajo del primer umbral de cada ruta: el QR vigila 0,5 s
-# (interpolado entre 0,4 y 1), el PIN y el lote 3 s.
+# (interpolado entre 0,4 y 1), el PIN y el lote 3 s. Las reglas aceptan `le` 3 y 3.0.
 http_request_duration_seconds_bucket{route="attendance.scan",le="0.4"} 100
 http_request_duration_seconds_bucket{route="attendance.scan",le="1.0"} 100
 http_request_duration_seconds_bucket{route="attendance.scan",le="+Inf"} 100

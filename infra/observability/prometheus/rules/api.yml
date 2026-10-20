@@ -62,6 +62,73 @@ groups:
     interval: 60s
     rules:
       #------------------------------------------------------------------------
+      # REGLAS DE GRABACION: EL RECUENTO POR FAMILIA DE RUTAS, EN UN SOLO SITIO.
+      #
+      # Tres familias (fichaje, gestion y portal) y dos magnitudes (peticiones 5xx
+      # y todas). El filtro de rutas de cada familia vive SOLO aqui; las alertas
+      # leen estas series y no repiten el selector.
+      #
+      # POR QUE NO BASTA `increase()`. Un contador en Redis no existe hasta su
+      # primer incremento: la serie `{route,method,status="500"}` nace ya con valor
+      # 1, y `increase()` necesita dos muestras, asi que el PRIMER error de cada
+      # serie no cuenta. Es justo el que importa tras una instalacion nueva o un
+      # reinicio de Redis. Cada magnitud suma dos mitades que no se solapan:
+      #
+      #   · `increase(X[w]) and X offset w`: las series que ya existian al empezar
+      #     la ventana (su aumento es el real);
+      #   · `X unless X offset w`: las series que NO existian (nacidas dentro de la
+      #     ventana): su valor actual es todo lo ocurrido desde que nacieron.
+      #
+      # Cada mitad lleva `or vector(0)`: sin series, la suma es 0 y no «vacio», y
+      # el cociente de la alerta da NaN (no salta) en vez de desaparecer. El mismo
+      # patron que `generated-files.yml`, con una suma en lugar de un `or`.
+      #------------------------------------------------------------------------
+      - record: kronoqr:http_server_errors:increase5m
+        labels:
+          family: fichaje
+        expr: >-
+          (sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."}[5m]) and http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} offset 5m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} unless http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} offset 5m) or vector(0))
+      - record: kronoqr:http_requests:increase5m
+        labels:
+          family: fichaje
+        expr: >-
+          (sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?"}[5m]) and http_requests_total{route=~"attendance\\.scan(\\..*)?"} offset 5m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"attendance\\.scan(\\..*)?"} unless http_requests_total{route=~"attendance\\.scan(\\..*)?"} offset 5m) or vector(0))
+
+      - record: kronoqr:http_server_errors:increase10m
+        labels:
+          family: gestion
+        expr: >-
+          (sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m]) and http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} unless http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} offset 10m) or vector(0))
+      - record: kronoqr:http_requests:increase10m
+        labels:
+          family: gestion
+        expr: >-
+          (sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"}[10m]) and http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} unless http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} offset 10m) or vector(0))
+
+      - record: kronoqr:http_server_errors:increase10m
+        labels:
+          family: portal
+        expr: >-
+          (sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m]) and http_requests_total{route=~"portal\\..*", status=~"5.."} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"portal\\..*", status=~"5.."} unless http_requests_total{route=~"portal\\..*", status=~"5.."} offset 10m) or vector(0))
+      - record: kronoqr:http_requests:increase10m
+        labels:
+          family: portal
+        expr: >-
+          (sum(increase(http_requests_total{route=~"portal\\..*"}[10m]) and http_requests_total{route=~"portal\\..*"} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"portal\\..*"} unless http_requests_total{route=~"portal\\..*"} offset 10m) or vector(0))
+
+      #------------------------------------------------------------------------
       # Proporcion de 5xx sobre el total, en las tres rutas de fichaje. Con
       # trafico cero la division es 0/0 (NaN) y Prometheus la descarta: no hay
       # falso positivo por falta de trafico, solo por errores de verdad.
@@ -69,9 +136,9 @@ groups:
       - alert: ErroresDeServidorEnElFichaje
         expr: >-
           (
-            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."}[5m]))
+            kronoqr:http_server_errors:increase5m{family="fichaje"}
             /
-            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?"}[5m]))
+            kronoqr:http_requests:increase5m{family="fichaje"}
           ) > 0.01
         for: 1m
         labels:
@@ -157,7 +224,7 @@ groups:
           (
             1
             -
-            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}[10m]))
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le=~"3(\\.0)?"}[10m]))
             /
             sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}[10m]))
           ) > 0.05
@@ -184,7 +251,7 @@ groups:
           (
             1
             -
-            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}[10m]))
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le=~"3(\\.0)?"}[10m]))
             /
             sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}[10m]))
           ) > 0.05
@@ -256,12 +323,12 @@ groups:
       - alert: ErroresDeServidorEnElPanel
         expr: >-
           (
-            sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m]))
+            kronoqr:http_server_errors:increase10m{family="gestion"}
             /
-            sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"}[10m]))
+            kronoqr:http_requests:increase10m{family="gestion"}
           ) > 0.05
           and on ()
-          sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m])) >= 3
+          kronoqr:http_server_errors:increase10m{family="gestion"} >= 3
         for: 5m
         labels:
           severity: high
@@ -281,12 +348,12 @@ groups:
       - alert: ErroresDeServidorEnElPortal
         expr: >-
           (
-            sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m]))
+            kronoqr:http_server_errors:increase10m{family="portal"}
             /
-            sum(increase(http_requests_total{route=~"portal\\..*"}[10m]))
+            kronoqr:http_requests:increase10m{family="portal"}
           ) > 0.05
           and on ()
-          sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m])) >= 3
+          kronoqr:http_server_errors:increase10m{family="portal"} >= 3
         for: 5m
         labels:
           severity: high

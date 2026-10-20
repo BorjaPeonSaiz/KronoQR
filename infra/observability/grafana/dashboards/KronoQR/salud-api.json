@@ -364,7 +364,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Trabajos pendientes por cola",
-      "description": "queue_jobs_pending{queue} (doc 02 §8.2): un estado, calculado en el scrape.",
+      "description": "queue_jobs_pending{queue} (esperando + en ejecución + retrasados) y queue_jobs_waiting{queue} (solo los que esperan a un trabajador), doc 02 §8.2: estados calculados en el scrape. Una exportación íntegra larga (hasta 60 min) cuenta como pendiente pero no como en espera; ColaDeTrabajosAcumulada lee los pendientes (más de 50, 10 min) y ColaDeTrabajosSinProcesar los en espera.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -372,7 +372,13 @@
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
           "expr": "queue_jobs_pending",
-          "legendFormat": "{{queue}}"
+          "legendFormat": "{{queue}}: pendientes (con los en ejecución)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "queue_jobs_waiting",
+          "legendFormat": "{{queue}}: en espera de un trabajador"
         }
       ],
       "fieldConfig": {

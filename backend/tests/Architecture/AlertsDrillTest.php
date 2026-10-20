@@ -113,6 +113,8 @@ it('toca en cada receta series que el estado sano declara', function () use ($fi
     // que existe; `none` no toca nada.
     $existe = static fn (string $accion, string $argumento): bool => match ($accion) {
         'set' => in_array((string) preg_replace('/ [^ ]+$/', '', $argumento), $sanas, true),
+        // `add` crea una serie que el producto no publica hasta su primer suceso: NO puede estar en el estado sano.
+        'add' => ! in_array((string) preg_replace('/ [^ ]+$/', '', $argumento), $sanas, true),
         'del' => str_contains($argumento, '{') ? in_array($argumento, $sanas, true) : in_array($argumento, $nombresSanos, true),
         'none' => true,
         default => false,

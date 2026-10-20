@@ -86,6 +86,11 @@ final class AlertRules
         foreach ($document['groups'] ?? [] as $group) {
             foreach ($group['rules'] ?? [] as $rule) {
                 /** @var array{alert?: string, expr?: string, for?: string, labels?: array<string, string>, annotations?: array<string, string>} $rule */
+                // Las reglas de grabacion (`record:`) no son alertas: no llevan severidad ni runbook.
+                if (! isset($rule['alert'])) {
+                    continue;
+                }
+
                 $rules[] = $rule;
             }
         }

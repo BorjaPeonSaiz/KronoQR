@@ -20,11 +20,20 @@
 #
 #   · ColaDeTrabajosSinProcesar. Es la que ve a `horizon` parado cuando hay UN
 #     solo trabajo esperando (una exportacion, que es justo el caso que pierde
-#     RRHH): la cola no esta vacia y en 20 min no ha terminado NINGUN trabajo
-#     (`queue_job_duration_seconds_count` no crece). 20 min + `for: 10m` = 30
-#     min, el tope de un informe diferido. Si no existe la serie (nunca ha
-#     terminado un trabajo) la comparacion `unless on()` sobre un vector vacio
-#     deja pasar la alerta: es lo correcto, hay trabajos y nadie los hace.
+#     RRHH): hay trabajos EN ESPERA (`queue_jobs_waiting`, sin los reservados) y
+#     en 20 min no ha terminado NINGUNO (`queue_job_duration_seconds_count` no
+#     crece). Lee los «en espera» y no los pendientes porque una exportacion
+#     integra legitima dura hasta 30 min (informes) o 60 min (exportacion de
+#     datos, `TIMEOUT_SECONDS = 3600`) y es UN trabajo reservado: cuenta como
+#     pendiente mientras se ejecuta, y con `queue_jobs_pending` esta alerta saltaba
+#     con ella sin averia alguna. Si no existe la serie de terminados (nunca ha
+#     terminado un trabajo) la comparacion `unless on()` sobre un vector vacio deja
+#     pasar la alerta: es lo correcto, hay trabajos esperando y nadie los hace.
+#     El contador de terminados NACE en 1 (un contador en Redis no existe hasta su
+#     primer incremento): se cuentan por separado las series que ya existian
+#     (`increase`) y las nacidas dentro de la ventana (su valor), como en
+#     `api.yml`; sin eso, el primer trabajo de la historia no contaria como
+#     terminado.
 #
 #   · ReverbSinRespuesta. `websocket_connections_active` la publica
 #     `reporting:presence-metrics` cada minuto preguntando a Reverb por HTTP
@@ -69,25 +78,32 @@ groups:
       # Hay trabajos esperando y en 20 min no ha terminado ninguno: Horizon
       # parado, colgado o pausado. Detecta tambien UNA sola exportacion atascada.
       #------------------------------------------------------------------------
+      - record: kronoqr:queue_jobs_finished:increase20m
+        expr: >-
+          (sum(increase(queue_job_duration_seconds_count[20m]) and queue_job_duration_seconds_count offset 20m) or vector(0))
+          +
+          (sum(queue_job_duration_seconds_count unless queue_job_duration_seconds_count offset 20m) or vector(0))
+
       - alert: ColaDeTrabajosSinProcesar
         expr: >-
-          max(queue_jobs_pending) > 0
+          max(queue_jobs_waiting) > 0
           unless on ()
-          (sum(increase(queue_job_duration_seconds_count[20m])) > 0)
+          (kronoqr:queue_jobs_finished:increase20m > 0)
         for: 10m
         labels:
           severity: high
           destinatario: it-cliente
           component: api
         annotations:
-          summary: "Hay trabajos en cola y ninguno ha terminado en los ultimos 30 min"
+          summary: "Hay trabajos esperando en la cola y ninguno ha terminado en los ultimos 30 min"
           description: >-
             Horizon no esta procesando: contenedor parado, en bucle de reinicio,
             pausado o colgado. Mientras tanto las exportaciones integras (la que
             se entrega a la Inspeccion o al empleado que ejerce su derecho de
             acceso) y los informes en diferido se quedan en pending. Una
-            exportacion legitima muy grande puede tardar hasta 30 min: si lleva
-            mas, no es eso. El fichaje sigue.
+            exportacion en curso, por larga que sea (hasta 60 min), no cuenta: un
+            trabajo que ya ha cogido un trabajador no esta «en espera». El
+            fichaje sigue.
           runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
 
       #------------------------------------------------------------------------

@@ -7,7 +7,7 @@ V21-4-DV-2 y CH2):
 | Alerta | Umbral | Severidad | Destinatario | Sección |
 | --- | --- | --- | --- | --- |
 | `ColaDeTrabajosAcumulada` | `queue_jobs_pending` > 50 durante `for: 10m` | Alta | IT del cliente | [§3](#3-coladetrabajosacumulada) |
-| `ColaDeTrabajosSinProcesar` | hay trabajos esperando y en 20 min no ha terminado ninguno, `for: 10m` | Alta | IT del cliente | [§4](#4-coladetrabajossinprocesar) |
+| `ColaDeTrabajosSinProcesar` | `queue_jobs_waiting` > 0 y en 20 min no ha terminado ningún trabajo, `for: 10m` | Alta | IT del cliente | [§4](#4-coladetrabajossinprocesar) |
 
 **A las 06:30, quien la reciba hace esto:**
 
@@ -31,7 +31,8 @@ petición: las **exportaciones íntegras** (la que se entrega a la Inspección o
 empleado que ejerce su derecho de acceso), los **informes en diferido** y la
 **difusión de la presencia** al panel en vivo. Todo eso viaja por una cola de
 Redis. La métrica `queue_jobs_pending` dice cuántos trabajos hay esperando o en
-ejecución en cada cola; es un estado que se calcula en el momento de cada lectura.
+ejecución en cada cola, y `queue_jobs_waiting` solo los que **esperan** a que un
+trabajador los coja; es un estado que se calcula en el momento de cada lectura.
 
 **Impacto en el fichaje: ninguno.** El quiosco ficha y encola por su cuenta
 (regla dura 19) y el servidor registra el fichaje en la propia petición, no en
@@ -48,9 +49,12 @@ sola pasado `REPORTING_EXPORT_STALE_AFTER` (una hora de serie): la persona puede
 volver a pedirla.
 
 **Qué no es.** Una exportación íntegra muy grande puede tardar hasta 30 min
-(informes) o 60 min (exportación de datos) y cuenta como «en cola» mientras se
-ejecuta. Por eso `ColaDeTrabajosSinProcesar` espera 30 min y no 5. Si la alerta
-suena y el registro de `horizon` muestra que el trabajo avanza, espera.
+(informes) o 60 min (exportación de datos): es **un trabajo en ejecución**, que
+cuenta en `queue_jobs_pending` pero **no** en `queue_jobs_waiting`.
+`ColaDeTrabajosSinProcesar` lee solo los que esperan, así que no salta con ella,
+por larga que sea. Si salta y el registro de `horizon` muestra que algo avanza,
+es que todos los trabajadores están ocupados con exportaciones y hay otros
+trabajos detrás: espera a que terminen.
 
 La alerta se calla durante la ventana de mantenimiento y mientras `update.sh`
 tiene el mantenimiento puesto (reinicia `horizon`).
