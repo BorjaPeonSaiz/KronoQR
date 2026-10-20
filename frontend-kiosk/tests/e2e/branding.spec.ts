@@ -146,6 +146,7 @@ test(
       privacyNotice: {
         controllerName: 'Hotel Marina S.L.',
         policyUrl: 'https://marina.example/privacidad',
+        retentionYears: 6,
       },
     })
 
@@ -153,6 +154,9 @@ test(
 
     const notice = page.getByTestId('privacy-notice')
     await expect(notice).toContainText('Hotel Marina S.L.')
+    // El plazo sale del perfil de cumplimiento, no del texto (regla dura 14).
+    await expect(notice).toContainText('Conservación: 6 años')
+    await expect(notice).toContainText('Agencia Española de Protección de Datos')
     await expect(page.getByTestId('privacy-policy-url')).toContainText(
       'https://marina.example/privacidad',
     )
