@@ -137,7 +137,7 @@ final readonly class ReadEmployeeWorkDays
 
     private function resolve(EmployeeWorkDayRange $query, string $timeZone): DateRange
     {
-        $to = $query->to ?? $this->today($timeZone);
+        $to = $query->to ?? $this->todayIn($timeZone);
 
         if ($query->from === null) {
             return DateRange::endingOn($to, $query->defaultDays);
@@ -149,8 +149,13 @@ final readonly class ReadEmployeeWorkDays
     /**
      * Que dia es hoy **para esa persona**, que es el unico «hoy» que decide a
      * que jornada pertenece el turno que esta haciendo ahora mismo.
+     *
+     * Publico desde la 2.3.0: la respuesta lo devuelve en `today` para que el
+     * portal no tenga que hacer una segunda peticion sin rango solo para saber
+     * que dia es. Un unico sitio decide «hoy», el mismo que fija el rango por
+     * omision.
      */
-    private function today(string $timeZone): string
+    public function todayIn(string $timeZone): string
     {
         return $this->clock->now()
             ->setTimezone(new DateTimeZone($timeZone))

@@ -1204,7 +1204,7 @@ it('no deja salir el nombre de un empleado por el detalle de jornada', function 
 
     $properties = Contract::keys('components', 'schemas', 'EmployeeWorkDays', 'properties');
 
-    expect($properties)->toBe(['employee_uuid', 'time_zone', 'from', 'to', 'data', 'meta']);
+    expect($properties)->toBe(['employee_uuid', 'time_zone', 'today', 'from', 'to', 'data', 'meta']);
 
     // Y una correccion no arrastra el correo de quien la firmo: en esa pantalla
     // no aporta nada y es un dato personal mas viajando de mas.

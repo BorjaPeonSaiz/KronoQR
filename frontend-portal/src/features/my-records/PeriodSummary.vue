@@ -6,7 +6,7 @@
 //    servidor**, jornada a jornada, y se enseña en horas y minutos, nunca en
 //    decimal. No se recalcula desde los tramos: el total del dia lo declara el
 //    servidor (RN-06, regla dura 7) y la tabla de cada jornada ya contrasta
-//    las dos cifras.
+//    las dos cifras (hoy salen de los mismos tramos: es una defensa en profundidad).
 //  - **Si el numero puede cambiar, se dice aqui**, no solo en la tarjeta del
 //    dia: un turno abierto, una revision pendiente o un dia cuyo total no
 //    cuadra con sus tramos hacen provisional la suma entera.
@@ -73,14 +73,14 @@ const todayHeading = computed(() =>
         {{ periodTotal }}
       </p>
       <p class="mt-1 text-kq-text-muted" data-test="period-days">
-        {{ t('myRecords.summary.days', { count: days.length, from, to }) }}
+        {{ t('myRecords.summary.days', { count: days.length, from, to }, days.length) }}
       </p>
       <p
         v-if="provisionalCount > 0"
         data-test="period-provisional"
         class="mt-2 rounded-kq border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
       >
-        {{ t('myRecords.summary.provisional', { count: provisionalCount }) }}
+        {{ t('myRecords.summary.provisional', { count: provisionalCount }, provisionalCount) }}
       </p>
     </div>
 

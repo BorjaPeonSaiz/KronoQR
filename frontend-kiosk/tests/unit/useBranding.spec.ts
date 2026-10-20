@@ -24,7 +24,7 @@ const HOTEL: RawBranding = {
   accent_color: null,
   logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
   locales: { default: 'es', available: ['es'] },
-  privacy_notice: { controller_name: null, policy_url: null },
+  privacy_notice: { controller_name: null, policy_url: null, retention_years: 4 },
 }
 
 function fakeApi(fetchBranding: () => Promise<ApiResult<RawBranding>>): ApiClient {

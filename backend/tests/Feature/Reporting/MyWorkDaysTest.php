@@ -9,11 +9,13 @@ use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Reporting\BreakFixtures;
 use Tests\Support\Time\FrozenTime;
@@ -121,6 +123,67 @@ it('devuelve el registro del titular del token, con la misma forma que el del pa
         ->assertJsonPath('data.0.shift_entries.0.clocked_in_at_local', '2026-03-14T06:00:00.000000+01:00');
 })->group('RF-ID-05', 'RL-05', 'RN-06');
 
+it('sirve el registro propio con no-store, como la descarga', function (): void {
+    // V4-PO-1 (2.3.0). El portal se abre en el ordenador compartido de la sala
+    // de personal: con el `no-cache, private` por omision de Laravel, el
+    // navegador podia guardar en su cache de disco las horas de quien acababa
+    // de salir. `assertValidResponse` comprueba ademas que el contrato declara
+    // la cabecera.
+    $contexto = miPortal();
+
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidResponse(200)
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    // Y vale tambien cuando no hay nada que enseñar: un rango vacio dice que esa
+    // persona no trabajo esos dias, que tambien es un dato suyo.
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    expect($respuesta->headers->get('Cache-Control'))->not->toContain('no-cache');
+})->group('RF-ID-05', 'RL-05', 'RS-09');
+
+it('dice que dia es hoy en la zona del centro, no en UTC', function (string $instanteUtc, string $hoy): void {
+    // 2.3.0, bloque 8: el portal deja de pedir el registro sin rango solo para
+    // saber que dia es. «Hoy» sale del `Clock` y de la zona del centro (reglas
+    // duras 2 y 3), y no depende del rango pedido.
+    $contexto = miPortal();
+    FrozenTime::at($instanteUtc);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('today', $hoy)
+        ->assertJsonPath('to', '2026-03-02');
+})->with([
+    // Madrid en invierno (+01:00): en UTC aun es el 28, en el centro ya el 29.
+    'pasada la medianoche local' => ['2026-03-28 23:30:00', '2026-03-29'],
+    // El 29 de marzo de 2026 Madrid pasa a +02:00. A las 22:30 UTC son las
+    // 00:30 del 30; con el desplazamiento de invierno serian las 23:30 del 29.
+    'tras el cambio de hora de primavera' => ['2026-03-29 22:30:00', '2026-03-30'],
+    // Y un minuto antes de la medianoche local sigue siendo el dia anterior.
+    'antes de la medianoche local, ya en horario de verano' => ['2026-03-29 21:59:00', '2026-03-29'],
+])->group('RF-ID-05', 'RN-04');
+
+it('lleva today tambien en la vista de gestion, que comparte el esquema', function (): void {
+    // `EmployeeWorkDays` es el mismo esquema para el panel y el portal: el campo
+    // es obligatorio en los dos.
+    $contexto = miPortal();
+    FrozenTime::at('2026-03-28 23:30:00');
+
+    $rrhh = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($rrhh)
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('today', '2026-03-29');
+})->group('RF-PA-03', 'RN-04');
+
 it('abre en los 31 dias que terminan hoy cuando no se pide rango', function (): void {
     // «Hoy» resuelto en la zona del CENTRO y con el reloj inyectado, no con el
     // del servidor ni con el del navegador (RN-04, regla dura 2).
@@ -205,6 +268,34 @@ it('descarga el historico propio en CSV con la suma cuadrando', function (): voi
         // Y el nombre del fichero no lleva ningun dato de nadie.
         ->and($respuesta->headers->get('Content-Disposition'))
         ->toBe('attachment; filename=mi-registro-horario-2026-03-01_2026-03-31.csv');
+})->group('RF-ID-05', 'RL-05', 'RL-03');
+
+it('dice en X-Kronoqr-Report-Rows cuantas filas de datos lleva el CSV, y 0 en un periodo vacio', function (): void {
+    // 2.3.0, bloque 8: el portal lee la cabecera para decir que un periodo no
+    // tiene jornadas en vez de anunciar una descarga vacia. Cuenta filas de
+    // DATOS: la cabecera de criterios y los rotulos van siempre.
+    $contexto = miPortal();
+
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-16', '2026-03-16 07:00', '2026-03-16 15:30');
+
+    $conDatos = Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2026-03-01', 'to' => '2026-03-31'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '2');
+
+    // Las dos filas que dice la cabecera son las dos que hay en el fichero.
+    expect(substr_count($conDatos->streamedContent(), "\r\nTRAMO;"))->toBe(2);
+
+    $vacio = Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2026-02-01', 'to' => '2026-02-28', 'format' => 'csv'])
+        ->assertValidResponse(200)
+        ->assertHeader('X-Kronoqr-Report-Rows', '0');
+
+    // Y aun asi es un fichero: lleva su cabecera de criterios.
+    expect($vacio->streamedContent())->toStartWith("\u{FEFF}")
+        ->and($vacio->streamedContent())->not->toContain('TRAMO;');
 })->group('RF-ID-05', 'RL-05', 'RL-03');
 
 it('no mete a nadie mas en el fichero del historico propio', function (): void {

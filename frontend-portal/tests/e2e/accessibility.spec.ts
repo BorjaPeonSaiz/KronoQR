@@ -53,7 +53,7 @@ test(
 test('el acceso con el logotipo del cliente tampoco', { tag: ['@RF-PD-08'] }, async ({ page }) => {
   await stubPortalApi(page, { locale: 'es', branding: HOTEL_BRANDING })
   await page.goto('/login')
-  await expect(page).toHaveTitle('Hotel Marina')
+  await expect(page).toHaveTitle(/· Hotel Marina$/)
 
   await expectNoBlockingViolations(page)
 })

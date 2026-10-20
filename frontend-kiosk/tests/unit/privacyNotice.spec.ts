@@ -52,7 +52,11 @@ describe('RF-KI-09 / RL-09 — aviso de privacidad desde la marca', () => {
   it('una copia anterior a la 2.2.0, sin `privacy_notice`, es el generico (no rompe la marca)', () => {
     cacheBranding({})
 
-    expect(readPrivacyNotice()).toEqual({ controllerName: null, policyUrl: null })
+    expect(readPrivacyNotice()).toEqual({
+      controllerName: null,
+      policyUrl: null,
+      retentionYears: null,
+    })
     const wrapper = mountNotice()
     expect(wrapper.text()).toContain('la empresa titular de este centro')
     expect(wrapper.find('[data-testid="privacy-policy-url"]').exists()).toBe(false)
@@ -122,5 +126,73 @@ describe('RF-KI-09 / RL-09 — aviso de privacidad desde la marca', () => {
     expect(wrapper.find('a').exists()).toBe(false)
     expect(wrapper.find('button').exists()).toBe(false)
     expect(wrapper.html()).not.toContain('javascript:')
+  })
+})
+
+describe('RF-KI-09 / RL-09 — plazo de conservacion y reclamacion (art. 13 RGPD, reglas duras 13 y 14)', () => {
+  function mountWithYears(years: number | null | undefined, locale: 'es' | 'en' = 'es') {
+    return mount(PrivacyNoticePanel, {
+      props: {
+        notice: {
+          controllerName: null,
+          policyUrl: null,
+          ...(years === undefined ? {} : { retentionYears: years }),
+        },
+      },
+      global: { plugins: [createAppI18n(locale)] },
+    })
+  }
+
+  it('interpola el plazo del perfil, no uno fijo', () => {
+    expect(mountWithYears(7).text()).toContain(
+      'Conservación: 7 años, según la normativa aplicable.',
+    )
+    expect(mountWithYears(7).text()).not.toContain('4 años')
+  })
+
+  it('usa el singular con un solo año, en espanol y en ingles', () => {
+    expect(mountWithYears(1).text()).toContain('Conservación: 1 año, según')
+    expect(mountWithYears(1, 'en').text()).toContain('Retention: 1 year, as required')
+    expect(mountWithYears(5, 'en').text()).toContain('Retention: 5 years, as required')
+  })
+
+  it.each([[null], [undefined], [0], [-2], [2.5]])(
+    'con %s, redaccion generica sin cifra',
+    (years) => {
+      const text = mountWithYears(years as number | null | undefined).text()
+      expect(text).toContain('Conservación: el plazo que fija la normativa aplicable.')
+      expect(text).not.toMatch(/Conservación: \S*\d/)
+    },
+  )
+
+  it('una copia de la marca anterior a la 2.3.0, sin retention_years, no rompe y va sin cifra', () => {
+    cacheBranding({
+      privacy_notice: { controller_name: 'Hotel Marina S.L.', policy_url: null },
+    })
+    const wrapper = mountNotice()
+
+    expect(readPrivacyNotice().retentionYears).toBeNull()
+    expect(wrapper.text()).toContain('Hotel Marina S.L.')
+    expect(wrapper.text()).toContain('el plazo que fija la normativa aplicable')
+  })
+
+  it('una copia con el plazo lo enseña sin red', () => {
+    cacheBranding({
+      privacy_notice: { controller_name: null, policy_url: null, retention_years: 6 },
+    })
+
+    expect(mountNotice().text()).toContain('Conservación: 6 años')
+  })
+
+  it('menciona el derecho a reclamar ante la AEPD y no promete sin matizar', () => {
+    const es = mountWithYears(4).text()
+    expect(es).toContain('reclamar ante la Agencia Española de Protección de Datos')
+    expect(es).toContain('obligación legal')
+    expect(es).toContain('pueden estar limitados')
+
+    const en = mountWithYears(4, 'en').text()
+    expect(en).toContain('complain to the Spanish Data Protection Agency')
+    expect(en).toContain('legal obligation')
+    expect(en).toContain('may be limited')
   })
 })

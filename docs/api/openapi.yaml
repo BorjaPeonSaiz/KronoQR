@@ -1968,6 +1968,9 @@ paths:
       responses:
         '200':
           description: Sesion iniciada. El token viaja como `Bearer` en cada peticion posterior.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -1993,6 +1996,9 @@ paths:
             Contrasena correcta y **sesion todavia no emitida**: falta el segundo
             factor (RS-06). El token que viaja aqui solo sirve para los tres
             endpoints de `/auth/2fa/*`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2059,6 +2065,9 @@ paths:
       responses:
         '200':
           description: Sesion iniciada, ya con los ambitos del rol.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2107,6 +2116,9 @@ paths:
       responses:
         '200':
           description: Secreto emitido y pendiente de confirmar.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2159,6 +2171,9 @@ paths:
       responses:
         '200':
           description: Segundo factor activo y sesion iniciada.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2200,6 +2215,9 @@ paths:
       responses:
         '204':
           description: Sesion cerrada. El token deja de ser valido de inmediato.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
@@ -2237,6 +2255,9 @@ paths:
       responses:
         '200':
           description: Sesion en curso.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2359,6 +2380,9 @@ paths:
             valer; esta sigue abierta y, si era una sesion `password:change`,
             lleva ya los ambitos de su rol. `GET /auth/me` devuelve
             `password_change_required: false`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3011,6 +3035,16 @@ paths:
             Sesion abierta. El token viaja como `Bearer` en las tres rutas
             restantes del portal y en ninguna mas: no alcanza ningun endpoint de
             gestion, porque su unico ambito es `self:read`.
+          headers:
+            Cache-Control:
+              description: |
+                Siempre `no-store` (2.3.0): el cuerpo lleva el token de la sesion
+                y el nombre de la persona. El portal se abre en el ordenador
+                compartido de la sala de personal, y ni el navegador ni un
+                proxy pueden guardarlo.
+              schema:
+                type: string
+                examples: ['no-store, private']
           content:
             application/json:
               schema:
@@ -3124,6 +3158,18 @@ paths:
             Las jornadas del rango, de la mas antigua a la mas reciente. Sin
             jornadas en el rango, `data` viene vacio: no haber trabajado esos
             dias es una respuesta.
+          headers:
+            Cache-Control:
+              description: |
+                Siempre `no-store` (V4-PO-1, 2.3.0): el cuerpo es el registro
+                horario de una persona, y el portal se abre en el ordenador
+                compartido de la sala de personal. Con el `no-cache` por omision
+                el navegador podia conservarlo en su cache de disco y enseñarselo
+                a quien se sentara despues. Es la misma cabecera que la descarga
+                de `GET /api/v1/me/export`.
+              schema:
+                type: string
+                examples: ['no-store, private']
           content:
             application/json:
               schema:
@@ -3232,7 +3278,13 @@ paths:
                 pattern: '^[0-9a-f]{64}$'
               example: 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
             X-Kronoqr-Report-Rows:
-              description: Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+              description: |
+                Con los dos formatos (en CSV desde la 2.3.0). Filas de datos de
+                la tabla del documento: tramos, jornadas sin tramos y
+                correcciones, sin contar la cabecera de criterios ni los rotulos.
+                El CSV y el PDF del mismo registro dan el mismo numero. Un
+                periodo sin jornadas da `0`, y es lo que el portal usa para decir
+                que no hay nada que descargar en ese periodo.
               schema:
                 type: integer
                 minimum: 0
@@ -4411,6 +4463,7 @@ paths:
                   value:
                     employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
                     time_zone: Europe/Madrid
+                    today: '2026-03-20'
                     from: '2026-03-14'
                     to: '2026-03-14'
                     data:
@@ -8586,6 +8639,10 @@ paths:
         claves de `installation_settings` solo las tres `BRANDING_*`, las dos
         `LOCALE_*` y las dos `PRIVACY_*`, ya resueltas por la cascada de RF-PD-01;
         ningun umbral operativo ni ningun ajuste de funcionamiento viaja por aqui.
+        Del perfil de cumplimiento sale **un unico dato**, el plazo de
+        conservacion del registro (`privacy_notice.retention_years`, 2.3.0),
+        porque el art. 13.2.a RGPD obliga a decirlo en el aviso; ningun otro
+        umbral del perfil.
         Lo que revela —el nombre del hotel y su color— es lo mismo que revela la
         tarjeta impresa que cada empleado lleva en el bolsillo. **El responsable y
         la URL de la politica no son un dato operativo sino informacion que el
@@ -8640,6 +8697,7 @@ paths:
                     privacy_notice:
                       controller_name: null
                       policy_url: null
+                      retention_years: 4
                 hotel:
                   summary: Un hotel con nombre, color, logotipo y aviso de privacidad propios
                   value:
@@ -8652,6 +8710,7 @@ paths:
                     privacy_notice:
                       controller_name: Hoteles Marina del Sur, S.L.
                       policy_url: https://www.hotelmarina.example/privacidad-plantilla
+                      retention_years: 4
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -9635,6 +9694,9 @@ paths:
           description: |
             Cuenta creada. Falta activar su segundo factor: el `challenge_token`
             solo sirve para `/api/v1/auth/2fa/*`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -10918,6 +10980,18 @@ components:
 
         **El correo de aviso nunca lo lleva**: lleva el enlace a la pantalla, donde
         se pide uno fresco.
+
+  headers:
+    NoStoreCacheControl:
+      description: |
+        Siempre `no-store, private` (2.3.0, bloque 8): el cuerpo es una
+        credencial —un token de sesion, el secreto TOTP del alta— o la abre.
+        Ni el navegador ni un proxy pueden guardarlo; el panel y el portal se
+        abren a veces en un ordenador compartido. En `/api/v1/auth/*` lo pone un
+        middleware de grupo, asi que vale para todas sus respuestas.
+      schema:
+        type: string
+        examples: ['no-store, private']
 
   parameters:
     IdempotencyKey:
@@ -15680,13 +15754,19 @@ components:
         privacy_notice:
           type: object
           additionalProperties: false
-          required: [controller_name, policy_url]
+          required: [controller_name, policy_url, retention_years]
           description: |
             Lo que el aviso de privacidad del quiosco necesita del cliente
             (RF-KI-09, RL-09, art. 13 RGPD en capa 1). **El quiosco lo guarda con
             el resto de la marca** y lo sigue enseñando sin red; si nunca lo
             recibio, enseña la redaccion generica. Un cliente que guardo una copia
             anterior a la 2.2.0, sin este objeto, la trata como «sin configurar».
+
+            **El portal del empleado lo enseña tambien** en su pantalla de acceso,
+            donde la persona teclea su codigo y su PIN (D8 de la 2.3.0, V3-PO-4,
+            art. 13 RGPD). Lee este mismo objeto: no hay un segundo ajuste ni un
+            segundo endpoint, y con los dos campos a `null` enseña la redaccion
+            generica de sus textos (i18n).
           properties:
             controller_name:
               type: ['string', 'null']
@@ -15711,6 +15791,22 @@ components:
                 legal, y cualquier otro esquema seria una puerta a ejecutar codigo
                 desde el. `null` mientras no se configure: el aviso dice entonces
                 que la politica completa esta disponible en recepcion.
+            retention_years:
+              type: ['integer', 'null']
+              minimum: 1
+              description: |
+                **Cuantos años se conserva el registro de jornada**, el plazo
+                `retention_years` del perfil de cumplimiento vigente del centro
+                (RF-PD-07, RL-02, regla dura 14), para que el aviso diga la
+                cifra real en lugar de una escrita en los textos (2.3.0). El
+                quiosco y el portal la interpolan en su redaccion.
+
+                `null` cuando no se puede resolver —la instalacion aun no tiene
+                centro, o el perfil no se puede leer—: el aviso dice entonces
+                que el plazo es el que fija la normativa aplicable, sin cifra.
+                Una copia guardada anterior a la 2.3.0, sin este campo, se
+                trata igual que `null`.
+              example: 4
         application_name:
           type: string
           minLength: 1
@@ -17646,7 +17742,7 @@ components:
       description: |
         Registro horario de una persona en un rango de jornadas (RF-PA-03).
       additionalProperties: false
-      required: [employee_uuid, time_zone, from, to, data, meta]
+      required: [employee_uuid, time_zone, today, from, to, data, meta]
       properties:
         employee_uuid:
           type: string
@@ -17654,6 +17750,20 @@ components:
           description: El empleado consultado. Nunca su clave interna ni su nombre.
         time_zone:
           $ref: '#/components/schemas/TimeZoneName'
+        today:
+          type: string
+          format: date
+          description: |
+            **El dia civil de hoy en la zona del centro** (`time_zone`), segun el
+            reloj del servidor (2.3.0, bloque 8). No depende del rango pedido ni
+            de la zona ni del reloj del navegador: a las 00:30 de Madrid ya es el
+            dia siguiente aunque en UTC sea todavia el anterior, y el cambio de
+            hora lo resuelve la zona del centro (reglas duras 2 y 3).
+
+            Existe para que un cliente sepa que jornada es «hoy» sin una segunda
+            peticion sin rango: en el portal, el limite por IP lo comparte toda
+            la wifi del hotel.
+          example: '2026-03-29'
         from:
           type: string
           format: date

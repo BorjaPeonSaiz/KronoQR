@@ -18,7 +18,7 @@
 // ya ha descartado cualquier URL que no sea https ASCII; aqui se vuelve a
 // comprobar antes de pintar la direccion y generar el QR: es lo ultimo que se
 // interpone entre una copia manipulada de `localStorage` y la pantalla.
-import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
+import { safePolicyUrl, type PrivacyNotice } from '@kronoqr/web-kit/branding'
 import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -45,8 +45,7 @@ const props = defineProps<{
  * profundidad sobre `parseBranding`, que ya lo exige.
  */
 const policyUrl = computed<string | null>(() => {
-  const url = props.notice.policyUrl
-  return url !== null && /^https:\/\/[!-~]+$/.test(url) ? url : null
+  return safePolicyUrl(props.notice.policyUrl)
 })
 
 /** El host que se enseña bajo el QR: lo unico que una persona puede comprobar de un vistazo. */
@@ -59,11 +58,23 @@ const policyHost = computed<string>(() => {
   }
 })
 
+const { t } = useI18n()
+
+/**
+ * El plazo sale del perfil de cumplimiento (regla dura 14), no del texto. Sin cifra
+ * (`null`, ausente en una copia anterior a la 2.3.0, o no entero >= 1): redaccion
+ * generica, que no promete un numero que nadie ha configurado.
+ */
+const retentionText = computed<string>(() => {
+  const years = props.notice.retentionYears
+  return typeof years === 'number' && Number.isInteger(years) && years >= 1
+    ? t('privacy.retentionYears', { n: years }, years)
+    : t('privacy.retentionGeneric')
+})
+
 // El componente pinta dos raices —el aviso y, cuando toca, el dialogo del QR—,
 // asi que las clases del padre se aplican a mano sobre el aviso.
 defineOptions({ inheritAttrs: false })
-
-const { t } = useI18n()
 
 const dialogOpen = ref(false)
 const qr = ref<QrPath | null>(null)
@@ -231,8 +242,8 @@ watch(policyUrl, () => {
           ? t('privacy.controllerUnknown')
           : t('privacy.controllerKnown', { controller: props.notice.controllerName })
       }}
-      {{ t('privacy.purpose') }} {{ t('privacy.basis') }} {{ t('privacy.retention') }}
-      {{ t('privacy.rights') }} {{ t('privacy.noBiometrics') }}
+      {{ t('privacy.purpose') }} {{ t('privacy.basis') }} {{ retentionText }}
+      {{ t('privacy.rights') }} {{ t('privacy.complaint') }} {{ t('privacy.noBiometrics') }}
     </p>
 
     <!-- `kiosk-touch` fija el minimo de 48 px en el CONTROL, no en el texto:

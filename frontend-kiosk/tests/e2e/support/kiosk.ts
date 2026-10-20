@@ -328,6 +328,8 @@ export interface BrandingStubOptions {
   readonly privacyNotice?: {
     readonly controllerName: string | null
     readonly policyUrl: string | null
+    /** Plazo de conservacion del perfil; sin esto, `null` (redaccion sin cifra). */
+    readonly retentionYears?: number | null
   }
 }
 
@@ -345,6 +347,7 @@ export async function stubBrandingApi(
   const privacyNotice = {
     controller_name: options.privacyNotice?.controllerName ?? null,
     policy_url: options.privacyNotice?.policyUrl ?? null,
+    retention_years: options.privacyNotice?.retentionYears ?? null,
   }
   const body =
     variant === 'hotel-marina'

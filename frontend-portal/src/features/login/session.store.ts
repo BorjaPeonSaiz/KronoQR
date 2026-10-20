@@ -21,6 +21,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { PortalEmployee, PortalLoginRequest } from '@/shared/api/types'
+import { useLocaleChoiceStore } from '@/shared/i18n/locale.store'
 import { logInToPortal as logInRequest, logOutOfPortal as logOutRequest } from './login.api'
 
 const STORAGE_KEY = 'kronoqr.portal.session'
@@ -86,47 +87,127 @@ function writeStored(value: StoredPortalSession | null): void {
   }
 }
 
-function isExpired(expiresAt: string | null, now: Date): boolean {
+/** Instante de caducidad en ms, o `null` si no hay caducidad legible. */
+function expiryInstant(expiresAt: string | null): number | null {
   if (expiresAt === null) {
-    return false
+    return null
   }
 
   const instant = new Date(expiresAt).getTime()
 
-  return Number.isFinite(instant) && instant <= now.getTime()
+  return Number.isFinite(instant) ? instant : null
 }
 
+/** `setTimeout` guarda el retardo en 32 bits con signo: pasado esto se dispara al instante. */
+const MAX_TIMER_MS = 2_147_483_647
+
+/** Por que ya no hay sesion, cuando no ha sido porque la persona pulsa «Salir». */
+export type SessionEndReason = 'expired'
+
 export const useSessionStore = defineStore('portal-session', () => {
-  const stored = readStored()
+  // Una sesion guardada que ya caduco no se recupera: se descarta y se avisa en
+  // el acceso. Se comprueba aqui, una vez, y no dentro de un `computed`: un
+  // `computed` que lee el reloj no se reevalua cuando el reloj avanza.
+  const loaded = readStored()
+  const loadedExpiry = expiryInstant(loaded?.expiresAt ?? null)
+  const stored = loadedExpiry !== null && loadedExpiry <= Date.now() ? null : loaded
 
   const token = ref<string | null>(stored?.token ?? null)
   const expiresAt = ref<string | null>(stored?.expiresAt ?? null)
   const employee = ref<PortalEmployee | null>(stored?.employee ?? null)
+  /** Se pone cuando la sesion termina sola (caducidad o `401`); se limpia al entrar. */
+  const endedReason = ref<SessionEndReason | null>(
+    loaded !== null && stored === null ? 'expired' : null,
+  )
+  let expiryTimer: ReturnType<typeof setTimeout> | null = null
+
+  if (loaded !== null && stored === null) {
+    writeStored(null)
+  }
 
   /**
-   * Valida solo la caducidad guardada. No hay `GET /me` que confirme el token
-   * contra el servidor (el portal no tiene ese endpoint): un token revocado o
-   * ya vencido en el servidor se descubre en la primera peticion real, y el
-   * gestor de `401` de `@kronoqr/web-kit/http` cierra la sesion entonces.
+   * Hay sesion mientras haya token. La caducidad no se lee aqui: la hace valer
+   * `expireIfDue`, llamado por un temporizador hasta `expires_at` y al volver a
+   * la pestana. No hay `GET /me` que confirme el token contra el servidor: uno
+   * revocado en el servidor se descubre en la primera peticion real, y el
+   * gestor de `401` de `@kronoqr/web-kit/http` llama a `expire()`.
    */
-  const isAuthenticated = computed(
-    () => token.value !== null && !isExpired(expiresAt.value, new Date()),
-  )
+  const isAuthenticated = computed(() => token.value !== null)
+
+  function stopExpiryTimer(): void {
+    if (expiryTimer !== null) {
+      clearTimeout(expiryTimer)
+      expiryTimer = null
+    }
+  }
 
   function clear(): void {
+    stopExpiryTimer()
     token.value = null
     expiresAt.value = null
     employee.value = null
     writeStored(null)
+    // El idioma elegido a mano era de quien estaba delante: no pasa a la persona
+    // siguiente del mismo dispositivo.
+    useLocaleChoiceStore().reset()
   }
 
+  /**
+   * La sesion termina sola: caducidad o `401` con la sesion abierta. Borra lo
+   * local y deja dicho por que, para que el acceso lo explique. Sin sesion no
+   * hace nada: un `401` que llega tras pulsar «Salir» no es una caducidad.
+   */
+  function expire(): void {
+    if (token.value === null) {
+      return
+    }
+
+    clear()
+    endedReason.value = 'expired'
+  }
+
+  /** Cierra la sesion si `expires_at` ya paso; si no, vuelve a armar el temporizador. */
+  function expireIfDue(): void {
+    const instant = expiryInstant(expiresAt.value)
+
+    if (token.value === null || instant === null) {
+      return
+    }
+
+    if (instant <= Date.now()) {
+      expire()
+
+      return
+    }
+
+    stopExpiryTimer()
+    expiryTimer = setTimeout(expireIfDue, Math.min(instant - Date.now(), MAX_TIMER_MS))
+  }
+
+  expireIfDue()
+
   async function logIn(credentials: PortalLoginRequest): Promise<void> {
-    const session = await logInRequest(credentials)
+    const { session, serverNow } = await logInRequest(credentials)
+
+    // La vida de la sesion se mide contra la hora del SERVIDOR (cabecera `Date`),
+    // no contra el reloj del dispositivo: un movil con la hora mal puesta no
+    // puede cerrarla al instante ni mantenerla abierta de mas. `expiresAt` se
+    // guarda ya en el reloj de este dispositivo, para que el temporizador y la
+    // recarga de la pestana sigan sin depender de el. Sin cabecera legible, se
+    // usa tal cual la caducidad que manda el servidor.
+    const lifetimeMs =
+      serverNow === null ? null : Date.parse(session.expires_at) - serverNow.getTime()
+    const localExpiry =
+      lifetimeMs !== null && Number.isFinite(lifetimeMs)
+        ? new Date(Date.now() + lifetimeMs).toISOString()
+        : session.expires_at
 
     token.value = session.token
-    expiresAt.value = session.expires_at
+    expiresAt.value = localExpiry
     employee.value = session.employee
-    writeStored({ token: session.token, expiresAt: session.expires_at, employee: session.employee })
+    endedReason.value = null
+    writeStored({ token: session.token, expiresAt: localExpiry, employee: session.employee })
+    expireIfDue()
   }
 
   /** Solo olvida la sesion en este dispositivo. Para la caducidad, no para el boton «Salir». */
@@ -142,6 +223,11 @@ export const useSessionStore = defineStore('portal-session', () => {
   async function signOut(): Promise<void> {
     const current = token.value
 
+    // La sesion local se cierra ANTES de esperar al servidor: un `401` de otra
+    // peticion que llegue mientras tanto ya no encuentra sesion que caducar
+    // (`expire()` no hace nada sin token) ni la presenta como «sesion caducada».
+    clear()
+
     if (current !== null) {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS)
@@ -154,9 +240,19 @@ export const useSessionStore = defineStore('portal-session', () => {
         clearTimeout(timer)
       }
     }
-
-    clear()
   }
 
-  return { token, expiresAt, employee, isAuthenticated, logIn, signOut, signOutLocally, clear }
+  return {
+    token,
+    expiresAt,
+    employee,
+    endedReason,
+    isAuthenticated,
+    logIn,
+    signOut,
+    signOutLocally,
+    expire,
+    expireIfDue,
+    clear,
+  }
 })

@@ -18,12 +18,36 @@
     "submit": "Entrar",
     "submitting": "Entrando…",
     "forgotPin": "¿No recuerdas tu PIN o tu código? Pide a Recursos Humanos que te lo restablezca. No se envía por correo electrónico ni por ningún enlace.",
+    "sessionExpired": {
+      "title": "Tu sesión ha caducado",
+      "advice": "Por seguridad, la sesión se cierra a las pocas horas. Vuelve a entrar con tu código y tu PIN y seguirás donde estabas."
+    },
     "originLocked": {
       "title": "Demasiados intentos desde esta conexión",
       "advice": "Inténtalo de nuevo en {minutes} minuto. | Inténtalo de nuevo en {minutes} minutos.",
       "alternative": "Puedes seguir intentándolo desde otra conexión o pedir ayuda a Recursos Humanos.",
       "countdown": "El botón «Entrar» estará disponible en {time}."
     }
+  },
+  "privacy": {
+    "heading": "Aviso de protección de datos",
+    "controllerKnown": "Responsable: {controller}.",
+    "controllerUnknown": "Responsable: la empresa titular de este centro de trabajo.",
+    "purpose": "Finalidad: que puedas consultar tu propio registro diario de jornada (art. 34.9 del Estatuto de los Trabajadores).",
+    "basis": "Base jurídica: cumplimiento de una obligación legal.",
+    "retention": "Conservación: el tiempo que exige la normativa aplicable.",
+    "retentionYears": "Conservación: {count} año, según la normativa aplicable. | Conservación: {count} años, según la normativa aplicable.",
+    "rights": "Tus derechos: acceder a tus datos y pedir que se rectifiquen si son inexactos. Como el tratamiento se basa en una obligación legal, otros derechos (supresión, oposición, portabilidad) pueden estar limitados. Solicítalos a Recursos Humanos.",
+    "complaint": "Si crees que tus datos no se tratan bien, puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).",
+    "noBiometrics": "Este sistema no trata datos biométricos.",
+    "policyLink": "Leer la política de privacidad completa",
+    "opensInNewTab": "(se abre en una pestaña nueva)",
+    "policyPending": "La política completa está disponible en Recursos Humanos."
+  },
+  "language": {
+    "label": "Idioma",
+    "es": "Español",
+    "en": "English"
   },
   "common": {
     "updating": "Actualizando…"
@@ -78,14 +102,15 @@
   },
   "myRecords": {
     "title": "Mi registro horario",
+    "howToRead": "Cómo leer esta pantalla",
     "subtitle": "Tus jornadas, tus tramos y el total de cada día. Un turno que empezó a las 22:00 pertenece al día en que empezó, aunque terminara al día siguiente. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
     "duration": "{hours} h {minutes} min",
     "loading": "Cargando tu registro…",
     "summary": {
       "label": "Resumen del periodo",
       "periodTotal": "Total del periodo",
-      "days": "{count} jornadas con registro, del {from} al {to}.",
-      "provisional": "Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
+      "days": "{count} jornada con registro, del {from} al {to}. | {count} jornadas con registro, del {from} al {to}.",
+      "provisional": "Este total todavía puede cambiar: {count} jornada tiene un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos. | Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
       "today": "Hoy",
       "todayEmpty": "Todavía no tienes ningún fichaje registrado hoy."
     },
@@ -105,7 +130,7 @@
       "description": "No es un fallo de la consulta: en esos días no tienes ningún fichaje registrado. Prueba con otro periodo."
     },
     "announce": {
-      "results": "{count} jornadas entre el {from} y el {to}."
+      "results": "{count} jornada entre el {from} y el {to}. | {count} jornadas entre el {from} y el {to}."
     },
     "day": {
       "total": "Total de la jornada",
@@ -122,7 +147,8 @@
       "out": "Salida",
       "duration": "Duración",
       "source": "Cómo se registró",
-      "queued": "Se registró {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
+      "queuedNoMoment": "Llegó {delay} después de fichar (cola sin conexión del quiosco). Cuenta la hora a la que fichaste.",
+      "queued": "Recibida {moment}, {delay} después de fichar (cola sin conexión del quiosco). Cuenta la hora a la que fichaste.",
       "open": "Sin cerrar",
       "openHint": "Este turno sigue abierto.",
       "nextDay": "(día siguiente)",
@@ -148,6 +174,7 @@
       "reason": "Motivo",
       "caption": "Qué cambió la corrección del {moment}",
       "fields": {
+        "moment": "Versión del tramo",
         "in": "Entrada",
         "out": "Salida",
         "worked": "Tiempo trabajado"
@@ -182,7 +209,9 @@
     "contents": {
       "entries": "Una fila por cada tramo trabajado, con entrada, salida, duración y el total de cada jornada.",
       "corrections": "Una fila por cada corrección de tu registro, con quién la hizo, cuándo y por qué.",
-      "format": "Fichero CSV o PDF, con las horas en formato HH:MM, nunca en decimal. El PDF es un documento sellado que puedes presentar ante un tercero."
+      "format": "Fichero CSV o PDF, con las horas en formato HH:MM, nunca en decimal. El PDF es un documento sellado que puedes presentar ante un tercero.",
+      "zone": "Todas las horas del PDF van en la zona horaria del centro ({zone}), la misma que ves en pantalla, no la de tu móvil u ordenador.",
+      "zoneUnknown": "Todas las horas del PDF van en la zona horaria del centro, no en la de tu móvil u ordenador."
     },
     "filters": {
       "legend": "Periodo a descargar",
@@ -211,9 +240,11 @@
       "message": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
       "messageNoWait": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible."
     },
+    "empty": "No tienes ninguna jornada en ese periodo. El fichero se ha descargado igualmente, pero solo lleva la cabecera con los criterios: prueba con otras fechas.",
     "downloading": "Generando la descarga…",
     "announce": {
-      "done": "Descarga generada. Revisa las descargas de tu dispositivo."
+      "done": "Descarga generada. Revisa las descargas de tu dispositivo.",
+      "empty": "No hay jornadas en ese periodo. Se ha descargado el fichero, solo con la cabecera de criterios."
     }
   }
 }

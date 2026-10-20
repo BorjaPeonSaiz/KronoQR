@@ -18,12 +18,36 @@
     "submit": "Sign in",
     "submitting": "Signing in…",
     "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link.",
+    "sessionExpired": {
+      "title": "Your session has expired",
+      "advice": "For security, the session closes after a few hours. Sign in again with your code and PIN and you will be back where you were."
+    },
     "originLocked": {
       "title": "Too many attempts from this connection",
       "advice": "Try again in {minutes} minute. | Try again in {minutes} minutes.",
       "alternative": "You can also try from another connection or ask Human Resources for help.",
       "countdown": "The \"Sign in\" button will be available in {time}."
     }
+  },
+  "privacy": {
+    "heading": "Data protection notice",
+    "controllerKnown": "Controller: {controller}.",
+    "controllerUnknown": "Controller: the company that owns this workplace.",
+    "purpose": "Purpose: so you can check your own daily working-time record (art. 34.9 of the Workers' Statute).",
+    "basis": "Legal basis: compliance with a legal obligation.",
+    "retention": "Retention: as long as the applicable regulations require.",
+    "retentionYears": "Retention: {count} year, as required by the applicable regulations. | Retention: {count} years, as required by the applicable regulations.",
+    "rights": "Your rights: to access your data and to ask for it to be corrected if it is inaccurate. Because the processing rests on a legal obligation, other rights (erasure, objection, portability) may be limited. Ask Human Resources.",
+    "complaint": "If you think your data is not being handled properly, you can complain to the Spanish Data Protection Agency (aepd.es).",
+    "noBiometrics": "This system does not process biometric data.",
+    "policyLink": "Read the full privacy policy",
+    "opensInNewTab": "(opens in a new tab)",
+    "policyPending": "The full policy is available from Human Resources."
+  },
+  "language": {
+    "label": "Language",
+    "es": "Español",
+    "en": "English"
   },
   "common": {
     "updating": "Updating…"
@@ -78,14 +102,15 @@
   },
   "myRecords": {
     "title": "My working time record",
+    "howToRead": "How to read this screen",
     "subtitle": "Your work days, your shifts and the total for each day. A shift that started at 22:00 belongs to the day it started, even if it ended the next day. Nothing is ever deleted: if something was corrected, it is explained below.",
     "duration": "{hours} h {minutes} min",
     "loading": "Loading your record…",
     "summary": {
       "label": "Period summary",
       "periodTotal": "Total for the period",
-      "days": "{count} work days with records, from {from} to {to}.",
-      "provisional": "This total may still change: {count} work days have an open shift, a pending review or a total that does not match their shifts.",
+      "days": "{count} work day with records, from {from} to {to}. | {count} work days with records, from {from} to {to}.",
+      "provisional": "This total may still change: {count} work day has an open shift, a pending review or a total that does not match its shifts. | This total may still change: {count} work days have an open shift, a pending review or a total that does not match their shifts.",
       "today": "Today",
       "todayEmpty": "You have no clock-in recorded today yet."
     },
@@ -105,7 +130,7 @@
       "description": "This is not a search error: you have no recorded clockings on those days. Try another period."
     },
     "announce": {
-      "results": "{count} work days between {from} and {to}."
+      "results": "{count} work day between {from} and {to}. | {count} work days between {from} and {to}."
     },
     "day": {
       "total": "Total for the day",
@@ -122,7 +147,8 @@
       "out": "Clock out",
       "duration": "Duration",
       "source": "How it was recorded",
-      "queued": "Recorded {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
+      "queuedNoMoment": "Arrived {delay} after you clocked (kiosk offline queue). What counts is the time you clocked.",
+      "queued": "Received {moment}, {delay} after you clocked (kiosk offline queue). What counts is the time you clocked.",
       "open": "Not closed",
       "openHint": "This shift is still open.",
       "nextDay": "(next day)",
@@ -148,6 +174,7 @@
       "reason": "Reason",
       "caption": "What the correction on {moment} changed",
       "fields": {
+        "moment": "Shift version",
         "in": "Clock in",
         "out": "Clock out",
         "worked": "Time worked"
@@ -182,7 +209,9 @@
     "contents": {
       "entries": "One row for every shift worked, with clock in, clock out, duration and the total for each work day.",
       "corrections": "One row for every correction to your record, with who made it, when and why.",
-      "format": "CSV or PDF file, with times as HH:MM, never as a decimal. The PDF is a sealed document you can show to a third party."
+      "format": "CSV or PDF file, with times as HH:MM, never as a decimal. The PDF is a sealed document you can show to a third party.",
+      "zone": "Every time in the PDF is in the centre's time zone ({zone}), the same one you see on screen, not your phone's or computer's.",
+      "zoneUnknown": "Every time in the PDF is in the centre's time zone, not your phone's or computer's."
     },
     "filters": {
       "legend": "Period to download",
@@ -211,9 +240,11 @@
       "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
       "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available."
     },
+    "empty": "You have no work days in that period. The file was downloaded anyway, but it only has the criteria header: try other dates.",
     "downloading": "Generating the download…",
     "announce": {
-      "done": "Download ready. Check your device's downloads."
+      "done": "Download ready. Check your device's downloads.",
+      "empty": "No work days in that period. The file was downloaded, with the criteria header only."
     }
   }
 }

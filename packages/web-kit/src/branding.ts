@@ -42,6 +42,12 @@ export interface PrivacyNotice {
   readonly controllerName: string | null
   /** Politica completa (capa 2). SOLO `https`: acaba en texto y en un QR, nunca en un enlace. */
   readonly policyUrl: string | null
+  /**
+   * Anos que el perfil de cumplimiento conserva el registro (`retention_years`,
+   * >= 1). `null` o ausente = no se sabe (copia anterior a la 2.3.0): el aviso
+   * usa entonces la redaccion generica, sin cifra.
+   */
+  readonly retentionYears?: number | null
 }
 
 /** La marca tal como la entrega `GET /api/v1/branding`, en camelCase. */
@@ -70,7 +76,7 @@ export const PRODUCT_BRANDING: Branding = Object.freeze({
   accentColor: null,
   logoUrl: null,
   locales: Object.freeze({ default: 'es', available: Object.freeze(['es']) }),
-  privacyNotice: Object.freeze({ controllerName: null, policyUrl: null }),
+  privacyNotice: Object.freeze({ controllerName: null, policyUrl: null, retentionYears: null }),
 })
 
 /**
@@ -100,6 +106,18 @@ const CONTROLLER_MAX = 160
 // Controles (Cc) y de formato (Cf: ancho cero, marcas bidireccionales).
 const CONTROL_CHARS = /\p{Cc}|\p{Cf}/u
 
+/**
+ * La URL de la politica, lista para un enlace o un QR: solo `https`, solo ASCII
+ * imprimible (sin espacios, tabuladores ni controles) y sin barra invertida. La
+ * validacion fuerte ya la hizo `parseBranding`; esta es la segunda llave, para
+ * quien pinta una URL que no ha pasado por alli (una copia guardada, una prueba).
+ */
+export function safePolicyUrl(url: string | null | undefined): string | null {
+  return typeof url === 'string' && /^https:\/\/[!-~]+$/.test(url) && !url.includes('\\')
+    ? url
+    : null
+}
+
 function parsePolicyUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > POLICY_URL_MAX || !POLICY_URL.test(value)) {
     return null
@@ -114,6 +132,13 @@ function parsePolicyUrl(value: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/** Entero >= 1 y razonable; cualquier otra cosa (copia manipulada incluida) es «sin cifra». */
+function parseRetentionYears(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 100
+    ? value
+    : null
 }
 
 function parseControllerName(value: unknown): string | null {
@@ -132,12 +157,13 @@ function parseControllerName(value: unknown): string | null {
  */
 function parsePrivacyNotice(value: unknown): PrivacyNotice {
   if (typeof value !== 'object' || value === null) {
-    return { controllerName: null, policyUrl: null }
+    return { controllerName: null, policyUrl: null, retentionYears: null }
   }
   const record = value as Record<string, unknown>
   return {
     controllerName: parseControllerName(record['controller_name']),
     policyUrl: parsePolicyUrl(record['policy_url']),
+    retentionYears: parseRetentionYears(record['retention_years']),
   }
 }
 

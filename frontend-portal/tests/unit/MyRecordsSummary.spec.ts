@@ -15,7 +15,7 @@ import { employeeWorkDays, portalEmployee, shiftEntry, workDay } from './support
 import { createTestPinia, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 const TODAY = '2026-03-16'
-const PAST = { from: '2026-02-14', to: TODAY }
+const PAST = { from: '2026-02-14', to: TODAY, today: TODAY }
 
 function entryOfMinutes(minutes: number, date: string): WorkDayShiftEntry {
   return shiftEntry({

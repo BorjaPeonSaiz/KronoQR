@@ -4,8 +4,12 @@
 // Lo que esta tabla se toma en serio:
 //
 //  - **Las partes tienen que sumar el total.** El pie enseña la suma de los
-//    tramos y, si el servidor declara otro total para el dia, enseña los dos y
-//    avisa: nunca se elige uno en silencio (RN-06, regla dura 7).
+//    tramos y, si el total del dia no coincide, enseña los dos y avisa: nunca se
+//    elige uno en silencio (RN-06, regla dura 7). HOY esa rama no puede darse
+//    con un servidor correcto: `total_minutes` y los `duration_minutes` salen de
+//    los mismos tramos (no hay `daily_totals` aparte en el contrato). Se queda
+//    como defensa en profundidad -un numero que acaba en una nomina no se da por
+//    bueno sin comprobar-, no como una verificacion cruzada contra otra fuente.
 //  - **Las dos marcas de cada fichaje** (regla dura 9): la hora a la que se
 //    ficho y la hora a la que el servidor la recibio. Cuando se diferencian, es
 //    que el fichaje viajo en la cola del quiosco sin conexion.
@@ -34,10 +38,13 @@ import BreakBadge from '@kronoqr/web-kit/components/BreakBadge.vue'
 import { breakBetween } from '@kronoqr/web-kit/breaks'
 import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
-  formatInstant,
+  formatDayMonthTime,
   formatLocalTime,
+  formatTimeOfDay,
   minutesBetween,
   readLocalTimestamp,
+  resolveTimeZone,
+  todayInZone,
 } from '@kronoqr/web-kit/datetime'
 import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
@@ -62,6 +69,7 @@ const QUEUE_NOTICE_MINUTES = 5
 interface MarkView {
   local: string
   nextDay: boolean
+  /** Cuando el servidor recibio la marca (HH:MM en la zona del centro), o `null` si no consta. */
   recordedAt: string | null
   queueDelayMinutes: number | null
 }
@@ -80,6 +88,26 @@ interface EntryRow {
   breakAfter: BreakBetween | null
 }
 
+/**
+ * La hora de recepcion en la zona del centro, en 24 h y con el orden de fecha
+ * del idioma (el mismo formateador que el historial, V2-PO-2). Si cae en otro dia
+ * que la marca lleva dia y mes: un fichaje que viaja en la cola puede llegar
+ * pasada la medianoche. Sin una zona valida no se pinta nada: nunca la del
+ * navegador (regla dura 3).
+ */
+function receivedMoment(recordedAt: string, markDate: string | null): string | null {
+  const zone = resolveTimeZone(props.timeZone)
+  const instant = new Date(recordedAt)
+
+  if (zone === undefined || Number.isNaN(instant.getTime())) {
+    return null
+  }
+
+  return markDate === null || todayInZone(zone, instant) === markDate
+    ? formatTimeOfDay(recordedAt, zone, locale.value)
+    : formatDayMonthTime(recordedAt, zone, locale.value)
+}
+
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
   const parts = readLocalTimestamp(localValue)
   const delay = recordedAt === null ? null : minutesBetween(utcValue, recordedAt)
@@ -87,8 +115,7 @@ function mark(utcValue: string, localValue: string, recordedAt: string | null): 
   return {
     local: formatLocalTime(localValue),
     nextDay: parts !== null && parts.date !== props.workDate,
-    recordedAt:
-      recordedAt === null ? null : formatInstant(recordedAt, props.timeZone, locale.value),
+    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, parts?.date ?? null),
     queueDelayMinutes: delay !== null && delay >= QUEUE_NOTICE_MINUTES ? delay : null,
   }
 }
@@ -116,6 +143,15 @@ const rows = computed<EntryRow[]>(() =>
 
 const summedMinutes = computed(() => sumShiftMinutes(props.entries))
 const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
+
+/** El aviso de cola; sin hora de recepcion legible no se inventa una. */
+function queuedNotice(markView: MarkView): string {
+  const delay = duration(markView.queueDelayMinutes ?? 0)
+
+  return markView.recordedAt === null
+    ? t('myRecords.entries.queuedNoMoment', { delay })
+    : t('myRecords.entries.queued', { moment: markView.recordedAt, delay })
+}
 
 function duration(minutes: number): string {
   return t('myRecords.duration', durationParts(minutes))
@@ -173,11 +209,7 @@ function duration(minutes: number): string {
                   v-if="row.clockIn.queueDelayMinutes !== null"
                   class="mt-1 block text-sm font-normal text-kq-warning"
                 >
-                  {{
-                    t('myRecords.entries.queued', {
-                      delay: duration(row.clockIn.queueDelayMinutes),
-                    })
-                  }}
+                  {{ queuedNotice(row.clockIn) }}
                 </span>
               </th>
 
@@ -197,11 +229,7 @@ function duration(minutes: number): string {
                     v-if="row.clockOut.queueDelayMinutes !== null"
                     class="mt-1 block text-sm text-kq-warning"
                   >
-                    {{
-                      t('myRecords.entries.queued', {
-                        delay: duration(row.clockOut.queueDelayMinutes),
-                      })
-                    }}
+                    {{ queuedNotice(row.clockOut) }}
                   </span>
                   <!-- Insignia «Pausa»: texto e icono, nunca solo color (WCAG
                        1.4.1). Un tramo cerrado por `break_start` no es un fin

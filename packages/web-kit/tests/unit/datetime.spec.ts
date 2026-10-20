@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatCivilDate,
+  formatDayMonthTime,
   formatInstant,
   formatInstantWithZone,
   formatLocalTime,
+  formatTimeOfDay,
   formatUtcTime,
   formatZoneLabel,
   isValidTimeZone,
@@ -187,5 +189,33 @@ describe('hora de pared en una zona', () => {
   it('una fecha invalida da null y no revienta', () => {
     expect(wallClockOf(new Date('nope'), MADRID)).toBeNull()
     expect(readWallClock(Number.NaN, MADRID)).toBeNull()
+  })
+})
+
+describe('reloj de 24 h y variantes cortas (V2-PO-2)', () => {
+  const instant = '2026-03-14T23:20:00.000Z'
+
+  it('formatInstant usa 24 h tambien en ingles, sin AM/PM', () => {
+    expect(formatInstant('2026-10-08T05:14:00Z', 'Europe/Madrid', 'en')).not.toMatch(/AM|PM/i)
+    expect(formatInstant('2026-10-08T15:14:00Z', 'Europe/Madrid', 'en')).toContain('17:14')
+  })
+
+  it('el reloj de 12 h solo sale si se pide', () => {
+    expect(
+      formatInstant('2026-10-08T15:14:00Z', 'Europe/Madrid', 'en', { hourCycle: 'h12' }),
+    ).toMatch(/PM/i)
+  })
+
+  it('formatTimeOfDay da HH:MM en la zona del centro, igual en los dos idiomas', () => {
+    expect(formatTimeOfDay(instant, 'Europe/Madrid', 'es')).toBe('00:20')
+    expect(formatTimeOfDay(instant, 'Europe/Madrid', 'en')).toBe('00:20')
+    expect(formatTimeOfDay('no es una fecha', 'Europe/Madrid', 'es')).toBe('')
+  })
+
+  it('formatDayMonthTime ordena dia y mes segun el idioma', () => {
+    // El cero del mes depende de la version de ICU: se admiten los dos.
+    expect(formatDayMonthTime(instant, 'Europe/Madrid', 'es')).toMatch(/^15\/0?3, 00:20$/)
+    expect(formatDayMonthTime(instant, 'Europe/Madrid', 'en')).toMatch(/^0?3\/15, 00:20$/)
+    expect(formatDayMonthTime('x', 'Europe/Madrid', 'es')).toBe('')
   })
 })

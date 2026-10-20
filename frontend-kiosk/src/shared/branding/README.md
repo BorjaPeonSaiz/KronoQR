@@ -27,7 +27,7 @@ quiosco:
   nunca una pantalla en blanco.
 - **El aviso de privacidad viaja con la marca.** El responsable y la URL de la politica
   (`PRIVACY_CONTROLLER_NAME`, `PRIVACY_POLICY_URL`, editables en el panel → «Marca») llegan en
-  `privacy_notice`; `readPrivacyNotice()` lo lee de la copia guardada, sin red, para
+  `privacy_notice` (con `retention_years`, el plazo del perfil de cumplimiento; sin cifra, texto generico); `readPrivacyNotice()` lo lee de la copia guardada, sin red, para
   `shared/ui/PrivacyNoticePanel.vue`. Sin copia, el aviso generico del producto.
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).

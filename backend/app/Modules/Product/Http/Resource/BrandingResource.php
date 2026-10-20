@@ -28,7 +28,12 @@ final class BrandingResource extends JsonResource
 {
     public static $wrap = null;
 
-    public function __construct(InstallationBranding $branding)
+    /**
+     * @param  int|null  $retentionYears  El plazo de conservacion del registro del
+     *                                    perfil de cumplimiento vigente, o `null`
+     *                                    si no se pudo resolver.
+     */
+    public function __construct(InstallationBranding $branding, private readonly ?int $retentionYears)
     {
         parent::__construct($branding);
     }
@@ -54,6 +59,9 @@ final class BrandingResource extends JsonResource
             'privacy_notice' => [
                 'controller_name' => $branding->privacyNotice->controllerName,
                 'policy_url' => $branding->privacyNotice->policyUrl,
+                // 2.3.0: el plazo real del perfil de cumplimiento (regla dura
+                // 14), para que el aviso no lleve una cifra escrita en los textos.
+                'retention_years' => $this->retentionYears,
             ],
         ];
     }

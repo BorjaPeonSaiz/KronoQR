@@ -157,3 +157,31 @@ describe('CorrectionHistory', () => {
     expect(items[1]?.text()).toContain('CET')
   })
 })
+
+describe('CorrectionHistory, reloj de 24 h (V2-PO-2)', () => {
+  it('en ingles lee las horas en 24 h, sin AM/PM', async () => {
+    const wrapper = await mountView(CorrectionHistory, {
+      locale: 'en',
+      props: { corrections: [correction()], timeZone: 'Europe/Madrid' },
+    })
+    const table = wrapper.find('table')
+
+    expect(table.text()).toContain('14:05')
+    expect(table.text()).not.toMatch(/(AM|PM)/)
+  })
+})
+
+describe('CorrectionHistory, tabla accesible (V7-QA-2)', () => {
+  it('ninguna cabecera de columna esta vacia: la primera dice que es la version del tramo', async () => {
+    const wrapper = await mountHistory([correction()])
+    const headers = wrapper.findAll('thead th')
+
+    expect(headers).toHaveLength(4)
+
+    for (const header of headers) {
+      expect(header.text().trim()).not.toBe('')
+    }
+
+    expect(headers[0]?.text()).toBe(es.myRecords.history.fields.moment)
+  })
+})

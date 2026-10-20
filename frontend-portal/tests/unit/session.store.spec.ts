@@ -119,7 +119,7 @@ describe('tienda de sesion del portal', () => {
     expect(session.isAuthenticated).toBe(false)
   })
 
-  it('cerrar sesion solo la olvida en este dispositivo: no hay endpoint de portal que la revoque', async () => {
+  it('signOutLocally solo olvida la sesion en este dispositivo, sin llamar al servidor (el boton «Salir» si la revoca con POST /me/logout)', async () => {
     stubFetch(() => jsonResponse(portalSession()))
 
     const session = useSessionStore()

@@ -9,8 +9,12 @@ use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
+use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -709,3 +713,57 @@ it('deniega cambiar el aviso de privacidad a cada rol que no es administrador', 
     'auditor' => [UserRole::AUDITOR],
     'empleado' => [UserRole::EMPLEADO],
 ])->group('RF-KI-09', 'RL-09', 'RS-04', 'RQ-07');
+
+// --- El plazo de conservacion del aviso (2.3.0, bloque 8) --------------------
+
+it('publica el plazo de conservacion del perfil de cumplimiento vigente', function (): void {
+    // Art. 13.2.a RGPD: el aviso dice cuanto se conserva el dato. La cifra es la
+    // del perfil del centro (regla dura 14), no un «4 años» escrito en los
+    // textos: el perfil sembrado lleva 4, y otro convenio lleva otra.
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('privacy_notice.retention_years', 4);
+
+    DB::table('compliance_profiles')->update(['retention_years' => 6]);
+    app()->forgetInstance(CompliancePolicyProvider::class);
+
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('privacy_notice.retention_years', 6);
+})->group('RF-KI-09', 'RL-09', 'RF-PD-07');
+
+it('publica el plazo en null, y la marca en 200, si no hay perfil que leer', function (string $causa): void {
+    // La marca la pide la tablet antes de que nadie fiche: un perfil ilegible no
+    // puede tumbar la pantalla de espera (regla dura 19). El aviso lo dice sin
+    // cifra.
+    if ($causa === 'sin centro') {
+        app()->instance(InstallationSiteProvider::class, new class implements InstallationSiteProvider
+        {
+            public function installationSite(): ?InstallationSite
+            {
+                return null;
+            }
+        });
+    } else {
+        app()->instance(CompliancePolicyProvider::class, new class implements CompliancePolicyProvider
+        {
+            public function forSite(int $siteId): CompliancePolicy
+            {
+                throw new RuntimeException('perfil ilegible');
+            }
+        });
+    }
+
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('privacy_notice.retention_years', null)
+        ->assertJsonPath('application_name', 'KronoQR');
+})->with(['sin centro', 'perfil ilegible'])->group('RF-KI-09', 'RL-09', 'RF-PD-07');
+
+it('no publica ningun otro umbral del perfil de cumplimiento', function (): void {
+    // Del perfil sale el plazo, que el art. 13 obliga a decir, y nada mas: la
+    // marca es publica.
+    $aviso = Api::guest()->get('/api/v1/branding')->assertValidResponse(200)->json('privacy_notice');
+
+    expect(array_keys((array) $aviso))->toBe(['controller_name', 'policy_url', 'retention_years']);
+})->group('RF-KI-09', 'RS-03');

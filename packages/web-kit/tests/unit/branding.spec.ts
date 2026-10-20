@@ -59,7 +59,7 @@ describe('parseBranding (RF-PD-08)', () => {
       accentColor: '#0f5c8c',
       logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
       locales: { default: 'es', available: ['es'] },
-      privacyNotice: { controllerName: null, policyUrl: null },
+      privacyNotice: { controllerName: null, policyUrl: null, retentionYears: null },
     })
   })
 
@@ -101,13 +101,18 @@ describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
   }
 
   it('una copia anterior a la 2.2.0, sin privacy_notice, es «sin configurar»', () => {
-    expect(parseBranding(PAYLOAD)?.privacyNotice).toEqual({ controllerName: null, policyUrl: null })
+    expect(parseBranding(PAYLOAD)?.privacyNotice).toEqual({
+      controllerName: null,
+      policyUrl: null,
+      retentionYears: null,
+    })
   })
 
   it('lee el responsable y la politica', () => {
     expect(parseBranding({ ...PAYLOAD, privacy_notice: NOTICE })?.privacyNotice).toEqual({
       controllerName: 'Hotel Marina S.L.',
       policyUrl: 'https://marina.example/privacidad',
+      retentionYears: null,
     })
   })
 
@@ -116,7 +121,11 @@ describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
       ...PAYLOAD,
       privacy_notice: { controller_name: null, policy_url: null },
     })
-    expect(parsed?.privacyNotice).toEqual({ controllerName: null, policyUrl: null })
+    expect(parsed?.privacyNotice).toEqual({
+      controllerName: null,
+      policyUrl: null,
+      retentionYears: null,
+    })
   })
 
   it.each([
@@ -155,10 +164,28 @@ describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
     expect(parsed?.privacyNotice.controllerName).toBeNull()
   })
 
+  it.each([
+    [5, 5],
+    [1, 1],
+    [0, null],
+    [-3, null],
+    [2.5, null],
+    ['4', null],
+    [null, null],
+    [1000, null],
+  ])('retention_years %j se lee como %j', (raw, expected) => {
+    const parsed = parseBranding({
+      ...PAYLOAD,
+      privacy_notice: { controller_name: null, policy_url: null, retention_years: raw },
+    })
+    expect(parsed?.privacyNotice.retentionYears).toBe(expected)
+  })
+
   it('un privacy_notice con la forma rota (no es un objeto) es «sin configurar»', () => {
     expect(parseBranding({ ...PAYLOAD, privacy_notice: 'x' })?.privacyNotice).toEqual({
       controllerName: null,
       policyUrl: null,
+      retentionYears: null,
     })
   })
 })
@@ -376,7 +403,7 @@ describe('applyBranding sobre el documento', () => {
     accentColor: '#0f5c8c',
     logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
     locales: { default: 'es', available: ['es'] },
-    privacyNotice: { controllerName: null, policyUrl: null },
+    privacyNotice: { controllerName: null, policyUrl: null, retentionYears: null },
   }
 
   it('aplica el acento, el titulo y el favicon del cliente', () => {

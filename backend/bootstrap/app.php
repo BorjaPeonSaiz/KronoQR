@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
 use App\Http\Middleware\NegotiateLocale;
+use App\Http\Middleware\PreventResponseCaching;
 use App\Http\Middleware\PropagateTraceContext;
 use App\Http\Middleware\RecordHttpMetrics;
 use App\Http\Middleware\TrustProxies;
@@ -209,6 +210,12 @@ return Application::configure(basePath: dirname(__DIR__))
              * (regla dura 13; ver UseInstallationLocale).
              */
             'locale.installation' => UseInstallationLocale::class,
+            /*
+             * `Cache-Control: no-store, private` en todo un grupo de rutas cuyo
+             * cuerpo es una credencial: `/auth/*` y el alta del primer
+             * administrador (2.3.0, bloque 8; ver PreventResponseCaching).
+             */
+            'no-store' => PreventResponseCaching::class,
         ]);
 
         /*

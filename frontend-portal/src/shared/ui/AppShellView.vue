@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/login/session.store'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -81,7 +82,7 @@ async function signOut(): Promise<void> {
           <!-- El nombre del producto ("Mi portal del empleado") se queda como
                subtitulo: la marca (logotipo o nombre de la instalacion) es lo
                que identifica la aplicacion, esto dice para que sirve. -->
-          <p class="text-sm text-kq-text-muted">{{ t('app.title') }}</p>
+          <p class="hidden text-sm text-kq-text-muted sm:block">{{ t('app.title') }}</p>
         </div>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex flex-wrap gap-2">
@@ -107,7 +108,8 @@ async function signOut(): Promise<void> {
             </li>
           </ul>
         </nav>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <LanguageSelector />
           <p v-if="session.employee !== null" class="text-base text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.employee.display_name }) }}
           </p>

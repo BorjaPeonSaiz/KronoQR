@@ -122,7 +122,7 @@ describe('cache de la marca en localStorage (MB4)', () => {
     // El aviso de privacidad (RF-KI-09) viaja con la marca; sin configurar, a null.
     expect(saved).toEqual({
       ...OTHER,
-      privacy_notice: { controller_name: null, policy_url: null },
+      privacy_notice: { controller_name: null, policy_url: null, retention_years: null },
     })
   })
 

@@ -108,9 +108,10 @@ describe('PortalSignOut, cierre de sesion en el servidor (RF-ID-05, RF-ID-07)', 
 
     const leaving = session.signOut()
 
-    // Justo antes del tiempo maximo, la sesion sigue ahi: se espera al servidor.
+    // La sesion local se cierra ya, sin esperar al servidor: un 401 concurrente no
+    // la encuentra para presentarla como caducada. La llamada sigue en vuelo.
     await vi.advanceTimersByTimeAsync(LOGOUT_TIMEOUT_MS - 1)
-    expect(session.isAuthenticated).toBe(true)
+    expect(session.isAuthenticated).toBe(false)
 
     await vi.advanceTimersByTimeAsync(1)
     await leaving

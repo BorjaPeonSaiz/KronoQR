@@ -1,21 +1,21 @@
+import { createQueryReloadMark, installChunkLoadRecovery } from '@kronoqr/web-kit/chunkLoadRecovery'
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
-import {
-  setAuthTokenProvider,
-  setLocaleProvider,
-  setUnauthenticatedHandler,
-} from '@kronoqr/web-kit/http'
+import { setAuthTokenProvider, setLocaleProvider } from '@kronoqr/web-kit/http'
 import { createPinia } from 'pinia'
 import { createApp, watch } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
 import { useSessionStore } from './features/login/session.store'
 import { createAppRouter } from './router'
+import { bindDocumentTitle } from './router/documentTitle'
 import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n } from './shared/i18n'
+import { useLocaleChoiceStore } from './shared/i18n/locale.store'
 import { bindPortalLocale } from './shared/i18n/portalLocale'
+import { bindSessionLifecycle } from './shared/session/sessionLifecycle'
 
 const app = createApp(App)
 
@@ -35,16 +35,14 @@ app.use(pinia)
 const router = createAppRouter()
 const session = useSessionStore(pinia)
 const branding = useBrandingStore(pinia)
+const localeChoice = useLocaleChoiceStore(pinia)
 
 const i18n = createAppI18n()
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
 setAuthTokenProvider(() => session.token)
-setUnauthenticatedHandler(() => {
-  session.clear()
-  void router.push({ name: 'login' })
-})
+bindSessionLifecycle({ router, session })
 
 // Vacia el buffer de errores del portal hacia `error_events` (tarea 5.12,
 // RF-PD-15): al pasar a autenticado, cada 60 s si hay pendientes y al
@@ -84,15 +82,35 @@ syncDocumentLang(() => i18n.global.locale.value)
 bindPortalLocale(i18n, () => ({
   policy: branding.current.locales,
   personal: session.employee?.locale,
+  stored: localeChoice.chosen,
 }))
 
 registerAuthGuard(router)
+
+// Tras una actualizacion, una pestana vieja pide pantallas que ya no existen
+// (8.8: se cargan bajo demanda): se recarga UNA vez. La marca anti-bucle viaja en
+// la URL, no en el navegador (regla no-browser-storage). `resolve(...).href`
+// lleva el prefijo `/portal/`: `fullPath` solo no.
+installChunkLoadRecovery(router, {
+  mark: createQueryReloadMark(router),
+  reload: (target) => window.location.assign(router.resolve(target).href),
+})
 
 // Marca de la instalacion (RF-PD-08). Se pinta el producto de inmediato -sin
 // esperar a la red, para no retrasar la primera pantalla- y se pide la marca
 // real en paralelo; si llega y es valida, sustituye a la del producto.
 branding.apply()
-void branding.load()
+
+// Titulo de la pestaña por pantalla (WCAG 2.4.2): la marca escribe el nombre de
+// la instalacion, esto le antepone la pantalla. Se recompone tras cada vez que
+// la marca se aplica.
+const documentTitle = bindDocumentTitle({
+  router,
+  i18n,
+  applicationName: () => branding.current.applicationName,
+})
+
+void branding.load().then(documentTitle.refresh)
 
 app.use(router)
 app.use(i18n)

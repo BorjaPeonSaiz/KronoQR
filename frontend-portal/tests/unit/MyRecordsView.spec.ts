@@ -108,10 +108,12 @@ describe('MyRecordsView', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    const lastUrl = requestedUrls.filter((url) => url.includes('/me/workdays')).at(-1)
+    const urls = requestedUrls.filter((url) => url.includes('/me/workdays'))
+    const periodUrl = urls.find((url) => url.includes('from=2026-03-01'))
 
-    expect(lastUrl).toContain('from=2026-03-01')
-    expect(lastUrl).toContain('to=2026-03-31')
+    expect(periodUrl).toContain('to=2026-03-31')
+    // "hoy" sale de la misma respuesta (`today`): sin peticion extra sin fechas.
+    expect(urls.at(-1)).toContain('from=2026-03-01')
   })
 
   it('no consulta un periodo que termina antes de empezar: lo dice y no deja enviar', async () => {

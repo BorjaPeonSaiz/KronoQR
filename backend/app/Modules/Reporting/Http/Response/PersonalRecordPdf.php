@@ -10,6 +10,7 @@ use App\Modules\Reporting\Http\Support\PersonalRecordPdfTelemetry;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordDigest;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordLayout;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordPdfWriter;
+use App\Modules\Reporting\Infrastructure\Export\PersonalRecordRows;
 use App\Modules\Shared\Application\Port\Clock;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -47,7 +48,8 @@ final readonly class PersonalRecordPdf
     public function respond(WorkDayJournal $journal): StreamedResponse
     {
         $digest = PersonalRecordDigest::of($journal)->toText();
-        $rows = \count(PersonalRecordLayout::rows($journal));
+        // El mismo recuento que el CSV (`PersonalRecordRows`), sin componer filas.
+        $rows = PersonalRecordRows::count($journal);
 
         $bytes = $this->telemetry->measure(
             $journal,

@@ -176,7 +176,7 @@ export function brandingPayload(overrides: Partial<Branding> = {}): Branding {
     accent_color: '#0f5c8c',
     logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
     locales: { default: 'es', available: ['es'] },
-    privacy_notice: { controller_name: null, policy_url: null },
+    privacy_notice: { controller_name: null, policy_url: null, retention_years: null },
     ...overrides,
   }
 }
@@ -188,6 +188,7 @@ export function employeeWorkDays(
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    today: days.at(-1)?.work_date ?? '2026-03-14',
     from: days[0]?.work_date ?? '2026-03-14',
     to: days.at(-1)?.work_date ?? '2026-03-14',
     data: days,

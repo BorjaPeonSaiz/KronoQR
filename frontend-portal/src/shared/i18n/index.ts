@@ -22,15 +22,18 @@ export function isSupportedLocale(value: unknown): value is AppLocale {
  * unico idioma ofrecido (`LOCALE_AVAILABLE = [es]`, de serie) es ese y ni el
  * navegador ni `employees.locale` lo cambian; con varios, sigue el de la
  * persona que ha entrado, despues el del navegador y al final el de la
- * instalacion. El portal no tiene selector, asi que no hay eleccion guardada.
+ * instalacion. La eleccion del selector (`stored`) gana a todo lo demas.
  */
 export function resolvePortalLocale(inputs: {
   readonly policy: LocalePolicy
   readonly personal?: string | null | undefined
+  /** Lo que la persona eligio a mano con el selector (solo se ofrece con varios idiomas). */
+  readonly stored?: string | null | undefined
   readonly browser: readonly string[]
 }): AppLocale {
   return resolveUiLocale<AppLocale>({
     policy: inputs.policy,
+    stored: inputs.stored ?? null,
     personal: inputs.personal ?? null,
     browser: inputs.browser,
     shipped: SUPPORTED_LOCALES,

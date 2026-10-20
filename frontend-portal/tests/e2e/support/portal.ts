@@ -45,7 +45,7 @@ export const PRODUCT_BRANDING: Branding = {
   accent_color: null,
   logo_url: null,
   locales: { default: 'es', available: ['es'] },
-  privacy_notice: { controller_name: null, policy_url: null },
+  privacy_notice: { controller_name: null, policy_url: null, retention_years: null },
 }
 
 /** La misma marca del producto con el ingles activado por configuracion (RF-PD-08). */
@@ -70,6 +70,7 @@ export const HOTEL_BRANDING: Branding = {
   privacy_notice: {
     controller_name: 'Hotel Marina, S. L.',
     policy_url: 'https://hotelmarina.example/privacidad',
+    retention_years: 4,
   },
 }
 
@@ -334,6 +335,9 @@ function employeeWorkDays(from: string, to: string): EmployeeWorkDays {
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    // El contrato trae `today` (hoy en el centro). El doble lo hace coincidir con
+    // el final del periodo, que es el caso de la pantalla de entrada.
+    today: WORKDAYS_TO,
     from,
     to,
     data,
@@ -351,6 +355,7 @@ export function singleDayEmployeeWorkDays(day: WorkDayDetail): EmployeeWorkDays 
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    today: day.work_date,
     from: day.work_date,
     to: day.work_date,
     data: [day],
@@ -391,6 +396,8 @@ export interface PortalApiOptions {
    * `'unavailable'`: el servidor no tiene Chromium y responde `503` (PR19).
    */
   pdfOutcome?: 'ok' | 'unavailable' | 'busy'
+  /** `true`: el periodo no tiene jornadas; el servidor declara `X-Kronoqr-Report-Rows: 0`. */
+  emptyExport?: boolean
 }
 
 export interface RecordedRequest {
@@ -419,6 +426,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
   const loginOutcome = options.loginOutcome ?? 'ok'
   const branding = options.branding ?? PRODUCT_BRANDING
   const pdfOutcome = options.pdfOutcome ?? 'ok'
+  const reportRows = options.emptyExport === true ? '0' : '6'
 
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/'),
@@ -569,6 +577,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
                 // Sin ningun nombre de persona (regla dura 21): solo el periodo.
                 'Content-Disposition': `attachment; filename=mi-registro-horario-${from}_${to}.pdf`,
                 'Cache-Control': 'no-store',
+                'X-Kronoqr-Report-Rows': reportRows,
               },
               body: Buffer.from('%PDF-1.7 prueba'),
             })
@@ -582,6 +591,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
             headers: {
               // Sin ningun nombre de persona (regla dura 21): solo el periodo.
               'Content-Disposition': `attachment; filename=mi-registro-horario-${from}_${to}.csv`,
+              'X-Kronoqr-Report-Rows': reportRows,
               'Cache-Control': 'no-store',
             },
             body: EXPORT_CSV,

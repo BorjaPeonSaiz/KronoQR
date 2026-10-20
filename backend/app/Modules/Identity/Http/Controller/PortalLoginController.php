@@ -36,6 +36,11 @@ final class PortalLoginController extends Controller
     ): JsonResponse {
         $session = $handler->handle($request->toCommand());
 
-        return (new PortalSessionResource($session))->response()->setStatusCode(JsonResponse::HTTP_OK);
+        // `no-store`: el cuerpo lleva el token y el nombre de la persona, y el
+        // portal se abre en el ordenador compartido de la sala de personal.
+        return (new PortalSessionResource($session))
+            ->response()
+            ->setStatusCode(JsonResponse::HTTP_OK)
+            ->header('Cache-Control', 'no-store, private');
     }
 }

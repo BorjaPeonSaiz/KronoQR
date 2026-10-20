@@ -4286,6 +4286,10 @@ export interface paths {
          *     claves de `installation_settings` solo las tres `BRANDING_*`, las dos
          *     `LOCALE_*` y las dos `PRIVACY_*`, ya resueltas por la cascada de RF-PD-01;
          *     ningun umbral operativo ni ningun ajuste de funcionamiento viaja por aqui.
+         *     Del perfil de cumplimiento sale **un unico dato**, el plazo de
+         *     conservacion del registro (`privacy_notice.retention_years`, 2.3.0),
+         *     porque el art. 13.2.a RGPD obliga a decirlo en el aviso; ningun otro
+         *     umbral del perfil.
          *     Lo que revela —el nombre del hotel y su color— es lo mismo que revela la
          *     tarjeta impresa que cada empleado lleva en el bolsillo. **El responsable y
          *     la URL de la politica no son un dato operativo sino informacion que el
@@ -8155,6 +8159,12 @@ export interface components {
              *     el resto de la marca** y lo sigue enseñando sin red; si nunca lo
              *     recibio, enseña la redaccion generica. Un cliente que guardo una copia
              *     anterior a la 2.2.0, sin este objeto, la trata como «sin configurar».
+             *
+             *     **El portal del empleado lo enseña tambien** en su pantalla de acceso,
+             *     donde la persona teclea su codigo y su PIN (D8 de la 2.3.0, V3-PO-4,
+             *     art. 13 RGPD). Lee este mismo objeto: no hay un segundo ajuste ni un
+             *     segundo endpoint, y con los dos campos a `null` enseña la redaccion
+             *     generica de sus textos (i18n).
              */
             privacy_notice: {
                 /**
@@ -8176,6 +8186,21 @@ export interface components {
                  *     que la politica completa esta disponible en recepcion.
                  */
                 policy_url: string | null;
+                /**
+                 * @description **Cuantos años se conserva el registro de jornada**, el plazo
+                 *     `retention_years` del perfil de cumplimiento vigente del centro
+                 *     (RF-PD-07, RL-02, regla dura 14), para que el aviso diga la
+                 *     cifra real en lugar de una escrita en los textos (2.3.0). El
+                 *     quiosco y el portal la interpolan en su redaccion.
+                 *
+                 *     `null` cuando no se puede resolver —la instalacion aun no tiene
+                 *     centro, o el perfil no se puede leer—: el aviso dice entonces
+                 *     que el plazo es el que fija la normativa aplicable, sin cifra.
+                 *     Una copia guardada anterior a la 2.3.0, sin este campo, se
+                 *     trata igual que `null`.
+                 * @example 4
+                 */
+                retention_years: number | null;
             };
             /**
              * @description Lo que se lee en la cabecera de las aplicaciones, en el titulo de la
@@ -9570,6 +9595,20 @@ export interface components {
              */
             employee_uuid: string;
             time_zone: components["schemas"]["TimeZoneName"];
+            /**
+             * Format: date
+             * @description **El dia civil de hoy en la zona del centro** (`time_zone`), segun el
+             *     reloj del servidor (2.3.0, bloque 8). No depende del rango pedido ni
+             *     de la zona ni del reloj del navegador: a las 00:30 de Madrid ya es el
+             *     dia siguiente aunque en UTC sea todavia el anterior, y el cambio de
+             *     hora lo resuelve la zona del centro (reglas duras 2 y 3).
+             *
+             *     Existe para que un cliente sepa que jornada es «hoy» sin una segunda
+             *     peticion sin rango: en el portal, el limite por IP lo comparte toda
+             *     la wifi del hotel.
+             * @example 2026-03-29
+             */
+            today: string;
             /**
              * Format: date
              * @description Primera jornada del rango **resuelto**, que puede venir de la omision.
@@ -14007,7 +14046,16 @@ export interface components {
         SetupStepName: components["schemas"]["SetupStep"];
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Siempre `no-store, private` (2.3.0, bloque 8): el cuerpo es una
+         *     credencial —un token de sesion, el secreto TOTP del alta— o la abre.
+         *     Ni el navegador ni un proxy pueden guardarlo; el panel y el portal se
+         *     abren a veces en un ordenador compartido. En `/api/v1/auth/*` lo pone un
+         *     middleware de grupo, asi que vale para todas sus respuestas.
+         */
+        NoStoreCacheControl: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -14597,6 +14645,7 @@ export interface operations {
             /** @description Sesion iniciada. El token viaja como `Bearer` en cada peticion posterior. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14610,6 +14659,7 @@ export interface operations {
              */
             202: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14637,6 +14687,7 @@ export interface operations {
             /** @description Sesion iniciada, ya con los ambitos del rol. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14661,6 +14712,7 @@ export interface operations {
             /** @description Secreto emitido y pendiente de confirmar. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14690,6 +14742,7 @@ export interface operations {
             /** @description Segundo factor activo y sesion iniciada. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14715,6 +14768,7 @@ export interface operations {
             /** @description Sesion cerrada. El token deja de ser valido de inmediato. */
             204: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -14734,6 +14788,7 @@ export interface operations {
             /** @description Sesion en curso. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14765,6 +14820,7 @@ export interface operations {
              */
             204: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -15048,6 +15104,13 @@ export interface operations {
              */
             200: {
                 headers: {
+                    /**
+                     * @description Siempre `no-store` (2.3.0): el cuerpo lleva el token de la sesion
+                     *     y el nombre de la persona. El portal se abre en el ordenador
+                     *     compartido de la sala de personal, y ni el navegador ni un
+                     *     proxy pueden guardarlo.
+                     */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -15116,6 +15179,15 @@ export interface operations {
              */
             200: {
                 headers: {
+                    /**
+                     * @description Siempre `no-store` (V4-PO-1, 2.3.0): el cuerpo es el registro
+                     *     horario de una persona, y el portal se abre en el ordenador
+                     *     compartido de la sala de personal. Con el `no-cache` por omision
+                     *     el navegador podia conservarlo en su cache de disco y enseñarselo
+                     *     a quien se sentara despues. Es la misma cabecera que la descarga
+                     *     de `GET /api/v1/me/export`.
+                     */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -15188,7 +15260,12 @@ export interface operations {
                      */
                     "X-Kronoqr-Report-Digest"?: string;
                     /**
-                     * @description Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+                     * @description Con los dos formatos (en CSV desde la 2.3.0). Filas de datos de
+                     *     la tabla del documento: tramos, jornadas sin tramos y
+                     *     correcciones, sin contar la cabecera de criterios ni los rotulos.
+                     *     El CSV y el PDF del mismo registro dan el mismo numero. Un
+                     *     periodo sin jornadas da `0`, y es lo que el portal usa para decir
+                     *     que no hay nada que descargar en ese periodo.
                      * @example 23
                      */
                     "X-Kronoqr-Report-Rows"?: number;
@@ -18493,6 +18570,7 @@ export interface operations {
              */
             201: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {

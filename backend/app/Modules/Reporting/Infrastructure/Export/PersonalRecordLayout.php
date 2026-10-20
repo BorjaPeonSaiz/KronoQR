@@ -116,33 +116,24 @@ final readonly class PersonalRecordLayout
      */
     public static function rows(WorkDayJournal $journal): array
     {
-        $rows = [];
-
-        foreach ($journal->days as $day) {
-            $total = self::duration($day->totalMinutes());
-
-            foreach ($day->shiftEntries as $entry) {
-                $rows[] = self::shiftRow($day, $entry, $total);
-            }
-
-            // Una jornada sin tramos vigentes no desaparece (regla dura 5): si se
-            // anularon todos, sigue con su total a cero y su historico intacto.
-            if ($day->shiftEntries === []) {
-                $rows[] = self::fill([
-                    'record_type' => self::text('record_type.shift'),
-                    'work_date' => $day->workDate,
-                    'duration' => self::duration(0),
-                    'day_total' => $total,
-                    'status' => self::statusText('none'),
-                ]);
-            }
-
-            foreach ($day->corrections as $correction) {
-                $rows[] = self::correctionRow($day, $correction);
-            }
-        }
-
-        return $rows;
+        // Cuales filas hay lo decide PersonalRecordRows, el mismo recorrido que
+        // el CSV: aqui solo se decide como se escribe cada tipo.
+        return PersonalRecordRows::map(
+            $journal,
+            static fn (JournalWorkDay $day, JournalShiftEntry $entry): array => self::shiftRow(
+                $day,
+                $entry,
+                self::duration($day->totalMinutes()),
+            ),
+            static fn (JournalWorkDay $day): array => self::fill([
+                'record_type' => self::text('record_type.shift'),
+                'work_date' => $day->workDate,
+                'duration' => self::duration(0),
+                'day_total' => self::duration($day->totalMinutes()),
+                'status' => self::statusText('none'),
+            ]),
+            static fn (JournalWorkDay $day, JournalCorrection $correction): array => self::correctionRow($day, $correction),
+        );
     }
 
     /**

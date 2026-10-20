@@ -89,7 +89,18 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 6 integrados (#182 a #187 y #189). **Bloque 7** (`fix/instalador-mensajes`): 7.1–7.5 ✅, revisiones aplicadas, CI manual 39466677880 en verde; PR y merge en curso. Lo que conviene saber del bloque 7 (decisiones del propietario en Engram `2.3.0/b7-decisiones`):
+**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 7 integrados (#182 a #187, #189 y #190). **Bloque 8** (`fix/portal-sesion-y-estados`): 8.1–8.10 ✅, revisiones aplicadas, CI manual 39491859900 en verde; PR y merge en curso. Lo que conviene saber del bloque 8:
+- Contrato nuevo:
+  - `EmployeeWorkDays.today` (día civil del centro; el portal ya no pide «hoy» aparte);
+  - `privacy_notice.retention_years` en `/branding`, leído del perfil de cumplimiento; el portal y el quiosco lo interpolan;
+  - `no-store` en `/auth/*`, `/me/login`, `/me/workdays` y `setup/administrator`;
+  - `X-Kronoqr-Report-Rows` también en el CSV.
+- web-kit concentra ahora `formatInstant` (24 h por omisión), `formatTimeOfDay`, `formatDayMonthTime`, `safePolicyUrl` y `chunkLoadRecovery`. El panel pasa a 24 h también en inglés. El portal marca la recarga con `kq_reloaded` en la URL, porque no puede usar el almacenamiento del navegador.
+- La sesión del portal caduca en relativo: `expires_at` menos la cabecera `Date` del login.
+- Avisos de privacidad del portal y del quiosco con la reclamación ante la AEPD y los derechos matizados. **La redacción debe validarla el DPO del cliente.** El aviso del quiosco es más largo: mirarlo en la tablet real.
+- Con varios agentes en paralelo: el que toque web-kit debe avisar, porque dos agentes editaron a la vez `branding.ts`. La matriz de trazabilidad la regenera quien coordina, al final.
+
+Lo que conviene saber del bloque 7 (#190; decisiones del propietario en Engram `2.3.0/b7-decisiones`):
 - Solo paran la instalación `MAIL_HOST=mailpit` y `MAIL_FROM_ADDRESS` en `kronoqr.local`. Un hotel sin relevo de correo usa `MAIL_MAILER=array` y consulta las incidencias en el panel; `log` no, porque manda el MIME con nombres a Loki.
 - El log de las órdenes `artisan` lanzadas con `docker compose exec` va al del contenedor (`ConsoleAwareStreamHandler`). Solo se desvía sin `KQ_CONTAINER_MAIN`, que exporta el entrypoint; `phpunit.xml` la declara.
 - Imagen sin digest (`lib/images.sh`): primero siempre `docker pull`; el aviso sale solo si falla y `RepoDigests` está vacío. El ID de imagen en `images.lock` es la tarea 33.13.
@@ -110,7 +121,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 7 no está integrado, PR y merge con la CI en verde; después, sin preguntar, el bloque 8 (portal: sesión, estados y lo que falta; rama `fix/portal-sesion-y-estados` desde `origin/main`), marcando ✅ el título del bloque 7 en su primer commit.
+**Siguiente acción:** si el bloque 8 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 9 (alertas y healthchecks; rama `feat/alertas-cola-y-servicios` desde `origin/main`), marcando ✅ el título del bloque 8 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -639,7 +650,7 @@ verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2
   se activa, solo resueltas) **y si muestra ausencias** (3.10: no, decisión 1; si se activa, sin la nota); si el
   `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
-  automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de
+  automáticamente; la mitad de
   aplicación de RF-ID-08 (requisitos extra de contraseña al exponer el portal a internet).
 
 ### Deuda técnica anotada

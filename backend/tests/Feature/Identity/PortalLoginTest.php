@@ -77,6 +77,22 @@ it('abre sesion con codigo de empleado y PIN', function (): void {
     expect($respuesta->getContent())->not->toContain(PortalLogins::PIN);
 })->group('RF-ID-05', 'RF-ID-06', 'RL-05');
 
+it('entrega la sesion con no-store, porque el cuerpo lleva el token', function (): void {
+    // 2.3.0, bloque 8. El portal se abre en el ordenador compartido de la sala
+    // de personal: con el `no-cache, private` por omision, el navegador podia
+    // guardar en disco una respuesta con un token vivo y el nombre de quien
+    // acababa de entrar. `assertValidResponse` comprueba que el contrato la
+    // declara.
+    $empleado = empleadoConPortal();
+
+    Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => $empleado['code'],
+        'pin' => PortalLogins::PIN,
+    ])
+        ->assertValidResponse(200)
+        ->assertHeader('Cache-Control', 'no-store, private');
+})->group('RF-ID-06', 'RS-09');
+
 it('emite un token con self:read y con ningun ambito mas', function (): void {
     // RF-ID-07, y es la mitad de la promesa que hace tolerable un PIN de seis
     // digitos: aunque alguien se lleve este token, no alcanza nada de gestion.

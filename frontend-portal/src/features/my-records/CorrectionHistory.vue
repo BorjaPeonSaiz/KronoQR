@@ -37,6 +37,7 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
+/** El instante en la zona del centro, en 24 h como el resto de la pantalla (V2-PO-2). */
 function instant(value: string): string {
   return formatInstant(value, props.timeZone, locale.value)
 }
@@ -163,7 +164,9 @@ const items = computed<CorrectionView[]>(() =>
               </caption>
               <thead>
                 <tr class="border-b border-kq-border">
-                  <th scope="col" class="py-1 pr-3"></th>
+                  <th scope="col" class="py-1 pr-3">
+                    <span class="sr-only">{{ t('myRecords.history.fields.moment') }}</span>
+                  </th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.in') }}</th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.out') }}</th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.worked') }}</th>

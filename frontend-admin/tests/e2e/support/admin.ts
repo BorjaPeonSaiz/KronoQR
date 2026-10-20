@@ -255,7 +255,7 @@ export const PRODUCT_BRANDING: Branding = {
   accent_color: null,
   logo_url: null,
   locales: { default: 'es', available: ['es'] },
-  privacy_notice: { controller_name: null, policy_url: null },
+  privacy_notice: { controller_name: null, policy_url: null, retention_years: 4 },
 }
 
 /**
@@ -278,7 +278,7 @@ export const HOTEL_BRANDING: Branding = {
   accent_color: '#0f5c8c',
   logo_url: `/api/v1/branding/logo?v=${LOGO_DIGEST}`,
   locales: { default: 'es', available: ['es'] },
-  privacy_notice: { controller_name: null, policy_url: null },
+  privacy_notice: { controller_name: null, policy_url: null, retention_years: 4 },
 }
 
 /**
@@ -525,6 +525,7 @@ export const CREDENTIAL_BOARD_PENDING_REPRINT: CredentialStatusBoard = {
 export const WORKDAYS: EmployeeWorkDays = {
   employee_uuid: EMPLOYEE_UUID,
   time_zone: 'Europe/Madrid',
+  today: '2026-03-20',
   from: '2026-03-01',
   to: '2026-03-31',
   data: [
