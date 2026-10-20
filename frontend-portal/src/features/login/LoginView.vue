@@ -167,7 +167,7 @@ async function submit(): Promise<void> {
         class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
       >
         <p class="font-semibold">{{ t('login.sessionExpired.title') }}</p>
-        <p class="mt-1">{{ t('login.sessionExpired.advice') }}</p>
+        <p class="mt-1 text-kq-text">{{ t('login.sessionExpired.advice') }}</p>
       </div>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
