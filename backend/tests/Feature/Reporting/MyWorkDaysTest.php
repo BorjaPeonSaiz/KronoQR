@@ -121,6 +121,31 @@ it('devuelve el registro del titular del token, con la misma forma que el del pa
         ->assertJsonPath('data.0.shift_entries.0.clocked_in_at_local', '2026-03-14T06:00:00.000000+01:00');
 })->group('RF-ID-05', 'RL-05', 'RN-06');
 
+it('sirve el registro propio con no-store, como la descarga', function (): void {
+    // V4-PO-1 (2.3.0). El portal se abre en el ordenador compartido de la sala
+    // de personal: con el `no-cache, private` por omision de Laravel, el
+    // navegador podia guardar en su cache de disco las horas de quien acababa
+    // de salir. `assertValidResponse` comprueba ademas que el contrato declara
+    // la cabecera.
+    $contexto = miPortal();
+
+    miJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidResponse(200)
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    // Y vale tambien cuando no hay nada que enseñar: un rango vacio dice que esa
+    // persona no trabajo esos dias, que tambien es un dato suyo.
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private');
+
+    expect($respuesta->headers->get('Cache-Control'))->not->toContain('no-cache');
+})->group('RF-ID-05', 'RL-05', 'RS-09');
+
 it('abre en los 31 dias que terminan hoy cuando no se pide rango', function (): void {
     // «Hoy» resuelto en la zona del CENTRO y con el reloj inyectado, no con el
     // del servidor ni con el del navegador (RN-04, regla dura 2).
