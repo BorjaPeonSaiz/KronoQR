@@ -69,12 +69,43 @@ describe('millisecondsUntilMidnight', () => {
     expect(millisecondsUntilMidnight(nowMs, ZONE)).toBe(10 * 60_000 + 1000)
   })
 
-  it('la noche del cambio de hora lee la hora de pared, no suma 24 h', () => {
-    // 2026-03-29 a las 00:30 en Madrid (UTC+1): faltan 23 h 30 min de reloj
-    // de pared pero la noche siguiente dura 23 h; la lectura es por pared.
+  it('primavera: la noche del 29-03-2026 en Madrid dura 23 h, asi que a las 00:30 faltan 22 h 30 min', () => {
+    // 00:30 (UTC+1) -> 00:00 del dia 30 (UTC+2): la hora 02:xx no existe.
     const nowMs = Date.parse('2026-03-28T23:30:00Z')
 
-    expect(millisecondsUntilMidnight(nowMs, ZONE)).toBe((23 * 60 + 30) * 60_000 + 1000)
+    expect(millisecondsUntilMidnight(nowMs, ZONE)).toBe((22 * 60 + 30) * 60_000 + 1000)
+  })
+
+  it('otono: la noche del 25-10-2026 en Madrid dura 25 h, asi que a las 00:30 faltan 24 h 30 min', () => {
+    // 00:30 (UTC+2) -> 00:00 del dia 26 (UTC+1): la hora 02:xx se repite.
+    const nowMs = Date.parse('2026-10-24T22:30:00Z')
+
+    expect(millisecondsUntilMidnight(nowMs, ZONE)).toBe((24 * 60 + 30) * 60_000 + 1000)
+  })
+
+  it('despues del salto el calculo vuelve a ser el de un dia normal', () => {
+    // 2026-03-29 12:00 (UTC+2) -> 12 h hasta la medianoche.
+    const nowMs = Date.parse('2026-03-29T10:00:00Z')
+
+    expect(millisecondsUntilMidnight(nowMs, ZONE)).toBe(12 * 3_600_000 + 1000)
+  })
+
+  it('el temporizador de la noche del cambio de primavera dispara a la medianoche real', async () => {
+    vi.setSystemTime(new Date('2026-03-28T23:30:00Z'))
+    const view = start()
+
+    await flush()
+    expect(view.urls).toHaveLength(1)
+
+    view.setToday('2026-03-30')
+    // Una hora antes de lo que diria una cuenta de minutos de pared: no hay llamada.
+    await vi.advanceTimersByTimeAsync(22 * 3_600_000)
+    expect(view.urls).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000 + 1000)
+    expect(view.urls).toHaveLength(2)
+    expect(view.result.today.value).toBe('2026-03-30')
+    view.stop()
   })
 
   it('sin zona valida no programa nada', () => {

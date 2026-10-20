@@ -19,7 +19,7 @@
 // **Un error no deja datos viejos a la vista.** Si la consulta falla, `data` se
 // vacia: la pantalla enseña el error, no un periodo que ya no es el pedido. Y
 // una respuesta tardia de una consulta anterior no pisa a la mas reciente.
-import { readWallClock, resolveTimeZone } from '@kronoqr/web-kit/datetime'
+import { readWallClock, resolveTimeZone, todayInZone } from '@kronoqr/web-kit/datetime'
 import { getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { EmployeeWorkDays } from '@/shared/api/types'
@@ -60,9 +60,29 @@ function isUnbounded(range: WorkDateRange): boolean {
 }
 
 /**
- * Milisegundos hasta la proxima medianoche en `timeZone`, leyendo la hora de
- * pared de esa zona (y no sumando 24 h, que se equivoca la noche de un cambio
- * de hora). `null` si no hay una zona valida: sin ella no se programa nada.
+ * Cuanto se desplaza la hora de pared de `zone` respecto a UTC en `instantMs`
+ * (milisegundos, con la resolucion del minuto que da `readWallClock`).
+ */
+function zoneOffsetMs(instantMs: number, zone: string): number | null {
+  const wall = readWallClock(instantMs, zone)
+
+  if (wall === null) {
+    return null
+  }
+
+  const asUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute)
+
+  return asUtc - (instantMs - (instantMs % MINUTE_MS))
+}
+
+/**
+ * Milisegundos hasta la proxima medianoche en `timeZone`. Se calcula el
+ * INSTANTE objetivo -la 00:00 de pared del dia siguiente- y no una cuenta de
+ * minutos de pared: la noche de un cambio de hora dura 23 o 25 horas, y asi la
+ * del 29-03-2026 en Madrid, a las 00:30, da 22 h 30 min (no 23 h 30 min). El
+ * desfase se lee en el instante objetivo y se corrige una segunda vez, por si
+ * el salto cae entre ahora y la medianoche. `null` si no hay una zona valida:
+ * sin ella no se programa nada.
  */
 export function millisecondsUntilMidnight(
   nowMs: number,
@@ -75,24 +95,35 @@ export function millisecondsUntilMidnight(
   }
 
   const wall = readWallClock(nowMs, zone)
+  const offsetNow = zoneOffsetMs(nowMs, zone)
 
-  if (wall === null) {
+  if (wall === null || offsetNow === null) {
     return null
   }
 
-  const minutesLeft = (23 - wall.hour) * 60 + (59 - wall.minute) + 1
-  // Un segundo de margen para no despertar antes de que el servidor cambie de dia.
-  const sinceMinuteStart = nowMs % MINUTE_MS
+  // La 00:00 de pared del dia siguiente, escrita como si fuera UTC.
+  const wallMidnight = Date.UTC(wall.year, wall.month - 1, wall.day + 1)
+  let target = wallMidnight - offsetNow
 
-  return minutesLeft * MINUTE_MS - sinceMinuteStart + 1000
+  for (let pass = 0; pass < 2; pass += 1) {
+    const offsetAtTarget = zoneOffsetMs(target, zone)
+
+    if (offsetAtTarget === null) {
+      return null
+    }
+
+    target = wallMidnight - offsetAtTarget
+  }
+
+  // Un segundo de margen para no despertar antes de que el servidor cambie de dia.
+  return target - nowMs + 1000
 }
 
+/** El dia civil de `nowMs` en la zona del centro (nunca la del navegador), o `null`. */
 function civilDay(nowMs: number, timeZone: string | null | undefined): string | null {
-  const wall = readWallClock(nowMs, resolveTimeZone(timeZone))
+  const zone = resolveTimeZone(timeZone)
 
-  return wall === null
-    ? null
-    : `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`
+  return zone === undefined ? null : todayInZone(zone, new Date(nowMs))
 }
 
 export function useMyWorkDays(
@@ -181,7 +212,14 @@ export function useMyWorkDays(
     }
 
     midnightTimer = setTimeout(() => {
-      void load()
+      // Si el reloj de pared aun no ha cambiado de dia en el centro (un salto de
+      // hora que el calculo no vio), no se consulta en balde: solo se reprograma.
+      const changed = civilDay(now(), options.timeZone?.value) !== loadedDay
+
+      if (changed) {
+        void load()
+      }
+
       scheduleMidnight()
     }, wait)
   }
