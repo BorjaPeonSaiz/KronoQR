@@ -426,7 +426,7 @@ mensaje, que es lo que hay que leer.**
 | `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión. `doctor.sh`: **Docker no responde**, o la versión de Compose no es la soportada; no se ha podido comprobar nada más |
 | `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
+| `5` | **Falló y NO se pudo deshacer todo, o falló algo después de que la versión nueva ya atendiera (y entonces no se deshace). Hay que intervenir a mano.** El mensaje dice exactamente qué queda, qué orden lo retira y si hay que restaurar algo o no | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie; no es el certificado, sino las sondas `/health` y `/ready`, un `[FALLO]` de `product:doctor` o un paquete sin él, y el mensaje dice cuál ([`instalacion.md`](instalacion.md) §2). `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6. `install.sh` y `update.sh`: la firma de cosign de una imagen del producto **no es válida** (solo se comprueba si tienes cosign instalado, §7.1 de [`instalacion.md`](instalacion.md)); `update.sh` sale en el paso 1 sin tocar nada e `install.sh` deshace lo escrito. No instales esas imágenes y avisa al fabricante con el detalle que imprime el script |
 | `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: **no repitas la restauración**. Si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás |
@@ -1101,8 +1101,8 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 2 · Mantenimiento | Sale `4` | Mantenimiento retirado; nada tocado | Reintentar. Si se repite, `docker compose logs app` |
 | 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | La causa está en el detalle, `/var/log/kronoqr/update-<fecha>.detalle.log` (el mensaje da la ruta). [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
 | 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró y qué migración falló |
-| 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
-| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (las órdenes, con la ruta de la copia, terminan en retirar el mantenimiento y comprobar que `/api/v1/auth/me` da `401`) | Runbook §5. Los quioscos siguen encolando mientras tanto |
+| 5 · Arranque y verificación | Antes de que la versión nueva atienda: vuelta atrás automática → `4`. **Después** (ya respondió `401` y los quioscos le entregan fichajes): sale `5` **sin volver atrás** | Con `4`, igual que arriba: **la versión nueva nunca recibió tráfico**. Con `5`, la versión nueva **sigue en servicio** con todos los datos; falta algo posterior (`horizon`, `scheduler`, `reverb`) | Con `4`, igual que arriba. Con `5` y «ACTUALIZACION HECHA, PERO INCOMPLETA»: **no restaures ninguna copia**; runbook §5, caso C |
+| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (las órdenes, con la ruta de la copia, terminan en retirar el mantenimiento y comprobar que `/api/v1/auth/me` da `401`; si la copia ya se restauró, el mensaje lo dice y **no manda restaurarla otra vez**) | Runbook §5. Los quioscos siguen encolando mientras tanto |
 | 7 · Informe | — | El **informe** en `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), siempre. El **detalle** (`update-<fecha>.detalle.log`: salida cruda, **puede llevar datos personales**) **no está ahí**: vive solo en `/var/log/kronoqr/` (`root:root 0600`, directorio `0700`), junto a una copia local del informe. El informe aparece en `reports/` **al terminar, no mientras corre**; si no se puede publicar, el script avisa y dice que queda a salvo en `/var/log/kronoqr/`. Hace falta `setpriv` (paquete `util-linux`). **Cuánto se guardan** (desde la 2.2.0): el detalle, **30 días** (`KRONOQR_LOG_RETENTION_DAYS` en el entorno de quien ejecuta el script, mínimo 7); el resumen local `update-<fecha>.log`, sin datos personales, **90 días**. Los borra `update.sh` al arrancar y `./doctor.sh` si lo ejecutas con `sudo`; si no actualizas ni ejecutas `doctor.sh` en meses, el borrado espera a la siguiente vez | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
@@ -1650,7 +1650,7 @@ sin tocar nada y dice «actualiza PRIMERO a la 2.2.1»; después, a la 2.3.0.
 en lugar de enseñar una cadena que la actualización no iba a recorrer.
 
 **Al actualizar a la 2.3.0: si la vuelta atrás automática se queda a medias.**
-Es el caso raro de la salida `5` (§11, paso 6), y cambian tres cosas:
+Es el caso raro de la salida `5` (§11, paso 6), y cambian cuatro cosas:
 
 - **Un Ctrl+C ya no la corta.** Mientras dura la vuelta atrás, la pantalla
   dice «NO LA INTERRUMPAS» y ahora es verdad: ni el script ni las órdenes de
@@ -1665,10 +1665,29 @@ Es el caso raro de la salida `5` (§11, paso 6), y cambian tres cosas:
 - **`./doctor.sh` da `[FALLA]` con la aplicación en mantenimiento**, por
   dentro (`app.maintenance_mode`) y por el borde, con la orden para retirarlo.
   Hasta ahora salía en verde.
+- **Si la copia ya estaba restaurada, no se restaura dos veces.** El mensaje lo
+  dice y empieza en «relanzar la versión anterior». Si no, sus primeros pasos
+  paran también lo que haya quedado de la actualización (una migración
+  interrumpida sigue viva en su contenedor) y cierran las sesiones abiertas
+  contra la base, que antes hacían fallar la restauración.
 
 Y si una migración falla, la pantalla y el informe dicen **cuál**, y el motivo
 de una copia previa fallida remite al detalle técnico de `/var/log/kronoqr/`,
 que es donde está la causa.
+
+**Al actualizar a la 2.3.0: una vez que la versión nueva atiende, ya no hay
+vuelta atrás.** En cuanto retira su mantenimiento y la API responde `401`, los
+quioscos empiezan a entregarle lo que tenían en cola. Desde ese momento, si
+falla algo posterior —arrancar `horizon`, `scheduler` o `reverb`—, `update.sh`
+**no restaura la copia previa**, porque borraría esos fichajes: sale con `5` y
+la pantalla dice «ACTUALIZACION HECHA, PERO INCOMPLETA». La versión nueva sigue
+en servicio con todos los datos y **no hay que restaurar nada**; hay que
+arrancar el proceso que falta, con las órdenes que imprime
+([`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)
+§5, caso C). Ese día no hay copia nocturna ni exportaciones mientras siga
+parado: resuélvelo el mismo día. Y si el servidor no tiene `setsid` (paquete
+`util-linux`), el paso 1 avisa: sin él, un Ctrl+C sí podría cortar una vuelta
+atrás a medias.
 
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que

@@ -438,7 +438,7 @@ is in the message, which is what you have to read.**
 | `2` | **Requirements not met. NOTHING written.** The machine is as it was | `install.sh`: Docker missing, disk, port in use. `backup.sh`/`restore.sh`: `pg_dump` missing, destination not writable, no space, or `BACKUP_ENCRYPTION_KEY` missing. `update.sh`: a precondition is not met, or **the pre-update backup failed**; the installation stays on its version. `doctor.sh`: **Docker is not responding**, or the Compose version is not the supported one; nothing else could be checked |
 | `3` | **Incompatible prior state. NOTHING written** | `install.sh`: there is already an installation (use `update.sh`). `backup.sh`: there is no backup to verify, or the destination already exists. `restore.sh`: there are still open connections against the database. `update.sh`: already on the target version, or there is no installation to update. `doctor.sh`: **there is no installation to diagnose** on this server — if it is a new one, what you need is `install.sh` |
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
-| `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
+| `5` | **Failed and NOT everything could be undone, or something failed after the new version was already serving (and then nothing is undone). Manual intervention required.** The message says exactly what is left, which order removes it and whether anything has to be restored or not | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up; it is not the certificate but the `/health` and `/ready` probes, a `[FAILURE]` from `product:doctor` or a package without it, and the message says which ([`installation.md`](installation.md) §2). `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`) or because `scheduler` or `horizon` are stopped; with the application stopped, in one of the external checks. The message says what to read |
 | `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish). `install.sh` and `update.sh`: the cosign signature of a product image is **not valid** (only checked if you have cosign installed, §7.1 of [`installation.md`](installation.md)); `update.sh` exits at step 1 touching nothing and `install.sh` undoes what it wrote. Do not install those images and tell the vendor with the detail the script prints |
 | `8` | **Restore completed but interrupted by a signal.** `restore.sh` only: the signal arrived during or after the database swap. The restored database is ALREADY in service and the previous one is kept with its mark | `restore.sh`: **do not restore again**. If the audit entry was also left pending, it exits with `6` and the command that writes it. `update.sh` treats it as restored and carries on with its rollback |
@@ -1119,8 +1119,8 @@ The seven steps and what happens if each one fails:
 | 2 · Maintenance | Exits `4` | Maintenance lifted; nothing touched | Retry. If it happens again, `docker compose logs app` |
 | 3 · Pre-update backup | Exits `2` | Maintenance lifted; nothing touched. **No backup, no update** | The cause is in the detail, `/var/log/kronoqr/update-<date>.detalle.log` (the message gives the path). [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) §2 and run again |
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped and which migration failed |
-| 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
-| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (the commands, with the path of the backup, end by lifting maintenance and checking that `/api/v1/auth/me` gives `401`) | Runbook §5. The kiosks keep queueing meanwhile |
+| 5 · Start-up and verification | Before the new version serves: automatic rollback → `4`. **After** (it already answered `401` and the kiosks hand it clockings): exits `5` **without rolling back** | With `4`, same as above: **the new version never received traffic**. With `5`, the new version **stays in service** with all the data; something later is missing (`horizon`, `scheduler`, `reverb`) | With `4`, same as above. With `5` and "UPDATE DONE, BUT INCOMPLETE": **do not restore any backup**; runbook §5, case C |
+| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (the commands, with the path of the backup, end by lifting maintenance and checking that `/api/v1/auth/me` gives `401`; if the backup was already restored, the message says so and **does not ask to restore it again**) | Runbook §5. The kiosks keep queueing meanwhile |
 | 7 · Report | — | The **report** at `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), always. The **detail** (`update-<fecha>.detalle.log`: raw output, **may contain personal data**) is **not there**: it lives only in `/var/log/kronoqr/` (`root:root 0600`, directory `0700`), next to a local copy of the report. The report appears in `reports/` **when the script finishes, not while it runs**; if it cannot be published, the script warns and says it is safe in `/var/log/kronoqr/`. `setpriv` (`util-linux` package) is required. **How long they are kept** (since 2.2.0): the detail, **30 days** (`KRONOQR_LOG_RETENTION_DAYS` in the environment of whoever runs the script, minimum 7); the local summary `update-<fecha>.log`, without personal data, **90 days**. `update.sh` deletes them when it starts and `./doctor.sh` does too if you run it with `sudo`; if you neither update nor run `doctor.sh` for months, the deletion waits for the next run | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
@@ -1667,7 +1667,7 @@ version>` now gives the same answer, with the same `2`, instead of showing a
 chain the update would not follow.
 
 **When updating to 2.3.0: if the automatic rollback is left half-done.** It is
-the rare case of exit `5` (§11, step 6), and three things change:
+the rare case of exit `5` (§11, step 6), and four things change:
 
 - **A Ctrl+C no longer cuts it.** While the rollback runs, the screen says "DO
   NOT INTERRUPT IT" and now it is true: neither the script nor the Docker
@@ -1682,10 +1682,29 @@ the rare case of exit `5` (§11, step 6), and three things change:
 - **`./doctor.sh` gives `[FAIL]` with the application under maintenance**, from
   inside (`app.maintenance_mode`) and through the edge, with the command to
   lift it. Until now it came out green.
+- **If the backup was already restored, it is not restored twice.** The message
+  says so and starts at "relaunch the previous version". Otherwise its first
+  steps also stop whatever is left of the update (an interrupted migration stays
+  alive in its container) and close the sessions open against the database,
+  which used to make the restore fail.
 
 And if a migration fails, the screen and the report say **which one**, and the
 reason for a failed pre-update backup points to the technical detail in
 `/var/log/kronoqr/`, which is where the cause is.
+
+**When updating to 2.3.0: once the new version serves, there is no rollback
+any more.** As soon as it lifts its maintenance and the API answers `401`, the
+kiosks start handing it what they had queued. From that moment, if something
+later fails —starting `horizon`, `scheduler` or `reverb`—, `update.sh` **does
+not restore the pre-update backup**, because it would erase those clockings: it
+exits `5` and the screen says "UPDATE DONE, BUT INCOMPLETE". The new version
+stays in service with all the data and **nothing has to be restored**; start the
+missing process with the commands it prints
+([`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md)
+(in Spanish) §5, case C). There is no nightly backup and no exports while it
+stays stopped: fix it the same day. And if the server has no `setsid`
+(`util-linux` package), step 1 warns: without it, a Ctrl+C could still cut a
+rollback half-way.
 
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
