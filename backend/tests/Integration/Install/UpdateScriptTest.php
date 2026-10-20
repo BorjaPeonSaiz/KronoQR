@@ -1192,3 +1192,174 @@ it('con la salida estandar en una TUBERIA YA CERRADA (SIGPIPE real) la vuelta at
         ->and($stderr)->toContain('ACTUALIZACION DESHECHA')
         ->and($stderr)->not->toContain('NO_DEBE_LLEGAR');
 })->group('RF-PD-10', 'RNF-D-04');
+
+it('no admite origenes anteriores a la 2.2.0 y manda primero a la intermedia, nunca al propio destino (D3, V21-6-PL-02)', function (): void {
+    // La 2.0.0 y la 2.1.0 caen dentro de la ventana de la 2.3.0 (menor vigente y
+    // las dos anteriores), pero esos saltos nunca se ejecutaron de verdad y sus
+    // imagenes no estan publicadas: no se prometen. La respuesta a «a donde voy
+    // primero» tiene que ser una version ANTERIOR al destino.
+    $matriz = matrizSintetica(<<<'TXT'
+        2.0.0 -
+        2.1.0 -
+        2.2.0 -
+        2.2.1 -
+        2.3.0 *
+        TXT);
+
+    $resultado = bashConElActualizador(sprintf(
+        'kq_versions_load %s; '
+        .'echo "sources: $(kq_supported_sources 2.3.0 | tr "\n" " ")"; '
+        .'echo "hop-2.1: $(kq_first_hop 2.1.0 2.3.0)"; '
+        .'echo "hop-2.0: $(kq_first_hop 2.0.0 2.3.0)"; '
+        .'kq_is_supported_source 2.1.0 2.3.0 || echo "2.1 no"; '
+        .'kq_is_supported_source 2.2.0 2.3.0 && echo "2.2 ok"',
+        escapeshellarg($matriz),
+    ));
+    unlink($matriz);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('sources: 2.2.0 2.2.1 ')
+        ->and($resultado->getOutput())->toContain('hop-2.1: 2.2.1')
+        ->and($resultado->getOutput())->toContain('hop-2.0: 2.2.1')
+        ->and($resultado->getOutput())->toContain('2.1 no')
+        ->and($resultado->getOutput())->toContain('2.2 ok');
+})->group('RF-PD-10');
+
+it('--chain da la misma respuesta que el paso 1: sin cadena para un origen que la actualizacion rechaza (V6-PL-04)', function (): void {
+    $version = trim((string) file_get_contents(Repo::file('VERSION')));
+
+    $fuera = ejecutarActualizador(['--chain', '2.1.0']);
+    $noPublicada = ejecutarActualizador(['--chain', '2.0.5']);
+    $valida = ejecutarActualizador(['--chain', '2.2.0']);
+
+    expect($fuera->getExitCode())->toBe(2, $fuera->getOutput())
+        ->and($fuera->getErrorOutput())->toContain('PRIMERO')
+        ->and($fuera->getOutput())->toBe('')
+        ->and($noPublicada->getExitCode())->toBe(2)
+        ->and($noPublicada->getErrorOutput())->toContain('no es ninguna version publicada')
+        ->and($valida->getExitCode())->toBe(0, $valida->getErrorOutput());
+
+    $cadena = array_values(array_filter(explode("\n", trim($valida->getOutput()))));
+    expect(end($cadena))->toBe($version);
+})->group('RF-PD-10');
+
+it('reconoce por su codigo de salida la senal que corto una orden (V21-3-PL-03)', function (): void {
+    $resultado = bashConElActualizador(
+        'for c in 129 130 143 1 2 137; do printf "%s=%s " "$c" "$(signal_of_status "$c" || printf no)"; done'
+    );
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toBe('129=HUP 130=INT 143=TERM 1=no 2=no 137=no ');
+})->group('RF-PD-10');
+
+it('nombra la primera migracion que no consta como aplicada, y nunca falla (V21-3-PL-04)', function (): void {
+    $resultado = bashConElActualizador(<<<'BASH'
+        applied_migrations() { printf '%s\n' 2026_01_01_000000_a 2026_01_02_000000_b; }
+        printf 'pendiente=%s\n' "$(first_unapplied_migration /m/2026_01_01_000000_a.php /m/2026_01_02_000000_b.php /m/2026_01_03_000000_c.php /m/2026_01_04_000000_d.php)"
+        printf 'todas=[%s]\n' "$(first_unapplied_migration /m/2026_01_01_000000_a.php)"
+        applied_migrations() { return 0; }
+        printf 'sin-base=%s\n' "$(first_unapplied_migration /m/2026_01_03_000000_c.php /m/2026_01_04_000000_d.php)"
+        BASH);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('pendiente=2026_01_03_000000_c')
+        ->and($resultado->getOutput())->toContain('todas=[]')
+        ->and($resultado->getOutput())->toContain('sin-base=2026_01_03_000000_c');
+})->group('RF-PD-10');
+
+it('una senal anotada manda sobre el motivo, y la vuelta atras nombra la migracion en curso (V21-3-PL-03, V21-3-PL-04)', function (): void {
+    // El Ctrl+C llega a todo el grupo: `docker compose` sale con 130 y bash puede
+    // entrar por el fallo de la orden y no por su trap. Lo que se registra es la
+    // interrupcion, no «la migracion ha fallado». Y la pantalla dice cual.
+    $proceso = inPlaceParadoAntesDeMigrar(
+        'exec 3>&1 4>&2; STEP=2; applied_migrations() { return 0; }; '
+        .'MIGRATING_FILES=(/m/2026_01_03_000000_c.php); INTERRUPTED_BY=INT; '
+        .'rollback_and_die "$(kq_format u_f_migrating_version 2.3.0 2.2.1)" migration_failed'
+    );
+
+    [, $resto] = explode("--- docker\n", $proceso->getOutput(), 2);
+    [$docker] = explode("--- dir\n", $resto, 2);
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('senal INT')
+        ->and($proceso->getErrorOutput())->not->toContain('la migracion de la version 2.3.0 ha fallado')
+        ->and($proceso->getErrorOutput())->toContain('MIGRACION QUE FALLABA (o en curso al pararse): 2026_01_03_000000_c')
+        ->and($docker)->toMatch('/ exec -T app php artisan up$/m');
+})->group('RF-PD-10', 'RNF-D-04');
+
+it('in place, la copia previa la hace la imagen ANTERIOR y la copia del .env lleva la subclave del WAL (V21-7-RV-2)', function (): void {
+    // `compose_rollback` usa `.env.kronoqr-pre-update`: IMAGE_TAG anterior y los
+    // digests vaciados, asi que la imagen es la vieja aunque el compose sea el nuevo.
+    $proceso = inPlaceParadoAntesDeMigrar('STEP=3; phase_backup');
+
+    [, $resto] = explode("--- docker\n", $proceso->getOutput(), 2);
+    [$docker] = explode("--- dir\n", $resto, 2);
+
+    expect($proceso->getExitCode())->toBe(2, $proceso->getErrorOutput())
+        ->and($docker)->toMatch('/--env-file \S+\/\.env\.kronoqr-pre-update -f \S+ run --rm --no-deps -T scheduler php artisan backup:run/')
+        ->and($proceso->getErrorOutput())->toContain('backup:run ha salido con 1')
+        ->and($proceso->getErrorOutput())->toContain('--- backup:run --mode dump ---')
+        ->and($proceso->getErrorOutput())->not->toContain('candado');
+
+    $wal = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        d="$(mktemp -d)"; trap 'rm -rf "${d}"' EXIT
+        printf 'APP_KEY=base64:prueba\nIMAGE_TAG=2.2.0\n' >"${d}/.env"
+        IN_PLACE=1; ENV_FILE="${d}/.env"; COMPOSE_FILE="${d}/docker-compose.yml"
+        WAL_KEY_DERIVED="$(printf 'a%.0s' $(seq 64))"
+        prepare_package
+        printf 'vivo=%s\n' "$(grep -c '^BACKUP_WAL_KEY=a\{64\}$' "${ENV_FILE}")"
+        printf 'rollback=%s\n' "$(grep -c '^BACKUP_WAL_KEY=a\{64\}$' "${ROLLBACK_ENV}")"
+        printf 'marca=%s\n' "$(grep -c '^# KQ_ROLLBACK_DIGESTS' "${ROLLBACK_ENV}")"
+        printf 'modo=%s\n' "$(stat -c '%a' "${ROLLBACK_ENV}")"
+        BASH);
+
+    expect($wal->getExitCode())->toBe(0, $wal->getErrorOutput())
+        ->and($wal->getOutput())->toContain('vivo=1')
+        ->and($wal->getOutput())->toContain('rollback=1')
+        ->and($wal->getOutput())->toContain('marca=1')
+        ->and($wal->getOutput())->toContain('modo=600');
+})->group('RF-PD-10', 'RS-08');
+
+it('escribe las vacias y la marca de la vuelta atras de golpe, sin dejar temporales y con el modo del original (V7-RV-5)', function (): void {
+    $resultado = bashConElActualizador(<<<'BASH'
+        d="$(mktemp -d)"; trap 'rm -rf "${d}"' EXIT
+        printf 'APP_KEY=x\nIMAGE_DIGEST_PHP=@sha256:viejo\n' >"${d}/.env"
+        chmod 0600 "${d}/.env"
+        kq_env_mark_rollback_digests "${d}/.env"
+        cat "${d}/.env"
+        printf -- '--- modo=%s ficheros=%s\n' "$(stat -c '%a' "${d}/.env")" "$(ls -A "${d}" | wc -l)"
+        BASH);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toBe(
+            "APP_KEY=x\nIMAGE_DIGEST_PHP=\nIMAGE_DIGEST_NGINX=\nIMAGE_DIGEST_POSTGRES=\n"
+            ."# KQ_ROLLBACK_DIGESTS: IMAGE_DIGEST_* vaciadas por la vuelta atras de update.sh; el siguiente update.sh las retira\n"
+            ."--- modo=600 ficheros=1\n"
+        );
+})->group('RF-PD-10');
+
+it('las ordenes de la salida 5 terminan retirando el mantenimiento y comprobando el 401 (V21-3-PL-02)', function (): void {
+    $resultado = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        ENV_FILE=/n/.env; COMPOSE_FILE=/n/docker-compose.yml; BACKUP_FILE=/b/copia.enc
+        SOURCE_VERSION=2.2.1; ROLLBACK_ENV=/a/.env; ROLLBACK_COMPOSE=/a/docker-compose.yml
+        CURRENT_ENV=/a/.env; CURRENT_COMPOSE=/a/docker-compose.yml; CFG_HTTPS_PORT=8443
+        exec 3>&1 4>&2
+        STEP=4; IN_PLACE=0
+        close_report() { :; }
+        # Las lineas finales salen por la salida de error ORIGINAL (V3-PL-01).
+        ( rollback_incomplete "prueba" ) || true
+        printf '%s\n' '--- mantenimiento' >&2
+        ( rollback_incomplete_maintenance "prueba" ) || true
+        BASH);
+
+    [$completa, $mantenimiento] = explode("--- mantenimiento\n", $resultado->getErrorOutput(), 2);
+
+    expect($completa)->toContain('3b. Retirar el mantenimiento:  docker compose --env-file /a/.env -f /a/docker-compose.yml exec -T app php artisan up')
+        ->and($completa)->toContain("curl -k -o /dev/null -w '%{http_code}' https://127.0.0.1:8443/api/v1/auth/me")
+        ->and($completa)->toContain('curl -k https://127.0.0.1:8443/api/v1/health  (debe decir 2.2.1)')
+        ->and($completa)->toContain('Salida 5')
+        ->and($mantenimiento)->toContain('https://127.0.0.1:8443/api/v1/auth/me')
+        ->and($mantenimiento)->toContain('Salida 5');
+})->group('RF-PD-10');

@@ -141,3 +141,45 @@ it('cuenta bien los argumentos de una llamada partida en lineas y con expansione
         ->and($third)->toBe(['clave_c', '"$@"'])
         ->and(scriptMessageArgumentsPlaceholders('a %s b %d c %% d %s'))->toBe(['s', 'd', 's']);
 })->group('RF-PD-13');
+
+/*
+ * Claves del catalogo que ningun script usa todavia, con el motivo y la tarea
+ * que las usara. Es la UNICA excepcion a la prueba de abajo, y caduca sola: en
+ * cuanto un script la use, la prueba pide quitarla de aqui.
+ */
+const SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS = [
+    // install.sh deshace `metrics/`, `daily/` y `base/` como «directorio de
+    // informes» (V1-PL-04 b); la tarea 7.5 del plan de la 2.3.0 lo corrige con esta.
+    'undo_metrics_dir' => 'bloque 7, tarea 7.5',
+];
+
+it('no guarda en el catalogo mensajes que ningun script usa', function (): void {
+    // V3-PL-08 (verificacion final de la 2.2.0): ocho claves que se traducian y
+    // no se veian nunca. Un texto muerto es trabajo de traduccion tirado y, peor,
+    // un texto que alguien corrige creyendo que arregla lo que ve el cliente.
+    // Una clave cuenta como usada si su nombre aparece como palabra en algun
+    // script fuera de las lineas que la definen.
+    $root = Repo::file('infra/scripts');
+    $corpus = '';
+    foreach ([...glob($root.'/*.sh') ?: [], ...glob($root.'/lib/*.sh') ?: []] as $file) {
+        $text = (string) file_get_contents($file);
+        $corpus .= (string) preg_replace('/^KQ_MSG_(?:ES|EN)\[[A-Za-z0-9_]+\]=/m', '', $text)."\n";
+    }
+
+    $sinUso = [];
+    $reservadasUsadas = [];
+    foreach (array_keys(scriptMessageArgumentsCatalog()) as $key) {
+        $usada = preg_match('/(?<![A-Za-z0-9_])'.preg_quote($key, '/').'(?![A-Za-z0-9_])/', $corpus) === 1;
+        $reservada = isset(SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS[$key]);
+        if (! $usada && ! $reservada) {
+            $sinUso[] = $key;
+        }
+        if ($usada && $reservada) {
+            $reservadasUsadas[] = $key;
+        }
+    }
+
+    expect($sinUso)->toBe([], "Claves del catalogo que ningun script usa (retiralas, o usalas):\n".implode("\n", $sinUso))
+        ->and($reservadasUsadas)->toBe([], "Claves reservadas que ya se usan (quitalas de SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS):\n"
+            .implode("\n", $reservadasUsadas));
+})->group('RF-PD-13');

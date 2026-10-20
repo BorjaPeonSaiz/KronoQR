@@ -61,7 +61,8 @@
 #   ./update.sh                    actualiza a la version de este paquete
 #   ./update.sh --check-only       solo el paso 1; no toca nada
 #   ./update.sh --supported-sources
-#   ./update.sh --chain 2.0.0
+#   ./update.sh --chain 2.2.0       intermedias desde esa version; sale con 2 si el paso 1
+#                                  la rechazaria, con el mismo motivo
 #   ./update.sh --help
 #
 # Ejecutalo dentro de `tmux` o `screen`, o con `nohup`: una sesion SSH que se
@@ -162,6 +163,14 @@ readonly KQ_WAIT_WORKERS=90
 # Matriz de versiones soportadas (doc 02 §11.6.5): la menor vigente y las DOS
 # anteriores.
 readonly KQ_SUPPORT_WINDOW_MINORS=2
+# Y nunca desde una version anterior a esta, este dentro de la ventana o no
+# (decision D3 del propietario, 18-10-2026; V21-6-PL-02). La primera version
+# publica es la 2.2.1 y los saltos desde la 2.0.0 o la 2.1.0 no se han ejecutado
+# nunca de verdad (sus imagenes ni estan en GHCR): no se prometen. Una
+# instalacion mas antigua pasa antes por una intermedia (kq_first_hop). Es un
+# dato del producto y no de versions.txt, que sigue listando esas versiones como
+# fronteras de migraciones.
+readonly KQ_MIN_SOURCE_VERSION="2.2.0"
 readonly KQ_CONTAINER_MIGRATIONS="/var/www/html/database/migrations"
 readonly KQ_CONTAINER_SCRIPTS="/opt/kronoqr/scripts"
 readonly KQ_MIN_DOCKER_FREE_GIB=2
@@ -261,6 +270,21 @@ STEP="1"
 # 0 nada que deshacer · 1 mantenimiento puesto (retirar) · 2 esquema o
 # contenedores tocados (restaurar la copia y relanzar la version anterior).
 ROLLBACK_ARMED=0
+# 1 desde que empieza la vuelta atras: cada `docker compose` corre en su propia
+# sesion (compose_current, compose_new, compose_rollback). Ver rollback_and_die.
+ROLLBACK_ISOLATED=0
+# La senal (INT, TERM, HUP) que interrumpio la actualizacion, si la hubo
+# (V21-3-PL-03). La fija on_signal, o el codigo de salida de la orden que la
+# recibio (signal_of_status). Decide `reason=interrupted` en la vuelta atras.
+INTERRUPTED_BY=""
+# La migracion que fallaba, o que estaba en curso, cuando se paro el paso 4
+# (V21-3-PL-04). Va a la pantalla y al informe; al asiento no (su payload es un
+# contrato cerrado del dominio).
+FAILED_MIGRATION=""
+# Las migraciones que el paso 4 esta aplicando ahora mismo (rutas del contenedor), o
+# ninguna. De ellas sale FAILED_MIGRATION al deshacer, tambien si lo que corto el
+# paso fue una senal y se entro por on_signal sin pasar por el fallo de la orden.
+declare -a MIGRATING_FILES=()
 ROLLBACK_SUMMARY=""
 FINAL_STATE=""
 # Primera version cuyo runtime NO recibe la credencial del superusuario (AUD-1,
@@ -336,8 +360,14 @@ err() {
 # lider de grupo. BusyBox no lo tiene: sin `-w`, setsid solo hace fork cuando el llamador
 # es lider de grupo, y un script lanzado desde una terminal no lo es (su `bash` es el
 # lider, no sus hijos), asi que ejecuta directamente y propaga el codigo.
+#
+# Una FUNCION no se puede lanzar en otra sesion (setsid ejecuta programas): se llama
+# tal cual. En produccion `docker` es siempre un programa; solo las pruebas de
+# integracion lo sustituyen por una funcion que anota las ordenes, y para ellas lo
+# que importa es QUE orden se lanza, no en que sesion. El aislamiento real lo
+# ejercita la etapa ⑧b de la CI con un SIGINT al grupo de procesos.
 isolated() {
-  if ! command -v setsid >/dev/null 2>&1; then
+  if declare -F -- "$1" >/dev/null 2>&1 || ! command -v setsid >/dev/null 2>&1; then
     "$@"
   elif setsid -w true 2>/dev/null; then
     setsid -w "$@"
@@ -618,7 +648,8 @@ kq_version_listed() {
 
 # Versiones publicadas desde las que se puede actualizar DIRECTAMENTE a la de
 # destino: misma mayor, menor igual o hasta KQ_SUPPORT_WINDOW_MINORS por
-# debajo, y anteriores a ella. Una por linea.
+# debajo, no anteriores a KQ_MIN_SOURCE_VERSION, y anteriores a ella. Una por
+# linea.
 kq_supported_sources() {
   local target="$1" version t_major t_minor floor
   t_major="$(kq_semver_major "${target}")"
@@ -627,6 +658,7 @@ kq_supported_sources() {
 
   for version in ${KQ_VERSIONS+"${KQ_VERSIONS[@]}"}; do
     [ "$(kq_semver_compare "${version}" "${target}")" = "-1" ] || continue
+    [ "$(kq_semver_compare "${version}" "${KQ_MIN_SOURCE_VERSION}")" != "-1" ] || continue
     [ "$(kq_semver_major "${version}")" = "${t_major}" ] || continue
     [ "$(kq_semver_minor "${version}")" -ge "${floor}" ] || continue
     printf '%s\n' "${version}"
@@ -655,7 +687,10 @@ kq_upgrade_chain() {
 # A que version hay que ir PRIMERO cuando el salto directo no esta soportado.
 # Imprime `major <ultima de la serie del origen>` si cambia la version mayor y
 # el origen no es ya esa ultima, `major-last` si lo es, la version intermedia
-# mas alta alcanzable desde el origen si la hay, o `none`.
+# mas alta alcanzable desde el origen si la hay, o `none`. Intermedia de verdad:
+# ANTERIOR al destino. Con el suelo de KQ_MIN_SOURCE_VERSION el destino puede caer
+# dentro de la ventana del origen (2.1.0 -> 2.3.0), y «actualiza primero a la
+# 2.3.0» seria pedirle lo que se acaba de negar; la respuesta es la 2.2.1.
 kq_first_hop() {
   local from="$1" target="$2" version best="" f_major f_minor ceiling
   f_major="$(kq_semver_major "${from}")"
@@ -676,6 +711,7 @@ kq_first_hop() {
 
   for version in ${KQ_VERSIONS+"${KQ_VERSIONS[@]}"}; do
     [ "$(kq_semver_compare "${version}" "${from}")" = "1" ] || continue
+    [ "$(kq_semver_compare "${version}" "${target}")" = "-1" ] || continue
     [ "$(kq_semver_major "${version}")" = "${f_major}" ] || continue
     [ "$(kq_semver_minor "${version}")" -le "${ceiling}" ] || continue
     best="${version}"
@@ -866,17 +902,40 @@ env_value() {
 # Docker Compose: dos proyectos que son el MISMO (`name: kronoqr`), descritos
 # desde dos directorios. Las tres funciones existen para que ninguna orden se
 # escriba con el fichero equivocado.
+#
+# DURANTE LA VUELTA ATRAS (ROLLBACK_ISOLATED=1) cada orden corre en su PROPIA
+# SESION y sin la entrada estandar del terminal (V21-3-PL-01). `trap '' INT`
+# protege a este script, y un hijo hereda la senal ignorada, pero el cliente de
+# Docker la pide al runtime de Go (`signal.Notify`), y eso le instala un manejador
+# aunque la heredara ignorada: un Ctrl+C, que el terminal manda a
+# TODO el grupo de procesos en primer plano, le llegaba igual y cortaba `up -d`,
+# `stop` o la restauracion a mitad. Fuera de la sesion del terminal no le llega.
+# Solo hace falta para docker: `curl`, `sleep` y los demas no reinstalan nada y
+# siguen ignorando la senal. `</dev/null` porque en otra sesion la terminal ya no
+# es suya; ninguna orden de la vuelta atras lee de la entrada estandar.
 #------------------------------------------------------------------------------
 compose_current() {
-  docker compose --env-file "${CURRENT_ENV}" -f "${CURRENT_COMPOSE}" "$@"
+  if [ "${ROLLBACK_ISOLATED}" -eq 1 ]; then
+    isolated docker compose --env-file "${CURRENT_ENV}" -f "${CURRENT_COMPOSE}" "$@" </dev/null
+  else
+    docker compose --env-file "${CURRENT_ENV}" -f "${CURRENT_COMPOSE}" "$@"
+  fi
 }
 
 compose_new() {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  if [ "${ROLLBACK_ISOLATED}" -eq 1 ]; then
+    isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@" </dev/null
+  else
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  fi
 }
 
 compose_rollback() {
-  docker compose --env-file "${ROLLBACK_ENV}" -f "${ROLLBACK_COMPOSE}" "$@"
+  if [ "${ROLLBACK_ISOLATED}" -eq 1 ]; then
+    isolated docker compose --env-file "${ROLLBACK_ENV}" -f "${ROLLBACK_COMPOSE}" "$@" </dev/null
+  else
+    docker compose --env-file "${ROLLBACK_ENV}" -f "${ROLLBACK_COMPOSE}" "$@"
+  fi
 }
 
 # Estado de un servicio: `healthy`, `running` (sin sonda) u otra cosa. awk
@@ -1431,6 +1490,32 @@ same_installation_env() {
   return 0
 }
 
+# Que hacer cuando el salto directo FROM -> TARGET no esta soportado: a que
+# version ir primero, o por que no hay camino. La misma respuesta en el paso 1 y en
+# `--chain` (V6-PL-04): una orden de consulta que promete una cadena que el flujo
+# real rechaza hace planificar una ventana que el script no va a recorrer.
+#   unsupported_source_fix FROM TARGET
+unsupported_source_fix() {
+  local from="$1" target="$2" hop supported
+  hop="$(kq_first_hop "${from}" "${target}")"
+  supported="$(kq_supported_sources "${target}" | tr '\n' ' ')"
+  case "${hop}" in
+  major-last)
+    kq_format u_f_unsupported_major_last "${from}" "$(kq_semver_major "${from}")" "$(kq_semver_major "${target}")"
+    ;;
+  major\ *)
+    kq_format u_f_unsupported_major "${from}" "$(kq_semver_major "${from}")" \
+      "$(kq_semver_major "${target}")" "${hop#major }"
+    ;;
+  none)
+    kq_format u_f_unsupported_none "${from}" "${target}"
+    ;;
+  *)
+    kq_format u_f_unsupported_hop "${from}" "${target}" "${supported% }" "${hop}"
+    ;;
+  esac
+}
+
 # La version de origen es la que dice IMAGE_TAG del .env: es lo que install.sh
 # escribio y lo que Compose levanto. La sonda se contrasta despues, en
 # check_services, y si discrepa se avisa.
@@ -1468,29 +1553,8 @@ check_source_version() {
   fi
 
   if ! kq_is_supported_source "${SOURCE_VERSION}" "${TARGET_VERSION}"; then
-    local hop supported
-    hop="$(kq_first_hop "${SOURCE_VERSION}" "${TARGET_VERSION}")"
-    supported="$(kq_supported_sources "${TARGET_VERSION}" | tr '\n' ' ')"
-    case "${hop}" in
-    major-last)
-      check_fail "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")" \
-        "$(kq_format u_f_unsupported_major_last "${SOURCE_VERSION}" "$(kq_semver_major "${SOURCE_VERSION}")" \
-          "$(kq_semver_major "${TARGET_VERSION}")")"
-      ;;
-    major\ *)
-      check_fail "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")" \
-        "$(kq_format u_f_unsupported_major "${SOURCE_VERSION}" "$(kq_semver_major "${SOURCE_VERSION}")" \
-          "$(kq_semver_major "${TARGET_VERSION}")" "${hop#major }")"
-      ;;
-    none)
-      check_fail "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")" \
-        "$(kq_format u_f_unsupported_none "${SOURCE_VERSION}" "${TARGET_VERSION}")"
-      ;;
-    *)
-      check_fail "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")" \
-        "$(kq_format u_f_unsupported_hop "${SOURCE_VERSION}" "${TARGET_VERSION}" "${supported% }" "${hop}")"
-      ;;
-    esac
+    check_fail "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")" \
+      "$(unsupported_source_fix "${SOURCE_VERSION}" "${TARGET_VERSION}")"
     return 0
   fi
   check_pass "$(kq_format u_c_supported "${SOURCE_VERSION}" "${TARGET_VERSION}")"
@@ -2089,6 +2153,13 @@ prepare_package() {
       ! kq_env_mark_rollback_digests "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}"; then
       die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${ROLLBACK_ENV}")"
     fi
+    # La subclave del WAL, en los DOS: la copia se hizo antes de escribirla, y con ella
+    # corre la copia previa (paso 3) y la version anterior tras una vuelta atras, que
+    # la deja como .env (settle_in_place_env). `backup:run` la deriva sola si falta
+    # (kq_wal_key_ensure), pero el `postgres` relanzado no: sin ella dejaria de
+    # archivar el WAL. Es la derivada ya comprobada (check_wal_key), la misma que
+    # tendra el .env vivo.
+    write_wal_key "${ROLLBACK_ENV}"
     write_wal_key "${ENV_FILE}"
     return 0
   fi
@@ -2218,9 +2289,43 @@ settle_in_place_env() {
 
 arm_rollback_traps() {
   trap 'rollback_and_die "$(kq_format u_f_unexpected "${LINENO}")" unexpected_error' ERR
-  trap 'rollback_and_die "$(kq_format u_interrupted INT)" interrupted' INT
-  trap 'rollback_and_die "$(kq_format u_interrupted TERM)" interrupted' TERM
-  trap 'rollback_and_die "$(kq_format u_interrupted HUP)" interrupted' HUP
+  trap 'on_signal INT' INT
+  trap 'on_signal TERM' TERM
+  trap 'on_signal HUP' HUP
+}
+
+# Una senal que llega al script con la vuelta atras armada (V21-3-PL-03). Se anota
+# antes de deshacer: el asiento, el informe y la pantalla dicen «interrumpido», no
+# el fallo de la orden que la senal corto.
+on_signal() {
+  INTERRUPTED_BY="$1"
+  rollback_and_die "$(kq_format u_interrupted "$1")" interrupted
+}
+
+# La senal que mato a una orden, por su codigo de salida: 128 + numero, como lo
+# deja bash (y como sale `docker compose` al recibirla). Un Ctrl+C llega a todo el
+# grupo de procesos en primer plano, y bash NO ejecuta su trap si el hijo
+# sobrevive a la senal y sale por su cuenta: el codigo es lo unico que queda.
+#   signal_of_status CODIGO   imprime HUP, INT o TERM; 1 si no es una de ellas.
+signal_of_status() {
+  case "$1" in
+  129) printf 'HUP' ;;
+  130) printf 'INT' ;;
+  143) printf 'TERM' ;;
+  *) return 1 ;;
+  esac
+}
+
+# Deshace por el fallo de una orden: por interrupcion si su codigo dice que la
+# corto una senal, y si no con el motivo propio del paso.
+#   rollback_after_status CODIGO MOTIVO CODIGO_DE_MOTIVO
+rollback_after_status() {
+  local status="$1" reason="$2" reason_code="$3" signal
+  if signal="$(signal_of_status "${status}")"; then
+    INTERRUPTED_BY="${signal}"
+    rollback_and_die "$(kq_format u_interrupted "${signal}")" interrupted
+  fi
+  rollback_and_die "${reason}" "${reason_code}"
 }
 
 disarm_rollback_traps() {
@@ -2400,25 +2505,26 @@ phase_maintenance() {
 }
 
 #------------------------------------------------------------------------------
-# Paso 3 — copia verificada, bloqueante, con el compose de la instalacion
-# ACTUAL. QUE IMAGEN LA HACE DEPENDE DEL MODO, y hay que decirlo como es (V7-RV-1):
+# Paso 3 — copia verificada, bloqueante, hecha SIEMPRE POR LA IMAGEN DE LA VERSION
+# VIGENTE, la que conoce el esquema que se copia (V21-7-RV-2). Por eso va con
+# compose_rollback, que es exactamente lo que relanzaria la vuelta atras:
 #
-#   · LADO A LADO, la version vigente: su compose, su .env, su imagen.
-#   · IN PLACE, la imagen del PAQUETE NUEVO. El docker-compose.yml de la
-#     instalacion ya es el nuevo y fija su imagen por digest
-#     (`${IMAGE_DIGEST_PHP-@sha256:<nuevo>}`, package.sh), y el .env vivo no lo
-#     anula. Funciona porque in place SOLO se admite desde la 2.2.0
-#     (check_in_place_source): el .env ya lleva el rol de copias de solo lectura y
-#     el reparto de montajes de copias es el mismo. Desde una anterior fallaria
-#     siempre (superusuario en BACKUP_DB_*, raiz de BACKUP_PATH en solo lectura)
-#     y por eso se rechaza en el paso 1.
+#   · LADO A LADO, el compose y el .env de la instalacion actual: su imagen.
+#   · IN PLACE, el docker-compose.yml de la instalacion ya es el del paquete nuevo
+#     y fija la imagen NUEVA por digest (`${IMAGE_DIGEST_PHP-@sha256:<nuevo>}`,
+#     package.sh). Con el .env vivo, la copia la hacia el codigo nuevo contra el
+#     esquema viejo, y nadie habia comprobado que funcionase. Con la copia
+#     `.kronoqr-pre-update` (IMAGE_TAG anterior y los digests vaciados,
+#     prepare_package) resuelve a la imagen anterior por su etiqueta, que sigue en
+#     local. El resto de la definicion es la del compose nuevo; vale porque in place
+#     SOLO se admite desde la 2.2.0 (check_in_place_source), con el mismo rol de
+#     copias de solo lectura y el mismo reparto de montajes. Desde una anterior
+#     fallaria siempre y por eso se rechaza en el paso 1.
 #
-# Que la haga la imagen nueva no toca el esquema: `backup:run` solo invoca
-# backup.sh, que es `pg_dump` de lo que haya, sin escribir en la base, y la copia
-# sale cifrada y autenticada (KQE1). Lo que NO puede hacer este paso es dejar
-# corriendo un contenedor de la version nueva: el de la copia es efimero
-# (`run --rm`) y, si la copia falla, lift_maintenance vuelve a ARRANCAR los
-# contenedores parados en vez de recrearlos.
+# La copia no toca el esquema: `backup:run` solo invoca backup.sh, que es
+# `pg_dump` de lo que haya, sin escribir en la base, y sale cifrada y autenticada
+# (KQE1). El contenedor es efimero (`run --rm`) y, si la copia falla,
+# lift_maintenance vuelve a ARRANCAR los contenedores parados en vez de recrearlos.
 #
 # Y DE ESTA EJECUCION:
 # `backup:run --mode dump` deja su nombre en daily/LATEST, y ese fichero tiene
@@ -2468,12 +2574,12 @@ phase_backup() {
   # que nada escriba durante la migracion, y `exec` sobre un contenedor parado
   # falla con 1. Tampoco con `app` (AUD-1): a `app` no le llegan ni BACKUP_DB_* ni
   # la clave de cifrado, solo al planificador. `run` levanta un contenedor efimero
-  # con el MISMO entorno que `scheduler` (en la 2.1.0 el .env entero; desde la
-  # 2.2.0, solo lo suyo), asi que vale para las dos versiones.
+  # con el MISMO entorno que `scheduler` (desde la 2.2.0, la primera version de origen
+  # admitida, solo lo suyo) y con la imagen de la version VIGENTE (compose_rollback).
   detail_note "--- backup:run --mode dump ---"
-  compose_current run --rm --no-deps -T scheduler php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
+  compose_rollback run --rm --no-deps -T scheduler php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
   if [ "${code}" -ne 0 ]; then
-    backup_failed "$(kq_format u_f_backup "${code}" "$(kq_exit_name "${code}")" "${SOURCE_VERSION}")"
+    backup_failed "$(kq_format u_f_backup "${code}" "${SOURCE_VERSION}" "${DETAIL_FILE:-?}")"
   fi
 
   name="$(head -n 1 "${CFG_BACKUP_PATH}/daily/LATEST" 2>/dev/null | tr -d '[:space:]' || true)"
@@ -2528,8 +2634,28 @@ last_migration_batch() {
   printf '%s' "${batch:-?}"
 }
 
+# De las migraciones que se mandaron aplicar (rutas del contenedor, en orden), la
+# primera que no consta en `migrations`: la que fallaba o estaba en curso cuando se
+# paro el paso (V21-3-PL-04). Si la base no responde, la primera de la lista, que es
+# la que se intento antes. Nunca falla: applied_migrations absorbe el error de la
+# consulta y el grep va dentro de un `if`, asi que con el trap ERR armado tampoco lo
+# dispara (y rollback_and_die, que es quien la llama, ya lo ha retirado).
+first_unapplied_migration() {
+  local applied path name
+  applied="$(applied_migrations)"
+  for path in "$@"; do
+    name="${path##*/}"
+    name="${name%.php}"
+    if ! grep -qxF "${name}" <<<"${applied}"; then
+      printf '%s' "${name}"
+      return 0
+    fi
+  done
+  return 0
+}
+
 phase_migrations() {
-  local version total pending_total applied name started seconds count batch
+  local version total pending_total applied name started seconds count batch status
   declare -a files=()
 
   STEP="4"
@@ -2547,8 +2673,10 @@ phase_migrations() {
   # volumenes y no se tocan.
   say "$(kq_format u_infra_up "${TARGET_VERSION}")"
   detail_note "--- up -d postgres redis (${TARGET_VERSION}) ---"
-  compose_new up -d postgres redis >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
+  status=0
+  compose_new up -d postgres redis >>"$(detail_sink)" 2>&1 || status=$?
+  [ "${status}" -eq 0 ] ||
+    rollback_after_status "${status}" "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new postgres "${KQ_WAIT_DEPENDENCIES}" ||
     rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new redis "${KQ_WAIT_DEPENDENCIES}" ||
@@ -2592,10 +2720,15 @@ phase_migrations() {
       args+=("--path=${name}")
     done
     detail_note "--- migrate (${version}) ---"
-    if ! compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
-      >>"$(detail_sink)" 2>&1; then
-      rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
+    MIGRATING_FILES=("${files[@]}")
+    status=0
+    compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
+      >>"$(detail_sink)" 2>&1 || status=$?
+    if [ "${status}" -ne 0 ]; then
+      rollback_after_status "${status}" \
+        "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
     fi
+    MIGRATING_FILES=()
     seconds=$(($(now_epoch) - started))
     batch="$(last_migration_batch)"
     CHECKPOINTS+=("${version}|${count}|${seconds}|${batch}")
@@ -3000,7 +3133,7 @@ phase_start_and_verify() {
   say "$(kq_format u_maintenance_new "${TARGET_VERSION}")"
   detail_note "--- artisan down (${TARGET_VERSION}) ---"
   compose_new exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_maintenance_on "${COMPOSE_FILE}")" maintenance_failed
+    rollback_and_die "$(kq_text u_f_maintenance_on_new)" maintenance_failed
 
   say "$(kq_format u_edge_up "${TARGET_VERSION}")"
   detail_note "--- up -d nginx (${TARGET_VERSION}) ---"
@@ -3019,7 +3152,7 @@ phase_start_and_verify() {
       remember_check "edge ${path}" "$(kq_text u_report_ok)"
     else
       remember_check "edge ${path}" "$(kq_text u_report_failed)"
-      rollback_and_die "$(kq_format u_f_edge_probe "${path}" "${CFG_HTTPS_PORT}" "${COMPOSE_FILE}")" health_probe_failed
+      rollback_and_die "$(kq_format u_f_edge_probe "${path}" "${CFG_HTTPS_PORT}")" health_probe_failed
     fi
   done
   reported="$(json_field "$(edge_probe /api/v1/health || true)" version)"
@@ -3031,7 +3164,7 @@ phase_start_and_verify() {
   # 401 si la aplicacion atiende y 503 si sigue en mantenimiento.
   detail_note "--- artisan up (${TARGET_VERSION}) ---"
   compose_new exec -T app php artisan up >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_maintenance_off "${COMPOSE_FILE}")" maintenance_failed
+    rollback_and_die "$(kq_text u_f_maintenance_off)" maintenance_failed
   write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
   status="$(edge_status "${KQ_MANAGEMENT_PROBE}")"
   if [ "${status}" = "401" ]; then
@@ -3121,7 +3254,10 @@ preserve_failed_state() {
   detail_note ""
   detail_note "--- $(kq_text u_rollback_evidence) ---"
   compose_new ps -a >>"$(detail_sink)" 2>&1 || true
-  compose_new logs --tail 80 app >>"$(detail_sink)" 2>&1 || true
+  # Los dos que pueden haber fallado en el paso 5. Es la UNICA copia de sus logs:
+  # tras relanzar la version anterior, `docker compose logs` ensena los suyos
+  # (V3-PL-03), y por eso los motivos remiten aqui y no a esa orden.
+  compose_new logs --tail 80 app nginx >>"$(detail_sink)" 2>&1 || true
   detail_note "--- fin ---"
   say "$(kq_format u_rollback_evidence_at "${DETAIL_FILE:-?}")"
 }
@@ -3136,7 +3272,7 @@ rollback_incomplete_maintenance() {
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="${SOURCE_VERSION}"
   err ""
-  err_final "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}")"
+  err_final "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CFG_HTTPS_PORT}")"
   err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
@@ -3151,7 +3287,9 @@ rollback_incomplete() {
     "${ENV_FILE}" "${COMPOSE_FILE}" \
     "${ENV_FILE}" "${COMPOSE_FILE}" "${BACKUP_FILE}" \
     "${SOURCE_VERSION}" "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
-    "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}")"
+    "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
+    "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}" \
+    "${CFG_HTTPS_PORT}")"
   err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
@@ -3176,13 +3314,34 @@ rollback_and_die() {
   trap - ERR
   restore_std_streams
   set +e
+  # Y lo mismo para lo que lanza: cada `docker compose` de aqui en adelante va en
+  # su propia sesion, fuera del alcance de un Ctrl+C (V21-3-PL-01, ver compose_new).
+  ROLLBACK_ISOLATED=1
+
+  # Una senal anotada manda sobre el motivo con el que se llego aqui: si corto
+  # una orden y se entro por su fallo, lo que paso es la interrupcion (V21-3-PL-03).
+  if [ -n "${INTERRUPTED_BY}" ] && [ "${reason_code}" != "interrupted" ]; then
+    reason="$(kq_format u_interrupted "${INTERRUPTED_BY}")"
+    reason_code="interrupted"
+  fi
 
   # Se resuelve AQUI, con el STEP de cuando se disparo la vuelta atras: nada
   # de lo que sigue en esta funcion cambia de paso (RF-PD-10, SystemUpdateStep).
   failed_step="$(resolve_failed_step)"
 
+  # La migracion que fallaba o estaba en curso (V21-3-PL-04): aqui y no en el paso
+  # 4, para que tambien la nombre una interrupcion que entra por on_signal. La base
+  # sigue en pie (el paso 4 la levanto) y la consulta ya va aislada.
+  if [ -z "${FAILED_MIGRATION}" ] && [ "${#MIGRATING_FILES[@]}" -gt 0 ]; then
+    FAILED_MIGRATION="$(first_unapplied_migration "${MIGRATING_FILES[@]}")"
+  fi
+
   heading "$(kq_text u_phase_6)"
   err_final "$(kq_format u_rollback_reason "${reason}")"
+  if [ -n "${FAILED_MIGRATION}" ]; then
+    err_final "$(kq_format u_rollback_failed_migration "${FAILED_MIGRATION}" "${DETAIL_FILE:-?}")"
+    remember_check "failed-migration" "${FAILED_MIGRATION}"
+  fi
   err_final "$(kq_text u_rollback_dont_interrupt)"
 
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
@@ -3232,10 +3391,10 @@ rollback_and_die() {
     restore_extra+=(--expect-sha256 "${own_sha}")
     [ "${BACKUP_LEGACY:-0}" -ne 1 ] || restore_extra+=(--accept-unauthenticated)
   fi
-  # En su propia sesion (setsid): una senal del terminal al grupo en primer plano no
-  # llega a `docker compose run`, que la reenviaria al contenedor y mataria restore.sh
-  # entre sus dos renombrados.
-  isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
+  # En su propia sesion (ROLLBACK_ISOLATED): una senal del terminal al grupo en primer
+  # plano no llega a `docker compose run`, que la reenviaria al contenedor y mataria
+  # restore.sh entre sus dos renombrados.
+  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
     "${restore_extra[@]}" >>"$(detail_sink)" 2>&1
   code=$?
   if [ "${code}" -eq "${KQ_EXIT_RESTORED_INTERRUPTED}" ]; then
@@ -3362,7 +3521,7 @@ rollback_and_die() {
   kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
   if [ "${audit_known}" -eq 0 ]; then
     audit_status=0
-    audit_output="$(isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
       audit_status=$?
     detail_note "${audit_output}"
 
@@ -3585,6 +3744,18 @@ print_info() {
     ;;
   chain)
     kq_semver_valid "${OPT_INFO_ARG}" || die "${KQ_EXIT_USAGE}" "$(kq_format u_bad_option "--chain ${OPT_INFO_ARG}")"
+    # La MISMA respuesta que el paso 1 (V6-PL-04): un origen que el flujo real
+    # rechaza no tiene cadena. Sale con 2 y dice lo que diria la actualizacion: a
+    # que version ir primero o por que no hay camino. Lo que no es anterior al
+    # destino sigue dando «(ninguna: ...)» con 0, como hasta ahora.
+    if [ "$(kq_semver_compare "${OPT_INFO_ARG}" "${TARGET_VERSION}")" = "-1" ]; then
+      if ! kq_version_listed "${OPT_INFO_ARG}"; then
+        die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_source_unlisted "${OPT_INFO_ARG}" "${VERSIONS_FILE}" ".env")"
+      fi
+      if ! kq_is_supported_source "${OPT_INFO_ARG}" "${TARGET_VERSION}"; then
+        die "${KQ_EXIT_REQUIREMENTS}" "$(unsupported_source_fix "${OPT_INFO_ARG}" "${TARGET_VERSION}")"
+      fi
+    fi
     local out
     out="$(kq_upgrade_chain "${OPT_INFO_ARG}" "${TARGET_VERSION}")"
     if [ -n "${out}" ]; then
