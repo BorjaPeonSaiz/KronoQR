@@ -443,8 +443,13 @@ check_trusted_proxy_cidr() {
 #                       bloquea el fichaje ni el registro (ADR-019, regla 15):
 #                       un sistema recien instalado tiene que poder fichar
 #                       aunque la clave llegue una semana despues.
-#   MAIL_*              AVISO si el SMTP es el de desarrollo (`mailpit`) o esta
-#                       vacio. El producto no depende del correo (regla 12).
+#   MAIL_*              ERROR si son los valores de DESARROLLO de la plantilla
+#                       (`MAIL_HOST=mailpit`, remitente en `kronoqr.local`): no
+#                       son una eleccion, son la plantilla sin rellenar. AVISO si
+#                       MAIL_HOST esta vacio. Un hotel sin relevo SMTP pone
+#                       MAIL_MAILER=array (sin correo; `log` no, que copia cada
+#                       correo con nombres al log tecnico). El producto no depende
+#                       del correo (regla 12).
 #   ALERT_*             AVISO si ningun destinatario de alertas, o uno mal
 #                       escrito. Solo importa con la observabilidad encendida,
 #                       que es la que tiene Alertmanager.
@@ -474,11 +479,25 @@ check_operational_settings() {
   case "${mailer}" in
   "" | smtp)
     case "${value,,}" in
-    "" | mailpit)
-      check_warn "$(kq_format c_mail_unset "${value:-$(kq_text empty_value)}")" "$(kq_format w_mail_unset "${env_file}")"
+    mailpit)
+      # El buzon de pruebas del entorno del fabricante: en un servidor de hotel no
+      # existe nunca, asi que dejarlo no es una decision, es la plantilla sin
+      # rellenar (I3, decision del propietario del 20-10-2026).
+      check_fail "$(kq_format c_mail_dev "${value}")" "$(kq_format f_mail_dev "${env_file}")"
+      ;;
+    "")
+      check_warn "$(kq_format c_mail_unset "$(kq_text empty_value)")" "$(kq_format w_mail_unset "${env_file}")"
       ;;
     *)
       check_pass "$(kq_text c_mail_ok)"
+      ;;
+    esac
+    value="$(env_value "${env_file}" "MAIL_FROM_ADDRESS")"
+    case "${value,,}" in
+    *@kronoqr.local)
+      # El remitente de la plantilla: un dominio que no es de nadie, con el que
+      # cualquier relevo SMTP serio rechaza o marca como spam lo que se envie.
+      check_fail "$(kq_format c_mail_from_dev "${value}")" "$(kq_format f_mail_from_dev "${env_file}")"
       ;;
     esac
     ;;
@@ -563,4 +582,20 @@ kq_edge_status() {
     --header 'Accept: application/json' \
     "https://127.0.0.1:${port}${path}" 2>/dev/null)" || true
   printf '%s' "${code:-000}"
+}
+
+# Lo que significa el codigo de `php artisan license:show`, para install.sh y
+# update.sh: `ok` (0, vigente y dentro del plan), `attention` (3,
+# LicenseShowCommand::ATTENTION: sin licencia, caducada, no verifica o un limite
+# superado, que NO es un error y no bloquea nada, regla dura 15) o `error` (la
+# consulta en si ha fallado; el 1 es lo que da una excepcion no capturada). Antes de
+# la 2.3.0 «hay algo que mirar» tambien era 1; los dos scripts llaman siempre al
+# `license:show` de su propia imagen, asi que no hay mezcla de versiones.
+#   kq_license_status_class CODIGO
+kq_license_status_class() {
+  case "$1" in
+  0) printf 'ok' ;;
+  3) printf 'attention' ;;
+  *) printf 'error' ;;
+  esac
 }

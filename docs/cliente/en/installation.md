@@ -220,7 +220,10 @@ docs/CHANGELOG.md        What changes in each version.
 >   three commands that repair it ([`operation.md`](operation.md) §18).
 >
 > It never prints a secret: from the `.env` it only reads paths, ports and
-> file names. Its exit codes are in section 2, below.
+> file names. It exits `0` if there is no failure (there may be warnings) and
+> `6` if there is any; the "exit code" it prints inside is `product:doctor`'s
+> (0, 1 or 2), not its own. Each script's table is in
+> [`operation.md`](operation.md) §8; the one in section 2 is the installer's.
 
 ### 1.2 Put the certificate in place and fill in the configuration
 
@@ -262,7 +265,7 @@ touch the ones tagged `[CLIENTE]`:**
 
 | Tag | What it means |
 | --- | --- |
-| `[CLIENTE]` | You fill it in. The installer checks they are all there and does not install if one is missing. |
+| `[CLIENTE]` | You fill it in. The installer **does not install** if one with no alternative is missing (`APP_URL`, the networks, `BACKUP_PATH`, `COMPLIANCE_PROFILE`), if one still holds the template example (`APP_URL`, `PORTAL_INTERNAL_CIDR`, `IMAGE_REGISTRY`) or a development value (`MAIL_HOST=mailpit`, a sender in `kronoqr.local`). The licence and the alert recipients, if missing, only give a warning. |
 | `[INSTALADOR]` | **Leave it empty.** The installer generates it on your server. If you write something, it is replaced. |
 | `[FIJO]` | Do not touch. Changing it breaks something that does not look like this file. |
 | No tag | Has a sensible default. If in doubt, leave it as it is. |
@@ -277,7 +280,9 @@ PORTAL_INTERNAL_CIDR=10.0.10.0/24
 METRICS_ALLOW_CIDR=172.29.0.20/32
 TLS_ALLOW_SELF_SIGNED=false
 BACKUP_PATH=/var/backups/fichaje
-IMAGE_REGISTRY=ghcr.io/kronoqr
+IMAGE_REGISTRY=ghcr.io/<cuenta-del-fabricante>/kronoqr
+MAIL_HOST=smtp.tuhotel.es
+MAIL_FROM_ADDRESS=fichaje@tuhotel.es
 ```
 
 **`APP_URL` and `PORTAL_INTERNAL_CIDR` cannot be left as they come.** The
@@ -311,12 +316,18 @@ that it covers Prometheus (§6).
 without blocking the installation — if something does not add up: a
 `PORTAL_INTERNAL_CIDR` that contains no network of this server nor the kiosk
 one (the portal would answer `403` to everyone), a range open to the whole
-internet, a `MAIL_HOST` still set to `mailpit` (the vendor's test mailbox: no
-email would go out), an empty licence or no alert recipient. `update.sh` and
+internet, an empty `MAIL_HOST`, an empty licence or no alert recipient.
+**On the other hand, `MAIL_HOST=mailpit` (the vendor's test mailbox) and a
+`MAIL_FROM_ADDRESS` in `kronoqr.local` stop the installation**: they are the
+template left unfilled. If the hotel has no mail relay, set `MAIL_MAILER=array`,
+the "no mail" mode: it installs all the same, no mail is sent or stored, and
+incidents and the digest are read in the panel. **Do not use `MAIL_MAILER=log`**:
+it would copy every email in full, with employee names, into the technical log. `update.sh` and
 `./doctor.sh` repeat the network checks on every run.
 
-**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and today it downloads
-nothing: put the one the vendor gives you.** The images are published on
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and it downloads
+nothing: put the one the vendor gives you.** With the template one, the
+installer refuses in phase 1, writing nothing. The images are published on
 GitHub's container registry (GHCR) under the vendor's account, in the form
 `ghcr.io/<vendor-account>/kronoqr`, and the exact value reaches you in writing
 together with the licence. Write it with no trailing slash and no version: the
@@ -842,7 +853,11 @@ shown. Detail in [`configuration.md`](configuration.md) §2.2.
 The operation scripts (`install.sh`, `update.sh`, `doctor.sh`,
 `backup.sh`, `restore.sh`, `restore-drill.sh`) use **the same table**
 ([`operation.md`](operation.md) §8). It lets you write a cron
-job or a runbook without reading every script.
+job or a runbook without reading every script. **What follows is what each
+code means in `install.sh`**; in the others the same number means the same in
+general, but the concrete case changes (in `doctor.sh`, for example, `3` is
+"no installation to diagnose" and `6` "the diagnosis found a failure"): it is
+in that §8.
 
 | Code | Meaning | What to do |
 | --- | --- | --- |

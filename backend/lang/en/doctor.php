@@ -296,6 +296,10 @@ return [
                     .'certificate to check. In production this should not be the case.',
                 'warning_unreachable' => 'A secure connection to port :port could not be opened to read the '
                     .'certificate. The web server may not be up yet.',
+                'warning_unresolvable' => 'From inside the application container the name :host of APP_URL does '
+                    .'not resolve, so the certificate served by the web server could not be read. It does not mean '
+                    .'it is down: it usually happens when the name is only in the server\'s /etc/hosts, which the '
+                    .'containers do not see. What matters is that the tablets resolve it.',
                 'warning_unreadable' => 'The web server answered but the expiry date of its certificate could '
                     .'not be read.',
                 'warning_self_signed' => 'The certificate is self-signed and the configuration says self-signed '
@@ -845,6 +849,10 @@ return [
                 'warning_unreachable' => "Check that the web server is up:\n"
                     ."  docker compose ps nginx\n"
                     .'If you are running this during an installation, this is expected: check again at the end.',
+                'warning_unresolvable' => "Check that :host resolves from a tablet or a machine on the kiosk network.\n"
+                    ."For this check to see it as well, register the name in the hotel network's DNS instead of only\n"
+                    ."in the server's /etc/hosts. Meanwhile, the expiry can be read from the server:\n"
+                    .'  openssl s_client -connect 127.0.0.1::port -servername :host </dev/null | openssl x509 -noout -enddate',
                 'warning_unreadable' => 'Check the certificate files in TLS_CERT_DIR: the file may be truncated '
                     .'or not be a certificate at all.',
                 'warning_self_signed' => "Install a certificate issued by an authority the tablets trust, or\n"

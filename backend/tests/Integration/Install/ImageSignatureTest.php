@@ -31,6 +31,8 @@ function imageSignatureSandbox(?string $mode, string $version = 'v3.1.3'): strin
             'network' => "echo 'Error: dial tcp: lookup rekor.sigstore.dev: no such host' >&2\nexit 1\n",
             'denied' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/referrers: DENIED: denied' >&2\nexit 1\n",
             'ratelimit' => "echo 'Error: unexpected status code 429 Too Many Requests: toomanyrequests' >&2\nexit 1\n",
+            'sig404' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/manifests/sha256-aaa.sig: MANIFEST_UNKNOWN: manifest unknown; unexpected status code 404 Not Found' >&2\nexit 1\n",
+            'denied-and-nosig' => "echo 'Error: no signatures found; GET https://ghcr.io/token: DENIED: denied' >&2\nexit 1\n",
             // Se verifican todas las imagenes aunque la primera no tenga red. La primera llamada no tiene red; las siguientes, firma inexistente.
             'network-then-invalid' => 'if [ ! -e '.escapeshellarg($dir.'/segunda').' ]; then : >'.escapeshellarg($dir.'/segunda')."; echo 'Error: dial tcp: i/o timeout' >&2; exit 1; fi\necho 'Error: no matching signatures' >&2\nexit 1\n",
             default => "exit 0\n",
@@ -381,3 +383,109 @@ it('update.sh lee el images.lock separado por espacios y pasa IMAGE_DIGEST_*=@sh
     expect((string) file_get_contents($dir.'/entorno'))
         ->toContain("ENV_PHP=@{$a} ENV_NGINX=@{$b} ENV_POSTGRES=@{$c}");
 })->group('RS-10', 'RF-PD-10');
+
+it('un registro que niega el acceso nombra IMAGE_REGISTRY y su valor, y no habla de firma rota (V21-1-PL-01)', function (string $script): void {
+    // Sigue saliendo con 7 (se falla en cerrado: un registro comprometido puede
+    // negar solo la firma), pero el texto empieza por lo que casi siempre es: un
+    // IMAGE_REGISTRY mal escrito. install.sh y update.sh comparten el texto.
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('denied');
+    file_put_contents($dir.'/images.lock', 'php '.IMAGE_SIGNATURE_DIGEST."\nnginx ".IMAGE_SIGNATURE_DIGEST."\npostgres ".IMAGE_SIGNATURE_DIGEST."\n");
+
+    $llamada = $script === 'install'
+        ? 'ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; check_image_signatures'
+        : 'DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; CURRENT_ENV='.escapeshellarg($dir.'/.env')
+            .'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; check_images';
+    $process = new Process(
+        ['bash', '-c', 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/'.$script.'.sh')).'; kq_msg_init es; '.$llamada],
+        env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'],
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(7, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->toContain('--skip-signature-check')
+        ->and($process->getErrorOutput())->not->toContain('no es valida segun cosign');
+
+    if ($script === 'install') {
+        expect($process->getErrorOutput())->toContain('NEGADO EL ACCESO')
+            ->and($process->getErrorOutput())->toContain("IMAGE_REGISTRY: ahora vale '".IMAGE_SIGNATURE_REGISTRY."'");
+    } else {
+        // En update.sh el registro es el que servia la version instalada: «mal
+        // escrito» no es lo probable, y el texto no lo sugiere.
+        expect($process->getErrorOutput())->toContain('el registro que servia la version instalada ('.IMAGE_SIGNATURE_REGISTRY.') NIEGA EL ACCESO')
+            ->and($process->getErrorOutput())->not->toContain('mal escrito');
+    }
+})->with(['install', 'update'])->group('RS-10', 'RF-PD-02', 'RF-PD-10');
+
+it('una firma inexistente o un 429 siguen siendo «firma no valida», y solo el acceso negado culpa al registro', function (string $mode, string $esperado): void {
+    $dir = imageSignatureSandbox($mode);
+    $process = new Process(
+        ['bash', '-c', 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/lib/messages.sh'))
+            .'; . '.escapeshellarg(Repo::file('infra/scripts/lib/image-signature.sh')).'; kq_msg_init es; '
+            .'kq_verify_product_images '.escapeshellarg(IMAGE_SIGNATURE_REGISTRY).' '.escapeshellarg(imageSignaturePinned('php')).' || true; '
+            .'printf "%s|%s|" "${KQ_SIG_RESULT}" "${KQ_SIG_DENIED}"; kq_sig_failed_text '.escapeshellarg(IMAGE_SIGNATURE_REGISTRY)],
+        env: ['PATH' => imageSignaturePath($dir, true)],
+        timeout: 30.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toStartWith('failed|')
+        ->and($process->getOutput())->toContain($esperado);
+})->with([
+    'firma inexistente' => ['invalid', 'no es valida segun cosign'],
+    'limite de peticiones' => ['ratelimit', 'no es valida segun cosign'],
+    // Una imagen sin firma: su `.sig` no existe y el registro da 404 / manifest
+    // unknown. Es firma ausente, no acceso negado.
+    'un 404 en el .sig' => ['sig404', 'no es valida segun cosign'],
+    // Acceso negado Y firma ausente en la misma salida: manda la firma.
+    'denied junto a firma ausente' => ['denied-and-nosig', 'no es valida segun cosign'],
+    'acceso negado' => ['denied', 'NEGADO EL ACCESO'],
+])->group('RS-10', 'RF-PD-02');
+
+/**
+ * update.sh `check_images` con un `docker` falso: ninguna imagen esta por su
+ * digest; la descarga funciona o no segun `$pull`, y la etiqueta de cada una
+ * responde a `{{len .RepoDigests}}` con `$repoDigests`.
+ *
+ * @return array{salida: string, docker: string}
+ */
+function updateConImagenes(bool $pull, int $repoDigests): array
+{
+    ['dir' => $dir] = imageSignatureInstallation(null);
+    // Sin cosign, pero con el `docker` falso delante.
+    $path = $dir.'/bin:'.getenv('PATH');
+    file_put_contents(
+        $dir.'/bin/docker',
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"\$*\" >>".escapeshellarg($dir.'/docker.log')."\n"
+        ."case \"\$*\" in *'config --images'*) cat ".escapeshellarg($dir.'/imagenes').'; exit 0 ;; '
+        ."*'{{len .RepoDigests}}'*) echo ".$repoDigests.'; exit 0 ;; '
+        ."*'image inspect'*) exit 1 ;; *pull*) exit ".($pull ? '0' : '1')." ;; esac\nexit 0\n",
+    );
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'kq_msg_init es; DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'CURRENT_ENV='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; '
+        .'check_images; printf "fallos=%s\n" "${CHECKS_FAILED}"';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    return ['salida' => $process->getOutput(), 'docker' => (string) file_get_contents($dir.'/docker.log')];
+}
+
+it('update.sh sin internet, con la imagen cargada sin su digest: intenta descargar y luego nombra su variable (V1-PL-02)', function (): void {
+    $resultado = updateConImagenes(pull: false, repoDigests: 0);
+
+    expect($resultado['salida'])->toContain('fallos=1')
+        ->and($resultado['docker'])->toContain('pull')
+        ->and($resultado['salida'])->toContain('se cargo con \'docker load\'')
+        ->and($resultado['salida'])->toContain('la linea vacia IMAGE_DIGEST_PHP=');
+})->group('RF-PD-10');
+
+it('update.sh con internet descarga por digest aunque haya etiquetas en local, con o sin digest de registro (V1-PL-02)', function (int $repoDigests): void {
+    $resultado = updateConImagenes(pull: true, repoDigests: $repoDigests);
+
+    expect($resultado['salida'])->toContain('fallos=0')
+        ->and($resultado['salida'])->not->toContain('docker load');
+})->with(['con digest' => [1], 'sin digest' => [0]])->group('RF-PD-10');

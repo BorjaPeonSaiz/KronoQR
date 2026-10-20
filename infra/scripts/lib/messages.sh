@@ -124,10 +124,6 @@ Que hacer:
   · Para ACTUALIZAR a una version nueva:  ./update.sh
     Procedimiento completo en docs/runbooks/actualizacion-cliente.md
   · Para ver como esta la instalacion:    ./doctor.sh
-
-  (update.sh y doctor.sh se entregan a partir de la version 2.1. En la 2.0.0,
-  para ver como esta la instalacion: docker compose ps y los dos comandos de
-  docs/cliente/operacion.md.)
   · Si de verdad quieres empezar de cero, retira antes la instalacion actual a
     conciencia, con su copia de seguridad. El instalador no lo hace por ti, y
     es deliberado.
@@ -141,22 +137,26 @@ KQ_MSG_ES[wal_dir]="Creado %s para el archivado de WAL (propietario 70:70, el us
 KQ_MSG_ES[f_wal_dir]="no se ha podido crear %s. Ejecuta \"sudo install -d -o 70 -g 70 -m 0750 %s\" y vuelve a lanzar el instalador."
 
 KQ_MSG_ES[images_pull]="Descargando las imagenes de la version %s. La primera vez tarda unos minutos."
-KQ_MSG_ES[f_images]="no se han podido descargar las imagenes de la version %s desde %s. Comprueba que el servidor llega al registro y que has iniciado sesion con \"docker login %s\". Si esta instalacion no tiene salida a internet, carga las imagenes del paquete con \"docker load -i imagenes-%s.tar\" y vuelve a ejecutar."
+KQ_MSG_ES[f_images]="no se han podido descargar las imagenes de la version %s desde %s. Comprueba IMAGE_REGISTRY en el .env —el que te dio el fabricante; el de la plantilla no descarga nada— y que el servidor llega a ese registro. Las imagenes del fabricante son publicas: no hace falta 'docker login' (solo en un registro interno propio con acceso restringido). Si el servidor no tiene salida a internet, cargalas antes con 'docker load' siguiendo docs/cliente/instalacion.md §7 y vuelve a ejecutar."
+KQ_MSG_ES[f_images_digest_lost]="no se ha podido descargar %s fijada por su digest, y la imagen que hay en este servidor con esa etiqueta no tiene ningun digest de registro: se cargo con 'docker load' en un Docker sin el almacen containerd, que no lo conserva. Repetir el 'docker load' no lo arregla. Si este servidor no tiene salida a internet, pon en el .env la linea vacia %s= (y la de cada imagen que hayas cargado asi: docs/cliente/instalacion.md §7) y vuelve a ejecutar. Si si tiene internet, el problema es la descarga: comprueba IMAGE_REGISTRY y el acceso al registro. Mientras esa linea siga en el .env, install.sh, update.sh y doctor.sh te recordaran que esa imagen no va fijada por digest."
 KQ_MSG_ES[c_sig_verified]="Firma de las imagenes del producto verificada con cosign (workflow de publicacion del fabricante)"
 KQ_MSG_ES[c_sig_no_cosign]="cosign no esta instalado: las imagenes se validan solo por su digest"
 KQ_MSG_ES[w_sig_no_cosign]="El digest garantiza QUE bytes se instalan, no QUIEN los publico. Para verificar tambien la firma del fabricante, instala cosign 3.0.0 o posterior (es opcional; docs/cliente/instalacion.md §7.1) y vuelve a ejecutar. No es un fallo: esto sigue adelante."
 KQ_MSG_ES[c_sig_unverifiable]="No se pudo consultar la firma de las imagenes con cosign (red, Sigstore o registro inaccesibles)"
 KQ_MSG_ES[w_sig_unverifiable]="Esto NO significa que la firma sea invalida: cosign no llego a comprobarla. Sigue valiendo el digest. Detalle de cosign: %s. Cuando el servidor llegue a internet, vuelve a ejecutar o comprueba la firma a mano (docs/cliente/instalacion.md §7.1)."
 KQ_MSG_ES[f_sig_failed]="la firma de la imagen %s no es valida segun cosign: no existe, o no la firmo el proceso de publicacion del fabricante. Detalle de cosign: %s. No se ha continuado. Avisa al fabricante con ese detalle."
+KQ_MSG_ES[f_sig_denied]="el registro ha NEGADO EL ACCESO a %s, asi que cosign no ha podido leer su firma; eso cuenta como firma no valida y no se ha continuado. Casi siempre es IMAGE_REGISTRY: ahora vale '%s' y ahi no estan las imagenes de KronoQR, o esta mal escrito. Pon en IMAGE_REGISTRY, en el .env, el registro que te dio el fabricante, comprueba que el 'docker pull' de docs/cliente/instalacion.md §1.2 descarga la imagen y vuelve a ejecutar. Si con el registro correcto la imagen se descarga y esto sigue saliendo, no sigas y avisa al fabricante con el detalle de cosign: %s. No uses --skip-signature-check para salir del paso."
 KQ_MSG_ES[c_sig_skipped]="Verificacion de la firma de las imagenes OMITIDA (--skip-signature-check)"
 KQ_MSG_ES[w_sig_skipped]="Solo se confia en el digest, y esta omision queda anotada. Usala unicamente con un registro propio que no firma sus imagenes; con las del fabricante, quita la opcion."
 KQ_MSG_ES[services_up]="Levantando los servicios."
-KQ_MSG_ES[f_services_up]="los servicios no han arrancado. El detalle esta arriba; amplialo con \"docker compose -f %s logs\"."
+KQ_MSG_ES[f_services_up]="los servicios no han arrancado. El detalle esta justo arriba: el estado y las ultimas lineas del registro de cada contenedor, que se muestran antes de deshacer porque al deshacer se retiran los contenedores con su registro."
 KQ_MSG_ES[waiting]="Esperando a que %s este listo (hasta %d s)..."
 KQ_MSG_ES[waiting_ok]="%s listo."
-KQ_MSG_ES[f_waiting]="%s no ha llegado a estar listo en %d s. Mira su registro con \"docker compose -f %s logs %s\": la causa suele estar en las ultimas 20 lineas."
+KQ_MSG_ES[f_waiting]="%s no ha llegado a estar listo en %d s. Las ultimas lineas de su registro estan justo arriba: se muestran antes de deshacer porque al deshacer se retira el contenedor, y con el su registro. La causa suele estar en esas lineas."
 KQ_MSG_ES[migrating]="Aplicando el esquema de la base de datos."
-KQ_MSG_ES[f_migrating]="las migraciones han fallado. El detalle esta arriba y en \"docker compose -f %s logs app\". La base se crea vacia y el instalador la retira al deshacer, asi que no queda nada a medias."
+KQ_MSG_ES[f_migrating]="las migraciones han fallado. El detalle esta justo arriba, en su propia salida: corren en el contenedor de un solo uso 'migrate', que no deja registro en 'docker compose logs app'. La base se crea vacia y el instalador la retira al deshacer, asi que no queda nada a medias."
+KQ_MSG_ES[service_logs_header]="=== Estado y ultimas lineas del registro de: %s (antes de deshacer) ==="
+KQ_MSG_ES[service_logs_footer]="=== fin del registro ==="
 KQ_MSG_ES[seed_note]="Datos de arranque: el perfil de convenio y los catalogos los siembran las propias migraciones. NO se instala ningun dato de demostracion."
 
 KQ_MSG_ES[verify_probe]="Sonda %s"
@@ -167,8 +167,9 @@ KQ_MSG_ES[verify_doctor_warn]="Diagnostico completo con avisos"
 KQ_MSG_ES[f_verify_doctor_warn]="ningun aviso impide declarar la instalacion correcta, pero conviene leerlos: son la primera senal de un problema que hoy no bloquea y manana si. Repite cuando quieras con \"docker compose -f %s exec app php artisan product:doctor\"."
 KQ_MSG_ES[f_verify_doctor]="\"product:doctor\" ha encontrado al menos un fallo. Los servicios estan en pie y la instalacion existe: revisa el informe de arriba —cada linea en [FALLA] dice que hacer— y, cuando lo hayas corregido, repite con \"docker compose -f %s exec app php artisan product:doctor\". NO se deshace nada."
 KQ_MSG_ES[f_verify_doctor_missing_command]="la imagen que se acaba de instalar no incluye \"product:doctor\". Es un defecto de esta version del paquete, no de tu servidor: los servicios estan en pie pero la instalacion no se declara verificada. Avisa al fabricante con la salida completa de este instalador. Mientras tanto, comprueba con \"docker compose -f %s logs\" y las sondas de la seccion 1.5 de instalacion.md."
-KQ_MSG_ES[verify_license]="Estado de la licencia consultado sin errores"
-KQ_MSG_ES[f_verify_license]="\"license:show\" ha terminado con error. No impide fichar ni consultar el registro —la licencia nunca bloquea el registro legal—. Ejecuta \"docker compose -f %s exec app php artisan license:show\" y sigue lo que diga."
+KQ_MSG_ES[verify_license]="Licencia vigente y dentro del plan"
+KQ_MSG_ES[verify_license_attention]="Licencia: hay algo que mirar (no hay ninguna activada, ha caducado, no verifica o se ha superado una cifra del plan). NO es un error de la instalacion y no impide fichar ni consultar el registro: la licencia nunca bloquea el registro legal. Si aun no la tienes, activala cuando llegue con 'docker compose -f %s exec app php artisan license:activate \"KQL1....\"'; para ver el motivo exacto, 'docker compose -f %s exec app php artisan license:show'."
+KQ_MSG_ES[f_verify_license]="no se ha podido consultar el estado de la licencia (\"license:show\" ha terminado con un codigo inesperado). No impide fichar ni consultar el registro —la licencia nunca bloquea el registro legal—. Ejecuta \"docker compose -f %s exec app php artisan license:show\" y sigue lo que diga."
 
 KQ_MSG_ES[rollback_start]="Algo ha fallado. Deshaciendo lo que este instalador ha hecho en ESTA ejecucion."
 KQ_MSG_ES[rollback_item]="  deshecho: %s"
@@ -182,13 +183,13 @@ KQ_MSG_ES[done_title]="KronoQR %s instalado y verificado."
 KQ_MSG_ES[done_admin]="  Panel de gestion:    %s/admin/"
 KQ_MSG_ES[done_kiosk]="  Quiosco (tablet):    %s/kiosk/"
 KQ_MSG_ES[done_portal]="  Portal del empleado: %s/portal/  (solo desde PORTAL_INTERNAL_CIDR)"
-KQ_MSG_ES[done_next]="SIGUIENTE PASO: abre el panel de gestion. La primera vez te guia un asistente que crea la organizacion, el centro, el primer administrador y el primer quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea usuarios.
-(El asistente se entrega a partir de la version 2.1. En la 2.0.0 la primera cuenta se crea por consola; el procedimiento esta en docs/cliente/instalacion.md.)"
+KQ_MSG_ES[done_next]="SIGUIENTE PASO: abre el panel de gestion. La primera vez te guia un asistente que crea la organizacion, el centro, el primer administrador y el primer quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea usuarios."
 KQ_MSG_ES[done_docs]="DOCUMENTACION, en %s
   instalacion.md           esta instalacion, y que hacer ante cada codigo de salida
   operacion.md             copias, actualizaciones, calendario y codigos de salida
   configuracion.md         cada parametro y que hace
-  obligaciones-legales.md  lo que le corresponde al hotel"
+  obligaciones-legales.md  lo que le corresponde al hotel
+  (en ingles, en el subdirectorio en/)"
 KQ_MSG_ES[done_custody]="ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este servidor (docs/cliente/operacion.md, «Custodia de secretos»)."
 
 KQ_MSG_ES[bad_option]="opcion desconocida: %s. Ejecuta \"install.sh --help\" para ver las que hay."
@@ -207,6 +208,8 @@ KQ_MSG_ES[w_tls_self_signed]="TLS_ALLOW_SELF_SIGNED=true es exclusivo de entorno
 KQ_MSG_ES[c_tls_missing]="Falta el certificado TLS en %s"
 KQ_MSG_ES[c_env_template]="%s sigue con el valor de ejemplo de la plantilla"
 KQ_MSG_ES[f_env_template]="%s vale todavia '%s', que es el ejemplo que trae la plantilla. Ponle el valor de ESTA instalacion en %s. Instalar con el valor de ejemplo produce un sistema que arranca y al que ningun quiosco puede llegar, y eso no lo detecta ninguna comprobacion posterior."
+KQ_MSG_ES[f_image_registry_template]="IMAGE_REGISTRY vale '%s', el valor de la plantilla, y ahi no hay ninguna imagen de KronoQR: la instalacion fallaria al descargarlas (y, con cosign instalado, como si la firma estuviera rota). Pon en %s el registro que te dio el fabricante (sin barra final ni version) y comprueba que descarga con el 'docker pull' de docs/cliente/instalacion.md §1.2. No se ha escrito nada."
+KQ_MSG_ES[f_image_registry_placeholder]="IMAGE_REGISTRY vale '%s': todavia lleva el marcador de la guia (lo que va entre < y >) o un espacio, y ninguna referencia de imagen los admite. Pon en %s el registro exacto que te dio el fabricante, sin barra final ni version, y comprueba que descarga con el 'docker pull' de docs/cliente/instalacion.md §1.2. No se ha escrito nada."
 KQ_MSG_ES[c_kiosk_vlan_template]="KIOSK_VLAN_CIDR=%s coincide con el ejemplo de la plantilla"
 KQ_MSG_ES[f_kiosk_vlan_template]="si %s es de verdad el rango de la VLAN de tus quioscos, no hagas nada: la instalacion sigue. Si no lo has decidido tu, pon en %s el rango de la red de las tablets. Con un rango que no las cubre nada falla, pero el fichaje cae al limite general de peticiones y se frena en el cambio de turno. Tras instalar, con las tablets encendidas y desde el directorio de la instalacion, cuenta sus latidos por direccion: sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '\"remote_addr\":\"[^\"]*\",\"from_kiosk_vlan\":[01]' | sort | uniq -c (sale una linea por direccion; todas tienen que terminar en 1. Ver docs/cliente/instalacion.md §6)."
 KQ_MSG_ES[c_root]="Privilegios para asignar el propietario del archivo de WAL"
@@ -302,7 +305,11 @@ KQ_MSG_ES[c_proxy_any]="TRUSTED_PROXY_CIDR incluye 0.0.0.0/0"
 KQ_MSG_ES[f_proxy_any]="el borde HTTP se niega a arrancar: confiaria en cualquier origen y cualquiera podria falsificar su IP con X-Forwarded-For, saltandose el limite de peticiones y el candado del portal. Pon en %s solo las direcciones del proxy o balanceador (por ejemplo 10.0.0.5/32), o dejala vacia si no lo hay."
 KQ_MSG_ES[c_proxy_ok]="TRUSTED_PROXY_CIDR=%s: nginx toma la IP real de X-Forwarded-For solo de esos proxies"
 KQ_MSG_ES[c_mail_unset]="MAIL_HOST=%s: el correo saliente no esta configurado"
-KQ_MSG_ES[w_mail_unset]="esta vacio o es el servidor de correo de desarrollo, asi que los avisos y el resumen diario de incidencias no saldran del servidor. No impide instalar ni fichar —el producto no depende del correo—. Pon en %s el SMTP del hotel: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD y MAIL_FROM_ADDRESS."
+KQ_MSG_ES[c_mail_dev]="MAIL_HOST=%s: es el servidor de correo de DESARROLLO de la plantilla"
+KQ_MSG_ES[c_mail_from_dev]="MAIL_FROM_ADDRESS=%s: es el remitente de la plantilla"
+KQ_MSG_ES[w_mail_unset]="esta vacio, asi que los avisos y el resumen diario de incidencias no saldran del servidor: se consultan en el panel. No impide instalar ni fichar —el producto no depende del correo—. Pon en %s el SMTP del hotel: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD y MAIL_FROM_ADDRESS; o, si no hay relevo de correo, MAIL_MAILER=array."
+KQ_MSG_ES[f_mail_dev]="'mailpit' es el buzon de pruebas del entorno del fabricante y en este servidor no existe. Pon en %s el SMTP del hotel: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD y MAIL_FROM_ADDRESS. Si el hotel no tiene relevo de correo, pon MAIL_MAILER=array, el modo sin correo: se instala igual —el producto no depende del correo—, no sale ni se guarda ningun correo, y las incidencias y el resumen se consultan en el panel. No uses MAIL_MAILER=log: copia cada correo entero, con nombres, al log tecnico. No se ha escrito nada."
+KQ_MSG_ES[f_mail_from_dev]="el dominio kronoqr.local no es de nadie, y un relevo SMTP rechaza o manda a spam lo que se envia con el. Pon en %s, en MAIL_FROM_ADDRESS, una direccion de un dominio del hotel (p. ej. fichaje@tuhotel.es). No se ha escrito nada."
 KQ_MSG_ES[c_mail_ok]="MAIL_HOST apunta a un servidor de correo propio"
 KQ_MSG_ES[c_alert_none]="ALERT_EMAIL_IT, ALERT_EMAIL_RRHH y ALERT_EMAIL_SEGURIDAD estan vacias"
 KQ_MSG_ES[w_alert_none]="ninguna alerta llegara a nadie: una instalacion que se cree vigilada sin estarlo es peor que una sin alertas. Pon al menos ALERT_EMAIL_IT en %s, y revisa MAIL_*: las alertas salen por ese SMTP."
@@ -411,10 +418,6 @@ What to do:
   · To UPGRADE to a new version:      ./update.sh
     Full procedure in docs/runbooks/actualizacion-cliente.md
   · To see how the installation is:   ./doctor.sh
-
-  (update.sh and doctor.sh ship from version 2.1 onwards. On 2.0.0, to see how
-  the installation is: docker compose ps and the two commands in
-  docs/cliente/operacion.md.)
   · If you really want to start over, remove the current installation on
     purpose first, backup included. The installer will not do it for you, and
     that is deliberate.
@@ -428,22 +431,26 @@ KQ_MSG_EN[wal_dir]="Created %s for WAL archiving (owner 70:70, the PostgreSQL us
 KQ_MSG_EN[f_wal_dir]="could not create %s. Run \"sudo install -d -o 70 -g 70 -m 0750 %s\" and launch the installer again."
 
 KQ_MSG_EN[images_pull]="Downloading the images for version %s. The first time takes a few minutes."
-KQ_MSG_EN[f_images]="could not download the images for version %s from %s. Check the server reaches the registry and that you logged in with \"docker login %s\". If this installation has no internet access, load the images from the package with \"docker load -i imagenes-%s.tar\" and run again."
+KQ_MSG_EN[f_images]="could not download the images for version %s from %s. Check IMAGE_REGISTRY in the .env —the one the manufacturer gave you; the template one downloads nothing— and that the server reaches that registry. The manufacturer's images are public: no 'docker login' is needed (only for an internal registry of your own with restricted access). If the server has no internet access, load them first with 'docker load' following docs/cliente/en/installation.md §7 and run again."
+KQ_MSG_EN[f_images_digest_lost]="%s could not be downloaded pinned by its digest, and the image on this server with that tag has no registry digest at all: it was loaded with 'docker load' on a Docker without the containerd store, which does not keep it. Repeating 'docker load' does not fix it. If this server has no internet access, add the empty line %s= to the .env (and the one for each image you loaded that way: docs/cliente/en/installation.md §7) and run again. If it does have internet, the problem is the download: check IMAGE_REGISTRY and access to the registry. While that line stays in the .env, install.sh, update.sh and doctor.sh will remind you that this image is not pinned by digest."
 KQ_MSG_EN[c_sig_verified]="Signature of the product images verified with cosign (manufacturer's release workflow)"
 KQ_MSG_EN[c_sig_no_cosign]="cosign is not installed: the images are validated by their digest only"
 KQ_MSG_EN[w_sig_no_cosign]="The digest guarantees WHICH bytes are installed, not WHO published them. To also verify the manufacturer's signature, install cosign 3.0.0 or later (optional; docs/cliente/en/installation.md §7.1) and run again. This is not a failure: it carries on."
 KQ_MSG_EN[c_sig_unverifiable]="Could not query the image signature with cosign (network, Sigstore or registry unreachable)"
 KQ_MSG_EN[w_sig_unverifiable]="This does NOT mean the signature is invalid: cosign never got to check it. The digest still holds. cosign detail: %s. When the server reaches the internet, run again or check the signature by hand (docs/cliente/en/installation.md §7.1)."
 KQ_MSG_EN[f_sig_failed]="the signature of image %s is not valid according to cosign: it does not exist, or it was not made by the manufacturer's release process. cosign detail: %s. It did not carry on. Tell the manufacturer with that detail."
+KQ_MSG_EN[f_sig_denied]="the registry DENIED ACCESS to %s, so cosign could not read its signature; that counts as an invalid signature and it did not carry on. It is almost always IMAGE_REGISTRY: it is now '%s' and the KronoQR images are not there, or it is mistyped. Set in IMAGE_REGISTRY, in the .env, the registry the manufacturer gave you, check that the 'docker pull' of docs/cliente/en/installation.md §1.2 downloads the image and run again. If with the right registry the image downloads and this still shows up, stop and tell the manufacturer with the cosign detail: %s. Do not use --skip-signature-check to get past this step."
 KQ_MSG_EN[c_sig_skipped]="Image signature verification SKIPPED (--skip-signature-check)"
 KQ_MSG_EN[w_sig_skipped]="Only the digest is trusted, and this omission is recorded. Use it only with a private registry that does not sign its images; with the manufacturer's, drop the option."
 KQ_MSG_EN[services_up]="Starting the services."
-KQ_MSG_EN[f_services_up]="the services did not start. The detail is above; expand it with \"docker compose -f %s logs\"."
+KQ_MSG_EN[f_services_up]="the services did not start. The detail is just above: the state and the last log lines of each container, shown before rolling back because rolling back removes the containers together with their log."
 KQ_MSG_EN[waiting]="Waiting for %s to be ready (up to %d s)..."
 KQ_MSG_EN[waiting_ok]="%s ready."
-KQ_MSG_EN[f_waiting]="%s did not become ready within %d s. Read its log with \"docker compose -f %s logs %s\": the cause is usually in the last 20 lines."
+KQ_MSG_EN[f_waiting]="%s did not become ready within %d s. The last lines of its log are just above: they are shown before rolling back because rolling back removes the container, and its log with it. The cause is usually in those lines."
 KQ_MSG_EN[migrating]="Applying the database schema."
-KQ_MSG_EN[f_migrating]="migrations failed. The detail is above and in \"docker compose -f %s logs app\". The database is created empty and the installer removes it while rolling back, so nothing is left half done."
+KQ_MSG_EN[f_migrating]="migrations failed. The detail is just above, in their own output: they run in the one-off 'migrate' container, which leaves nothing in 'docker compose logs app'. The database is created empty and the installer removes it while rolling back, so nothing is left half done."
+KQ_MSG_EN[service_logs_header]="=== State and last log lines of: %s (before rolling back) ==="
+KQ_MSG_EN[service_logs_footer]="=== end of log ==="
 KQ_MSG_EN[seed_note]="Bootstrap data: the collective-agreement profile and the catalogues are seeded by the migrations themselves. NO demonstration data is installed."
 
 KQ_MSG_EN[verify_probe]="Probe %s"
@@ -454,8 +461,9 @@ KQ_MSG_EN[verify_doctor_warn]="Full diagnostic with warnings"
 KQ_MSG_EN[f_verify_doctor_warn]="no warning stops the installation from being declared correct, but they are worth reading: they are the first sign of a problem that does not block today and will tomorrow. Run it again any time with \"docker compose -f %s exec app php artisan product:doctor\"."
 KQ_MSG_EN[f_verify_doctor]="\"product:doctor\" found at least one failure. The services are up and the installation exists: check the report above —every [FAIL] line says what to do— and, once fixed, run \"docker compose -f %s exec app php artisan product:doctor\" again. NOTHING is rolled back."
 KQ_MSG_EN[f_verify_doctor_missing_command]="the image that was just installed does not include \"product:doctor\". It is a defect of this package version, not of your server: the services are up but the installation is not declared verified. Tell the manufacturer, attaching this installer's full output. Meanwhile, check with \"docker compose -f %s logs\" and the probes in section 1.5 of instalacion.md."
-KQ_MSG_EN[verify_license]="License status read without errors"
-KQ_MSG_EN[f_verify_license]="\"license:show\" ended with an error. It does not stop clock-in nor access to the record —the licence never blocks the legal record—. Run \"docker compose -f %s exec app php artisan license:show\" and follow what it says."
+KQ_MSG_EN[verify_license]="License valid and within the plan"
+KQ_MSG_EN[verify_license_attention]="License: something to look at (none activated, expired, does not verify or a plan figure exceeded). It is NOT an installation error and it does not stop clock-in nor access to the record: the licence never blocks the legal record. If you do not have it yet, activate it when it arrives with 'docker compose -f %s exec app php artisan license:activate \"KQL1....\"'; for the exact reason, 'docker compose -f %s exec app php artisan license:show'."
+KQ_MSG_EN[f_verify_license]="the licence status could not be read (\"license:show\" ended with an unexpected code). It does not stop clock-in nor access to the record —the licence never blocks the legal record—. Run \"docker compose -f %s exec app php artisan license:show\" and follow what it says."
 
 KQ_MSG_EN[rollback_start]="Something failed. Undoing what this installer did in THIS run."
 KQ_MSG_EN[rollback_item]="  undone: %s"
@@ -469,13 +477,13 @@ KQ_MSG_EN[done_title]="KronoQR %s installed and verified."
 KQ_MSG_EN[done_admin]="  Admin panel:       %s/admin/"
 KQ_MSG_EN[done_kiosk]="  Kiosk (tablet):    %s/kiosk/"
 KQ_MSG_EN[done_portal]="  Employee portal:   %s/portal/  (only from PORTAL_INTERNAL_CIDR)"
-KQ_MSG_EN[done_next]="NEXT STEP: open the admin panel. The first time, a wizard walks you through the organisation, the site, the first administrator and the first kiosk. Until you finish it there is no account at all: the installer creates no users.
-(The wizard ships from version 2.1 onwards. On 2.0.0 the first account is created from the console; the procedure is in docs/cliente/instalacion.md.)"
+KQ_MSG_EN[done_next]="NEXT STEP: open the admin panel. The first time, a wizard walks you through the organisation, the site, the first administrator and the first kiosk. Until you finish it there is no account at all: the installer creates no users."
 KQ_MSG_EN[done_docs]="DOCUMENTATION, in %s
-  instalacion.md           this installation, and what to do for each exit code
-  operacion.md             backups, upgrades, calendar and exit codes
-  configuracion.md         every parameter and what it does
-  obligaciones-legales.md  what belongs to the hotel"
+  en/installation.md       this installation, and what to do for each exit code
+  en/operation.md          backups, upgrades, calendar and exit codes
+  en/configuration.md      every parameter and what it does
+  en/legal-obligations.md  what belongs to the hotel
+  (the Spanish originals are one level up, next to en/)"
 KQ_MSG_EN[done_custody]="BEFORE YOU LOG OUT: keep BACKUP_ENCRYPTION_KEY outside this server (docs/cliente/operacion.md, «Custodia de secretos»)."
 
 KQ_MSG_EN[bad_option]="unknown option: %s. Run \"install.sh --help\" to see the ones there are."
@@ -494,6 +502,8 @@ KQ_MSG_EN[w_tls_self_signed]="TLS_ALLOW_SELF_SIGNED=true is for test environment
 KQ_MSG_EN[c_tls_missing]="TLS certificate missing in %s"
 KQ_MSG_EN[c_env_template]="%s still holds the example value from the template"
 KQ_MSG_EN[f_env_template]="%s is still '%s', the example shipped in the template. Set the value of THIS installation in %s. Installing with the example value produces a system that starts and that no kiosk can reach, and no later check detects that."
+KQ_MSG_EN[f_image_registry_template]="IMAGE_REGISTRY is '%s', the template value, and no KronoQR image lives there: the installation would fail when downloading them (and, with cosign installed, as if the signature were broken). Set in %s the registry the manufacturer gave you (no trailing slash, no version) and check it downloads with the 'docker pull' of docs/cliente/en/installation.md §1.2. Nothing was written."
+KQ_MSG_EN[f_image_registry_placeholder]="IMAGE_REGISTRY is '%s': it still holds the guide's placeholder (what goes between < and >) or a space, and no image reference accepts them. Set in %s the exact registry the manufacturer gave you, no trailing slash, no version, and check it downloads with the 'docker pull' of docs/cliente/en/installation.md §1.2. Nothing was written."
 KQ_MSG_EN[c_kiosk_vlan_template]="KIOSK_VLAN_CIDR=%s matches the template example"
 KQ_MSG_EN[f_kiosk_vlan_template]="if %s really is the range of your kiosk VLAN, do nothing: the installation goes on. If you did not choose it, set the range of the tablets' network in %s. With a range that does not cover them nothing fails, but clocking falls into the general request limit and slows down at shift change. After installing, with the tablets switched on and from the installation directory, count their heartbeats per address: sudo docker compose logs --since 10m nginx | grep '/api/v1/kiosk/heartbeat' | grep -o '\"remote_addr\":\"[^\"]*\",\"from_kiosk_vlan\":[01]' | sort | uniq -c (one line per address; all of them must end in 1. See docs/cliente/en/installation.md §6)."
 KQ_MSG_EN[c_root]="Privileges to set the owner of the WAL archive"
@@ -589,7 +599,11 @@ KQ_MSG_EN[c_proxy_any]="TRUSTED_PROXY_CIDR includes 0.0.0.0/0"
 KQ_MSG_EN[f_proxy_any]="the HTTP edge refuses to start: it would trust any origin and anyone could forge their IP with X-Forwarded-For, bypassing the request limit and the portal lock. Put only the proxy or load balancer addresses in %s (for example 10.0.0.5/32), or leave it empty if there is none."
 KQ_MSG_EN[c_proxy_ok]="TRUSTED_PROXY_CIDR=%s: nginx takes the real IP from X-Forwarded-For only from those proxies"
 KQ_MSG_EN[c_mail_unset]="MAIL_HOST=%s: outgoing mail is not configured"
-KQ_MSG_EN[w_mail_unset]="it is empty or the development mail server, so notices and the daily incident digest will not leave the server. It does not stop the install or clock-ins —the product does not depend on mail—. Set the hotel SMTP in %s: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD and MAIL_FROM_ADDRESS."
+KQ_MSG_EN[c_mail_dev]="MAIL_HOST=%s: it is the template's DEVELOPMENT mail server"
+KQ_MSG_EN[c_mail_from_dev]="MAIL_FROM_ADDRESS=%s: it is the template's sender"
+KQ_MSG_EN[w_mail_unset]="it is empty, so notices and the daily incident digest will not leave the server: they are read in the panel. It does not stop the install or clock-ins —the product does not depend on mail—. Set the hotel SMTP in %s: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD and MAIL_FROM_ADDRESS; or, if there is no mail relay, MAIL_MAILER=array."
+KQ_MSG_EN[f_mail_dev]="'mailpit' is the manufacturer's test mailbox and it does not exist on this server. Set the hotel SMTP in %s: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD and MAIL_FROM_ADDRESS. If the hotel has no mail relay, set MAIL_MAILER=array, the no-mail mode: it installs all the same —the product does not depend on mail—, no mail is sent or stored, and incidents and the digest are read in the panel. Do not use MAIL_MAILER=log: it copies every email in full, with names, into the technical log. Nothing was written."
+KQ_MSG_EN[f_mail_from_dev]="the kronoqr.local domain belongs to nobody, and an SMTP relay rejects or spam-files what is sent with it. Set in %s, in MAIL_FROM_ADDRESS, an address in a hotel domain (e.g. fichaje@yourhotel.com). Nothing was written."
 KQ_MSG_EN[c_mail_ok]="MAIL_HOST points to a mail server of your own"
 KQ_MSG_EN[c_alert_none]="ALERT_EMAIL_IT, ALERT_EMAIL_RRHH and ALERT_EMAIL_SEGURIDAD are empty"
 KQ_MSG_EN[w_alert_none]="no alert will reach anyone: an installation that believes itself monitored without being so is worse than one without alerts. Set at least ALERT_EMAIL_IT in %s, and review MAIL_*: alerts leave through that SMTP."

@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -243,6 +244,26 @@ it('avisa, sin inventar un verde, si no puede leer el modo mantenimiento', funct
     expect($result['code'])->toBe(1)
         ->and($result['output'])->toContain('app.maintenance_mode')
         ->and($result['output'])->toContain('APP_MAINTENANCE_DRIVER');
+})->group('RF-PD-13');
+
+it('con un nombre que el contenedor no resuelve, tls.certificate dice eso y no que el borde este caido (I6)', function (): void {
+    conSondas([new TlsProbe(
+        applicationUrl: 'https://fichaje.solo-en-etc-hosts.invalid',
+        allowSelfSigned: false,
+        clock: app(Clock::class),
+        resolves: static fn (string $host): bool => false,
+    )]);
+
+    $result = runDoctor(['--lang' => 'es']);
+
+    expect($result['code'])->toBe(1)
+        ->and($result['output'])->toContain('no se resuelve el nombre fichaje.solo-en-etc-hosts.invalid')
+        ->and($result['output'])->toContain('/etc/hosts')
+        ->and($result['output'])->toContain('openssl s_client -connect 127.0.0.1:443')
+        ->and($result['output'])->not->toContain('no este levantado');
+
+    $en = runDoctor(['--lang' => 'en']);
+    expect($en['output'])->toContain('does not resolve');
 })->group('RF-PD-13');
 
 // --- No explota -------------------------------------------------------------

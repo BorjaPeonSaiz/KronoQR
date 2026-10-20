@@ -155,10 +155,14 @@ it('deja una sola linea de log con dos recuentos y ningun contenido', function (
         ->and($logger->lines[0]['context'])->toBe(['rows' => 2, 'merged' => 1]);
 })->group('RF-PD-15', 'RL-19');
 
-it('no hace nada con un historico vacio', function (): void {
-    $resultado = new ResanitizeErrorHistory(new InMemoryErrorHistory, resanitizeErrorHistoryLogger())->run();
+it('no hace nada con un historico vacio, y tampoco lo dice en el log', function (): void {
+    // V1-PL-01: en una instalacion nueva la migracion que lo lanza corre con el
+    // historico vacio, y su linea INFO salia en mitad de la salida del instalador.
+    $logger = resanitizeErrorHistoryLogger();
+    $resultado = new ResanitizeErrorHistory(new InMemoryErrorHistory, $logger)->run();
 
-    expect($resultado->rows)->toBe(0);
+    expect($resultado->rows)->toBe(0)
+        ->and($logger->lines)->toBe([]);
 })->group('RF-PD-15');
 
 it('funde con el grupo que aparece entre la busqueda y la escritura', function (): void {

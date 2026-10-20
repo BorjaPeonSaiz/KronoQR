@@ -169,3 +169,16 @@ it('el comando de consola responde a la misma pregunta que el endpoint', functio
 
     expect(Artisan::output())->toContain('credentials:retire-key a2');
 })->group('RF-QR-07', 'RF-QR-08');
+
+it('antes del asistente, credentials:status dice que falta el centro sin excepcion y sale con 0 (I11)', function (): void {
+    // La guia lo manda ejecutar justo despues de instalar. Sin centro volcaba la
+    // excepcion InstallationSiteMissing (bloque «In ... line 22») y una linea
+    // ERROR de log, y salia con 1: para el IT, una instalacion rota que no lo esta.
+    $codigo = Artisan::call('credentials:status', ['--pending' => true]);
+    $salida = Artisan::output();
+
+    expect($codigo)->toBe(0)
+        ->and($salida)->toContain('todavia no tiene centro')
+        ->and($salida)->toContain('asistente de puesta en marcha')
+        ->and($salida)->not->toContain('InstallationSiteMissing');
+})->group('RF-QR-07', 'RF-PD-03');

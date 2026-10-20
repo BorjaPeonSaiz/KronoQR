@@ -98,6 +98,7 @@ function paqueteDePrueba(): array
         '/^METRICS_ALLOW_CIDR=.*$/m',
         '/^TLS_ALLOW_SELF_SIGNED=.*$/m',
         '/^BACKUP_PATH=.*$/m',
+        '/^IMAGE_REGISTRY=.*$/m',
     ], [
         'APP_ENV=production',
         'APP_URL=https://fichaje.prueba.local',
@@ -106,6 +107,8 @@ function paqueteDePrueba(): array
         'METRICS_ALLOW_CIDR=10.91.0.5/32',
         'TLS_ALLOW_SELF_SIGNED=false',
         'BACKUP_PATH='.$dir.'/copias',
+        // Uno que no es el de la plantilla: con ese la fase 1 falla (V21-1-PL-01).
+        'IMAGE_REGISTRY=ghcr.io/acme/kronoqr',
     ], (string) $env);
 
     file_put_contents($dir.'/.env', (string) $env);
@@ -497,4 +500,203 @@ it('espera tambien al borde antes de dar la fase 4 por buena', function (): void
     // aplicacion. Las migraciones van por el servicio puntual `migrate`.
     expect($script)->toContain('run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force');
     expect($script)->not->toContain('exec -T app php artisan migrate');
+})->group('RF-PD-02');
+
+it('la fase 1 da [FALLA] con el IMAGE_REGISTRY de la plantilla y no llega a verificar firmas (V21-1-PL-01, I2)', function (string $valor): void {
+    $paquete = paqueteDePrueba();
+    $env = (string) file_get_contents($paquete['dir'].'/.env.example');
+    $env = (string) preg_replace('/^IMAGE_REGISTRY=.*$/m', 'IMAGE_REGISTRY='.$valor, $env);
+    file_put_contents($paquete['dir'].'/.env', $env);
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'ENV_FILE='.escapeshellarg($paquete['dir'].'/.env').'; ENV_TEMPLATE='.escapeshellarg($paquete['dir'].'/.env.example').'; '
+        .'check_customer_values; printf "plantilla=%s fallos=%s\n" "${REGISTRY_IS_TEMPLATE}" "${CHECKS_FAILED}"'
+    );
+    borrarPaquete($paquete['dir']);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('IMAGE_REGISTRY sigue con el valor de ejemplo de la plantilla')
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('el valor de la plantilla, y ahi no hay ninguna imagen de KronoQR')
+        ->and($proceso->getOutput())->toContain('plantilla=1');
+
+    expect(Repo::contents('infra/scripts/install.sh'))
+        ->toContain('[ "${REGISTRY_IS_TEMPLATE}" -eq 1 ] || check_image_signatures');
+})->with(['plantilla' => ['ghcr.io/kronoqr'], 'vacio' => ['']])->group('RF-PD-02');
+
+it('una instalacion sin licencia no es un error: license:show con 1 es un aviso que dice como activarla (I7)', function (int $codigo, string $esperado, string $ausente): void {
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; COMPOSE_FILE=/opt/kronoqr/docker-compose.yml; '
+        .'compose() { return '.$codigo.'; }; verify_license_status 2>&1'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain($esperado)
+        ->and($proceso->getOutput())->not->toContain($ausente);
+})->with([
+    'vigente' => [0, 'Licencia vigente y dentro del plan', 'AVISO'],
+    'sin licencia o con algo que mirar' => [3, 'NO es un error de la instalacion', 'ha terminado'],
+    'la consulta falla (excepcion no capturada: 1)' => [1, 'codigo inesperado', 'NO es un error de la instalacion'],
+    'la consulta falla (otro codigo)' => [2, 'codigo inesperado', 'NO es un error de la instalacion'],
+])->group('RF-PD-02', 'RF-PD-05');
+
+it('la vuelta atras retira tambien los padres de BACKUP_PATH que creo y no otros (I9)', function (): void {
+    $dir = sys_get_temp_dir().'/kq-ancestro-'.bin2hex(random_bytes(4));
+    mkdir($dir);
+
+    $proceso = bashConElInstalador(
+        'printf "nuevo=%s\n" "$(first_missing_ancestor '.escapeshellarg($dir.'/var/backups/fichaje').')"; '
+        .'printf "existe=%s\n" "$(first_missing_ancestor '.escapeshellarg($dir).')"'
+    );
+    rmdir($dir);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('nuevo='.$dir.'/var'."\n")
+        ->and($proceso->getOutput())->toContain('existe='.$dir."\n");
+
+    $instalador = Repo::contents('infra/scripts/install.sh');
+    expect($instalador)->toContain('register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf \'${created_root}\'"')
+        // El .env vuelve con su modo original, no con el 0600 de la copia.
+        ->and($instalador)->toContain("mv -f '\${backup_env}' '\${ENV_FILE}' && chmod '\${env_mode}' '\${ENV_FILE}'");
+})->group('RF-PD-02');
+
+it('la salida final no habla de la 2.0.0 y apunta a las guias del cliente del paquete (I8)', function (): void {
+    $dir = sys_get_temp_dir().'/kq-docs-'.bin2hex(random_bytes(4));
+    mkdir($dir.'/docs/cliente', 0o755, true);
+    touch($dir.'/docker-compose.yml');
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; OPT_COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; resolve_paths_quietly; '
+        .'printf "docs=%s\n" "${DOCS_DIR}"; kq_text done_next; kq_text existing_stop'
+    );
+    unlink($dir.'/docker-compose.yml');
+    rmdir($dir.'/docs/cliente');
+    rmdir($dir.'/docs');
+    rmdir($dir);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('docs='.$dir.'/docs/cliente')
+        ->and($proceso->getOutput())->not->toContain('2.0.0')
+        ->and($proceso->getOutput())->not->toContain('a partir de la version 2.1');
+})->group('RF-PD-02');
+
+/**
+ * Ejecuta pull_images_if_needed de install.sh con un `docker` falso: `$imagen` es
+ * la unica que pide el compose y no esta por su digest; `$pull` dice si la
+ * descarga funciona y `$repoDigests` lo que da `{{len .RepoDigests}}` de su
+ * etiqueta (null = la etiqueta no esta en local).
+ *
+ * @return array{codigo: int, salida: string, docker: string}
+ */
+function instalarConImagen(string $imagen, bool $pull, ?int $repoDigests): array
+{
+    $dir = sys_get_temp_dir().'/kq-digest-'.bin2hex(random_bytes(4));
+    mkdir($dir);
+    file_put_contents($dir.'/.env', "IMAGE_REGISTRY=ghcr.io/acme/kronoqr\n");
+    touch($dir.'/docker-compose.yml');
+    $etiqueta = explode('@', $imagen)[0];
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; '
+        .'PRODUCT_VERSION=2.3.0; KQ_SKIP_SIGNATURE_CHECK=1; LOG='.escapeshellarg($dir.'/docker.log').'; '
+        .'docker() { local IFS=" "; printf "%s\n" "$*" >>"${LOG}"; case "$*" in '
+        .'*"config --images"*) printf "%s\n" '.escapeshellarg($imagen).' ;; '
+        .'"image inspect -f {{len .RepoDigests}} "'.escapeshellarg($etiqueta).') '
+        .($repoDigests === null ? 'return 1' : 'printf "%s\n" '.$repoDigests).' ;; '
+        .'*"image inspect"*) return 1 ;; '
+        .'*pull*) return '.($pull ? '0' : '1').' ;; esac; return 0; }; '
+        .'tag_pinned_images() { :; }; '
+        .'pull_images_if_needed; echo SIGUE'
+    );
+    $docker = is_file($dir.'/docker.log') ? (string) file_get_contents($dir.'/docker.log') : '';
+    foreach (['.env', 'docker-compose.yml', '.kronoqr-signature-check', 'docker.log'] as $fichero) {
+        @unlink($dir.'/'.$fichero);
+    }
+    @rmdir($dir);
+
+    return ['codigo' => $proceso->getExitCode() ?? -1, 'salida' => $proceso->getOutput().$proceso->getErrorOutput(), 'docker' => $docker];
+}
+
+it('una imagen cargada sin su digest y sin internet: intenta descargar y luego nombra su variable (V1-PL-02)', function (string $imagen, string $variable): void {
+    $resultado = instalarConImagen($imagen, pull: false, repoDigests: 0);
+
+    expect($resultado['codigo'])->toBe(4, $resultado['salida'])
+        // Primero se intenta la descarga: con internet funcionaria y no se toca nada.
+        ->and($resultado['docker'])->toContain('pull')
+        ->and($resultado['salida'])->toContain('se cargo con \'docker load\'')
+        ->and($resultado['salida'])->toContain('la linea vacia '.$variable.'=')
+        ->and($resultado['salida'])->not->toContain('docker login');
+})->with([
+    'php' => ['ghcr.io/acme/kronoqr/php:2.3.0@sha256:'.str_repeat('a', 64), 'IMAGE_DIGEST_PHP'],
+    'redis' => ['redis:7-alpine@sha256:'.str_repeat('b', 64), 'REDIS_IMAGE_DIGEST'],
+])->group('RF-PD-02');
+
+it('con internet no culpa al docker load: la etiqueta presente (con o sin digest de registro) no impide descargar por digest (V1-PL-02)', function (?int $repoDigests): void {
+    $resultado = instalarConImagen('redis:7-alpine@sha256:'.str_repeat('b', 64), pull: true, repoDigests: $repoDigests);
+
+    expect($resultado['codigo'])->toBe(0, $resultado['salida'])
+        ->and($resultado['salida'])->toContain('SIGUE')
+        ->and($resultado['salida'])->not->toContain('docker load');
+})->with([
+    'redis de otro proyecto, con su digest' => [1],
+    'etiqueta cargada sin digest' => [0],
+])->group('RF-PD-02');
+
+it('si la descarga falla y la etiqueta trae digest de registro, es un fallo de descarga, no un docker load (V1-PL-02)', function (): void {
+    $resultado = instalarConImagen('redis:7-alpine@sha256:'.str_repeat('b', 64), pull: false, repoDigests: 1);
+
+    expect($resultado['codigo'])->toBe(4, $resultado['salida'])
+        ->and($resultado['salida'])->toContain('no se han podido descargar las imagenes')
+        ->and($resultado['salida'])->not->toContain('docker load\' en un Docker');
+})->group('RF-PD-02');
+
+it('ensena el registro de los servicios que fallan ANTES de deshacer, y los mensajes ya no mandan a docker compose logs (V1-PL-04, R3-PL-04)', function (): void {
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; compose() { local IFS=" "; printf "COMPOSE %s\n" "$*"; }; show_service_logs nginx'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('Estado y ultimas lineas del registro de: nginx (antes de deshacer)')
+        ->and($proceso->getErrorOutput())->toContain('COMPOSE logs --no-color --tail 40 nginx')
+        ->and($proceso->getErrorOutput())->toContain('fin del registro');
+
+    $instalador = Repo::contents('infra/scripts/install.sh');
+    $mensajes = Repo::contents('infra/scripts/lib/messages.sh');
+    expect($instalador)->toContain("show_service_logs nginx\n    rollback_and_die")
+        ->and($instalador)->toContain('rollback_and_die "$(kq_text f_migrating)"')
+        // Cada subdirectorio de BACKUP_PATH con su nombre en la lista de lo deshecho.
+        ->and($instalador)->toContain('*/metrics) label="$(kq_format undo_metrics_dir "${dir}")" ;;')
+        ->and($instalador)->toContain('*/daily | */base) label="$(kq_format undo_backup_dir "${dir}")" ;;');
+    foreach (['f_migrating', 'f_waiting', 'f_services_up', 'f_images'] as $clave) {
+        preg_match('/^KQ_MSG_ES\['.$clave.'\]="([^\n]*)"$/m', $mensajes, $m);
+        expect($m[1] ?? '')->not->toBe('')
+            ->and($m[1] ?? '')->not->toContain('docker compose -f %s logs')
+            ->and($m[1] ?? '')->not->toContain('docker login %s');
+    }
+})->group('RF-PD-02');
+
+it('la fase 1 rechaza IMAGE_REGISTRY con el marcador de la guia o con espacios (revision del bloque 7)', function (string $valor): void {
+    $paquete = paqueteDePrueba();
+    $env = (string) file_get_contents($paquete['dir'].'/.env.example');
+    $env = (string) preg_replace('/^IMAGE_REGISTRY=.*$/m', 'IMAGE_REGISTRY='.$valor, $env);
+    file_put_contents($paquete['dir'].'/.env', $env);
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'ENV_FILE='.escapeshellarg($paquete['dir'].'/.env').'; ENV_TEMPLATE='.escapeshellarg($paquete['dir'].'/.env.example').'; '
+        .'check_customer_values; printf "plantilla=%s\n" "${REGISTRY_IS_TEMPLATE}"'
+    );
+    borrarPaquete($paquete['dir']);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('todavia lleva el marcador de la guia')
+        ->and($proceso->getOutput())->toContain('plantilla=1');
+})->with([
+    'marcador' => ['ghcr.io/<cuenta-del-fabricante>/kronoqr'],
+    'espacio' => ['"ghcr.io/acme /kronoqr"'],
+])->group('RF-PD-02');
+
+it('backup.sh barre lo empezado tambien con un corte de SSH: sale con 129 por su trap', function (): void {
+    expect(Repo::contents('infra/scripts/backup.sh'))->toContain("trap 'exit 129' HUP")
+        ->and(Repo::contents('infra/scripts/lib/exit-codes.sh'))->toContain('sale con 129 (corte de SSH), 130 o 143');
 })->group('RF-PD-02');

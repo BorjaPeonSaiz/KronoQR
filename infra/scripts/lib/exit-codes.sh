@@ -24,7 +24,9 @@
 #      algo que impide hacerlo sin destruir. NADA se ha escrito.
 #        · install.sh  ya hay una instalacion: para actualizar, update.sh
 #        · update.sh   la version instalada ya es la de destino
-#        · backup.sh   ya hay una copia en curso (candado tomado)
+#        · backup.sh   el fichero de destino ya existe, o no hay copia que
+#                      verificar (no hay candado: lo que evita dos copias a la
+#                      vez es el planificador)
 #        · restore.sh  la base de destino existe, o quedan conexiones abiertas
 #        · doctor.sh   no hay instalacion que diagnosticar
 #
@@ -36,6 +38,8 @@
 #          empiezan a escribir: se trata como un fallo y se deshace. El proceso
 #          NO sale con 130, 143 ni 129 en ese tramo; antes de el, si (nada
 #          escrito). Por SSH, dentro de tmux o screen.
+#        · backup.sh NO usa el 5 (barre lo empezado al salir) y una interrupcion
+#          sale con 129 (corte de SSH), 130 o 143 en cualquier fase, con lo empezado barrido.
 #
 #   5  FALLO CON VUELTA ATRAS INCOMPLETA. Algo salio mal y el script NO pudo
 #      deshacerlo todo. HAY QUE INTERVENIR A MANO, y el mensaje dice

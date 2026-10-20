@@ -1769,6 +1769,10 @@ jobs:
           set -euo pipefail
           cd paquete
           sudo ./install.sh | tee salida-c.log
+          # Ninguna linea JSON del log tecnico en la salida del instalador (V1-PL-01):
+          # ni el INFO de la migracion de saneado ni el WARNING del cortacircuitos.
+          lineas_json="$(grep -c '^{"message"' salida-c.log || true)"
+          test "${lineas_json}" = "0" || { echo "La salida de install.sh trae ${lineas_json} lineas JSON del log"; grep '^{"message"' salida-c.log; exit 1; }
           # Lo que la guia promete que se ve al terminar.
           grep -q 'instalado y verificado' salida-c.log
           grep -q 'SIGUIENTE PASO'         salida-c.log
@@ -1808,6 +1812,24 @@ jobs:
           curl -fsS -k https://127.0.0.1/api/v1/ready  | tee ready.json
           # La version que informa la sonda es la que se instalo, no `latest`.
           grep -qF "$(cat VERSION)" health.json
+
+      - name: "C · El log de una orden lanzada con exec va al log del contenedor, no a la terminal"
+        # V1-PL-01, V21-4-PL-2: `docker compose exec` no pasa por el entrypoint, no
+        # hereda KQ_CONTAINER_MAIN y su log va a /proc/1/fd/2 (ConsoleAwareStreamHandler).
+        # La marca va en el contexto como UUID: el saneado de ADR-048 recorta las
+        # palabras que no estan en su vocabulario, pero conserva los UUID intactos.
+        # HOME en /tmp: psysh (tinker) quiere escribir su configuracion y, sin
+        # permiso en el HOME del usuario de la imagen, lo diria por la salida de error.
+        run: |
+          set -euo pipefail
+          cd paquete
+          marca="$(cat /proc/sys/kernel/random/uuid)"
+          sudo docker compose exec -T -e HOME=/tmp app php artisan tinker \
+            --execute="\\Illuminate\\Support\\Facades\\Log::warning('redis.circuit_opened', ['trace_id' => '${marca}']);" 2>err.txt
+          cat err.txt
+          test ! -s err.txt || { echo "La orden ha dejado algo en la salida de error de la terminal"; exit 1; }
+          sudo docker compose logs --no-color app | grep -qF "${marca}" ||
+            { echo "La linea no ha llegado al log del contenedor app"; exit 1; }
 
       - name: "C · Las tres SPA se sirven, y el portal solo desde su red"
         run: |

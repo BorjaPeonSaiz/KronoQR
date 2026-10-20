@@ -71,6 +71,7 @@ KQ_MSG_ES[d_f_installation_files]="en %s no estan los ficheros de una instalacio
 KQ_MSG_ES[d_delegating]="El contenedor 'app' esta en marcha: delegando en 'product:doctor'."
 KQ_MSG_ES[d_doctor_ok]="'product:doctor' no ha encontrado ningun problema."
 KQ_MSG_ES[d_doctor_warn]="'product:doctor' ha encontrado avisos."
+KQ_MSG_ES[d_doctor_code_note]="(El «codigo de salida» de arriba es el de product:doctor: 0 nada, 1 solo avisos, 2 algun fallo. doctor.sh sale con 0 si solo hay avisos y con 6 si hay algun fallo, el suyo o el de las comprobaciones de abajo: docs/cliente/operacion.md §8.)"
 KQ_MSG_ES[d_doctor_warn_fix]="revisa las lineas marcadas arriba: ningun aviso impide declarar la instalacion operativa, pero suelen ser la primera senal de un problema que hoy no bloquea y manana si."
 KQ_MSG_ES[d_f_doctor_failed]="'product:doctor' ha encontrado al menos un fallo. Revisa el informe de arriba —cada linea en [FALLA] dice que hacer— y repite './doctor.sh' cuando lo hayas corregido."
 KQ_MSG_ES[d_f_doctor_missing_command]="esta instalacion corre una version de la aplicacion que no incluye 'product:doctor'. Actualiza con ./update.sh a una version que lo traiga; mientras tanto usa las sondas y los comandos de docs/cliente/operacion.md."
@@ -154,12 +155,14 @@ KQ_MSG_ES[d_w_maintenance_unknown]="se esperaba 401 (sin sesion) y ha respondido
 
 KQ_MSG_ES[d_c_redis_stable]="Redis: %s, %s reinicio(s) desde que se creo el contenedor"
 KQ_MSG_ES[d_c_redis_loop]="Redis se esta reiniciando en bucle (%s reinicios)"
+KQ_MSG_ES[d_c_redis_down]="Redis esta parado (%s)"
 KQ_MSG_ES[d_f_redis_loop_aof]="el registro de Redis dice que su fichero AOF esta danado, lo habitual tras un corte de luz. Con Redis caido el fichaje NO se para —los quioscos encolan y /scan sigue respondiendo—, pero caen el acceso al panel y al portal (las sesiones viven en Redis), las colas de trabajos y el tiempo real, y /ready responde 503. Reparalo asi; solo se pierde la ultima escritura corrupta del fichero:
   docker compose -f %s stop redis
   echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
   docker compose -f %s up -d redis
 Despues repite ./doctor.sh. El procedimiento completo esta en docs/runbooks/errores-en-el-panel.md."
 KQ_MSG_ES[d_f_redis_loop_other]="Redis no se mantiene en pie y su registro no apunta al fichero AOF. Mira por que: docker compose -f %s logs --tail 50 redis. Las causas habituales son disco lleno o falta de memoria; si el registro habla de 'append only file', sigue docs/runbooks/errores-en-el-panel.md. Con Redis caido el fichaje no se para, pero caen el panel, el portal, las colas y el tiempo real."
+KQ_MSG_ES[d_f_redis_down]="arrancalo con 'docker compose -f %s up -d redis' y, si vuelve a pararse, mira por que con 'docker compose -f %s logs --tail 50 redis'. Con Redis caido el fichaje NO se para —los quioscos encolan—, pero caen el acceso al panel y al portal (las sesiones viven en Redis), las colas de trabajos y el tiempo real."
 KQ_MSG_ES[d_c_prom_rules_ok]="Prometheus: %s reglas de alerta cargadas, todas las del paquete"
 KQ_MSG_ES[d_c_prom_rules_missing]="Prometheus no tiene cargadas %s regla(s) de alerta del paquete"
 KQ_MSG_ES[d_w_prom_rules_missing]="faltan (las cinco primeras): %s. Prometheus solo lee las reglas al arrancar o al recargar: tras una actualizacion que cambia observability/ hay que recrearlo. Ejecuta 'docker compose -f %s up -d --force-recreate prometheus' y repite ./doctor.sh. Mientras no esten cargadas, esas alertas NO saltan. Mas en docs/runbooks/entrega-de-alertas.md."
@@ -229,6 +232,7 @@ KQ_MSG_EN[d_f_installation_files]="%s does not hold the files of an installation
 KQ_MSG_EN[d_delegating]="The 'app' container is up: delegating on 'product:doctor'."
 KQ_MSG_EN[d_doctor_ok]="'product:doctor' found no problem."
 KQ_MSG_EN[d_doctor_warn]="'product:doctor' found warnings."
+KQ_MSG_EN[d_doctor_code_note]="(The \"exit code\" above is product:doctor's: 0 nothing, 1 warnings only, 2 some failure. doctor.sh exits 0 with warnings only and 6 with any failure, its own or one of the checks below: docs/cliente/en/operation.md §8.)"
 KQ_MSG_EN[d_doctor_warn_fix]="check the lines marked above: no warning stops the installation from being declared operational, but they are usually the first sign of a problem that does not block today and will tomorrow."
 KQ_MSG_EN[d_f_doctor_failed]="'product:doctor' found at least one failure. Check the report above —every [FAIL] line says what to do— and run './doctor.sh' again once fixed."
 KQ_MSG_EN[d_f_doctor_missing_command]="this installation runs a version of the application that does not include 'product:doctor'. Upgrade with ./update.sh to a version that has it; meanwhile use the probes and commands in docs/cliente/operacion.md."
@@ -312,12 +316,14 @@ KQ_MSG_EN[d_w_maintenance_unknown]="401 (no session) was expected and it answere
 
 KQ_MSG_EN[d_c_redis_stable]="Redis: %s, %s restart(s) since the container was created"
 KQ_MSG_EN[d_c_redis_loop]="Redis is restarting in a loop (%s restarts)"
+KQ_MSG_EN[d_c_redis_down]="Redis is stopped (%s)"
 KQ_MSG_EN[d_f_redis_loop_aof]="the Redis log says its AOF file is damaged, which is usual after a power cut. With Redis down clocking-in does NOT stop —kiosks queue and /scan keeps answering—, but panel and portal sign-in (sessions live in Redis), job queues and real time go down, and /ready answers 503. Repair it like this; only the last corrupt write of the file is lost:
   docker compose -f %s stop redis
   echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
   docker compose -f %s up -d redis
 Then run ./doctor.sh again. The full procedure is in docs/runbooks/errores-en-el-panel.md (in Spanish)."
 KQ_MSG_EN[d_f_redis_loop_other]="Redis does not stay up and its log does not point at the AOF file. Find out why: docker compose -f %s logs --tail 50 redis. Usual causes are a full disk or lack of memory; if the log mentions 'append only file', follow docs/runbooks/errores-en-el-panel.md (in Spanish). With Redis down clocking-in does not stop, but the panel, the portal, the queues and real time do."
+KQ_MSG_EN[d_f_redis_down]="start it with 'docker compose -f %s up -d redis' and, if it stops again, find out why with 'docker compose -f %s logs --tail 50 redis'. With Redis down clocking-in does NOT stop —kiosks queue—, but panel and portal sign-in (sessions live in Redis), job queues and real time go down."
 KQ_MSG_EN[d_c_prom_rules_ok]="Prometheus: %s alert rules loaded, all of the package's"
 KQ_MSG_EN[d_c_prom_rules_missing]="Prometheus has %s alert rule(s) from the package not loaded"
 KQ_MSG_EN[d_w_prom_rules_missing]="missing (first five): %s. Prometheus only reads rules on start or reload: after an update that changes observability/ it has to be recreated. Run 'docker compose -f %s up -d --force-recreate prometheus' and repeat ./doctor.sh. Until they are loaded those alerts do NOT fire. More in docs/runbooks/entrega-de-alertas.md (in Spanish)."

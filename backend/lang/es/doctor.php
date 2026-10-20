@@ -333,6 +333,10 @@ return [
                     .'certificado que comprobar. En produccion esto no deberia ser asi.',
                 'warning_unreachable' => 'No se ha podido abrir una conexion segura contra el puerto :port para '
                     .'leer el certificado. Puede ser que el servidor web no este levantado todavia.',
+                'warning_unresolvable' => 'Desde dentro del contenedor de la aplicacion no se resuelve el nombre '
+                    .':host de APP_URL, asi que no se ha podido leer el certificado que sirve el servidor web. No '
+                    .'quiere decir que este caido: suele pasar cuando el nombre solo esta en el /etc/hosts del '
+                    .'servidor, que los contenedores no ven. Lo que importa es que lo resuelvan las tablets.',
                 'warning_unreadable' => 'Se ha conectado con el servidor web pero no se ha podido leer la fecha '
                     .'de caducidad de su certificado.',
                 'warning_self_signed' => 'El certificado esta firmado por si mismo y la configuracion dice que '
@@ -906,6 +910,11 @@ return [
                 'warning_unreachable' => "Comprueba que el servidor web esta levantado:\n"
                     ."  docker compose ps nginx\n"
                     .'Si estas ejecutando esto durante una instalacion, es normal: vuelve a mirarlo al terminar.',
+                'warning_unresolvable' => "Comprueba que :host resuelve desde una tablet o un equipo de la red de los\n"
+                    ."quioscos. Para que esta comprobacion tambien lo vea, da de alta el nombre en el DNS de la red\n"
+                    ."del hotel en vez de solo en /etc/hosts del servidor. Mientras tanto, la caducidad se puede\n"
+                    ."mirar desde el servidor:\n"
+                    .'  openssl s_client -connect 127.0.0.1::port -servername :host </dev/null | openssl x509 -noout -enddate',
                 'warning_unreadable' => 'Revisa los ficheros de certificado del directorio TLS_CERT_DIR: puede '
                     .'que el fichero este incompleto o no sea un certificado.',
                 'warning_self_signed' => "Instala un certificado emitido por una autoridad en la que confien las\n"

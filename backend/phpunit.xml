@@ -132,6 +132,10 @@
         -->
         <env name="OTEL_EXPORTER_OTLP_ENDPOINT" value="" force="true"/>
         <env name="LOKI_URL" value="" force="true"/>
+        <!-- La suite corre con `docker compose exec`, que no pasa por el entrypoint:
+             sin esto, ConsoleAwareStreamHandler mandaria el log de las pruebas al log
+             del contenedor de desarrollo. Las pruebas del desvio la retiran ellas. -->
+        <env name="KQ_CONTAINER_MAIN" value="1" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>

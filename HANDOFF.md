@@ -89,7 +89,15 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 5 integrados (#182 a #187). **Bloque 6** (`fix/update-sh-interrupcion`): 6.1–6.8 ✅, revisiones de código y seguridad aplicadas, CI manual 39429187854 en verde (⑧b en 24 min, `timeout-minutes` 90). Lo que conviene saber:
+**Estado de la 2.3.0 (20-10-2026):** bloques 0 a 6 integrados (#182 a #187 y #189). **Bloque 7** (`fix/instalador-mensajes`): 7.1–7.5 ✅, revisiones aplicadas, CI manual 39466677880 en verde; PR y merge en curso. Lo que conviene saber del bloque 7 (decisiones del propietario en Engram `2.3.0/b7-decisiones`):
+- Solo paran la instalación `MAIL_HOST=mailpit` y `MAIL_FROM_ADDRESS` en `kronoqr.local`. Un hotel sin relevo de correo usa `MAIL_MAILER=array` y consulta las incidencias en el panel; `log` no, porque manda el MIME con nombres a Loki.
+- El log de las órdenes `artisan` lanzadas con `docker compose exec` va al del contenedor (`ConsoleAwareStreamHandler`). Solo se desvía sin `KQ_CONTAINER_MAIN`, que exporta el entrypoint; `phpunit.xml` la declara.
+- Imagen sin digest (`lib/images.sh`): primero siempre `docker pull`; el aviso sale solo si falla y `RepoDigests` está vacío. El ID de imagen en `images.lock` es la tarea 33.13.
+- `license:show` da 3 para «atención»; el 1 es una excepción no capturada.
+- Una biblioteca nueva en `infra/scripts/lib/` necesita `set -euo pipefail` e `IFS=$'\n\t'`, o `make sh-lint` falla.
+- U3m de ⑧b: el 401 o el 503 antes del 3b depende de si la vuelta atrás llegó a «nginx listo»; la prueba exige lo que corresponde.
+
+Lo que conviene saber del bloque 6 (#189):
 - **Decisión del propietario (20-10-2026): tras el 401 de la versión nueva no se restaura** (`ROLLBACK_ARMED=3`, salida 5 sin tocar nada; Engram `2.3.0/b6-sin-restaurar-tras-up`).
 - ⑧b ejercita los fallos con `.github/scripts/update-faults-e2e.sh` (U3s, U3i+U1b, U3m, U3n, U3p, chain-check). U3p sustituye al reintento tras la vuelta atrás, que ya cubre P3.
 - En U3m la vuelta atrás ya hizo `artisan up` antes de fallar (401 tras el paso 3); el 503 antes del 3b solo se da si falla la restauración (U3n).
@@ -102,7 +110,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 6 no está ya integrado, PR y merge con la CI en verde; después bloque 7 (instalador: mensajes y comprobaciones, rama `fix/instalador-mensajes` desde `origin/main`), marcando el título del bloque 6 ✅ en su primer commit. Ojo: `docs/cliente/instalacion.md` y `en/installation.md` tienen cambios locales sin commit que dicen que los runbooks internos viajan (falso desde I10): descartarlos, no commitearlos.
+**Siguiente acción:** si el bloque 7 no está integrado, PR y merge con la CI en verde; después, sin preguntar, el bloque 8 (portal: sesión, estados y lo que falta; rama `fix/portal-sesion-y-estados` desde `origin/main`), marcando ✅ el título del bloque 7 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

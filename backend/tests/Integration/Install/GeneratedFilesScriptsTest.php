@@ -127,6 +127,19 @@ function ficherosGeneradosSubdirectoriosDeCopias(): array
     return ['metrics', 'daily', 'base', 'reports', 'reports/retention'];
 }
 
+/**
+ * Como nombra install.sh el deshacer de cada subdirectorio (V1-PL-04 b, 2.3.0
+ * bloque 7): cada uno con su propio nombre, no todos como «informes».
+ */
+function ficherosGeneradosEtiquetaDeshacer(string $sub): string
+{
+    return match ($sub) {
+        'metrics' => 'directorio de metricas',
+        'daily', 'base' => 'directorio de copias',
+        default => 'directorio de informes',
+    };
+}
+
 it('install.sh crea los cinco subdirectorios de BACKUP_PATH como uid 1000 y en 0750, el padre primero', function (): void {
     $dir = ficherosGeneradosDirectorio('install-retencion');
     mkdir($dir.'/copias', 0o750);
@@ -162,7 +175,7 @@ it('install.sh registra el deshacer de cada directorio que crea, y deshacerlo lo
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and($proceso->getOutput())->toBe(implode('', array_map(
-            static fn (string $sub): string => 'directorio de informes '.$dir.'/copias/'.$sub.'|rm -rf \''.$dir.'/copias/'.$sub.'\''."\n",
+            static fn (string $sub): string => ficherosGeneradosEtiquetaDeshacer($sub).' '.$dir.'/copias/'.$sub.'|rm -rf \''.$dir.'/copias/'.$sub.'\''."\n",
             ficherosGeneradosSubdirectoriosDeCopias(),
         )))
         ->and(ficherosGeneradosListado($dir.'/copias'))->toBe([])

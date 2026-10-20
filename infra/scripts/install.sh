@@ -94,6 +94,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/kqe.sh"
 # shellcheck source=lib/image-signature.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/image-signature.sh"
+# shellcheck source=lib/images.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/images.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales publicados (doc 02 §11.6.2). Son los MINIMOS, no los recomendados.
@@ -169,6 +171,9 @@ CFG_HTTPS_PORT="443"
 CFG_BACKUP_PATH="/var/backups/fichaje"
 CFG_TLS_CERT_DIR=""
 CFG_TLS_ALLOW_SELF_SIGNED="false"
+# 1 si IMAGE_REGISTRY sigue con el valor de la plantilla (o vacio): la fase 1 ya ha
+# fallado por ello y no verifica firmas (check_customer_values).
+REGISTRY_IS_TEMPLATE=0
 
 #------------------------------------------------------------------------------
 # Salida
@@ -229,6 +234,21 @@ discard_undo() {
   done
 
   ROLLBACK_STACK=(${resto+"${resto[@]}"})
+}
+
+# El directorio mas alto de RUTA que todavia no existe: lo que `install -d RUTA`
+# va a crear, padres incluidos. Si RUTA ya existe, la propia RUTA.
+#   first_missing_ancestor RUTA
+first_missing_ancestor() {
+  local path="$1" parent
+  while :; do
+    parent="$(dirname -- "${path}")"
+    if [ "${parent}" = "${path}" ] || [ -e "${parent}" ]; then
+      break
+    fi
+    path="${parent}"
+  done
+  printf '%s' "${path}"
 }
 
 # Deshace lo hecho en esta ejecucion y sale con 4 (todo deshecho) o con 5 (algo
@@ -455,9 +475,12 @@ resolve_paths_quietly() {
     fi
   done
 
+  # Las guias del cliente van en docs/cliente/ del paquete (package.sh), no en
+  # docs/ a secas, que lleva tambien los runbooks y el CHANGELOG (I8).
   for candidate in \
-    "${package_dir}/docs" \
-    "${package_dir}/../docs/cliente"; do
+    "${package_dir}/docs/cliente" \
+    "${package_dir}/../docs/cliente" \
+    "${package_dir}/docs"; do
     if [ -d "${candidate}" ]; then
       DOCS_DIR="${candidate}"
       break
@@ -865,6 +888,29 @@ check_customer_values() {
     fi
   done
 
+  # IMAGE_REGISTRY con el valor de la plantilla (V21-1-PL-01, I2): ahi no hay
+  # ninguna imagen de KronoQR. Sin esta comprobacion la fase 1 pasaba, la 3
+  # escribia secretos y la 4 fallaba al descargar; y con cosign instalado salia
+  # antes con 7, como si la firma estuviera rota. Vacio, Compose usaria ese
+  # mismo valor por defecto. No hay instalacion legitima con el: tambien la de un
+  # servidor sin internet carga imagenes con el nombre del registro real.
+  value="$(env_value "${ENV_FILE}" "IMAGE_REGISTRY")"
+  plantilla="$(env_value "${ENV_TEMPLATE}" "IMAGE_REGISTRY")"
+  REGISTRY_IS_TEMPLATE=0
+  if [ -z "${value}" ] || { [ -n "${plantilla}" ] && [ "${value}" = "${plantilla}" ]; }; then
+    REGISTRY_IS_TEMPLATE=1
+    check_fail "$(kq_format c_env_template "IMAGE_REGISTRY")" \
+      "$(kq_format f_image_registry_template "${value:-${plantilla:-ghcr.io/kronoqr}}" "${ENV_FILE}")"
+  elif [[ "${value}" =~ [[:space:]\<\>] ]]; then
+    # El marcador del bloque minimo de la guia (`ghcr.io/<cuenta-del-fabricante>/kronoqr`)
+    # copiado tal cual, o un espacio: ninguna referencia de imagen los admite.
+    REGISTRY_IS_TEMPLATE=1
+    check_fail "$(kq_format c_env_template "IMAGE_REGISTRY")" \
+      "$(kq_format f_image_registry_placeholder "${value}" "${ENV_FILE}")"
+  else
+    check_pass "$(kq_format c_env_key "IMAGE_REGISTRY")"
+  fi
+
   value="$(env_value "${ENV_FILE}" "APP_ENV")"
   if [ "${value}" = "production" ]; then
     check_pass "APP_ENV=production"
@@ -941,7 +987,9 @@ phase_requirements() {
     check_log_retention "${ENV_FILE}"
     check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_image_digest_overrides "${ENV_FILE}" "$(dirname -- "${COMPOSE_FILE}")"
-    check_image_signatures
+    # Con el registro de la plantilla ya hay un [FALLA] que dice que hacer; la firma
+    # no se puede leer de donde no hay imagenes, y cosign saldria con 7 (V21-1-PL-01).
+    [ "${REGISTRY_IS_TEMPLATE}" -eq 1 ] || check_image_signatures
     check_app_url
     check_tls
     check_ports
@@ -1128,8 +1176,14 @@ phase_secrets() {
   backup_env="${ENV_FILE}.kronoqr-pre-install"
   local backup_tmp="${backup_env}.tmp.$$"
   TEMP_FILES+=("${backup_tmp}")
+  # Con su MODO original (I9): la copia nace 0600 por el `umask`, y sin esto la
+  # vuelta atras devolvia un .env identico pero con otros permisos. El modo se lee
+  # aqui, antes del `chmod 0600` de abajo.
+  local env_mode
+  env_mode="$(stat -c '%a' -- "${ENV_FILE}")"
+  [[ "${env_mode}" =~ ^[0-7]{3,4}$ ]] || env_mode="600"
   register_undo "$(kq_format undo_env "${ENV_FILE}")" \
-    "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}'; fi"
+    "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}' && chmod '${env_mode}' '${ENV_FILE}'; fi"
   (umask 077 && cp -- "${ENV_FILE}" "${backup_tmp}")
   chown "$(stat -c %u:%g -- "${ENV_FILE}")" -- "${backup_tmp}"
   touch -r "${ENV_FILE}" -- "${backup_tmp}"
@@ -1191,6 +1245,23 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+# El estado y las ultimas lineas del registro de los servicios que han fallado, en
+# pantalla y ANTES de deshacer (V1-PL-04, R3-PL-04): la vuelta atras hace `down -v`
+# y se lleva los contenedores con su registro, asi que un «mira docker compose
+# logs» despues ya no ensena nada (y sin IMAGE_TAG en el .env restaurado, ni
+# siquiera funciona). Son registros tecnicos del producto, sin secretos ni nombres
+# (regla dura 21). Nunca falla.
+#   show_service_logs SERVICIO...
+show_service_logs() {
+  local IFS=' '
+  err ""
+  err "$(kq_format service_logs_header "$*")"
+  compose ps -a "$@" >&2 2>/dev/null || true
+  compose logs --no-color --tail 40 "$@" >&2 2>/dev/null || true
+  err "$(kq_text service_logs_footer)"
+  return 0
+}
+
 # Espera a que un servicio declare estar sano. POR CONDICION: se pregunta por el
 # estado cada KQ_POLL_SECONDS y se abandona al llegar al techo. Un `sleep 30`
 # seria a la vez demasiado en una maquina rapida y poco en una lenta, y el
@@ -1237,6 +1308,16 @@ ensure_backup_directories() {
 
   # El destino de copias lo escribe la aplicacion, que corre como uid 1000.
   if [ ! -d "${CFG_BACKUP_PATH}" ]; then
+    # `install -d` crea tambien los padres que falten (`/var/backups` en un
+    # servidor recien instalado), y la vuelta atras tiene que retirarlos: se
+    # deshace desde el PRIMER directorio que no existia, que es de esta ejecucion
+    # y de nadie mas (I9).
+    local created_root
+    created_root="$(first_missing_ancestor "${CFG_BACKUP_PATH}")"
+    # Se registra ANTES de crear: un fallo o una senal a mitad de `install -d` (que
+    # puede haber creado ya algun padre) tambien se deshace. `rm -rf` de algo que
+    # no llego a existir no falla.
+    register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf '${created_root}'"
     if ! install -d -o 1000 -g 1000 -m 0750 "${CFG_BACKUP_PATH}" 2>/dev/null; then
       # Sin privilegios para asignar el propietario. Se crea igualmente y SE
       # AVISA: antes se caia a esta rama en silencio y la copia diaria fallaba
@@ -1247,7 +1328,6 @@ ensure_backup_directories() {
       kq_msg fix "$(kq_format f_owner_fallback "1000" "1000" "${CFG_BACKUP_PATH}")"
     fi
     created=1
-    register_undo "$(kq_format undo_backup_dir "${CFG_BACKUP_PATH}")" "rm -rf '${CFG_BACKUP_PATH}'"
   fi
 
   # El WAL lo archiva PostgreSQL, que en la imagen Alpine corre como uid 70. Si
@@ -1289,7 +1369,7 @@ ensure_backup_directories() {
 # BLOQUEANTE desde la 2.2.0: compose.prod.yaml monta cada uno con
 # `create_host_path: false` y, si falta, `up` falla. Mejor fallar aqui, con el motivo.
 ensure_backup_subdirectories() {
-  local dir status
+  local dir status label
 
   for dir in "${CFG_BACKUP_PATH}/metrics" "${CFG_BACKUP_PATH}/daily" "${CFG_BACKUP_PATH}/base" \
     "${CFG_BACKUP_PATH}/reports" "${CFG_BACKUP_PATH}/reports/retention"; do
@@ -1299,7 +1379,14 @@ ensure_backup_subdirectories() {
       rollback_and_die "$(kq_format f_backup_subdir "${dir}" "${dir}")"
     fi
     if [ "${KQ_DIR_CREATED}" -eq 1 ]; then
-      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
+      # Cada uno con su nombre en la lista de lo deshecho (V1-PL-04 b): antes los
+      # cinco salian como «directorio de informes».
+      case "${dir}" in
+      */metrics) label="$(kq_format undo_metrics_dir "${dir}")" ;;
+      */daily | */base) label="$(kq_format undo_backup_dir "${dir}")" ;;
+      *) label="$(kq_format undo_retention_dir "${dir}")" ;;
+      esac
+      register_undo "${label}" "rm -rf '${dir}'"
     fi
   done
   return 0
@@ -1325,7 +1412,7 @@ verify_image_signatures() {
   skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
   failed)
     ROLLBACK_DONE_CODE="${KQ_EXIT_SECURITY}"
-    rollback_and_die "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    rollback_and_die "$(kq_sig_failed_text "${registry}")"
     ;;
   esac
   record_signature_result
@@ -1379,7 +1466,7 @@ check_image_signatures() {
   unverifiable) check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")" ;;
   skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
   failed)
-    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    die "${KQ_EXIT_SECURITY}" "$(kq_sig_failed_text "${registry}")"
     ;;
   esac
   return 0
@@ -1420,8 +1507,13 @@ pull_images_if_needed() {
     fi
 
     if ! docker pull --quiet "${image}" >/dev/null; then
-      rollback_and_die "$(kq_format f_images \
-        "${PRODUCT_VERSION}" "${registry}" "${registry}" "${PRODUCT_VERSION}")"
+      # SOLO tras fallar la descarga por digest (V1-PL-02, lib/images.sh): la etiqueta
+      # esta en local sin ningun digest de registro, que es lo que deja `docker load`
+      # sin el almacen containerd. Repetir el `docker load` no lo arregla.
+      if kq_image_digest_lost "${image}"; then
+        rollback_and_die "$(kq_format f_images_digest_lost "${image%@*}" "$(kq_image_digest_var "${image}")")"
+      fi
+      rollback_and_die "$(kq_format f_images "${PRODUCT_VERSION}" "${registry}")"
     fi
   done
 
@@ -1461,20 +1553,21 @@ phase_bootstrap() {
     "docker compose --env-file '${ENV_FILE}' -f '${COMPOSE_FILE}' down -v --remove-orphans"
 
   if ! compose up -d; then
-    rollback_and_die "$(kq_format f_services_up "${COMPOSE_FILE}")"
+    show_service_logs
+    rollback_and_die "$(kq_text f_services_up)"
   fi
 
   local service
   for service in postgres redis; do
     if ! wait_for_healthy "${service}" "${KQ_WAIT_DEPENDENCIES}"; then
-      rollback_and_die "$(kq_format f_waiting \
-        "${service}" "${KQ_WAIT_DEPENDENCIES}" "${COMPOSE_FILE}" "${service}")"
+      show_service_logs "${service}"
+      rollback_and_die "$(kq_format f_waiting "${service}" "${KQ_WAIT_DEPENDENCIES}")"
     fi
   done
 
   if ! wait_for_healthy app "${KQ_WAIT_APPLICATION}"; then
-    rollback_and_die "$(kq_format f_waiting \
-      "app" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "app")"
+    show_service_logs app
+    rollback_and_die "$(kq_format f_waiting "app" "${KQ_WAIT_APPLICATION}")"
   fi
 
   # EL BORDE TAMBIEN, y no es simetria: es donde se descubre el error de
@@ -1492,8 +1585,8 @@ phase_bootstrap() {
   # espera agota su plazo y termina igual en 4. Es el resultado correcto por
   # los dos caminos.
   if ! wait_for_healthy nginx "${KQ_WAIT_APPLICATION}"; then
-    rollback_and_die "$(kq_format f_waiting \
-      "nginx" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "nginx")"
+    show_service_logs nginx
+    rollback_and_die "$(kq_format f_waiting "nginx" "${KQ_WAIT_APPLICATION}")"
   fi
 
   say ""
@@ -1510,7 +1603,7 @@ phase_bootstrap() {
   # migraciones antes seria seguro, pero la espera del borde de arriba es la que
   # cubre el fallo de certificado y no conviene reordenar dos cosas a la vez.
   if ! compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force; then
-    rollback_and_die "$(kq_format f_migrating "${COMPOSE_FILE}")"
+    rollback_and_die "$(kq_text f_migrating)"
   fi
 
   say "$(kq_text seed_note)"
@@ -1608,16 +1701,28 @@ phase_verify() {
     ;;
   esac
 
-  # `license:show` termina con 0 tanto con licencia como sin ella: sin licencia
-  # el producto funciona y lo dice. Un codigo distinto de 0 significa que la
-  # consulta en si ha fallado, no que falte la clave. Y aunque falle, NO se
-  # deshace nada ni se degrada el registro (regla dura 15, ADR-019).
-  if compose exec -T app php artisan license:show >/dev/null 2>&1; then
-    kq_msg check_ok "$(kq_text verify_license)"
-  else
+  verify_license_status
+}
+
+# `license:show` sale con 0 si la licencia esta vigente y dentro del plan, con 3
+# si «hay algo que mirar» —tambien SIN licencia, que es lo normal en una
+# instalacion recien hecha: la licencia llega aparte y se puede activar despues
+# (doc 05 §10)— y con otro codigo si la consulta en si falla (I7; ver
+# kq_license_status_class). Ninguno deshace nada ni degrada el registro (ADR-019).
+verify_license_status() {
+  local license_status=0
+  compose exec -T app php artisan license:show >/dev/null 2>&1 || license_status=$?
+  case "$(kq_license_status_class "${license_status}")" in
+  ok) kq_msg check_ok "$(kq_text verify_license)" ;;
+  attention)
+    kq_msg check_warn "$(kq_format verify_license_attention "${COMPOSE_FILE}" "${COMPOSE_FILE}")"
+    ;;
+  *)
     err ""
     err "$(kq_text prefix_warning): $(kq_format f_verify_license "${COMPOSE_FILE}")"
-  fi
+    ;;
+  esac
+  return 0
 }
 
 #------------------------------------------------------------------------------

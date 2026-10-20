@@ -146,6 +146,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/observability-merge.sh"
 # shellcheck source=lib/image-signature.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/image-signature.sh"
+# shellcheck source=lib/images.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/images.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -1828,7 +1830,7 @@ check_images() {
     ;;
   failed)
     remember_check "image-signature" "FALLIDA / FAILED: ${KQ_SIG_FAILED_IMAGE}"
-    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    die "${KQ_EXIT_SECURITY}" "$(kq_sig_failed_text "${registry:-ghcr.io/kronoqr}" u_f_sig_denied)"
     ;;
   esac
 
@@ -1838,6 +1840,13 @@ check_images() {
       announced=1
     fi
     if ! docker pull --quiet "${image}" >/dev/null 2>&1; then
+      # SOLO tras fallar la descarga por digest (V1-PL-02, lib/images.sh), como en
+      # install.sh: la etiqueta esta en local sin digest de registro (`docker load`).
+      if kq_image_digest_lost "${image}"; then
+        check_fail "$(kq_format u_c_images "${TARGET_VERSION}")" \
+          "$(kq_format f_images_digest_lost "${image%@*}" "$(kq_image_digest_var "${image}")")"
+        return 0
+      fi
       check_fail "$(kq_format u_c_images "${TARGET_VERSION}")" \
         "$(kq_format u_f_images "${TARGET_VERSION}" "${registry:-?}" "${TARGET_VERSION}")"
       return 0
@@ -3116,13 +3125,24 @@ phase_start_and_verify() {
   # La licencia NO bloquea (regla dura 15): se consulta para el informe, y solo
   # su resultado. Su salida lleva el nombre del cliente y no va a ningun
   # fichero (ADR-020).
-  if compose_new exec -T app php artisan license:show >/dev/null 2>&1; then
+  # ok · attention (3: «hay algo que mirar», tambien sin licencia), que NO es un
+  # fallo de la consulta · error (I7; kq_license_status_class, lib/checks.sh).
+  local license_status=0
+  compose_new exec -T app php artisan license:show >/dev/null 2>&1 || license_status=$?
+  case "$(kq_license_status_class "${license_status}")" in
+  ok)
     kq_msg check_ok "$(kq_text u_verify_license)"
     remember_check "license:show" "$(kq_text u_report_ok)"
-  else
+    ;;
+  attention)
+    kq_msg check_warn "$(kq_format u_verify_license_attention "${COMPOSE_FILE}")"
+    remember_check "license:show" "$(kq_text u_report_warned)"
+    ;;
+  *)
     kq_msg check_warn "$(kq_format u_verify_license_warn "${COMPOSE_FILE}")"
-    remember_check "license:show" "$(kq_text u_report_failed)"
-  fi
+    remember_check "license:show" "$(kq_text u_report_failed) (${license_status})"
+    ;;
+  esac
 
   reconcile_work_record
 

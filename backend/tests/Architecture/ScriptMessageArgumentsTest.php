@@ -147,11 +147,16 @@ it('cuenta bien los argumentos de una llamada partida en lineas y con expansione
  * que las usara. Es la UNICA excepcion a la prueba de abajo, y caduca sola: en
  * cuanto un script la use, la prueba pide quitarla de aqui.
  */
-const SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS = [
-    // install.sh deshace `metrics/`, `daily/` y `base/` como «directorio de
-    // informes» (V1-PL-04 b); la tarea 7.5 del plan de la 2.3.0 lo corrige con esta.
-    'undo_metrics_dir' => 'bloque 7, tarea 7.5',
-];
+/**
+ * Clave => tarea que la usara. Ninguna hoy: `undo_metrics_dir` estuvo aqui hasta
+ * que la tarea 7.5 de la 2.3.0 la uso (V1-PL-04 b).
+ *
+ * @return array<string, string>
+ */
+function scriptMessageArgumentsReservedKeys(): array
+{
+    return [];
+}
 
 it('no guarda en el catalogo mensajes que ningun script usa', function (): void {
     // V3-PL-08 (verificacion final de la 2.2.0): ocho claves que se traducian y
@@ -170,7 +175,7 @@ it('no guarda en el catalogo mensajes que ningun script usa', function (): void 
     $reservadasUsadas = [];
     foreach (array_keys(scriptMessageArgumentsCatalog()) as $key) {
         $usada = preg_match('/(?<![A-Za-z0-9_])'.preg_quote($key, '/').'(?![A-Za-z0-9_])/', $corpus) === 1;
-        $reservada = isset(SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS[$key]);
+        $reservada = array_key_exists($key, scriptMessageArgumentsReservedKeys());
         if (! $usada && ! $reservada) {
             $sinUso[] = $key;
         }
@@ -180,6 +185,6 @@ it('no guarda en el catalogo mensajes que ningun script usa', function (): void 
     }
 
     expect($sinUso)->toBe([], "Claves del catalogo que ningun script usa (retiralas, o usalas):\n".implode("\n", $sinUso))
-        ->and($reservadasUsadas)->toBe([], "Claves reservadas que ya se usan (quitalas de SCRIPT_MESSAGE_ARGUMENTS_RESERVED_KEYS):\n"
+        ->and($reservadasUsadas)->toBe([], "Claves reservadas que ya se usan (quitalas de scriptMessageArgumentsReservedKeys()):\n"
             .implode("\n", $reservadasUsadas));
 })->group('RF-PD-13');

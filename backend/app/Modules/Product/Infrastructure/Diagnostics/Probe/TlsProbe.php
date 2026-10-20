@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Shared\Application\Port\Clock;
+use Closure;
 use OpenSSLCertificate;
 use Throwable;
 
@@ -30,6 +31,14 @@ use Throwable;
  * cadena: en una instalacion interna el certificado es autofirmado a proposito y
  * validarlo fallaria siempre.
  *
+ * ## Un nombre que el contenedor no resuelve no es un borde caido (I6)
+ *
+ * La sonda corre DENTRO del contenedor `app`, y el contenedor no ve el
+ * `/etc/hosts` del servidor. Con `APP_URL` resuelta solo ahi —lo normal en una
+ * maqueta o en un hotel sin DNS interno—, la fase 1 del instalador decia que el
+ * nombre resuelve y esta sonda, que el servidor web «no esta levantado». Se
+ * resuelve primero y, si no se puede, se dice ESO (`warning_unresolvable`).
+ *
  * ## Inalcanzable es `warning`, nunca `failure`
  *
  * `doctor` se ejecuta tambien desde dentro del contenedor durante una
@@ -48,6 +57,8 @@ final readonly class TlsProbe implements DoctorProbe
         private string $applicationUrl,
         private bool $allowSelfSigned,
         private Clock $clock,
+        /** @var (Closure(string): bool)|null Dice si un nombre resuelve; null = gethostbynamel(). */
+        private ?Closure $resolves = null,
     ) {}
 
     public function family(): string
@@ -85,6 +96,15 @@ final readonly class TlsProbe implements DoctorProbe
 
     private function certificate(string $host, int $port): DoctorFinding
     {
+        if (! $this->resolvable($host)) {
+            return DoctorFinding::warning(
+                'tls.certificate',
+                'unresolvable',
+                params: ['host' => $host, 'port' => $port],
+                details: ['port' => $port, 'resolvable' => false],
+            );
+        }
+
         $certificate = $this->peerCertificate($host, $port);
 
         if ($certificate === null) {
@@ -137,6 +157,28 @@ final readonly class TlsProbe implements DoctorProbe
             ),
             default => DoctorFinding::ok('tls.certificate', $details, ['days' => $days]),
         };
+    }
+
+    private function resolvable(string $host): bool
+    {
+        if (filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false) {
+            return true;
+        }
+
+        if ($this->resolves instanceof Closure) {
+            return (bool) ($this->resolves)($host);
+        }
+
+        // `gethostbynamel` mira `/etc/hosts` (y los `extra_hosts` del compose) pero
+        // solo IPv4; `dns_get_record` ve tambien un nombre solo IPv6 (AAAA), pero no
+        // los ficheros de hosts. Resuelve si cualquiera de los dos lo hace.
+        if (gethostbynamel($host) !== false) {
+            return true;
+        }
+
+        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+
+        return \is_array($records) && $records !== [];
     }
 
     /**

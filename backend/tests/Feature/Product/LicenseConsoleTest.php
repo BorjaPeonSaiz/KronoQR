@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
@@ -56,7 +57,7 @@ it('license:show sin clave sale degradado y NUNCA con un error fatal', function 
         // Y que hacer.
         ->and($result['output'])->toContain('php artisan license:activate')
         // `1` significa «hay algo que mirar», no «esto se ha roto».
-        ->and($result['code'])->toBe(1);
+        ->and($result['code'])->toBe(LicenseShowCommand::ATTENTION);
 })->group('RF-PD-04');
 
 it('license:show imprime contratado frente a real para las dos magnitudes', function (): void {
@@ -80,7 +81,7 @@ it('license:show imprime contratado frente a real para las dos magnitudes', func
         ->and($result['output'])->toContain('SUPERADO en 1')
         // Y lo que el exceso NO significa, dicho con todas las letras.
         ->and($result['output'])->toContain('NO ha impedido ningun alta')
-        ->and($result['code'])->toBe(1);
+        ->and($result['code'])->toBe(LicenseShowCommand::ATTENTION);
 })->group('RF-PD-04', 'RF-PD-05');
 
 it('license:show ya no dice de ninguna funcionalidad que todavia no exista', function (): void {
@@ -141,7 +142,7 @@ it('license:show explica que esta degradado y desde cuando', function (): void {
         // La degradacion parcial de ADR-011: la presencia no se apaga, sondea.
         ->and($result['output'])->toContain('pasa a actualizarse por sondeo')
         ->and($result['output'])->toContain('Pide la renovacion al proveedor')
-        ->and($result['code'])->toBe(1);
+        ->and($result['code'])->toBe(LicenseShowCommand::ATTENTION);
 })->group('RF-PD-04', 'RF-PD-05');
 
 it('license:show no imprime la clave, solo su huella', function (): void {

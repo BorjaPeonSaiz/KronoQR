@@ -383,6 +383,9 @@ run_delegated_doctor() {
   check_prometheus_rules
   check_app_storage
   check_maintenance_mode
+  # Tambien con la aplicacion en marcha, que es el caso normal (V1-PL-03): la guia
+  # promete que doctor.sh recuerda los digests anulados mientras sigan en el .env.
+  check_image_digest_overrides "${CURRENT_ENV}" "$(dirname -- "${CURRENT_COMPOSE}")"
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -400,6 +403,9 @@ run_delegated_doctor() {
 
   output="$(compose_current exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || status=$?
   printf '%s\n' "${output}"
+  # El «codigo de salida» que imprime product:doctor es SUYO (0/1/2), no el de este
+  # script (I13): se dice para que nadie lo lea con la tabla de operacion.md §8.
+  say "$(kq_text d_doctor_code_note)"
   say ""
 
   # DESPUES del informe de `product:doctor` y no antes: desde dentro de `app` no
@@ -890,6 +896,13 @@ check_redis_restart_loop() {
   [[ "${restarts}" =~ ^[0-9]+$ ]] || restarts=0
 
   case "${status}" in
+  exited | dead | created | paused)
+    # Parado, no en bucle (R3-PL-05). Antes caia en «estable» y el informe decia
+    # [ok] Redis: exited justo encima del fallo de queue.redis de product:doctor.
+    check_fail "$(kq_format d_c_redis_down "${status}")" \
+      "$(kq_format d_f_redis_down "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    return 0
+    ;;
   restarting) loop=1 ;;
   running)
     # Docker da `2026-09-30T13:05:27.123456789Z`. Sin fracciones ni la `T`, que es

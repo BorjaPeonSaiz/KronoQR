@@ -74,8 +74,8 @@
 #      ninguna copia que verificar. NADA se ha escrito.
 #   4  La copia ha fallado y se ha limpiado lo que habia empezado a escribir.
 #      El destino queda como estaba y la copia ANTERIOR sigue siendo la buena.
-#   5  La copia ha fallado y ha quedado algo a medias que hay que retirar a
-#      mano. El mensaje dice que fichero.
+#   5  NO LO USA: lo que empieza a escribir se barre siempre al salir (trap EXIT),
+#      asi que no queda nada a medias que retirar a mano (V6-PL-02).
 #   6  La copia se ha escrito pero NO ha superado la verificacion, o una copia
 #      existente no verifica (huella distinta, no se descifra, o no es un
 #      volcado legible). TRATALA COMO INEXISTENTE.
@@ -86,6 +86,8 @@
 #      escrito ninguna copia y la metrica de copia sale como fallida, para que
 #      suene la alerta. BACKUP_DB_USERNAME/BACKUP_DB_PASSWORD tienen que ser los
 #      de `fichaje_backup`: docs/runbooks/rotacion-secretos.md.
+#   129, 130, 143  Interrumpido (corte de SSH, Ctrl+C, kill) en CUALQUIER fase: se barre lo que habia
+#      empezado a escribir y la copia anterior sigue intacta, como en el 4.
 #
 # Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
 # lib/backup-common.sh y en docs/cliente/operacion.md.
@@ -128,6 +130,7 @@ al_salir() {
 trap al_salir EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 uso() {
   # La cabecera entera, sin numeros de linea que mantener sincronizados: se

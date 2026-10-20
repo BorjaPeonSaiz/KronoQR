@@ -10,6 +10,7 @@ use App\Modules\Identity\Application\UseCase\CredentialStatusRow;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Identity\Domain\ValueObject\CredentialLifecycleStatus;
 use App\Modules\Identity\Domain\ValueObject\SiteCredentialCoverage;
+use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use Illuminate\Console\Command;
 
 /**
@@ -75,9 +76,19 @@ final class CredentialStatusCommand extends Command
 
         $publish = ! (bool) $this->option('no-metrics');
 
-        $report = $publish
-            ? $board->handleAndPublishMetrics($query)
-            : $board->handle($query);
+        try {
+            $report = $publish
+                ? $board->handleAndPublishMetrics($query)
+                : $board->handle($query);
+        } catch (InstallationSiteMissing) {
+            // Antes del asistente de puesta en marcha no hay centro, y sin centro
+            // no hay ninguna credencial que contar (I11). Es un estado de la
+            // instalacion, no un fallo: ni excepcion en pantalla ni linea ERROR en
+            // el log, y 0 para que la tarea programada no lo cuente como fallida.
+            $this->line('La instalacion todavia no tiene centro: completa antes el asistente de puesta en marcha, en el panel. Hasta entonces no hay credenciales que mostrar.');
+
+            return self::SUCCESS;
+        }
 
         if (! $quiet) {
             $this->renderRows($report->rows, $keyId === '' ? null : $keyId);
