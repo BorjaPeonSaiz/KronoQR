@@ -9,11 +9,13 @@ use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Reporting\BreakFixtures;
 use Tests\Support\Time\FrozenTime;
@@ -145,6 +147,42 @@ it('sirve el registro propio con no-store, como la descarga', function (): void 
 
     expect($respuesta->headers->get('Cache-Control'))->not->toContain('no-cache');
 })->group('RF-ID-05', 'RL-05', 'RS-09');
+
+it('dice que dia es hoy en la zona del centro, no en UTC', function (string $instanteUtc, string $hoy): void {
+    // 2.3.0, bloque 8: el portal deja de pedir el registro sin rango solo para
+    // saber que dia es. «Hoy» sale del `Clock` y de la zona del centro (reglas
+    // duras 2 y 3), y no depende del rango pedido.
+    $contexto = miPortal();
+    FrozenTime::at($instanteUtc);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('today', $hoy)
+        ->assertJsonPath('to', '2026-03-02');
+})->with([
+    // Madrid en invierno (+01:00): en UTC aun es el 28, en el centro ya el 29.
+    'pasada la medianoche local' => ['2026-03-28 23:30:00', '2026-03-29'],
+    // El 29 de marzo de 2026 Madrid pasa a +02:00. A las 22:30 UTC son las
+    // 00:30 del 30; con el desplazamiento de invierno serian las 23:30 del 29.
+    'tras el cambio de hora de primavera' => ['2026-03-29 22:30:00', '2026-03-30'],
+    // Y un minuto antes de la medianoche local sigue siendo el dia anterior.
+    'antes de la medianoche local, ya en horario de verano' => ['2026-03-29 21:59:00', '2026-03-29'],
+])->group('RF-ID-05', 'RN-04');
+
+it('lleva today tambien en la vista de gestion, que comparte el esquema', function (): void {
+    // `EmployeeWorkDays` es el mismo esquema para el panel y el portal: el campo
+    // es obligatorio en los dos.
+    $contexto = miPortal();
+    FrozenTime::at('2026-03-28 23:30:00');
+
+    $rrhh = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($rrhh)
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-01', 'to' => '2026-03-02'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('today', '2026-03-29');
+})->group('RF-PA-03', 'RN-04');
 
 it('abre en los 31 dias que terminan hoy cuando no se pide rango', function (): void {
     // «Hoy» resuelto en la zona del CENTRO y con el reloj inyectado, no con el

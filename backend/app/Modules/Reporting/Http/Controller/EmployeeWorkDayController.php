@@ -74,6 +74,6 @@ final class EmployeeWorkDayController extends Controller
             static fn () => $workDays->handle($request->toQuery($uuid)),
         );
 
-        return (new EmployeeWorkDaysResource($journal))->response();
+        return (new EmployeeWorkDaysResource($journal, $workDays->todayIn($journal->timeZone)))->response();
     }
 }

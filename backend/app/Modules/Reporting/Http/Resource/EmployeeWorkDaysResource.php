@@ -56,6 +56,16 @@ final class EmployeeWorkDaysResource extends JsonResource
     public static $wrap = null;
 
     /**
+     * @param  WorkDayJournal  $resource
+     * @param  string  $today  El dia civil de hoy en la zona del centro, tal como
+     *                         lo resuelve `ReadEmployeeWorkDays::todayIn()`.
+     */
+    public function __construct($resource, private readonly string $today)
+    {
+        parent::__construct($resource);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -72,6 +82,9 @@ final class EmployeeWorkDaysResource extends JsonResource
         return [
             'employee_uuid' => $journal->employeeUuid,
             'time_zone' => $journal->timeZone,
+            // «Hoy» en la zona del centro (2.3.0): el portal ya no necesita una
+            // segunda peticion sin rango para saberlo.
+            'today' => $this->today,
             // El rango **resuelto**, que puede no ser el que se pidio: sin `from`
             // ni `to` son los 31 dias que terminan hoy en la zona del centro, y
             // el cliente tiene que saber que ventana esta mirando.

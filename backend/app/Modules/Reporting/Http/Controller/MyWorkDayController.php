@@ -63,7 +63,7 @@ final class MyWorkDayController extends Controller
         // `no-store` (V4-PO-1): el portal se abre en el ordenador compartido de
         // la sala de personal, y el `no-cache, private` por omision deja que el
         // navegador guarde en disco las horas de quien acaba de salir.
-        return (new EmployeeWorkDaysResource($journal))
+        return (new EmployeeWorkDaysResource($journal, $workDays->todayIn($journal->timeZone)))
             ->response()
             ->header('Cache-Control', 'no-store, private');
     }
