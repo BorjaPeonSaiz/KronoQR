@@ -801,16 +801,23 @@ mode_manual_path() {
 
   run_printed_order 3
   wait_edge_health
-  # La vuelta atras automatica llego a relanzar la version anterior (app y nginx sanos) y a retirar su
-  # mantenimiento con `artisan up`; solo despues fallo, en la sonda de /health por el nginx roto. Asi
-  # que ANTES del 3b la API de gestion ya atiende: 401, no 503. (El 3b es idempotente.)
+  # Que haya mantenimiento ANTES del 3b depende de hasta donde llego la vuelta atras, y eso es una
+  # carrera del nginx roto: si llego a pasar su espera («nginx listo» tras el relanzamiento),
+  # update.sh hizo `artisan up` y fallo despues en la sonda de /health: 401. Si no la paso, nunca
+  # llego al `artisan up`: el `app` anterior, solo parado y arrancado, conserva su `down`: 503. Las
+  # dos son correctas; lo que se exige es que la API diga lo que corresponde. (El 3b es idempotente.)
   grep -q 'Esperando a que nginx este listo' "${OUT}" ||
     fail_with_output "la vuelta atras no llego a relanzar la version anterior"
   grep -q 'no ha arrancado sana tras restaurar' "${ERR}" ||
-    fail_with_output "la vuelta atras no fallo en la sonda posterior al relanzamiento"
+    fail_with_output "la vuelta atras no fallo al relanzar la version anterior"
+  expected_before=503
+  if awk '/Relanzando la version/ { r = 1 } r && /^nginx listo/ { found = 1 } END { exit !found }' "${OUT}"; then
+    expected_before=401
+  fi
   status="$(edge_status /api/v1/auth/me)"
-  [ "${status}" = "401" ] ||
-    fail "tras el paso 3 y antes del 3b, /api/v1/auth/me responde ${status} y se esperaba 401 (la vuelta atras ya retiro el mantenimiento con artisan up)"
+  [ "${status}" = "${expected_before}" ] ||
+    fail "tras el paso 3 y antes del 3b, /api/v1/auth/me responde ${status} y se esperaba ${expected_before} (401 si la vuelta atras llego a su artisan up, 503 si no)"
+  note "antes del 3b la API responde ${status}, como corresponde a hasta donde llego la vuelta atras"
 
   run_printed_order 3b
   run_printed_order 4
@@ -834,7 +841,7 @@ mode_manual_path() {
 
   product_doctor_new_image
   assert_no_secrets "${OUT}" "${ERR}" "${after}" "${NEW_DIR}/product-doctor-u3m.log"
-  note "camino manual de la salida 5 (copia ya restaurada) completo: 401 desde el paso 3 (la vuelta atras ya retiro el mantenimiento)"
+  note "camino manual de la salida 5 (copia ya restaurada) completo hasta el 401 y la cadena verificada"
 }
 
 mode_manual_path_restore() {
