@@ -86,7 +86,7 @@
 #      escrito ninguna copia y la metrica de copia sale como fallida, para que
 #      suene la alerta. BACKUP_DB_USERNAME/BACKUP_DB_PASSWORD tienen que ser los
 #      de `fichaje_backup`: docs/runbooks/rotacion-secretos.md.
-#   130, 143  Interrumpido (Ctrl+C, kill) en CUALQUIER fase: se barre lo que habia
+#   129, 130, 143  Interrumpido (corte de SSH, Ctrl+C, kill) en CUALQUIER fase: se barre lo que habia
 #      empezado a escribir y la copia anterior sigue intacta, como en el 4.
 #
 # Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
@@ -130,6 +130,7 @@ al_salir() {
 trap al_salir EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 uso() {
   # La cabecera entera, sin numeros de linea que mantener sincronizados: se

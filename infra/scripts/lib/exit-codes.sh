@@ -39,7 +39,7 @@
 #          NO sale con 130, 143 ni 129 en ese tramo; antes de el, si (nada
 #          escrito). Por SSH, dentro de tmux o screen.
 #        · backup.sh NO usa el 5 (barre lo empezado al salir) y una interrupcion
-#          sale con 130 o 143 en cualquier fase, con lo empezado barrido.
+#          sale con 129 (corte de SSH), 130 o 143 en cualquier fase, con lo empezado barrido.
 #
 #   5  FALLO CON VUELTA ATRAS INCOMPLETA. Algo salio mal y el script NO pudo
 #      deshacerlo todo. HAY QUE INTERVENIR A MANO, y el mensaje dice

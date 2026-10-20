@@ -901,6 +901,12 @@ check_customer_values() {
     REGISTRY_IS_TEMPLATE=1
     check_fail "$(kq_format c_env_template "IMAGE_REGISTRY")" \
       "$(kq_format f_image_registry_template "${value:-${plantilla:-ghcr.io/kronoqr}}" "${ENV_FILE}")"
+  elif [[ "${value}" =~ [[:space:]\<\>] ]]; then
+    # El marcador del bloque minimo de la guia (`ghcr.io/<cuenta-del-fabricante>/kronoqr`)
+    # copiado tal cual, o un espacio: ninguna referencia de imagen los admite.
+    REGISTRY_IS_TEMPLATE=1
+    check_fail "$(kq_format c_env_template "IMAGE_REGISTRY")" \
+      "$(kq_format f_image_registry_placeholder "${value}" "${ENV_FILE}")"
   else
     check_pass "$(kq_format c_env_key "IMAGE_REGISTRY")"
   fi
@@ -1308,6 +1314,10 @@ ensure_backup_directories() {
     # y de nadie mas (I9).
     local created_root
     created_root="$(first_missing_ancestor "${CFG_BACKUP_PATH}")"
+    # Se registra ANTES de crear: un fallo o una senal a mitad de `install -d` (que
+    # puede haber creado ya algun padre) tambien se deshace. `rm -rf` de algo que
+    # no llego a existir no falla.
+    register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf '${created_root}'"
     if ! install -d -o 1000 -g 1000 -m 0750 "${CFG_BACKUP_PATH}" 2>/dev/null; then
       # Sin privilegios para asignar el propietario. Se crea igualmente y SE
       # AVISA: antes se caia a esta rama en silencio y la copia diaria fallaba
@@ -1318,7 +1328,6 @@ ensure_backup_directories() {
       kq_msg fix "$(kq_format f_owner_fallback "1000" "1000" "${CFG_BACKUP_PATH}")"
     fi
     created=1
-    register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf '${created_root}'"
   fi
 
   # El WAL lo archiva PostgreSQL, que en la imagen Alpine corre como uid 70. Si

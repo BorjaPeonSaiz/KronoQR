@@ -674,3 +674,29 @@ it('ensena el registro de los servicios que fallan ANTES de deshacer, y los mens
             ->and($m[1] ?? '')->not->toContain('docker login %s');
     }
 })->group('RF-PD-02');
+
+it('la fase 1 rechaza IMAGE_REGISTRY con el marcador de la guia o con espacios (revision del bloque 7)', function (string $valor): void {
+    $paquete = paqueteDePrueba();
+    $env = (string) file_get_contents($paquete['dir'].'/.env.example');
+    $env = (string) preg_replace('/^IMAGE_REGISTRY=.*$/m', 'IMAGE_REGISTRY='.$valor, $env);
+    file_put_contents($paquete['dir'].'/.env', $env);
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'ENV_FILE='.escapeshellarg($paquete['dir'].'/.env').'; ENV_TEMPLATE='.escapeshellarg($paquete['dir'].'/.env.example').'; '
+        .'check_customer_values; printf "plantilla=%s\n" "${REGISTRY_IS_TEMPLATE}"'
+    );
+    borrarPaquete($paquete['dir']);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('todavia lleva el marcador de la guia')
+        ->and($proceso->getOutput())->toContain('plantilla=1');
+})->with([
+    'marcador' => ['ghcr.io/<cuenta-del-fabricante>/kronoqr'],
+    'espacio' => ['"ghcr.io/acme /kronoqr"'],
+])->group('RF-PD-02');
+
+it('backup.sh barre lo empezado tambien con un corte de SSH: sale con 129 por su trap', function (): void {
+    expect(Repo::contents('infra/scripts/backup.sh'))->toContain("trap 'exit 129' HUP")
+        ->and(Repo::contents('infra/scripts/lib/exit-codes.sh'))->toContain('sale con 129 (corte de SSH), 130 o 143');
+})->group('RF-PD-02');

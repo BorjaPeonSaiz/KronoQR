@@ -169,7 +169,16 @@ final readonly class TlsProbe implements DoctorProbe
             return (bool) ($this->resolves)($host);
         }
 
-        return gethostbynamel($host) !== false;
+        // `gethostbynamel` mira `/etc/hosts` (y los `extra_hosts` del compose) pero
+        // solo IPv4; `dns_get_record` ve tambien un nombre solo IPv6 (AAAA), pero no
+        // los ficheros de hosts. Resuelve si cualquiera de los dos lo hace.
+        if (gethostbynamel($host) !== false) {
+            return true;
+        }
+
+        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+
+        return \is_array($records) && $records !== [];
     }
 
     /**
