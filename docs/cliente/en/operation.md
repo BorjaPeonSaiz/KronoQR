@@ -872,6 +872,7 @@ stopped running):
 | `ColaDeTrabajosAcumulada` | More than 50 jobs waiting in the queue for 10 min | High | IT | [`cola-de-trabajos-atascada.md`](../../runbooks/cola-de-trabajos-atascada.md) (in Spanish) | `docker compose ps horizon` and `horizon:status`. Clocking is not affected; exports and reports are delayed |
 | `ColaDeTrabajosSinProcesar` | Jobs are waiting and none has finished in 20 min, `for: 10m` | High | IT | [`cola-de-trabajos-atascada.md`](../../runbooks/cola-de-trabajos-atascada.md) (in Spanish) | Horizon stopped, paused or hung: an export requested by HR or by an employee is not generated until it is back |
 | `ReverbSinRespuesta` | Reverb does not answer the presence task, `for: 5m` | Medium | IT | [`reverb-parado.md`](../../runbooks/reverb-parado.md) (in Spanish) | `docker compose up -d reverb`. Only the panel's real time is lost: reloading gives the right data |
+| `LokiSinRespuesta` | Loki does not answer the internal probe, `for: 10m` | Medium | IT | [`loki-sin-respuesta.md`](../../runbooks/loki-sin-respuesta.md) (in Spanish) | `docker compose up -d loki` and its log. Clocking and the audit are not affected: the centralised technical trail is lost |
 | `AlmacenDeMetricasCaido` / `AlmacenDeMetricasAusente` | Redis (metrics store) is not responding, `for: 15s`; or the application publishes no metrics, `for: 2m` | Critical | IT | [`almacen-de-metricas-caido.md`](../../runbooks/almacen-de-metricas-caido.md) (in Spanish) | `docker compose ps redis` and `./doctor.sh`. **While it lasts, kiosk and queue alerts are not reliable** (they are inhibited): clocking keeps working, what is missing is visibility |
 | `CertificadoTlsProximoACaducar` | < 21 days | High | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | Start the renewal process with your certificate's issuer |
 | `CertificadoTlsCaducado` | Expired | Critical | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | All kiosks affected: place the renewed certificate and reload Nginx |
@@ -1971,6 +1972,14 @@ the command to start each one:
 | `scheduler` | **Failure** (exits `6`) | Without it there is no nightly backup, no audit chain verification, no work record reconciliation and no purges. Clocking goes on and none of that raises an alarm |
 | `horizon` | **Failure** (exits `6`) | Without it no full export (the Labour Inspectorate's, or an employee's asking for their data), no deferred report and no incident notice gets done. Clocking goes on |
 | `reverb` | Warning | Only the panel's live presence stops updating; reloading gives the right figure |
+
+Since 2.3.0 all three also have a Docker `healthcheck` (`docker compose ps` shows
+`healthy` or `unhealthy`): `horizon` runs `horizon:status`, `reverb` its `/up` route and
+`scheduler` a heartbeat it renews every minute. A container that is
+**`running (unhealthy)`** is a live process that has stopped doing its job;
+`doctor.sh` reports it as a failure (`scheduler`, `horizon`) or a warning (`reverb`) and
+prints the `restart` command. None of the three takes part in clocking: being
+`unhealthy` does not stop the kiosks.
 
 It also warns if you run it from a directory that is not the current
 installation's (the one from before an update, for instance).

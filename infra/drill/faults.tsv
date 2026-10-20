@@ -60,3 +60,4 @@ SimulacroDeRestauracionCaducado	set	kronoqr_backup_restore_drill_last_result 0
 SimulacroDeRestauracionNuncaEjecutado	del	kronoqr_backup_restore_drill_last_success_timestamp_seconds
 SlotDeReplicacionParado	set	kronoqr_wal_replication_slots_inactive 1
 ReverbSinRespuesta	del	websocket_connections_active
+LokiSinRespuesta	set	probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 0

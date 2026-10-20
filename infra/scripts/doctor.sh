@@ -295,15 +295,22 @@ check_background_services() {
 
   read_service_states
   for service in scheduler horizon reverb; do
-    report_service_state "${service}" "$(service_state_of "${service}")"
+    report_service_state "${service}" "$(service_state_of "${service}")" "$(service_health_of "${service}")"
   done
 }
 
 # Una sola lectura de `docker compose ps` para las dos comprobaciones de
-# servicios: «servicio estado» por linea.
+# servicios: «servicio estado salud» por linea. La salud va vacia si el servicio no
+# declara `healthcheck`; los procesos de fondo (`horizon`, `scheduler`, `reverb`) lo
+# declaran desde la 2.3.0 (O1) y un `running` con salud `unhealthy` es un proceso vivo
+# que ha dejado de hacer su trabajo.
 SERVICE_STATES=""
 read_service_states() {
-  SERVICE_STATES="$(compose_current ps -a --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
+  SERVICE_STATES="$(compose_current ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null || true)"
+}
+
+service_health_of() {
+  awk -v s="$1" '$1 == s { print $3 }' <<<"${SERVICE_STATES}" || true
 }
 
 service_state_of() {
@@ -314,9 +321,30 @@ service_state_of() {
 # misma que da `product:doctor` a Horizon (`queue.worker`): scheduler y horizon,
 # fallo; reverb y los demas, aviso (con `app` parada, `app` ya es un fallo aparte).
 report_service_state() {
-  local service="$1" state="$2"
+  local service="$1" state="$2" health="${3:-}"
 
+  if [ "${state}" = "running" ] && [ "${health}" = "unhealthy" ]; then
+    # En marcha pero con la comprobacion de salud fallando: `up -d` no lo arregla, hay que
+    # reiniciarlo. Misma gravedad que parado para scheduler y horizon; aviso para el resto.
+    case "${service}" in
+    scheduler | horizon)
+      check_fail "$(kq_format d_c_service_state "${service}" "${state} (${health})")" \
+        "$(kq_format d_f_service_unhealthy "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
+      ;;
+    *)
+      check_warn "$(kq_format d_c_service_state "${service}" "${state} (${health})")" \
+        "$(kq_format d_f_service_unhealthy "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
+      ;;
+    esac
+    return 0
+  fi
   if [ "${state}" = "running" ]; then
+    check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
+    return 0
+  fi
+  # La guarda de retencion de Loki y Tempo es de UN SOLO USO: termina y se queda `exited`.
+  # No es una averia (si saliera con error, Loki no arrancaria: esa es otra comprobacion).
+  if [ "${service}" = "retention-guard" ] && [ "${state}" = "exited" ]; then
     check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
     return 0
   fi
@@ -492,11 +520,11 @@ check_services_state() {
   local service state
 
   read_service_states
-  # El tercer campo (salud) no se pide: `state` ya distingue "running" de
-  # cualquier otra cosa. `_` descarta lo que sobre sin dejar una variable sin usar.
-  while IFS=' ' read -r service state _; do
+  # `state` distingue "running" de cualquier otra cosa; `health` solo importa si es
+  # "unhealthy". `_` descarta lo que sobre sin dejar una variable sin usar.
+  while IFS=' ' read -r service state health _; do
     [ -n "${service}" ] || continue
-    report_service_state "${service}" "${state}"
+    report_service_state "${service}" "${state}" "${health}"
   done <<<"${SERVICE_STATES}"
   for service in scheduler horizon reverb; do
     [ -n "$(service_state_of "${service}")" ] || report_service_state "${service}" ""

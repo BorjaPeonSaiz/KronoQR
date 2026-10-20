@@ -855,6 +855,7 @@ la alimenta dejó de ejecutarse):
 | `ColaDeTrabajosAcumulada` | Más de 50 trabajos esperando en la cola durante 10 min | Alta | IT | [`cola-de-trabajos-atascada.md`](../runbooks/cola-de-trabajos-atascada.md) | `docker compose ps horizon` y `horizon:status`. El fichaje no se ve afectado; se retrasan exportaciones e informes |
 | `ColaDeTrabajosSinProcesar` | Hay trabajos esperando y en 20 min no ha terminado ninguno, `for: 10m` | Alta | IT | [`cola-de-trabajos-atascada.md`](../runbooks/cola-de-trabajos-atascada.md) | Horizon parado, en pausa o colgado: una exportación pedida por RRHH o por un empleado no se genera hasta que vuelva |
 | `ReverbSinRespuesta` | Reverb no contesta a la tarea de presencia, `for: 5m` | Media | IT | [`reverb-parado.md`](../runbooks/reverb-parado.md) | `docker compose up -d reverb`. Solo se pierde el tiempo real del panel: recargar da el dato correcto |
+| `LokiSinRespuesta` | Loki no responde a la sonda interna, `for: 10m` | Media | IT | [`loki-sin-respuesta.md`](../runbooks/loki-sin-respuesta.md) | `docker compose up -d loki` y su registro. No afecta al fichaje ni a la auditoría: se pierde el rastro técnico centralizado |
 | `AlmacenDeMetricasCaido` / `AlmacenDeMetricasAusente` | Redis (almacén de métricas) no responde, `for: 15s`; o la aplicación no publica métricas, `for: 2m` | Crítica | IT | [`almacen-de-metricas-caido.md`](../runbooks/almacen-de-metricas-caido.md) | `docker compose ps redis` y `./doctor.sh`. **Mientras dure, las alertas de quiosco y cola no son fiables** (se inhiben): el fichaje sigue, lo que falta es visibilidad |
 | `CertificadoTlsProximoACaducar` | < 21 días | Alta | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Empieza el trámite de renovación con el emisor de tu certificado |
 | `CertificadoTlsCaducado` | Caducado | Crítica | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Todos los quioscos afectados: coloca el certificado renovado y recarga Nginx |
@@ -1954,6 +1955,14 @@ arrancar cada uno:
 | `scheduler` | **Fallo** (sale `6`) | Sin él no hay copia nocturna, ni verificación de la cadena de auditoría, ni conciliación del registro, ni purgas. El fichaje sigue y nada de eso avisa |
 | `horizon` | **Fallo** (sale `6`) | Sin él no termina ninguna exportación íntegra (la de la Inspección o la de un empleado que pide sus datos), ningún informe en diferido ni ningún aviso de incidencias. El fichaje sigue |
 | `reverb` | Aviso | Solo deja de actualizarse en vivo la presencia del panel; recargar da el dato bueno |
+
+Desde la 2.3.0 los tres tienen además un `healthcheck` de Docker (`docker compose
+ps` muestra `healthy` o `unhealthy`): `horizon` con `horizon:status`, `reverb` con
+su ruta `/up` y `scheduler` con un latido que renueva cada minuto. Un contenedor
+**`running (unhealthy)`** es un proceso vivo que ha dejado de hacer su trabajo;
+`doctor.sh` lo da por fallo (`scheduler`, `horizon`) o aviso (`reverb`) y trae la orden
+`restart`. Ninguno de los tres interviene en el fichaje: que estén `unhealthy` no
+detiene a los quioscos.
 
 También avisa si lo lanzas desde un directorio que no es el de la instalación
 vigente (el de antes de una actualización, por ejemplo).

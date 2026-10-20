@@ -27,7 +27,7 @@ use Tests\Architecture\Support\Repo;
 /**
  * El inventario del simulacro: las 34 alertas que nunca habian saltado en real
  * (docs/verificacion/2.2.0-verificacion-final-tanda-4.md) mas las que se han
- * anadido despues (bloque 9 de la 2.3.0: cola de trabajos y Reverb).
+ * anadido despues (bloque 9 de la 2.3.0: cola de trabajos, Reverb y Loki).
  *
  * @var list<string>
  */
@@ -43,7 +43,7 @@ $inventarioDelSimulacro = [
     'PurgaDeFicherosGeneradosNoPuedeBorrar', 'RechazoDeFirmaQr', 'ReconciliacionConFallos',
     'RoturaDeCadenaDeAuditoria', 'SaturacionDelBordeEnElFichaje', 'ScanBatchItemNotProcessed',
     'SimulacroDeRestauracionCaducado', 'SimulacroDeRestauracionNuncaEjecutado', 'SlotDeReplicacionParado',
-    'ColaDeTrabajosAcumulada', 'ColaDeTrabajosSinProcesar', 'ReverbSinRespuesta',
+    'ColaDeTrabajosAcumulada', 'ColaDeTrabajosSinProcesar', 'ReverbSinRespuesta', 'LokiSinRespuesta',
 ];
 
 /**
@@ -82,7 +82,7 @@ it('cubre las alertas del inventario, cada una con receta o con motivo, y ningun
     $conReceta = array_values(array_unique(array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/faults.tsv'))));
     $sinReceta = array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/not-fabricable.tsv'));
 
-    expect($inventarioDelSimulacro)->toHaveCount(37);
+    expect($inventarioDelSimulacro)->toHaveCount(38);
 
     $cubiertas = array_merge($conReceta, $sinReceta);
     sort($cubiertas);

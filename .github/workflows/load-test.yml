@@ -322,10 +322,11 @@ jobs:
           fi
           # `restart` no basta: relanza el proceso existente sin releer
           # env_file. `up -d --wait` recrea los servicios con el .env de disco
-          # y espera a que su healthcheck pase antes de seguir. Los cuatro
+          # y espera a que su healthcheck pase antes de seguir (hasta 300 s: desde
+          # el bloque 9 de la 2.3.0 horizon, scheduler y reverb tambien lo tienen). Los cuatro
           # roles PHP se recrean para que ninguno se quede con el APP_ENV
           # anterior; nginx, por el CIDR.
-          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait app horizon scheduler reverb nginx
+          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 300 app horizon scheduler reverb nginx
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
       - name: "paquete/.env legible por el runner, sin sudo (lo necesita run.sh)"

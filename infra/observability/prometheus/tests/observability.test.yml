@@ -1,0 +1,54 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/observability.yml
+# (bloque 9 de la 2.3.0: V21-4-DV-4).
+rule_files:
+  - ../rules/observability.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Loki deja de responder en el minuto 5: dispara a los 10 min de persistir.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"}'
+        values: "1x5 0x30"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LokiSinRespuesta
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LokiSinRespuesta
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: host
+              job: kronoqr-loki
+              instance: "http://loki:3100/ready"
+            exp_annotations:
+              summary: "Loki no responde: los registros tecnicos no se estan guardando"
+              description: >-
+                La sonda interna de Loki (/ready) falla desde hace 10 min. Mientras
+                tanto los registros de la aplicacion no llegan a ninguna parte y el
+                rastro para diagnosticar un incidente se pierde. El fichaje, el
+                registro horario y la auditoria no se ven afectados.
+              runbook_url: docs/runbooks/loki-sin-respuesta.md
+
+  # Un reinicio de 5 minutos (update.sh) no despierta a nadie.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"}'
+        values: "1x5 0x5 1x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LokiSinRespuesta
+        exp_alerts: []
+
+  # Otro job de sonda caido (el borde) no es Loki.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: LokiSinRespuesta
+        exp_alerts: []

@@ -88,3 +88,4 @@ http_requests_total{route="attendance.scan",status="429"} 0
 queue_jobs_pending{queue="default"} 0
 presence_metrics_timestamp_seconds @NOW@
 websocket_connections_active 2
+probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 1

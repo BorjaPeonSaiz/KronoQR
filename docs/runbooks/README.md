@@ -3,7 +3,7 @@
 Procedimientos de operación interna: uno por cada modo de fallo que tiene una
 alerta asociada, y uno por cada situación que el cliente o el fabricante
 afrontan sin alerta (una persona que entra, una norma que cambia, un servidor
-que se pierde). **Los 35 viajan en el paquete de entrega** (`docs/runbooks/`):
+que se pierde). **Los 36 viajan en el paquete de entrega** (`docs/runbooks/`):
 los ejecuta el IT del cliente, con el sistema delante y a veces a las 06:30.
 
 **La norma que gobierna esta carpeta** (doc 02 §8.4): *cada alerta lleva
@@ -61,7 +61,7 @@ vigila que los documentos no se contradigan.
 
 ## Índice por alerta
 
-Las 69 reglas de `infra/observability/prometheus/rules/` y el runbook al que
+Las 70 reglas de `infra/observability/prometheus/rules/` y el runbook al que
 apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
 **En tu servidor no hay `infra/`.** Los runbooks citan los ficheros con su ruta
@@ -87,6 +87,7 @@ paquete: es de la integración continua del fabricante.
 | [`saturacion-del-borde.md`](saturacion-del-borde.md) | `SaturacionDelBordeEnElFichaje` |
 | [`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md) | `ColaDeTrabajosAcumulada` · `ColaDeTrabajosSinProcesar` |
 | [`reverb-parado.md`](reverb-parado.md) | `ReverbSinRespuesta` |
+| [`loki-sin-respuesta.md`](loki-sin-respuesta.md) | `LokiSinRespuesta` |
 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | `ErroresCriticosNuevos` · `ErroresDeServidorEnElFichaje` · `LatenciaDelFichajeAlta` · `SondaDelBordeFallida` · `DeteccionDeIncidenciasConFallos` |
 | [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | `AlmacenDeMetricasCaido` · `AlmacenDeMetricasAusente` |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | `EnrutadoDeAlertasCaido` · `EntregaDeAlertasFallando` |
@@ -117,6 +118,7 @@ paquete: es de la integración continua del fabricante.
 | [`saturacion-del-borde.md`](saturacion-del-borde.md) | `429` por encima de lo normal en las rutas de fichaje (T1499.002) | IT del cliente |
 | [`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md) | Hay trabajos esperando en la cola y nadie los procesa: Horizon parado, en pausa o colgado. Las exportaciones y los informes en diferido no se generan; el fichaje sigue | IT del cliente |
 | [`reverb-parado.md`](reverb-parado.md) | Reverb no responde: el panel de presencia pierde el tiempo real. Recargar da el dato correcto; no se pierde ningún fichaje | IT del cliente |
+| [`loki-sin-respuesta.md`](loki-sin-respuesta.md) | Loki no responde: los registros técnicos no se están guardando. El fichaje, el registro horario y la auditoría no se ven afectados | IT del cliente |
 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | Cómo lee el IT `error_events` y qué hacer con cada severidad; `5xx` y latencia del fichaje; sonda del borde; las sondas de `doctor` que ninguna alerta ve | IT del cliente |
 | [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | Redis (almacén de métricas) no responde o la aplicación no publica `/metrics`: las alertas de quiosco y cola no son fiables | IT del cliente |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, sino a un fallo de la propia infraestructura de alertas | IT del cliente |

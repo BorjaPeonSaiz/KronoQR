@@ -848,6 +848,20 @@ services:
       - *v-storage
     environment:
       <<: *runtime-env
+    # `horizon:status` sale con 0 solo si hay un maestro de Horizon registrado y NO en pausa
+    # (1 en pausa, 2 inactivo). Es la misma sonda que usan `doctor.sh`, `product:doctor`
+    # (`queue.worker`) y `update.sh` (`wait_for_horizon_heartbeat`): un proceso vivo que ha
+    # dejado de registrarse en Redis no sirve de nada. NUNCA bloquea el fichaje (regla dura 19):
+    # el quiosco no depende de este servicio, y `unhealthy` solo cambia lo que dicen
+    # `docker compose ps` y `doctor.sh`; Compose no reinicia por ello. Arranca cada 20 s porque
+    # cada ejecucion arranca la aplicacion (~0,5 s de CPU); con 90 s de espera en `update.sh`
+    # (KQ_WAIT_WORKERS) caben cuatro intentos antes de dar el arranque por fallido.
+    healthcheck:
+      test: ["CMD-SHELL", "php /var/www/html/artisan horizon:status >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       redis:
         condition: service_healthy
@@ -864,6 +878,16 @@ services:
       <<: *reverb-env
     expose:
       - "8080"
+    # Reverb publica `GET /up` (detras de `REVERB_SERVER_PATH` si se ha configurado). Responde
+    # sin tocar Redis ni la base: dice solo que el servidor WebSocket atiende. Si cae, el panel
+    # pierde el tiempo real y nada mas (RF-AT-10 no depende de el); la alerta `ReverbSinRespuesta`
+    # lo ve desde Prometheus y esto lo deja a la vista en `docker compose ps` y `doctor.sh`.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080$${REVERB_SERVER_PATH:-}/up"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       redis:
         condition: service_healthy
@@ -894,6 +918,17 @@ services:
       BACKUP_ENCRYPTION_KEY_PREVIOUS:
       BACKUP_DB_USERNAME:
       BACKUP_DB_PASSWORD:
+    # El latido del planificador: `schedule:work` toca este fichero al arrancar y lo vuelve a
+    # tocar cada minuto una tarea propia (`SchedulerHeartbeat`, routes/console.php). Si pasan 3
+    # minutos sin tocarlo, el bucle esta colgado aunque el proceso viva: sin el no hay copia, ni
+    # verificacion de la cadena, ni conciliacion. El nombre del fichero lo ata una prueba a
+    # `SchedulerHeartbeat::PATH`. Sin efecto sobre el fichaje (regla dura 19).
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/kronoqr-scheduler-heartbeat -mmin -3 2>/dev/null | grep -q ."]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy

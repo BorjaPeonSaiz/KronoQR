@@ -325,3 +325,43 @@ it('con la aplicacion en marcha recuerda tambien los digests anulados y explica 
         // Y en las dos ramas: con la aplicacion parada ya estaba.
         ->and(substr_count($doctor, 'check_image_digest_overrides "${CURRENT_ENV}"'))->toBe(2);
 })->group('RF-PD-13');
+
+it('falla con el procesador de trabajos en marcha pero «unhealthy», y la orden es reiniciarlo (O1, 2.3.0)', function (): void {
+    // `up -d` no arregla un contenedor vivo cuyo `healthcheck` falla: `horizon:status` dice que
+    // ningun maestro esta registrado o que esta en pausa. La orden correcta es `restart`.
+    $proceso = doctorConServicios([
+        'app' => 'running', 'scheduler' => 'running', 'horizon' => 'running unhealthy', 'reverb' => 'running',
+    ]);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=1 avisos=0')
+        ->and($proceso->getOutput())->toContain('[FALLA] Servicio horizon: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('sudo docker compose -f /opt/kronoqr-2.2.0/docker-compose.yml restart horizon')
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio scheduler: running');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('falla con el planificador «unhealthy» y solo avisa con Reverb «unhealthy» (O1, 2.3.0)', function (): void {
+    $proceso = doctorConServicios([
+        'app' => 'running', 'scheduler' => 'running unhealthy', 'horizon' => 'running healthy', 'reverb' => 'running unhealthy',
+    ]);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=1 avisos=1')
+        ->and($proceso->getOutput())->toContain('[FALLA] Servicio scheduler: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('[aviso] Servicio reverb: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio horizon: running');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('no tiene por averia la guarda de retencion de Loki, que es de un solo uso y se queda «exited» (V21-4-DV-4)', function (): void {
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_COMPOSE=/opt/kronoqr-2.2.0/docker-compose.yml; '
+        .'compose_current() { printf "app exited\nscheduler running\nhorizon running\nreverb running\nretention-guard exited\n"; }; '
+        .'check_services_state; printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
+    $proceso = new Process(['bash', '-c', $script], timeout: 30.0);
+    $proceso->run();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio retention-guard: exited')
+        // Solo `app` parada es aviso: la guarda no suma ninguno.
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=1');
+})->group('RF-PD-13', 'RNF-D-01');

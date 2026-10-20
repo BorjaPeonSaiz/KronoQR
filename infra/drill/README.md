@@ -27,7 +27,7 @@ ha saltado es una alerta de la que no se sabe si salta.
 5. Destruye la pila (salvo `KQ_DRILL_KEEP=1`).
 
 ```bash
-make alerts-drill                                   # las 36, unos 9 minutos
+make alerts-drill                                   # las 37, unos 9 minutos
 make alerts-drill ALERT=RoturaDeCadenaDeAuditoria   # una sola, medio minuto
 infra/drill/alerts-drill.sh --list                  # inventario, sin Docker
 ```
@@ -51,7 +51,7 @@ persistencia la prueban los casos de `promtool test rules` de
 `infra/observability/prometheus/tests/`. Tampoco la entrega real al buzón de un
 cliente: eso es la prueba de entrega de `docs/runbooks/entrega-de-alertas.md` §4.2.
 
-## Las 37 alertas
+## Las 38 alertas
 
 La columna «Falla» es lo que cambia en `baseline.prom` (ver `faults.tsv`). La
 columna «Real» es cómo se produciría la misma condición en una instalación; en
@@ -78,6 +78,7 @@ simulacro evita.
 | `EntregaDeAlertasFallando` | mantiene encendida una alerta de copia (`kronoqr_wal_replication_slots_inactive` 1) hacia webhooks que dan 404: la entrega falla de verdad | it-cliente | SMTP rechaza, contraseña rotada, webhook caído |
 | `EspacioEnDiscoBajo` | `node_filesystem_avail_bytes` al 10 % | it-cliente | disco del servidor lleno |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue` 3 | it-cliente | purga programada que no retira |
+| `LokiSinRespuesta` | `probe_success` del job `kronoqr-loki` a 0 | it-cliente | `loki` parado o `retention-guard` con un plazo inválido |
 | `KioskDiscardedScansAttributed` | `kiosk_discarded_scans_total{attributed="true"}` +5 | it-cliente | quiosco descartó fichajes atribuibles a una tarjeta |
 | `KioskQueueStorageDegraded` | `kiosk_queue_storage_degraded` 1 | it-cliente | IndexedDB del quiosco degradado |
 | `KioskUnreportedDiscards` | `kiosk_unreported_discards` 4 | it-cliente | descartes que el quiosco no pudo notificar |
@@ -108,7 +109,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
 2. Una línea en `faults.tsv` (`ALERTA<TAB>set|del|none<TAB>argumento`).
-3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 37).
+3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 38).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 
 Si `alerts-drill.sh` dice «ESTADO SANO NO SILENCIOSO», la regla lee una serie que

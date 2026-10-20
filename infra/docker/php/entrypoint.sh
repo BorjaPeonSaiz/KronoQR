@@ -258,6 +258,9 @@ main() {
     exec php "${APP_PATH}/artisan" reverb:start --host=0.0.0.0 --port=8080
     ;;
   scheduler)
+    # El latido inicial del `healthcheck` (SchedulerHeartbeat::PATH): sin el, el servicio no
+    # seria `healthy` hasta su primer minuto de bucle. Cada minuto lo renueva una tarea propia.
+    touch /tmp/kronoqr-scheduler-heartbeat
     exec php "${APP_PATH}/artisan" schedule:work
     ;;
   *)
