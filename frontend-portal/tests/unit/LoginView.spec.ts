@@ -133,7 +133,8 @@ describe('LoginView', () => {
     await fillAndSubmit(wrapper)
 
     expect(useSessionStore(pinia).isAuthenticated).toBe(true)
-    expect(router.currentRoute.value.path).toBe('/records')
+    // La pantalla se baja bajo demanda (8.8): se espera a que llegue.
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/records'))
   })
 
   it('lleva a la pantalla que se pedia antes de exigir el acceso', async () => {
@@ -147,7 +148,7 @@ describe('LoginView', () => {
 
     await fillAndSubmit(wrapper)
 
-    expect(router.currentRoute.value.path).toBe('/export')
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/export'))
   })
 
   it('no distingue un codigo inexistente de un PIN incorrecto ni de un bloqueo por intentos', async () => {

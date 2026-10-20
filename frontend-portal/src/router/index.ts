@@ -1,9 +1,6 @@
-import NotFoundView from '@kronoqr/web-kit/components/NotFoundView.vue'
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '@/features/login/LoginView.vue'
-import MyExportView from '@/features/my-export/MyExportView.vue'
-import MyRecordsView from '@/features/my-records/MyRecordsView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 
 // Las rutas se escriben en ingles como el resto del codigo (CLAUDE.md): una URL
@@ -17,6 +14,9 @@ declare module 'vue-router' {
   }
 }
 
+// Solo el acceso y el marco van en el chunk de entrada. Cada pantalla se baja
+// cuando se pide (8.8, V5-PO-1): se abre con datos moviles personales, y quien
+// entra por el acceso no necesita todavia el codigo de las otras.
 export const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -36,19 +36,19 @@ export const routes: RouteRecordRaw[] = [
         // existe por obligacion legal: el registro de jornada propio (RL-05).
         path: 'records',
         name: 'my-records',
-        component: MyRecordsView,
+        component: () => import('@/features/my-records/MyRecordsView.vue'),
         meta: { titleKey: 'myRecords.title' },
       },
       {
         path: 'export',
         name: 'my-export',
-        component: MyExportView,
+        component: () => import('@/features/my-export/MyExportView.vue'),
         meta: { titleKey: 'myExport.title' },
       },
       {
         path: ':pathMatch(.*)*',
         name: 'not-found',
-        component: NotFoundView,
+        component: () => import('@kronoqr/web-kit/components/NotFoundView.vue'),
         meta: { titleKey: 'notFound.heading' },
         // El portal es de consulta, con dos pantallas propias: el rescate
         // vuelve a mi registro, que es la pantalla de partida (`@kronoqr/web-kit`,

@@ -178,6 +178,6 @@ describe('401 con la sesion abierta', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    expect(router.currentRoute.value.fullPath).toBe('/records')
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/records'))
   })
 })

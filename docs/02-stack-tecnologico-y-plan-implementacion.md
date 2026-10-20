@@ -1627,6 +1627,8 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 
 **El panel tiene su propio presupuesto de arranque** (2.2.1, bloque 17): JS crítico ≤ 190 KiB gzip y CSS ≤ 40 KiB, comprobado en el `build` por `frontend-admin/scripts/check-bundle-budget.mjs`. Las vistas se cargan bajo demanda salvo el marco, el acceso y la de aterrizaje; el umbral salta si una vista o ECharts vuelven al chunk de entrada. Apoya RNF-P-04.
 
+**El portal del empleado tiene el suyo** (2.3.0, bloque 8): JS crítico ≤ 85 KiB gzip y CSS ≤ 10 KiB, comprobado en el `build` por `frontend-portal/scripts/check-bundle-budget.mjs` con la mecánica común de `packages/web-kit/scripts/bundle-budget.mjs`. Medido: 67,8 KiB de JS y 5,1 KiB de CSS. Solo el acceso y el marco van en el chunk de entrada; «Mi registro», la descarga y la 404 se cargan bajo demanda. Se abre desde datos móviles personales: el umbral salta si una pantalla o una librería pesada vuelven al chunk de entrada.
+
 El escaneo continuo por cámara durante turnos de 8 h es un caso de uso poco habitual: **se exige una prueba de resistencia de 12 h en el dispositivo real** antes de dar por buena la Fase 1. Las fugas de memoria en el bucle de decodificación son un fallo típico y no aparecen en pruebas cortas.
 
 ## Anexo B — Variables de entorno principales
