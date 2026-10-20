@@ -176,9 +176,10 @@ return [
          * que nada fallara. La variable sigue pudiendo existir en un `.env`
          * antiguo: ya no la lee nadie (decision 9 de la ficha 3.1).
          *
-         * En una orden de consola lanzada con `docker compose exec` (no el PID 1 del
-         * contenedor), el registro va al log del contenedor y no a la terminal del
-         * operador: {@see ConsoleAwareStreamHandler} (V1-PL-01, V21-4-PL-2).
+         * En una orden de consola lanzada con `docker compose exec` (sin la variable
+         * KQ_CONTAINER_MAIN que exporta el entrypoint), el registro va al log del
+         * contenedor y no a la terminal del operador: {@see ConsoleAwareStreamHandler}
+         * (V1-PL-01, V21-4-PL-2).
          */
         'stderr' => [
             'driver' => 'monolog',

@@ -4,20 +4,16 @@ declare(strict_types=1);
 
 use App\Support\Observability\Logging\ConsoleAwareStreamHandler;
 use Illuminate\Support\Facades\Log;
-use Monolog\Level;
-use Monolog\LogRecord;
 use Symfony\Component\Process\Process;
 
 /*
- * **EL LOG DE UNA ORDEN DE CONSOLA VA AL LOG DEL CONTENEDOR, NO A LA TERMINAL DEL
- * OPERADOR** (V1-PL-01, V21-4-PL-2, I11; decision del propietario del 20-10-2026).
+ * **EL LOG DE UNA ORDEN LANZADA CON `docker compose exec` VA AL LOG DEL
+ * CONTENEDOR, NO A LA TERMINAL DEL OPERADOR** (V1-PL-01, V21-4-PL-2, I11; decision
+ * del propietario del 20-10-2026).
  *
- * `docker compose exec app php artisan …` escribia en la terminal del IT, en
- * JSON, todo lo que el producto registraba: un INFO de rutina, el WARNING del
- * cortacircuitos, el ERROR con la excepcion entera. Aqui se comprueba que, en un
- * proceso de consola que no es el PID 1 —el caso de Pest y el de `exec`—, el canal
- * `stderr` escribe en el log del contenedor (en la prueba, un fichero temporal en
- * lugar de `/proc/1/fd/2`) y no en su salida de error.
+ * La senal es `KQ_CONTAINER_MAIN`, que exporta el entrypoint y no hereda `exec`.
+ * `phpunit.xml` la declara para toda la suite (que corre con `exec`); las pruebas
+ * del desvio la retiran. En lugar de `/proc/1/fd/2`, un fichero temporal.
  */
 
 /** Un fichero temporal que hace de `/proc/1/fd/2`. */
@@ -26,17 +22,41 @@ function consoleLogContainerFile(): string
     return (string) tempnam(sys_get_temp_dir(), 'kq-container-log-');
 }
 
-it('solo desvia el destino de serie, solo en consola y solo si no es el proceso principal', function (mixed $stream, string $sapi, int|false $pid, bool $esperado): void {
-    expect(ConsoleAwareStreamHandler::redirects($stream, $sapi, $pid))->toBe($esperado);
+/**
+ * Ejecuta $codigo en un PHP aparte con la aplicacion cargada y SIN
+ * `KQ_CONTAINER_MAIN`: como una orden de `docker compose exec`.
+ *
+ * @param  array<string, string>  $env
+ */
+function consoleLogProceso(string $codigo, array $env = []): Process
+{
+    $proceso = new Process(
+        ['php', '-r', 'require "vendor/autoload.php"; '.$codigo],
+        base_path(),
+        [ConsoleAwareStreamHandler::CONTAINER_MAIN => false, ...$env],
+        timeout: 60.0,
+    );
+    $proceso->run();
+
+    return $proceso;
+}
+
+afterEach(function (): void {
+    putenv(ConsoleAwareStreamHandler::CONTAINER_MAIN.'=1');
+    Log::forgetChannel('stderr');
+});
+
+it('solo desvia el destino de serie, solo en consola y solo fuera del proceso principal del contenedor', function (mixed $stream, string $sapi, bool $principal, bool $esperado): void {
+    expect(ConsoleAwareStreamHandler::redirects($stream, $sapi, $principal))->toBe($esperado);
 })->with([
-    'docker compose exec … artisan' => ['php://stderr', 'cli', 4242, true],
-    'horizon, scheduler o run --rm: PID 1' => ['php://stderr', 'cli', 1, false],
-    'PHP-FPM' => ['php://stderr', 'fpm-fcgi', 4242, false],
-    'un fichero configurado a proposito' => ['/var/log/kronoqr.log', 'cli', 4242, false],
+    'docker compose exec … artisan' => ['php://stderr', 'cli', false, true],
+    'horizon, scheduler, sus hijos o run --rm' => ['php://stderr', 'cli', true, false],
+    'PHP-FPM' => ['php://stderr', 'fpm-fcgi', false, false],
+    'un fichero configurado a proposito' => ['/var/log/kronoqr.log', 'cli', false, false],
 ])->group('RNF-D-02');
 
-it('en un proceso de consola que no es el PID 1, el canal stderr escribe en el log del contenedor y no en stderr', function (): void {
-    // Pest es exactamente eso: `cli` y no el PID 1.
+it('sin la senal del entrypoint, el canal stderr escribe en el log del contenedor', function (): void {
+    putenv(ConsoleAwareStreamHandler::CONTAINER_MAIN);
     $contenedor = consoleLogContainerFile();
     config(['logging.channels.stderr.handler_with.containerLog' => $contenedor]);
     Log::forgetChannel('stderr');
@@ -53,32 +73,57 @@ it('en un proceso de consola que no es el PID 1, el canal stderr escribe en el l
         ]);
 })->group('RNF-D-02');
 
-it('un manejador construido para consola no-PID-1 abre el destino del contenedor', function (): void {
+it('con la senal (el proceso principal, sus hijos y esta suite) no desvia nada', function (): void {
     $contenedor = consoleLogContainerFile();
+    config(['logging.channels.stderr.handler_with.containerLog' => $contenedor]);
+    Log::forgetChannel('stderr');
 
-    $handler = new ConsoleAwareStreamHandler('php://stderr', Level::Debug, containerLog: $contenedor);
-    $handler->handle(new LogRecord(new DateTimeImmutable, 'prueba', Level::Info, 'kq.directo'));
-    $handler->close();
+    Log::channel('stderr')->warning('redis.circuit_opened');
 
-    expect((string) file_get_contents($contenedor))->toContain('kq.directo');
+    expect((string) file_get_contents($contenedor))->toBe('');
     unlink($contenedor);
 })->group('RNF-D-02');
 
+it('si el log del contenedor no se puede escribir, sale por la salida de error', function (): void {
+    $proceso = consoleLogProceso(
+        '$h = new App\Support\Observability\Logging\ConsoleAwareStreamHandler("php://stderr", containerLog: "/nonexistent/kq/log");'
+        .'$h->setFormatter(new Monolog\Formatter\JsonFormatter);'
+        .'$h->handle(new Monolog\LogRecord(new DateTimeImmutable, "prueba", Monolog\Level::Warning, "kq.sin.destino"));'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('kq.sin.destino');
+})->group('RNF-D-02');
+
+it('si el lector del log del contenedor muere, no lanza nada y sigue por la salida de error', function (): void {
+    // Una tuberia cuyo lector (`true`) ya ha terminado: escribir en ella da EPIPE.
+    $proceso = consoleLogProceso(
+        '$p = proc_open(["true"], [0 => ["pipe", "r"]], $pipes); while (proc_get_status($p)["running"]) { usleep(10000); }'
+        .'$h = new App\Support\Observability\Logging\ConsoleAwareStreamHandler("php://stderr", containerStream: $pipes[0]);'
+        .'$h->setFormatter(new Monolog\Formatter\JsonFormatter);'
+        .'foreach (["kq.primera", "kq.segunda"] as $m) { $h->handle(new Monolog\LogRecord(new DateTimeImmutable, "prueba", Monolog\Level::Warning, $m)); }'
+        .'echo "sigue\n";'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('sigue')
+        ->and($proceso->getErrorOutput())->toContain('kq.primera')
+        ->and($proceso->getErrorOutput())->toContain('kq.segunda');
+})->group('RNF-D-02');
+
 it('regresion de V1-PL-01 y V21-4-PL-2: una orden de consola no deja lineas JSON en la terminal', function (): void {
-    // Un proceso de consola de verdad, aparte, como `docker compose exec … artisan`:
-    // arranca la aplicacion y registra un WARNING como el del cortacircuitos. Su
-    // salida de error tiene que quedar limpia, y la linea, en el log del contenedor.
+    // Un proceso de consola aparte, como `docker compose exec … artisan`: arranca la
+    // aplicacion y registra un WARNING como el del cortacircuitos.
     $contenedor = consoleLogContainerFile();
-    $codigo = 'require "vendor/autoload.php";'
-        .'$app = require "bootstrap/app.php";'
+    $proceso = consoleLogProceso(
+        '$app = require "bootstrap/app.php";'
         .'$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();'
         .'config(["logging.default" => "stack", "logging.channels.stack.channels" => ["stderr"],'
         .' "logging.channels.stderr.handler_with.containerLog" => getenv("KQ_PRUEBA_LOG")]);'
         .'Illuminate\Support\Facades\Log::warning("redis.circuit_opened", ["failure" => "RedisException"]);'
-        .'echo "orden terminada\n";';
-
-    $proceso = new Process(['php', '-r', $codigo], base_path(), ['KQ_PRUEBA_LOG' => $contenedor], timeout: 60.0);
-    $proceso->run();
+        .'echo "orden terminada\n";',
+        ['KQ_PRUEBA_LOG' => $contenedor],
+    );
     $log = (string) file_get_contents($contenedor);
     unlink($contenedor);
 

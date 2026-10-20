@@ -235,6 +235,13 @@ main() {
     wait_for_application
   fi
 
+  # Este proceso y todo lo que lance son el PRINCIPAL del contenedor: su salida de
+  # error ya es el log del contenedor, o la captura de quien hizo `docker compose
+  # run`. `docker compose exec` no pasa por aqui y no la hereda: es lo que permite a
+  # ConsoleAwareStreamHandler sacar el log de una orden lanzada a mano de la
+  # terminal del operador (V1-PL-01). No va en el .env ni en el compose, a proposito.
+  export KQ_CONTAINER_MAIN=1
+
   case "${ROLE}" in
   fpm)
     if [[ ! -f "${APP_PATH}/artisan" ]]; then
