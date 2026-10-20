@@ -135,6 +135,10 @@ readonly -a EXCLUIDAS=(
   # LOG_RETENTION_HOURS es el plazo de Loki y Tempo (retention-guard.sh): solo lo
   # reciben esos dos servicios; la aplicacion no lo lee.
   LOG_RETENTION_HOURS
+  # KQ_OBSERVABILITY_REVISION es la huella de observability/ que escribe update.sh: la interpola
+  # Compose en la etiqueta de prometheus, alertmanager y blackbox-exporter (V4-DV-4); ningun
+  # proceso la lee.
+  KQ_OBSERVABILITY_REVISION
 )
 
 status=0
