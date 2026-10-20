@@ -1078,13 +1078,13 @@ return [
                     ."lift it from the installation directory:\n"
                     ."  docker compose exec -T app php artisan up\n"
                     ."and check that the API answers 401 (no session) and not 503:\n"
-                    ."  curl -k -o /dev/null -w '%{http_code}\n' https://127.0.0.1/api/v1/auth/me\n"
+                    ."  curl -k -o /dev/null -w '%{http_code}' https://127.0.0.1/api/v1/auth/me\n"
                     ."(with HTTPS_PORT other than 443, add the port: https://127.0.0.1:<port>/...).\n"
                     ."If you come from an update.sh rollback that exited with 5, first finish the other\n"
                     .'commands it printed (docs/runbooks/actualizacion-cliente.md §5).',
                 'warning_unknown' => "Check APP_MAINTENANCE_DRIVER and APP_MAINTENANCE_STORE in the .env (they are\n"
                     ."normally left empty). To tell from outside: if\n"
-                    ."  curl -k -o /dev/null -w '%{http_code}\n' https://127.0.0.1/api/v1/auth/me\n"
+                    ."  curl -k -o /dev/null -w '%{http_code}' https://127.0.0.1/api/v1/auth/me\n"
                     .'answers 503, it is in maintenance; 401 is correct.',
             ],
             'error_history' => [
