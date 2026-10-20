@@ -156,12 +156,17 @@ kq_cosign_ref() {
 kq_cosign_run() {
   local status=0 output
 
+  KQ_SIG_DENIED=0
   output="$(cosign "$@" 2>&1 >/dev/null)" || status=$?
 
   if [ "${status}" -ne 0 ]; then
     KQ_SIG_DETAIL="$(printf '%s\n' "${output}" | tail -n 4 | tr '\n' ' ')"
     KQ_SIG_KIND="$(kq_cosign_classify "${output}")"
-    if grep -qiE 'denied|unauthorized|forbidden|manifest unknown|manifest_unknown|name unknown|name_unknown|repository .*not found|\b(401|403|404)\b' <<<"${output}"; then
+    # Acceso NEGADO al repositorio, no una firma ausente: un 404 o un «manifest
+    # unknown» son lo que da una imagen sin firma (`.sig` que no existe), y eso
+    # tiene que seguir diciendose como firma no valida.
+    if grep -qiE 'denied|unauthorized|forbidden|\b40[13]\b|name unknown|name_unknown|repository .*not found' <<<"${output}" &&
+      ! grep -qiE 'no matching signatures|no signatures found|none of the expected identities|certificate identity|invalid signature|signature verification|does not match|no signature' <<<"${output}"; then
       KQ_SIG_DENIED=1
     fi
     return 1
@@ -263,10 +268,13 @@ kq_verify_product_images() {
 # mirar primero, y la causa habitual (un registro mal escrito, el de la plantilla).
 # Si no, el de siempre: firma no valida, avisa al fabricante. Necesita kq_format
 # (lib/messages.sh), que el script que llama ya ha cargado.
-#   kq_sig_failed_text REGISTRY
+# update.sh pasa su propia clave para el caso de acceso negado (u_f_sig_denied): alli
+# el registro es el que servia la version instalada, y «mal escrito» no es lo probable.
+# Las dos claves reciben IMAGEN, REGISTRO y DETALLE.
+#   kq_sig_failed_text REGISTRY [CLAVE_DE_ACCESO_NEGADO]
 kq_sig_failed_text() {
   if [ "${KQ_SIG_DENIED:-0}" = "1" ]; then
-    kq_format f_sig_denied "${KQ_SIG_FAILED_IMAGE}" "$1" "${KQ_SIG_DETAIL:-?}"
+    kq_format "${2:-f_sig_denied}" "${KQ_SIG_FAILED_IMAGE}" "$1" "${KQ_SIG_DETAIL:-?}"
   else
     kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}"
   fi

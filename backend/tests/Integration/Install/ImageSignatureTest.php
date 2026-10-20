@@ -31,6 +31,8 @@ function imageSignatureSandbox(?string $mode, string $version = 'v3.1.3'): strin
             'network' => "echo 'Error: dial tcp: lookup rekor.sigstore.dev: no such host' >&2\nexit 1\n",
             'denied' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/referrers: DENIED: denied' >&2\nexit 1\n",
             'ratelimit' => "echo 'Error: unexpected status code 429 Too Many Requests: toomanyrequests' >&2\nexit 1\n",
+            'sig404' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/manifests/sha256-aaa.sig: MANIFEST_UNKNOWN: manifest unknown; unexpected status code 404 Not Found' >&2\nexit 1\n",
+            'denied-and-nosig' => "echo 'Error: no signatures found; GET https://ghcr.io/token: DENIED: denied' >&2\nexit 1\n",
             // Se verifican todas las imagenes aunque la primera no tenga red. La primera llamada no tiene red; las siguientes, firma inexistente.
             'network-then-invalid' => 'if [ ! -e '.escapeshellarg($dir.'/segunda').' ]; then : >'.escapeshellarg($dir.'/segunda')."; echo 'Error: dial tcp: i/o timeout' >&2; exit 1; fi\necho 'Error: no matching signatures' >&2\nexit 1\n",
             default => "exit 0\n",
@@ -401,10 +403,18 @@ it('un registro que niega el acceso nombra IMAGE_REGISTRY y su valor, y no habla
     $process->run();
 
     expect($process->getExitCode())->toBe(7, $process->getErrorOutput())
-        ->and($process->getErrorOutput())->toContain('NEGADO EL ACCESO')
-        ->and($process->getErrorOutput())->toContain("IMAGE_REGISTRY: ahora vale '".IMAGE_SIGNATURE_REGISTRY."'")
         ->and($process->getErrorOutput())->toContain('--skip-signature-check')
         ->and($process->getErrorOutput())->not->toContain('no es valida segun cosign');
+
+    if ($script === 'install') {
+        expect($process->getErrorOutput())->toContain('NEGADO EL ACCESO')
+            ->and($process->getErrorOutput())->toContain("IMAGE_REGISTRY: ahora vale '".IMAGE_SIGNATURE_REGISTRY."'");
+    } else {
+        // En update.sh el registro es el que servia la version instalada: «mal
+        // escrito» no es lo probable, y el texto no lo sugiere.
+        expect($process->getErrorOutput())->toContain('el registro que servia la version instalada ('.IMAGE_SIGNATURE_REGISTRY.') NIEGA EL ACCESO')
+            ->and($process->getErrorOutput())->not->toContain('mal escrito');
+    }
 })->with(['install', 'update'])->group('RS-10', 'RF-PD-02', 'RF-PD-10');
 
 it('una firma inexistente o un 429 siguen siendo «firma no valida», y solo el acceso negado culpa al registro', function (string $mode, string $esperado): void {
@@ -425,6 +435,11 @@ it('una firma inexistente o un 429 siguen siendo «firma no valida», y solo el 
 })->with([
     'firma inexistente' => ['invalid', 'no es valida segun cosign'],
     'limite de peticiones' => ['ratelimit', 'no es valida segun cosign'],
+    // Una imagen sin firma: su `.sig` no existe y el registro da 404 / manifest
+    // unknown. Es firma ausente, no acceso negado.
+    'un 404 en el .sig' => ['sig404', 'no es valida segun cosign'],
+    // Acceso negado Y firma ausente en la misma salida: manda la firma.
+    'denied junto a firma ausente' => ['denied-and-nosig', 'no es valida segun cosign'],
     'acceso negado' => ['denied', 'NEGADO EL ACCESO'],
 ])->group('RS-10', 'RF-PD-02');
 
