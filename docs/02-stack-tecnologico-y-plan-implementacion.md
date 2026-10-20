@@ -851,6 +851,8 @@ compliance_metrics_week_start_seconds                    gauge
 application_errors_total{source,level}                   counter
 application_error_groups_opened_total{source,level}      counter
 projection_divergence_total                              counter
+projection_divergence_first_increase_timestamp_seconds   gauge
+projection_divergence_last_increase_timestamp_seconds    gauge
 projection_reconciliation_last_run_timestamp_seconds     gauge
 projection_reconciliation_work_days_inspected            gauge
 projection_reconciliation_last_corrections               gauge

@@ -193,3 +193,35 @@ it('no escribe el fichero de la deteccion de patrones con el colector apagado', 
 
     expect(ficheroDeAttendance('kronoqr_pattern_detection.prom'))->not->toBeFile();
 })->group('RF-PR-06');
+
+it('anota desde cuando hay divergencias, y lo conserva aunque las pasadas siguientes salgan limpias', function (): void {
+    $metricas = new TextfileProjectionMetrics;
+
+    // Una pasada limpia no deja marcas: ausente significa «nunca».
+    $metricas->reconciliationCompleted(10, 0, 0, 0, 0, new DateTimeImmutable('2026-03-14T03:50:00+00:00'));
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))
+        ->not->toContain('projection_divergence_first_increase_timestamp_seconds')
+        ->not->toContain('projection_divergence_last_increase_timestamp_seconds');
+
+    // Primera divergencia: las dos marcas valen lo mismo.
+    $metricas->reconciliationCompleted(10, 2, 2, 0, 0, new DateTimeImmutable('2026-03-15T03:50:00+00:00'));
+    $primera = strtotime('2026-03-15T03:50:00+00:00');
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))
+        ->toContain('# TYPE projection_divergence_first_increase_timestamp_seconds gauge')
+        ->toContain('projection_divergence_first_increase_timestamp_seconds '.$primera)
+        ->toContain('projection_divergence_last_increase_timestamp_seconds '.$primera);
+
+    // Una pasada limpia despues NO borra nada: la marca es del suceso, no de la pasada.
+    $metricas->reconciliationCompleted(10, 0, 0, 0, 0, new DateTimeImmutable('2026-03-16T03:50:00+00:00'));
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))
+        ->toContain('projection_divergence_total 2')
+        ->toContain('projection_divergence_first_increase_timestamp_seconds '.$primera)
+        ->toContain('projection_divergence_last_increase_timestamp_seconds '.$primera);
+
+    // Otra divergencia mueve solo la ultima.
+    $metricas->reconciliationCompleted(10, 1, 1, 0, 0, new DateTimeImmutable('2026-03-20T03:50:00+00:00'));
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))
+        ->toContain('projection_divergence_total 3')
+        ->toContain('projection_divergence_first_increase_timestamp_seconds '.$primera)
+        ->toContain('projection_divergence_last_increase_timestamp_seconds '.strtotime('2026-03-20T03:50:00+00:00'));
+})->group('RF-PR-02', 'RN-06');

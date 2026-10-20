@@ -1096,31 +1096,33 @@
       "id": 28,
       "type": "stat",
       "title": "Divergencia de proyección: desde cuándo",
-      "description": "Dos fechas para projection_divergence_total (V21-4-DV-1), dentro de la retención de Prometheus (90 días): A, la primera vez que el contador valió más de cero; B, la última vez que subió. Vacío si nunca ha subido. El acumulado a secas (primer panel) no dice cuándo ocurrió; con él, el asiento de audit_log de la corrección (subject_type daily_totals) da la fecha exacta, también sin Prometheus. Runbook divergencia-proyeccion.md §3.",
+      "description": "Cuándo hubo divergencias en la proyección (V21-4-DV-1): la primera pasada que encontró una y la última. Las escribe el propio contador, junto a projection_divergence_total, y sobreviven a reinicios y a la retención de Prometheus. Sin valor (\"Ninguna\") es el estado normal: cero es cero. Con valor, en rojo: es un incidente de integridad, y la fecha dice dónde empezar a buscar. Runbook divergencia-proyeccion.md §3.",
       "gridPos": { "h": 4, "w": 12, "x": 0, "y": 64 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "min_over_time(timestamp(projection_divergence_total > 0)[90d:5m]) * 1000",
+          "expr": "projection_divergence_first_increase_timestamp_seconds * 1000",
+          "legendFormat": "Primera divergencia",
           "instant": true
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "max_over_time(timestamp(increase(projection_divergence_total[1h]) > 0)[90d:5m]) * 1000",
+          "expr": "projection_divergence_last_increase_timestamp_seconds * 1000",
+          "legendFormat": "Última divergencia",
           "instant": true
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "dateTimeAsIso",
-          "min": 0,
+          "noValue": "Ninguna",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              { "color": "red", "value": null }
             ]
           }
         },
@@ -1129,7 +1131,7 @@
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
