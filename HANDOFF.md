@@ -639,7 +639,7 @@ verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2
   se activa, solo resueltas) **y si muestra ausencias** (3.10: no, decisión 1; si se activa, sin la nota); si el
   `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
-  automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de
+  automáticamente; la mitad de
   aplicación de RF-ID-08 (requisitos extra de contraseña al exponer el portal a internet).
 
 ### Deuda técnica anotada
