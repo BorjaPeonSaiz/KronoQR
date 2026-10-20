@@ -992,21 +992,6 @@ wait_for_healthy() {
   return 1
 }
 
-# El maestro de Horizon registrado y en marcha (`horizon:status` sale con 0;
-# 1 en pausa, 2 inactivo). Desde `app`, que llega al mismo Redis. Nunca deshace:
-# devuelve 1 si no llega a tiempo y quien llama decide.
-wait_for_horizon_heartbeat() {
-  local waited=0
-  while [ "${waited}" -lt "${KQ_WAIT_WORKERS}" ]; do
-    if compose_new exec -T app php artisan horizon:status >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep "${KQ_POLL_SECONDS}"
-    waited=$((waited + KQ_POLL_SECONDS))
-  done
-  return 1
-}
-
 # Sonda por loopback a traves del borde. `--insecure` por el mismo motivo que
 # en install.sh: se comprueba que la aplicacion responde, no que el nombre del
 # certificado resuelva desde este servidor.
@@ -3243,20 +3228,26 @@ phase_start_and_verify() {
   say "$(kq_format u_workers_up "${TARGET_VERSION}")"
   detail_note "--- up -d (resto de servicios, ${TARGET_VERSION}) ---"
   compose_new up -d --remove-orphans >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
+    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}" "arranque")" workers_failed
+  # Los tres procesos de fondo tienen `healthcheck` desde la 2.3.0 (O1): `horizon`
+  # con `horizon:status` (el maestro registrado y NO en pausa), `scheduler` con su
+  # latido y `reverb` con `/up`. `wait_for_healthy` espera a `healthy`, no solo a
+  # `running`, y por tanto ESPERA al maestro de Horizon (la espera de su latido, que
+  # era aparte, ya no hace falta: `product:doctor` de abajo lo encuentra registrado).
+  #
+  # Si uno no llega a `healthy` en KQ_WAIT_WORKERS segundos, ESTO NO SE DESHACE, y
+  # es una decision tomada: estamos DESPUES del 401 del paso 5 (ROLLBACK_ARMED=3), la
+  # version nueva atiende y los quioscos le entregan fichajes, y restaurar la copia
+  # previa los borraria (la decision del propietario del 20-10-2026, la misma de
+  # cualquier fallo posterior al 401). `rollback_and_die` aqui es `forward_incomplete`:
+  # salida 5, version nueva en servicio y la orden para arreglar el proceso a mano. Un
+  # `horizon` que no esta sano significa exportaciones e informes sin procesar, no
+  # fichaje perdido: es un problema que una persona arregla con el sistema en pie
+  # (`docker compose logs --tail 100 <servicio>`), no una razon para tirarlo.
   for service in horizon scheduler reverb; do
     wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" ||
-      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
+      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}" "${service}")" workers_failed
   done
-
-  # `product:doctor` va AQUI, con los trabajadores ya en marcha, y no antes: su
-  # sonda `queue.worker` pregunta a Horizon por su latido, y ejecutado antes de
-  # arrancarlo lo veia siempre parado y TODA actualizacion acababa «con avisos»
-  # (revision de la verificacion final). `wait_for_healthy` solo dice que el
-  # contenedor corre; el maestro de Horizon tarda unos segundos mas en
-  # registrarse, y se espera a el. Si no llega, no se deshace nada: lo dira
-  # `product:doctor`, que es informativo aqui.
-  wait_for_horizon_heartbeat || true
 
   # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
   # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva

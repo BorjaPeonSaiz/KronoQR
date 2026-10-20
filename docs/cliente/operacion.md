@@ -1686,7 +1686,7 @@ que es donde está la causa.
 **Al actualizar a la 2.3.0: una vez que la versión nueva atiende, ya no hay
 vuelta atrás.** En cuanto retira su mantenimiento y la API responde `401`, los
 quioscos empiezan a entregarle lo que tenían en cola. Desde ese momento, si
-falla algo posterior —arrancar `horizon`, `scheduler` o `reverb`—, `update.sh`
+falla algo posterior —arrancar `horizon`, `scheduler` o `reverb`, o que lleguen a estar sanos—, `update.sh`
 **no restaura la copia previa**, porque borraría esos fichajes: sale con `5` y
 la pantalla dice «ACTUALIZACION HECHA, PERO INCOMPLETA». La versión nueva sigue
 en servicio con todos los datos y **no hay que restaurar nada**; hay que

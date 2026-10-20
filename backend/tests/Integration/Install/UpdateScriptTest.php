@@ -1339,7 +1339,7 @@ it('antes de restaurar mata los contenedores de un solo uso y cierra las sesione
 it('tras el 401 del paso 5 no vuelve atras: sale con 5, no restaura ni para nada y deja el .env de la version nueva (decision del propietario)', function (): void {
     $proceso = inPlaceParadoAntesDeMigrar(
         'exec 3>&1 4>&2; STEP=5; ROLLBACK_ARMED=3; '
-        .'rollback_and_die "$(kq_format u_f_workers_up 2.3.0)" workers_failed'
+        .'rollback_and_die "$(kq_format u_f_workers_up 2.3.0 horizon)" workers_failed'
     );
 
     [, $resto] = explode("--- docker\n", $proceso->getOutput(), 2);

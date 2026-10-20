@@ -694,7 +694,7 @@ pierde, pero la tablet no lo ve ni lo drena. Por eso:
 **Caso C — «ACTUALIZACION HECHA, PERO INCOMPLETA».** La versión nueva **ya
 atiende**: pasó todas las verificaciones, se retiró su mantenimiento, la API
 respondió `401` y los quioscos empezaron a entregarle sus fichajes. Lo que falló
-fue posterior —arrancar `horizon`, `scheduler` o `reverb`, o que la imagen no
+fue posterior —arrancar `horizon`, `scheduler` o `reverb` o que lleguen a estar sanos (su `healthcheck`), o que la imagen no
 traiga `product:doctor`—, y **desde ese punto el script ya no vuelve atrás**
 (decisión del fabricante): restaurar la copia previa borraría los fichajes que
 entraron después. Los datos están intactos y en la versión nueva, el asiento
