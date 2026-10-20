@@ -954,7 +954,13 @@ Route::middleware([
         ->name('kiosk.devices.unpair');
 });
 
-Route::prefix('auth')->group(function (): void {
+/*
+ * `no-store` EN TODO EL GRUPO (2.3.0, bloque 8): el acceso y el segundo factor
+ * devuelven tokens, y el alta del segundo factor el secreto TOTP. Ninguna de
+ * esas respuestas puede quedarse en la cache de un navegador compartido. Va en
+ * el grupo para que una ruta nueva lo herede sin acordarse.
+ */
+Route::prefix('auth')->middleware('no-store')->group(function (): void {
     // Publico y limitado a 5 r/m (§7.1). El bloqueo por intentos fallidos es
     // otro control distinto y vive en el caso de uso: este cuenta peticiones,
     // aquel cuenta fallos por cuenta.
@@ -2085,8 +2091,9 @@ Route::prefix('setup')->group(function (): void {
         ->middleware('throttle:setup')
         ->name('setup.status');
 
+    // `no-store`: la respuesta abre la primera sesion de gestion (2.3.0).
     Route::post('/administrator', FirstAdministratorController::class)
-        ->middleware('throttle:setup')
+        ->middleware(['throttle:setup', 'no-store'])
         ->name('setup.administrator');
 
     /*
