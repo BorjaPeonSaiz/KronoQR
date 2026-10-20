@@ -523,3 +523,58 @@ it('la fase 1 da [FALLA] con el IMAGE_REGISTRY de la plantilla y no llega a veri
     expect(Repo::contents('infra/scripts/install.sh'))
         ->toContain('[ "${REGISTRY_IS_TEMPLATE}" -eq 1 ] || check_image_signatures');
 })->with(['plantilla' => ['ghcr.io/kronoqr'], 'vacio' => ['']])->group('RF-PD-02');
+
+it('una instalacion sin licencia no es un error: license:show con 1 es un aviso que dice como activarla (I7)', function (int $codigo, string $esperado, string $ausente): void {
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; COMPOSE_FILE=/opt/kronoqr/docker-compose.yml; '
+        .'compose() { return '.$codigo.'; }; verify_license_status 2>&1'
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain($esperado)
+        ->and($proceso->getOutput())->not->toContain($ausente);
+})->with([
+    'vigente' => [0, 'Licencia vigente y dentro del plan', 'AVISO'],
+    'sin licencia o con algo que mirar' => [1, 'NO es un error de la instalacion', 'ha terminado'],
+    'la consulta falla' => [2, 'codigo inesperado', 'NO es un error de la instalacion'],
+])->group('RF-PD-02', 'RF-PD-05');
+
+it('la vuelta atras retira tambien los padres de BACKUP_PATH que creo y no otros (I9)', function (): void {
+    $dir = sys_get_temp_dir().'/kq-ancestro-'.bin2hex(random_bytes(4));
+    mkdir($dir);
+
+    $proceso = bashConElInstalador(
+        'printf "nuevo=%s\n" "$(first_missing_ancestor '.escapeshellarg($dir.'/var/backups/fichaje').')"; '
+        .'printf "existe=%s\n" "$(first_missing_ancestor '.escapeshellarg($dir).')"'
+    );
+    rmdir($dir);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('nuevo='.$dir.'/var'."\n")
+        ->and($proceso->getOutput())->toContain('existe='.$dir."\n");
+
+    $instalador = Repo::contents('infra/scripts/install.sh');
+    expect($instalador)->toContain('register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf \'${created_root}\'"')
+        // El .env vuelve con su modo original, no con el 0600 de la copia.
+        ->and($instalador)->toContain("mv -f '\${backup_env}' '\${ENV_FILE}' && chmod '\${env_mode}' '\${ENV_FILE}'");
+})->group('RF-PD-02');
+
+it('la salida final no habla de la 2.0.0 y apunta a las guias del cliente del paquete (I8)', function (): void {
+    $dir = sys_get_temp_dir().'/kq-docs-'.bin2hex(random_bytes(4));
+    mkdir($dir.'/docs/cliente', 0o755, true);
+    touch($dir.'/docker-compose.yml');
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; OPT_COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; resolve_paths_quietly; '
+        .'printf "docs=%s\n" "${DOCS_DIR}"; kq_text done_next; kq_text existing_stop'
+    );
+    unlink($dir.'/docker-compose.yml');
+    rmdir($dir.'/docs/cliente');
+    rmdir($dir.'/docs');
+    rmdir($dir);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('docs='.$dir.'/docs/cliente')
+        ->and($proceso->getOutput())->not->toContain('2.0.0')
+        ->and($proceso->getOutput())->not->toContain('a partir de la version 2.1');
+})->group('RF-PD-02');

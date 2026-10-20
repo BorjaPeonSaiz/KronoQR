@@ -124,10 +124,6 @@ Que hacer:
   · Para ACTUALIZAR a una version nueva:  ./update.sh
     Procedimiento completo en docs/runbooks/actualizacion-cliente.md
   · Para ver como esta la instalacion:    ./doctor.sh
-
-  (update.sh y doctor.sh se entregan a partir de la version 2.1. En la 2.0.0,
-  para ver como esta la instalacion: docker compose ps y los dos comandos de
-  docs/cliente/operacion.md.)
   · Si de verdad quieres empezar de cero, retira antes la instalacion actual a
     conciencia, con su copia de seguridad. El instalador no lo hace por ti, y
     es deliberado.
@@ -168,8 +164,9 @@ KQ_MSG_ES[verify_doctor_warn]="Diagnostico completo con avisos"
 KQ_MSG_ES[f_verify_doctor_warn]="ningun aviso impide declarar la instalacion correcta, pero conviene leerlos: son la primera senal de un problema que hoy no bloquea y manana si. Repite cuando quieras con \"docker compose -f %s exec app php artisan product:doctor\"."
 KQ_MSG_ES[f_verify_doctor]="\"product:doctor\" ha encontrado al menos un fallo. Los servicios estan en pie y la instalacion existe: revisa el informe de arriba —cada linea en [FALLA] dice que hacer— y, cuando lo hayas corregido, repite con \"docker compose -f %s exec app php artisan product:doctor\". NO se deshace nada."
 KQ_MSG_ES[f_verify_doctor_missing_command]="la imagen que se acaba de instalar no incluye \"product:doctor\". Es un defecto de esta version del paquete, no de tu servidor: los servicios estan en pie pero la instalacion no se declara verificada. Avisa al fabricante con la salida completa de este instalador. Mientras tanto, comprueba con \"docker compose -f %s logs\" y las sondas de la seccion 1.5 de instalacion.md."
-KQ_MSG_ES[verify_license]="Estado de la licencia consultado sin errores"
-KQ_MSG_ES[f_verify_license]="\"license:show\" ha terminado con error. No impide fichar ni consultar el registro —la licencia nunca bloquea el registro legal—. Ejecuta \"docker compose -f %s exec app php artisan license:show\" y sigue lo que diga."
+KQ_MSG_ES[verify_license]="Licencia vigente y dentro del plan"
+KQ_MSG_ES[verify_license_attention]="Licencia: hay algo que mirar (no hay ninguna activada, ha caducado, no verifica o se ha superado una cifra del plan). NO es un error de la instalacion y no impide fichar ni consultar el registro: la licencia nunca bloquea el registro legal. Si aun no la tienes, activala cuando llegue con 'docker compose -f %s exec app php artisan license:activate \"KQL1....\"'; para ver el motivo exacto, 'docker compose -f %s exec app php artisan license:show'."
+KQ_MSG_ES[f_verify_license]="no se ha podido consultar el estado de la licencia (\"license:show\" ha terminado con un codigo inesperado). No impide fichar ni consultar el registro —la licencia nunca bloquea el registro legal—. Ejecuta \"docker compose -f %s exec app php artisan license:show\" y sigue lo que diga."
 
 KQ_MSG_ES[rollback_start]="Algo ha fallado. Deshaciendo lo que este instalador ha hecho en ESTA ejecucion."
 KQ_MSG_ES[rollback_item]="  deshecho: %s"
@@ -183,13 +180,13 @@ KQ_MSG_ES[done_title]="KronoQR %s instalado y verificado."
 KQ_MSG_ES[done_admin]="  Panel de gestion:    %s/admin/"
 KQ_MSG_ES[done_kiosk]="  Quiosco (tablet):    %s/kiosk/"
 KQ_MSG_ES[done_portal]="  Portal del empleado: %s/portal/  (solo desde PORTAL_INTERNAL_CIDR)"
-KQ_MSG_ES[done_next]="SIGUIENTE PASO: abre el panel de gestion. La primera vez te guia un asistente que crea la organizacion, el centro, el primer administrador y el primer quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea usuarios.
-(El asistente se entrega a partir de la version 2.1. En la 2.0.0 la primera cuenta se crea por consola; el procedimiento esta en docs/cliente/instalacion.md.)"
+KQ_MSG_ES[done_next]="SIGUIENTE PASO: abre el panel de gestion. La primera vez te guia un asistente que crea la organizacion, el centro, el primer administrador y el primer quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea usuarios."
 KQ_MSG_ES[done_docs]="DOCUMENTACION, en %s
   instalacion.md           esta instalacion, y que hacer ante cada codigo de salida
   operacion.md             copias, actualizaciones, calendario y codigos de salida
   configuracion.md         cada parametro y que hace
-  obligaciones-legales.md  lo que le corresponde al hotel"
+  obligaciones-legales.md  lo que le corresponde al hotel
+  (en ingles, en el subdirectorio en/)"
 KQ_MSG_ES[done_custody]="ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este servidor (docs/cliente/operacion.md, «Custodia de secretos»)."
 
 KQ_MSG_ES[bad_option]="opcion desconocida: %s. Ejecuta \"install.sh --help\" para ver las que hay."
@@ -413,10 +410,6 @@ What to do:
   · To UPGRADE to a new version:      ./update.sh
     Full procedure in docs/runbooks/actualizacion-cliente.md
   · To see how the installation is:   ./doctor.sh
-
-  (update.sh and doctor.sh ship from version 2.1 onwards. On 2.0.0, to see how
-  the installation is: docker compose ps and the two commands in
-  docs/cliente/operacion.md.)
   · If you really want to start over, remove the current installation on
     purpose first, backup included. The installer will not do it for you, and
     that is deliberate.
@@ -457,8 +450,9 @@ KQ_MSG_EN[verify_doctor_warn]="Full diagnostic with warnings"
 KQ_MSG_EN[f_verify_doctor_warn]="no warning stops the installation from being declared correct, but they are worth reading: they are the first sign of a problem that does not block today and will tomorrow. Run it again any time with \"docker compose -f %s exec app php artisan product:doctor\"."
 KQ_MSG_EN[f_verify_doctor]="\"product:doctor\" found at least one failure. The services are up and the installation exists: check the report above —every [FAIL] line says what to do— and, once fixed, run \"docker compose -f %s exec app php artisan product:doctor\" again. NOTHING is rolled back."
 KQ_MSG_EN[f_verify_doctor_missing_command]="the image that was just installed does not include \"product:doctor\". It is a defect of this package version, not of your server: the services are up but the installation is not declared verified. Tell the manufacturer, attaching this installer's full output. Meanwhile, check with \"docker compose -f %s logs\" and the probes in section 1.5 of instalacion.md."
-KQ_MSG_EN[verify_license]="License status read without errors"
-KQ_MSG_EN[f_verify_license]="\"license:show\" ended with an error. It does not stop clock-in nor access to the record —the licence never blocks the legal record—. Run \"docker compose -f %s exec app php artisan license:show\" and follow what it says."
+KQ_MSG_EN[verify_license]="License valid and within the plan"
+KQ_MSG_EN[verify_license_attention]="License: something to look at (none activated, expired, does not verify or a plan figure exceeded). It is NOT an installation error and it does not stop clock-in nor access to the record: the licence never blocks the legal record. If you do not have it yet, activate it when it arrives with 'docker compose -f %s exec app php artisan license:activate \"KQL1....\"'; for the exact reason, 'docker compose -f %s exec app php artisan license:show'."
+KQ_MSG_EN[f_verify_license]="the licence status could not be read (\"license:show\" ended with an unexpected code). It does not stop clock-in nor access to the record —the licence never blocks the legal record—. Run \"docker compose -f %s exec app php artisan license:show\" and follow what it says."
 
 KQ_MSG_EN[rollback_start]="Something failed. Undoing what this installer did in THIS run."
 KQ_MSG_EN[rollback_item]="  undone: %s"
@@ -472,13 +466,13 @@ KQ_MSG_EN[done_title]="KronoQR %s installed and verified."
 KQ_MSG_EN[done_admin]="  Admin panel:       %s/admin/"
 KQ_MSG_EN[done_kiosk]="  Kiosk (tablet):    %s/kiosk/"
 KQ_MSG_EN[done_portal]="  Employee portal:   %s/portal/  (only from PORTAL_INTERNAL_CIDR)"
-KQ_MSG_EN[done_next]="NEXT STEP: open the admin panel. The first time, a wizard walks you through the organisation, the site, the first administrator and the first kiosk. Until you finish it there is no account at all: the installer creates no users.
-(The wizard ships from version 2.1 onwards. On 2.0.0 the first account is created from the console; the procedure is in docs/cliente/instalacion.md.)"
+KQ_MSG_EN[done_next]="NEXT STEP: open the admin panel. The first time, a wizard walks you through the organisation, the site, the first administrator and the first kiosk. Until you finish it there is no account at all: the installer creates no users."
 KQ_MSG_EN[done_docs]="DOCUMENTATION, in %s
-  instalacion.md           this installation, and what to do for each exit code
-  operacion.md             backups, upgrades, calendar and exit codes
-  configuracion.md         every parameter and what it does
-  obligaciones-legales.md  what belongs to the hotel"
+  en/installation.md       this installation, and what to do for each exit code
+  en/operation.md          backups, upgrades, calendar and exit codes
+  en/configuration.md      every parameter and what it does
+  en/legal-obligations.md  what belongs to the hotel
+  (the Spanish originals are one level up, next to en/)"
 KQ_MSG_EN[done_custody]="BEFORE YOU LOG OUT: keep BACKUP_ENCRYPTION_KEY outside this server (docs/cliente/operacion.md, «Custodia de secretos»)."
 
 KQ_MSG_EN[bad_option]="unknown option: %s. Run \"install.sh --help\" to see the ones there are."

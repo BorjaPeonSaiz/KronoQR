@@ -3116,13 +3116,24 @@ phase_start_and_verify() {
   # La licencia NO bloquea (regla dura 15): se consulta para el informe, y solo
   # su resultado. Su salida lleva el nombre del cliente y no va a ningun
   # fichero (ADR-020).
-  if compose_new exec -T app php artisan license:show >/dev/null 2>&1; then
+  # 0 vigente · 1 «hay algo que mirar» (tambien sin licencia), que NO es un fallo
+  # de la consulta · otro, la consulta ha fallado (I7).
+  local license_status=0
+  compose_new exec -T app php artisan license:show >/dev/null 2>&1 || license_status=$?
+  case "${license_status}" in
+  0)
     kq_msg check_ok "$(kq_text u_verify_license)"
     remember_check "license:show" "$(kq_text u_report_ok)"
-  else
+    ;;
+  1)
+    kq_msg check_warn "$(kq_format u_verify_license_attention "${COMPOSE_FILE}")"
+    remember_check "license:show" "$(kq_text u_report_warned)"
+    ;;
+  *)
     kq_msg check_warn "$(kq_format u_verify_license_warn "${COMPOSE_FILE}")"
-    remember_check "license:show" "$(kq_text u_report_failed)"
-  fi
+    remember_check "license:show" "$(kq_text u_report_failed) (${license_status})"
+    ;;
+  esac
 
   reconcile_work_record
 

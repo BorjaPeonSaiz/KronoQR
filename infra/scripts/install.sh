@@ -234,6 +234,21 @@ discard_undo() {
   ROLLBACK_STACK=(${resto+"${resto[@]}"})
 }
 
+# El directorio mas alto de RUTA que todavia no existe: lo que `install -d RUTA`
+# va a crear, padres incluidos. Si RUTA ya existe, la propia RUTA.
+#   first_missing_ancestor RUTA
+first_missing_ancestor() {
+  local path="$1" parent
+  while :; do
+    parent="$(dirname -- "${path}")"
+    if [ "${parent}" = "${path}" ] || [ -e "${parent}" ]; then
+      break
+    fi
+    path="${parent}"
+  done
+  printf '%s' "${path}"
+}
+
 # Deshace lo hecho en esta ejecucion y sale con 4 (todo deshecho) o con 5 (algo
 # quedo a medias). Nunca toca nada que existiera antes: la fase 2 ya garantizo
 # que no habia instalacion previa, y el .env del cliente se restaura desde la
@@ -458,9 +473,12 @@ resolve_paths_quietly() {
     fi
   done
 
+  # Las guias del cliente van en docs/cliente/ del paquete (package.sh), no en
+  # docs/ a secas, que lleva tambien los runbooks y el CHANGELOG (I8).
   for candidate in \
-    "${package_dir}/docs" \
-    "${package_dir}/../docs/cliente"; do
+    "${package_dir}/docs/cliente" \
+    "${package_dir}/../docs/cliente" \
+    "${package_dir}/docs"; do
     if [ -d "${candidate}" ]; then
       DOCS_DIR="${candidate}"
       break
@@ -1150,8 +1168,14 @@ phase_secrets() {
   backup_env="${ENV_FILE}.kronoqr-pre-install"
   local backup_tmp="${backup_env}.tmp.$$"
   TEMP_FILES+=("${backup_tmp}")
+  # Con su MODO original (I9): la copia nace 0600 por el `umask`, y sin esto la
+  # vuelta atras devolvia un .env identico pero con otros permisos. El modo se lee
+  # aqui, antes del `chmod 0600` de abajo.
+  local env_mode
+  env_mode="$(stat -c '%a' -- "${ENV_FILE}")"
+  [[ "${env_mode}" =~ ^[0-7]{3,4}$ ]] || env_mode="600"
   register_undo "$(kq_format undo_env "${ENV_FILE}")" \
-    "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}'; fi"
+    "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}' && chmod '${env_mode}' '${ENV_FILE}'; fi"
   (umask 077 && cp -- "${ENV_FILE}" "${backup_tmp}")
   chown "$(stat -c %u:%g -- "${ENV_FILE}")" -- "${backup_tmp}"
   touch -r "${ENV_FILE}" -- "${backup_tmp}"
@@ -1259,6 +1283,12 @@ ensure_backup_directories() {
 
   # El destino de copias lo escribe la aplicacion, que corre como uid 1000.
   if [ ! -d "${CFG_BACKUP_PATH}" ]; then
+    # `install -d` crea tambien los padres que falten (`/var/backups` en un
+    # servidor recien instalado), y la vuelta atras tiene que retirarlos: se
+    # deshace desde el PRIMER directorio que no existia, que es de esta ejecucion
+    # y de nadie mas (I9).
+    local created_root
+    created_root="$(first_missing_ancestor "${CFG_BACKUP_PATH}")"
     if ! install -d -o 1000 -g 1000 -m 0750 "${CFG_BACKUP_PATH}" 2>/dev/null; then
       # Sin privilegios para asignar el propietario. Se crea igualmente y SE
       # AVISA: antes se caia a esta rama en silencio y la copia diaria fallaba
@@ -1269,7 +1299,7 @@ ensure_backup_directories() {
       kq_msg fix "$(kq_format f_owner_fallback "1000" "1000" "${CFG_BACKUP_PATH}")"
     fi
     created=1
-    register_undo "$(kq_format undo_backup_dir "${CFG_BACKUP_PATH}")" "rm -rf '${CFG_BACKUP_PATH}'"
+    register_undo "$(kq_format undo_backup_dir "${created_root}")" "rm -rf '${created_root}'"
   fi
 
   # El WAL lo archiva PostgreSQL, que en la imagen Alpine corre como uid 70. Si
@@ -1630,16 +1660,28 @@ phase_verify() {
     ;;
   esac
 
-  # `license:show` termina con 0 tanto con licencia como sin ella: sin licencia
-  # el producto funciona y lo dice. Un codigo distinto de 0 significa que la
-  # consulta en si ha fallado, no que falte la clave. Y aunque falle, NO se
-  # deshace nada ni se degrada el registro (regla dura 15, ADR-019).
-  if compose exec -T app php artisan license:show >/dev/null 2>&1; then
-    kq_msg check_ok "$(kq_text verify_license)"
-  else
+  verify_license_status
+}
+
+# `license:show` sale con 0 si la licencia esta vigente y dentro del plan, con 1
+# si «hay algo que mirar» —tambien SIN licencia, que es lo normal en una
+# instalacion recien hecha: la licencia llega aparte y se puede activar despues
+# (doc 05 §10)— y con otro codigo solo si la consulta en si falla (I7). Ninguno
+# deshace nada ni degrada el registro (regla dura 15, ADR-019).
+verify_license_status() {
+  local license_status=0
+  compose exec -T app php artisan license:show >/dev/null 2>&1 || license_status=$?
+  case "${license_status}" in
+  0) kq_msg check_ok "$(kq_text verify_license)" ;;
+  1)
+    kq_msg check_warn "$(kq_format verify_license_attention "${COMPOSE_FILE}" "${COMPOSE_FILE}")"
+    ;;
+  *)
     err ""
     err "$(kq_text prefix_warning): $(kq_format f_verify_license "${COMPOSE_FILE}")"
-  fi
+    ;;
+  esac
+  return 0
 }
 
 #------------------------------------------------------------------------------
