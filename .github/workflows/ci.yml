@@ -2134,12 +2134,10 @@ jobs:
     # Dos juegos de imagenes (la version anterior y esta), una instalacion, una
     # actualizacion, una reinstalacion y una actualizacion con vuelta atras
     # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min. Desde la 2.3.0
-    # (tarea 6.8) suma cinco escenarios de fallo: Ctrl+C al grupo de procesos en la vuelta atras
-    # y en las migraciones (U3s, U3i), la salida 5 con la copia restaurada o sin restaurar (U3m, U3n) y
-    # un fallo posterior al 401 (U3p, que sustituye al antiguo reintento). Estimado, sin medir todavia:
-    # unos +30 minutos sobre los ~17 de antes. El tope sube de 90 a 120 y se ajusta con la primera
-    # ejecucion real.
-    timeout-minutes: 120
+    # (tarea 6.8) suma cinco escenarios de fallo (U3s, U3i, U3m, U3n, U3p). Medido en la CI manual
+    # 39412494631: U3s 1,3 min, U3i 1,5 y U3m 1,3 (la espera de 180 s al borde no se agota: la sonda de
+    # /health falla antes). Por eso el tope vuelve a 90.
+    timeout-minutes: 90
     # Ver el comentario de `clean-install`: sin excluir `schedule` a proposito,
     # la entrada de cron de `coverage` habria arrastrado esta etapa de 45-60
     # minutos cada noche.
@@ -2869,8 +2867,8 @@ jobs:
         if: steps.anterior.outputs.skip != 'true'
         # La vuelta atras no consigue relanzar la version anterior (su imagen de nginx termina al
         # arrancar): salida 5. Se corrige la causa y se EJECUTAN las ordenes que imprime, tal como
-        # salen. Antes del 3b la API de gestion responde 503 (el `artisan down` de la version
-        # anterior sobrevive) y doctor.sh sale 6; tras el 3b responde 401 y esa [FALLA] desaparece.
+        # salen. La vuelta atras automatica ya retiro el mantenimiento (`artisan up`) antes de fallar:
+        # la API da 401 ya antes del 3b. El 503 y la FALLA de doctor.sh se prueban en U3n.
         # La sonda `app.maintenance_mode` de la imagen nueva se comprueba aparte, en un contenedor
         # suelto con `artisan down`. Espera 3 minutos al borde que no arranca (KQ_WAIT_APPLICATION).
         run: |

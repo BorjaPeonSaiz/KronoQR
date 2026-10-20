@@ -63,8 +63,8 @@
 #     La restauracion automatica TERMINA y la vuelta atras no consigue relanzar la version
 #     anterior: salida 5. El bloque trae SOLO `1-2.` (copia ya restaurada) y los pasos 3, 3b,
 #     4, 4b y 4c, sin 1, 1b, 1c ni 2. Se corrige la causa y se EJECUTAN LAS ORDENES IMPRESAS,
-#     en orden y tal como salen. Antes del 3b, `doctor.sh` sale 6 con el 503; tras el 3b el
-#     curl da 401 y esa [FALLA] desaparece; el 4c termina bien. El asiento de la vuelta
+#     en orden y tal como salen. La vuelta atras automatica ya hizo `artisan up` (fallo despues,
+#     en la sonda de /health): la API da 401 ya antes del 3b, que es idempotente; el 4c termina bien. El asiento de la vuelta
 #     atras lo escribio update.sh (o se escribe con el paso 5 si sale impreso). Aparte, la
 #     sonda `app.maintenance_mode` de `product:doctor` de la imagen nueva, en un contenedor
 #     suelto con `artisan down`: sale 2 y la nombra.
@@ -72,7 +72,10 @@
 #   manual-path-restore        (escenario C2, variante fail-norestore)
 #     La restauracion automatica NO termina (restore.sh sale 1): salida 5 con el bloque
 #     COMPLETO: 1, 1b, 1c y 2 (restaurar) ademas de 3, 3b, 4, 4b y 4c, y sin `1-2.` ni 5.
-#     Se ejecutan todas, en orden. La restauracion manual escribe su propio asiento.
+#     Se ejecutan todas, en orden. Aqui la vuelta atras automatica NO llego al `artisan up`:
+#     el `app` anterior solo se paro, el paso 3 lo arranca sin recrearlo y conserva su mantenimiento,
+#     asi que ANTES del 3b hay 503 y `doctor.sh` sale 6 con la FALLA; despues, 401 y `[ok]`.
+#     La restauracion manual escribe su propio asiento.
 #
 #   forward-only               (escenario P, variante nohorizon)
 #     Un fallo DESPUES del 401 (horizon no arranca): salida 5, `SIN VUELTA ATRAS` en pantalla,
@@ -750,7 +753,7 @@ run_relaunch_orders() {
 mode_manual_path() {
   STEP="U3m-salida-5"
   local doctor_code=0 status block
-  local before="${NEW_DIR}/doctor-u3m-antes.log" after="${NEW_DIR}/doctor-u3m-despues.log"
+  local after="${NEW_DIR}/doctor-u3m-despues.log"
 
   build_fault_image fail
   # Que la version anterior no arranque sana tras restaurar: su nginx termina al arrancar. Un
@@ -794,17 +797,16 @@ mode_manual_path() {
 
   run_printed_order 3
   wait_edge_health
-  # La version anterior responde a las sondas pero sigue en mantenimiento: el estado que deja la
-  # salida 5 si alguien se salta el `artisan up`. Es lo que doctor.sh tiene que decir.
+  # La vuelta atras automatica llego a relanzar la version anterior (app y nginx sanos) y a retirar su
+  # mantenimiento con `artisan up`; solo despues fallo, en la sonda de /health por el nginx roto. Asi
+  # que ANTES del 3b la API de gestion ya atiende: 401, no 503. (El 3b es idempotente.)
+  grep -q 'Esperando a que nginx este listo' "${OUT}" ||
+    fail_with_output "la vuelta atras no llego a relanzar la version anterior"
+  grep -q 'no ha arrancado sana tras restaurar' "${ERR}" ||
+    fail_with_output "la vuelta atras no fallo en la sonda posterior al relanzamiento"
   status="$(edge_status /api/v1/auth/me)"
-  [ "${status}" = "503" ] ||
-    fail "tras el paso 3 y antes del 3b, /api/v1/auth/me responde ${status} y se esperaba 503 (el mantenimiento de la version anterior tenia que seguir puesto)"
-  "${SUDO[@]}" bash "${NEW_DIR}/doctor.sh" --lang es --current "${OLD_DIR}" >"${before}" 2>&1 || doctor_code=$?
-  cat "${before}"
-  [ "${doctor_code}" -eq 6 ] || fail "antes del 3b doctor.sh tenia que salir con 6 y salio con ${doctor_code}"
-  grep -qE '\[FALLA\].*/api/v1/auth/me\): responde 503' "${before}" ||
-    fail "antes del 3b doctor.sh no marca [FALLA] la API de gestion en 503"
-  product_doctor_if_supported
+  [ "${status}" = "401" ] ||
+    fail "tras el paso 3 y antes del 3b, /api/v1/auth/me responde ${status} y se esperaba 401 (la vuelta atras ya retiro el mantenimiento con artisan up)"
 
   run_printed_order 3b
   run_printed_order 4
@@ -827,13 +829,14 @@ mode_manual_path() {
     fail "tras el 3b doctor.sh no da [ok] la API de gestion en 401"
 
   product_doctor_new_image
-  assert_no_secrets "${OUT}" "${ERR}" "${before}" "${after}" "${NEW_DIR}/product-doctor-u3m.log" "${NEW_DIR}/product-doctor-u3m-antes.log"
-  note "camino manual de la salida 5 (copia ya restaurada) completo: 503 antes del 3b, 401 despues"
+  assert_no_secrets "${OUT}" "${ERR}" "${after}" "${NEW_DIR}/product-doctor-u3m.log"
+  note "camino manual de la salida 5 (copia ya restaurada) completo: 401 desde el paso 3 (la vuelta atras ya retiro el mantenimiento)"
 }
 
 mode_manual_path_restore() {
   STEP="U3n-salida-5-sin-restaurar"
-  local block
+  local block status doctor_code=0
+  local before="${NEW_DIR}/doctor-u3n-antes.log" after="${NEW_DIR}/doctor-u3n-despues.log"
 
   build_fault_image fail-norestore
   launch_update "${NEW_DIR}/salida-u3n.log" "${NEW_DIR}/err-u3n.log"
@@ -863,9 +866,37 @@ mode_manual_path_restore() {
   run_printed_order 1b
   run_printed_order 1c
   run_printed_order 2
-  run_relaunch_orders
+  run_printed_order 3
+  wait_edge_health
+  # Aqui la restauracion automatica NO llego al `artisan up`: el `app` anterior solo se paro
+  # (`compose stop`) y el paso 3 impreso lo ARRANCA sin recrearlo, asi que conserva el fichero de
+  # mantenimiento de su contenedor. La API responde a las sondas y da 503 a todo lo demas.
+  status="$(edge_status /api/v1/auth/me)"
+  [ "${status}" = "503" ] ||
+    fail "tras el paso 3 y antes del 3b, /api/v1/auth/me responde ${status} y se esperaba 503 (el app anterior solo se paro: tenia que conservar su mantenimiento)"
+  "${SUDO[@]}" bash "${NEW_DIR}/doctor.sh" --lang es --current "${OLD_DIR}" >"${before}" 2>&1 || doctor_code=$?
+  cat "${before}"
+  [ "${doctor_code}" -eq 6 ] || fail "antes del 3b doctor.sh tenia que salir con 6 y salio con ${doctor_code}"
+  grep -qE '\[FALLA\].*/api/v1/auth/me\): responde 503' "${before}" ||
+    fail "antes del 3b doctor.sh no marca [FALLA] la API de gestion en 503"
+  product_doctor_if_supported
+
+  run_printed_order 3b
+  run_printed_order 4
+  status="$("${SUDO[@]}" bash -c "${ORDERS[4b]}" 2>/dev/null || true)"
+  [ "${status}" = "401" ] || fail "la orden 4b impresa da '${status}' y tenia que dar 401"
+  run_printed_order 4c
+  assert_old_in_service
+  doctor_code=0
+  "${SUDO[@]}" bash "${NEW_DIR}/doctor.sh" --lang es --current "${OLD_DIR}" >"${after}" 2>&1 || doctor_code=$?
+  cat "${after}"
+  if grep -qE '\[FALLA\].*/api/v1/auth/me\)' "${after}"; then
+    fail "tras el 3b doctor.sh sigue marcando [FALLA] la API de gestion"
+  fi
+  grep -qE '\[ok\].*/api/v1/auth/me\): responde 401' "${after}" ||
+    fail "tras el 3b doctor.sh no da [ok] la API de gestion en 401"
   assert_restored_entry
-  assert_no_secrets "${OUT}" "${ERR}"
+  assert_no_secrets "${OUT}" "${ERR}" "${before}" "${after}"
   note "camino manual de la salida 5 (copia sin restaurar) completo, de la orden 1 al 4c"
 }
 
