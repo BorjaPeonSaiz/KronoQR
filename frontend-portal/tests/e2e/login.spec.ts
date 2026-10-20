@@ -10,6 +10,7 @@
 // muestra un aviso generico y no confirma nada sobre el codigo de empleado.
 import { expect, test } from '@playwright/test'
 import {
+  HOTEL_BRANDING,
   PORTAL_EMPLOYEE_CODE,
   PORTAL_PIN,
   PORTAL_PIN_8,
@@ -222,5 +223,23 @@ test(
     await expect(button).toBeDisabled()
     await expect(button).toHaveAccessibleDescription(/estará disponible en \d:\d{2}/)
     await expect(page).toHaveURL(/\/login$/)
+  },
+)
+
+test(
+  'la pantalla de acceso enseña el aviso de privacidad de la instalacion',
+  { tag: ['@RF-PD-08', '@RL-09'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es', branding: HOTEL_BRANDING })
+
+    await page.goto('/login')
+
+    const notice = page.getByTestId('privacy-notice')
+
+    await expect(notice).toContainText('Responsable: Hotel Marina, S. L.')
+    await expect(notice.getByRole('link')).toHaveAttribute(
+      'href',
+      'https://hotelmarina.example/privacidad',
+    )
   },
 )

@@ -29,6 +29,19 @@
       "countdown": "The \"Sign in\" button will be available in {time}."
     }
   },
+  "privacy": {
+    "heading": "Data protection notice",
+    "controllerKnown": "Controller: {controller}.",
+    "controllerUnknown": "Controller: the company that owns this workplace.",
+    "purpose": "Purpose: so you can check your own daily working-time record (art. 34.9 of the Workers' Statute).",
+    "basis": "Legal basis: compliance with a legal obligation.",
+    "retention": "Retention: as long as the applicable regulations require.",
+    "rights": "Rights: access, rectification, erasure, restriction, objection and portability. Ask Human Resources.",
+    "noBiometrics": "This system does not process biometric data.",
+    "policyLink": "Read the full privacy policy",
+    "opensInNewTab": "(opens in a new tab)",
+    "policyPending": "The full policy is available from Human Resources."
+  },
   "common": {
     "updating": "Updating…"
   },

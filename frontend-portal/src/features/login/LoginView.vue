@@ -19,6 +19,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import PrivacyNotice from '@/shared/ui/PrivacyNotice.vue'
 import { useSessionStore } from './session.store'
 
 const PIN_PATTERN = /^\d{6,8}$/
@@ -235,6 +236,8 @@ async function submit(): Promise<void> {
       </form>
 
       <p class="mt-6 text-base text-kq-text-muted">{{ t('login.forgotPin') }}</p>
+
+      <PrivacyNotice :notice="branding.current.privacyNotice" />
     </div>
   </main>
 </template>

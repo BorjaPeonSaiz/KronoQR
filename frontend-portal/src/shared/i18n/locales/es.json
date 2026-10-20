@@ -29,6 +29,19 @@
       "countdown": "El botón «Entrar» estará disponible en {time}."
     }
   },
+  "privacy": {
+    "heading": "Aviso de protección de datos",
+    "controllerKnown": "Responsable: {controller}.",
+    "controllerUnknown": "Responsable: la empresa titular de este centro de trabajo.",
+    "purpose": "Finalidad: que puedas consultar tu propio registro diario de jornada (art. 34.9 del Estatuto de los Trabajadores).",
+    "basis": "Base jurídica: cumplimiento de una obligación legal.",
+    "retention": "Conservación: el tiempo que exige la normativa aplicable.",
+    "rights": "Derechos: acceso, rectificación, supresión, limitación, oposición y portabilidad. Solicítalos a Recursos Humanos.",
+    "noBiometrics": "Este sistema no trata datos biométricos.",
+    "policyLink": "Leer la política de privacidad completa",
+    "opensInNewTab": "(se abre en una pestaña nueva)",
+    "policyPending": "La política completa está disponible en Recursos Humanos."
+  },
   "common": {
     "updating": "Actualizando…"
   },
