@@ -233,6 +233,29 @@ it('incluye cada correccion con su autor y su motivo, y la jornada que se quedo 
     expect($html)->toContain('09:00');
 })->group('RF-ID-05', 'RN-13', 'RL-04');
 
+it('pide al motor el PDF etiquetado siempre, aunque la instalacion no etiquete los informes de gestion', function (bool $etiquetarInformes): void {
+    // V21-3-PO-1 (2.3.0) y doc 01 §6.5: el registro propio es el documento que
+    // una persona presenta en una reclamacion, y sale SIEMPRE etiquetado para
+    // los lectores de pantalla. `REPORTING_PDF_TAGGED` solo decide sobre los
+    // informes de gestion: con el ajuste apagado —el valor de serie— y
+    // encendido, el registro propio pide lo mismo al motor. Que Chromium
+    // escriba de verdad el arbol de estructura lo afirma
+    // `MyWorkDaysExportYearVolumeTest` cuando hay Chromium.
+    config()->set('reporting.pdf.tagged', $etiquetarInformes);
+    $contexto = pdfPropioContexto();
+
+    pdfPropioJornada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2026-03-01', 'to' => '2026-03-31', 'format' => 'pdf'])
+        ->assertOk();
+
+    expect(FakeReportDocumentRenderer::lastAlwaysTagged())->toBeTrue();
+})->with([
+    'informes sin etiquetar (de serie)' => false,
+    'informes etiquetados' => true,
+])->group('RF-ID-05', 'RL-05');
+
 it('no mete a nadie mas en el PDF del registro propio', function (): void {
     // El alcance del documento es el del token. Un `JOIN` de mas en la consulta
     // se veria aqui antes que en el papel.
