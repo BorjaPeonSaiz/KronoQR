@@ -427,3 +427,31 @@ it('una firma inexistente o un 429 siguen siendo «firma no valida», y solo el 
     'limite de peticiones' => ['ratelimit', 'no es valida segun cosign'],
     'acceso negado' => ['denied', 'NEGADO EL ACCESO'],
 ])->group('RS-10', 'RF-PD-02');
+
+it('update.sh sin internet, con la imagen cargada sin su digest, no manda repetir el docker load (V1-PL-02)', function (): void {
+    ['dir' => $dir] = imageSignatureInstallation(null);
+    // Sin cosign, pero con el `docker` falso delante.
+    $path = $dir.'/bin:'.getenv('PATH');
+    // `image inspect` por digest falla y por etiqueta no: es lo que deja `docker load`
+    // en un Docker sin almacen containerd.
+    file_put_contents(
+        $dir.'/bin/docker',
+        "#!/usr/bin/env bash\nprintf '%s\n' \"\$*\" >>".escapeshellarg($dir.'/docker.log')."\n"
+        ."case \"\$*\" in *'config --images'*) cat ".escapeshellarg($dir.'/imagenes').'; exit 0 ;; '
+        ."*'image inspect '*'@sha256:'*) exit 1 ;; *'image inspect '*'/php:'*) exit 0 ;; *'image inspect'*) exit 1 ;; esac\nexit 0\n",
+    );
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'kq_msg_init es; DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'CURRENT_ENV='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; '
+        .'check_images; printf "fallos=%s\n" "${CHECKS_FAILED}"';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    $docker = (string) file_get_contents($dir.'/docker.log');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain('fallos=1')
+        ->and($process->getOutput())->toContain('esta cargada en este servidor, pero sin su digest')
+        ->and($docker)->not->toContain('pull');
+})->group('RF-PD-10');
