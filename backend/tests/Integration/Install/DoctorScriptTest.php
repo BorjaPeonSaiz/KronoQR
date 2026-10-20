@@ -198,6 +198,46 @@ it('avisa si Prometheus no tiene cargadas las reglas de alerta del paquete (pend
         ->and($sinObservabilidad['salida'])->toContain('comprobadas=0')->toContain('avisos=0');
 })->group('RF-PD-13');
 
+/**
+ * Carga doctor.sh y ejecuta `check_maintenance_mode` con `curl` respondiendo
+ * $codigo a la API de gestion por el borde.
+ */
+function doctorConLaApiRespondiendo(string $codigo): string
+{
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_ENV=/dev/null; CURRENT_COMPOSE=/opt/kronoqr-2.3.0/docker-compose.yml; '
+        .'env_value() { [ "$2" = HTTPS_PORT ] && printf 8443 || true; }; '
+        .'curl() { printf "%s" '.escapeshellarg($codigo).'; }; '
+        .'check_maintenance_mode; '
+        .'printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
+
+    $process = new Process(['bash', '-c', $script], timeout: 30.0);
+    $process->run();
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    return $process->getOutput();
+}
+
+it('da [FALLA] con la aplicacion en mantenimiento y dice como retirarlo (V21-3-PL-02)', function (): void {
+    // Una vuelta atras de update.sh que sale con 5 y a la que a mano se le salta el
+    // `artisan up` deja la API en 503: el quiosco encola, y el panel, el portal y la
+    // exportacion legal no responden. Hasta la 2.3.0 doctor.sh salia con 0.
+    $mantenimiento = doctorConLaApiRespondiendo('503');
+    $atiende = doctorConLaApiRespondiendo('401');
+    $sinRespuesta = doctorConLaApiRespondiendo('000');
+
+    expect($mantenimiento)->toContain('[FALLA] API de gestion por el borde (https://127.0.0.1:8443/api/v1/auth/me): responde 503')
+        ->and($mantenimiento)->toContain('docker compose -f /opt/kronoqr-2.3.0/docker-compose.yml exec -T app php artisan up')
+        ->and($mantenimiento)->toContain('fallos=1 avisos=0')
+        ->and($atiende)->toContain('fallos=0 avisos=0')
+        ->and($sinRespuesta)->toContain('fallos=0 avisos=1')
+        ->and($sinRespuesta)->toContain('ps nginx');
+})->group('RF-PD-13', 'RF-PD-10');
+
+it('doctor.sh comprueba el mantenimiento por el borde con la aplicacion en marcha', function (): void {
+    expect(substr_count(Repo::contents('infra/scripts/doctor.sh'), "\n  check_maintenance_mode\n"))->toBe(1);
+})->group('RF-PD-13');
+
 it('doctor.sh lanza la comprobacion de las reglas de Prometheus en sus dos ramas', function (): void {
     expect(substr_count(Repo::contents('infra/scripts/doctor.sh'), "\n  check_prometheus_rules\n"))->toBe(2);
 })->group('RF-PD-13');
