@@ -14046,7 +14046,16 @@ export interface components {
         SetupStepName: components["schemas"]["SetupStep"];
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Siempre `no-store, private` (2.3.0, bloque 8): el cuerpo es una
+         *     credencial —un token de sesion, el secreto TOTP del alta— o la abre.
+         *     Ni el navegador ni un proxy pueden guardarlo; el panel y el portal se
+         *     abren a veces en un ordenador compartido. En `/api/v1/auth/*` lo pone un
+         *     middleware de grupo, asi que vale para todas sus respuestas.
+         */
+        NoStoreCacheControl: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -14636,6 +14645,7 @@ export interface operations {
             /** @description Sesion iniciada. El token viaja como `Bearer` en cada peticion posterior. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14649,6 +14659,7 @@ export interface operations {
              */
             202: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14676,6 +14687,7 @@ export interface operations {
             /** @description Sesion iniciada, ya con los ambitos del rol. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14700,6 +14712,7 @@ export interface operations {
             /** @description Secreto emitido y pendiente de confirmar. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14729,6 +14742,7 @@ export interface operations {
             /** @description Segundo factor activo y sesion iniciada. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14754,6 +14768,7 @@ export interface operations {
             /** @description Sesion cerrada. El token deja de ser valido de inmediato. */
             204: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -14773,6 +14788,7 @@ export interface operations {
             /** @description Sesion en curso. */
             200: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -14804,6 +14820,7 @@ export interface operations {
              */
             204: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -18553,6 +18570,7 @@ export interface operations {
              */
             201: {
                 headers: {
+                    "Cache-Control": components["headers"]["NoStoreCacheControl"];
                     [name: string]: unknown;
                 };
                 content: {

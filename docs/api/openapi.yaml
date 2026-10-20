@@ -1968,6 +1968,9 @@ paths:
       responses:
         '200':
           description: Sesion iniciada. El token viaja como `Bearer` en cada peticion posterior.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -1993,6 +1996,9 @@ paths:
             Contrasena correcta y **sesion todavia no emitida**: falta el segundo
             factor (RS-06). El token que viaja aqui solo sirve para los tres
             endpoints de `/auth/2fa/*`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2059,6 +2065,9 @@ paths:
       responses:
         '200':
           description: Sesion iniciada, ya con los ambitos del rol.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2107,6 +2116,9 @@ paths:
       responses:
         '200':
           description: Secreto emitido y pendiente de confirmar.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2159,6 +2171,9 @@ paths:
       responses:
         '200':
           description: Segundo factor activo y sesion iniciada.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2200,6 +2215,9 @@ paths:
       responses:
         '204':
           description: Sesion cerrada. El token deja de ser valido de inmediato.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
@@ -2237,6 +2255,9 @@ paths:
       responses:
         '200':
           description: Sesion en curso.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -2359,6 +2380,9 @@ paths:
             valer; esta sigue abierta y, si era una sesion `password:change`,
             lleva ya los ambitos de su rol. `GET /auth/me` devuelve
             `password_change_required: false`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -9670,6 +9694,9 @@ paths:
           description: |
             Cuenta creada. Falta activar su segundo factor: el `challenge_token`
             solo sirve para `/api/v1/auth/2fa/*`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStoreCacheControl'
           content:
             application/json:
               schema:
@@ -10953,6 +10980,18 @@ components:
 
         **El correo de aviso nunca lo lleva**: lleva el enlace a la pantalla, donde
         se pide uno fresco.
+
+  headers:
+    NoStoreCacheControl:
+      description: |
+        Siempre `no-store, private` (2.3.0, bloque 8): el cuerpo es una
+        credencial —un token de sesion, el secreto TOTP del alta— o la abre.
+        Ni el navegador ni un proxy pueden guardarlo; el panel y el portal se
+        abren a veces en un ordenador compartido. En `/api/v1/auth/*` lo pone un
+        middleware de grupo, asi que vale para todas sus respuestas.
+      schema:
+        type: string
+        examples: ['no-store, private']
 
   parameters:
     IdempotencyKey:
