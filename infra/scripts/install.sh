@@ -169,6 +169,9 @@ CFG_HTTPS_PORT="443"
 CFG_BACKUP_PATH="/var/backups/fichaje"
 CFG_TLS_CERT_DIR=""
 CFG_TLS_ALLOW_SELF_SIGNED="false"
+# 1 si IMAGE_REGISTRY sigue con el valor de la plantilla (o vacio): la fase 1 ya ha
+# fallado por ello y no verifica firmas (check_customer_values).
+REGISTRY_IS_TEMPLATE=0
 
 #------------------------------------------------------------------------------
 # Salida
@@ -865,6 +868,23 @@ check_customer_values() {
     fi
   done
 
+  # IMAGE_REGISTRY con el valor de la plantilla (V21-1-PL-01, I2): ahi no hay
+  # ninguna imagen de KronoQR. Sin esta comprobacion la fase 1 pasaba, la 3
+  # escribia secretos y la 4 fallaba al descargar; y con cosign instalado salia
+  # antes con 7, como si la firma estuviera rota. Vacio, Compose usaria ese
+  # mismo valor por defecto. No hay instalacion legitima con el: tambien la de un
+  # servidor sin internet carga imagenes con el nombre del registro real.
+  value="$(env_value "${ENV_FILE}" "IMAGE_REGISTRY")"
+  plantilla="$(env_value "${ENV_TEMPLATE}" "IMAGE_REGISTRY")"
+  REGISTRY_IS_TEMPLATE=0
+  if [ -z "${value}" ] || { [ -n "${plantilla}" ] && [ "${value}" = "${plantilla}" ]; }; then
+    REGISTRY_IS_TEMPLATE=1
+    check_fail "$(kq_format c_env_template "IMAGE_REGISTRY")" \
+      "$(kq_format f_image_registry_template "${value:-${plantilla:-ghcr.io/kronoqr}}" "${ENV_FILE}")"
+  else
+    check_pass "$(kq_format c_env_key "IMAGE_REGISTRY")"
+  fi
+
   value="$(env_value "${ENV_FILE}" "APP_ENV")"
   if [ "${value}" = "production" ]; then
     check_pass "APP_ENV=production"
@@ -941,7 +961,9 @@ phase_requirements() {
     check_log_retention "${ENV_FILE}"
     check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_image_digest_overrides "${ENV_FILE}" "$(dirname -- "${COMPOSE_FILE}")"
-    check_image_signatures
+    # Con el registro de la plantilla ya hay un [FALLA] que dice que hacer; la firma
+    # no se puede leer de donde no hay imagenes, y cosign saldria con 7 (V21-1-PL-01).
+    [ "${REGISTRY_IS_TEMPLATE}" -eq 1 ] || check_image_signatures
     check_app_url
     check_tls
     check_ports
@@ -1325,7 +1347,7 @@ verify_image_signatures() {
   skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
   failed)
     ROLLBACK_DONE_CODE="${KQ_EXIT_SECURITY}"
-    rollback_and_die "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    rollback_and_die "$(kq_sig_failed_text "${registry}")"
     ;;
   esac
   record_signature_result
@@ -1379,7 +1401,7 @@ check_image_signatures() {
   unverifiable) check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")" ;;
   skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
   failed)
-    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    die "${KQ_EXIT_SECURITY}" "$(kq_sig_failed_text "${registry}")"
     ;;
   esac
   return 0

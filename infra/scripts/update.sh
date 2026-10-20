@@ -1828,7 +1828,7 @@ check_images() {
     ;;
   failed)
     remember_check "image-signature" "FALLIDA / FAILED: ${KQ_SIG_FAILED_IMAGE}"
-    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    die "${KQ_EXIT_SECURITY}" "$(kq_sig_failed_text "${registry:-ghcr.io/kronoqr}")"
     ;;
   esac
 

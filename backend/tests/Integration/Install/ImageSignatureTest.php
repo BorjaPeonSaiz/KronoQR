@@ -381,3 +381,49 @@ it('update.sh lee el images.lock separado por espacios y pasa IMAGE_DIGEST_*=@sh
     expect((string) file_get_contents($dir.'/entorno'))
         ->toContain("ENV_PHP=@{$a} ENV_NGINX=@{$b} ENV_POSTGRES=@{$c}");
 })->group('RS-10', 'RF-PD-10');
+
+it('un registro que niega el acceso nombra IMAGE_REGISTRY y su valor, y no habla de firma rota (V21-1-PL-01)', function (string $script): void {
+    // Sigue saliendo con 7 (se falla en cerrado: un registro comprometido puede
+    // negar solo la firma), pero el texto empieza por lo que casi siempre es: un
+    // IMAGE_REGISTRY mal escrito. install.sh y update.sh comparten el texto.
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('denied');
+    file_put_contents($dir.'/images.lock', 'php '.IMAGE_SIGNATURE_DIGEST."\nnginx ".IMAGE_SIGNATURE_DIGEST."\npostgres ".IMAGE_SIGNATURE_DIGEST."\n");
+
+    $llamada = $script === 'install'
+        ? 'ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; check_image_signatures'
+        : 'DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; CURRENT_ENV='.escapeshellarg($dir.'/.env')
+            .'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; check_images';
+    $process = new Process(
+        ['bash', '-c', 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/'.$script.'.sh')).'; kq_msg_init es; '.$llamada],
+        env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'],
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(7, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->toContain('NEGADO EL ACCESO')
+        ->and($process->getErrorOutput())->toContain("IMAGE_REGISTRY: ahora vale '".IMAGE_SIGNATURE_REGISTRY."'")
+        ->and($process->getErrorOutput())->toContain('--skip-signature-check')
+        ->and($process->getErrorOutput())->not->toContain('no es valida segun cosign');
+})->with(['install', 'update'])->group('RS-10', 'RF-PD-02', 'RF-PD-10');
+
+it('una firma inexistente o un 429 siguen siendo «firma no valida», y solo el acceso negado culpa al registro', function (string $mode, string $esperado): void {
+    $dir = imageSignatureSandbox($mode);
+    $process = new Process(
+        ['bash', '-c', 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/lib/messages.sh'))
+            .'; . '.escapeshellarg(Repo::file('infra/scripts/lib/image-signature.sh')).'; kq_msg_init es; '
+            .'kq_verify_product_images '.escapeshellarg(IMAGE_SIGNATURE_REGISTRY).' '.escapeshellarg(imageSignaturePinned('php')).' || true; '
+            .'printf "%s|%s|" "${KQ_SIG_RESULT}" "${KQ_SIG_DENIED}"; kq_sig_failed_text '.escapeshellarg(IMAGE_SIGNATURE_REGISTRY)],
+        env: ['PATH' => imageSignaturePath($dir, true)],
+        timeout: 30.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toStartWith('failed|')
+        ->and($process->getOutput())->toContain($esperado);
+})->with([
+    'firma inexistente' => ['invalid', 'no es valida segun cosign'],
+    'limite de peticiones' => ['ratelimit', 'no es valida segun cosign'],
+    'acceso negado' => ['denied', 'NEGADO EL ACCESO'],
+])->group('RS-10', 'RF-PD-02');

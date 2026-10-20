@@ -44,6 +44,12 @@
 #   failed        cosign esta, pudo consultar y la firma NO es valida (o no
 #                 existe). Es un FALLO: el script que llama sale con
 #                 KQ_EXIT_SECURITY (7).
+#                 KQ_SIG_DENIED=1 si el registro NEGO EL ACCESO (denied, unauthorized,
+#                 forbidden, 401/403/404, manifiesto o repositorio desconocido): sigue
+#                 siendo `failed` —un registro comprometido puede negar solo la firma—,
+#                 pero casi siempre es un IMAGE_REGISTRY mal escrito, y el mensaje
+#                 (kq_sig_failed_text) empieza por ahi en vez de por «firma rota»
+#                 (V21-1-PL-01).
 #
 # POR QUE EL ATAJO ES UNA OPCION DE LA LINEA DE ORDENES Y NO UNA VARIABLE DEL .env.
 # La etapa 8b de la CI instala desde un registro local con imagenes SIN firmar
@@ -155,6 +161,9 @@ kq_cosign_run() {
   if [ "${status}" -ne 0 ]; then
     KQ_SIG_DETAIL="$(printf '%s\n' "${output}" | tail -n 4 | tr '\n' ' ')"
     KQ_SIG_KIND="$(kq_cosign_classify "${output}")"
+    if grep -qiE 'denied|unauthorized|forbidden|manifest unknown|manifest_unknown|name unknown|name_unknown|repository .*not found|\b(401|403|404)\b' <<<"${output}"; then
+      KQ_SIG_DENIED=1
+    fi
     return 1
   fi
   KQ_SIG_KIND=""
@@ -194,6 +203,7 @@ kq_verify_product_images() {
   KQ_SIG_FAILED_IMAGE=""
   KQ_SIG_DETAIL=""
   KQ_SIG_KIND=""
+  KQ_SIG_DENIED=0
 
   for image in "$@"; do
     [ -n "${registry}" ] || continue
@@ -246,4 +256,18 @@ kq_verify_product_images() {
 
   KQ_SIG_RESULT="verified"
   return 0
+}
+
+# El texto del fallo de firma (`failed`) para install.sh y update.sh. Si el registro
+# nego el acceso, el mensaje nombra IMAGE_REGISTRY y su valor: es lo que hay que
+# mirar primero, y la causa habitual (un registro mal escrito, el de la plantilla).
+# Si no, el de siempre: firma no valida, avisa al fabricante. Necesita kq_format
+# (lib/messages.sh), que el script que llama ya ha cargado.
+#   kq_sig_failed_text REGISTRY
+kq_sig_failed_text() {
+  if [ "${KQ_SIG_DENIED:-0}" = "1" ]; then
+    kq_format f_sig_denied "${KQ_SIG_FAILED_IMAGE}" "$1" "${KQ_SIG_DETAIL:-?}"
+  else
+    kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}"
+  fi
 }

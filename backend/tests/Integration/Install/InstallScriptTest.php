@@ -98,6 +98,7 @@ function paqueteDePrueba(): array
         '/^METRICS_ALLOW_CIDR=.*$/m',
         '/^TLS_ALLOW_SELF_SIGNED=.*$/m',
         '/^BACKUP_PATH=.*$/m',
+        '/^IMAGE_REGISTRY=.*$/m',
     ], [
         'APP_ENV=production',
         'APP_URL=https://fichaje.prueba.local',
@@ -106,6 +107,8 @@ function paqueteDePrueba(): array
         'METRICS_ALLOW_CIDR=10.91.0.5/32',
         'TLS_ALLOW_SELF_SIGNED=false',
         'BACKUP_PATH='.$dir.'/copias',
+        // Uno que no es el de la plantilla: con ese la fase 1 falla (V21-1-PL-01).
+        'IMAGE_REGISTRY=ghcr.io/acme/kronoqr',
     ], (string) $env);
 
     file_put_contents($dir.'/.env', (string) $env);
@@ -498,3 +501,25 @@ it('espera tambien al borde antes de dar la fase 4 por buena', function (): void
     expect($script)->toContain('run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force');
     expect($script)->not->toContain('exec -T app php artisan migrate');
 })->group('RF-PD-02');
+
+it('la fase 1 da [FALLA] con el IMAGE_REGISTRY de la plantilla y no llega a verificar firmas (V21-1-PL-01, I2)', function (string $valor): void {
+    $paquete = paqueteDePrueba();
+    $env = (string) file_get_contents($paquete['dir'].'/.env.example');
+    $env = (string) preg_replace('/^IMAGE_REGISTRY=.*$/m', 'IMAGE_REGISTRY='.$valor, $env);
+    file_put_contents($paquete['dir'].'/.env', $env);
+
+    $proceso = bashConElInstalador(
+        'kq_msg_init es; CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0; '
+        .'ENV_FILE='.escapeshellarg($paquete['dir'].'/.env').'; ENV_TEMPLATE='.escapeshellarg($paquete['dir'].'/.env.example').'; '
+        .'check_customer_values; printf "plantilla=%s fallos=%s\n" "${REGISTRY_IS_TEMPLATE}" "${CHECKS_FAILED}"'
+    );
+    borrarPaquete($paquete['dir']);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('IMAGE_REGISTRY sigue con el valor de ejemplo de la plantilla')
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('el valor de la plantilla, y ahi no hay ninguna imagen de KronoQR')
+        ->and($proceso->getOutput())->toContain('plantilla=1');
+
+    expect(Repo::contents('infra/scripts/install.sh'))
+        ->toContain('[ "${REGISTRY_IS_TEMPLATE}" -eq 1 ] || check_image_signatures');
+})->with(['plantilla' => ['ghcr.io/kronoqr'], 'vacio' => ['']])->group('RF-PD-02');
