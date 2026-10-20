@@ -94,6 +94,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/kqe.sh"
 # shellcheck source=lib/image-signature.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/image-signature.sh"
+# shellcheck source=lib/images.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/images.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales publicados (doc 02 §11.6.2). Son los MINIMOS, no los recomendados.
@@ -1495,18 +1497,13 @@ pull_images_if_needed() {
       announced=1
     fi
 
-    # La imagen fijada por digest falta, pero la MISMA etiqueta esta en local: se
-    # cargo con `docker load` en un Docker sin almacen containerd, que no conserva
-    # el digest (V1-PL-02). Descargar no va a funcionar sin internet, y repetir el
-    # `docker load` tampoco: el mensaje da la salida de verdad, sin intentarlo.
-    case "${image}" in
-    *@sha256:*)
-      if docker image inspect "${image%@*}" >/dev/null 2>&1; then
-        rollback_and_die "$(kq_format f_images_digest_lost "${image%@*}")"
-      fi
-      ;;
-    esac
     if ! docker pull --quiet "${image}" >/dev/null; then
+      # SOLO tras fallar la descarga por digest (V1-PL-02, lib/images.sh): la etiqueta
+      # esta en local sin ningun digest de registro, que es lo que deja `docker load`
+      # sin el almacen containerd. Repetir el `docker load` no lo arregla.
+      if kq_image_digest_lost "${image}"; then
+        rollback_and_die "$(kq_format f_images_digest_lost "${image%@*}" "$(kq_image_digest_var "${image}")")"
+      fi
       rollback_and_die "$(kq_format f_images "${PRODUCT_VERSION}" "${registry}")"
     fi
   done

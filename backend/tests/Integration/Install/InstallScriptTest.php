@@ -579,32 +579,74 @@ it('la salida final no habla de la 2.0.0 y apunta a las guias del cliente del pa
         ->and($proceso->getOutput())->not->toContain('a partir de la version 2.1');
 })->group('RF-PD-02');
 
-it('sin internet, una imagen cargada que ha perdido su digest no manda repetir el docker load: da las tres lineas IMAGE_DIGEST_* (V1-PL-02)', function (): void {
+/**
+ * Ejecuta pull_images_if_needed de install.sh con un `docker` falso: `$imagen` es
+ * la unica que pide el compose y no esta por su digest; `$pull` dice si la
+ * descarga funciona y `$repoDigests` lo que da `{{len .RepoDigests}}` de su
+ * etiqueta (null = la etiqueta no esta en local).
+ *
+ * @return array{codigo: int, salida: string, docker: string}
+ */
+function instalarConImagen(string $imagen, bool $pull, ?int $repoDigests): array
+{
     $dir = sys_get_temp_dir().'/kq-digest-'.bin2hex(random_bytes(4));
     mkdir($dir);
     file_put_contents($dir.'/.env', "IMAGE_REGISTRY=ghcr.io/acme/kronoqr\n");
     touch($dir.'/docker-compose.yml');
+    $etiqueta = explode('@', $imagen)[0];
 
     $proceso = bashConElInstalador(
         'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; '
-        .'PRODUCT_VERSION=2.3.0; KQ_SKIP_SIGNATURE_CHECK=1; '
-        .'docker() { local IFS=" "; case "$*" in '
-        .'*"config --images"*) printf "ghcr.io/acme/kronoqr/php:2.3.0@sha256:%064d\n" 0 ;; '
-        .'"image inspect ghcr.io/acme/kronoqr/php:2.3.0") return 0 ;; '
+        .'PRODUCT_VERSION=2.3.0; KQ_SKIP_SIGNATURE_CHECK=1; LOG='.escapeshellarg($dir.'/docker.log').'; '
+        .'docker() { local IFS=" "; printf "%s\n" "$*" >>"${LOG}"; case "$*" in '
+        .'*"config --images"*) printf "%s\n" '.escapeshellarg($imagen).' ;; '
+        .'"image inspect -f {{len .RepoDigests}} "'.escapeshellarg($etiqueta).') '
+        .($repoDigests === null ? 'return 1' : 'printf "%s\n" '.$repoDigests).' ;; '
         .'*"image inspect"*) return 1 ;; '
-        .'*pull*) echo SE-HA-INTENTADO-DESCARGAR >&2; return 1 ;; esac; return 0; }; '
-        .'pull_images_if_needed'
+        .'*pull*) return '.($pull ? '0' : '1').' ;; esac; return 0; }; '
+        .'tag_pinned_images() { :; }; '
+        .'pull_images_if_needed; echo SIGUE'
     );
-    foreach (['.env', 'docker-compose.yml', '.kronoqr-signature-check'] as $fichero) {
+    $docker = is_file($dir.'/docker.log') ? (string) file_get_contents($dir.'/docker.log') : '';
+    foreach (['.env', 'docker-compose.yml', '.kronoqr-signature-check', 'docker.log'] as $fichero) {
         @unlink($dir.'/'.$fichero);
     }
     @rmdir($dir);
 
-    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
-        ->and($proceso->getErrorOutput())->toContain('esta cargada en este servidor, pero sin su digest')
-        ->and($proceso->getErrorOutput())->toContain('IMAGE_DIGEST_PHP=, IMAGE_DIGEST_NGINX= e IMAGE_DIGEST_POSTGRES=')
-        ->and($proceso->getErrorOutput())->not->toContain('SE-HA-INTENTADO-DESCARGAR')
-        ->and($proceso->getErrorOutput())->not->toContain('docker login');
+    return ['codigo' => $proceso->getExitCode() ?? -1, 'salida' => $proceso->getOutput().$proceso->getErrorOutput(), 'docker' => $docker];
+}
+
+it('una imagen cargada sin su digest y sin internet: intenta descargar y luego nombra su variable (V1-PL-02)', function (string $imagen, string $variable): void {
+    $resultado = instalarConImagen($imagen, pull: false, repoDigests: 0);
+
+    expect($resultado['codigo'])->toBe(4, $resultado['salida'])
+        // Primero se intenta la descarga: con internet funcionaria y no se toca nada.
+        ->and($resultado['docker'])->toContain('pull')
+        ->and($resultado['salida'])->toContain('se cargo con \'docker load\'')
+        ->and($resultado['salida'])->toContain('la linea vacia '.$variable.'=')
+        ->and($resultado['salida'])->not->toContain('docker login');
+})->with([
+    'php' => ['ghcr.io/acme/kronoqr/php:2.3.0@sha256:'.str_repeat('a', 64), 'IMAGE_DIGEST_PHP'],
+    'redis' => ['redis:7-alpine@sha256:'.str_repeat('b', 64), 'REDIS_IMAGE_DIGEST'],
+])->group('RF-PD-02');
+
+it('con internet no culpa al docker load: la etiqueta presente (con o sin digest de registro) no impide descargar por digest (V1-PL-02)', function (?int $repoDigests): void {
+    $resultado = instalarConImagen('redis:7-alpine@sha256:'.str_repeat('b', 64), pull: true, repoDigests: $repoDigests);
+
+    expect($resultado['codigo'])->toBe(0, $resultado['salida'])
+        ->and($resultado['salida'])->toContain('SIGUE')
+        ->and($resultado['salida'])->not->toContain('docker load');
+})->with([
+    'redis de otro proyecto, con su digest' => [1],
+    'etiqueta cargada sin digest' => [0],
+])->group('RF-PD-02');
+
+it('si la descarga falla y la etiqueta trae digest de registro, es un fallo de descarga, no un docker load (V1-PL-02)', function (): void {
+    $resultado = instalarConImagen('redis:7-alpine@sha256:'.str_repeat('b', 64), pull: false, repoDigests: 1);
+
+    expect($resultado['codigo'])->toBe(4, $resultado['salida'])
+        ->and($resultado['salida'])->toContain('no se han podido descargar las imagenes')
+        ->and($resultado['salida'])->not->toContain('docker load\' en un Docker');
 })->group('RF-PD-02');
 
 it('ensena el registro de los servicios que fallan ANTES de deshacer, y los mensajes ya no mandan a docker compose logs (V1-PL-04, R3-PL-04)', function (): void {

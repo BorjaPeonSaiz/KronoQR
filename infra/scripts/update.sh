@@ -146,6 +146,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/observability-merge.sh"
 # shellcheck source=lib/image-signature.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/image-signature.sh"
+# shellcheck source=lib/images.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/images.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -1837,19 +1839,14 @@ check_images() {
       kq_msg u_images_pull "${TARGET_VERSION}"
       announced=1
     fi
-    # Cargada con `docker load` sin el almacen containerd: la etiqueta esta, el
-    # digest no (V1-PL-02). Ni descargar sin internet ni repetir el `docker load`
-    # lo arreglan; el texto, el mismo de install.sh, da las tres lineas.
-    case "${image}" in
-    *@sha256:*)
-      if docker image inspect "${image%@*}" >/dev/null 2>&1; then
+    if ! docker pull --quiet "${image}" >/dev/null 2>&1; then
+      # SOLO tras fallar la descarga por digest (V1-PL-02, lib/images.sh), como en
+      # install.sh: la etiqueta esta en local sin digest de registro (`docker load`).
+      if kq_image_digest_lost "${image}"; then
         check_fail "$(kq_format u_c_images "${TARGET_VERSION}")" \
-          "$(kq_format f_images_digest_lost "${image%@*}")"
+          "$(kq_format f_images_digest_lost "${image%@*}" "$(kq_image_digest_var "${image}")")"
         return 0
       fi
-      ;;
-    esac
-    if ! docker pull --quiet "${image}" >/dev/null 2>&1; then
       check_fail "$(kq_format u_c_images "${TARGET_VERSION}")" \
         "$(kq_format u_f_images "${TARGET_VERSION}" "${registry:-?}" "${TARGET_VERSION}")"
       return 0
