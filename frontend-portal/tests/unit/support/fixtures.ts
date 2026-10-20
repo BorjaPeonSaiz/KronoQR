@@ -188,6 +188,7 @@ export function employeeWorkDays(
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    today: days.at(-1)?.work_date ?? '2026-03-14',
     from: days[0]?.work_date ?? '2026-03-14',
     to: days.at(-1)?.work_date ?? '2026-03-14',
     data: days,

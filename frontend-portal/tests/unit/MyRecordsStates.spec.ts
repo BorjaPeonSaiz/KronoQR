@@ -2,6 +2,7 @@
 //
 // Un error no puede dejar a la vista el periodo anterior, ni el resumen ni las
 // tarjetas, y cada causa dice que ha pasado y que hacer.
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/login/session.store'
 import MyRecordsView from '@/features/my-records/MyRecordsView.vue'
@@ -114,6 +115,35 @@ describe('MyRecordsView, errores con datos previos', () => {
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-test="workday"]')).toHaveLength(1)
+  })
+})
+
+describe('MyRecordsView, anuncio tras un error', () => {
+  it('lo que vuelve despues de un error se anuncia aunque sea igual que antes', async () => {
+    const wrapper = await mountWith((call) =>
+      call === 1 ? problemResponse(503, 'about:blank') : jsonResponse(employeeWorkDays()),
+    )
+
+    expect(announcement.value).not.toBe('')
+
+    await applyRange(wrapper, '2026-02-01', '2026-02-28')
+    clearAnnouncement()
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+    await applyRange(wrapper, '2026-02-01', '2026-02-28')
+
+    expect(announcement.value).not.toBe('')
+  })
+
+  it('una actualizacion que trae lo mismo no vuelve a anunciarse', async () => {
+    const wrapper = await mountWith(() => jsonResponse(employeeWorkDays()))
+
+    clearAnnouncement()
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(announcement.value).toBe('')
   })
 })
 

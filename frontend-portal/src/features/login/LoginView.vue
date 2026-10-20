@@ -97,18 +97,38 @@ const canSubmit = computed(
     PIN_PATTERN.test(pin.value),
 )
 
+const DEFAULT_TARGET = '/records'
+
+/**
+ * A donde volver tras entrar. El router decide, no un prefijo de texto: solo se
+ * acepta una ruta del propio portal que exista, que no sea publica (volver al
+ * acceso seria un bucle) ni la 404. Un valor con barra invertida o caracteres de
+ * control (un tabulador que el navegador se come al leer la URL) se descarta antes
+ * de preguntarle al router: acaban en otro origen.
+ */
 function redirectTarget(): string {
   const redirect = route.query['redirect']
 
-  // Solo rutas del propio portal: `//otro-sitio` o `/\otro-sitio` serian un
-  // salto a otro origen, y volver al acceso seria un bucle.
-  return typeof redirect === 'string' &&
-    redirect.startsWith('/') &&
-    !redirect.startsWith('//') &&
-    !redirect.startsWith('/\\') &&
-    !redirect.startsWith('/login')
-    ? redirect
-    : '/records'
+  if (
+    typeof redirect !== 'string' ||
+    !redirect.startsWith('/') ||
+    redirect.startsWith('//') ||
+    /[\\\u0000-\u001f\u007f]/.test(redirect)
+  ) {
+    return DEFAULT_TARGET
+  }
+
+  const resolved = router.resolve(redirect)
+
+  if (
+    resolved.matched.length === 0 ||
+    resolved.meta.public === true ||
+    resolved.name === 'not-found'
+  ) {
+    return DEFAULT_TARGET
+  }
+
+  return resolved.fullPath
 }
 
 async function submit(): Promise<void> {

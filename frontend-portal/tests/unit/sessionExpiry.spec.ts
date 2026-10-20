@@ -9,6 +9,7 @@ import LoginView from '@/features/login/LoginView.vue'
 import { useSessionStore } from '@/features/login/session.store'
 import { registerAuthGuard } from '@/router/guards'
 import es from '@/shared/i18n/locales/es.json'
+import type { SessionLifecycleOptions } from '@/shared/session/sessionLifecycle'
 import { bindSessionLifecycle } from '@/shared/session/sessionLifecycle'
 import { useLocaleChoiceStore } from '@/shared/i18n/locale.store'
 import { portalSession } from './support/fixtures'
@@ -25,11 +26,23 @@ import {
 const STORAGE_KEY = 'kronoqr.portal.session'
 const NOW = new Date('2026-03-20T10:00:00.000Z')
 
+// Cada prueba suelta lo que ata (gestor de 401, escucha de la pestana), pase o falle.
+const stops: Array<() => void> = []
+
+function bind(options: SessionLifecycleOptions): () => void {
+  const stop = bindSessionLifecycle(options)
+
+  stops.push(stop)
+
+  return stop
+}
+
 beforeEach(() => {
   window.sessionStorage.clear()
 })
 
 afterEach(() => {
+  stops.splice(0).forEach((stop) => stop())
   vi.useRealTimers()
   vi.unstubAllGlobals()
   setAuthTokenProvider(() => null)
@@ -72,7 +85,7 @@ describe('caducidad por tiempo', () => {
     createTestPinia()
     const router = createTestRouter()
     const session = await openSession()
-    const stop = bindSessionLifecycle({ router, session })
+    const stop = bind({ router, session })
 
     // El movil durmio: el reloj salta sin que el temporizador llegue a disparar.
     vi.setSystemTime(new Date(NOW.getTime() + 3 * 3_600_000))
@@ -113,7 +126,7 @@ describe('401 con la sesion abierta', () => {
     registerAuthGuard(router)
     const session = await openSession('2099-01-01T00:00:00Z')
 
-    bindSessionLifecycle({ router, session })
+    bind({ router, session })
     setAuthTokenProvider(() => session.token)
 
     await router.push('/export')
@@ -151,7 +164,7 @@ describe('401 con la sesion abierta', () => {
     const router = createTestRouter()
     const session = useSessionStore()
 
-    bindSessionLifecycle({ router, session })
+    bind({ router, session })
     stubFetch(() => problemResponse(401, 'urn:kronoqr:problem:invalid-credentials'))
 
     const wrapper = await mountView(LoginView, { pinia, router })
@@ -165,11 +178,23 @@ describe('401 con la sesion abierta', () => {
     expect(session.endedReason).toBeNull()
   })
 
-  it('no sigue una redireccion hacia otro origen', async () => {
+  const REDIRECTS: ReadonlyArray<readonly [string, string, string]> = [
+    ['otro origen con //', '//otro-sitio.example/robo', '/records'],
+    ['barra invertida', '/\\otro-sitio.example', '/records'],
+    ['tabulador', '/\totro-sitio.example', '/records'],
+    ['salto de linea', '/records\nSet-Cookie: x', '/records'],
+    ['URL absoluta', 'https://otro-sitio.example/records', '/records'],
+    ['el propio acceso', '/login', '/records'],
+    ['el acceso con otra capitalizacion', '/LOGIN', '/records'],
+    ['una ruta que no existe', '/no-existe', '/records'],
+    ['una ruta propia con consulta', '/export?x=1', '/export?x=1'],
+  ]
+
+  it.each(REDIRECTS)('redireccion: %s', async (_name, redirect, expected) => {
     const pinia = createTestPinia()
     const router = createTestRouter()
 
-    await router.push({ name: 'login', query: { redirect: '//otro-sitio.example/robo' } })
+    await router.push({ name: 'login', query: { redirect } })
     stubFetch(() => jsonResponse(portalSession()))
 
     const wrapper = await mountView(LoginView, { pinia, router })
@@ -179,7 +204,7 @@ describe('401 con la sesion abierta', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
 
-    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/records'))
+    expect(router.currentRoute.value.fullPath).toBe(expected)
   })
 })
 

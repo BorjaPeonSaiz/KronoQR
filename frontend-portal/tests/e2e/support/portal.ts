@@ -334,6 +334,9 @@ function employeeWorkDays(from: string, to: string): EmployeeWorkDays {
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    // El contrato trae `today` (hoy en el centro). El doble lo hace coincidir con
+    // el final del periodo, que es el caso de la pantalla de entrada.
+    today: WORKDAYS_TO,
     from,
     to,
     data,
@@ -351,6 +354,7 @@ export function singleDayEmployeeWorkDays(day: WorkDayDetail): EmployeeWorkDays 
   return {
     employee_uuid: EMPLOYEE_UUID,
     time_zone: 'Europe/Madrid',
+    today: day.work_date,
     from: day.work_date,
     to: day.work_date,
     data: [day],

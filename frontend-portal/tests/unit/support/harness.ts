@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { Component } from 'vue'
 import { vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import type { Router } from 'vue-router'
+import type { RouteRecordRaw, Router } from 'vue-router'
 import { routes } from '@/router'
 import type { AppLocale } from '@/shared/i18n'
 import { createAppI18n } from '@/shared/i18n'
@@ -23,8 +23,33 @@ export function createTestPinia(): ReturnType<typeof createPinia> {
   return pinia
 }
 
+const LazyStub = { render: () => null }
+
+/**
+ * Las rutas reales con las pantallas que se cargan bajo demanda (8.8) sustituidas
+ * por un componente vacio y SINCRONO: un test que navega no tiene que adivinar
+ * cuanto tarda el `import()` en transformarse. Las pantallas se prueban montadas
+ * directamente (`mountView`), no a traves del router.
+ */
+function withSynchronousScreens(list: RouteRecordRaw[]): RouteRecordRaw[] {
+  return list.map((route) => {
+    const { component, children, ...rest } = route as RouteRecordRaw & {
+      component?: unknown
+      children?: RouteRecordRaw[]
+    }
+
+    return {
+      ...rest,
+      ...(component === undefined
+        ? {}
+        : { component: typeof component === 'function' ? LazyStub : component }),
+      ...(children === undefined ? {} : { children: withSynchronousScreens(children) }),
+    } as RouteRecordRaw
+  })
+}
+
 export function createTestRouter(): Router {
-  return createRouter({ history: createMemoryHistory(), routes })
+  return createRouter({ history: createMemoryHistory(), routes: withSynchronousScreens(routes) })
 }
 
 export interface HarnessOptions<Props> {

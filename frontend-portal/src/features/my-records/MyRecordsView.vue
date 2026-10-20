@@ -80,6 +80,10 @@ let lastAnnounced = ''
 
 watch(data, (value) => {
   if (value === undefined) {
+    // Tras un error la pantalla se vacia: lo siguiente que llegue, aunque sea
+    // igual a lo anterior, vuelve a anunciarse.
+    lastAnnounced = ''
+
     return
   }
 
