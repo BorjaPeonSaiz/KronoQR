@@ -525,6 +525,7 @@ export const CREDENTIAL_BOARD_PENDING_REPRINT: CredentialStatusBoard = {
 export const WORKDAYS: EmployeeWorkDays = {
   employee_uuid: EMPLOYEE_UUID,
   time_zone: 'Europe/Madrid',
+  today: '2026-03-20',
   from: '2026-03-01',
   to: '2026-03-31',
   data: [

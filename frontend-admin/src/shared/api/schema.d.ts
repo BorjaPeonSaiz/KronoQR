@@ -9578,6 +9578,20 @@ export interface components {
             time_zone: components["schemas"]["TimeZoneName"];
             /**
              * Format: date
+             * @description **El dia civil de hoy en la zona del centro** (`time_zone`), segun el
+             *     reloj del servidor (2.3.0, bloque 8). No depende del rango pedido ni
+             *     de la zona ni del reloj del navegador: a las 00:30 de Madrid ya es el
+             *     dia siguiente aunque en UTC sea todavia el anterior, y el cambio de
+             *     hora lo resuelve la zona del centro (reglas duras 2 y 3).
+             *
+             *     Existe para que un cliente sepa que jornada es «hoy» sin una segunda
+             *     peticion sin rango: en el portal, el limite por IP lo comparte toda
+             *     la wifi del hotel.
+             * @example 2026-03-29
+             */
+            today: string;
+            /**
+             * Format: date
              * @description Primera jornada del rango **resuelto**, que puede venir de la omision.
              */
             from: string;

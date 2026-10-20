@@ -4439,6 +4439,7 @@ paths:
                   value:
                     employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
                     time_zone: Europe/Madrid
+                    today: '2026-03-20'
                     from: '2026-03-14'
                     to: '2026-03-14'
                     data:
@@ -17680,7 +17681,7 @@ components:
       description: |
         Registro horario de una persona en un rango de jornadas (RF-PA-03).
       additionalProperties: false
-      required: [employee_uuid, time_zone, from, to, data, meta]
+      required: [employee_uuid, time_zone, today, from, to, data, meta]
       properties:
         employee_uuid:
           type: string
@@ -17688,6 +17689,20 @@ components:
           description: El empleado consultado. Nunca su clave interna ni su nombre.
         time_zone:
           $ref: '#/components/schemas/TimeZoneName'
+        today:
+          type: string
+          format: date
+          description: |
+            **El dia civil de hoy en la zona del centro** (`time_zone`), segun el
+            reloj del servidor (2.3.0, bloque 8). No depende del rango pedido ni
+            de la zona ni del reloj del navegador: a las 00:30 de Madrid ya es el
+            dia siguiente aunque en UTC sea todavia el anterior, y el cambio de
+            hora lo resuelve la zona del centro (reglas duras 2 y 3).
+
+            Existe para que un cliente sepa que jornada es «hoy» sin una segunda
+            peticion sin rango: en el portal, el limite por IP lo comparte toda
+            la wifi del hotel.
+          example: '2026-03-29'
         from:
           type: string
           format: date
