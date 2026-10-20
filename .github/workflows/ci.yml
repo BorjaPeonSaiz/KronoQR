@@ -2134,9 +2134,11 @@ jobs:
     # Dos juegos de imagenes (la version anterior y esta), una instalacion, una
     # actualizacion, una reinstalacion y una actualizacion con vuelta atras
     # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min. Desde la 2.3.0
-    # (tarea 6.8) suma tres escenarios de fallo con Ctrl+C al grupo de procesos y el camino manual
-    # de la salida 5 (U3s, U3i, U3m: unos 5, 6 y 10 minutos, estimados, sin medir todavia):
-    # el tope sube de 90 a 120 y se ajusta con la primera ejecucion real.
+    # (tarea 6.8) suma cinco escenarios de fallo: Ctrl+C al grupo de procesos en la vuelta atras
+    # y en las migraciones (U3s, U3i), la salida 5 con la copia restaurada o sin restaurar (U3m, U3n) y
+    # un fallo posterior al 401 (U3p, que sustituye al antiguo reintento). Estimado, sin medir todavia:
+    # unos +30 minutos sobre los ~17 de antes. El tope sube de 90 a 120 y se ajusta con la primera
+    # ejecucion real.
     timeout-minutes: 120
     # Ver el comentario de `clean-install`: sin excluir `schedule` a proposito,
     # la entrada de cron de `coverage` habria arrastrado esta etapa de 45-60
@@ -2875,20 +2877,47 @@ jobs:
           set -euo pipefail
           bash .github/scripts/update-faults-e2e.sh manual-path "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
 
-      - name: "U3 · Y tras la vuelta atras se puede reintentar: salida 0"
+      - name: "U3n · Salida 5 con la copia SIN restaurar: las ordenes 1, 1b, 1c y 2 impresas, hasta el 4c (V21-3-PL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La restauracion automatica no termina (el restore.sh de la imagen de prueba rechaza la de
+        # update.sh): salida 5 con el bloque completo, sin la linea «1-2» y sin el paso 5. Se ejecutan
+        # TODAS las ordenes impresas, en orden: parar, matar los contenedores de un solo uso, cerrar las
+        # sesiones, restaurar de verdad, relanzar, retirar el mantenimiento, 401 y cadena de auditoria.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh manual-path-restore "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3p · Un fallo DESPUES del 401 no se deshace: salida 5 sin vuelta atras, version nueva en servicio (decision del 20-10-2026)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Horizon no arranca (punto de entrada de la imagen de prueba). La actualizacion llega al 401 y
+        # falla despues: salida 5, SIN VUELTA ATRAS, la version NUEVA en servicio, ningun asiento de vuelta
+        # atras y los mismos recuentos. Dos SIGINT al grupo durante la espera no cambian nada. Despues se
+        # arregla la causa y se ejecuta la orden 3 impresa. Sustituye al antiguo «reintentar tras la vuelta
+        # atras» (que dejaba la version nueva en servicio): esta etapa termina igual, con la nueva en pie, y el
+        # reintento tras una vuelta atras sigue cubierto por P3.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh forward-only "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3 · Y con la version nueva ya en servicio, repetir update.sh dice que ya esta en ella: salida 3"
         if: steps.anterior.outputs.skip != 'true'
         run: |
           set -euo pipefail
           old="${{ steps.anterior.outputs.old_version }}"
           new="${{ steps.anterior.outputs.new_version }}"
-          docker tag "kronoqr/nginx:${new}-sana" "kronoqr/nginx:${new}"
-          # Las imagenes y la matriz que dejaron los escenarios U3s, U3i y U3m (migracion de prueba,
-          # nginx de la version anterior roto): P0 en adelante parte de las buenas.
+          # Las imagenes y la matriz que dejaron los escenarios U3s, U3i, U3m, U3n y U3p (migracion de
+          # prueba, nginx de la version anterior roto, horizon roto): P0 en adelante parte de las buenas.
           bash .github/scripts/update-faults-e2e.sh restore-images "${old}" "${new}"
           cd paquete-nuevo
-          sudo ./update.sh >salida-u3b.log 2>&1 || { tail -60 salida-u3b.log; exit 1; }
-          grep -q 'actualizado y verificado' salida-u3b.log
+          set +e
+          sudo ./update.sh >salida-u3b.log 2>&1
+          codigo=$?
+          set -e
+          tail -20 salida-u3b.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'YA esta en la version' salida-u3b.log
           curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
       - name: "U4 · La copia previa de la actualizacion se restaura en una base limpia (RF-PR-04, RQ-09)"
         if: steps.anterior.outputs.skip != 'true'
@@ -3250,6 +3279,10 @@ jobs:
             paquete-nuevo/doctor-u1b.log
             paquete-nuevo/salida-u3m.log
             paquete-nuevo/err-u3m.log
+            paquete-nuevo/salida-u3n.log
+            paquete-nuevo/err-u3n.log
+            paquete-nuevo/salida-u3p.log
+            paquete-nuevo/err-u3p.log
             paquete-nuevo/doctor-u3m-antes.log
             paquete-nuevo/doctor-u3m-despues.log
             paquete-nuevo/product-doctor-u3m-antes.log
