@@ -6,11 +6,13 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
+use Illuminate\Contracts\Foundation\MaintenanceMode;
+use Throwable;
 
 /**
  * Sondas `app.*` de `product:doctor` (RF-PD-13).
  *
- * ## Dos comprobaciones, y las dos son `failure`
+ * ## Tres comprobaciones, y las tres son `failure`
  *
  * **`app.timezone_utc`** (regla dura 3). Si el proceso no vive en UTC, cada
  * instante que se escriba a partir de ese momento queda desplazado, y el
@@ -24,6 +26,16 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
  * contraseña de la base de datos, `APP_KEY` y la clave de firma de los QR. En un
  * producto instalado en la red del cliente, eso es la fuga completa en una sola
  * peticion.
+ *
+ * **`app.maintenance_mode`** (V21-3-PL-02). La aplicacion en mantenimiento
+ * (`php artisan down`) responde 503 a todo: el quiosco encola y no pierde nada
+ * (regla dura 19), pero el panel, el portal y la exportacion del registro para la
+ * Inspeccion se quedan sin servicio, y **nada mas lo dice**. Es el estado en que
+ * queda una vuelta atras de `update.sh` interrumpida (salida 5) si alguien sigue
+ * las ordenes a mano y se salta el `artisan up`. Fuera de una actualizacion en
+ * curso nunca es lo esperado; durante una, `update.sh` no ejecuta `doctor` hasta
+ * haberlo retirado. Si el estado no se puede leer (driver `cache` sin su almacen),
+ * es un aviso: no se sabe, y decir «no esta en mantenimiento» seria inventarlo.
  */
 final readonly class ApplicationProbe implements DoctorProbe
 {
@@ -31,6 +43,7 @@ final readonly class ApplicationProbe implements DoctorProbe
         private string $timezone,
         private bool $debug,
         private string $environment,
+        private MaintenanceMode $maintenance,
     ) {}
 
     public function family(): string
@@ -40,7 +53,7 @@ final readonly class ApplicationProbe implements DoctorProbe
 
     public function run(): array
     {
-        return [$this->timezone(), $this->debug()];
+        return [$this->timezone(), $this->debug(), $this->maintenanceMode()];
     }
 
     private function timezone(): DoctorFinding
@@ -72,5 +85,24 @@ final readonly class ApplicationProbe implements DoctorProbe
             'app.debug_in_production',
             details: ['app_env' => $this->environment, 'debug' => true],
         );
+    }
+
+    private function maintenanceMode(): DoctorFinding
+    {
+        try {
+            $active = $this->maintenance->active();
+        } catch (Throwable $error) {
+            return DoctorFinding::warning(
+                'app.maintenance_mode',
+                'unknown',
+                details: ['error' => $error::class],
+            );
+        }
+
+        if (! $active) {
+            return DoctorFinding::ok('app.maintenance_mode', ['maintenance' => false]);
+        }
+
+        return DoctorFinding::failure('app.maintenance_mode', details: ['maintenance' => true]);
     }
 }

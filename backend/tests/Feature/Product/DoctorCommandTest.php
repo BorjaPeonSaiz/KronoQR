@@ -10,9 +10,11 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -171,6 +173,77 @@ it('devuelve 2 con el modo de depuracion encendido en produccion', function (): 
         ->and($result['output'])->toContain('app.debug_in_production')
         ->and($result['output'])->toContain('APP_DEBUG=false');
 })->group('RF-PD-13', 'RS-08');
+
+/**
+ * Un modo mantenimiento de mentira: activo, inactivo o que no se puede leer.
+ * No se usa el de verdad porque el driver `file` escribiria `storage/framework/down`
+ * en el arbol compartido y pondria en mantenimiento el entorno de quien ejecuta.
+ */
+function mantenimientoQue(?bool $activo): MaintenanceMode
+{
+    return new class($activo) implements MaintenanceMode
+    {
+        public function __construct(private readonly ?bool $activo) {}
+
+        /** @param  array<string, mixed>  $payload */
+        public function activate(array $payload): void {}
+
+        public function deactivate(): void {}
+
+        public function active(): bool
+        {
+            return $this->activo ?? throw new RuntimeException('almacen de mantenimiento inalcanzable');
+        }
+
+        /** @return array<string, mixed> */
+        public function data(): array
+        {
+            return [];
+        }
+    };
+}
+
+function sondaDeAplicacionCon(MaintenanceMode $mantenimiento): ApplicationProbe
+{
+    return new ApplicationProbe(timezone: 'UTC', debug: false, environment: 'production', maintenance: $mantenimiento);
+}
+
+it('devuelve 2 con la aplicacion en modo mantenimiento y dice como retirarlo', function (): void {
+    // V21-3-PL-02: una vuelta atras de update.sh interrumpida (salida 5) podia
+    // dejar la API en 503 sin que nada lo dijera. El quiosco encola, pero el
+    // panel, el portal y la exportacion legal se quedan sin servicio.
+    conSondas([sondaDeAplicacionCon(mantenimientoQue(true))]);
+
+    $result = runDoctor(['--lang' => 'es']);
+
+    expect($result['code'])->toBe(2)
+        ->and($result['output'])->toContain('app.maintenance_mode')
+        ->and($result['output'])->toContain('MODO MANTENIMIENTO')
+        ->and($result['output'])->toContain('php artisan up')
+        ->and($result['output'])->toContain('/api/v1/auth/me');
+
+    $en = runDoctor(['--lang' => 'en']);
+    expect($en['output'])->toContain('MAINTENANCE MODE')
+        ->and($en['output'])->toContain('php artisan up');
+})->group('RF-PD-13', 'RF-PD-10');
+
+it('no dice nada del mantenimiento con la aplicacion atendiendo', function (): void {
+    conSondas([sondaDeAplicacionCon(mantenimientoQue(false))]);
+
+    $report = app(RunDoctorHandler::class)->handle('es');
+
+    expect(comprobacion($report, 'app.maintenance_mode')->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13');
+
+it('avisa, sin inventar un verde, si no puede leer el modo mantenimiento', function (): void {
+    conSondas([sondaDeAplicacionCon(mantenimientoQue(null))]);
+
+    $result = runDoctor(['--lang' => 'es']);
+
+    expect($result['code'])->toBe(1)
+        ->and($result['output'])->toContain('app.maintenance_mode')
+        ->and($result['output'])->toContain('APP_MAINTENANCE_DRIVER');
+})->group('RF-PD-13');
 
 // --- No explota -------------------------------------------------------------
 
