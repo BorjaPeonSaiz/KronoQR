@@ -46,6 +46,15 @@ auditoría del panel.** Durante la caída, el acceso a la gestión y al portal
 falla cerrado, el contador de fallos del PIN sigue en disco y el diario de
 autenticación sigue en `audit_log`.
 
+**Qué rutas fallan en cerrado con Redis caído** (devuelven error en lugar de dejar
+pasar sin el límite o la sesión que guarda Redis): el acceso al panel y al portal
+(`/auth/login`, `/me/login`), el latido y el padrón del quiosco, la exportación del
+portal (`/me/export`) y la corrección de tramos (`PATCH /shift-entries`). **El fichaje
+no está en la lista**: el limitador de `/api/v1/scan*` falla abierto y el quiosco
+encola (regla dura 19). `ErroresDeServidorEnElPanel` y `ErroresDeServidorEnElPortal`
+no pueden verlo —sus series también viven en Redis—: es esta alerta, y
+`SondaDelBordeFallida`, la que lo dice.
+
 **El hueco que queda.** `AlmacenDeMetricasCaido` se evalúa cada 15 s y espera
 un ciclo, así que tarda 15-30 s en activarse. Las de quiosco se «resuelven» en
 la primera evaluación tras desaparecer su serie: si el `group_interval` de

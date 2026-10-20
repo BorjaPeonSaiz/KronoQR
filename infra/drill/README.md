@@ -27,7 +27,7 @@ ha saltado es una alerta de la que no se sabe si salta.
 5. Destruye la pila (salvo `KQ_DRILL_KEEP=1`).
 
 ```bash
-make alerts-drill                                   # las 37, unos 9 minutos
+make alerts-drill                                   # las 39, unos 10 minutos
 make alerts-drill ALERT=RoturaDeCadenaDeAuditoria   # una sola, medio minuto
 infra/drill/alerts-drill.sh --list                  # inventario, sin Docker
 ```
@@ -51,7 +51,7 @@ persistencia la prueban los casos de `promtool test rules` de
 `infra/observability/prometheus/tests/`. Tampoco la entrega real al buzón de un
 cliente: eso es la prueba de entrega de `docs/runbooks/entrega-de-alertas.md` §4.2.
 
-## Las 38 alertas
+## Las 40 alertas
 
 La columna «Falla» es lo que cambia en `baseline.prom` (ver `faults.tsv`). La
 columna «Real» es cómo se produciría la misma condición en una instalación; en
@@ -76,6 +76,8 @@ simulacro evita.
 | `DeteccionDePatronesConFallos` | `pattern_detection_last_failures` 1 | it-cliente | excepción en la detección de patrones |
 | `DiscoDeCopiasCasiLleno` | `kronoqr_backup_volume_free_ratio` 0,10 | it-cliente | volumen de copias al 90 % |
 | `EntregaDeAlertasFallando` | mantiene encendida una alerta de copia (`kronoqr_wal_replication_slots_inactive` 1) hacia webhooks que dan 404: la entrega falla de verdad | it-cliente | SMTP rechaza, contraseña rotada, webhook caído |
+| `ErroresDeServidorEnElPanel` | `http_requests_total{route="employees.index",status="500"}` +40 | it-cliente | rutas de gestión con 5xx (base de datos, disco, despliegue) |
+| `ErroresDeServidorEnElPortal` | `http_requests_total{route="portal.workdays",status="500"}` +40 | it-cliente | el portal del empleado devolviendo 5xx |
 | `EspacioEnDiscoBajo` | `node_filesystem_avail_bytes` al 10 % | it-cliente | disco del servidor lleno |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue` 3 | it-cliente | purga programada que no retira |
 | `LokiSinRespuesta` | `probe_success` del job `kronoqr-loki` a 0 | it-cliente | `loki` parado o `retention-guard` con un plazo inválido |
@@ -109,7 +111,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
 2. Una línea en `faults.tsv` (`ALERTA<TAB>set|del|none<TAB>argumento`).
-3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 38).
+3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 40).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 
 Si `alerts-drill.sh` dice «ESTADO SANO NO SILENCIOSO», la regla lee una serie que

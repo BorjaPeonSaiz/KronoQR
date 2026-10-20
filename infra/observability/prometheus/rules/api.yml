@@ -136,3 +136,75 @@ groups:
             parado en el servidor: el quiosco seguira encolando (regla dura
             19), pero nada llegara hasta que esto se resuelva.
           runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      #------------------------------------------------------------------------
+      # 5xx FUERA DEL FICHAJE (bloque 9 de la 2.3.0, V21-4-DV-3). Hasta la 2.2.1
+      # solo se vigilaban las tres rutas de fichaje: un panel de gestion o un
+      # portal que devolvian 500 no avisaban a nadie (RRHH lo notaba antes que
+      # IT). El nombre de la ruta (`route`) separa las tres familias:
+      #
+      #   fichaje  attendance.scan, attendance.scan.batch, attendance.scan.pin
+      #   portal   portal.*
+      #   gestion  todo lo demas salvo `health.*` y `unmatched`: el panel, la
+      #            configuracion, la gestion de quioscos y sus rutas de
+      #            padron, latido y emparejamiento.
+      #
+      # DOS CONDICIONES, y las dos importan. La proporcion (> 5 %) sola salta con
+      # 1 error de 4 peticiones a las tres de la madrugada; el minimo de 3
+      # errores en 10 min solo, con un hotel de mil peticiones, no dice que
+      # algo falle. Juntas dicen «esta familia esta fallando de verdad».
+      #
+      # LA LIMITACION QUE NO SE PUEDE ARREGLAR AQUI. `http_requests_total` vive
+      # en Redis. Con Redis caido estas rutas fallan, y es justo cuando NO
+      # hay serie que evaluar: esa averia la cubren `AlmacenDeMetricasCaido` y
+      # `SondaDelBordeFallida` (que sondea `/ready`, y `/ready` mira Redis), no
+      # estas dos. Por eso su descripcion y la del almacen nombran las rutas.
+      #------------------------------------------------------------------------
+      - alert: ErroresDeServidorEnElPanel
+        expr: >-
+          (
+            sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m]))
+            /
+            sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m])) >= 3
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+          description: >-
+            Las rutas de gestion (el panel, la configuracion, la gestion de
+            quioscos y sus rutas de padron, latido y emparejamiento) estan
+            devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+            rutas, con su propia alerta. Mira el historico de errores del panel
+            y product:doctor; la causa habitual es la base de datos, el disco o
+            un despliegue reciente.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: ErroresDeServidorEnElPortal
+        expr: >-
+          (
+            sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m]))
+            /
+            sum(increase(http_requests_total{route=~"portal\\..*"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m])) >= 3
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+          description: >-
+            El portal del empleado (acceso con codigo y PIN, consulta de su
+            registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+            afectado, pero las personas no pueden consultar su registro ni
+            ejercer su derecho de acceso. Mira el historico de errores del
+            panel y product:doctor.
+          runbook_url: docs/runbooks/errores-en-el-panel.md

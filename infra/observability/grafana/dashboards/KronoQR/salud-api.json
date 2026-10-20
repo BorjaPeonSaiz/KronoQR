@@ -729,6 +729,156 @@
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
 
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Casos de uso: p95 por caso (los 10 más lentos)",
+      "description": "use_case_duration_seconds{use_case,outcome} (doc 02 §8.2): cuánto tarda cada caso de uso de la capa de aplicación, también los que entran por consola, por la cola o desde otro caso de uso y que el borde HTTP no ve. Ninguna alerta lo lee todavía (V21-4-BE-3): se mira aquí al investigar una lentitud, tras errores-en-el-panel.md.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "topk(10, histogram_quantile(0.95, sum by (le, use_case) (rate(use_case_duration_seconds_bucket[5m]))))",
+          "legendFormat": "{{use_case}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Casos de uso que terminan en error (1 h)",
+      "description": "use_case_duration_seconds_count{outcome=error}: ejecuciones de un caso de uso que acabaron en avería, no en un rechazo de negocio (outcome=rejected). Cero es lo normal. La clasificación de qué es error y qué es rechazo se revisa en el bloque 10 de la 2.3.0; hasta entonces, un valor distinto de cero se contrasta con el histórico de errores del panel (errores-en-el-panel.md).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (use_case) (increase(use_case_duration_seconds_count{outcome=\"error\"}[1h]))",
+          "legendFormat": "{{use_case}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Errores 5xx por familia de rutas (10 min)",
+      "description": "Proporción de respuestas 5xx por familia: fichaje (ErroresDeServidorEnElFichaje, umbral 1 %), panel de gestión (ErroresDeServidorEnElPanel, 5 % con al menos 3 errores) y portal (ErroresDeServidorEnElPortal, igual). Con Redis caído estas series desaparecen: lo dicen AlmacenDeMetricasCaido y SondaDelBordeFallida (errores-en-el-panel.md).",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 68 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(http_requests_total{route=~\"attendance\\\\.scan(\\\\..*)?\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route=~\"attendance\\\\.scan(\\\\..*)?\"}[10m]))",
+          "legendFormat": "fichaje"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(http_requests_total{route!~\"attendance\\\\.scan(\\\\..*)?|portal\\\\..*|health\\\\..*|unmatched\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route!~\"attendance\\\\.scan(\\\\..*)?|portal\\\\..*|health\\\\..*|unmatched\"}[10m]))",
+          "legendFormat": "panel"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(http_requests_total{route=~\"portal\\\\..*\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route=~\"portal\\\\..*\"}[10m]))",
+          "legendFormat": "portal"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
     }
   ]
 }

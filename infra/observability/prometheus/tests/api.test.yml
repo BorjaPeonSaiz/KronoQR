@@ -188,3 +188,116 @@ tests:
       - eval_time: 20m
         alertname: SondaDelBordeFallida
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ErroresDeServidorEnElPanel (bloque 9 de la 2.3.0, V21-4-DV-3): una ruta de
+  # gestion con 2 5xx por minuto sobre 20 correctas (9 %) durante mas de 10 min.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+2x40"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+              description: >-
+                Las rutas de gestion (el panel, la configuracion, la gestion de
+                quioscos y sus rutas de padron, latido y emparejamiento) estan
+                devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+                rutas, con su propia alerta. Mira el historico de errores del panel
+                y product:doctor; la causa habitual es la base de datos, el disco o
+                un despliegue reciente.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Valor limite justo por debajo: 5 % exacto (1 error por 20 correctas). El umbral
+  # es `> 0.05` estricto: nunca dispara.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+19x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Poco trafico: 2 errores de 3 peticiones en 10 min (67 %) no son 3 errores.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+0.1x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+0.2x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Un 5xx en el fichaje o en el portal no cuenta aqui: tienen sus propias alertas.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="500"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+20x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ErroresDeServidorEnElPortal: igual, sobre las rutas portal.*.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="200"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "0+2x40"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+              description: >-
+                El portal del empleado (acceso con codigo y PIN, consulta de su
+                registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+                afectado, pero las personas no pueden consultar su registro ni
+                ejercer su derecho de acceso. Mira el historico de errores del
+                panel y product:doctor.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Poco trafico en el portal: nunca.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.login", method="POST", status="200"}'
+        values: "0+0.1x40"
+      - series: 'http_requests_total{route="portal.login", method="POST", status="500"}'
+        values: "0+0.2x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts: []

@@ -61,3 +61,5 @@ SimulacroDeRestauracionNuncaEjecutado	del	kronoqr_backup_restore_drill_last_succ
 SlotDeReplicacionParado	set	kronoqr_wal_replication_slots_inactive 1
 ReverbSinRespuesta	del	websocket_connections_active
 LokiSinRespuesta	set	probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 0
+ErroresDeServidorEnElPanel	set	http_requests_total{route="employees.index",status="500"} 40
+ErroresDeServidorEnElPortal	set	http_requests_total{route="portal.workdays",status="500"} 40
