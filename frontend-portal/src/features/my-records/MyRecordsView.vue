@@ -103,11 +103,11 @@ watch(data, (value) => {
 
   lastAnnounced = signature
   announce(
-    t('myRecords.announce.results', {
-      count: value.data.length,
-      from: value.from,
-      to: value.to,
-    }),
+    t(
+      'myRecords.announce.results',
+      { count: value.data.length, from: value.from, to: value.to },
+      value.data.length,
+    ),
   )
 })
 </script>
@@ -116,12 +116,37 @@ watch(data, (value) => {
   <section>
     <header>
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('myRecords.title') }}</h1>
-      <div v-if="session.employee !== null" class="mt-1">
-        <p class="text-lg">{{ session.employee.display_name }}</p>
-        <p class="text-sm font-bold text-kq-text-muted">{{ session.employee.employee_code }}</p>
-      </div>
-      <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('myRecords.subtitle') }}</p>
+      <p v-if="session.employee !== null" class="mt-1 text-lg">
+        <span>{{ session.employee.display_name }}</span>
+        <span class="text-sm font-bold text-kq-text-muted">
+          · {{ session.employee.employee_code }}
+        </span>
+      </p>
+      <!-- El texto largo no empuja el resumen fuera de la primera pantalla del
+           movil: se pliega, y se abre con el teclado o con un toque. -->
+      <details class="mt-1 max-w-prose text-kq-text-muted" data-test="how-to-read">
+        <summary class="min-h-12 cursor-pointer py-3 font-medium text-kq-text">
+          {{ t('myRecords.howToRead') }}
+        </summary>
+        <p>{{ t('myRecords.subtitle') }}</p>
+      </details>
     </header>
+
+    <!--
+      El resumen va justo debajo del titulo, ANTES del formulario de fechas y del
+      detalle (R7-PO-01): en un movil de 360 px lo primero que se lee es cuanto
+      lleva el periodo y como va hoy, sin bajar. No se reordena el listado: el
+      contrato fija las jornadas de la mas antigua a la mas reciente (la lectura
+      cronologica es la que se contrasta con una nomina) y el servidor no las
+      invierte.
+    -->
+    <PeriodSummary
+      v-if="data !== undefined && error === null"
+      :days="days"
+      :from="data.from"
+      :to="data.to"
+      :today="today"
+    />
 
     <form
       class="mt-4 flex max-w-3xl flex-wrap items-start gap-4"
@@ -195,21 +220,6 @@ watch(data, (value) => {
       {{ t('myRecords.filters.resolved', { from: data.from, to: data.to }) }}
       <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
     </p>
-
-    <!--
-      El resumen va ANTES del detalle y no se ordena de otra forma el listado:
-      el contrato fija las jornadas de la mas antigua a la mas reciente (la
-      lectura cronologica es la que se contrasta con una nomina) y el servidor
-      no las invierte. Lo que hace falta ver nada mas entrar -cuanto lleva el
-      periodo y como va hoy- sube aqui, sin tocar el orden de las tarjetas.
-    -->
-    <PeriodSummary
-      v-if="data !== undefined && error === null"
-      :days="days"
-      :from="data.from"
-      :to="data.to"
-      :today="today"
-    />
 
     <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
 

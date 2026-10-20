@@ -42,7 +42,7 @@ test(
 
     await page.getByTestId('export-submit').click()
 
-    await expect(page).toHaveURL(/\/login\?redirect=%2Fexport/)
+    await expect(page).toHaveURL(/\/login\?redirect=(%2F|\/)export$/)
     await expect(page.getByTestId('session-expired')).toContainText('Tu sesión ha caducado')
 
     await page.locator('input[name="employee_code"]').fill(PORTAL_EMPLOYEE_CODE)

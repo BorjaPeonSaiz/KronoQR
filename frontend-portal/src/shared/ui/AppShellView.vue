@@ -81,7 +81,7 @@ async function signOut(): Promise<void> {
           <!-- El nombre del producto ("Mi portal del empleado") se queda como
                subtitulo: la marca (logotipo o nombre de la instalacion) es lo
                que identifica la aplicacion, esto dice para que sirve. -->
-          <p class="text-sm text-kq-text-muted">{{ t('app.title') }}</p>
+          <p class="hidden text-sm text-kq-text-muted sm:block">{{ t('app.title') }}</p>
         </div>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex flex-wrap gap-2">

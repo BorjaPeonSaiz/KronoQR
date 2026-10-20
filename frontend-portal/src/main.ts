@@ -8,6 +8,7 @@ import App from './App.vue'
 import './assets/main.css'
 import { useSessionStore } from './features/login/session.store'
 import { createAppRouter } from './router'
+import { bindDocumentTitle } from './router/documentTitle'
 import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n } from './shared/i18n'
@@ -86,7 +87,17 @@ registerAuthGuard(router)
 // esperar a la red, para no retrasar la primera pantalla- y se pide la marca
 // real en paralelo; si llega y es valida, sustituye a la del producto.
 branding.apply()
-void branding.load()
+
+// Titulo de la pestaña por pantalla (WCAG 2.4.2): la marca escribe el nombre de
+// la instalacion, esto le antepone la pantalla. Se recompone tras cada vez que
+// la marca se aplica.
+const documentTitle = bindDocumentTitle({
+  router,
+  i18n,
+  applicationName: () => branding.current.applicationName,
+})
+
+void branding.load().then(documentTitle.refresh)
 
 app.use(router)
 app.use(i18n)

@@ -95,14 +95,15 @@
   },
   "myRecords": {
     "title": "Mi registro horario",
+    "howToRead": "Cómo leer esta pantalla",
     "subtitle": "Tus jornadas, tus tramos y el total de cada día. Un turno que empezó a las 22:00 pertenece al día en que empezó, aunque terminara al día siguiente. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
     "duration": "{hours} h {minutes} min",
     "loading": "Cargando tu registro…",
     "summary": {
       "label": "Resumen del periodo",
       "periodTotal": "Total del periodo",
-      "days": "{count} jornadas con registro, del {from} al {to}.",
-      "provisional": "Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
+      "days": "{count} jornada con registro, del {from} al {to}. | {count} jornadas con registro, del {from} al {to}.",
+      "provisional": "Este total todavía puede cambiar: {count} jornada tiene un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos. | Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
       "today": "Hoy",
       "todayEmpty": "Todavía no tienes ningún fichaje registrado hoy."
     },
@@ -122,7 +123,7 @@
       "description": "No es un fallo de la consulta: en esos días no tienes ningún fichaje registrado. Prueba con otro periodo."
     },
     "announce": {
-      "results": "{count} jornadas entre el {from} y el {to}."
+      "results": "{count} jornada entre el {from} y el {to}. | {count} jornadas entre el {from} y el {to}."
     },
     "day": {
       "total": "Total de la jornada",

@@ -73,14 +73,14 @@ const todayHeading = computed(() =>
         {{ periodTotal }}
       </p>
       <p class="mt-1 text-kq-text-muted" data-test="period-days">
-        {{ t('myRecords.summary.days', { count: days.length, from, to }) }}
+        {{ t('myRecords.summary.days', { count: days.length, from, to }, days.length) }}
       </p>
       <p
         v-if="provisionalCount > 0"
         data-test="period-provisional"
         class="mt-2 rounded-kq border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
       >
-        {{ t('myRecords.summary.provisional', { count: provisionalCount }) }}
+        {{ t('myRecords.summary.provisional', { count: provisionalCount }, provisionalCount) }}
       </p>
     </div>
 

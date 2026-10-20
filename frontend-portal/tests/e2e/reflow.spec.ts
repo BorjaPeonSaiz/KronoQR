@@ -172,3 +172,36 @@ test(
     await expect(region).toBeFocused()
   },
 )
+
+async function openExport(page: Page): Promise<void> {
+  await stubPortalApi(page, { locale: 'es' })
+  await logInToPortal(page)
+  await page.goto('/export')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Descargar mi historial' }),
+  ).toBeVisible()
+}
+
+test(
+  'al 200 % de zoom (195 px CSS) la descarga no desborda ni corta texto (R7-PO-02)',
+  { tag: ['@RF-ID-05', '@RL-05'] },
+  async ({ page }) => {
+    await page.setViewportSize({ width: 195, height: 422 })
+    await openExport(page)
+
+    await expectReadable(page)
+  },
+)
+
+test(
+  'con el texto al 200 % la descarga sigue legible (R7-PO-02)',
+  { tag: ['@RF-ID-05', '@RL-05'] },
+  async ({ page }) => {
+    await openExport(page)
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '200%'
+    })
+
+    await expectReadable(page)
+  },
+)

@@ -191,7 +191,7 @@ async function submit(): Promise<void> {
             type="radio"
             name="format"
             :value="option"
-            class="size-6 accent-kq-primary-strong"
+            class="size-12 shrink-0 accent-kq-primary-strong"
           />
           <span class="min-w-0 break-words">{{ t(`myExport.format.${option}`) }}</span>
         </label>

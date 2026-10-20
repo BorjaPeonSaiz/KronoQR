@@ -12,6 +12,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     /** Accesible sin sesion. Solo el acceso. */
     public?: boolean
+    /** Clave de i18n con el nombre de la pantalla, para el titulo de la pestana. */
+    titleKey?: string
   }
 }
 
@@ -20,7 +22,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: LoginView,
-    meta: { public: true },
+    meta: { public: true, titleKey: 'login.heading' },
   },
   {
     // El marco autenticado. Sin nombre a proposito: nombrar un padre que tiene
@@ -35,16 +37,19 @@ export const routes: RouteRecordRaw[] = [
         path: 'records',
         name: 'my-records',
         component: MyRecordsView,
+        meta: { titleKey: 'myRecords.title' },
       },
       {
         path: 'export',
         name: 'my-export',
         component: MyExportView,
+        meta: { titleKey: 'myExport.title' },
       },
       {
         path: ':pathMatch(.*)*',
         name: 'not-found',
         component: NotFoundView,
+        meta: { titleKey: 'notFound.heading' },
         // El portal es de consulta, con dos pantallas propias: el rescate
         // vuelve a mi registro, que es la pantalla de partida (`@kronoqr/web-kit`,
         // ADR-036).
