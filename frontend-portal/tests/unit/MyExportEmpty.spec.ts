@@ -4,7 +4,9 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MyExportView from '@/features/my-export/MyExportView.vue'
 import es from '@/shared/i18n/locales/es.json'
-import { mountView, settle, stubFetch } from './support/harness'
+import { useSessionStore } from '@/features/login/session.store'
+import { portalEmployee } from './support/fixtures'
+import { createTestPinia, mountView, settle, stubFetch } from './support/harness'
 
 function fileResponse(rows: string | null): Response {
   return new Response('x', {
@@ -66,5 +68,19 @@ describe('MyExportView, periodo vacio', () => {
     expect(wrapper.find('[data-test="export-done"]').attributes('role')).toBeUndefined()
     expect(wrapper.find('[data-test="export-done"]').attributes('aria-live')).toBeUndefined()
     expect(announcement.value).toBe(es.myExport.announce.done)
+  })
+})
+
+describe('MyExportView, zona del PDF', () => {
+  it('dice que el PDF va en la zona del centro y no en la del dispositivo (R3-PO-02)', async () => {
+    const pinia = createTestPinia()
+
+    useSessionStore(pinia).employee = portalEmployee()
+
+    const wrapper = await mountView(MyExportView, { pinia })
+
+    expect(wrapper.find('[data-test="pdf-zone"]').text()).toBe(
+      es.myExport.contents.zone.replace('{zone}', 'Europe/Madrid'),
+    )
   })
 })

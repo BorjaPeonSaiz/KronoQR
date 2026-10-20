@@ -15,12 +15,14 @@ import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-k
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useSessionStore } from '../login/session.store'
 import { exportMyWorkDays } from './export.api'
 import type { ExportFormat } from './export.api'
 import type { WorkDateRange } from '../my-records/workdays.api'
 import { UNBOUNDED_RANGE } from '../my-records/workdays.api'
 
 const { t } = useI18n()
+const session = useSessionStore()
 
 const range = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
 const submitting = ref(false)
@@ -122,6 +124,13 @@ async function submit(): Promise<void> {
       <li>{{ t('myExport.contents.entries') }}</li>
       <li>{{ t('myExport.contents.corrections') }}</li>
       <li>{{ t('myExport.contents.format') }}</li>
+      <li data-test="pdf-zone">
+        {{
+          session.employee === null
+            ? t('myExport.contents.zoneUnknown')
+            : t('myExport.contents.zone', { zone: session.employee.time_zone })
+        }}
+      </li>
     </ul>
 
     <form

@@ -38,10 +38,11 @@ import BreakBadge from '@kronoqr/web-kit/components/BreakBadge.vue'
 import { breakBetween } from '@kronoqr/web-kit/breaks'
 import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
-  formatInstant,
   formatLocalTime,
   minutesBetween,
   readLocalTimestamp,
+  readWallClock,
+  resolveTimeZone,
 } from '@kronoqr/web-kit/datetime'
 import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
@@ -58,7 +59,7 @@ const props = defineProps<{
   workDate: string
 }>()
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 /** A partir de este desfase, la marca no llego en el acto: viajo encolada. */
 const QUEUE_NOTICE_MINUTES = 5
@@ -66,6 +67,7 @@ const QUEUE_NOTICE_MINUTES = 5
 interface MarkView {
   local: string
   nextDay: boolean
+  /** Cuando el servidor recibio la marca (HH:MM en la zona del centro), o `null` si no consta. */
   recordedAt: string | null
   queueDelayMinutes: number | null
 }
@@ -84,6 +86,27 @@ interface EntryRow {
   breakAfter: BreakBetween | null
 }
 
+/**
+ * La hora de recepcion en la zona del centro, en 24 h como el resto de la
+ * pantalla (nunca AM/PM segun el idioma). Si cae en otro dia que la marca lleva
+ * dia y mes: un fichaje que viaja en la cola puede llegar pasada la medianoche.
+ */
+function receivedMoment(recordedAt: string, markDate: string | null): string | null {
+  const wall = readWallClock(new Date(recordedAt), resolveTimeZone(props.timeZone))
+
+  if (wall === null) {
+    return null
+  }
+
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const time = `${pad(wall.hour)}:${pad(wall.minute)}`
+  const date = `${wall.year}-${pad(wall.month)}-${pad(wall.day)}`
+
+  return markDate === null || date === markDate
+    ? time
+    : `${pad(wall.day)}/${pad(wall.month)} ${time}`
+}
+
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
   const parts = readLocalTimestamp(localValue)
   const delay = recordedAt === null ? null : minutesBetween(utcValue, recordedAt)
@@ -91,8 +114,7 @@ function mark(utcValue: string, localValue: string, recordedAt: string | null): 
   return {
     local: formatLocalTime(localValue),
     nextDay: parts !== null && parts.date !== props.workDate,
-    recordedAt:
-      recordedAt === null ? null : formatInstant(recordedAt, props.timeZone, locale.value),
+    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, parts?.date ?? null),
     queueDelayMinutes: delay !== null && delay >= QUEUE_NOTICE_MINUTES ? delay : null,
   }
 }
@@ -179,6 +201,7 @@ function duration(minutes: number): string {
                 >
                   {{
                     t('myRecords.entries.queued', {
+                      moment: row.clockIn.recordedAt ?? '',
                       delay: duration(row.clockIn.queueDelayMinutes),
                     })
                   }}
@@ -203,6 +226,7 @@ function duration(minutes: number): string {
                   >
                     {{
                       t('myRecords.entries.queued', {
+                        moment: row.clockOut.recordedAt ?? '',
                         delay: duration(row.clockOut.queueDelayMinutes),
                       })
                     }}

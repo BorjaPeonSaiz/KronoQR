@@ -126,7 +126,7 @@
       "out": "Clock out",
       "duration": "Duration",
       "source": "How it was recorded",
-      "queued": "Recorded {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
+      "queued": "The server received it ({moment}), {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
       "open": "Not closed",
       "openHint": "This shift is still open.",
       "nextDay": "(next day)",
@@ -186,7 +186,9 @@
     "contents": {
       "entries": "One row for every shift worked, with clock in, clock out, duration and the total for each work day.",
       "corrections": "One row for every correction to your record, with who made it, when and why.",
-      "format": "CSV or PDF file, with times as HH:MM, never as a decimal. The PDF is a sealed document you can show to a third party."
+      "format": "CSV or PDF file, with times as HH:MM, never as a decimal. The PDF is a sealed document you can show to a third party.",
+      "zone": "Every time in the PDF is in the centre's time zone ({zone}), the same one you see on screen, not your phone's or computer's.",
+      "zoneUnknown": "Every time in the PDF is in the centre's time zone, not your phone's or computer's."
     },
     "filters": {
       "legend": "Period to download",

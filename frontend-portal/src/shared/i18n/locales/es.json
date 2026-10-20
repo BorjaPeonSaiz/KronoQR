@@ -126,7 +126,7 @@
       "out": "Salida",
       "duration": "Duración",
       "source": "Cómo se registró",
-      "queued": "Se registró {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
+      "queued": "El servidor la recibió ({moment}), {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
       "open": "Sin cerrar",
       "openHint": "Este turno sigue abierto.",
       "nextDay": "(día siguiente)",
@@ -186,7 +186,9 @@
     "contents": {
       "entries": "Una fila por cada tramo trabajado, con entrada, salida, duración y el total de cada jornada.",
       "corrections": "Una fila por cada corrección de tu registro, con quién la hizo, cuándo y por qué.",
-      "format": "Fichero CSV o PDF, con las horas en formato HH:MM, nunca en decimal. El PDF es un documento sellado que puedes presentar ante un tercero."
+      "format": "Fichero CSV o PDF, con las horas en formato HH:MM, nunca en decimal. El PDF es un documento sellado que puedes presentar ante un tercero.",
+      "zone": "Todas las horas del PDF van en la zona horaria del centro ({zone}), la misma que ves en pantalla, no la de tu móvil u ordenador.",
+      "zoneUnknown": "Todas las horas del PDF van en la zona horaria del centro, no en la de tu móvil u ordenador."
     },
     "filters": {
       "legend": "Periodo a descargar",
