@@ -4,8 +4,12 @@
 // Lo que esta tabla se toma en serio:
 //
 //  - **Las partes tienen que sumar el total.** El pie enseña la suma de los
-//    tramos y, si el servidor declara otro total para el dia, enseña los dos y
-//    avisa: nunca se elige uno en silencio (RN-06, regla dura 7).
+//    tramos y, si el total del dia no coincide, enseña los dos y avisa: nunca se
+//    elige uno en silencio (RN-06, regla dura 7). HOY esa rama no puede darse
+//    con un servidor correcto: `total_minutes` y los `duration_minutes` salen de
+//    los mismos tramos (no hay `daily_totals` aparte en el contrato). Se queda
+//    como defensa en profundidad -un numero que acaba en una nomina no se da por
+//    bueno sin comprobar-, no como una verificacion cruzada contra otra fuente.
 //  - **Las dos marcas de cada fichaje** (regla dura 9): la hora a la que se
 //    ficho y la hora a la que el servidor la recibio. Cuando se diferencian, es
 //    que el fichaje viajo en la cola del quiosco sin conexion.

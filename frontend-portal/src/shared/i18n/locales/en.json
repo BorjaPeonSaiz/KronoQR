@@ -215,9 +215,11 @@
       "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
       "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available."
     },
+    "empty": "You have no work days in that period. The file was downloaded anyway, but it only has the criteria header: try other dates.",
     "downloading": "Generating the download…",
     "announce": {
-      "done": "Download ready. Check your device's downloads."
+      "done": "Download ready. Check your device's downloads.",
+      "empty": "No work days in that period. The file was downloaded, with the criteria header only."
     }
   }
 }

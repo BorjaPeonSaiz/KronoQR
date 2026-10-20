@@ -215,9 +215,11 @@
       "message": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
       "messageNoWait": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible."
     },
+    "empty": "No tienes ninguna jornada en ese periodo. El fichero se ha descargado igualmente, pero solo lleva la cabecera con los criterios: prueba con otras fechas.",
     "downloading": "Generando la descarga…",
     "announce": {
-      "done": "Descarga generada. Revisa las descargas de tu dispositivo."
+      "done": "Descarga generada. Revisa las descargas de tu dispositivo.",
+      "empty": "No hay jornadas en ese periodo. Se ha descargado el fichero, solo con la cabecera de criterios."
     }
   }
 }

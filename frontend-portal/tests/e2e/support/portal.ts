@@ -391,6 +391,8 @@ export interface PortalApiOptions {
    * `'unavailable'`: el servidor no tiene Chromium y responde `503` (PR19).
    */
   pdfOutcome?: 'ok' | 'unavailable' | 'busy'
+  /** `true`: el periodo no tiene jornadas; el servidor declara `X-Kronoqr-Report-Rows: 0`. */
+  emptyExport?: boolean
 }
 
 export interface RecordedRequest {
@@ -419,6 +421,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
   const loginOutcome = options.loginOutcome ?? 'ok'
   const branding = options.branding ?? PRODUCT_BRANDING
   const pdfOutcome = options.pdfOutcome ?? 'ok'
+  const reportRows = options.emptyExport === true ? '0' : '6'
 
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/'),
@@ -569,6 +572,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
                 // Sin ningun nombre de persona (regla dura 21): solo el periodo.
                 'Content-Disposition': `attachment; filename=mi-registro-horario-${from}_${to}.pdf`,
                 'Cache-Control': 'no-store',
+                'X-Kronoqr-Report-Rows': reportRows,
               },
               body: Buffer.from('%PDF-1.7 prueba'),
             })
@@ -582,6 +586,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
             headers: {
               // Sin ningun nombre de persona (regla dura 21): solo el periodo.
               'Content-Disposition': `attachment; filename=mi-registro-horario-${from}_${to}.csv`,
+              'X-Kronoqr-Report-Rows': reportRows,
               'Cache-Control': 'no-store',
             },
             body: EXPORT_CSV,

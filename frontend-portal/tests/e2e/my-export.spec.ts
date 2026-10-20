@@ -38,7 +38,9 @@ test(
     // `#main` excluye la region viva global del marco autenticado
     // (`AppShellView`, que tambien anuncia el mismo texto por accesibilidad):
     // este es el aviso visible propio de la pantalla.
-    await expect(page.locator('#main').getByRole('status')).toContainText('Descarga generada')
+    await expect(page.locator('#main').getByTestId('export-done')).toContainText(
+      'Descarga generada',
+    )
 
     const request = api.requests.find((it) => it.path === '/api/v1/me/export')
     expect(request).toBeDefined()
@@ -224,5 +226,24 @@ test(
 
     expect(request?.query).not.toContain('from=')
     expect(request?.query).not.toContain('to=')
+  },
+)
+
+test(
+  'un periodo sin jornadas no dice «Descarga generada»: dice que no hay ninguna',
+  { tag: ['@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es', emptyExport: true })
+    await logInToPortal(page)
+    await page.goto('/export')
+
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Descargar CSV' }).click()
+    await download
+
+    await expect(page.locator('#main').getByTestId('export-empty')).toContainText(
+      'No tienes ninguna jornada en ese periodo',
+    )
+    await expect(page.locator('#main')).not.toContainText('Descarga generada')
   },
 )

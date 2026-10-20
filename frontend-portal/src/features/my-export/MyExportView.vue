@@ -26,6 +26,8 @@ const range = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
 const submitting = ref(false)
 const error = ref<unknown>(null)
 const done = ref(false)
+/** El servidor ha dicho que el periodo no tiene ninguna fila: el fichero solo lleva la cabecera. */
+const emptyPeriod = ref(false)
 const FORMATS: readonly ExportFormat[] = ['csv', 'pdf']
 const format = ref<ExportFormat>('csv')
 /** El servidor no pudo generar el PDF (`503`): se ofrece el CSV en su lugar. */
@@ -52,6 +54,14 @@ const rangeErrors = computed<string[]>(() => {
   return tooWide.value ? [t('myExport.filters.tooWide', { days: MAX_RANGE_DAYS })] : []
 })
 
+/** Filas que declara el servidor en el fichero, o `null` si no lo dice. */
+function reportedRows(headers: Headers): number | null {
+  const raw = headers.get('X-Kronoqr-Report-Rows')
+  const rows = raw === null ? Number.NaN : Number.parseInt(raw, 10)
+
+  return Number.isFinite(rows) ? rows : null
+}
+
 async function retryWithCsv(): Promise<void> {
   format.value = 'csv'
   await submit()
@@ -65,6 +75,7 @@ async function submit(): Promise<void> {
   submitting.value = true
   error.value = null
   done.value = false
+  emptyPeriod.value = false
   pdfUnavailable.value = false
   pdfBusy.value = false
   retryAfterSeconds.value = null
@@ -73,8 +84,14 @@ async function submit(): Promise<void> {
     const document_ = await exportMyWorkDays(range.value, format.value)
 
     downloadDocument(document_)
+
+    // Un periodo sin jornadas es una respuesta valida (el fichero lleva su
+    // cabecera de criterios), pero NO es «descarga generada» a secas: la persona
+    // buscaba sus horas y tiene que saber que no hay ninguna en esas fechas.
+    // El servidor lo dice con `X-Kronoqr-Report-Rows`.
+    emptyPeriod.value = reportedRows(document_.headers) === 0
     done.value = true
-    announce(t('myExport.announce.done'))
+    announce(t(emptyPeriod.value ? 'myExport.announce.empty' : 'myExport.announce.done'))
   } catch (caught) {
     if (format.value === 'pdf' && isApiError(caught) && caught.status === 503) {
       if (isPdfRenderingBusy(caught)) {
@@ -221,8 +238,15 @@ async function submit(): Promise<void> {
 
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
-    <p v-if="done && error === null" role="status" class="mt-4 text-kq-text-muted">
-      {{ t('myExport.announce.done') }}
+    <!-- Texto visible, sin `role="status"`: lo que se lee en voz alta ya lo anuncia
+         la region viva del marco (`announce`). Con dos regiones diciendo lo mismo
+         sonaba dos veces. -->
+    <p
+      v-if="done && error === null"
+      :data-test="emptyPeriod ? 'export-empty' : 'export-done'"
+      class="mt-4 max-w-prose text-kq-text-muted"
+    >
+      {{ emptyPeriod ? t('myExport.empty') : t('myExport.announce.done') }}
     </p>
   </section>
 </template>
