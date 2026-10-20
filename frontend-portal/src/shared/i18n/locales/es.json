@@ -145,7 +145,7 @@
       "out": "Salida",
       "duration": "Duración",
       "source": "Cómo se registró",
-      "queued": "El servidor la recibió ({moment}), {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
+      "queued": "Recibida {moment}, {delay} después de fichar (cola sin conexión del quiosco). Cuenta la hora a la que fichaste.",
       "open": "Sin cerrar",
       "openHint": "Este turno sigue abierto.",
       "nextDay": "(día siguiente)",

@@ -145,7 +145,7 @@
       "out": "Clock out",
       "duration": "Duration",
       "source": "How it was recorded",
-      "queued": "The server received it ({moment}), {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
+      "queued": "Received {moment}, {delay} after you clocked (kiosk offline queue). What counts is the time you clocked.",
       "open": "Not closed",
       "openHint": "This shift is still open.",
       "nextDay": "(next day)",

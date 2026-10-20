@@ -37,7 +37,7 @@ describe('hora de recepcion (regla dura 9)', () => {
     const text = wrapper.text()
 
     expect(text).toContain('06:00')
-    expect(text).toContain('El servidor la recibió (06:12), 0 h 12 min después de fichar')
+    expect(text).toContain('Recibida 06:12, 0 h 12 min después de fichar')
   })
 
   it('si la recepcion cae otro dia en el centro, lleva dia y mes', async () => {
@@ -53,7 +53,7 @@ describe('hora de recepcion (regla dura 9)', () => {
       1070,
     )
 
-    expect(wrapper.text()).toContain('El servidor la recibió (15/03 00:20), 0 h 30 min')
+    expect(wrapper.text()).toContain('Recibida 15/03 00:20, 0 h 30 min')
   })
 
   it('un fichaje que llega al momento, aunque sea por unos milisegundos, no lleva aviso', async () => {
@@ -142,7 +142,7 @@ describe('cambio de hora (DST)', () => {
     const wrapper = await mountTable([nightOfTheClockChange()], 480, '2026-03-28')
 
     // 05:20Z = 07:20 en Madrid ya en horario de verano.
-    expect(wrapper.text()).toContain('(07:20)')
+    expect(wrapper.text()).toContain('Recibida 07:20')
   })
 
   it('el historial convierte con la zona del centro a ambos lados del salto', async () => {
