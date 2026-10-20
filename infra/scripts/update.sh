@@ -47,8 +47,10 @@
 #      resume, pero solo deshace si el comando falta en la imagen—,
 #      mantenimiento, borde, verificacion por loopback, y solo despues el
 #      resto de servicios.
-#   6  Si algo falla en el 4 o en el 5: restauracion de la copia y relanzamiento
-#      de la version anterior, sin intervencion humana.
+#   6  Si algo falla en el 4 o en el 5 ANTES de que la version nueva atienda (el
+#      401 tras retirar su mantenimiento): restauracion de la copia y
+#      relanzamiento de la version anterior, sin intervencion humana. Despues
+#      del 401 ya no se vuelve atras (salida 5, ver abajo).
 #   7  Informe, siempre, tambien tras una vuelta atras. DOS FICHEROS EN SITIOS
 #      DISTINTOS: el informe (resumen, sin secretos ni datos personales, para el
 #      paquete de diagnostico) se publica en BACKUP_PATH/reports/ como uid 1000
@@ -80,7 +82,10 @@
 #      en marcha y verificada. Se puede reintentar tras leer el informe.
 #   5  Fallo con VUELTA ATRAS INCOMPLETA. Hace falta una persona; el mensaje
 #      imprime las ordenes exactas (y distingue si solo queda retirar el
-#      mantenimiento de si hay que restaurar la copia).
+#      mantenimiento, si hay que restaurar la copia o si ya esta restaurada).
+#      TAMBIEN, sin vuelta atras, si algo falla DESPUES del 401 del paso 5: la
+#      version nueva ya atiende y ha recibido fichajes, asi que se queda en
+#      servicio y el mensaje dice que NO se restaure ninguna copia.
 #   6  CASI NUNCA LO USA ESTE SCRIPT: toda verificacion fallida deshace
 #      (RF-PD-10), con UNA excepcion documentada: un `product:doctor` con
 #      fallos o avisos (tarea 5.9, segunda vuelta) es informativo y NO
@@ -171,6 +176,11 @@ readonly KQ_SUPPORT_WINDOW_MINORS=2
 # dato del producto y no de versions.txt, que sigue listando esas versiones como
 # fronteras de migraciones.
 readonly KQ_MIN_SOURCE_VERSION="2.2.0"
+# La primera version publicada CON ese suelo. Las anteriores admiten origenes por
+# debajo de el (solo con su ventana): son las unicas intermedias posibles para una
+# instalacion mas antigua que el suelo. Sin esto, con un paquete 2.4.0 y una
+# instalacion 2.1.0, kq_first_hop propondria la 2.3.0, que a su vez la rechaza.
+readonly KQ_MIN_SOURCE_SINCE="2.3.0"
 readonly KQ_CONTAINER_MIGRATIONS="/var/www/html/database/migrations"
 readonly KQ_CONTAINER_SCRIPTS="/opt/kronoqr/scripts"
 readonly KQ_MIN_DOCKER_FREE_GIB=2
@@ -266,22 +276,28 @@ MIGRATIONS_IN_IMAGE=""
 LAST_CHECKPOINT=""
 STEP="1"
 # 0 nada que deshacer · 1 mantenimiento puesto (retirar) · 2 esquema o
-# contenedores tocados (restaurar la copia y relanzar la version anterior).
+# contenedores tocados (restaurar la copia y relanzar la version anterior) · 3 la
+# version nueva ya atiende (401 tras el `artisan up`): NO se vuelve atras, un fallo
+# sale con 5 dejandola en servicio (forward_incomplete).
 ROLLBACK_ARMED=0
-# 1 desde que empieza la vuelta atras: cada `docker compose` corre en su propia
-# sesion (compose_current, compose_new, compose_rollback). Ver rollback_and_die.
+# 1 si la vuelta atras restauro la copia (restore.sh salio con 0 u 8): lo que quede
+# a mano ya no incluye restaurarla, y el asiento se intenta escribir igualmente.
+RESTORE_DONE=0
+# El motivo (codigo estable del asiento) y el paso en que se disparo la vuelta atras;
+# los fija rollback_and_die y van al asiento y al informe.
+ROLLBACK_REASON_CODE=""
+ROLLBACK_FAILED_STEP=""
+# 1 desde que empieza la vuelta atras (o desde el 401 del paso 5): cada
+# `docker compose` corre en su propia sesion (compose_current, compose_new,
+# compose_rollback). Ver rollback_and_die.
 ROLLBACK_ISOLATED=0
-# La senal (INT, TERM, HUP) que interrumpio la actualizacion, si la hubo
-# (V21-3-PL-03). La fija on_signal, o el codigo de salida de la orden que la
-# recibio (signal_of_status). Decide `reason=interrupted` en la vuelta atras.
-INTERRUPTED_BY=""
 # La migracion que fallaba, o que estaba en curso, cuando se paro el paso 4
 # (V21-3-PL-04). Va a la pantalla y al informe; al asiento no (su payload es un
 # contrato cerrado del dominio).
 FAILED_MIGRATION=""
 # Las migraciones que el paso 4 esta aplicando ahora mismo (rutas del contenedor), o
 # ninguna. De ellas sale FAILED_MIGRATION al deshacer, tambien si lo que corto el
-# paso fue una senal y se entro por on_signal sin pasar por el fallo de la orden.
+# paso fue una senal (on_signal) y no el fallo de la orden.
 declare -a MIGRATING_FILES=()
 ROLLBACK_SUMMARY=""
 FINAL_STATE=""
@@ -689,11 +705,14 @@ kq_upgrade_chain() {
 # ANTERIOR al destino. Con el suelo de KQ_MIN_SOURCE_VERSION el destino puede caer
 # dentro de la ventana del origen (2.1.0 -> 2.3.0), y «actualiza primero a la
 # 2.3.0» seria pedirle lo que se acaba de negar; la respuesta es la 2.2.1.
+# Y si el ORIGEN es anterior al suelo, la intermedia tiene que admitirlo: solo las
+# publicadas antes de KQ_MIN_SOURCE_SINCE (2.4.0 desde 2.1.0: la 2.2.1, no la 2.3.0).
 kq_first_hop() {
-  local from="$1" target="$2" version best="" f_major f_minor ceiling
+  local from="$1" target="$2" version best="" f_major f_minor ceiling below_floor=0
   f_major="$(kq_semver_major "${from}")"
   f_minor="$(kq_semver_minor "${from}")"
   ceiling=$((f_minor + KQ_SUPPORT_WINDOW_MINORS))
+  [ "$(kq_semver_compare "${from}" "${KQ_MIN_SOURCE_VERSION}")" != "-1" ] || below_floor=1
 
   if [ "${f_major}" != "$(kq_semver_major "${target}")" ]; then
     for version in ${KQ_VERSIONS+"${KQ_VERSIONS[@]}"}; do
@@ -712,6 +731,7 @@ kq_first_hop() {
     [ "$(kq_semver_compare "${version}" "${target}")" = "-1" ] || continue
     [ "$(kq_semver_major "${version}")" = "${f_major}" ] || continue
     [ "$(kq_semver_minor "${version}")" -le "${ceiling}" ] || continue
+    [ "${below_floor}" -eq 0 ] || [ "$(kq_semver_compare "${version}" "${KQ_MIN_SOURCE_SINCE}")" = "-1" ] || continue
     best="${version}"
   done
   printf '%s\n' "${best:-none}"
@@ -1285,6 +1305,19 @@ close_report() {
   REPORT_CLOSED=1
 }
 
+# La vuelta atras lanza cada orden de Docker en su PROPIA SESION (isolated, con
+# `setsid -w` de util-linux) para que un Ctrl+C al grupo de procesos no la corte a
+# medias (V21-3-PL-01). Sin `setsid -w` ese aislamiento se pierde o depende de como
+# se lance el script: se avisa, no se bloquea (la vuelta atras sigue funcionando si
+# nadie pulsa Ctrl+C durante ella).
+check_session_isolation() {
+  if command -v setsid >/dev/null 2>&1 && setsid -w true </dev/null >/dev/null 2>&1; then
+    check_pass "$(kq_text u_c_setsid)"
+  else
+    check_warn "$(kq_text u_c_setsid)" "$(kq_text u_w_setsid)"
+  fi
+}
+
 #------------------------------------------------------------------------------
 # Paso 1 — precondiciones. NO SE TOCA LA INSTALACION.
 #
@@ -1297,6 +1330,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_versions_matrix
   check_docker_available
   check_tools
+  check_session_isolation
   check_privileges
   check_installation
   check_source_version
@@ -2289,38 +2323,15 @@ arm_rollback_traps() {
   trap 'on_signal HUP' HUP
 }
 
-# Una senal que llega al script con la vuelta atras armada (V21-3-PL-03). Se anota
-# antes de deshacer: el asiento, el informe y la pantalla dicen «interrumpido», no
-# el fallo de la orden que la senal corto.
+# Una senal que llega al script con la vuelta atras armada. Un Ctrl+C llega a todo
+# el grupo de procesos en primer plano; el hijo (p. ej. `docker compose run`) sale
+# con 130 y bash 5.2 ejecuta ESTE trap al volver de el, antes de mirar su codigo:
+# el asiento, el informe y la pantalla dicen «interrumpido» (V21-3-PL-03), no el
+# fallo de la orden que la senal corto. Un 143 que llega por otro camino (un
+# `docker stop` del contenedor, reiniciar dockerd) no es una senal a este script y
+# se registra como el fallo de la orden, que es lo que fue.
 on_signal() {
-  INTERRUPTED_BY="$1"
   rollback_and_die "$(kq_format u_interrupted "$1")" interrupted
-}
-
-# La senal que mato a una orden, por su codigo de salida: 128 + numero, como lo
-# deja bash (y como sale `docker compose` al recibirla). Un Ctrl+C llega a todo el
-# grupo de procesos en primer plano, y bash NO ejecuta su trap si el hijo
-# sobrevive a la senal y sale por su cuenta: el codigo es lo unico que queda.
-#   signal_of_status CODIGO   imprime HUP, INT o TERM; 1 si no es una de ellas.
-signal_of_status() {
-  case "$1" in
-  129) printf 'HUP' ;;
-  130) printf 'INT' ;;
-  143) printf 'TERM' ;;
-  *) return 1 ;;
-  esac
-}
-
-# Deshace por el fallo de una orden: por interrupcion si su codigo dice que la
-# corto una senal, y si no con el motivo propio del paso.
-#   rollback_after_status CODIGO MOTIVO CODIGO_DE_MOTIVO
-rollback_after_status() {
-  local status="$1" reason="$2" reason_code="$3" signal
-  if signal="$(signal_of_status "${status}")"; then
-    INTERRUPTED_BY="${signal}"
-    rollback_and_die "$(kq_format u_interrupted "${signal}")" interrupted
-  fi
-  rollback_and_die "${reason}" "${reason_code}"
 }
 
 disarm_rollback_traps() {
@@ -2650,7 +2661,7 @@ first_unapplied_migration() {
 }
 
 phase_migrations() {
-  local version total pending_total applied name started seconds count batch status
+  local version total pending_total applied name started seconds count batch
   declare -a files=()
 
   STEP="4"
@@ -2668,10 +2679,8 @@ phase_migrations() {
   # volumenes y no se tocan.
   say "$(kq_format u_infra_up "${TARGET_VERSION}")"
   detail_note "--- up -d postgres redis (${TARGET_VERSION}) ---"
-  status=0
-  compose_new up -d postgres redis >>"$(detail_sink)" 2>&1 || status=$?
-  [ "${status}" -eq 0 ] ||
-    rollback_after_status "${status}" "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
+  compose_new up -d postgres redis >>"$(detail_sink)" 2>&1 ||
+    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new postgres "${KQ_WAIT_DEPENDENCIES}" ||
     rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new redis "${KQ_WAIT_DEPENDENCIES}" ||
@@ -2716,12 +2725,9 @@ phase_migrations() {
     done
     detail_note "--- migrate (${version}) ---"
     MIGRATING_FILES=("${files[@]}")
-    status=0
-    compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
-      >>"$(detail_sink)" 2>&1 || status=$?
-    if [ "${status}" -ne 0 ]; then
-      rollback_after_status "${status}" \
-        "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
+    if ! compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
+      >>"$(detail_sink)" 2>&1; then
+      rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
     fi
     MIGRATING_FILES=()
     seconds=$(($(now_epoch) - started))
@@ -3169,6 +3175,15 @@ phase_start_and_verify() {
     remember_check "maintenance-lifted" "$(kq_text u_report_failed) (${status})"
     rollback_and_die "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "${status}")" health_probe_failed
   fi
+  # DESDE AQUI YA NO SE VUELVE ATRAS (decision del propietario, 20-10-2026). La
+  # version nueva atiende, y los quioscos empiezan a vaciar sus colas contra ella:
+  # restaurar la copia previa borraria esos fichajes. Un fallo de ahora en adelante
+  # (procesos de fondo, `product:doctor` ausente, un error inesperado) sale con 5
+  # SIN restaurar ni parar nada: forward_incomplete. Las senales se ignoran, y lo
+  # que se lanza va en su propia sesion, igual que durante la vuelta atras.
+  ROLLBACK_ARMED=3
+  ROLLBACK_ISOLATED=1
+  trap '' INT TERM HUP
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
   mark_lap start
 
@@ -3245,6 +3260,151 @@ phase_start_and_verify() {
 #------------------------------------------------------------------------------
 # Paso 6 — vuelta atras automatica.
 #------------------------------------------------------------------------------
+# El nombre del proyecto de Compose (`name:` del compose; los dos directorios
+# describen el MISMO). Se lee de la etiqueta del contenedor de PostgreSQL, que
+# existe en cualquier momento de la vuelta atras; si no se puede, el del producto.
+compose_project_name() {
+  local ids project=""
+  ids="$(compose_new ps -a -q postgres 2>/dev/null)" || ids=""
+  if [ -n "${ids}" ]; then
+    project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "${ids%%$'\n'*}" 2>/dev/null)" ||
+      project=""
+  fi
+  printf '%s' "${project:-kronoqr}"
+}
+
+# Los contenedores DE UN SOLO USO del proyecto (`docker compose run`) que sigan
+# vivos, fuera (revision del bloque 6, reproducido en Docker). Un Ctrl+C en el paso
+# 4 hace salir a `docker compose run --rm migrate` con 130, pero su contenedor sigue:
+# PHP es el PID 1 (`exec php` en el entrypoint, sin init) e ignora SIGINT. Su sesion
+# de PostgreSQL seguia abierta, restore.sh salia con 3 por conexiones abiertas y la
+# vuelta atras acababa en 5. Lo mismo con `backup:run` del paso 3, que seguia
+# copiando en segundo plano. `docker kill` (SIGKILL) no lo puede ignorar. Nunca falla.
+stop_oneoff_containers() {
+  local project ids
+  local -a list=()
+  project="$(compose_project_name)"
+  ids="$(docker ps -q --filter "label=com.docker.compose.project=${project}" \
+    --filter "label=com.docker.compose.oneoff=True" 2>/dev/null)" || ids=""
+  [ -n "${ids}" ] || return 0
+  mapfile -t list <<<"${ids}"
+  detail_note "--- docker kill: ${#list[@]} contenedor(es) de un solo uso de ${project} ---"
+  isolated docker kill "${list[@]}" </dev/null >>"$(detail_sink)" 2>&1 || true
+  return 0
+}
+
+# Las sesiones que queden contra la base de la instalacion, cerradas antes de
+# restaurar: matar el contenedor cierra su conexion, pero un backend en mitad de una
+# consulta larga no se entera hasta que intenta responder. Como el migrador, por el
+# socket del contenedor de PostgreSQL (igual que psql_migrator): ninguna contrasena
+# en la linea de ordenes. El nombre de la base va en el SQL y por eso se valida.
+# Nunca falla.
+terminate_database_sessions() {
+  [[ "${CFG_DB_DATABASE}" =~ ^[A-Za-z0-9_]+$ ]] || return 0
+  detail_note "--- pg_terminate_backend: sesiones abiertas contra ${CFG_DB_DATABASE} ---"
+  compose_new exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" -Atqc \
+    "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE datname = '${CFG_DB_DATABASE}' AND pid <> pg_backend_pid()" \
+    >>"$(detail_sink)" 2>&1 || true
+  return 0
+}
+
+# El --data del asiento `system.restored_from_backup` (RF-PD-10, RL-04, RS-07): sin
+# datos personales ni secretos (nombres de fichero, huellas, versiones, la punta de
+# la cadena descartada).
+restored_audit_json() {
+  audit_json_object \
+    "backup_file=$(basename -- "${BACKUP_FILE}")" \
+    "backup_taken_at=${BACKUP_TAKEN_AT}" \
+    "failed_step=${ROLLBACK_FAILED_STEP}" \
+    "reason=${ROLLBACK_REASON_CODE}" \
+    "from_version=${SOURCE_VERSION}" \
+    "to_version=${TARGET_VERSION}" \
+    "backup_fingerprint=${BACKUP_SHA256}" \
+    "integrity=${BACKUP_INTEGRITY}" \
+    "kqe_created=${BACKUP_KQE_CREATED}" \
+    "kid=${BACKUP_KID}" \
+    "chain_before=${CHAIN_DISCARDED}" \
+    "report_id=update-${STARTED_UTC}"
+}
+
+# Escribe el asiento `system.restored_from_backup`. 0 si queda escrito; 1 si no
+# (no se ha podido, o la version restaurada no lo conoceria). Lo dice en pantalla y
+# en el informe. Ver en rollback_and_die por que lo escribe la imagen NUEVA y por
+# que solo si la version restaurada conoce la accion.
+record_restored_audit_entry() {
+  local audit_json audit_known=0 audit_status=0 audit_output
+
+  audit_json="$(restored_audit_json)"
+  detail_note "--- compliance:record-system-event system.restored_from_backup (imagen nueva, base restaurada) ---"
+  kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
+  if [ "${audit_known}" -eq 0 ]; then
+    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+      audit_status=$?
+    detail_note "${audit_output}"
+    if [ "${audit_status}" -eq 0 ]; then
+      say "$(kq_text u_rollback_audit_entry_ok)"
+      remember_check "audit-entry-rollback" "$(kq_text u_report_ok)"
+      return 0
+    fi
+    err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
+    remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
+  elif [ "${audit_known}" -eq 1 ]; then
+    detail_note "${audit_json}"
+    err "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+  else
+    detail_note "${audit_json}"
+    detail_note "artisan list: ${KQ_APP_COMMAND_ERROR}"
+    err "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
+    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
+  fi
+  return 1
+}
+
+# UN FALLO DESPUES DEL 401 DEL PASO 5 (ROLLBACK_ARMED=3; decision del propietario,
+# 20-10-2026). La version nueva YA atiende y los quioscos le han entregado fichajes:
+# restaurar la copia previa los borraria. No se restaura ni se para nada; se deja
+# la instalacion coherente con la version que esta en servicio y se sale con 5:
+#
+#   · in place, la copia `.env.kronoqr-pre-update` se retira (el .env vivo ya es el
+#     de la version nueva; settle_in_place_env la pondria encima y un `docker
+#     compose up` a mano levantaria la anterior sobre el esquema migrado);
+#   · lado a lado, el directorio anterior se retira como al terminar bien
+#     (retire_previous_directory), por la misma razon.
+#
+# El asiento `system.updated` ya esta escrito: se escribe antes de abrir el borde.
+forward_incomplete() {
+  local reason="$1"
+
+  trap '' INT TERM HUP PIPE
+  trap - ERR
+  restore_std_streams
+  set +e
+  ROLLBACK_ISOLATED=1
+
+  heading "$(kq_text u_forward_heading)"
+  err_final "$(kq_format u_rollback_reason "${reason}")"
+
+  if [ "${IN_PLACE}" -eq 1 ] && [ -n "${ROLLBACK_ENV}" ] && [ -f "${ROLLBACK_ENV}" ]; then
+    rm -f "${ROLLBACK_ENV}"
+  fi
+  retire_previous_directory
+
+  MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
+  ROLLBACK_SUMMARY="$(kq_format u_report_forward_only "${STEP}" "${reason}" "$(kq_text u_report_needs_person)")"
+  FINAL_STATE="${TARGET_VERSION}"
+
+  err ""
+  err_final "$(kq_format u_forward_incomplete "${TARGET_VERSION}" \
+    "${ENV_FILE}" "${COMPOSE_FILE}" "${ENV_FILE}" "${COMPOSE_FILE}" \
+    "${ENV_FILE}" "${COMPOSE_FILE}" "${ENV_FILE}" "${COMPOSE_FILE}" "${PACKAGE_DIR}")"
+  say ""
+  say "$(kq_format u_done_current_dir "${PACKAGE_DIR}" "${TARGET_VERSION}" "${PACKAGE_DIR}")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
+  close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
+  exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
+}
+
 preserve_failed_state() {
   detail_note ""
   detail_note "--- $(kq_text u_rollback_evidence) ---"
@@ -3273,18 +3433,56 @@ rollback_incomplete_maintenance() {
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
 }
 
+# La vuelta atras con la copia se ha quedado a medias: las ordenes para terminarla,
+# con las rutas de este servidor, segun hasta donde llego (V21-3-PL-02):
+#
+#   · SIN restaurar (RESTORE_DONE=0): parar lo que escribe, lo que quede de esta
+#     ejecucion (contenedores de un solo uso y sesiones abiertas) y restaurar.
+#   · YA RESTAURADA (restore.sh salio con 0 u 8): esos pasos NO se imprimen —
+#     restaurar otra vez no hace falta—, y se intenta aqui mismo el asiento
+#     `system.restored_from_backup`; si no se puede, se imprime la orden con su
+#     --data para escribirlo a mano.
+#   · Siempre: relanzar la anterior, retirar su mantenimiento, comprobar salud,
+#     401 y cadena de auditoria; in place, ademas, dejar su .env en su sitio.
+#
+# Una orden por linea `  <paso>. <que>:  <orden>`; la CI (⑧b) las extrae y las
+# ejecuta tal cual.
 rollback_incomplete() {
+  local block audit_written=1
   restore_std_streams
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="?"
+
+  if [ "${RESTORE_DONE}" -eq 1 ]; then
+    record_restored_audit_entry && audit_written=0
+  fi
+
+  block="$(kq_text u_ri_head)"
+  if [ "${RESTORE_DONE}" -eq 0 ]; then
+    block+=$'\n'"$(kq_format u_ri_stop "${ENV_FILE}" "${COMPOSE_FILE}")"
+    block+=$'\n'"$(kq_format u_ri_stop_oneoff "$(compose_project_name)")"
+    block+=$'\n'"$(kq_format u_ri_stop_sessions "${ENV_FILE}" "${COMPOSE_FILE}" \
+      "${CFG_DB_MIGRATION_USERNAME}" "${CFG_DB_DATABASE}" "${CFG_DB_DATABASE}")"
+    block+=$'\n'"$(kq_format u_ri_restore "${ENV_FILE}" "${COMPOSE_FILE}" "${BACKUP_FILE}")"
+  else
+    block+=$'\n'"$(kq_format u_ri_restored "${BACKUP_FILE}")"
+  fi
+  block+=$'\n'"$(kq_format u_ri_relaunch "${SOURCE_VERSION}" "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}")"
+  block+=$'\n'"$(kq_format u_ri_lift "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}")"
+  block+=$'\n'"$(kq_format u_ri_health "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}")"
+  block+=$'\n'"$(kq_format u_ri_serving "${CFG_HTTPS_PORT}")"
+  block+=$'\n'"$(kq_format u_ri_chain "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}")"
+  if [ "${RESTORE_DONE}" -eq 1 ] && [ "${audit_written}" -ne 0 ]; then
+    # Con la imagen NUEVA (su .env y su compose), como el camino automatico.
+    block+=$'\n'"$(kq_format u_ri_audit "${ENV_FILE}" "${COMPOSE_FILE}" "$(restored_audit_json)")"
+  fi
+  if [ "${IN_PLACE}" -eq 1 ]; then
+    block+=$'\n'"$(kq_format u_ri_in_place_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
+  fi
+  block+=$'\n'"$(kq_text u_ri_tail)"
+
   err ""
-  err_final "$(kq_format u_rollback_incomplete \
-    "${ENV_FILE}" "${COMPOSE_FILE}" \
-    "${ENV_FILE}" "${COMPOSE_FILE}" "${BACKUP_FILE}" \
-    "${SOURCE_VERSION}" "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
-    "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
-    "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}" \
-    "${CFG_HTTPS_PORT}")"
+  err_final "${block}"
   err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
@@ -3292,7 +3490,7 @@ rollback_incomplete() {
 
 rollback_and_die() {
   local reason="$1" reason_code="${2:-unexpected_error}" code=0 body reported from_date to_date
-  local failed_step audit_json audit_status audit_output audit_known privileges
+  local failed_step privileges
 
   # SOLO EN EL PROCESO PRINCIPAL. Con `set -E` el trap se hereda en las
   # subshells de `$(...)`; deshacer desde ahi restauraria la base y el padre
@@ -3300,6 +3498,10 @@ rollback_and_die() {
   # instalador en su primera ejecucion).
   if [ "${BASHPID}" != "$$" ]; then
     return 1
+  fi
+  # Tras el 401 del paso 5 no hay vuelta atras: la version nueva sigue en servicio.
+  if [ "${ROLLBACK_ARMED}" -ge 3 ]; then
+    forward_incomplete "${reason}"
   fi
   # DURANTE la vuelta atras las senales se IGNORAN (un segundo Ctrl+C no la corta a
   # medias, con los servicios caidos) y el mensaje sale por la pantalla ORIGINAL aunque
@@ -3313,16 +3515,11 @@ rollback_and_die() {
   # su propia sesion, fuera del alcance de un Ctrl+C (V21-3-PL-01, ver compose_new).
   ROLLBACK_ISOLATED=1
 
-  # Una senal anotada manda sobre el motivo con el que se llego aqui: si corto
-  # una orden y se entro por su fallo, lo que paso es la interrupcion (V21-3-PL-03).
-  if [ -n "${INTERRUPTED_BY}" ] && [ "${reason_code}" != "interrupted" ]; then
-    reason="$(kq_format u_interrupted "${INTERRUPTED_BY}")"
-    reason_code="interrupted"
-  fi
-
   # Se resuelve AQUI, con el STEP de cuando se disparo la vuelta atras: nada
   # de lo que sigue en esta funcion cambia de paso (RF-PD-10, SystemUpdateStep).
   failed_step="$(resolve_failed_step)"
+  ROLLBACK_FAILED_STEP="${failed_step}"
+  ROLLBACK_REASON_CODE="${reason_code}"
 
   # La migracion que fallaba o estaba en curso (V21-3-PL-04): aqui y no en el paso
   # 4, para que tambien la nombre una interrupcion que entra por on_signal. La base
@@ -3340,7 +3537,10 @@ rollback_and_die() {
   err_final "$(kq_text u_rollback_dont_interrupt)"
 
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
-    # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
+    # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba. Antes,
+    # fuera la copia previa si una senal la corto: `backup:run` seguia en su
+    # contenedor de un solo uso, copiando en segundo plano.
+    stop_oneoff_containers
     if lift_maintenance; then
       settle_in_place_env
       ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
@@ -3354,6 +3554,9 @@ rollback_and_die() {
   fi
 
   preserve_failed_state
+  # Lo que quede de esta ejecucion, antes que nada: una migracion interrumpida sigue
+  # en su contenedor de un solo uso con su sesion abierta (stop_oneoff_containers).
+  stop_oneoff_containers
 
   say "$(kq_format u_rollback_stop "${TARGET_VERSION}")"
   detail_note "--- stop (${TARGET_VERSION}) ---"
@@ -3367,6 +3570,13 @@ rollback_and_die() {
   # levanta un contenedor suelto solo para leerla, como hace restore.sh.
   detail_note "--- compliance:audit-chain-head (punta a punto de descartarse) ---"
   CHAIN_DISCARDED="$(json_field "$(compose_new run --rm --no-deps -T app php artisan compliance:audit-chain-head 2>/dev/null || true)" hash)"
+  # Al INFORME siempre, pase lo que pase despues: si la vuelta atras se queda a
+  # medias tras restaurar, el asiento puede no llegar a escribirse, y esto es lo
+  # que dice que intervalo se descarto (RS-07, revision de seguridad del bloque 6).
+  remember_check "rollback-reason" "${reason_code}"
+  remember_check "rollback-failed-step" "${failed_step}"
+  remember_check "chain-discarded" "${CHAIN_DISCARDED:-$(kq_text u_report_none)}"
+  remember_check "report-id" "update-${STARTED_UTC}"
 
   say "$(kq_format u_rollback_restore "${BACKUP_FILE}")"
   # `--audit-by-caller`: el asiento de la vuelta atras lo escribe este script
@@ -3388,7 +3598,9 @@ rollback_and_die() {
   fi
   # En su propia sesion (ROLLBACK_ISOLATED): una senal del terminal al grupo en primer
   # plano no llega a `docker compose run`, que la reenviaria al contenedor y mataria
-  # restore.sh entre sus dos renombrados.
+  # restore.sh entre sus dos renombrados. Antes, las sesiones que queden contra la
+  # base: con una abierta restore.sh se niega (sale con 3).
+  terminate_database_sessions
   compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
     "${restore_extra[@]}" >>"$(detail_sink)" 2>&1
   code=$?
@@ -3401,6 +3613,7 @@ rollback_and_die() {
     err "$(kq_format u_f_rollback_restore "${code}" "$(kq_exit_name "${code}")")"
     rollback_incomplete "${reason}"
   fi
+  RESTORE_DONE=1
   privileges=0
   verify_privileges compose_new migrations || privileges=$?
   case "${privileges}" in
@@ -3433,8 +3646,10 @@ rollback_and_die() {
     err "$(kq_format u_f_rollback_relaunch "${SOURCE_VERSION}")"
     rollback_incomplete "${reason}"
   fi
-  # La version anterior arranca en un contenedor nuevo, sin el fichero de
-  # mantenimiento: `up` por si acaso, y no importa que no hubiera nada.
+  # El fichero `down` vive en storage/framework, DENTRO de cada contenedor `app`.
+  # Si `up -d` no recrea el de la version anterior (lado a lado con un fallo en el
+  # paso 4: su definicion no ha cambiado y solo se arranca), conserva el `down` que
+  # le puso el paso 2 y la API sigue en 503; si lo recrea, nace sin el. `up` siempre.
   compose_rollback exec -T app php artisan up >>"$(detail_sink)" 2>&1
   write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
 
@@ -3471,20 +3686,6 @@ rollback_and_die() {
   # la base que sirve ahora. Si falla, la vuelta atras YA ESTA HECHA y
   # verificada: no se reintenta (instruccion (e)); se queda escrito en el
   # informe y la salida sigue siendo KQ_EXIT_ROLLED_BACK.
-  audit_json="$(audit_json_object \
-    "backup_file=$(basename -- "${BACKUP_FILE}")" \
-    "backup_taken_at=${BACKUP_TAKEN_AT}" \
-    "failed_step=${failed_step}" \
-    "reason=${reason_code}" \
-    "from_version=${SOURCE_VERSION}" \
-    "to_version=${TARGET_VERSION}" \
-    "backup_fingerprint=${BACKUP_SHA256}" \
-    "integrity=${BACKUP_INTEGRITY}" \
-    "kqe_created=${BACKUP_KQE_CREATED}" \
-    "kid=${BACKUP_KID}" \
-    "chain_before=${CHAIN_DISCARDED}" \
-    "report_id=update-${STARTED_UTC}")"
-
   # LO ESCRIBE LA IMAGEN NUEVA, no la restaurada. Tras la vuelta atras corre la
   # version anterior, y la version anterior puede no conocer todavia el comando
   # (la primera que lo lleva vuelve a una que no lo tiene: asi se vio en la
@@ -3495,7 +3696,6 @@ rollback_and_die() {
   # asiento necesita (actor `system`, cadena por hash) es el de la tarea 1.14 y
   # no ha cambiado desde entonces, asi que el codigo nuevo escribe en una base
   # antigua sin tocar nada mas.
-  detail_note "--- compliance:record-system-event system.restored_from_backup (imagen nueva, base restaurada) ---"
   # ...PERO SOLO SI LA VERSION RESTAURADA CONOCE LA ACCION. Un verificador
   # anterior a la accion (`compliance:verify-audit-chain` de la 2.1.0 y antes)
   # hace `AuditAction::from()` sobre cada fila y revienta con una que no esta en
@@ -3512,31 +3712,7 @@ rollback_and_die() {
   # asiento no se escribia NUNCA. Tres desenlaces, tres caminos: lo conoce, no
   # lo conoce, y no se ha podido preguntar —que no es lo mismo que no conocerlo
   # y no se cuenta como tal—.
-  audit_known=0
-  kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
-  if [ "${audit_known}" -eq 0 ]; then
-    audit_status=0
-    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
-      audit_status=$?
-    detail_note "${audit_output}"
-
-    if [ "${audit_status}" -eq 0 ]; then
-      say "$(kq_text u_rollback_audit_entry_ok)"
-      remember_check "audit-entry-rollback" "$(kq_text u_report_ok)"
-    else
-      err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
-      remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
-    fi
-  elif [ "${audit_known}" -eq 1 ]; then
-    detail_note "${audit_json}"
-    err "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
-    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
-  else
-    detail_note "${audit_json}"
-    detail_note "artisan list: ${KQ_APP_COMMAND_ERROR}"
-    err "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
-    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
-  fi
+  record_restored_audit_entry || true
 
   # daily_totals es una proyeccion reconstruible (regla dura 7): se reconcilian
   # las jornadas de la ventana. El rango va holgado a proposito —dos dias antes
@@ -3745,7 +3921,7 @@ print_info() {
     # destino sigue dando «(ninguna: ...)» con 0, como hasta ahora.
     if [ "$(kq_semver_compare "${OPT_INFO_ARG}" "${TARGET_VERSION}")" = "-1" ]; then
       if ! kq_version_listed "${OPT_INFO_ARG}"; then
-        die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_source_unlisted "${OPT_INFO_ARG}" "${VERSIONS_FILE}" ".env")"
+        die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_chain_unlisted "${OPT_INFO_ARG}" "${VERSIONS_FILE}")"
       fi
       if ! kq_is_supported_source "${OPT_INFO_ARG}" "${TARGET_VERSION}"; then
         die "${KQ_EXIT_REQUIREMENTS}" "$(unsupported_source_fix "${OPT_INFO_ARG}" "${TARGET_VERSION}")"
@@ -3796,7 +3972,10 @@ main() {
   mark_lap migrations
   phase_start_and_verify
 
-  disarm_rollback_traps
+  # Solo el ERR: desde el 401 del paso 5 las senales se ignoran (ROLLBACK_ARMED=3) y
+  # asi siguen hasta el final; un Ctrl+C aqui dejaria a medias la retirada del
+  # directorio anterior o del .env.kronoqr-pre-update.
+  trap - ERR
   final_report
 }
 
