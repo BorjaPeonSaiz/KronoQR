@@ -1004,7 +1004,7 @@
       "id": 26,
       "type": "timeseries",
       "title": "Conciliación del registro: tramos comprobados",
-      "description": "work_record_reconciliation_entries_checked por alcance: cuántos tramos cruzó la última pasada, la diaria (recent, últimos días) y la semanal completa (full). Una cifra que cae a cero de un día para otro delata que la pasada no está leyendo el registro.",
+      "description": "work_record_reconciliation_entries_checked por alcance: cuántos tramos cruzó la última pasada, la diaria (recent, últimos días) y la semanal completa (full). Cero (franja roja) habiendo fichajes delata que la pasada no está leyendo el registro: ConciliacionCompletaSinTramos salta si la completa lee 0 tramos con fichajes aceptados en los últimos 8 días (una conciliación que no lee nada da cero discrepancias y parece perfecta).",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 56 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -1034,7 +1034,8 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
             ]
           }
         },

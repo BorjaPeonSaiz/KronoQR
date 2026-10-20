@@ -3,7 +3,7 @@
 Procedimientos de operación interna: uno por cada modo de fallo que tiene una
 alerta asociada, y uno por cada situación que el cliente o el fabricante
 afrontan sin alerta (una persona que entra, una norma que cambia, un servidor
-que se pierde). **Los 36 viajan en el paquete de entrega** (`docs/runbooks/`):
+que se pierde). **Los 37 viajan en el paquete de entrega** (`docs/runbooks/`):
 los ejecuta el IT del cliente, con el sistema delante y a veces a las 06:30.
 
 **La norma que gobierna esta carpeta** (doc 02 §8.4): *cada alerta lleva
@@ -61,7 +61,7 @@ vigila que los documentos no se contradigan.
 
 ## Índice por alerta
 
-Las 74 reglas de `infra/observability/prometheus/rules/` y el runbook al que
+Las 76 reglas de `infra/observability/prometheus/rules/` y el runbook al que
 apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
 **En tu servidor no hay `infra/`.** Los runbooks citan los ficheros con su ruta
@@ -78,7 +78,7 @@ paquete: es de la integración continua del fabricante.
 | [`restaurar-backup.md`](restaurar-backup.md) | `CopiaDeSeguridadFallida` · `CopiaDeSeguridadSinVerificar` · `CopiaDeSeguridadAusente` · `ArchivadoDeWalDetenido` · `ArchivadoDeWalFallando` · `MedicionDeWalAusente` · `ArchiveTimeoutFueraDeRango` · `DiscoDeCopiasCasiLleno` · `SimulacroDeRestauracionNuncaEjecutado` · `SimulacroDeRestauracionCaducado` |
 | [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | `SlotDeReplicacionParado` |
 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | `RoturaDeCadenaDeAuditoria` · `VerificacionDeAuditoriaAusente` · `ParticionDeAuditoriaAusente` · `ParticionDeAuditoriaDelProximoAnoSinPreparar` |
-| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` · `PurgaFueraDeLimitesRevisada` · `PurgaRevisadaQueExplicaBorrados` · `CambioDeZonaRevisado` · `DiscrepanciaDeZonaRevisada` · `ZonaDelCentroNoVerificable` (informativa, no notifica) |
+| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` · `ConciliacionCompletaSinTramos` · `PurgaFueraDeLimitesRevisada` · `PurgaRevisadaQueExplicaBorrados` · `CambioDeZonaRevisado` · `DiscrepanciaDeZonaRevisada` · `ZonaDelCentroNoVerificable` (informativa, no notifica) |
 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | `DivergenciaEnReconciliacionNocturna` · `ReconciliacionDeProyeccionAusente` · `ReconciliacionConFallos` |
 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | `TurnoAbiertoProlongado` · `DescansoEntreJornadasInsuficiente` · `MetricaDeIncidenciasAusente` · `DeteccionDeIncidenciasAusente` |
 | [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | `DeteccionDePatronesConFallos` · `DeteccionDePatronesAusente` |
@@ -88,6 +88,7 @@ paquete: es de la integración continua del fabricante.
 | [`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md) | `ColaDeTrabajosAcumulada` · `ColaDeTrabajosSinProcesar` |
 | [`reverb-parado.md`](reverb-parado.md) | `ReverbSinRespuesta` |
 | [`loki-sin-respuesta.md`](loki-sin-respuesta.md) | `LokiSinRespuesta` |
+| [`blackbox-sin-respuesta.md`](blackbox-sin-respuesta.md) | `SondasDeBlackboxSinRespuesta` |
 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | `ErroresCriticosNuevos` · `ErroresDeServidorEnElFichaje` · `LatenciaDelFichajeAlta` · `ErroresDeServidorEnElPanel` · `ErroresDeServidorEnElPortal` · `LatenciaDelFichajePorPinAlta` · `LatenciaDelFichajePorLoteAlta` · `SondaDelBordeFallida` · `DeteccionDeIncidenciasConFallos` |
 | [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | `AlmacenDeMetricasCaido` · `AlmacenDeMetricasAusente` |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | `EnrutadoDeAlertasCaido` · `EntregaDeAlertasFallando` |
@@ -119,6 +120,7 @@ paquete: es de la integración continua del fabricante.
 | [`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md) | Hay trabajos esperando en la cola y nadie los procesa: Horizon parado, en pausa o colgado. Las exportaciones y los informes en diferido no se generan; el fichaje sigue | IT del cliente |
 | [`reverb-parado.md`](reverb-parado.md) | Reverb no responde: el panel de presencia pierde el tiempo real. Recargar da el dato correcto; no se pierde ningún fichaje | IT del cliente |
 | [`loki-sin-respuesta.md`](loki-sin-respuesta.md) | Loki no responde: los registros técnicos no se están guardando. El fichaje, el registro horario y la auditoría no se ven afectados | IT del cliente |
+| [`blackbox-sin-respuesta.md`](blackbox-sin-respuesta.md) | blackbox-exporter no responde: las alertas del borde, del certificado y de Loki se quedan sin serie y callan. El fichaje sigue; se pierde visibilidad | IT del cliente |
 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | Cómo lee el IT `error_events` y qué hacer con cada severidad; `5xx` y latencia del fichaje; sonda del borde; las sondas de `doctor` que ninguna alerta ve | IT del cliente |
 | [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | Redis (almacén de métricas) no responde o la aplicación no publica `/metrics`: las alertas de quiosco y cola no son fiables | IT del cliente |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, sino a un fallo de la propia infraestructura de alertas | IT del cliente |

@@ -116,3 +116,14 @@ http_request_duration_seconds_count{route="attendance.scan.pin"} 100
 http_request_duration_seconds_bucket{route="attendance.scan.batch",le="3.0"} 100
 http_request_duration_seconds_bucket{route="attendance.scan.batch",le="+Inf"} 100
 http_request_duration_seconds_count{route="attendance.scan.batch"} 100
+
+# --- Conciliacion completa y fichajes aceptados (work-record.yml, revision del bloque 9) ---
+# La pasada completa lee tramos y ha habido fichajes: ConciliacionCompletaSinTramos en silencio.
+work_record_reconciliation_entries_checked{scope="full"} 1200
+scans_total{result="clock_in"} 100
+
+# --- Las sondas de blackbox-exporter leidas por Prometheus (observability.yml) -------------
+# `up` de cada job de sonda: 1 mientras Prometheus consigue leerlas. (En la pila del
+# simulacro los publica el colector textfile con `honor_labels`.)
+up{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"} 1
+up{job="kronoqr-loki",instance="http://loki:3100/ready"} 1

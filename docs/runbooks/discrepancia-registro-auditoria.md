@@ -13,6 +13,7 @@ procedimiento de 72 h es [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 | `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-seis-discrepancias) |
 | `ConciliacionDelRegistroAusente` | > 26 h sin la pasada diaria, `for: 30m` | Crítica (seguridad) | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la pasada completa, `for: 30m` | Alta | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
+| `ConciliacionCompletaSinTramos` | `work_record_reconciliation_entries_checked{scope="full"}` a 0 con fichajes aceptados en los últimos 8 días, `for: 1h` | Alta | Responsable de seguridad | [§5.1](#51-la-pasada-completa-lee-cero-tramos) |
 | `PurgaFueraDeLimitesRevisada` | `work_record_reconciliation_reviewed_purges` sube respecto a hace un día; se apaga sola al cabo de un día | Aviso (`warning`) | Responsable de seguridad | [§3.1](#31-dar-por-revisada-una-purga-no-admisible) |
 
 **Impacto en el fichaje: ninguno.** Nadie se queda sin fichar y no hay que parar
@@ -687,6 +688,26 @@ métricas (`BACKUP_PATH`) sin montar o sin permisos; `node-exporter` sin acceso
 al volumen. Tras instalar o actualizar, la pasada completa no corre hasta el
 primer domingo: su alerta de silencio no suena hasta que la diaria lleva una
 semana publicando, precisamente para no avisar de eso.
+
+### 5.1 La pasada completa lee cero tramos
+
+`ConciliacionCompletaSinTramos`: la pasada semanal se ejecutó (no es el silencio de
+arriba) pero cruzó **0 tramos** y en los últimos 8 días hubo fichajes aceptados. Una
+conciliación que no lee nada da cero discrepancias y parece perfecta: no puede
+encontrar un borrado ni una edición, y un cero en la §3 deja de significar nada.
+En una instalación nueva, sin fichajes, 0 tramos es lo correcto y no salta.
+
+```bash
+docker compose exec -T app php artisan compliance:reconcile-work-record --full
+docker compose exec -T postgres psql -U fichaje_app -d fichaje -Atc "SELECT count(*) FROM shift_entries"
+```
+
+- Si el comando ahora lee tramos y la cifra de `shift_entries` es la esperada, era un
+  fallo puntual de la pasada del domingo: la métrica se corrige sola con la siguiente.
+- Si el comando sigue leyendo 0 y `shift_entries` **tiene** filas, el comando no está
+  mirando donde debe (otra base, otro centro, un filtro): avisa a soporte con la salida.
+- Si `shift_entries` está **vacía** y hay fichajes, el registro se ha vaciado: es un
+  incidente de seguridad. Sigue la §2 (preservar evidencia) y la §6 antes de tocar nada.
 
 ---
 

@@ -27,7 +27,7 @@ ha saltado es una alerta de la que no se sabe si salta.
 5. Destruye la pila (salvo `KQ_DRILL_KEEP=1`).
 
 ```bash
-make alerts-drill                                   # las 42, unos 11 minutos
+make alerts-drill                                   # las 44, unos 12 minutos
 make alerts-drill ALERT=RoturaDeCadenaDeAuditoria   # una sola, medio minuto
 infra/drill/alerts-drill.sh --list                  # inventario, sin Docker
 ```
@@ -51,7 +51,7 @@ persistencia la prueban los casos de `promtool test rules` de
 `infra/observability/prometheus/tests/`. Tampoco la entrega real al buzón de un
 cliente: eso es la prueba de entrega de `docs/runbooks/entrega-de-alertas.md` §4.2.
 
-## Las 43 alertas
+## Las 45 alertas
 
 La columna «Falla» es lo que cambia en `baseline.prom` (ver `faults.tsv`). La
 columna «Real» es cómo se produciría la misma condición en una instalación; en
@@ -69,6 +69,7 @@ simulacro evita.
 | `ColaDeTrabajosSinProcesar` | `queue_jobs_waiting{queue="default"}` 1 sin trabajos terminados | it-cliente | `horizon` parado con una exportación esperando |
 | `ColaOfflineAtascada` | `kiosk_offline_queue_size` 80 | it-cliente | quiosco con red caída varias horas |
 | `ConciliacionCompletaDelRegistroAusente` | última conciliación completa hace 9 días | seguridad | `scheduler` parado más de una semana |
+| `ConciliacionCompletaSinTramos` | `work_record_reconciliation_entries_checked{scope="full"}` a 0 con fichajes aceptados | seguridad | la pasada completa mira otra base o un filtro roto, o `shift_entries` vaciada |
 | `ConciliacionDelRegistroAusente` | retira la serie de la conciliación reciente | seguridad | `scheduler` parado o tarea sin ejecutarse |
 | `CopiaDeSeguridadAusente` | retira `kronoqr_backup_last_success_timestamp_seconds` | it-cliente | cron de copias que nunca corrió o carpeta de métricas sin montar |
 | `DescansoEntreJornadasInsuficiente` | `incidents_open{type="insufficient_rest"}` 2 | rrhh | dos jornadas con menos descanso del perfil |
@@ -95,6 +96,7 @@ simulacro evita.
 | `LatenciaDelFichajeAlta` | observaciones de `attendance.scan` entre 0,4 s y 1 s (p95 0,975 s) | it-cliente | servidor o base de datos lentos con tarjeta |
 | `LatenciaDelFichajePorPinAlta` | más de 3 s en el histograma de `attendance.scan.pin` | it-cliente | CPU justa: el PIN paga un bcrypt de coste 12 |
 | `LatenciaDelFichajePorLoteAlta` | más de 3 s en el histograma de `attendance.scan.batch` | it-cliente | lotes lentos tras un corte largo |
+| `SondasDeBlackboxSinRespuesta` | `up` del job `kronoqr-loki` a 0 | it-cliente | blackbox-exporter parado o con configuración inválida |
 | `RechazoDeFirmaQr` | `scans_total{result="rejected_signature"}` +60 | seguridad | ráfaga de QR con firma falsa |
 | `ReconciliacionConFallos` | `projection_reconciliation_last_failures` 1 | it-cliente | excepción al reconciliar proyecciones |
 | `RoturaDeCadenaDeAuditoria` | `audit_chain_verification_failures_total` 1 | seguridad | `audit_log` alterado (no se fabrica: sería romper la cadena) |
@@ -114,7 +116,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
 2. Una línea en `faults.tsv` (`ALERTA<TAB>set|add|del|none<TAB>argumento`; `add` crea una serie que el estado sano no publica (un contador que nace en su primer suceso)).
-3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 43).
+3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 45).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 
 Si `alerts-drill.sh` dice «ESTADO SANO NO SILENCIOSO», la regla lee una serie que

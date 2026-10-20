@@ -39,3 +39,34 @@ groups:
             rastro para diagnosticar un incidente se pierde. El fichaje, el
             registro horario y la auditoria no se ven afectados.
           runbook_url: docs/runbooks/loki-sin-respuesta.md
+
+      #------------------------------------------------------------------------
+      # QUIEN VIGILA AL VIGILANTE: blackbox-exporter (revision del bloque 9).
+      # `SondaDelBordeFallida`, `CertificadoTls*` y `LokiSinRespuesta` leen series
+      # que blackbox-exporter produce. Si blackbox cae, el scrape de los jobs de sonda
+      # falla, `probe_success` DESAPARECE y ninguna de las cuatro tiene nada que
+      # evaluar: el borde puede estar caido y nadie lo sabe. `up == 0` del propio job
+      # de sonda es la unica senal que sobrevive, porque la genera Prometheus y no
+      # blackbox.
+      #
+      # `kronoqr-uptime.*` casa con `kronoqr-uptime` y `kronoqr-uptime-tls-verified`; el
+      # segundo no existe con `TLS_ALLOW_SELF_SIGNED=true` y entonces no hay serie que
+      # vigilar, que es correcto. `component: host`: se calla en la ventana de
+      # mantenimiento y con `VentanaDeMantenimientoActiva` (update.sh recrea blackbox).
+      #------------------------------------------------------------------------
+      - alert: SondasDeBlackboxSinRespuesta
+        expr: up{job=~"kronoqr-loki|kronoqr-uptime.*"} == 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: host
+        annotations:
+          summary: "Prometheus no consigue leer la sonda {{ $labels.job }}: blackbox-exporter no responde"
+          description: >-
+            blackbox-exporter hace las comprobaciones desde fuera (el borde, el
+            certificado, Loki). Si no responde, esas alertas se quedan SIN SERIE y
+            callan: el servidor puede estar caido sin que nada lo diga. Recrea
+            blackbox-exporter y comprueba que su configuracion (observability/blackbox/
+            blackbox.yml) es valida.
+          runbook_url: docs/runbooks/blackbox-sin-respuesta.md

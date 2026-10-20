@@ -68,3 +68,5 @@ LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_bucket{route="att
 LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_count{route="attendance.scan.pin"} 300
 LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_bucket{route="attendance.scan.batch",le="+Inf"} 130
 LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_count{route="attendance.scan.batch"} 130
+ConciliacionCompletaSinTramos	set	work_record_reconciliation_entries_checked{scope="full"} 0
+SondasDeBlackboxSinRespuesta	set	up{job="kronoqr-loki",instance="http://loki:3100/ready"} 0

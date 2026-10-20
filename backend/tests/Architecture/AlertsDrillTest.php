@@ -45,6 +45,7 @@ $inventarioDelSimulacro = [
     'SimulacroDeRestauracionCaducado', 'SimulacroDeRestauracionNuncaEjecutado', 'SlotDeReplicacionParado',
     'ColaDeTrabajosAcumulada', 'ColaDeTrabajosSinProcesar', 'ReverbSinRespuesta', 'LokiSinRespuesta', 'ErroresDeServidorEnElPanel', 'ErroresDeServidorEnElPortal',
     'LatenciaDelFichajeAlta', 'LatenciaDelFichajePorPinAlta', 'LatenciaDelFichajePorLoteAlta',
+    'ConciliacionCompletaSinTramos', 'SondasDeBlackboxSinRespuesta',
 ];
 
 /**
@@ -83,7 +84,7 @@ it('cubre las alertas del inventario, cada una con receta o con motivo, y ningun
     $conReceta = array_values(array_unique(array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/faults.tsv'))));
     $sinReceta = array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/not-fabricable.tsv'));
 
-    expect($inventarioDelSimulacro)->toHaveCount(43);
+    expect($inventarioDelSimulacro)->toHaveCount(45);
 
     $cubiertas = array_merge($conReceta, $sinReceta);
     sort($cubiertas);
