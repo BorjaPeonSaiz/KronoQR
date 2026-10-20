@@ -1706,6 +1706,20 @@ stays stopped: fix it the same day. And if the server has no `setsid`
 (`util-linux` package), step 1 warns: without it, a Ctrl+C could still cut a
 rollback half-way.
 
+**When updating to 2.3.0: clearer warnings and a new `[FAIL]` in
+`./doctor.sh`.** None of this stops clock-in:
+
+- **Licence not activated or with something to look at**: `update.sh` says so
+  as a warning, with the command to see it, and not as "failed".
+- **If cosign is installed and the image registry denies access**, the update
+  still stops with `7`, but the message starts with what it almost always is:
+  a mistyped `IMAGE_REGISTRY`.
+- **`./doctor.sh` gives `[FAIL]` with Redis stopped** (it used to say `[ok]
+  Redis: exited`) and, with the application running, **reminds you of the empty
+  `IMAGE_DIGEST_*=` lines** in the `.env` if they are still there. And it makes
+  clear that the "exit code" it prints inside is `product:doctor`'s: its own is
+  `0` with no failures and `6` with any (§8).
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or

@@ -1689,6 +1689,20 @@ parado: resuélvelo el mismo día. Y si el servidor no tiene `setsid` (paquete
 `util-linux`), el paso 1 avisa: sin él, un Ctrl+C sí podría cortar una vuelta
 atrás a medias.
 
+**Al actualizar a la 2.3.0: avisos más claros y un `[FALLA]` nuevo en
+`./doctor.sh`.** Nada de esto impide fichar:
+
+- **Licencia sin activar o con algo que mirar**: `update.sh` lo dice como
+  aviso, con la orden para verlo, y no como «ha fallado».
+- **Si cosign está instalado y el registro de imágenes niega el acceso**, la
+  actualización sigue parándose con `7`, pero el mensaje empieza por lo que
+  casi siempre es: `IMAGE_REGISTRY` mal escrito.
+- **`./doctor.sh` da `[FALLA]` con Redis parado** (antes decía `[ok] Redis:
+  exited`) y, con la aplicación en marcha, **recuerda las líneas
+  `IMAGE_DIGEST_*=` vacías** del `.env` si siguen ahí. Y aclara que el
+  «código de salida» que imprime dentro es el de `product:doctor`: el suyo es
+  `0` sin fallos y `6` con alguno (§8).
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,
