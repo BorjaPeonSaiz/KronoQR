@@ -2258,6 +2258,7 @@ Tempo and blackbox-exporter add, is in [`operation.md`](operation.md) §10.
 | `ALERT_MAINTENANCE_WEEKDAY` | `[CLIENTE]` | Day of the week of the maintenance window that silences kiosk, API, certificate and disk alerts. **Value in English and lower case** (`monday`…`sunday`): `render-config.sh` rejects anything else and refuses to start. See [`operation.md`](operation.md) §10.4 | `sunday` | If your quiet window is another day. **Never the day of the 06:00 shift change** | No |
 | `ALERT_MAINTENANCE_START` | `[CLIENTE]` | Start time of that window, in the **server's** time zone, not the site's | `02:00` | Same | No |
 | `ALERT_MAINTENANCE_END` | `[CLIENTE]` | End time | `04:00` | Same | No |
+| `KQ_OBSERVABILITY_REVISION` | `[INSTALADOR]` | Fingerprint of the contents of `observability/`. `update.sh` writes it and the compose file puts it as a label on Prometheus, Alertmanager and blackbox-exporter: if it changes, `docker compose up -d` recreates them and they load the new rules and recipients (they read their configuration once, at start) | (empty; computed by `update.sh`) | Never by hand. If you edit a file under `observability/` without updating, recreate the three with `sudo docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter` | No |
 
 ### 6.21 Email
 

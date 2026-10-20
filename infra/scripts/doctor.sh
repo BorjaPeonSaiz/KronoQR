@@ -409,6 +409,7 @@ run_delegated_doctor() {
   check_orphan_restore_databases
   check_redis_restart_loop
   check_prometheus_rules
+  check_alertmanager
   check_app_storage
   check_maintenance_mode
   # Tambien con la aplicacion en marcha, que es el caso normal (V1-PL-03): la guia
@@ -489,6 +490,7 @@ run_external_checks() {
   check_orphan_restore_databases
   check_redis_restart_loop
   check_prometheus_rules
+  check_alertmanager
   check_app_storage
   check_disk_space
   check_certificates
@@ -1000,6 +1002,55 @@ check_prometheus_rules() {
   shown="$(head -n 5 <<<"${missing}" | tr '\n' ' ')"
   check_warn "$(kq_format d_c_prom_rules_missing "${count}")" \
     "$(kq_format d_w_prom_rules_missing "${shown}" "${CURRENT_COMPOSE}")"
+}
+
+# Alertmanager: vivo, conectado a Prometheus y con los destinatarios del `.env` (bloque 9 de la
+# 2.3.0, V4-DV-4). `check_prometheus_rules` vigila que las reglas se EVALUAN; esto vigila que lo que
+# se evalua LLEGA a alguien. Tres cosas distintas, cada una con su arreglo:
+#
+#   1. No responde en su puerto interno: las alertas se evaluan y no se entregan (la alerta
+#      `EnrutadoDeAlertasCaido` lo dice tambien, pero la lee quien tiene Alertmanager).
+#   2. Prometheus no lo ve: las reglas saltan y nadie las recoge (mal `alerting:` o red).
+#   3. Lleva destinatarios o ajustes distintos de los del `.env`: Alertmanager lee `ALERT_*` y
+#      `MAIL_*` UNA vez, al arrancar, y quien cambia el correo del IT en el `.env` sin recrearlo
+#      sigue mandando a la direccion vieja. Se comparan los valores del `.env` con los del contenedor
+#      en marcha, y solo se NOMBRAN las variables que difieren, nunca sus valores (llevan
+#      contrasenas y URL con secretos). La contrasena SMTP no esta en la lista: viaja por fichero.
+#
+# Avisos y no fallos, como `check_prometheus_rules`: se arreglan recreando un contenedor. Sin la
+# observabilidad encendida (perfil `observability`) no hay nada que mirar.
+KQ_ALERTMANAGER_ENV_VARS=(ALERT_EMAIL_IT ALERT_EMAIL_RRHH ALERT_EMAIL_SEGURIDAD ALERT_WEBHOOK_IT ALERT_WEBHOOK_RRHH ALERT_WEBHOOK_SEGURIDAD MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_FROM_ADDRESS MAIL_SCHEME)
+check_alertmanager() {
+  local container prometheus response running_env var configured running stale=""
+  container="$(compose_current ps -q alertmanager 2>/dev/null || true)"
+  container="${container%%$'\n'*}"
+  [ -n "${container}" ] || return 0
+
+  if ! compose_current exec -T alertmanager wget -qO- http://127.0.0.1:9093/-/ready >/dev/null 2>&1; then
+    check_warn "$(kq_text d_c_am_unreachable)" "$(kq_format d_w_am_unreachable "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    return 0
+  fi
+
+  prometheus="$(compose_current ps -q prometheus 2>/dev/null || true)"
+  if [ -n "${prometheus%%$'\n'*}" ]; then
+    response="$(compose_current exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alertmanagers 2>/dev/null || true)"
+    if [ -n "${response}" ] && ! grep -q '"activeAlertmanagers":\[{' <<<"${response}"; then
+      check_warn "$(kq_text d_c_am_not_seen)" "$(kq_format d_w_am_not_seen "${CURRENT_COMPOSE}")"
+      return 0
+    fi
+  fi
+
+  running_env="$(compose_current exec -T alertmanager env 2>/dev/null || true)"
+  for var in "${KQ_ALERTMANAGER_ENV_VARS[@]}"; do
+    configured="$(env_value "${CURRENT_ENV}" "${var}")"
+    running="$(sed -n "s/^${var}=//p" <<<"${running_env}" | head -n 1)"
+    [ "${configured}" = "${running}" ] || stale+="${var} "
+  done
+  if [ -n "${stale}" ]; then
+    check_warn "$(kq_text d_c_am_stale)" "$(kq_format d_w_am_stale "${stale% }" "${CURRENT_COMPOSE}")"
+    return 0
+  fi
+  check_pass "$(kq_text d_c_am_ok)"
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

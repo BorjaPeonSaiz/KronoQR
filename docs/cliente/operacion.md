@@ -988,7 +988,7 @@ del paquete**, `update.sh` lo avisa con la lista y **tu versión sigue, intacta,
 en `observability/` del directorio anterior**: compárala
 (`diff -u <anterior>/observability/<fichero> <nuevo>/observability/<fichero>`),
 vuelve a aplicar lo tuyo y recarga
-(`docker compose restart prometheus alertmanager grafana`). Si el paquete
+(`docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter`; `restart` no basta con Alertmanager si has cambiado el `.env`). Si el paquete
 anterior es de una versión que no entregaba la huella (hasta la 2.2.0),
 `update.sh` no puede saber qué tocaste tú: deja lo del paquete nuevo, avisa de
 cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es lo que
@@ -1729,7 +1729,14 @@ y cada uno trae su «Que hacer»:
   está en [`instalacion.md`](instalacion.md) §6.
 - **«Prometheus no tiene cargadas … regla(s) de alerta del paquete»**: tras
   una actualización que cambia `observability/` hay que recrear Prometheus; la
-  orden viene en el propio aviso.
+  orden viene en el propio aviso. Desde la 2.3.0 `update.sh` lo recrea solo
+  (también si actualizas encima del mismo directorio); el aviso queda para quien
+  edita las reglas a mano.
+- **«Alertmanager lleva destinatarios o ajustes distintos de los del .env»**: cambiaste
+  `ALERT_*` o `MAIL_*` en el `.env` y Alertmanager sigue con los anteriores, porque los
+  lee una sola vez, al arrancar. El aviso nombra las variables que difieren (nunca sus
+  valores) y trae la orden para recrearlo. Si dice que **no contesta** o que **Prometheus
+  no lo ve**, las alertas se evalúan y no llegan a nadie: [`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md).
 
 **Al actualizar desde la 2.2.0: la aplicación de la tablet puede cambiar de
 nombre y de icono.** Desde la 2.2.1 la tablet se instala con el nombre y el

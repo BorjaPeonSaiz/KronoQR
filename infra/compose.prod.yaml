@@ -1088,6 +1088,15 @@ services:
       observability:
         ipv4_address: 172.29.0.20
     restart: unless-stopped
+    # LA REVISION DE observability/ (bloque 9 de la 2.3.0, V4-DV-4). Prometheus solo lee sus reglas al
+    # arrancar y Alertmanager renderiza su configuracion en el entrypoint: un cambio en
+    # `observability/` que no cambie nada MAS en la definicion del servicio (una actualizacion
+    # `in place`, o una edicion del cliente) dejaba las reglas viejas en memoria sin aviso. `update.sh`
+    # escribe en el .env la huella de `observability/` y esta etiqueta la lleva: si cambia, `up -d`
+    # recrea el servicio. Es `KQ_OBSERVABILITY_REVISION`; no se edita a mano.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
+
 
   # Publica a Prometheus el resultado de la copia diaria, de su verificacion y
   # del simulacro de restauracion: los scripts de infra/scripts escriben
@@ -1168,6 +1177,9 @@ services:
     networks:
       - observability
     restart: unless-stopped
+    # Ver la etiqueta de `prometheus`: `render-config.sh` se ejecuta al arrancar.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
     # Decision 17(c): sin esto, nadie vigilaba que Alertmanager siguiera vivo.
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9093/-/healthy || exit 1"]
@@ -1280,6 +1292,9 @@ services:
       - --web.listen-address=:9115
     volumes:
       - ./observability/blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    # Ver la etiqueta de `prometheus`: blackbox solo lee sus modulos al arrancar.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
     networks:
       # 'app': tiene que alcanzar `nginx:8080`. 'observability': Prometheus lo
       # scrapea via /probe.

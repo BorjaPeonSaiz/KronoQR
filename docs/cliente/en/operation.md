@@ -1002,8 +1002,9 @@ the package's. **If you changed a file that the new package also changes, the
 package's wins**, `update.sh` warns with the list, and **your version stays,
 intact, in `observability/` of the previous directory**: compare it
 (`diff -u <previous>/observability/<file> <new>/observability/<file>`), apply
-yours again and reload (`docker compose restart prometheus alertmanager
-grafana`). If the previous package is from a version that did not ship the
+yours again and reload (`docker compose up -d --force-recreate prometheus
+alertmanager blackbox-exporter`; `restart` is not enough for Alertmanager if you
+changed the `.env`). If the previous package is from a version that did not ship the
 fingerprint (up to 2.2.0), `update.sh` cannot know what you touched: it leaves
 the new package's files, warns how many files differ, and your files stay in
 the previous directory. That is what
@@ -1746,7 +1747,15 @@ updating**, and each one brings its "What to do":
   [`installation.md`](installation.md) §6.
 - **"Prometheus has … alert rule(s) from the package not loaded"**: after an
   update that changes `observability/`, Prometheus has to be recreated; the
-  command comes in the warning itself.
+  command comes in the warning itself. Since 2.3.0 `update.sh` recreates it on its own
+  (also when you update over the same directory); the warning remains for whoever edits
+  the rules by hand.
+- **"Alertmanager carries recipients or settings different from the .env"**: you changed
+  `ALERT_*` or `MAIL_*` in the `.env` and Alertmanager keeps the previous ones, because it
+  reads them once, at start. The warning names the variables that differ (never their
+  values) and gives the command to recreate it. If it says it **does not answer** or that
+  **Prometheus does not see it**, alerts are evaluated and reach nobody:
+  [`entrega-de-alertas.md`](../../runbooks/entrega-de-alertas.md) (in Spanish).
 
 **When updating from 2.2.0: the tablet app may change name and icon.** Since
 2.2.1 the tablet installs with your brand's name and icon, if you have it
