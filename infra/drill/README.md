@@ -27,7 +27,7 @@ ha saltado es una alerta de la que no se sabe si salta.
 5. Destruye la pila (salvo `KQ_DRILL_KEEP=1`).
 
 ```bash
-make alerts-drill                                   # las 33, unos 8 minutos
+make alerts-drill                                   # las 36, unos 9 minutos
 make alerts-drill ALERT=RoturaDeCadenaDeAuditoria   # una sola, medio minuto
 infra/drill/alerts-drill.sh --list                  # inventario, sin Docker
 ```
@@ -51,7 +51,7 @@ persistencia la prueban los casos de `promtool test rules` de
 `infra/observability/prometheus/tests/`. Tampoco la entrega real al buzón de un
 cliente: eso es la prueba de entrega de `docs/runbooks/entrega-de-alertas.md` §4.2.
 
-## Las 34 alertas
+## Las 37 alertas
 
 La columna «Falla» es lo que cambia en `baseline.prom` (ver `faults.tsv`). La
 columna «Real» es cómo se produciría la misma condición en una instalación; en
@@ -65,6 +65,8 @@ simulacro evita.
 | `CertificadoTlsCaducado` | caducidad un día en el pasado | it-cliente | certificado vencido sin renovar |
 | `CertificadoTlsNoVerificable` | sonda verificada a 0 con la sonda básica a 1 | it-cliente | cadena incompleta o nombre que no coincide |
 | `CertificadoTlsProximoACaducar` | caducidad a 10 días | it-cliente | certificado a punto de vencer |
+| `ColaDeTrabajosAcumulada` | `queue_jobs_pending{queue="default"}` 80 | it-cliente | Horizon no da abasto o parado con tráfico |
+| `ColaDeTrabajosSinProcesar` | `queue_jobs_pending{queue="default"}` 1 sin trabajos terminados | it-cliente | `horizon` parado con una exportación esperando |
 | `ColaOfflineAtascada` | `kiosk_offline_queue_size` 80 | it-cliente | quiosco con red caída varias horas |
 | `ConciliacionCompletaDelRegistroAusente` | última conciliación completa hace 9 días | seguridad | `scheduler` parado más de una semana |
 | `ConciliacionDelRegistroAusente` | retira la serie de la conciliación reciente | seguridad | `scheduler` parado o tarea sin ejecutarse |
@@ -86,6 +88,7 @@ simulacro evita.
 | `ParticionDeAuditoriaAusente` | `audit_log_partition_ready{horizon="current"}` 0 | it-cliente | falta la partición del año |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | **no fabricable** (depende de `month() >= 11`) | it-cliente | noviembre sin partición del año siguiente |
 | `PurgaDeFicherosGeneradosNoPuedeBorrar` | `generated_files_remove_failed_total` +3 | it-cliente | permisos del disco de ficheros |
+| `ReverbSinRespuesta` | retira `websocket_connections_active` con el latido de presencia vivo | it-cliente | `reverb` parado o sin DNS |
 | `RechazoDeFirmaQr` | `scans_total{result="rejected_signature"}` +60 | seguridad | ráfaga de QR con firma falsa |
 | `ReconciliacionConFallos` | `projection_reconciliation_last_failures` 1 | it-cliente | excepción al reconciliar proyecciones |
 | `RoturaDeCadenaDeAuditoria` | `audit_chain_verification_failures_total` 1 | seguridad | `audit_log` alterado (no se fabrica: sería romper la cadena) |
@@ -105,7 +108,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
 2. Una línea en `faults.tsv` (`ALERTA<TAB>set|del|none<TAB>argumento`).
-3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 34).
+3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 37).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 
 Si `alerts-drill.sh` dice «ESTADO SANO NO SILENCIOSO», la regla lee una serie que

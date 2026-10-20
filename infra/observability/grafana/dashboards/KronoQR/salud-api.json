@@ -637,6 +637,98 @@
         "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Conexiones WebSocket activas (Reverb)",
+      "description": "websocket_connections_active (doc 02 §8.2), runbook reverb-parado.md. La publica la tarea de presencia cada minuto preguntando a Reverb. Un hueco en la línea no es un cero: Reverb no ha contestado (alerta ReverbSinRespuesta, 5 min). Cero conexiones de madrugada es normal.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "websocket_connections_active",
+          "legendFormat": "conexiones"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Trabajos terminados por Horizon (20 min)",
+      "description": "Trabajos de cola que han terminado en los últimos 20 min, a partir de queue_job_duration_seconds_count. Si hay trabajos pendientes (panel «Trabajos pendientes por cola») y esta línea baja a cero durante 30 min, salta ColaDeTrabajosSinProcesar: Horizon parado o colgado (runbook cola-de-trabajos-atascada.md). ColaDeTrabajosAcumulada: más de 50 pendientes durante 10 min.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(queue_job_duration_seconds_count[20m]))",
+          "legendFormat": "terminados"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
     }
   ]
 }

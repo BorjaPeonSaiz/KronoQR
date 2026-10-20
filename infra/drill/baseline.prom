@@ -82,3 +82,9 @@ audit_log_partition_ready{horizon="next"} 1
 # --- Deteccion de amenazas (threat-detection.yml) -----------------------------
 scans_total{result="rejected_signature"} 0
 http_requests_total{route="attendance.scan",status="429"} 0
+
+# --- Cola de trabajos y tiempo real (queue.yml, bloque 9 de la 2.3.0) ------------
+# Cola vacia y Reverb contestando a la tarea de presencia, que acaba de correr.
+queue_jobs_pending{queue="default"} 0
+presence_metrics_timestamp_seconds @NOW@
+websocket_connections_active 2

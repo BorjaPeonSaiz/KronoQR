@@ -35,6 +35,13 @@ DiscoDeCopiasCasiLleno	set	kronoqr_backup_volume_free_ratio 0.10
 EntregaDeAlertasFallando	set	kronoqr_wal_replication_slots_inactive 1
 EspacioEnDiscoBajo	set	node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 10000000000
 FicheroGeneradoSinRetirarPasadoSuPlazo	set	generated_files_overdue 3
+# ColaDeTrabajosSinProcesar va ANTES que ColaDeTrabajosAcumulada a proposito: con 80 trabajos
+# esperando y sin ninguna serie de trabajos terminados, la falla de Acumulada enciende tambien
+# a SinProcesar, y la comprobacion previa de la siguiente (que no este ya disparada) fallaria
+# si Acumulada fuera la primera. Con 1 trabajo solo se enciende SinProcesar.
+ColaDeTrabajosSinProcesar	set	queue_jobs_pending{queue="default"} 1
+ColaDeTrabajosAcumulada	set	queue_jobs_pending{queue="default"} 80
+
 KioskDiscardedScansAttributed	set	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 5
 KioskQueueStorageDegraded	set	kiosk_queue_storage_degraded{device="drill-kiosk-1"} 1
 KioskUnreportedDiscards	set	kiosk_unreported_discards{device="drill-kiosk-1"} 4
@@ -52,3 +59,4 @@ ScanBatchItemNotProcessed	set	scan_batch_items_not_processed_total 12
 SimulacroDeRestauracionCaducado	set	kronoqr_backup_restore_drill_last_result 0
 SimulacroDeRestauracionNuncaEjecutado	del	kronoqr_backup_restore_drill_last_success_timestamp_seconds
 SlotDeReplicacionParado	set	kronoqr_wal_replication_slots_inactive 1
+ReverbSinRespuesta	del	websocket_connections_active

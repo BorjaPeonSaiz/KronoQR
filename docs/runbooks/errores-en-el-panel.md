@@ -134,8 +134,9 @@ cuyo texto ya trae la orden:
 
 Las dos últimas tienen su alerta (`MedicionDeWalAusente`, `CopiaDeSeguridadSinVerificar`);
 la sonda existe para la instalación que aún no tiene Alertmanager configurado
-([`entrega-de-alertas.md`](entrega-de-alertas.md)). La primera no tiene alerta: la
-revisión semanal de esta página (y `doctor.sh` tras cada actualización) es lo que la vigila.
+([`entrega-de-alertas.md`](entrega-de-alertas.md)). La primera la vigilan `ColaDeTrabajosSinProcesar` y `ColaDeTrabajosAcumulada`
+([`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md)); y a `reverb`,
+`ReverbSinRespuesta` ([`reverb-parado.md`](reverb-parado.md)).
 
 ---
 

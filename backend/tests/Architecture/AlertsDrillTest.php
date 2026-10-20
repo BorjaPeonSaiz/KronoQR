@@ -15,7 +15,7 @@ use Tests\Architecture\Support\Repo;
  * —necesita Docker—, lo ejecuta `.github/workflows/alerts-drill.yml`—. Vigilan
  * lo que se erosiona sin ruido:
  *
- *   · que el inventario de las 34 siga completo y apunte a reglas que existen;
+ *   · que el inventario del simulacro (las 34 de la 2.2.0 y las que se han ido anadiendo) siga completo y apunte a reglas que existen;
  *   · que cada receta toque series que el estado sano declara (una receta que
  *     cambia una serie inexistente la crea, y la alerta "salta" por otro motivo);
  *   · que las no fabricables tengan de verdad un caso de promtool que las dispare;
@@ -25,12 +25,13 @@ use Tests\Architecture\Support\Repo;
  */
 
 /**
- * El inventario de la tanda 4 de la verificacion 2.2.0: las 34 alertas que
- * nunca habian saltado en real (docs/verificacion/2.2.0-verificacion-final-tanda-4.md).
+ * El inventario del simulacro: las 34 alertas que nunca habian saltado en real
+ * (docs/verificacion/2.2.0-verificacion-final-tanda-4.md) mas las que se han
+ * anadido despues (bloque 9 de la 2.3.0: cola de trabajos y Reverb).
  *
  * @var list<string>
  */
-$inventarioDeLas34 = [
+$inventarioDelSimulacro = [
     'AlmacenDeMetricasAusente', 'ArchivadoDeWalFallando', 'CertificadoTlsCaducado', 'CertificadoTlsNoVerificable',
     'CertificadoTlsProximoACaducar', 'ColaOfflineAtascada', 'ConciliacionCompletaDelRegistroAusente',
     'ConciliacionDelRegistroAusente', 'CopiaDeSeguridadAusente', 'DescansoEntreJornadasInsuficiente',
@@ -42,6 +43,7 @@ $inventarioDeLas34 = [
     'PurgaDeFicherosGeneradosNoPuedeBorrar', 'RechazoDeFirmaQr', 'ReconciliacionConFallos',
     'RoturaDeCadenaDeAuditoria', 'SaturacionDelBordeEnElFichaje', 'ScanBatchItemNotProcessed',
     'SimulacroDeRestauracionCaducado', 'SimulacroDeRestauracionNuncaEjecutado', 'SlotDeReplicacionParado',
+    'ColaDeTrabajosAcumulada', 'ColaDeTrabajosSinProcesar', 'ReverbSinRespuesta',
 ];
 
 /**
@@ -76,18 +78,18 @@ $seriesDelEstadoSano = static function (): array {
     return $series;
 };
 
-it('cubre las 34 alertas del inventario, cada una con receta o con motivo, y ninguna otra', function () use ($inventarioDeLas34, $filasDe): void {
+it('cubre las alertas del inventario, cada una con receta o con motivo, y ninguna otra', function () use ($inventarioDelSimulacro, $filasDe): void {
     $conReceta = array_values(array_unique(array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/faults.tsv'))));
     $sinReceta = array_map(static fn (array $fila): string => $fila[0], $filasDe('infra/drill/not-fabricable.tsv'));
 
-    expect($inventarioDeLas34)->toHaveCount(34);
+    expect($inventarioDelSimulacro)->toHaveCount(37);
 
     $cubiertas = array_merge($conReceta, $sinReceta);
     sort($cubiertas);
-    $esperadas = $inventarioDeLas34;
+    $esperadas = $inventarioDelSimulacro;
     sort($esperadas);
 
-    expect($cubiertas)->toBe($esperadas, 'faults.tsv + not-fabricable.tsv tienen que ser exactamente el inventario de las 34.');
+    expect($cubiertas)->toBe($esperadas, 'faults.tsv + not-fabricable.tsv tienen que ser exactamente el inventario del simulacro.');
     expect(array_intersect($conReceta, $sinReceta))->toBe([], 'Una alerta o se dispara o se declara no fabricable, no las dos cosas.');
 })->group('RF-PD-13', 'RNF-D-01');
 
@@ -160,11 +162,11 @@ it('respalda cada alerta no fabricable con un caso de promtool que la dispara', 
     }
 })->group('RF-PD-13', 'RNF-D-01');
 
-it('documenta cada alerta del simulacro en infra/drill/README.md', function () use ($inventarioDeLas34): void {
+it('documenta cada alerta del simulacro en infra/drill/README.md', function () use ($inventarioDelSimulacro): void {
     $readme = Repo::contents('infra/drill/README.md');
 
     $sinDocumentar = array_values(array_filter(
-        $inventarioDeLas34,
+        $inventarioDelSimulacro,
         static fn (string $alerta): bool => ! str_contains($readme, '`'.$alerta.'`'),
     ));
 
