@@ -20,6 +20,9 @@
 # anterior descargada de un registro) no casa: su contenido no es el fijado, y
 # lo que corresponde es el error de descarga normal.
 
+set -euo pipefail
+IFS=$'\n\t'
+
 # La variable del .env que anula la fijacion de la imagen REF, por su nombre:
 # IMAGE_DIGEST_PHP, IMAGE_DIGEST_NGINX, IMAGE_DIGEST_POSTGRES o REDIS_IMAGE_DIGEST.
 # Vacio si no es una imagen fijada por el paquete.
