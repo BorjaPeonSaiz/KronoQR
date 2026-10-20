@@ -72,7 +72,7 @@
       "id": 2,
       "type": "stat",
       "title": "Latencia p95 del fichaje (10 min)",
-      "description": "Umbral de la alerta LatenciaDelFichajeAlta: > 500 ms en 10 min, alta.",
+      "description": "Las tres rutas de fichaje juntas, como orientación. Desde el bloque 9 de la 2.3.0 las alertas son una por ruta: LatenciaDelFichajeAlta (tarjeta, > 500 ms), LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta (más del 5 % por encima de 3 s); mira el panel «p95 por ruta de fichaje».",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -915,6 +915,64 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
+      }
+
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Latencia p95 por ruta de fichaje (10 min)",
+      "description": "p95 de attendance.scan (tarjeta), attendance.scan.pin (PIN) y attendance.scan.batch (lote) por separado: cada una tiene su alerta y su umbral (LatenciaDelFichajeAlta a 0,5 s; PIN y lote con más del 5 % por encima de 3 s). El PIN paga un hash a propósito (RNF-P-08) y va más lento que la tarjeta sin que haya avería. El histograma no pasa de 3 s: un valor de 3 es «3 s o más».",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 80 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan\"}[10m])))",
+          "legendFormat": "tarjeta"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\"}[10m])))",
+          "legendFormat": "PIN"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\"}[10m])))",
+          "legendFormat": "lote"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       }
 
     }

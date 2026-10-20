@@ -90,27 +90,120 @@ groups:
           runbook_url: docs/runbooks/errores-en-el-panel.md
 
       #------------------------------------------------------------------------
-      # p95 de latencia por encima de 500 ms, mismas tres rutas.
+      # p95 de latencia, UNA REGLA POR RUTA (bloque 9 de la 2.3.0, R4-DV-06).
+      #
+      # Hasta la 2.2.1 una sola regla agrupaba las tres rutas de fichaje con
+      # `attendance\.scan(\..*)?`. Cada una tiene un coste distinto y un
+      # presupuesto distinto, y mezclarlas daba dos fallos:
+      #
+      #   · el PIN paga un bcrypt de coste 12 a proposito (RNF-P-08, decision de
+      #     15-10-2026) y tarda de 1 s a 1,5 s en una maquina lenta: con pocas
+      #     peticiones por minuto dominaba el p95 conjunto y la alerta saltaba
+      #     sin averia alguna (dos veces en la verificacion de la 2.2.0);
+      #   · el lote procesa hasta `kiosk.batch_max_size` (50) fichajes en una
+      #     sola peticion, asi que su latencia crece con el numero de elementos.
+      #
+      # Cada ruta tiene su umbral y un MINIMO DE PETICIONES en la ventana: el p95
+      # de cinco peticiones es la mas lenta de las cinco, y de madrugada no dice
+      # nada. Los umbrales NO son un requisito del producto, son el punto en el
+      # que alguien delante de la tablet ya lo nota:
+      #
+      #   attendance.scan        500 ms  catalogo del §9.3 (RNF-P-02: p95 < 150 ms)
+      #   attendance.scan.pin    3 s     ~7 veces RNF-P-08 (p95 < 400 ms, a confirmar)
+      #   attendance.scan.batch  3 s     el ultimo cubo finito del histograma
+      #
+      # LOS CUBOS DEL HISTOGRAMA LIMITAN LO QUE SE PUEDE VIGILAR. `RecordHttpMetrics`
+      # mide con cubos 0,025 0,05 0,1 0,15 0,3 0,4 1 3 y +Inf, y `histogram_quantile`
+      # interpola dentro del cubo: con toda la masa a 1,2 s da 2,9 s, no 1,2 s. Un umbral
+      # entre dos cubos (el PIN a 2 s) saltaria con un PIN de 1,2 s, justo el falso positivo
+      # de R4-DV-06. Y un p95 por encima de 3 s cae en +Inf y devuelve 3, nunca mas: un
+      # umbral del lote a 10 s seria inalcanzable. Por eso el PIN y el lote se vigilan como
+      # «mas del 5 % de las peticiones tardan mas de 3 s» (= p95 > 3 s) sobre los cubos
+      # `le="3.0"` y `le="+Inf"`, que SI son exactos, y por eso son menos finos que el QR: un
+      # lote lleno tras un corte largo puede acercarse a esos 3 s (se compensa con
+      # `for: 15m` y un minimo de 5 lotes). Medirlos mejor exige cubos nuevos (2 s, 10 s)
+      # en el middleware, que cambian una serie existente: queda para el bloque de
+      # instrumentacion.
+      #
+      # `LatenciaDelFichajeAlta` conserva su nombre y es la del catalogo (QR).
       #------------------------------------------------------------------------
       - alert: LatenciaDelFichajeAlta
         expr: >-
           histogram_quantile(
             0.95,
-            sum(rate(http_request_duration_seconds_bucket{route=~"attendance\\.scan(\\..*)?"}[10m])) by (le)
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan"}[10m])) by (le)
           ) > 0.5
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan"}[10m])) >= 20
         for: 1m
         labels:
           severity: high
           destinatario: it-cliente
           component: api
         annotations:
-          summary: "El p95 de latencia del fichaje supera los 500 ms desde hace 10 min"
+          summary: "El p95 de latencia del fichaje con tarjeta supera los 500 ms desde hace 10 min"
           description: >-
             RNF-P-02 fija p95 < 150 ms; esta alerta suena muy por encima, a
             500 ms, porque a partir de ahi el retraso ya lo nota quien esta
             fichando delante del quiosco. Con 500 personas en el cambio de
             turno, una cola de peticiones lentas en el servidor se traduce
-            en gente esperando frente a la tablet.
+            en gente esperando frente a la tablet. Solo mide el fichaje con
+            tarjeta (attendance.scan), con al menos 20 peticiones en la
+            ventana; el PIN y el lote tienen la suya.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: LatenciaDelFichajePorPinAlta
+        expr: >-
+          (
+            1
+            -
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}[10m]))
+            /
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan.pin"}[10m])) >= 20
+        for: 5m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de los fichajes por PIN tardan mas de 3 s desde hace 10 min"
+          description: >-
+            El fichaje por PIN paga un hash bcrypt de coste 12 a proposito
+            (RNF-P-08: p95 < 400 ms en el hardware de referencia). Por encima de
+            3 s en mas de uno de cada veinte, el servidor va justo de CPU o la
+            base de datos va lenta. El fichaje con tarjeta no se ve afectado salvo
+            que la causa sea comun: compara con LatenciaDelFichajeAlta. Con al
+            menos 20 peticiones por PIN en la ventana.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: LatenciaDelFichajePorLoteAlta
+        expr: >-
+          (
+            1
+            -
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}[10m]))
+            /
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan.batch"}[10m])) >= 5
+        for: 15m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 3 s desde hace 10 min"
+          description: >-
+            El envio de la cola offline de un quiosco (hasta 50 fichajes por
+            lote) tarda mas de lo normal. Un lote lleno tras un corte largo puede
+            rozar los 3 s sin que haya averia: si coincide con un quiosco que se
+            esta vaciando, espera; si no, el servidor va lento. Los quioscos
+            siguen aceptando fichajes y los reenviaran (regla dura 19). Con al
+            menos 5 lotes en la ventana.
           runbook_url: docs/runbooks/errores-en-el-panel.md
 
       #------------------------------------------------------------------------

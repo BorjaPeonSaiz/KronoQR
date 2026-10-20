@@ -63,3 +63,10 @@ ReverbSinRespuesta	del	websocket_connections_active
 LokiSinRespuesta	set	probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 0
 ErroresDeServidorEnElPanel	set	http_requests_total{route="employees.index",status="500"} 40
 ErroresDeServidorEnElPortal	set	http_requests_total{route="portal.workdays",status="500"} 40
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_bucket{route="attendance.scan",le="1.0"} 300
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_bucket{route="attendance.scan",le="+Inf"} 300
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_count{route="attendance.scan"} 300
+LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_bucket{route="attendance.scan.pin",le="+Inf"} 300
+LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_count{route="attendance.scan.pin"} 300
+LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_bucket{route="attendance.scan.batch",le="+Inf"} 130
+LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_count{route="attendance.scan.batch"} 130

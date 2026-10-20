@@ -10,13 +10,15 @@
 
 ---
 
-## 1. Las siete alertas que traen aquí, y la revisión sin alerta
+## 1. Las nueve alertas que traen aquí, y la revisión sin alerta
 
 | Alerta | Umbral | Severidad | Regla | Estado |
 | --- | --- | --- | --- | --- |
 | `ErroresCriticosNuevos` | Un grupo `critical` **nuevo o reabierto** en 5 min | Alta | `infra/observability/prometheus/rules/errors.yml` | ✅ Tarea 5.12 |
 | `ErroresDeServidorEnElFichaje` | Tasa de `5xx` en `/api/v1/scan*` > 1 % en 5 min | Crítica | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
-| `LatenciaDelFichajeAlta` | p95 de `/api/v1/scan*` > 500 ms en 10 min | Alta | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
+| `LatenciaDelFichajeAlta` | p95 del fichaje con tarjeta (`attendance.scan`) > 500 ms en 10 min, con al menos 20 peticiones | Alta | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
+| `LatenciaDelFichajePorPinAlta` | Más del 5 % de los fichajes por PIN tardan más de 3 s en 10 min (≥ 20 peticiones), `for: 5m` | Media | `infra/observability/prometheus/rules/api.yml` | ✅ Bloque 9 de la 2.3.0 |
+| `LatenciaDelFichajePorLoteAlta` | Más del 5 % de los lotes de la cola offline tardan más de 3 s en 10 min (≥ 5 lotes), `for: 15m` | Media | `infra/observability/prometheus/rules/api.yml` | ✅ Bloque 9 de la 2.3.0 |
 | `ErroresDeServidorEnElPanel` | Más del 5 % de `5xx` (y al menos 3) en las rutas de gestión en 10 min, `for: 5m` | Alta | `infra/observability/prometheus/rules/api.yml` | ✅ Bloque 9 de la 2.3.0 |
 | `ErroresDeServidorEnElPortal` | Más del 5 % de `5xx` (y al menos 3) en las rutas `portal.*` en 10 min, `for: 5m` | Alta | `infra/observability/prometheus/rules/api.yml` | ✅ Bloque 9 de la 2.3.0 |
 | `SondaDelBordeFallida` | `probe_success == 0`, `for: 5m` (nada llega, o `/ready` dice que la base de datos o Redis no responden) | Crítica | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
@@ -53,6 +55,18 @@ vigilaban las rutas de fichaje: un panel o un portal que devolvían 500 no avisa
 nadie. Las dos alertas nuevas separan las familias por el nombre de la ruta y piden
 **a la vez** más del 5 % y al menos 3 errores en 10 min, para no saltar con una
 petición suelta de madrugada. Empieza igual que con las demás: §3 de este documento.
+
+**La latencia, una alerta por ruta.** Hasta la 2.2.1 una sola alerta mezclaba el
+fichaje con tarjeta, el PIN y el lote, y un PIN (que paga su hash a propósito) la
+hacía saltar con poco tráfico sin ninguna avería. Ahora `LatenciaDelFichajeAlta`
+mide solo la tarjeta (`attendance.scan`), `LatenciaDelFichajePorPinAlta` el PIN y
+`LatenciaDelFichajePorLoteAlta` los lotes, y las tres exigen un mínimo de
+peticiones en la ventana: el p95 de cinco peticiones es la más lenta de las
+cinco. Compara siempre las tres: si solo va lento el PIN, suele ser CPU (su hash); si van lentas
+las tres, suele ser la base de datos o el disco. **Límite honesto:** el histograma solo
+tiene cubos hasta 3 s, así que el PIN y el lote se vigilan como «más del 5 %
+tarda más de 3 s»; un lote lleno tras un corte largo puede rozar ese valor sin
+averia.
 
 **Con Redis caído no saltan, y es normal.** `http_requests_total` vive en Redis. Con
 Redis parado fallan —porque cierran en seguro— el acceso al panel y al portal, el

@@ -61,7 +61,7 @@ vigila que los documentos no se contradigan.
 
 ## Índice por alerta
 
-Las 72 reglas de `infra/observability/prometheus/rules/` y el runbook al que
+Las 74 reglas de `infra/observability/prometheus/rules/` y el runbook al que
 apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
 **En tu servidor no hay `infra/`.** Los runbooks citan los ficheros con su ruta
@@ -88,7 +88,7 @@ paquete: es de la integración continua del fabricante.
 | [`cola-de-trabajos-atascada.md`](cola-de-trabajos-atascada.md) | `ColaDeTrabajosAcumulada` · `ColaDeTrabajosSinProcesar` |
 | [`reverb-parado.md`](reverb-parado.md) | `ReverbSinRespuesta` |
 | [`loki-sin-respuesta.md`](loki-sin-respuesta.md) | `LokiSinRespuesta` |
-| [`errores-en-el-panel.md`](errores-en-el-panel.md) | `ErroresCriticosNuevos` · `ErroresDeServidorEnElFichaje` · `LatenciaDelFichajeAlta` · `ErroresDeServidorEnElPanel` · `ErroresDeServidorEnElPortal` · `SondaDelBordeFallida` · `DeteccionDeIncidenciasConFallos` |
+| [`errores-en-el-panel.md`](errores-en-el-panel.md) | `ErroresCriticosNuevos` · `ErroresDeServidorEnElFichaje` · `LatenciaDelFichajeAlta` · `ErroresDeServidorEnElPanel` · `ErroresDeServidorEnElPortal` · `LatenciaDelFichajePorPinAlta` · `LatenciaDelFichajePorLoteAlta` · `SondaDelBordeFallida` · `DeteccionDeIncidenciasConFallos` |
 | [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | `AlmacenDeMetricasCaido` · `AlmacenDeMetricasAusente` |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | `EnrutadoDeAlertasCaido` · `EntregaDeAlertasFallando` |
 | [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) | `CertificadoTlsProximoACaducar` · `CertificadoTlsCaducado` · `CertificadoTlsNoVerificable` |

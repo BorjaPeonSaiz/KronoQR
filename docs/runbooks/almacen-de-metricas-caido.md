@@ -31,8 +31,10 @@ de `/api/v1/scan*` falla abierto. Lo que se pierde es **visibilidad**.
 
 Mientras la alerta está activa, Alertmanager **inhibe** las alertas de
 `component: kiosk` (`QuioscoSinLatido`, `ColaOfflineAtascada`,
-`ColaOfflineSinVaciar`…) y `ErroresDeServidorEnElFichaje` y
-`LatenciaDelFichajeAlta`, que leen esas series. No se inhiben la sonda del borde,
+`ColaOfflineSinVaciar`…) y las de errores y latencia del fichaje, del panel y del
+portal (`ErroresDeServidorEnElFichaje`, `ErroresDeServidorEnElPanel`,
+`ErroresDeServidorEnElPortal`, `LatenciaDelFichajeAlta`, `LatenciaDelFichajePorPinAlta`
+y `LatenciaDelFichajePorLoteAlta`), que leen esas series. No se inhiben la sonda del borde,
 la copia, la auditoría, la integridad ni la autenticación. Cuando el almacén
 vuelve, las alertas inhibidas se reevalúan solas: si algún quiosco estuvo
 caído durante el hueco, `QuioscoSinLatido` volverá a sonar tras su propio
