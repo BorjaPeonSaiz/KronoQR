@@ -3011,6 +3011,16 @@ paths:
             Sesion abierta. El token viaja como `Bearer` en las tres rutas
             restantes del portal y en ninguna mas: no alcanza ningun endpoint de
             gestion, porque su unico ambito es `self:read`.
+          headers:
+            Cache-Control:
+              description: |
+                Siempre `no-store` (2.3.0): el cuerpo lleva el token de la sesion
+                y el nombre de la persona. El portal se abre en el ordenador
+                compartido de la sala de personal, y ni el navegador ni un
+                proxy pueden guardarlo.
+              schema:
+                type: string
+                examples: ['no-store, private']
           content:
             application/json:
               schema:
@@ -3244,7 +3254,13 @@ paths:
                 pattern: '^[0-9a-f]{64}$'
               example: 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
             X-Kronoqr-Report-Rows:
-              description: Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+              description: |
+                Con los dos formatos (en CSV desde la 2.3.0). Filas de datos de
+                la tabla del documento: tramos, jornadas sin tramos y
+                correcciones, sin contar la cabecera de criterios ni los rotulos.
+                El CSV y el PDF del mismo registro dan el mismo numero. Un
+                periodo sin jornadas da `0`, y es lo que el portal usa para decir
+                que no hay nada que descargar en ese periodo.
               schema:
                 type: integer
                 minimum: 0

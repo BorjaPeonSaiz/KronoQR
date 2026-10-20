@@ -15054,6 +15054,13 @@ export interface operations {
              */
             200: {
                 headers: {
+                    /**
+                     * @description Siempre `no-store` (2.3.0): el cuerpo lleva el token de la sesion
+                     *     y el nombre de la persona. El portal se abre en el ordenador
+                     *     compartido de la sala de personal, y ni el navegador ni un
+                     *     proxy pueden guardarlo.
+                     */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -15203,7 +15210,12 @@ export interface operations {
                      */
                     "X-Kronoqr-Report-Digest"?: string;
                     /**
-                     * @description Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+                     * @description Con los dos formatos (en CSV desde la 2.3.0). Filas de datos de
+                     *     la tabla del documento: tramos, jornadas sin tramos y
+                     *     correcciones, sin contar la cabecera de criterios ni los rotulos.
+                     *     El CSV y el PDF del mismo registro dan el mismo numero. Un
+                     *     periodo sin jornadas da `0`, y es lo que el portal usa para decir
+                     *     que no hay nada que descargar en ese periodo.
                      * @example 23
                      */
                     "X-Kronoqr-Report-Rows"?: number;
