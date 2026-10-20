@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/login/session.store'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -107,7 +108,8 @@ async function signOut(): Promise<void> {
             </li>
           </ul>
         </nav>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <LanguageSelector />
           <p v-if="session.employee !== null" class="text-base text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.employee.display_name }) }}
           </p>

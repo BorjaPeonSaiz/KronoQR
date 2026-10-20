@@ -8,7 +8,8 @@ import { resolvePortalLocale } from './index'
 
 export interface PortalLocaleSource {
   readonly policy: LocalePolicy
-  readonly personal: string | null | undefined
+  readonly personal?: string | null | undefined
+  readonly stored?: string | null | undefined
 }
 
 /**
@@ -23,9 +24,9 @@ export function bindPortalLocale(
 ): WatchHandle {
   return watch(
     () => {
-      const { policy, personal } = source()
+      const { policy, personal, stored } = source()
 
-      return resolvePortalLocale({ policy, personal, browser: browser() })
+      return resolvePortalLocale({ policy, personal, stored, browser: browser() })
     },
     (locale) => {
       i18n.global.locale.value = locale

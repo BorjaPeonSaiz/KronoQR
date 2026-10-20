@@ -42,6 +42,11 @@
     "opensInNewTab": "(opens in a new tab)",
     "policyPending": "The full policy is available from Human Resources."
   },
+  "language": {
+    "label": "Language",
+    "es": "Español",
+    "en": "English"
+  },
   "common": {
     "updating": "Updating…"
   },

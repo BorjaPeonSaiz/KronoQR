@@ -19,6 +19,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNotice from '@/shared/ui/PrivacyNotice.vue'
 import { useSessionStore } from './session.store'
 
@@ -146,6 +147,10 @@ async function submit(): Promise<void> {
     <div
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
+      <div class="mb-4 flex justify-end">
+        <LanguageSelector />
+      </div>
+
       <div class="mb-4 flex justify-center">
         <BrandMark :branding="branding.current" size="lg" />
       </div>

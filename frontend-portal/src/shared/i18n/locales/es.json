@@ -42,6 +42,11 @@
     "opensInNewTab": "(se abre en una pestaña nueva)",
     "policyPending": "La política completa está disponible en Recursos Humanos."
   },
+  "language": {
+    "label": "Idioma",
+    "es": "Español",
+    "en": "English"
+  },
   "common": {
     "updating": "Actualizando…"
   },

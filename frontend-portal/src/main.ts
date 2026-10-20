@@ -12,6 +12,7 @@ import { bindDocumentTitle } from './router/documentTitle'
 import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n } from './shared/i18n'
+import { useLocaleChoiceStore } from './shared/i18n/locale.store'
 import { bindPortalLocale } from './shared/i18n/portalLocale'
 import { bindSessionLifecycle } from './shared/session/sessionLifecycle'
 
@@ -33,6 +34,7 @@ app.use(pinia)
 const router = createAppRouter()
 const session = useSessionStore(pinia)
 const branding = useBrandingStore(pinia)
+const localeChoice = useLocaleChoiceStore(pinia)
 
 const i18n = createAppI18n()
 
@@ -79,6 +81,7 @@ syncDocumentLang(() => i18n.global.locale.value)
 bindPortalLocale(i18n, () => ({
   policy: branding.current.locales,
   personal: session.employee?.locale,
+  stored: localeChoice.chosen,
 }))
 
 registerAuthGuard(router)
