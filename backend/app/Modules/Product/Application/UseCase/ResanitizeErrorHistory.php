@@ -103,8 +103,13 @@ final readonly class ResanitizeErrorHistory
             }
         } while (\count($batch) === $size);
 
-        // Dos recuentos y nada mas: ni mensajes, ni huellas, ni identificadores.
-        $this->logger->info('product.error_history_resanitized', ['rows' => $rows, 'merged' => $merged]);
+        // Dos recuentos y nada mas: ni mensajes, ni huellas, ni identificadores. Y
+        // solo si habia algo que sanear: en una instalacion nueva la migracion que
+        // lo lanza corre con el historico vacio, y su linea INFO salia en mitad de
+        // la salida del instalador sin decir nada (V1-PL-01).
+        if ($rows > 0) {
+            $this->logger->info('product.error_history_resanitized', ['rows' => $rows, 'merged' => $merged]);
+        }
 
         return new ResanitizeErrorHistoryResult($rows, $rewritten, $merged);
     }

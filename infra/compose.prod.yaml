@@ -940,6 +940,17 @@ services:
       LOG_CHANNEL:
       LOG_STACK:
       LOG_LEVEL:
+      # Redis (V1-PL-01, 2.3.0). El arranque de la aplicacion lo toca aunque
+      # migrar no lo necesite, y sin estas variables apuntaba a 127.0.0.1, abria el
+      # cortacircuitos y dejaba un WARNING `redis.circuit_opened` con un
+      # RedisException en mitad de una instalacion sana: una pista falsa para el IT.
+      REDIS_CLIENT:
+      REDIS_HOST:
+      REDIS_PORT:
+      REDIS_PASSWORD:
+      REDIS_DB:
+      REDIS_CACHE_DB:
+      REDIS_PREFIX:
       # Conexion. DB_USERNAME es el NOMBRE del rol de aplicacion: las migraciones
       # le escriben los GRANT (AuditLogSchema). Su contraseña no hace falta.
       DB_CONNECTION:

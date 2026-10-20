@@ -1702,6 +1702,11 @@ atrás a medias.
   `IMAGE_DIGEST_*=` vacías** del `.env` si siguen ahí. Y aclara que el
   «código de salida» que imprime dentro es el de `product:doctor`: el suyo es
   `0` sin fallos y `6` con alguno (§8).
+- **Las órdenes `docker compose exec app php artisan …` ya no llenan la
+  pantalla de líneas JSON del log.** Ese registro va ahora al log del
+  contenedor: si el fabricante te pide «el log», es
+  `docker compose logs --since 1h app`. Lo que la orden tiene que decirte sale
+  igual que antes.
 
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que

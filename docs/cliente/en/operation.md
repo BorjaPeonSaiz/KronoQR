@@ -1719,6 +1719,11 @@ rollback half-way.
   `IMAGE_DIGEST_*=` lines** in the `.env` if they are still there. And it makes
   clear that the "exit code" it prints inside is `product:doctor`'s: its own is
   `0` with no failures and `6` with any (§8).
+- **`docker compose exec app php artisan …` commands no longer fill the
+  screen with JSON log lines.** That log now goes to the container log: if the
+  manufacturer asks you for "the log", it is
+  `docker compose logs --since 1h app`. What the command has to tell you shows
+  up as before.
 
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from

@@ -69,7 +69,7 @@ final readonly class ContainerLogChannel
     public function __invoke(array $config): Monolog
     {
         $handler = new StreamHandler(
-            $this->open(self::stream($config['stream'] ?? null)),
+            self::open(self::stream($config['stream'] ?? null)),
             $this->level($config['level'] ?? null),
         );
         $handler->setFormatter(new JsonFormatter);
@@ -83,7 +83,7 @@ final readonly class ContainerLogChannel
      *
      * @return resource|string
      */
-    private function open(string $path): mixed
+    public static function open(string $path): mixed
     {
         if (! str_starts_with($path, '/proc/')) {
             return $path;

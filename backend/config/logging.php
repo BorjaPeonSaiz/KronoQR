@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Logging\RedactPersonalData;
 use App\Support\Observability\Logging\AddCorrelation;
+use App\Support\Observability\Logging\ConsoleAwareStreamHandler;
 use App\Support\Observability\Logging\ContainerLogChannel;
 use App\Support\Observability\Logging\LogChannelStack;
 use App\Support\Observability\Logging\LokiLogChannel;
 use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
-use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
@@ -175,11 +175,15 @@ return [
          * un `.env` mal copiado convertia todo el historico en texto suelto sin
          * que nada fallara. La variable sigue pudiendo existir en un `.env`
          * antiguo: ya no la lee nadie (decision 9 de la ficha 3.1).
+         *
+         * En una orden de consola lanzada con `docker compose exec` (no el PID 1 del
+         * contenedor), el registro va al log del contenedor y no a la terminal del
+         * operador: {@see ConsoleAwareStreamHandler} (V1-PL-01, V21-4-PL-2).
          */
         'stderr' => [
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
-            'handler' => StreamHandler::class,
+            'handler' => ConsoleAwareStreamHandler::class,
             'handler_with' => [
                 'stream' => 'php://stderr',
             ],

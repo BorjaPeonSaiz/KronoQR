@@ -998,6 +998,8 @@ Se confunden con facilidad y tienen propósitos incompatibles. Mezclarlos es un 
 
 En el log técnico, el mensaje de cada línea y el de cada excepción pasan por la misma lista. El canal `emergency` la recibe mediante `RedactingLogManager`, porque Laravel construye ese canal sin `tap`. La prueba que lo respalda es la de volumen sembrada de ADR-048: nombres, documentos, cuentas, teléfonos y códigos en todas sus formas, por las dos puertas de entrada, buscados uno a uno en un paquete real.
 
+**El log técnico de una orden de consola va al log del contenedor, no a la terminal** (2.3.0; V1-PL-01, V21-4-PL-2). El canal `stderr` es el primario, y en `docker compose exec app php artisan …` la salida de error del proceso es la terminal del operador: cada línea registrada le salía en JSON en mitad de la respuesta de la orden, y no llegaba a `docker compose logs`. Desde la 2.3.0, `ConsoleAwareStreamHandler` lo manda a `/proc/1/fd/2` (el log del contenedor, con el mismo mecanismo que `ContainerLogChannel`) cuando el proceso es de consola y no es el PID 1. Los servicios cuya orden es el PID 1 (`horizon`, `scheduler`, `reverb`, los contenedores de un solo uso de `docker compose run`) y PHP-FPM siguen igual. Lo que el operador necesita ver —la salida de la orden y una excepción no capturada— sigue en la terminal.
+
 ### 8.3 Cuadros de mando
 
 | Dashboard | Audiencia | Contenido |
