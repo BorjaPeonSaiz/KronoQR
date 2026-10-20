@@ -236,6 +236,8 @@ test(
 
     const notice = page.getByTestId('privacy-notice')
 
+    await notice.getByText('Aviso de protección de datos').click()
+
     await expect(notice).toContainText('Responsable: Hotel Marina, S. L.')
     await expect(notice.getByRole('link')).toHaveAttribute(
       'href',

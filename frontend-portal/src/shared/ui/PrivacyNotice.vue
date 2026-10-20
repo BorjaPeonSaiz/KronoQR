@@ -24,40 +24,48 @@ const policyUrl = computed(() =>
 </script>
 
 <template>
+  <!-- Plegado: seis puntos seguidos empujan el formulario fuera de la pantalla en
+       un movil. El resumen es un control de 48 px y el contenido sigue en el DOM. -->
   <section
     data-test="privacy-notice"
     aria-labelledby="privacy-heading"
-    class="mt-6 border-t border-kq-border pt-4 text-base text-kq-text-muted"
+    class="mt-6 border-t border-kq-border text-base text-kq-text-muted"
   >
-    <h2 id="privacy-heading" class="font-heading text-lg font-semibold text-kq-text">
-      {{ t('privacy.heading') }}
-    </h2>
-    <ul class="mt-2 list-disc space-y-1 pl-5">
-      <li>
-        {{
-          notice.controllerName === null
-            ? t('privacy.controllerUnknown')
-            : t('privacy.controllerKnown', { controller: notice.controllerName })
-        }}
-      </li>
-      <li>{{ t('privacy.purpose') }}</li>
-      <li>{{ t('privacy.basis') }}</li>
-      <li>{{ t('privacy.retention') }}</li>
-      <li>{{ t('privacy.rights') }}</li>
-      <li>{{ t('privacy.noBiometrics') }}</li>
-    </ul>
-    <p class="mt-2">
-      <a
-        v-if="policyUrl !== null"
-        :href="policyUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-block min-h-12 py-3 font-medium text-kq-primary-strong underline"
+    <details>
+      <summary
+        class="flex min-h-12 cursor-pointer items-center py-3 font-heading text-lg font-semibold text-kq-text"
       >
-        {{ t('privacy.policyLink') }}
-        <span class="sr-only"> {{ t('privacy.opensInNewTab') }}</span>
-      </a>
-      <template v-else>{{ t('privacy.policyPending') }}</template>
-    </p>
+        <h2 id="privacy-heading" class="font-heading text-lg font-semibold">
+          {{ t('privacy.heading') }}
+        </h2>
+      </summary>
+      <ul class="mt-2 list-disc space-y-1 pl-5">
+        <li>
+          {{
+            notice.controllerName === null
+              ? t('privacy.controllerUnknown')
+              : t('privacy.controllerKnown', { controller: notice.controllerName })
+          }}
+        </li>
+        <li>{{ t('privacy.purpose') }}</li>
+        <li>{{ t('privacy.basis') }}</li>
+        <li>{{ t('privacy.retention') }}</li>
+        <li>{{ t('privacy.rights') }}</li>
+        <li>{{ t('privacy.noBiometrics') }}</li>
+      </ul>
+      <p class="mt-2">
+        <a
+          v-if="policyUrl !== null"
+          :href="policyUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block min-h-12 py-3 font-medium text-kq-primary-strong underline"
+        >
+          {{ t('privacy.policyLink') }}
+          <span class="sr-only"> {{ t('privacy.opensInNewTab') }}</span>
+        </a>
+        <template v-else>{{ t('privacy.policyPending') }}</template>
+      </p>
+    </details>
   </section>
 </template>
