@@ -2,13 +2,22 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
+use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -42,7 +51,7 @@ uses(RefreshDatabase::class);
  * Que sean del mismo centro es deliberado: si el aislamiento dependiera del
  * centro y no de la persona, esta prueba no lo detectaria.
  *
- * @return array{token: string, mine: string, theirs: string}
+ * @return array{token: string, site: int, mine: string, theirs: string}
  */
 function dosEmpleadosYUnPortal(): array
 {
@@ -57,9 +66,29 @@ function dosEmpleadosYUnPortal(): array
 
     return [
         'token' => PortalLogins::open($mio),
+        'site' => $centro,
         'mine' => $mio,
         'theirs' => $ajeno,
     ];
+}
+
+/**
+ * Una jornada cerrada registrada por el quiosco, con su proyeccion recalculada.
+ * Se escribe con el agregado: lo que se prueba aqui es la lectura.
+ */
+function aislamientoJornada(int $site, string $employee, string $workDate, string $entrada, string $salida): void
+{
+    $jornada = WorkDay::start($employee, $site, WorkDate::fromIsoDate($workDate, Instants::madrid()));
+    $jornada->clockIn(Str::uuid7()->toString(), Instants::inMadrid($entrada), ScanOrigin::QR_KIOSK);
+    $jornada->clockOut(Instants::inMadrid($salida), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+
+    app(WorkDayRepository::class)->save($jornada);
+
+    foreach ($jornada->releaseEvents() as $evento) {
+        if ($evento instanceof DailyTotalsRecalculated) {
+            app(DailyTotalsProjector::class)->handle($evento);
+        }
+    }
 }
 
 it('devuelve siempre el registro del titular del token, se manipule lo que se manipule', function (): void {
@@ -116,6 +145,68 @@ it('ignora un identificador ajeno enviado en el cuerpo o en una cabecera', funct
         ->assertStatus(200)
         ->assertJsonPath('employee_uuid', $contexto['mine']);
 })->group('RF-ID-07', 'RQ-07');
+
+it('no exporta el registro de otra persona aunque se señale en la consulta de /me/export', function (string $parametro): void {
+    // A6 y V4-PO-2 (2.3.0). `/me/export` es la ruta que entrega el fichero
+    // completo, y el CSV es su formato por omision: la manipulacion de la
+    // barrera 1 se prueba tambien aqui, y no solo sobre `/me/workdays`. Sin
+    // `format` (el CSV por omision) y con `format=csv` explicito.
+    $contexto = dosEmpleadosYUnPortal();
+
+    foreach (['', '&format=csv'] as $formato) {
+        $uri = '/api/v1/me/export?from=2026-03-01&to=2026-03-31'.$formato.'&'.$parametro.'='.$contexto['theirs'];
+
+        $respuesta = Api::as($contexto['token'])->get($uri);
+
+        // Un parametro que no esta en el contrato se rechaza como campo
+        // desconocido ANTES de leer nada: ni el fichero del otro ni el propio.
+        $respuesta->assertStatus(422)->assertJsonStructure(['errors' => [$parametro]]);
+
+        expect($respuesta->headers->get('Content-Disposition'))->toBeNull()
+            ->and($respuesta->getContent())->not->toContain($contexto['theirs']);
+    }
+})->with(['employee_uuid', 'uuid', 'employee'])->group('RF-ID-07', 'RQ-07', 'RL-05');
+
+it('exporta solo lo propio aunque el identificador ajeno viaje en el cuerpo o en una cabecera', function (): void {
+    // Las otras dos vias de la barrera 1 sobre `/me/export` (A6). El campo en el
+    // cuerpo se rechaza como desconocido; la cabecera no existe para el servidor
+    // y la descarga es la del titular del token, sin una linea del otro.
+    $contexto = dosEmpleadosYUnPortal();
+
+    // Una jornada de cada uno, a horas distintas: si la del otro apareciera en
+    // el fichero, sus 07:15 lo delatarian aunque el UUID no viajara en el CSV.
+    aislamientoJornada($contexto['site'], $contexto['mine'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+    aislamientoJornada($contexto['site'], $contexto['theirs'], '2026-03-14', '2026-03-14 07:15', '2026-03-14 15:45');
+
+    Api::as($contexto['token'])
+        ->call('GET', '/api/v1/me/export', ['employee_uuid' => $contexto['theirs']])
+        ->assertStatus(422)
+        ->assertJsonStructure(['errors' => ['employee_uuid']]);
+
+    $descarga = Api::as($contexto['token'])
+        ->withHeaders(['X-Employee-Uuid' => $contexto['theirs']])
+        ->get('/api/v1/me/export?from=2026-03-01&to=2026-03-31');
+
+    $descarga->assertStatus(200)->assertHeader('Content-Type', 'text/csv; charset=utf-8');
+
+    $csv = $descarga->streamedContent();
+
+    expect($csv)->toContain('2026-03-14 06:00')
+        ->and($csv)->not->toContain($contexto['theirs'])
+        ->and($csv)->not->toContain('2026-03-14 07:15')
+        ->and($csv)->not->toContain('15:45');
+})->group('RF-ID-07', 'RQ-07', 'RL-05');
+
+it('no atiende un identificador colgado como segmento extra de /me', function (string $ruta): void {
+    // El «segmento extra» que promete el docblock de este fichero (R4-QA-02):
+    // la ruta no tiene `{uuid}`, asi que `/me/export/<ajeno>` no es una ruta.
+    $contexto = dosEmpleadosYUnPortal();
+
+    Api::as($contexto['token'])->get($ruta.'/'.$contexto['theirs'])->assertStatus(404);
+})->with([
+    'mi registro' => '/api/v1/me/workdays',
+    'mi exportacion' => '/api/v1/me/export',
+])->group('RF-ID-07', 'RQ-07');
 
 it('no deja que una sesion de portal alcance el registro de otro por la ruta de gestion', function (): void {
     // La barrera 2 en su forma mas directa: la ruta de gestion existe y sirve
