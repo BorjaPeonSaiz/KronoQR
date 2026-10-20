@@ -10,6 +10,7 @@ import { useSessionStore } from '@/features/login/session.store'
 import { registerAuthGuard } from '@/router/guards'
 import es from '@/shared/i18n/locales/es.json'
 import { bindSessionLifecycle } from '@/shared/session/sessionLifecycle'
+import { useLocaleChoiceStore } from '@/shared/i18n/locale.store'
 import { portalSession } from './support/fixtures'
 import {
   createTestPinia,
@@ -179,5 +180,117 @@ describe('401 con la sesion abierta', () => {
     await settle()
 
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/records'))
+  })
+})
+
+describe('«Salir» con un 401 concurrente', () => {
+  it('un 401 que llega mientras se espera al servidor no se toma por una caducidad', async () => {
+    createTestPinia()
+    const session = await openSession('2099-01-01T00:00:00Z')
+
+    let release: (response: Response) => void = () => {}
+
+    stubFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
+    )
+
+    const leaving = session.signOut()
+
+    // Mientras el logout sigue en vuelo, otra peticion recibe su 401.
+    session.expire()
+    release(new Response(null, { status: 204 }))
+    await leaving
+
+    expect(session.endedReason).toBeNull()
+    expect(session.isAuthenticated).toBe(false)
+  })
+})
+
+describe('caducidad medida con la hora del servidor', () => {
+  it('un dispositivo con el reloj adelantado no cierra la sesion al instante', async () => {
+    // El servidor dice que son las 10:00 y la sesion dura 2 h; el movil cree que son las 13:00.
+    vi.useFakeTimers({ now: new Date('2026-03-20T13:00:00.000Z') })
+    createTestPinia()
+    stubFetch(
+      () =>
+        new Response(JSON.stringify(portalSession({ expires_at: '2026-03-20T12:00:00.000Z' })), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            Date: 'Fri, 20 Mar 2026 10:00:00 GMT',
+          },
+        }),
+    )
+    const session = useSessionStore()
+
+    await session.logIn({ employee_code: 'E7K2M9XQ4', pin: '284016' })
+
+    expect(session.isAuthenticated).toBe(true)
+
+    vi.advanceTimersByTime(2 * 3_600_000 - 1)
+    expect(session.isAuthenticated).toBe(true)
+
+    vi.advanceTimersByTime(1)
+    expect(session.isAuthenticated).toBe(false)
+    expect(session.endedReason).toBe('expired')
+  })
+
+  it('un dispositivo con el reloj atrasado no la deja abierta de mas', async () => {
+    vi.useFakeTimers({ now: new Date('2026-03-20T07:00:00.000Z') })
+    createTestPinia()
+    stubFetch(
+      () =>
+        new Response(JSON.stringify(portalSession({ expires_at: '2026-03-20T12:00:00.000Z' })), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            Date: 'Fri, 20 Mar 2026 10:00:00 GMT',
+          },
+        }),
+    )
+    const session = useSessionStore()
+
+    await session.logIn({ employee_code: 'E7K2M9XQ4', pin: '284016' })
+    vi.advanceTimersByTime(2 * 3_600_000)
+
+    expect(session.isAuthenticated).toBe(false)
+  })
+
+  it('sin cabecera Date se usa la caducidad del servidor tal cual', async () => {
+    vi.useFakeTimers({ now: NOW })
+    createTestPinia()
+    const session = await openSession()
+
+    vi.advanceTimersByTime(2 * 3_600_000)
+
+    expect(session.isAuthenticated).toBe(false)
+  })
+})
+
+describe('idioma elegido a mano', () => {
+  it('se vacia al salir y al caducar, no al entrar', async () => {
+    const pinia = createTestPinia()
+    const choice = useLocaleChoiceStore(pinia)
+    const session = await openSession('2099-01-01T00:00:00Z')
+
+    choice.choose('en')
+    expect(choice.chosen).toBe('en')
+
+    stubFetch(() => jsonResponse(portalSession()))
+    await session.logIn({ employee_code: 'E7K2M9XQ4', pin: '284016' })
+    expect(choice.chosen).toBe('en')
+
+    session.expire()
+    expect(choice.chosen).toBeNull()
+
+    await session.logIn({ employee_code: 'E7K2M9XQ4', pin: '284016' })
+    choice.choose('en')
+    stubFetch(() => new Response(null, { status: 204 }))
+    await session.signOut()
+
+    expect(choice.chosen).toBeNull()
   })
 })

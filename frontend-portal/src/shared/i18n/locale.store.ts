@@ -4,7 +4,7 @@
 // (`no-browser-storage`) reserva `sessionStorage` a la sesion de la propia
 // persona, y un movil o un ordenador del centro compartido no tiene por que
 // recordar el idioma de quien lo uso antes. Se conserva mientras la pestana
-// siga abierta, tambien al salir y volver a entrar; al recargar vuelve a mandar
+// siga abierta y la misma persona no salga ni caduque su sesion (`reset`); al recargar vuelve a mandar
 // el idioma de la persona (`employees.locale`) y despues el del navegador.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -17,5 +17,9 @@ export const useLocaleChoiceStore = defineStore('portal-locale-choice', () => {
     chosen.value = locale
   }
 
-  return { chosen, choose }
+  function reset(): void {
+    chosen.value = null
+  }
+
+  return { chosen, choose, reset }
 })

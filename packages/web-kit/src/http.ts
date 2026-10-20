@@ -364,6 +364,24 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return (await response.json()) as T
 }
 
+/**
+ * Peticion JSON que devuelve ademas las cabeceras de la respuesta. Para lo que
+ * necesita leer algo de ellas -la hora del servidor (`Date`)- sin pedirselo al
+ * reloj del dispositivo.
+ */
+export async function requestJsonWithHeaders<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ body: T; headers: Headers }> {
+  const response = await send(path, options, 'application/json')
+
+  if (response.status === 204) {
+    throw new ApiError({ kind: 'unexpected', status: 204 })
+  }
+
+  return { body: (await response.json()) as T, headers: response.headers }
+}
+
 /** Igual que `request`, para respuestas que siempre traen cuerpo. */
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const body = await request<T>(path, options)

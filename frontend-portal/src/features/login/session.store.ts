@@ -21,6 +21,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { PortalEmployee, PortalLoginRequest } from '@/shared/api/types'
+import { useLocaleChoiceStore } from '@/shared/i18n/locale.store'
 import { logInToPortal as logInRequest, logOutOfPortal as logOutRequest } from './login.api'
 
 const STORAGE_KEY = 'kronoqr.portal.session'
@@ -146,6 +147,9 @@ export const useSessionStore = defineStore('portal-session', () => {
     expiresAt.value = null
     employee.value = null
     writeStored(null)
+    // El idioma elegido a mano era de quien estaba delante: no pasa a la persona
+    // siguiente del mismo dispositivo.
+    useLocaleChoiceStore().reset()
   }
 
   /**
@@ -183,13 +187,26 @@ export const useSessionStore = defineStore('portal-session', () => {
   expireIfDue()
 
   async function logIn(credentials: PortalLoginRequest): Promise<void> {
-    const session = await logInRequest(credentials)
+    const { session, serverNow } = await logInRequest(credentials)
+
+    // La vida de la sesion se mide contra la hora del SERVIDOR (cabecera `Date`),
+    // no contra el reloj del dispositivo: un movil con la hora mal puesta no
+    // puede cerrarla al instante ni mantenerla abierta de mas. `expiresAt` se
+    // guarda ya en el reloj de este dispositivo, para que el temporizador y la
+    // recarga de la pestana sigan sin depender de el. Sin cabecera legible, se
+    // usa tal cual la caducidad que manda el servidor.
+    const lifetimeMs =
+      serverNow === null ? null : Date.parse(session.expires_at) - serverNow.getTime()
+    const localExpiry =
+      lifetimeMs !== null && Number.isFinite(lifetimeMs)
+        ? new Date(Date.now() + lifetimeMs).toISOString()
+        : session.expires_at
 
     token.value = session.token
-    expiresAt.value = session.expires_at
+    expiresAt.value = localExpiry
     employee.value = session.employee
     endedReason.value = null
-    writeStored({ token: session.token, expiresAt: session.expires_at, employee: session.employee })
+    writeStored({ token: session.token, expiresAt: localExpiry, employee: session.employee })
     expireIfDue()
   }
 
@@ -206,6 +223,11 @@ export const useSessionStore = defineStore('portal-session', () => {
   async function signOut(): Promise<void> {
     const current = token.value
 
+    // La sesion local se cierra ANTES de esperar al servidor: un `401` de otra
+    // peticion que llegue mientras tanto ya no encuentra sesion que caducar
+    // (`expire()` no hace nada sin token) ni la presenta como «sesion caducada».
+    clear()
+
     if (current !== null) {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS)
@@ -218,8 +240,6 @@ export const useSessionStore = defineStore('portal-session', () => {
         clearTimeout(timer)
       }
     }
-
-    clear()
   }
 
   return {
