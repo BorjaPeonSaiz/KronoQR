@@ -8155,6 +8155,12 @@ export interface components {
              *     el resto de la marca** y lo sigue enseñando sin red; si nunca lo
              *     recibio, enseña la redaccion generica. Un cliente que guardo una copia
              *     anterior a la 2.2.0, sin este objeto, la trata como «sin configurar».
+             *
+             *     **El portal del empleado lo enseña tambien** en su pantalla de acceso,
+             *     donde la persona teclea su codigo y su PIN (D8 de la 2.3.0, V3-PO-4,
+             *     art. 13 RGPD). Lee este mismo objeto: no hay un segundo ajuste ni un
+             *     segundo endpoint, y con los dos campos a `null` enseña la redaccion
+             *     generica de sus textos (i18n).
              */
             privacy_notice: {
                 /**
@@ -15116,6 +15122,15 @@ export interface operations {
              */
             200: {
                 headers: {
+                    /**
+                     * @description Siempre `no-store` (V4-PO-1, 2.3.0): el cuerpo es el registro
+                     *     horario de una persona, y el portal se abre en el ordenador
+                     *     compartido de la sala de personal. Con el `no-cache` por omision
+                     *     el navegador podia conservarlo en su cache de disco y enseñarselo
+                     *     a quien se sentara despues. Es la misma cabecera que la descarga
+                     *     de `GET /api/v1/me/export`.
+                     */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
