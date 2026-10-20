@@ -1,3 +1,4 @@
+import { createQueryReloadMark, installChunkLoadRecovery } from '@kronoqr/web-kit/chunkLoadRecovery'
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
@@ -85,6 +86,15 @@ bindPortalLocale(i18n, () => ({
 }))
 
 registerAuthGuard(router)
+
+// Tras una actualizacion, una pestana vieja pide pantallas que ya no existen
+// (8.8: se cargan bajo demanda): se recarga UNA vez. La marca anti-bucle viaja en
+// la URL, no en el navegador (regla no-browser-storage). `resolve(...).href`
+// lleva el prefijo `/portal/`: `fullPath` solo no.
+installChunkLoadRecovery(router, {
+  mark: createQueryReloadMark(router),
+  reload: (target) => window.location.assign(router.resolve(target).href),
+})
 
 // Marca de la instalacion (RF-PD-08). Se pinta el producto de inmediato -sin
 // esperar a la red, para no retrasar la primera pantalla- y se pide la marca

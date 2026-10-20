@@ -120,7 +120,10 @@ registerAuthGuard(router)
 
 // Tras una actualizacion, una pestana vieja pide trozos que ya no existen:
 // se recarga una vez (ver `chunkLoadRecovery.ts`).
-installChunkLoadRecovery(router, { reload: (target) => window.location.assign(target) })
+// `router.resolve(...).href` lleva el prefijo `/admin/`: `fullPath` solo no.
+installChunkLoadRecovery(router, {
+  reload: (target) => window.location.assign(router.resolve(target).href),
+})
 
 app.use(router)
 app.use(i18n)
