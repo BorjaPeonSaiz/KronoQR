@@ -812,6 +812,7 @@ Nada de secretos en el repositorio. En desarrollo, `.env` local a partir de `.en
 http_request_duration_seconds{route,method,status}       histogram
 http_requests_total{route,method,status}                 counter
 queue_jobs_pending{queue}                                gauge
+queue_jobs_waiting{queue}                                gauge
 kronoqr_metrics_store_up                                 gauge
 queue_job_duration_seconds{job}                          histogram
 queue_jobs_failed_total{job}                             counter

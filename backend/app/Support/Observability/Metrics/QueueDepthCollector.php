@@ -8,6 +8,7 @@ use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricCatalogue;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricDefinition;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricStorage;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
+use Illuminate\Queue\RedisQueue;
 use Prometheus\MetricFamilySamples;
 use Throwable;
 
@@ -24,6 +25,15 @@ use Throwable;
  * cola. Ademas, un contador se desincroniza para siempre con el primer trabajo
  * que muera sin evento —un `SIGKILL` al *worker*, un Redis reiniciado— mientras
  * que `size()` vuelve a la verdad en el siguiente scrape.
+ *
+ * ## Esperando no es lo mismo que pendiente
+ *
+ * `queue_jobs_pending` es `LLEN + ZCARD(delayed) + ZCARD(reserved)`: cuenta tambien
+ * el trabajo que se esta ejecutando. Una exportacion integra legitima dura hasta
+ * 30 o 60 min (`TIMEOUT_SECONDS`) y es UN trabajo reservado, no una cola atascada.
+ * `queue_jobs_waiting{queue}` es solo `LLEN`: los que esperan a que un trabajador
+ * los coja, sin los reservados ni los retrasados. La alerta de «Horizon no procesa»
+ * (`ColaDeTrabajosSinProcesar`) lee esta.
  *
  * ## Las colas salen de Horizon, no de una lista
  *
@@ -46,11 +56,36 @@ use Throwable;
  */
 final readonly class QueueDepthCollector
 {
+    private const string PENDING = 'queue_jobs_pending';
+
+    private const string WAITING = 'queue_jobs_waiting';
+
     public function __construct(private QueueFactory $queues) {}
 
-    public function collect(): ?MetricFamilySamples
+    /**
+     * `queue_jobs_pending` y `queue_jobs_waiting`, las dos del mismo recorrido
+     * por las colas de Horizon.
+     *
+     * @return list<MetricFamilySamples>
+     */
+    public function collect(): array
     {
-        $definition = $this->definition();
+        $families = [];
+
+        foreach ([self::PENDING => 'size', self::WAITING => 'pendingSize'] as $series => $method) {
+            $family = $this->family($series, $method);
+
+            if ($family instanceof MetricFamilySamples) {
+                $families[] = $family;
+            }
+        }
+
+        return $families;
+    }
+
+    private function family(string $series, string $method): ?MetricFamilySamples
+    {
+        $definition = $this->definition($series);
 
         if (! $definition instanceof MetricDefinition) {
             return null;
@@ -59,7 +94,7 @@ final readonly class QueueDepthCollector
         $samples = [];
 
         foreach ($this->declaredQueues() as [$connection, $queue]) {
-            $size = $this->sizeOf($connection, $queue);
+            $size = $this->sizeOf($connection, $queue, $method);
 
             if ($size === null) {
                 continue;
@@ -91,10 +126,10 @@ final readonly class QueueDepthCollector
      * el tipo de esta serie tienen que ser los mismos que declara el §8.2, y la
      * prueba de arquitectura solo mira el catalogo.
      */
-    private function definition(): ?MetricDefinition
+    private function definition(string $series): ?MetricDefinition
     {
         foreach (MetricCatalogue::all() as $definition) {
-            if ($definition->storage === MetricStorage::Runtime && $definition->name === 'queue_jobs_pending') {
+            if ($definition->storage === MetricStorage::Runtime && $definition->name === $series) {
                 return $definition;
             }
         }
@@ -168,10 +203,21 @@ final readonly class QueueDepthCollector
         return array_values($merged);
     }
 
-    private function sizeOf(string $connection, string $queue): ?int
+    /**
+     * `size` cuenta esperando + reservados + retrasados; `pendingSize` solo los
+     * que esperan a que un trabajador los coja (en el *driver* de Redis). Un
+     * *driver* sin ese metodo no publica la serie: ausente, no cero.
+     */
+    private function sizeOf(string $connection, string $queue, string $method): ?int
     {
         try {
-            return $this->queues->connection($connection)->size($queue);
+            $driver = $this->queues->connection($connection);
+
+            if ($method === 'size') {
+                return $driver->size($queue);
+            }
+
+            return $driver instanceof RedisQueue ? $driver->pendingSize($queue) : null;
         } catch (Throwable) {
             return null;
         }

@@ -96,6 +96,13 @@ final class MetricCatalogue
                 'Trabajos esperando en cada cola en este momento. Se calcula en el scrape: es un estado, no un acontecimiento.',
                 ['queue'],
             ),
+            new MetricDefinition(
+                'queue_jobs_waiting',
+                MetricType::Gauge,
+                MetricStorage::Runtime,
+                'Trabajos que esperan a que un trabajador los coja, sin los reservados (en ejecucion) ni los retrasados. Se calcula en el scrape.',
+                ['queue'],
+            ),
             // Las series de arriba y casi todas las de abajo viven en Redis y
             // DESAPARECEN con el; sin esta, una alerta de quiosco se
             // «resolveria» justo cuando el almacen cae. Se calcula en el
