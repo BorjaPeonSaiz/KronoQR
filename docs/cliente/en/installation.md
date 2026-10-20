@@ -265,7 +265,7 @@ touch the ones tagged `[CLIENTE]`:**
 
 | Tag | What it means |
 | --- | --- |
-| `[CLIENTE]` | You fill it in. The installer checks they are all there and does not install if one is missing. |
+| `[CLIENTE]` | You fill it in. The installer **does not install** if one with no alternative is missing (`APP_URL`, the networks, `BACKUP_PATH`, `COMPLIANCE_PROFILE`), if one still holds the template example (`APP_URL`, `PORTAL_INTERNAL_CIDR`, `IMAGE_REGISTRY`) or a development value (`MAIL_HOST=mailpit`, a sender in `kronoqr.local`). The licence and the alert recipients, if missing, only give a warning. |
 | `[INSTALADOR]` | **Leave it empty.** The installer generates it on your server. If you write something, it is replaced. |
 | `[FIJO]` | Do not touch. Changing it breaks something that does not look like this file. |
 | No tag | Has a sensible default. If in doubt, leave it as it is. |
@@ -280,7 +280,9 @@ PORTAL_INTERNAL_CIDR=10.0.10.0/24
 METRICS_ALLOW_CIDR=172.29.0.20/32
 TLS_ALLOW_SELF_SIGNED=false
 BACKUP_PATH=/var/backups/fichaje
-IMAGE_REGISTRY=ghcr.io/kronoqr
+IMAGE_REGISTRY=ghcr.io/<cuenta-del-fabricante>/kronoqr
+MAIL_HOST=smtp.tuhotel.es
+MAIL_FROM_ADDRESS=fichaje@tuhotel.es
 ```
 
 **`APP_URL` and `PORTAL_INTERNAL_CIDR` cannot be left as they come.** The
@@ -314,12 +316,16 @@ that it covers Prometheus (§6).
 without blocking the installation — if something does not add up: a
 `PORTAL_INTERNAL_CIDR` that contains no network of this server nor the kiosk
 one (the portal would answer `403` to everyone), a range open to the whole
-internet, a `MAIL_HOST` still set to `mailpit` (the vendor's test mailbox: no
-email would go out), an empty licence or no alert recipient. `update.sh` and
+internet, an empty `MAIL_HOST`, an empty licence or no alert recipient.
+**On the other hand, `MAIL_HOST=mailpit` (the vendor's test mailbox) and a
+`MAIL_FROM_ADDRESS` in `kronoqr.local` stop the installation**: they are the
+template left unfilled. If the hotel has no mail relay, set `MAIL_MAILER=log`:
+it installs all the same and notices stay in the log. `update.sh` and
 `./doctor.sh` repeat the network checks on every run.
 
-**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and today it downloads
-nothing: put the one the vendor gives you.** The images are published on
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and it downloads
+nothing: put the one the vendor gives you.** With the template one, the
+installer refuses in phase 1, writing nothing. The images are published on
 GitHub's container registry (GHCR) under the vendor's account, in the form
 `ghcr.io/<vendor-account>/kronoqr`, and the exact value reaches you in writing
 together with the licence. Write it with no trailing slash and no version: the

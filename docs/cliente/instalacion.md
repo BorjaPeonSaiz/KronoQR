@@ -261,7 +261,7 @@ tocar las marcadas `[CLIENTE]`:**
 
 | Marca | Qué significa |
 | --- | --- |
-| `[CLIENTE]` | Lo rellenas tú. El instalador comprueba que están y no instala si falta alguna. |
+| `[CLIENTE]` | Lo rellenas tú. El instalador **no instala** si falta una de las que no tienen alternativa (`APP_URL`, las redes, `BACKUP_PATH`, `COMPLIANCE_PROFILE`), si alguna sigue con el valor de ejemplo de la plantilla (`APP_URL`, `PORTAL_INTERNAL_CIDR`, `IMAGE_REGISTRY`) o con un valor de desarrollo (`MAIL_HOST=mailpit`, remitente en `kronoqr.local`). La licencia y los destinatarios de alertas, si faltan, solo dan aviso. |
 | `[INSTALADOR]` | **Déjalo vacío.** Lo genera el instalador en tu servidor. Si escribes algo, lo sustituye. |
 | `[FIJO]` | No se toca. Cambiarlo rompe algo que no se parece a este fichero. |
 | Sin marca | Tiene un valor por defecto pensado. Si dudas, déjalo como está. |
@@ -276,7 +276,9 @@ PORTAL_INTERNAL_CIDR=10.0.10.0/24
 METRICS_ALLOW_CIDR=172.29.0.20/32
 TLS_ALLOW_SELF_SIGNED=false
 BACKUP_PATH=/var/backups/fichaje
-IMAGE_REGISTRY=ghcr.io/kronoqr
+IMAGE_REGISTRY=ghcr.io/<cuenta-del-fabricante>/kronoqr
+MAIL_HOST=smtp.tuhotel.es
+MAIL_FROM_ADDRESS=fichaje@tuhotel.es
 ```
 
 **`APP_URL` y `PORTAL_INTERNAL_CIDR` no pueden quedarse como vienen.** El
@@ -308,13 +310,16 @@ que cubra a Prometheus (§6).
 **Además de la forma, el instalador comprueba qué hace cada valor**, y avisa
 —sin impedir la instalación— si algo no cuadra: un `PORTAL_INTERNAL_CIDR` que
 no contiene ninguna red de este servidor ni la de los quioscos (el portal daría
-`403` a todo el mundo), un rango abierto a todo internet, un `MAIL_HOST` que
-sigue en `mailpit` (el buzón de pruebas del fabricante: no saldría ningún
-correo), la licencia vacía o ningún destinatario de alertas. `update.sh` y
+`403` a todo el mundo), un rango abierto a todo internet, un `MAIL_HOST` vacío, la licencia vacía
+o ningún destinatario de alertas. **En cambio, `MAIL_HOST=mailpit` (el buzón
+de pruebas del fabricante) y un `MAIL_FROM_ADDRESS` en `kronoqr.local` paran la
+instalación**: son la plantilla sin rellenar. Si el hotel no tiene relevo de
+correo, pon `MAIL_MAILER=log`: se instala igual y los avisos quedan en el log. `update.sh` y
 `./doctor.sh` repiten las comprobaciones de redes en cada ejecución.
 
-**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y hoy no
-descarga nada: pon el que te da el fabricante.** Las imágenes se publican en el
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y no descarga
+nada: pon el que te da el fabricante.** Con el de la plantilla, el instalador
+se niega en la fase 1, sin escribir nada. Las imágenes se publican en el
 registro de contenedores de GitHub (GHCR) bajo la cuenta del fabricante, con la
 forma `ghcr.io/<cuenta-del-fabricante>/kronoqr`, y el valor exacto te llega por
 escrito junto con la licencia. Escríbelo sin barra final y sin versión: el

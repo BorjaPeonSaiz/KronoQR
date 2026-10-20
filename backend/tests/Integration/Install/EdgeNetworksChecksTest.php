@@ -308,21 +308,35 @@ it('PP-01 y PP-03: update.sh y doctor.sh comprueban las mismas redes que el inst
         ->and($posicionCheck - (int) $posicionPrecondiciones)->toBeLessThan(600);
 })->group('RF-PD-02', 'RF-PD-13');
 
-it('I3: avisa, sin impedir instalar, de correo de desarrollo, alertas sin destino y licencia ausente', function (): void {
-    // .env.example trae MAIL_HOST=mailpit, las seis ALERT_* vacias, LICENSE_KEY
-    // vacia y COMPOSE_PROFILES=observability: el camino por defecto.
+it('I3: el correo de desarrollo de la plantilla impide instalar; alertas sin destino y licencia ausente solo avisan', function (): void {
+    // .env.example trae MAIL_HOST=mailpit, el remitente en kronoqr.local, las
+    // seis ALERT_* vacias, LICENSE_KEY vacia y COMPOSE_PROFILES=observability: el
+    // camino por defecto. Decision del propietario (20-10-2026): bloquean solo
+    // los valores de desarrollo inequivocos; la licencia, nunca (doc 05 §10).
     $paquete = redesPaquete();
 
     $fase1 = redesFase1($paquete);
 
-    expect($fase1['salida'])->toContain('[aviso] MAIL_HOST=mailpit: el correo saliente no esta configurado')
+    expect($fase1['codigo'])->toBe(2)
+        ->and($fase1['salida'])->toContain('[FALLA] MAIL_HOST=mailpit: es el servidor de correo de DESARROLLO de la plantilla')
+        ->and($fase1['salida'])->toContain('MAIL_MAILER=log')
+        ->and($fase1['salida'])->toContain('[FALLA] MAIL_FROM_ADDRESS=no-reply@kronoqr.local: es el remitente de la plantilla')
         ->and($fase1['salida'])->toContain('[aviso] ALERT_EMAIL_IT, ALERT_EMAIL_RRHH y ALERT_EMAIL_SEGURIDAD estan vacias')
         ->and($fase1['salida'])->toContain('[aviso] LICENSE_KEY vacia: el producto se instala sin licencia')
-        // Avisos: ninguno cuenta como fallo.
-        ->and($fase1['salida'])->not->toMatch('/\[FALLA\][^\n]*(MAIL_HOST|ALERT_|LICENSE_KEY)/');
+        ->and($fase1['salida'])->not->toMatch('/\[FALLA\][^\n]*(ALERT_|LICENSE_KEY)/');
 
     redesBorrar($paquete['dir']);
 })->group('RF-PD-02', 'RF-PD-11', 'RQ-11');
+
+it('I3: un hotel sin relevo de correo instala con MAIL_MAILER=log', function (): void {
+    $resultado = redesComprobar('check_operational_settings "$ENV_FILE" /srv/kq/docker-compose.yml', [
+        'COMPLIANCE_PROFILE' => 'ES-hosteleria',
+        'MAIL_MAILER' => 'log',
+    ]);
+
+    expect($resultado['fallos'])->toBe(0)
+        ->and($resultado['salida'])->not->toContain('mailpit');
+})->group('RF-PD-02', 'RF-PD-11');
 
 it('I3: COMPLIANCE_PROFILE vacio impide instalar, y dice que hacer', function (): void {
     $paquete = redesPaquete(['COMPLIANCE_PROFILE' => '']);
@@ -342,6 +356,7 @@ it('I3: no avisa de lo que el cliente ha rellenado bien', function (): void {
         'COMPLIANCE_PROFILE' => 'ES-hosteleria',
         'LICENSE_KEY' => 'KQL1.eyJhIjoxfQ.c2lnbmF0dXJh',
         'MAIL_HOST' => 'smtp.hotel.example',
+        'MAIL_FROM_ADDRESS' => 'fichaje@hotel.example',
         'ALERT_EMAIL_IT' => 'it@hotel.example',
         'ALERT_EMAIL_RRHH' => 'rrhh@hotel.example',
         'ALERT_EMAIL_SEGURIDAD' => 'seguridad@hotel.example',
@@ -358,6 +373,7 @@ it('I3: avisa de un destinatario vacio, de un correo o un webhook mal escritos y
         'COMPLIANCE_PROFILE' => 'ES-hosteleria',
         'LICENSE_KEY' => 'KQL1.solo-una-parte',
         'MAIL_HOST' => 'smtp.hotel.example',
+        'MAIL_FROM_ADDRESS' => 'fichaje@hotel.example',
         'ALERT_EMAIL_IT' => 'it@hotel.example',
         'ALERT_EMAIL_RRHH' => '',
         'ALERT_EMAIL_SEGURIDAD' => 'seguridad sin arroba',
@@ -378,6 +394,7 @@ it('I3: sin observabilidad no pide destinatarios de alerta, que nadie lee', func
         'COMPLIANCE_PROFILE' => 'ES-hosteleria',
         'LICENSE_KEY' => 'KQL1.a.b',
         'MAIL_HOST' => 'smtp.hotel.example',
+        'MAIL_FROM_ADDRESS' => 'fichaje@hotel.example',
     ]);
 
     expect($resultado['avisos'])->toBe(0)

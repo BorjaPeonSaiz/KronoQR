@@ -24,7 +24,10 @@
 #     que dejaba a Prometheus con 403) pasaba la CI sin que nadie lo viera.
 #   · `--literal`: SOLO lo que la guia manda poner en su bloque «Lo minimo que hay
 #     que rellenar» (instalacion.md §1.2): APP_ENV, APP_URL, KIOSK_VLAN_CIDR,
-#     PORTAL_INTERNAL_CIDR, TLS_ALLOW_SELF_SIGNED, BACKUP_PATH e IMAGE_REGISTRY. Lo
+#     PORTAL_INTERNAL_CIDR, TLS_ALLOW_SELF_SIGNED, BACKUP_PATH, IMAGE_REGISTRY,
+#     MAIL_HOST y MAIL_FROM_ADDRESS (desde la 2.3.0 la fase 1 se niega con
+#     `mailpit` y con el remitente en kronoqr.local, I3; ningun escenario envia
+#     correo, asi que un relevo inexistente solo da el aviso de mail.reachable). Lo
 #     demas queda como lo entrega el fabricante: `METRICS_ALLOW_CIDR` con el valor
 #     de serie (172.29.0.20/32) y `COMPOSE_PROFILES=observability` (encendida). Es
 #     lo que usa la segunda pasada del ⑧ (escenario G).
@@ -124,6 +127,8 @@ sed -i \
   -e 's|^APP_ENV=.*|APP_ENV=production|' \
   -e 's|^APP_URL=.*|APP_URL=https://kronoqr.ci.local|' \
   -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=kronoqr|' \
+  -e 's|^MAIL_HOST=.*|MAIL_HOST=smtp.kronoqr.ci.invalid|' \
+  -e 's|^MAIL_FROM_ADDRESS=.*|MAIL_FROM_ADDRESS=fichaje@kronoqr.ci.invalid|' \
   -e "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${KIOSK_VLAN}|" \
   -e 's|^TLS_ALLOW_SELF_SIGNED=.*|TLS_ALLOW_SELF_SIGNED=false|' \
   -e "s|^BACKUP_PATH=.*|BACKUP_PATH=${BACKUP_PATH}|" \

@@ -443,8 +443,11 @@ check_trusted_proxy_cidr() {
 #                       bloquea el fichaje ni el registro (ADR-019, regla 15):
 #                       un sistema recien instalado tiene que poder fichar
 #                       aunque la clave llegue una semana despues.
-#   MAIL_*              AVISO si el SMTP es el de desarrollo (`mailpit`) o esta
-#                       vacio. El producto no depende del correo (regla 12).
+#   MAIL_*              ERROR si son los valores de DESARROLLO de la plantilla
+#                       (`MAIL_HOST=mailpit`, remitente en `kronoqr.local`): no
+#                       son una eleccion, son la plantilla sin rellenar. AVISO si
+#                       MAIL_HOST esta vacio. Un hotel sin relevo SMTP pone
+#                       MAIL_MAILER=log: el producto no depende del correo (regla 12).
 #   ALERT_*             AVISO si ningun destinatario de alertas, o uno mal
 #                       escrito. Solo importa con la observabilidad encendida,
 #                       que es la que tiene Alertmanager.
@@ -474,11 +477,25 @@ check_operational_settings() {
   case "${mailer}" in
   "" | smtp)
     case "${value,,}" in
-    "" | mailpit)
-      check_warn "$(kq_format c_mail_unset "${value:-$(kq_text empty_value)}")" "$(kq_format w_mail_unset "${env_file}")"
+    mailpit)
+      # El buzon de pruebas del entorno del fabricante: en un servidor de hotel no
+      # existe nunca, asi que dejarlo no es una decision, es la plantilla sin
+      # rellenar (I3, decision del propietario del 20-10-2026).
+      check_fail "$(kq_format c_mail_dev "${value}")" "$(kq_format f_mail_dev "${env_file}")"
+      ;;
+    "")
+      check_warn "$(kq_format c_mail_unset "$(kq_text empty_value)")" "$(kq_format w_mail_unset "${env_file}")"
       ;;
     *)
       check_pass "$(kq_text c_mail_ok)"
+      ;;
+    esac
+    value="$(env_value "${env_file}" "MAIL_FROM_ADDRESS")"
+    case "${value,,}" in
+    *@kronoqr.local)
+      # El remitente de la plantilla: un dominio que no es de nadie, con el que
+      # cualquier relevo SMTP serio rechaza o marca como spam lo que se envie.
+      check_fail "$(kq_format c_mail_from_dev "${value}")" "$(kq_format f_mail_from_dev "${env_file}")"
       ;;
     esac
     ;;
