@@ -832,26 +832,26 @@
       "id": 20,
       "type": "timeseries",
       "title": "Errores 5xx por familia de rutas (10 min)",
-      "description": "Proporción de respuestas 5xx por familia: fichaje (ErroresDeServidorEnElFichaje, umbral 1 %), panel de gestión (ErroresDeServidorEnElPanel, 5 % con al menos 3 errores) y portal (ErroresDeServidorEnElPortal, igual). Con Redis caído estas series desaparecen: lo dicen AlmacenDeMetricasCaido y SondaDelBordeFallida (errores-en-el-panel.md).",
+      "description": "Proporción de respuestas 5xx por familia: fichaje (ErroresDeServidorEnElFichaje, umbral 1 %), panel de gestión (ErroresDeServidorEnElPanel, 5 % con al menos 3 errores) y portal (ErroresDeServidorEnElPortal, igual). Lee las mismas reglas de grabación que las alertas (kronoqr:http_server_errors:* y kronoqr:http_requests:*), que suman también la primera petición de cada serie. Con Redis caído estas series desaparecen: lo dicen AlmacenDeMetricasCaido y SondaDelBordeFallida (errores-en-el-panel.md).",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 68 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "sum(increase(http_requests_total{route=~\"attendance\\\\.scan(\\\\..*)?\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route=~\"attendance\\\\.scan(\\\\..*)?\"}[10m]))",
-          "legendFormat": "fichaje"
+          "expr": "kronoqr:http_server_errors:increase5m{family=\"fichaje\"} / kronoqr:http_requests:increase5m{family=\"fichaje\"}",
+          "legendFormat": "fichaje (5 min)"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "sum(increase(http_requests_total{route!~\"attendance\\\\.scan(\\\\..*)?|portal\\\\..*|health\\\\..*|unmatched\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route!~\"attendance\\\\.scan(\\\\..*)?|portal\\\\..*|health\\\\..*|unmatched\"}[10m]))",
-          "legendFormat": "panel"
+          "expr": "kronoqr:http_server_errors:increase10m{family=\"gestion\"} / kronoqr:http_requests:increase10m{family=\"gestion\"}",
+          "legendFormat": "panel de gestión"
         },
         {
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "sum(increase(http_requests_total{route=~\"portal\\\\..*\",status=~\"5..\"}[10m])) / sum(increase(http_requests_total{route=~\"portal\\\\..*\"}[10m]))",
+          "expr": "kronoqr:http_server_errors:increase10m{family=\"portal\"} / kronoqr:http_requests:increase10m{family=\"portal\"}",
           "legendFormat": "portal"
         }
       ],
@@ -927,9 +927,9 @@
     {
       "id": 22,
       "type": "timeseries",
-      "title": "Latencia p95 por ruta de fichaje (10 min)",
-      "description": "p95 de attendance.scan (tarjeta), attendance.scan.pin (PIN) y attendance.scan.batch (lote) por separado: cada una tiene su alerta y su umbral (LatenciaDelFichajeAlta a 0,5 s; PIN y lote con más del 5 % por encima de 3 s). El PIN paga un hash a propósito (RNF-P-08) y va más lento que la tarjeta sin que haya avería. El histograma no pasa de 3 s: un valor de 3 es «3 s o más».",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 80 },
+      "title": "Latencia p95 del fichaje con tarjeta (10 min)",
+      "description": "p95 de attendance.scan (tarjeta), el de LatenciaDelFichajeAlta (umbral 0,5 s; el histograma interpola entre sus cubos de 0,4 s y 1 s). El PIN y los lotes tienen su propio panel: su histograma no pasa de 3 s, así que se vigilan como fracción por encima de 3 s, no como p95.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
         {
@@ -937,18 +937,6 @@
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan\"}[10m])))",
           "legendFormat": "tarjeta"
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\"}[10m])))",
-          "legendFormat": "PIN"
-        },
-        {
-          "refId": "C",
-          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\"}[10m])))",
-          "legendFormat": "lote"
         }
       ],
       "fieldConfig": {
@@ -971,6 +959,58 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null }, { "color": "red", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "PIN y lotes: fracción por encima de 3 s (10 min)",
+      "description": "La misma expresión que LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta: 1 menos las peticiones que acaban en 3 s o menos, sobre todas. La línea roja es el 5 %: por encima, la alerta (con al menos 20 PIN o 5 lotes en la ventana). El histograma del middleware no distingue por encima de 3 s; con cubos de 2 s y 10 s (tarea 10.8) se podrán vigilar umbrales más finos.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "PIN"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "lote"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.05 }
             ]
           }
         },

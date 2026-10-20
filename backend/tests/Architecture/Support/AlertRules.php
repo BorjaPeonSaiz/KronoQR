@@ -135,6 +135,32 @@ final class AlertRules
      *
      * @return array{file: string, alert: string, expr: string, for: string, severity: string, destinatario: string, component: string, runbook: string}|null
      */
+    /**
+     * Los nombres de las reglas de grabacion (`record:`) de todos los ficheros: series
+     * derivadas que un cuadro de mando puede graficar sin que esten en el §8.2.
+     *
+     * @return list<string>
+     */
+    public static function recordedNames(): array
+    {
+        $names = [];
+
+        foreach (self::files() as $relative) {
+            /** @var array{groups?: list<array{rules?: list<array<string, mixed>>}>} $document */
+            $document = Yaml::parse(Repo::contents($relative));
+
+            foreach ($document['groups'] ?? [] as $group) {
+                foreach ($group['rules'] ?? [] as $rule) {
+                    if (isset($rule['record']) && \is_string($rule['record'])) {
+                        $names[] = $rule['record'];
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
     public static function named(string $alert): ?array
     {
         foreach (self::all() as $rule) {
