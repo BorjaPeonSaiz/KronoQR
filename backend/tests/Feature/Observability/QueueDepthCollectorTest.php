@@ -6,6 +6,7 @@ use App\Support\Observability\Metrics\QueueDepthCollector;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Contracts\Queue\Queue;
 use Illuminate\Queue\RedisQueue;
+use Mockery\MockInterface;
 use Prometheus\MetricFamilySamples;
 
 /*
@@ -24,7 +25,7 @@ function queueDepthValues(array $families): array
 
     foreach ($families as $family) {
         foreach ($family->getSamples() as $sample) {
-            $values[$family->getName()][$sample->getLabelValues()[0]] = $sample->getValue();
+            $values[$family->getName()][is_scalar($sample->getLabelValues()[0]) ? (string) $sample->getLabelValues()[0] : ''] = $sample->getValue();
         }
     }
 
@@ -39,6 +40,7 @@ it('publica en espera solo lo que aun no ha cogido un trabajador, y pendiente to
     $driver = Mockery::mock(RedisQueue::class);
     $driver->shouldReceive('size')->with('default')->andReturn(1);
     $driver->shouldReceive('pendingSize')->with('default')->andReturn(0);
+    /** @var QueueFactory&MockInterface $factory */
     $factory = Mockery::mock(QueueFactory::class);
     $factory->shouldReceive('connection')->with('redis')->andReturn($driver);
 
@@ -54,10 +56,12 @@ it('no publica en espera con un driver que no sabe distinguirlo: ausente, no cer
 
     $driver = Mockery::mock(Queue::class);
     $driver->shouldReceive('size')->andReturn(2);
+    /** @var QueueFactory&MockInterface $factory */
     $factory = Mockery::mock(QueueFactory::class);
     $factory->shouldReceive('connection')->with('sync')->andReturn($driver);
 
     $values = queueDepthValues((new QueueDepthCollector($factory))->collect());
 
-    expect($values)->toHaveKey('queue_jobs_pending')->not->toHaveKey('queue_jobs_waiting');
+    expect($values)->toHaveKey('queue_jobs_pending');
+    expect($values)->not->toHaveKey('queue_jobs_waiting');
 })->group('RQ-06');

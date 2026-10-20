@@ -127,15 +127,6 @@ final class AlertRules
     }
 
     /**
-     * Una regla por su nombre, o `null` si todavia no existe.
-     *
-     * Devolver `null` en vez de fallar es deliberado: el mensaje de la prueba
-     * que la busca explica que alerta falta y de que fila del catalogo es, y eso
-     * dice mucho mas que un "undefined index".
-     *
-     * @return array{file: string, alert: string, expr: string, for: string, severity: string, destinatario: string, component: string, runbook: string}|null
-     */
-    /**
      * Los nombres de las reglas de grabacion (`record:`) de todos los ficheros: series
      * derivadas que un cuadro de mando puede graficar sin que esten en el §8.2.
      *
@@ -161,6 +152,15 @@ final class AlertRules
         return array_values(array_unique($names));
     }
 
+    /**
+     * Una regla por su nombre, o `null` si todavia no existe.
+     *
+     * Devolver `null` en vez de fallar es deliberado: el mensaje de la prueba
+     * que la busca explica que alerta falta y de que fila del catalogo es, y eso
+     * dice mucho mas que un "undefined index".
+     *
+     * @return array{file: string, alert: string, expr: string, for: string, severity: string, destinatario: string, component: string, runbook: string}|null
+     */
     public static function named(string $alert): ?array
     {
         foreach (self::all() as $rule) {

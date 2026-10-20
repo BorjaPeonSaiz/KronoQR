@@ -199,9 +199,8 @@ it('anota desde cuando hay divergencias, y lo conserva aunque las pasadas siguie
 
     // Una pasada limpia no deja marcas: ausente significa «nunca».
     $metricas->reconciliationCompleted(10, 0, 0, 0, 0, new DateTimeImmutable('2026-03-14T03:50:00+00:00'));
-    expect(publicadoEnAttendance('kronoqr_projection.prom'))
-        ->not->toContain('projection_divergence_first_increase_timestamp_seconds')
-        ->not->toContain('projection_divergence_last_increase_timestamp_seconds');
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))->not->toContain('projection_divergence_first_increase_timestamp_seconds');
+    expect(publicadoEnAttendance('kronoqr_projection.prom'))->not->toContain('projection_divergence_last_increase_timestamp_seconds');
 
     // Primera divergencia: las dos marcas valen lo mismo.
     $metricas->reconciliationCompleted(10, 2, 2, 0, 0, new DateTimeImmutable('2026-03-15T03:50:00+00:00'));

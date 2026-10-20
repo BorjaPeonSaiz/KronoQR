@@ -482,7 +482,7 @@ it('compara la ventana de mantenimiento con la del .env y nunca vuelca el entorn
 
     // doctor.sh pregunta por cada variable de la lista y nunca ejecuta `env` (arrastra MAIL_PASSWORD).
     $doctor = Repo::contents('infra/scripts/doctor.sh');
-    expect($doctor)->toContain('printenv "${var}"')
-        ->not->toContain('exec -T alertmanager env ')
-        ->not->toContain('alertmanager env 2>');
+    expect($doctor)->toContain('printenv "${var}"');
+    expect($doctor)->not->toContain('exec -T alertmanager env ');
+    expect($doctor)->not->toContain('alertmanager env 2>');
 })->group('RF-PD-13', 'RS-08');
