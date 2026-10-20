@@ -36,6 +36,7 @@
     "purpose": "Finalidad: que puedas consultar tu propio registro diario de jornada (art. 34.9 del Estatuto de los Trabajadores).",
     "basis": "Base jurídica: cumplimiento de una obligación legal.",
     "retention": "Conservación: el tiempo que exige la normativa aplicable.",
+    "retentionYears": "Conservación: {count} año, según la normativa aplicable. | Conservación: {count} años, según la normativa aplicable.",
     "rights": "Tus derechos: acceder a tus datos y pedir que se rectifiquen si son inexactos. Como el tratamiento se basa en una obligación legal, otros derechos (supresión, oposición, portabilidad) pueden estar limitados. Solicítalos a Recursos Humanos.",
     "complaint": "Si crees que tus datos no se tratan bien, puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).",
     "noBiometrics": "Este sistema no trata datos biométricos.",

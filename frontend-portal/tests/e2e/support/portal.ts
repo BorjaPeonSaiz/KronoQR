@@ -45,7 +45,7 @@ export const PRODUCT_BRANDING: Branding = {
   accent_color: null,
   logo_url: null,
   locales: { default: 'es', available: ['es'] },
-  privacy_notice: { controller_name: null, policy_url: null },
+  privacy_notice: { controller_name: null, policy_url: null, retention_years: null },
 }
 
 /** La misma marca del producto con el ingles activado por configuracion (RF-PD-08). */
@@ -70,6 +70,7 @@ export const HOTEL_BRANDING: Branding = {
   privacy_notice: {
     controller_name: 'Hotel Marina, S. L.',
     policy_url: 'https://hotelmarina.example/privacidad',
+    retention_years: 4,
   },
 }
 

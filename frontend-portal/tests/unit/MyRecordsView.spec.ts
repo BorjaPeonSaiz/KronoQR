@@ -112,8 +112,8 @@ describe('MyRecordsView', () => {
     const periodUrl = urls.find((url) => url.includes('from=2026-03-01'))
 
     expect(periodUrl).toContain('to=2026-03-31')
-    // Con un periodo explicito, "hoy" se pregunta aparte, sin fechas: lo da el servidor.
-    expect(urls.at(-1)).toBe('/api/v1/me/workdays')
+    // "hoy" sale de la misma respuesta (`today`): sin peticion extra sin fechas.
+    expect(urls.at(-1)).toContain('from=2026-03-01')
   })
 
   it('no consulta un periodo que termina antes de empezar: lo dice y no deja enviar', async () => {

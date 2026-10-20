@@ -17,6 +17,13 @@ const { t } = useI18n()
 
 // Solo https y ASCII imprimible: la URL la escribe el cliente y acaba en un href.
 const policyUrl = computed(() => safePolicyUrl(props.notice.policyUrl))
+
+// Sin cifra (o con una que no es un entero >= 1, p. ej. una copia antigua): redaccion generica.
+const years = computed(() => {
+  const value = props.notice.retentionYears
+
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null
+})
 </script>
 
 <template>
@@ -45,7 +52,13 @@ const policyUrl = computed(() => safePolicyUrl(props.notice.policyUrl))
         </li>
         <li>{{ t('privacy.purpose') }}</li>
         <li>{{ t('privacy.basis') }}</li>
-        <li>{{ t('privacy.retention') }}</li>
+        <li data-test="retention">
+          {{
+            years === null
+              ? t('privacy.retention')
+              : t('privacy.retentionYears', { count: years }, years)
+          }}
+        </li>
         <li>{{ t('privacy.rights') }}</li>
         <li>{{ t('privacy.complaint') }}</li>
         <li>{{ t('privacy.noBiometrics') }}</li>

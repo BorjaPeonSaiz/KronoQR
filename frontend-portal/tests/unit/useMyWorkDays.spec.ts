@@ -27,7 +27,7 @@ beforeEach(() => {
 })
 
 function workdaysFor(today: string) {
-  return { ...employeeWorkDays(), from: '2026-02-12', to: today }
+  return { ...employeeWorkDays(), from: '2026-02-12', to: today, today }
 }
 
 async function flush(): Promise<void> {
@@ -156,16 +156,26 @@ describe('useMyWorkDays, refresco', () => {
     view.stop()
   })
 
-  it('con un periodo explicito, «hoy» se pregunta aparte y se refresca igual', async () => {
+  it('con un periodo explicito, «hoy» sale de la misma respuesta: una sola peticion', async () => {
     const view = start({ from: '2026-03-01', to: '2026-03-10' })
 
     await flush()
 
-    expect(view.urls).toEqual([
-      '/api/v1/me/workdays?from=2026-03-01&to=2026-03-10',
-      '/api/v1/me/workdays',
-    ])
+    expect(view.urls).toEqual(['/api/v1/me/workdays?from=2026-03-01&to=2026-03-10'])
+    // `today` no depende del periodo pedido: aqui el periodo termina antes de hoy.
     expect(view.result.today.value).toBe('2026-03-14')
+    view.stop()
+  })
+
+  it('el refresco de la pestana y el de medianoche hacen una sola peticion cada uno', async () => {
+    const view = start({ from: '2026-03-01', to: '2026-03-10' })
+
+    await flush()
+    await vi.advanceTimersByTimeAsync(STALE_AFTER_MS + 1)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flush()
+
+    expect(view.urls).toHaveLength(2)
     view.stop()
   })
 

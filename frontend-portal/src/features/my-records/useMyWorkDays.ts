@@ -23,7 +23,7 @@ import { readWallClock, resolveTimeZone, todayInZone } from '@kronoqr/web-kit/da
 import { getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { EmployeeWorkDays } from '@/shared/api/types'
-import { listMyWorkDays, UNBOUNDED_RANGE } from './workdays.api'
+import { listMyWorkDays } from './workdays.api'
 import type { WorkDateRange } from './workdays.api'
 
 /** Volver a la pestaña antes de esto no repite la consulta. */
@@ -47,16 +47,12 @@ export interface UseMyWorkDaysResult {
   /** Hay una peticion en curso, con o sin datos previos que enseñar mientras tanto. */
   isFetching: Ref<boolean>
   /**
-   * «Hoy» en la zona del centro, o `null` si todavia no se sabe. Solo lo da el
-   * servidor: cuando se le pide el rango por omision, su `to` ES hoy en el
-   * centro. Calcularlo aqui usaria el reloj y la zona del navegador (regla dura 3).
+   * «Hoy» en la zona del centro (`today` de la respuesta), o `null` si todavia no
+   * se sabe. Solo lo da el servidor, con cualquier periodo: calcularlo aqui usaria
+   * el reloj y la zona del navegador (regla dura 3).
    */
   today: Ref<string | null>
   reload: () => Promise<void>
-}
-
-function isUnbounded(range: WorkDateRange): boolean {
-  return range.from === '' && range.to === ''
 }
 
 /**
@@ -144,20 +140,6 @@ export function useMyWorkDays(
   let loadedDay: string | null = null
   let midnightTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** Pregunta al servidor que dia es hoy en el centro, sin tocar lo que se ve. */
-  async function refreshToday(token: number): Promise<void> {
-    try {
-      const result = await listMyWorkDays(UNBOUNDED_RANGE)
-
-      if (token === latest) {
-        today.value = result.to
-      }
-    } catch {
-      // Es solo la tarjeta «Hoy»: si falla, se queda el ultimo dia conocido y
-      // el error de la consulta principal, si lo hubo, ya se ha enseñado.
-    }
-  }
-
   async function load(): Promise<void> {
     latest += 1
     const token = latest
@@ -177,13 +159,9 @@ export function useMyWorkDays(
       loadedAt = now()
       loadedDay = civilDay(loadedAt, options.timeZone?.value)
 
-      if (isUnbounded(requested)) {
-        today.value = result.to
-      } else {
-        // Con un periodo explicito el servidor no dice que dia es hoy: se le
-        // pregunta aparte, para que la tarjeta «Hoy» no dependa del rango.
-        await refreshToday(token)
-      }
+      // «Hoy» sale de la MISMA respuesta, sea cual sea el periodo pedido: una sola
+      // peticion por consulta.
+      today.value = result.today
     } catch (caught) {
       if (token !== latest) {
         return

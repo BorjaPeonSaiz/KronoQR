@@ -239,6 +239,7 @@ test(
     await notice.getByText('Aviso de protección de datos').click()
 
     await expect(notice).toContainText('Responsable: Hotel Marina, S. L.')
+    await expect(notice).toContainText('Conservación: 4 años, según la normativa aplicable')
     await expect(notice.getByRole('link')).toHaveAttribute(
       'href',
       'https://hotelmarina.example/privacidad',

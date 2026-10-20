@@ -35,6 +35,42 @@ describe('PrivacyNotice', () => {
     expect(wrapper.find('a').exists()).toBe(false)
   })
 
+  it('con la cifra de retencion la dice, con plural', async () => {
+    const one = await mountView(PrivacyNotice, {
+      props: { notice: { ...NOTICE, retentionYears: 1 } },
+    })
+    const four = await mountView(PrivacyNotice, {
+      props: { notice: { ...NOTICE, retentionYears: 4 } },
+    })
+
+    expect(one.find('[data-test="retention"]').text()).toBe(
+      'Conservación: 1 año, según la normativa aplicable.',
+    )
+    expect(four.find('[data-test="retention"]').text()).toBe(
+      'Conservación: 4 años, según la normativa aplicable.',
+    )
+  })
+
+  it('en ingles tambien lleva plural', async () => {
+    const wrapper = await mountView(PrivacyNotice, {
+      locale: 'en',
+      props: { notice: { ...NOTICE, retentionYears: 4 } },
+    })
+
+    expect(wrapper.find('[data-test="retention"]').text()).toContain('4 years')
+  })
+
+  it.each([null, undefined, 0, -3, 2.5])(
+    'sin cifra valida (%s) dice la redaccion generica',
+    async (retentionYears) => {
+      const wrapper = await mountView(PrivacyNotice, {
+        props: { notice: { ...NOTICE, retentionYears } },
+      })
+
+      expect(wrapper.find('[data-test="retention"]').text()).toBe(es.privacy.retention)
+    },
+  )
+
   it('esta en español e ingles con las mismas claves', () => {
     expect(Object.keys(en.privacy).sort()).toEqual(Object.keys(es.privacy).sort())
   })
