@@ -31,9 +31,10 @@
 #                   el rol es `horizon`. La actualizacion llega al 401 y falla DESPUES.
 # El fallo de la version anterior para la salida 5 con la copia ya restaurada es otro: su
 # imagen de nginx se sustituye por una que termina al arrancar, de modo que la vuelta
-# atras no consigue relanzarla sana. Los contenedores de la version anterior no se
-# recrean (su imagen no cambia), asi que el `app` que tenia `artisan down` conserva el
-# fichero de mantenimiento: es exactamente el 503 que el runbook describe.
+# atras no consigue relanzarla sana. Para entonces ya ha hecho `artisan up`: tras el paso
+# 3 la API da 401. El 503 antes del 3b es de U3n (`fail-norestore`): la restauracion
+# automatica falla antes de relanzar nada, y el `app` anterior, que solo se paro y no se
+# recrea, conserva su fichero de mantenimiento.
 #
 # MODOS
 #
@@ -408,14 +409,17 @@ build_fault_image() {
   fail-norestore)
     docker_root cp "${cid}:${scripts}/restore.sh" "${tmp}/restore.real.sh"
     write_restore_wrapper >"${tmp}/restore.sh"
-    chmod 0755 "${tmp}/restore.real.sh" "${tmp}/restore.sh"
+    # Solo el envoltorio: restore.real.sh sale del contenedor como fichero de root
+    # (docker_root), con el modo del original ya conservado por `docker cp`.
+    chmod 0755 "${tmp}/restore.sh"
     docker_root cp "${tmp}/restore.real.sh" "${cid}:${scripts}/restore.real.sh"
     docker_root cp "${tmp}/restore.sh" "${cid}:${scripts}/restore.sh"
     ;;
   nohorizon)
     docker_root cp "${cid}:${bin}/kronoqr-entrypoint" "${tmp}/kronoqr-entrypoint.real"
     write_entrypoint_wrapper >"${tmp}/kronoqr-entrypoint"
-    chmod 0755 "${tmp}/kronoqr-entrypoint.real" "${tmp}/kronoqr-entrypoint"
+    # Solo el envoltorio, como en fail-norestore: el .real es de root y conserva su modo.
+    chmod 0755 "${tmp}/kronoqr-entrypoint"
     docker_root cp "${tmp}/kronoqr-entrypoint.real" "${cid}:${bin}/kronoqr-entrypoint.real"
     docker_root cp "${tmp}/kronoqr-entrypoint" "${cid}:${bin}/kronoqr-entrypoint"
     ;;
