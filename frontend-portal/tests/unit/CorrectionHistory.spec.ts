@@ -158,6 +158,19 @@ describe('CorrectionHistory', () => {
   })
 })
 
+describe('CorrectionHistory, reloj de 24 h (V2-PO-2)', () => {
+  it('en ingles lee las horas en 24 h, sin AM/PM', async () => {
+    const wrapper = await mountView(CorrectionHistory, {
+      locale: 'en',
+      props: { corrections: [correction()], timeZone: 'Europe/Madrid' },
+    })
+    const table = wrapper.find('table')
+
+    expect(table.text()).toContain('14:05')
+    expect(table.text()).not.toMatch(/(AM|PM)/)
+  })
+})
+
 describe('CorrectionHistory, tabla accesible (V7-QA-2)', () => {
   it('ninguna cabecera de columna esta vacia: la primera dice que es la version del tramo', async () => {
     const wrapper = await mountHistory([correction()])
