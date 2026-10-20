@@ -4286,6 +4286,10 @@ export interface paths {
          *     claves de `installation_settings` solo las tres `BRANDING_*`, las dos
          *     `LOCALE_*` y las dos `PRIVACY_*`, ya resueltas por la cascada de RF-PD-01;
          *     ningun umbral operativo ni ningun ajuste de funcionamiento viaja por aqui.
+         *     Del perfil de cumplimiento sale **un unico dato**, el plazo de
+         *     conservacion del registro (`privacy_notice.retention_years`, 2.3.0),
+         *     porque el art. 13.2.a RGPD obliga a decirlo en el aviso; ningun otro
+         *     umbral del perfil.
          *     Lo que revela —el nombre del hotel y su color— es lo mismo que revela la
          *     tarjeta impresa que cada empleado lleva en el bolsillo. **El responsable y
          *     la URL de la politica no son un dato operativo sino informacion que el
@@ -8182,6 +8186,21 @@ export interface components {
                  *     que la politica completa esta disponible en recepcion.
                  */
                 policy_url: string | null;
+                /**
+                 * @description **Cuantos años se conserva el registro de jornada**, el plazo
+                 *     `retention_years` del perfil de cumplimiento vigente del centro
+                 *     (RF-PD-07, RL-02, regla dura 14), para que el aviso diga la
+                 *     cifra real en lugar de una escrita en los textos (2.3.0). El
+                 *     quiosco y el portal la interpolan en su redaccion.
+                 *
+                 *     `null` cuando no se puede resolver —la instalacion aun no tiene
+                 *     centro, o el perfil no se puede leer—: el aviso dice entonces
+                 *     que el plazo es el que fija la normativa aplicable, sin cifra.
+                 *     Una copia guardada anterior a la 2.3.0, sin este campo, se
+                 *     trata igual que `null`.
+                 * @example 4
+                 */
+                retention_years: number | null;
             };
             /**
              * @description Lo que se lee en la cabecera de las aplicaciones, en el titulo de la

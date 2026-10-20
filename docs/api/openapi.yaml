@@ -8615,6 +8615,10 @@ paths:
         claves de `installation_settings` solo las tres `BRANDING_*`, las dos
         `LOCALE_*` y las dos `PRIVACY_*`, ya resueltas por la cascada de RF-PD-01;
         ningun umbral operativo ni ningun ajuste de funcionamiento viaja por aqui.
+        Del perfil de cumplimiento sale **un unico dato**, el plazo de
+        conservacion del registro (`privacy_notice.retention_years`, 2.3.0),
+        porque el art. 13.2.a RGPD obliga a decirlo en el aviso; ningun otro
+        umbral del perfil.
         Lo que revela —el nombre del hotel y su color— es lo mismo que revela la
         tarjeta impresa que cada empleado lleva en el bolsillo. **El responsable y
         la URL de la politica no son un dato operativo sino informacion que el
@@ -8669,6 +8673,7 @@ paths:
                     privacy_notice:
                       controller_name: null
                       policy_url: null
+                      retention_years: 4
                 hotel:
                   summary: Un hotel con nombre, color, logotipo y aviso de privacidad propios
                   value:
@@ -8681,6 +8686,7 @@ paths:
                     privacy_notice:
                       controller_name: Hoteles Marina del Sur, S.L.
                       policy_url: https://www.hotelmarina.example/privacidad-plantilla
+                      retention_years: 4
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -15709,7 +15715,7 @@ components:
         privacy_notice:
           type: object
           additionalProperties: false
-          required: [controller_name, policy_url]
+          required: [controller_name, policy_url, retention_years]
           description: |
             Lo que el aviso de privacidad del quiosco necesita del cliente
             (RF-KI-09, RL-09, art. 13 RGPD en capa 1). **El quiosco lo guarda con
@@ -15746,6 +15752,22 @@ components:
                 legal, y cualquier otro esquema seria una puerta a ejecutar codigo
                 desde el. `null` mientras no se configure: el aviso dice entonces
                 que la politica completa esta disponible en recepcion.
+            retention_years:
+              type: ['integer', 'null']
+              minimum: 1
+              description: |
+                **Cuantos años se conserva el registro de jornada**, el plazo
+                `retention_years` del perfil de cumplimiento vigente del centro
+                (RF-PD-07, RL-02, regla dura 14), para que el aviso diga la
+                cifra real en lugar de una escrita en los textos (2.3.0). El
+                quiosco y el portal la interpolan en su redaccion.
+
+                `null` cuando no se puede resolver —la instalacion aun no tiene
+                centro, o el perfil no se puede leer—: el aviso dice entonces
+                que el plazo es el que fija la normativa aplicable, sin cifra.
+                Una copia guardada anterior a la 2.3.0, sin este campo, se
+                trata igual que `null`.
+              example: 4
         application_name:
           type: string
           minLength: 1
