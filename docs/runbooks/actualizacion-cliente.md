@@ -236,11 +236,11 @@ colas de los quioscos y entra después, gane o pierda la actualización.
 **Reglas y destinatarios de las alertas.** Prometheus solo lee sus reglas al arrancar y
 Alertmanager lee el `.env` una sola vez. Desde la 2.3.0 `update.sh` escribe en el `.env` la huella de
 `observability/` (`KQ_OBSERVABILITY_REVISION`) y el compose la pone como etiqueta de Prometheus,
-Alertmanager y blackbox-exporter: si el contenido cambia, **se recrean solos** al arrancar los
+Alertmanager, blackbox-exporter, Grafana, Loki y Tempo: si el contenido cambia, **se recrean solos** al arrancar los
 procesos de fondo, también si actualizas encima del mismo directorio. `./doctor.sh` lo comprueba:
 avisa si Prometheus no tiene cargadas reglas del paquete y si Alertmanager lleva destinatarios
 distintos de los del `.env`. Si el aviso persiste, recrea a mano:
-`sudo docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter`.
+`sudo docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter grafana loki tempo`.
 
 **Al terminar** (salida `0`):
 

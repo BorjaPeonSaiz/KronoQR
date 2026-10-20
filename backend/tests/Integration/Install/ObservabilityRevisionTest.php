@@ -118,16 +118,16 @@ it('avisa con la orden para recrear a mano si no puede escribir el .env, y la ac
 
     expect($fallo->getExitCode())->toBe(0, $fallo->getErrorOutput())
         ->and($fallo->getOutput())->toContain('seguimos')
-        ->and($fallo->getOutput())->toContain('--force-recreate prometheus alertmanager blackbox-exporter');
+        ->and($fallo->getOutput())->toContain('--force-recreate prometheus alertmanager blackbox-exporter grafana loki tempo');
 })->group('RNF-D-01');
 
-it('el compose etiqueta Prometheus, Alertmanager y Blackbox con la variable que escribe update.sh', function (): void {
+it('el compose etiqueta los seis servicios de observabilidad con la variable que escribe update.sh', function (): void {
     $compose = Repo::contents('infra/compose.prod.yaml');
 
     // Una por servicio: si alguno la pierde, una actualizacion in place lo deja con las reglas viejas.
-    expect(substr_count($compose, 'kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"'))->toBe(3);
+    expect(substr_count($compose, 'kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"'))->toBe(6);
 
-    foreach (['prometheus', 'alertmanager', 'blackbox-exporter'] as $servicio) {
+    foreach (['prometheus', 'alertmanager', 'blackbox-exporter', 'grafana', 'loki', 'tempo'] as $servicio) {
         $desde = (string) strstr($compose, "\n  {$servicio}:\n");
         $resto = substr($desde, 1);
         $siguiente = preg_match('/\n  [a-z-]+:\n/', $resto, $m, PREG_OFFSET_CAPTURE) === 1 ? $m[0][1] : strlen($resto);

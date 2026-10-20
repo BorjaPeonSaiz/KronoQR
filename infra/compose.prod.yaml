@@ -1208,6 +1208,9 @@ services:
     networks:
       - observability
     restart: unless-stopped
+    # Ver la etiqueta de `prometheus`: lee su configuracion o sus cuadros al arrancar.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
 
   # Guarda de LOG_RETENTION_HOURS de Loki y Tempo (RL-11): valida el plazo (entero 24..17520)
   # ANTES de que arranquen, porque un `up -d loki` no pasa por install.sh ni update.sh, y 0
@@ -1249,6 +1252,9 @@ services:
       - app
       - observability
     restart: unless-stopped
+    # Ver la etiqueta de `prometheus`: lee su configuracion o sus cuadros al arrancar.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
 
   # Destino de las trazas OTLP (tarea 3.1, §8.1). En produccion NO arranca
   # sola: OTEL_EXPORTER_OTLP_ENDPOINT viene vacia de serie en .env.example y
@@ -1275,6 +1281,9 @@ services:
       - app
       - observability
     restart: unless-stopped
+    # Ver la etiqueta de `prometheus`: lee su configuracion o sus cuadros al arrancar.
+    labels:
+      kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
     logging:
       driver: json-file
       options:

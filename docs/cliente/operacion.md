@@ -990,7 +990,7 @@ del paquete**, `update.sh` lo avisa con la lista y **tu versión sigue, intacta,
 en `observability/` del directorio anterior**: compárala
 (`diff -u <anterior>/observability/<fichero> <nuevo>/observability/<fichero>`),
 vuelve a aplicar lo tuyo y recarga
-(`docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter`; `restart` no basta con Alertmanager si has cambiado el `.env`). Si el paquete
+(`docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter grafana loki tempo`; `restart` no basta con Alertmanager si has cambiado el `.env`). Si el paquete
 anterior es de una versión que no entregaba la huella (hasta la 2.2.0),
 `update.sh` no puede saber qué tocaste tú: deja lo del paquete nuevo, avisa de
 cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es lo que

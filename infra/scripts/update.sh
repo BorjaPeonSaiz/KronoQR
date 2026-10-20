@@ -2163,11 +2163,11 @@ merge_observability() {
 # es el mismo (in place), la ruta del montaje no cambia, la definicion del servicio tampoco, y
 # `up -d` los dejaba corriendo con las reglas y los destinatarios de la version anterior, sin avisar.
 # Con la huella como etiqueta (`kronoqr.observability.revision`, compose.prod.yaml) cualquier cambio
-# del contenido, tambien una edicion del cliente que viaja con la fusion, recrea los tres.
+# del contenido, tambien una edicion del cliente que viaja con la fusion, recrea los seis servicios que lo leen (Prometheus, Alertmanager, Blackbox, Grafana, Loki y Tempo).
 #
 # Va DESPUES de la fusion (lleva lo que el cliente edito) y escribe SOLO el .env de la version
 # nueva: el de la vuelta atras no la lleva, y al volver se recrean con la etiqueta anterior. Nunca
-# deshace la actualizacion: sin huella, los tres se quedan como estaban y el aviso dice como
+# deshace la actualizacion: sin huella, se quedan como estaban y el aviso dice como
 # recrearlos a mano.
 set_observability_revision() {
   local dir="${PACKAGE_DIR}/observability" manifest tmp revision

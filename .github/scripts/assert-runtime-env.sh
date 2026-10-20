@@ -136,7 +136,7 @@ readonly -a EXCLUIDAS=(
   # reciben esos dos servicios; la aplicacion no lo lee.
   LOG_RETENTION_HOURS
   # KQ_OBSERVABILITY_REVISION es la huella de observability/ que escribe update.sh: la interpola
-  # Compose en la etiqueta de prometheus, alertmanager y blackbox-exporter (V4-DV-4); ningun
+  # Compose en la etiqueta de prometheus, alertmanager, blackbox-exporter, grafana, loki y tempo (V4-DV-4); ningun
   # proceso la lee.
   KQ_OBSERVABILITY_REVISION
 )
