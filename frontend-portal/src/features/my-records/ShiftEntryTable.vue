@@ -38,11 +38,13 @@ import BreakBadge from '@kronoqr/web-kit/components/BreakBadge.vue'
 import { breakBetween } from '@kronoqr/web-kit/breaks'
 import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
+  formatDayMonthTime,
   formatLocalTime,
+  formatTimeOfDay,
   minutesBetween,
   readLocalTimestamp,
-  readWallClock,
   resolveTimeZone,
+  todayInZone,
 } from '@kronoqr/web-kit/datetime'
 import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
@@ -59,7 +61,7 @@ const props = defineProps<{
   workDate: string
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 /** A partir de este desfase, la marca no llego en el acto: viajo encolada. */
 const QUEUE_NOTICE_MINUTES = 5
@@ -87,24 +89,23 @@ interface EntryRow {
 }
 
 /**
- * La hora de recepcion en la zona del centro, en 24 h como el resto de la
- * pantalla (nunca AM/PM segun el idioma). Si cae en otro dia que la marca lleva
- * dia y mes: un fichaje que viaja en la cola puede llegar pasada la medianoche.
+ * La hora de recepcion en la zona del centro, en 24 h y con el orden de fecha
+ * del idioma (el mismo formateador que el historial, V2-PO-2). Si cae en otro dia
+ * que la marca lleva dia y mes: un fichaje que viaja en la cola puede llegar
+ * pasada la medianoche. Sin una zona valida no se pinta nada: nunca la del
+ * navegador (regla dura 3).
  */
 function receivedMoment(recordedAt: string, markDate: string | null): string | null {
-  const wall = readWallClock(new Date(recordedAt), resolveTimeZone(props.timeZone))
+  const zone = resolveTimeZone(props.timeZone)
+  const instant = new Date(recordedAt)
 
-  if (wall === null) {
+  if (zone === undefined || Number.isNaN(instant.getTime())) {
     return null
   }
 
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  const time = `${pad(wall.hour)}:${pad(wall.minute)}`
-  const date = `${wall.year}-${pad(wall.month)}-${pad(wall.day)}`
-
-  return markDate === null || date === markDate
-    ? time
-    : `${pad(wall.day)}/${pad(wall.month)} ${time}`
+  return markDate === null || todayInZone(zone, instant) === markDate
+    ? formatTimeOfDay(recordedAt, zone, locale.value)
+    : formatDayMonthTime(recordedAt, zone, locale.value)
 }
 
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
@@ -142,6 +143,15 @@ const rows = computed<EntryRow[]>(() =>
 
 const summedMinutes = computed(() => sumShiftMinutes(props.entries))
 const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
+
+/** El aviso de cola; sin hora de recepcion legible no se inventa una. */
+function queuedNotice(markView: MarkView): string {
+  const delay = duration(markView.queueDelayMinutes ?? 0)
+
+  return markView.recordedAt === null
+    ? t('myRecords.entries.queuedNoMoment', { delay })
+    : t('myRecords.entries.queued', { moment: markView.recordedAt, delay })
+}
 
 function duration(minutes: number): string {
   return t('myRecords.duration', durationParts(minutes))
@@ -199,12 +209,7 @@ function duration(minutes: number): string {
                   v-if="row.clockIn.queueDelayMinutes !== null"
                   class="mt-1 block text-sm font-normal text-kq-warning"
                 >
-                  {{
-                    t('myRecords.entries.queued', {
-                      moment: row.clockIn.recordedAt ?? '',
-                      delay: duration(row.clockIn.queueDelayMinutes),
-                    })
-                  }}
+                  {{ queuedNotice(row.clockIn) }}
                 </span>
               </th>
 
@@ -224,12 +229,7 @@ function duration(minutes: number): string {
                     v-if="row.clockOut.queueDelayMinutes !== null"
                     class="mt-1 block text-sm text-kq-warning"
                   >
-                    {{
-                      t('myRecords.entries.queued', {
-                        moment: row.clockOut.recordedAt ?? '',
-                        delay: duration(row.clockOut.queueDelayMinutes),
-                      })
-                    }}
+                    {{ queuedNotice(row.clockOut) }}
                   </span>
                   <!-- Insignia «Pausa»: texto e icono, nunca solo color (WCAG
                        1.4.1). Un tramo cerrado por `break_start` no es un fin

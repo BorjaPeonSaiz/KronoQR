@@ -100,6 +100,18 @@ const CONTROLLER_MAX = 160
 // Controles (Cc) y de formato (Cf: ancho cero, marcas bidireccionales).
 const CONTROL_CHARS = /\p{Cc}|\p{Cf}/u
 
+/**
+ * La URL de la politica, lista para un enlace o un QR: solo `https`, solo ASCII
+ * imprimible (sin espacios, tabuladores ni controles) y sin barra invertida. La
+ * validacion fuerte ya la hizo `parseBranding`; esta es la segunda llave, para
+ * quien pinta una URL que no ha pasado por alli (una copia guardada, una prueba).
+ */
+export function safePolicyUrl(url: string | null | undefined): string | null {
+  return typeof url === 'string' && /^https:\/\/[!-~]+$/.test(url) && !url.includes('\\')
+    ? url
+    : null
+}
+
 function parsePolicyUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > POLICY_URL_MAX || !POLICY_URL.test(value)) {
     return null

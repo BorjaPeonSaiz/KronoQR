@@ -18,7 +18,12 @@
 // calculo que ya se hizo con la zona buena, y en una noche de cambio de hora
 // las dos cuentas no tienen por que dar lo mismo — que es exactamente el
 // defecto que esta migracion corrige.
-import { formatCivilDate, formatZoneLabel, readLocalTimestamp } from '@kronoqr/web-kit/datetime'
+import {
+  formatCivilDate,
+  formatInstant,
+  formatZoneLabel,
+  readLocalTimestamp,
+} from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -32,25 +37,9 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-/**
- * El instante en la zona del centro, siempre en 24 h como el resto de la pantalla
- * (V2-PO-2): `formatInstant` de web-kit sigue el reloj del idioma y en ingles da
- * AM/PM. Se fija aqui `h23` en vez de cambiar el paquete compartido, que usan
- * tambien el panel y el quiosco.
- */
+/** El instante en la zona del centro, en 24 h como el resto de la pantalla (V2-PO-2). */
 function instant(value: string): string {
-  const parsed = new Date(value)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(locale.value, {
-    timeZone: props.timeZone,
-    dateStyle: 'short',
-    timeStyle: 'short',
-    hourCycle: 'h23',
-  }).format(parsed)
+  return formatInstant(value, props.timeZone, locale.value)
 }
 
 function duration(minutes: number): string {

@@ -162,11 +162,29 @@ function parseInstant(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
+/** Reloj de 24 h (`h23`, el de todo el producto) o de 12 h (`h12`). */
+export type HourCycle = 'h23' | 'h12'
+
+export interface InstantFormatOptions {
+  /**
+   * Por omision `h23`: el producto escribe las horas como `HH:MM` de 24 h en
+   * todas partes (pantalla, CSV y PDF, doc 01), y un historial que dijera
+   * `7:14 AM` en ingles junto a un `07:14` no se puede contrastar con una nomina.
+   */
+  readonly hourCycle?: HourCycle
+}
+
 /**
  * Un instante UTC en la zona del centro: fecha y hora con minutos, sin segundos
- * ni decimales. Nunca redondea nada hacia arriba.
+ * ni decimales. Nunca redondea nada hacia arriba. El orden de la fecha lo da el
+ * idioma; el reloj es de 24 h salvo que se pida otra cosa.
  */
-export function formatInstant(value: string, timeZone: string, locale: string): string {
+export function formatInstant(
+  value: string,
+  timeZone: string,
+  locale: string,
+  options: InstantFormatOptions = {},
+): string {
   const instant = parseInstant(value)
 
   if (instant === null) {
@@ -177,6 +195,54 @@ export function formatInstant(value: string, timeZone: string, locale: string): 
     timeZone,
     dateStyle: 'short',
     timeStyle: 'short',
+    hourCycle: options.hourCycle ?? 'h23',
+  }).format(instant)
+}
+
+/** Solo la hora, `HH:MM`, en la zona del centro. `''` si no es una fecha. */
+export function formatTimeOfDay(
+  value: string,
+  timeZone: string,
+  locale: string,
+  options: InstantFormatOptions = {},
+): string {
+  const instant = parseInstant(value)
+
+  if (instant === null) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: options.hourCycle ?? 'h23',
+  }).format(instant)
+}
+
+/**
+ * Dia, mes y hora, sin año (`15/03, 00:20` en espanol, `03/15, 00:20` en ingles):
+ * para una hora que cae en otro dia que la jornada que se esta leyendo.
+ */
+export function formatDayMonthTime(
+  value: string,
+  timeZone: string,
+  locale: string,
+  options: InstantFormatOptions = {},
+): string {
+  const instant = parseInstant(value)
+
+  if (instant === null) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: options.hourCycle ?? 'h23',
   }).format(instant)
 }
 

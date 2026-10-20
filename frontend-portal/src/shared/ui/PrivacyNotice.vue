@@ -7,7 +7,7 @@
 // cliente en el panel, no el codigo (regla dura 13). Con los dos a `null`, la
 // redaccion generica de los textos. Aqui la politica puede ser un enlace; la
 // regla de «nunca enlace» es del quiosco, que acaba en una pantalla compartida.
-import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
+import { safePolicyUrl, type PrivacyNotice } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -15,12 +15,8 @@ const props = defineProps<{ notice: PrivacyNotice }>()
 
 const { t } = useI18n()
 
-// Solo `https`: la URL la escribe el cliente y acaba en un `href`.
-const policyUrl = computed(() =>
-  props.notice.policyUrl !== null && props.notice.policyUrl.startsWith('https://')
-    ? props.notice.policyUrl
-    : null,
-)
+// Solo https y ASCII imprimible: la URL la escribe el cliente y acaba en un href.
+const policyUrl = computed(() => safePolicyUrl(props.notice.policyUrl))
 </script>
 
 <template>
@@ -51,6 +47,7 @@ const policyUrl = computed(() =>
         <li>{{ t('privacy.basis') }}</li>
         <li>{{ t('privacy.retention') }}</li>
         <li>{{ t('privacy.rights') }}</li>
+        <li>{{ t('privacy.complaint') }}</li>
         <li>{{ t('privacy.noBiometrics') }}</li>
       </ul>
       <p class="mt-2">

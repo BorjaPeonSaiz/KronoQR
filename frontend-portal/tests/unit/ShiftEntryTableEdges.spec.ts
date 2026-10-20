@@ -53,7 +53,47 @@ describe('hora de recepcion (regla dura 9)', () => {
       1070,
     )
 
-    expect(wrapper.text()).toContain('Recibida 15/03 00:20, 0 h 30 min')
+    expect(wrapper.text()).toMatch(/Recibida 15\/0?3, 00:20, 0 h 30 min/)
+  })
+
+  it('en ingles la fecha va con el orden del idioma y la hora en 24 h, sin AM/PM', async () => {
+    const wrapper = await mountView(ShiftEntryTable, {
+      locale: 'en',
+      props: {
+        entries: [
+          shiftEntry({
+            clocked_out_at: '2026-03-14T22:50:00.000000Z',
+            clocked_out_at_local: '2026-03-14T23:50:00.000000+01:00',
+            clocked_out_recorded_at: '2026-03-14T23:20:00.000000Z',
+            duration_minutes: 1070,
+          }),
+        ],
+        totalMinutes: 1070,
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+      },
+    })
+
+    expect(wrapper.text()).toMatch(/Received 0?3\/15, 00:20/)
+    expect(wrapper.text()).not.toMatch(/AM|PM/)
+  })
+
+  it('sin una zona valida no pinta la hora de recepcion (nunca la del navegador)', async () => {
+    const wrapper = await mountView(ShiftEntryTable, {
+      props: {
+        entries: [
+          shiftEntry({
+            clocked_in_recorded_at: '2026-03-14T05:12:30.900000Z',
+            clocked_out_recorded_at: null,
+          }),
+        ],
+        totalMinutes: 485,
+        timeZone: 'No/Existe',
+        workDate: '2026-03-14',
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('Recibida')
   })
 
   it('un fichaje que llega al momento, aunque sea por unos milisegundos, no lleva aviso', async () => {

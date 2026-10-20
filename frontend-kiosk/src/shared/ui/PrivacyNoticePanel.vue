@@ -18,7 +18,7 @@
 // ya ha descartado cualquier URL que no sea https ASCII; aqui se vuelve a
 // comprobar antes de pintar la direccion y generar el QR: es lo ultimo que se
 // interpone entre una copia manipulada de `localStorage` y la pantalla.
-import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
+import { safePolicyUrl, type PrivacyNotice } from '@kronoqr/web-kit/branding'
 import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -45,8 +45,7 @@ const props = defineProps<{
  * profundidad sobre `parseBranding`, que ya lo exige.
  */
 const policyUrl = computed<string | null>(() => {
-  const url = props.notice.policyUrl
-  return url !== null && /^https:\/\/[!-~]+$/.test(url) ? url : null
+  return safePolicyUrl(props.notice.policyUrl)
 })
 
 /** El host que se enseña bajo el QR: lo unico que una persona puede comprobar de un vistazo. */
