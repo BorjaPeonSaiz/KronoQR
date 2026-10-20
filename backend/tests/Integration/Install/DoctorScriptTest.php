@@ -394,7 +394,7 @@ function doctorConAlertmanager(string $envDelFichero, array $envDelContenedor, b
         .'"ps -q prometheus") '.($conPrometheus ? 'echo pr456' : 'true').' ;; '
         .'"exec -T alertmanager wget -qO- http://127.0.0.1:9093/-/ready") return '.($listo ? '0' : '1').' ;; '
         .'"exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alertmanagers") printf %s '.escapeshellarg($respuestaPrometheus).' ;; '
-        .'"exec -T alertmanager env") printf '.escapeshellarg($entorno).' ;; '
+        .'"exec -T alertmanager printenv "*) var="$*"; var="${var##* }"; printf "%s" "$(printf '.escapeshellarg($entorno).' | sed -n "s/^${var}=//p")" ;; '
         .'*) return 0 ;; esac; }; '
         .'check_alertmanager; printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
 
@@ -407,7 +407,7 @@ function doctorConAlertmanager(string $envDelFichero, array $envDelContenedor, b
 it('da por bueno Alertmanager en marcha, visto por Prometheus y con los destinatarios del .env (V4-DV-4)', function (): void {
     $proceso = doctorConAlertmanager(
         "ALERT_EMAIL_IT=it@hotel.test\nALERT_WEBHOOK_IT=https://hooks.test/x?k=a=b\nMAIL_HOST=smtp.hotel.test\n",
-        ['ALERT_EMAIL_IT' => 'it@hotel.test', 'ALERT_WEBHOOK_IT' => 'https://hooks.test/x?k=a=b', 'MAIL_HOST' => 'smtp.hotel.test'],
+        ['ALERT_EMAIL_IT' => 'it@hotel.test', 'ALERT_WEBHOOK_IT' => 'https://hooks.test/x?k=a=b', 'MAIL_HOST' => 'smtp.hotel.test'] + doctorVentanaDeSerie(),
     );
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
@@ -418,7 +418,7 @@ it('da por bueno Alertmanager en marcha, visto por Prometheus y con los destinat
 it('avisa si el .env cambio los destinatarios y Alertmanager sigue con los anteriores, sin mostrar valores (V4-DV-4)', function (): void {
     $proceso = doctorConAlertmanager(
         "ALERT_EMAIL_IT=nuevo@hotel.test\nMAIL_HOST=smtp.hotel.test\n",
-        ['ALERT_EMAIL_IT' => 'viejo@hotel.test', 'MAIL_HOST' => 'smtp.hotel.test'],
+        ['ALERT_EMAIL_IT' => 'viejo@hotel.test', 'MAIL_HOST' => 'smtp.hotel.test'] + doctorVentanaDeSerie(),
     );
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
@@ -457,3 +457,32 @@ it('no dice nada si la observabilidad esta apagada y Alertmanager no existe (V4-
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and($proceso->getOutput())->toContain('fallos=0 avisos=0 comprobaciones=0');
 })->group('RF-PD-13', 'RNF-D-01');
+
+/**
+ * Los valores de serie de la ventana de mantenimiento (`${VAR:-sunday}` en
+ * compose.prod.yaml): el contenedor los lleva aunque el `.env` no los defina.
+ *
+ * @return array<string, string>
+ */
+function doctorVentanaDeSerie(): array
+{
+    return ['ALERT_MAINTENANCE_WEEKDAY' => 'sunday', 'ALERT_MAINTENANCE_START' => '02:00', 'ALERT_MAINTENANCE_END' => '04:00'];
+}
+
+it('compara la ventana de mantenimiento con la del .env y nunca vuelca el entorno entero de Alertmanager (V4-DV-4)', function (): void {
+    // El cliente cambio el dia en el .env y el contenedor sigue con el de serie.
+    $proceso = doctorConAlertmanager(
+        "ALERT_MAINTENANCE_WEEKDAY=saturday\n",
+        doctorVentanaDeSerie(),
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('difieren: ALERT_MAINTENANCE_WEEKDAY.')
+        ->and($proceso->getOutput())->not->toContain('saturday');
+
+    // doctor.sh pregunta por cada variable de la lista y nunca ejecuta `env` (arrastra MAIL_PASSWORD).
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+    expect($doctor)->toContain('printenv "${var}"')
+        ->not->toContain('exec -T alertmanager env ')
+        ->not->toContain('alertmanager env 2>');
+})->group('RF-PD-13', 'RS-08');

@@ -1015,13 +1015,18 @@ check_prometheus_rules() {
 #      `MAIL_*` UNA vez, al arrancar, y quien cambia el correo del IT en el `.env` sin recrearlo
 #      sigue mandando a la direccion vieja. Se comparan los valores del `.env` con los del contenedor
 #      en marcha, y solo se NOMBRAN las variables que difieren, nunca sus valores (llevan
-#      contrasenas y URL con secretos). La contrasena SMTP no esta en la lista: viaja por fichero.
+#      contrasenas y URL con secretos).
+#
+#      SE PREGUNTA POR CADA VARIABLE DE LA LISTA (`printenv VAR`), NUNCA SE VUELCA EL ENTORNO
+#      ENTERO: el del contenedor lleva `MAIL_PASSWORD`, y un `env` completo pasaria la
+#      contrasena SMTP por este script y por cualquier registro que alguien le redirija. Esa
+#      variable no esta en la lista: su cambio se nota por el fichero del que la lee la plantilla.
 #
 # Avisos y no fallos, como `check_prometheus_rules`: se arreglan recreando un contenedor. Sin la
 # observabilidad encendida (perfil `observability`) no hay nada que mirar.
-KQ_ALERTMANAGER_ENV_VARS=(ALERT_EMAIL_IT ALERT_EMAIL_RRHH ALERT_EMAIL_SEGURIDAD ALERT_WEBHOOK_IT ALERT_WEBHOOK_RRHH ALERT_WEBHOOK_SEGURIDAD MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_FROM_ADDRESS MAIL_SCHEME)
+KQ_ALERTMANAGER_ENV_VARS=(ALERT_EMAIL_IT ALERT_EMAIL_RRHH ALERT_EMAIL_SEGURIDAD ALERT_WEBHOOK_IT ALERT_WEBHOOK_RRHH ALERT_WEBHOOK_SEGURIDAD ALERT_MAINTENANCE_WEEKDAY ALERT_MAINTENANCE_START ALERT_MAINTENANCE_END MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_FROM_ADDRESS MAIL_SCHEME)
 check_alertmanager() {
-  local container prometheus response running_env var configured running stale=""
+  local container prometheus response var configured running stale=""
   container="$(compose_current ps -q alertmanager 2>/dev/null || true)"
   container="${container%%$'\n'*}"
   [ -n "${container}" ] || return 0
@@ -1040,10 +1045,16 @@ check_alertmanager() {
     fi
   fi
 
-  running_env="$(compose_current exec -T alertmanager env 2>/dev/null || true)"
   for var in "${KQ_ALERTMANAGER_ENV_VARS[@]}"; do
     configured="$(env_value "${CURRENT_ENV}" "${var}")"
-    running="$(sed -n "s/^${var}=//p" <<<"${running_env}" | head -n 1)"
+    # Los valores por defecto de compose.prod.yaml (`${VAR:-sunday}`): sin la variable en el
+    # `.env` el contenedor lleva el de serie, y eso no es una diferencia.
+    case "${var}" in
+    ALERT_MAINTENANCE_WEEKDAY) [ -n "${configured}" ] || configured="sunday" ;;
+    ALERT_MAINTENANCE_START) [ -n "${configured}" ] || configured="02:00" ;;
+    ALERT_MAINTENANCE_END) [ -n "${configured}" ] || configured="04:00" ;;
+    esac
+    running="$(compose_current exec -T alertmanager printenv "${var}" 2>/dev/null || true)"
     [ "${configured}" = "${running}" ] || stale+="${var} "
   done
   if [ -n "${stale}" ]; then
