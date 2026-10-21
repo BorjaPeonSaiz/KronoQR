@@ -37,6 +37,13 @@ final readonly class ReportExportGenerated implements DomainEvent
     /**
      * @param  list<string>  $employeeUuids  Vacio cuando el informe no es por empleado o cuando
      *                                       el conjunto supera el tope de enumeracion.
+     * @param  string  $disclosureDataset  El conjunto que se divulga (`period_report` o
+     *                                     `payroll_export`), para el asiento de lectura que
+     *                                     acompaña a este (tarea 11.4, V4-BE-5).
+     * @param  int  $disclosureRecordCount  Filas del informe, como en la descarga sincrona.
+     * @param  array<string, scalar>  $disclosureContext  El alcance del acceso, ya resuelto
+     *                                                    por `GeneratePeriodReport::compose()`.
+     *                                                    Sin nombres (regla dura 21).
      */
     public function __construct(
         public string $uuid,
@@ -49,6 +56,9 @@ final readonly class ReportExportGenerated implements DomainEvent
         public string $expiresAt,
         public array $employeeUuids,
         public int $requestedByUserId,
+        public string $disclosureDataset,
+        public int $disclosureRecordCount,
+        public array $disclosureContext,
         private DateTimeImmutable $occurredAt,
     ) {}
 

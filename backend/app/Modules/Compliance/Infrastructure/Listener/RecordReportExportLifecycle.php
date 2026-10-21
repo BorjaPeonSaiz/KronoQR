@@ -107,6 +107,28 @@ final readonly class RecordReportExportLifecycle
                 ...self::affectedSubjects($event->employeeUuids),
             ]),
         ));
+
+        // La LECTURA, con su propio asiento y a nombre de quien la pidio (tarea
+        // 11.4, V4-BE-5; RS-05, RL-15). Antes la escribia el trabajo en la cola
+        // a nombre de `system`, y «quien se llevo estas horas» se respondia con
+        // la maquina. Mismo contenido que la descarga sincrona —el contexto lo
+        // resuelve `GeneratePeriodReport::compose()`—, mas el informe del que
+        // sale y la marca de diferido. En la misma transaccion que el asiento de
+        // arriba: o constan los dos o ninguno.
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::user($event->requestedByUserId),
+            action: AuditAction::PersonalDataAccessed,
+            subject: AuditSubject::of('personal_data'),
+            payload: AuditPayload::of([
+                ...$event->disclosureContext,
+                'report_export_uuid' => $event->uuid,
+                'deferred' => true,
+                // Las dos claves canonicas al final, como en
+                // `AuditedPersonalDataAccessLog`: el contexto no las pisa.
+                'dataset' => $event->disclosureDataset,
+                'record_count' => $event->disclosureRecordCount,
+            ]),
+        ));
     }
 
     /**

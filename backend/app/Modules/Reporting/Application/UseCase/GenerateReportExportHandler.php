@@ -12,6 +12,7 @@ use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\Support\ComposedPeriodReport;
 use App\Modules\Reporting\Application\Support\ReportDataset;
 use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
@@ -157,7 +158,15 @@ final readonly class GenerateReportExportHandler
             $scope = $export->scope
                 ?? throw new RuntimeException('El informe en diferido no tiene alcance que aplicar: '.$uuid);
 
-            $report = $this->reports->handle(
+            /*
+             * `compose()` y no `handle()` (tarea 11.4, V4-BE-5): el asiento
+             * `personal_data.accessed` NO se escribe aqui, en el trabajo y a
+             * nombre de `system`, sino al cerrar, en la misma transaccion que
+             * `report_export.generated` y a nombre de quien lo pidio. Si la
+             * generacion falla, no queda asiento de una lectura que no llego a
+             * nadie.
+             */
+            $composed = $this->reports->compose(
                 $export->parameters->toQuery($scope),
                 // Los dos techos sincronos no aplican en diferido. Ver el docblock.
                 maxRangeDays: PHP_INT_MAX,
@@ -170,12 +179,13 @@ final readonly class GenerateReportExportHandler
                 // para que» se sigue respondiendo con una sola consulta al trail.
                 dataset: $this->datasetOf($export),
             );
+            $report = $composed->report;
 
             $fileName = $this->fileNameFor($export, $report);
             $path = $this->storage->pathFor($export->uuid, $fileName);
             $rowCount = $this->write($export, $report, $path);
 
-            $completed = $this->completeAndPublish($uuid, $report, $fileName, $path, $rowCount);
+            $completed = $this->completeAndPublish($uuid, $composed, $fileName, $path, $rowCount);
         } catch (Throwable $failure) {
             /*
              * El fichero a medias se borra ANTES de marcar la fila. Si el fallo
@@ -226,14 +236,14 @@ final readonly class GenerateReportExportHandler
      */
     private function completeAndPublish(
         string $uuid,
-        PeriodReport $report,
+        ComposedPeriodReport $composed,
         string $fileName,
         string $path,
         int $rowCount,
     ): ReportExport {
         /** @var ReportExport $completed */
         $completed = $this->connection->transaction(
-            function () use ($uuid, $report, $fileName, $path, $rowCount): ReportExport {
+            function () use ($uuid, $composed, $fileName, $path, $rowCount): ReportExport {
                 $locked = $this->exports->lockByUuid($uuid)
                     ?? throw new RuntimeException('El informe en diferido desaparecio al cerrarlo: '.$uuid);
 
@@ -248,11 +258,11 @@ final readonly class GenerateReportExportHandler
                     // entera.
                     sha256: $this->storage->digestOf($path),
                     rowCount: $rowCount,
-                    criteria: $this->criteria->linesFor($report),
+                    criteria: $this->criteria->linesFor($composed->report),
                     expiresAt: $this->clock->now()->modify('+'.max(1, $this->retentionDays).' days'),
                 );
 
-                $this->publishGeneration($completed, $report);
+                $this->publishGeneration($completed, $composed);
 
                 return $completed;
             }
@@ -296,7 +306,7 @@ final readonly class GenerateReportExportHandler
      * exactamente lo que RS-05 no admite, y con las dos escrituras en la misma
      * transaccion eso se cumple por construccion.
      */
-    private function publishGeneration(ReportExport $completed, PeriodReport $report): void
+    private function publishGeneration(ReportExport $completed, ComposedPeriodReport $composed): void
     {
         $this->exports->save($completed);
 
@@ -312,8 +322,11 @@ final readonly class GenerateReportExportHandler
             sizeBytes: $completed->sizeBytes ?? 0,
             rowCount: $completed->rowCount ?? 0,
             expiresAt: $completed->expiresAt?->format(DateTimeInterface::RFC3339) ?? '',
-            employeeUuids: $this->affectedSubjects($report),
+            employeeUuids: $this->affectedSubjects($composed->report),
             requestedByUserId: $completed->requestedByUserId,
+            disclosureDataset: $composed->dataset->value,
+            disclosureRecordCount: $composed->recordCount(),
+            disclosureContext: $composed->disclosure,
             occurredAt: $completed->completedAt ?? $this->clock->now(),
         ));
     }
