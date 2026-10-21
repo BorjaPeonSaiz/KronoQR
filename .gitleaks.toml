@@ -212,4 +212,11 @@ useDefault = true
     #    por eso entra aqui y no basta con cambiarla. La version vigente usa un marcador
     #    sin forma de clave.
     '''^kq_clave_marcador_9Xz$''',
+    # 34) backend/tests/Feature/Observability/WorkUnitTracingTest.php (bloque 10 de la
+    #    2.3.0) y backend/tests/Unit/Observability/CorrelationProcessorTest.php: el
+    #    `trace-id` de EJEMPLO de la especificacion W3C Trace Context (§3.2.2.3,
+    #    «00-0af7651916cd43dd8448eb211c80319c-…»), publico y sin valor. La regla
+    #    `generic-api-key` lo captura por el nombre de la clave (TRACE_ID_KEY), no por
+    #    su forma: es un identificador de correlacion, no un secreto.
+    '''^0af7651916cd43dd8448eb211c80319c$''',
   ]
