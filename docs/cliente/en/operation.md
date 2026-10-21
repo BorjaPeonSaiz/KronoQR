@@ -151,6 +151,11 @@ script, `-T`), add `--responsible-confirm=<the same e-mail>`.
    the same transaction.
 4. Each expired partition is **sealed** in `audit_chain_anchors` and **dropped
    whole**. The audit trail is never deleted row by row.
+   Then, in batches and each with its audit entry, the files of people who have
+   left and the deactivated management accounts whose period has expired are
+   **minimised**, and those people's contracts and absences are deleted
+   ([`legal-obligations.md`](legal-obligations.md) §4). The proposal counts
+   them without names.
 5. The technical log and the error history older than 90 days are cleaned up.
 6. The report of what was purged is left at
    `BACKUP_PATH/reports/retention/retencion-purga-AAAAMMDD-HHMMSS.txt`, on the

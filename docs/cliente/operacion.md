@@ -149,6 +149,11 @@ Sin terminal (un script, `-T`), añade `--responsible-confirm=<el mismo correo>`
    misma transacción.
 4. Se **sella** cada partición vencida en `audit_chain_anchors` y se **suelta
    entera**. La auditoría nunca se borra fila a fila.
+   Después, y por lotes con su asiento cada uno, se **minimizan** las fichas de
+   quien se fue y las cuentas de gestión dadas de baja cuyo plazo ha vencido, y
+   se borran los contratos y las ausencias de esas personas
+   ([`obligaciones-legales.md`](obligaciones-legales.md) §4). La propuesta las
+   cuenta sin nombres.
 5. Se limpian el log técnico y el histórico de errores de más de 90 días.
 6. Queda el informe de lo purgado en
    `BACKUP_PATH/reports/retention/retencion-purga-AAAAMMDD-HHMMSS.txt`, en el

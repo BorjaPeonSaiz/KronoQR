@@ -35,9 +35,12 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | --- | --- | --- | --- |
 | Registro de jornada (tramos, totales, correcciones, escaneos, incidencias) | PostgreSQL | **4 años** | `compliance_profiles.retention_years` del centro (RF-PD-07) |
 | Auditoría (`audit_log`) | PostgreSQL, particionada por año | **4 años** | El mismo perfil de cumplimiento |
-| Ficha de la persona (`employees`), credenciales | PostgreSQL | Mientras haya relación laboral, y después lo que exija la normativa laboral y fiscal aplicable | Decisión del responsable del tratamiento |
-| Contratos (`employment_contracts`: horas pactadas, tipo de jornada, vigencia) | PostgreSQL | **Duración de la relación laboral + 4 años**, orientativo (art. 21 LISOS, a validar) | **Pendiente de la asesoría laboral (tarea 5.2).** Hoy **no hay purga automática**: se conserva |
-| Ausencias (`absences`: tipo, fechas, nota, versiones y anulaciones) | PostgreSQL | **Duración de la relación laboral + 4 años**, orientativo (art. 21 LISOS, a validar) | **Pendiente de la asesoría laboral (tarea 3.10).** Hoy **no hay purga automática**: se conserva. **Contiene dato de salud** |
+| Ficha de la persona (`employees`): nombre, apellidos, correo, huella del DNI, PIN, foto y código | PostgreSQL | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la partición de auditoría del año de su baja. Al vencer se **minimiza**: la fila se queda con `uuid`, centro, departamento, estado y fechas | `compliance_profiles.personnel_record_retention_years`. **Pendiente de validar con la asesoría laboral** |
+| Credenciales (`credentials`) | PostgreSQL | Se conservan: están revocadas desde la baja y no llevan nombre | — |
+| Contratos (`employment_contracts`: horas pactadas, tipo de jornada, vigencia) | PostgreSQL | **Los de la ficha**: se borran en la misma purga que la minimiza | El mismo campo del perfil. **Pendiente de la asesoría laboral (tarea 5.2)** |
+| Ausencias (`absences`: tipo, fechas, nota, versiones y anulaciones) | PostgreSQL | **Los de la ficha**: se borran en la misma purga que la minimiza | El mismo campo del perfil. **Pendiente de la asesoría laboral (tarea 3.10). Contiene dato de salud** |
+| Cuenta de gestión dada de baja (`users`) | PostgreSQL | **`retention_years` desde la baja**, y nunca mientras un asiento, una corrección o una resolución vivos la citen. Al vencer se minimiza | `compliance_profiles.retention_years` |
+| Motivo de una concesión de soporte (`support_grants.reason`) | PostgreSQL | **90 días** desde que terminó la concesión, y se vacía solo. La copia del asiento `support_grant.granted` vive con la auditoría | `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` (mínimo 30) |
 | Log técnico | `storage/logs` | **90 días** | `TECHNICAL_LOG_RETENTION_DAYS` |
 | Histórico de errores (`error_events`) | PostgreSQL | **90 días** | `ERROR_HISTORY_RETENTION_DAYS` |
 | Copias de seguridad | `BACKUP_PATH` | `BACKUP_RETENTION_DAYS` (30 de serie) | Configuración de la instalación |
@@ -45,17 +48,25 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | Exportación del registro horario generada por consola (§3 de este runbook, o para la Inspección) | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que alguien la borre**; `product:doctor` avisa a los 30 días | Custodia de quien la generó ([`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) §7) |
 | Informes de retención (propuesta y purga) | `BACKUP_PATH/reports/retention` | **Sin purga**: no llevan datos personales | — |
 
-**Contratos y ausencias quedan fuera de la purga automática a propósito.** El
-ámbito de retención que ejecuta la purga es una **lista cerrada** —registro de
-jornada, auditoría, log técnico e histórico de errores— y ninguna de esas dos
-tablas entra en ella. No es un olvido: el plazo no está validado, y purgar con un
-plazo que luego resulte corto destruye datos que puede haber obligación de
-conservar. Hasta que la asesoría laboral del cliente lo fije, las dos se
-conservan y salen en cualquier respuesta a un derecho de acceso. En las
-ausencias, además, `note` puede contener **dato de salud** (art. 9 RGPD): se
-conserva y se entrega tal cual, y por eso la guía de RRHH pide que ahí no se
-escriba el diagnóstico ([`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md)
-§5 bis.5).
+**La ficha, los contratos y las ausencias se van juntos, y después del registro**
+(desde la 2.3.0, ADR-060). La purga de retención tiene, además del registro de
+jornada, la auditoría, el log técnico y el histórico de errores, dos ámbitos
+más:
+
+- **`personnel_records`.** Minimiza la ficha de quien lleva de baja los años del
+  perfil y ya no tiene ni registro de jornada ni partición de auditoría viva del
+  año de su baja, y borra en ese momento sus contratos y sus ausencias.
+- **`management_accounts`.** Minimiza las cuentas de gestión dadas de baja que
+  ya ningún asiento cita.
+
+Nunca es automática (§6) y deja un asiento por persona, sin nombre. El plazo de
+la ficha es orientativo hasta que la asesoría laboral del cliente lo fije, y
+contratos y ausencias comparten ese plazo. Hasta entonces, las ausencias salen
+en cualquier respuesta a un derecho de acceso. En las ausencias, además, `note`
+puede contener **dato de salud** (art. 9 RGPD): se conserva y se entrega tal
+cual, y por eso la guía de RRHH pide que ahí no se escriba el diagnóstico
+([`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md) §5 bis.5).
+
 
 **Ni el log técnico ni el histórico de errores llevan nombres** (regla dura 21):
 identifican con `employee_uuid`. No hace falta buscar ahí para atender un derecho
@@ -305,6 +316,11 @@ número de informe (ver §5).
    jornada de una sola persona porque lo ha pedido dejaría el registro del centro
    incompleto para el mismo periodo, que es precisamente lo que la Inspección
    mira.
+   Lo mismo vale para la ficha: su nombre, su documento y sus contratos y
+   ausencias se retiran en esa misma purga cuando vence su plazo (§1), no a
+   petición. En la respuesta, da también esa fecha: la de la baja más los años
+   de conservación de la ficha del perfil, y nunca antes de que se purgue el
+   registro del año de la baja.
 
 ---
 
