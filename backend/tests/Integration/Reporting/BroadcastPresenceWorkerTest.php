@@ -10,7 +10,6 @@ use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\PresenceEntry;
 use App\Modules\Reporting\Domain\ValueObject\PresenceStatus;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Support\Database\DatabaseUnavailable;
 use Illuminate\Contracts\Queue\Job;
@@ -19,11 +18,10 @@ use Illuminate\Queue\Connectors\ConnectorInterface;
 use Illuminate\Queue\QueueManager;
 use Illuminate\Queue\Worker;
 use Illuminate\Queue\WorkerOptions;
-use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 use Tests\Support\Observability\RecordingLogger;
 use Tests\Support\Queue\InMemoryQueue;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * LA DIFUSION DE PRESENCIA, EN UN WORKER DE VERDAD, NUNCA SE DA POR FALLIDA SIN
@@ -46,30 +44,31 @@ const BROADCAST_PRESENCE_WORKER_EMPLOYEE = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92
  */
 function broadcastPresenceWorkerDispatch(): void
 {
-    Carbon::setTestNow('2026-03-14 07:00:00');
+    // Los dos relojes: `createdAt` lo pone Carbon al encolar. El `TestCase`
+    // devuelve Carbon al reloj real al terminar la prueba.
+    FrozenTime::at('2026-03-14 07:00:00');
 
-    try {
-        $eventos = new Dispatcher(app());
-        // @phpstan-ignore argument.type (el docblock de Laravel pide una `Queue`, pero `Dispatcher::queueHandler()` llama a `->connection()` sobre lo que devuelve: es el `QueueManager`, como en `EventServiceProvider`)
-        $eventos->setQueueResolver(static fn (): QueueManager => app('queue'));
-        $eventos->listen(EmployeeClockedIn::class, [BroadcastPresenceChange::class, 'clockedIn']);
-        $eventos->dispatch(new EmployeeClockedIn(
-            BROADCAST_PRESENCE_WORKER_EMPLOYEE,
-            1,
-            '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b93',
-            WorkDate::fromIsoDate('2026-03-14', new DateTimeZone('Europe/Madrid')),
-            new DateTimeImmutable('2026-03-14 06:59:58', new DateTimeZone('UTC')),
-            ScanOrigin::QR_KIOSK,
-        ));
-    } finally {
-        Carbon::setTestNow();
-    }
+    $eventos = new Dispatcher(app());
+    // @phpstan-ignore argument.type (el docblock de Laravel pide una `Queue`, pero `Dispatcher::queueHandler()` llama a `->connection()` sobre lo que devuelve: es el `QueueManager`, como en `EventServiceProvider`)
+    $eventos->setQueueResolver(static fn (): QueueManager => app('queue'));
+    $eventos->listen(EmployeeClockedIn::class, [BroadcastPresenceChange::class, 'clockedIn']);
+    $eventos->dispatch(new EmployeeClockedIn(
+        BROADCAST_PRESENCE_WORKER_EMPLOYEE,
+        1,
+        '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b93',
+        WorkDate::fromIsoDate('2026-03-14', new DateTimeZone('Europe/Madrid')),
+        new DateTimeImmutable('2026-03-14 06:59:58', new DateTimeZone('UTC')),
+        ScanOrigin::QR_KIOSK,
+    ));
 }
 
-/** Saca el siguiente trabajo y lo pasa por el worker a la hora dada. */
+/**
+ * Saca el siguiente trabajo y lo pasa por el worker a la hora dada: el `Clock`
+ * del listener y el `Carbon::now()` del worker, los dos en ese instante.
+ */
 function broadcastPresenceWorkerRun(InMemoryQueue $cola, string $hora): Job
 {
-    app()->instance(Clock::class, FixedClock::at($hora));
+    FrozenTime::at($hora);
     $job = $cola->pop();
     expect($job)->not->toBeNull();
     assert($job instanceof Job);
@@ -155,13 +154,8 @@ it('con Horizon dos minutos atrasado se ejecuta y avisa, no falla sin haberse in
 
     // `Carbon::now()` del worker tambien va atrasado: con `retryUntil()` el
     // worker lo habria fallado aqui con `MaxAttemptsExceededException`.
-    Carbon::setTestNow('2026-03-14 07:02:00');
-
-    try {
-        $job = broadcastPresenceWorkerRun($cola, '2026-03-14 07:02:00');
-    } finally {
-        Carbon::setTestNow();
-    }
+    // `broadcastPresenceWorkerRun()` congela los dos relojes en esa hora.
+    $job = broadcastPresenceWorkerRun($cola, '2026-03-14 07:02:00');
 
     expect($job->hasFailed())->toBeFalse()
         ->and($job->isDeleted())->toBeTrue()
