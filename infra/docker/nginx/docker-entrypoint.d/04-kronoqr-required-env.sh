@@ -102,6 +102,18 @@ if [ -n "${ADMIN_INTERNAL_CIDR:-}" ]; then
   fi
 fi
 
+# NGINX_SCAN_PIN_RATE_PER_MINUTE (ADR-059 §3) tiene valor por defecto en la imagen (60), asi que
+# solo se valida si viene: un entero entre 1 y 6000. Vacia o con texto, `rate=...r/m` seria una
+# directiva rota y nginx moriria con un `[emerg]` sobre un fichero generado.
+if [ -n "${NGINX_SCAN_PIN_RATE_PER_MINUTE+x}" ]; then
+  visible="${NGINX_SCAN_PIN_RATE_PER_MINUTE//[^0-9A-Za-z./: ,-]/?}"
+  if ! [[ "${NGINX_SCAN_PIN_RATE_PER_MINUTE}" =~ ^[1-9][0-9]{0,3}$ ]] || [ "${NGINX_SCAN_PIN_RATE_PER_MINUTE}" -gt 6000 ]; then
+    log "error" "NGINX_SCAN_PIN_RATE_PER_MINUTE='${visible}' no es un entero entre 1 y 6000 (peticiones por minuto y por IP en /api/v1/scan/pin)."
+    log "error" "Que hacer: corrige NGINX_SCAN_PIN_RATE_PER_MINUTE en el .env de la instalacion, o borra la linea para usar 60. Explicado en docs/cliente/configuracion.md."
+    invalidas=1
+  fi
+fi
+
 # Opcional: solo se valida si viene. Una lista con comas, un CIDR por elemento.
 if [ -n "${TRUSTED_PROXY_CIDR:-}" ]; then
   visible="${TRUSTED_PROXY_CIDR//[^0-9A-Za-z./: ,-]/?}"
