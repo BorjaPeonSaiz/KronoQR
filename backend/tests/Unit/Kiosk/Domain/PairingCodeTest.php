@@ -46,7 +46,7 @@ it('acepta el codigo tal y como lo copia quien lo lee de la pantalla', function 
 
 it('rechaza cualquier cosa que no sean seis digitos', function (): void {
     expect(fn (): PairingCode => PairingCode::of('no-es-un-codigo'))
-        ->toThrow(InvalidPairingCode::class);
+        ->toThrow(InvalidPairingCode::class, 'Un codigo de emparejamiento son seis digitos decimales.');
 })->group('RF-PD-06');
 
 it('no hashea nada, que es trabajo del adaptador', function (): void {

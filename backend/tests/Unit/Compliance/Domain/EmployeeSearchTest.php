@@ -61,6 +61,23 @@ it('dice en el rechazo que cota fallo y cuanto vale, para traducir el 422', func
         ->and([$documento->field, $documento->bound, $documento->limit])->toBe(['national_id', InvalidEmployeeSearch::MIN, 4]);
 })->group('RF-IN-05');
 
+it('dice en el mensaje del rechazo que cota fallo y cuanto vale', function (?InvalidEmployeeSearch $rechazo, string $mensaje): void {
+    expect($rechazo?->getMessage())->toBe($mensaje);
+})->with([
+    'texto corto' => [
+        fn (): ?InvalidEmployeeSearch => rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byText('am')),
+        'El termino de busqueda necesita al menos 3 caracteres una vez recortado.',
+    ],
+    'texto largo' => [
+        fn (): ?InvalidEmployeeSearch => rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byText(str_repeat('a', 101))),
+        'El termino de busqueda admite como mucho 100 caracteres.',
+    ],
+    'documento corto' => [
+        fn (): ?InvalidEmployeeSearch => rechazoDeBusquedaLegal(static fn (): EmployeeSearch => EmployeeSearch::byNationalId('1-2-3')),
+        'El documento de identidad necesita al menos 4 caracteres una vez quitados espacios, puntos y guiones.',
+    ],
+])->group('RF-IN-05');
+
 it('rechaza un termino de mas de cien caracteres', function (): void {
     expect(EmployeeSearch::byText(str_repeat('a', 100))->text)->toHaveLength(100)
         ->and(static fn (): EmployeeSearch => EmployeeSearch::byText(str_repeat('a', 101)))
