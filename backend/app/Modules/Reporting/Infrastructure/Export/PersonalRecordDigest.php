@@ -23,12 +23,14 @@ use DateTimeZone;
  *
  * ## El formato canonico
  *
- * UTF-8, lineas separadas por `\n`, campos por `\x1F`. Los instantes en UTC con
+ * UTF-8, lineas separadas por `\n`, campos por `\x1F`. Dentro de cada campo se
+ * escapan la barra invertida, `\x1F`, `\n` y `\r` (R7-RV-03): un motivo libre
+ * no puede partir su campo ni su linea. Los instantes en UTC con
  * segundos —lo almacenado (regla dura 3)— y las duraciones en minutos enteros:
  * el texto `HH:MM` es presentacion.
  *
  * ```
- * kronoqr-personal-record/1
+ * kronoqr-personal-record/2
  * range<US>2026-03-01<US>2026-03-31
  * holder<US>0199…<US>Europe/Madrid
  * day<US>2026-03-14<US>480<US>1
@@ -42,11 +44,34 @@ use DateTimeZone;
  */
 final readonly class PersonalRecordDigest
 {
-    /** Version del formato canonico. Subirla si cambia lo que entra. */
-    private const string VERSION = 'kronoqr-personal-record/1';
+    /**
+     * Version del formato canonico. Subirla si cambia lo que entra o como se
+     * escribe: la 2 escapa los separadores dentro de cada campo (R7-RV-03).
+     */
+    private const string VERSION = 'kronoqr-personal-record/2';
 
-    /** Separador de unidad de ASCII: no aparece en ningun valor del registro. */
+    /** Separador de unidad de ASCII, entre campos. */
     private const string SEPARATOR = "\x1F";
+
+    /**
+     * Como se escribe cada caracter que podria confundirse con la estructura.
+     *
+     * `reason_text` es texto libre de hasta 500 caracteres y el nombre del autor
+     * de una correccion tambien lo escribe una persona: sin escapar, un motivo
+     * con un `\x1F` o un salto de linea dentro partiria su campo en dos y dos
+     * registros distintos podrian dar el mismo texto canonico, y por tanto la
+     * misma huella (R7-RV-03). La barra invertida se duplica: es lo que hace
+     * que la codificacion sea reversible y, por tanto, inyectiva. `strtr`
+     * sustituye en una sola pasada, asi que el orden de las claves no importa.
+     *
+     * @var array<string, string>
+     */
+    private const array ESCAPES = [
+        '\\' => '\\\\',
+        "\x1F" => '\\x1F',
+        "\n" => '\\n',
+        "\r" => '\\r',
+    ];
 
     private function __construct(public string $canonicalText, public string $sha256) {}
 
@@ -134,6 +159,12 @@ final readonly class PersonalRecordDigest
      */
     private static function line(array $fields): string
     {
-        return implode(self::SEPARATOR, $fields);
+        return implode(self::SEPARATOR, array_map(self::escape(...), $fields));
+    }
+
+    /** Un campo, con sus separadores escapados (ver {@see self::ESCAPES}). */
+    private static function escape(string $field): string
+    {
+        return strtr($field, self::ESCAPES);
     }
 }
