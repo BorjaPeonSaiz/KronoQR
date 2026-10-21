@@ -85,6 +85,11 @@ info:
     **Forma de los errores.** En lo que responde la aplicacion, `title` y
     `detail` van en el idioma negociado (abajo, **Idioma**) y la respuesta lleva
     `Content-Language`. Un `422` siempre trae `errors`, con el detalle por campo.
+    **Excepcion:** los rechazos del fichaje y del emparejamiento —`ScanRejected`,
+    `ScanNotProcessed`, `ScanHeldBack`, `PairingRejected` y
+    `PairingCodeRejected`— son **texto fijo**, el mismo en toda peticion y sin
+    negociar: son genericos y de tiempo constante (RS-03), el esquema los fija
+    con `enum` y el cliente los distingue por `type`, nunca por el texto.
     Todo `503` de la aplicacion trae su `type`
     real —`maintenance`, `pdf-rendering-busy`, `not-ready` o
     `service-unavailable`— e `instance`, la ruta que fallo, que es lo que permite
@@ -586,6 +591,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             **Escaneo rechazado.** Respuesta unica y generica para toda causa de
@@ -818,6 +825,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -946,6 +955,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             **Fichaje rechazado.** Exactamente la misma respuesta que la de `/scan`, y no
@@ -1092,6 +1103,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -1338,6 +1351,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -1441,6 +1456,8 @@ paths:
                     poll_interval_seconds: 5
         '400':
           $ref: '#/components/responses/InvalidRequest'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -1551,6 +1568,8 @@ paths:
                       expires_at: '2026-12-06T10:07:00Z'
         '400':
           $ref: '#/components/responses/InvalidRequest'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             **Emparejamiento rechazado.** Respuesta unica, generica y de tiempo
@@ -1701,6 +1720,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/SiteNotConfigured'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             **Dos cuerpos distintos, y la diferencia importa.**
@@ -2076,6 +2097,8 @@ paths:
                     enrolment_required: true
         '401':
           $ref: '#/components/responses/InvalidCredentials'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -2134,6 +2157,8 @@ paths:
           $ref: '#/components/responses/InvalidCredentials'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -2246,6 +2271,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -2471,6 +2498,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Tu contraseña ha cambiado mientras la editabas. Vuelve a entrar.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             No se ha cambiado nada. `errors.current_password` dice que la
@@ -2709,6 +2738,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ActorReauthenticationFailed'
         '429':
@@ -2837,6 +2868,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Es la última cuenta admin activa. Crea otra antes de dar de baja esta.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -2935,6 +2968,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ActorReauthenticationFailed'
         '429':
@@ -3030,6 +3065,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ActorReauthenticationFailed'
         '429':
@@ -3145,6 +3182,8 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/PortalAccessDenied'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/PortalLoginThrottled'
         '503':
@@ -3571,6 +3610,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -3706,6 +3747,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/EmployeeConflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -3823,6 +3866,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/EmployeeConflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no cumple el contrato. Ademas de los errores de forma,
@@ -4131,6 +4176,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -4736,6 +4783,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -4863,6 +4912,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -4967,6 +5018,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/SiteConflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -5065,6 +5118,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -5139,6 +5194,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -5460,6 +5517,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -5835,6 +5894,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no se puede aplicar tal cual. `errors` lleva el detalle
@@ -6074,6 +6135,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no se puede aplicar tal cual. `errors` lleva el detalle
@@ -6250,6 +6313,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de anular.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no se puede aplicar tal cual. `errors` lleva el detalle
@@ -7530,6 +7595,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -7677,6 +7744,8 @@ paths:
                     properties:
                       export:
                         $ref: '#/components/schemas/ReportExport'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no es valida: rango invertido o por encima de los 366 dias
@@ -8103,6 +8172,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -8255,6 +8326,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no cumple el contrato o deja el perfil en un estado que
@@ -8516,6 +8589,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -8743,6 +8818,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           description: |
             La peticion no se puede aplicar y no se guarda ninguna clave.
@@ -9167,6 +9244,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -9376,6 +9455,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -9500,6 +9581,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -9923,6 +10006,8 @@ paths:
                       Esta instalacion ya tiene una cuenta de gestion. Entra en
                       /api/v1/auth/login con tu correo y tu contrasena; si aun no
                       has activado tu segundo factor, la respuesta te lo pedira.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10010,6 +10095,8 @@ paths:
                     detail: >-
                       Esta instalacion ya tiene su centro de trabajo. Consultalo
                       en /api/v1/site y modificalo con PATCH /api/v1/site.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10162,6 +10249,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10454,6 +10543,8 @@ paths:
                     detail: >-
                       El fichero enviado no es el que se valido. Vuelve a
                       validarlo y aplica con el resumen nuevo.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10652,6 +10743,8 @@ paths:
                     detail: >-
                       Esa persona ya tiene una ausencia registrada en alguno de
                       esos dias. Revisa su historial antes de registrar otra.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10783,6 +10876,8 @@ paths:
                     detail: >-
                       El fichero enviado no es el que se valido. Vuelve a
                       validarlo y aplica con el resumen nuevo.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10899,6 +10994,8 @@ paths:
                     detail: >-
                       Esa ausencia ya no es la version vigente. Vuelve a cargar
                       su historial antes de corregirla.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -10972,6 +11069,8 @@ paths:
                     detail: >-
                       Esa ausencia ya no es la version vigente. Vuelve a cargar
                       su historial antes de anularla.
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -12166,6 +12265,24 @@ components:
                 errors:
                   occurred_at:
                     - El instante debe ir en UTC con sufijo Z.
+    UnsupportedMediaType:
+      description: |
+        El cuerpo no es de un tipo que esta ruta acepte: lleva `Content-Type`
+        distinto de `application/json` (o `+json`), o `multipart/form-data` en una
+        ruta que no es de subida de ficheros. No se ha leido ni guardado nada.
+        En las rutas con sesion se responde despues de autenticar; en las
+        puertas de acceso, que no la piden, decir que el cuerpo no se entiende
+        no revela nada de ninguna credencial. `title` y `detail`, en el idioma
+        negociado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: 'urn:kronoqr:problem:unsupported-media-type'
+            title: Tipo de contenido no admitido
+            status: 415
+            detail: El tipo de contenido del cuerpo no es uno que esta ruta acepte.
     Unauthenticated:
       description: Falta el token o no es valido.
       content:

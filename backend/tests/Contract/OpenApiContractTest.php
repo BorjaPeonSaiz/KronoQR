@@ -843,7 +843,7 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
     // Prefijo que no es FH1, clave desconocida, firma que no valida, credencial
     // revocada, empleado de baja: una sola forma para las cinco.
     expect(Contract::keys('paths', '/api/v1/scan', 'post', 'responses'))
-        ->toBe(['200', '400', '401', '403', '422', '429', '503'])
+        ->toBe(['200', '400', '401', '403', '415', '422', '429', '503'])
         ->and(Contract::value(
             'paths', '/api/v1/scan', 'post', 'responses', '422',
             'content', 'application/problem+json', 'schema',
@@ -1330,7 +1330,7 @@ it('busca a la persona de la exportacion con los mismos ambitos y sin el DNI en 
             ['managementToken' => ['reports:*']],
         ])
         ->and(Contract::has('paths', $path, 'post', 'parameters'))->toBeFalse()
-        ->and(Contract::keys('paths', $path, 'post', 'responses'))->toBe(['200', '401', '403', '422', '429', '503'])
+        ->and(Contract::keys('paths', $path, 'post', 'responses'))->toBe(['200', '401', '403', '415', '422', '429', '503'])
         ->and(Contract::keys('paths', $path, 'post', 'responses', '200', 'headers'))->toContain('Cache-Control');
 })->group('RF-IN-05', 'RF-ID-02', 'RS-04');
 
@@ -1483,7 +1483,7 @@ it('no distingue las causas del rechazo del acceso al portal', function (): void
     // que responde a la IP y no a la credencial.
     $responses = Contract::keys('paths', '/api/v1/me/login', 'post', 'responses');
 
-    expect($responses)->toBe(['200', '400', '401', '429', '503']);
+    expect($responses)->toBe(['200', '400', '401', '415', '429', '503']);
 
     $unauthorised = Contract::value('paths', '/api/v1/me/login', 'post', 'responses', '401');
 
