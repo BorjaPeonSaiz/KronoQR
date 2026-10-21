@@ -9,7 +9,7 @@ use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
-use App\Support\Resilience\DependencyFailure;
+use Closure;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
@@ -56,9 +56,13 @@ use Throwable;
  */
 final readonly class DatabaseLicenseRepository implements LicenseRepository
 {
+    /**
+     * @param  Closure(Throwable): bool  $isDatabaseOutage  Si el fallo es PostgreSQL caido o perdido. Lo da el proveedor del modulo con `DependencyFailure`, que es del armazon (`App\Support`) y que la capa de persistencia no alcanza (Deptrac): asi la clasificacion es la misma que la del `503` sin abrir la frontera.
+     */
     public function __construct(
         private ConnectionInterface $connection,
         private LoggerInterface $logger,
+        private Closure $isDatabaseOutage,
     ) {}
 
     public function current(): ?StoredLicense
@@ -80,7 +84,7 @@ final readonly class DatabaseLicenseRepository implements LicenseRepository
             // `RENAME` —una sola sentencia SQL— saltaria la licencia. Cualquier
             // otro fallo es lo de antes: no hay licencia que se pueda usar, y
             // el gate deniega lo accesorio.
-            if (DependencyFailure::dependencyOf($exception) === DependencyFailure::DATABASE) {
+            if (($this->isDatabaseOutage)($exception)) {
                 throw LicenseUnavailable::because($exception);
             }
 

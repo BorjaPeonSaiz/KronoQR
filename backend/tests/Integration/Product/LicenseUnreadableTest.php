@@ -9,6 +9,7 @@ use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Support\Database\DatabaseUnavailable;
 use App\Support\Health\LicenseStateProbe;
+use App\Support\Resilience\DependencyFailure;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -37,6 +38,15 @@ use Tests\Support\Product\LicenseKeys;
 uses(RefreshDatabase::class);
 
 /**
+ * La clasificacion que el proveedor del modulo le da al repositorio. La prueba
+ * del `REVOKE`, mas abajo, pasa por el enlace real del contenedor.
+ */
+function licenseUnreadableOutage(Throwable $fallo): bool
+{
+    return DependencyFailure::dependencyOf($fallo) === DependencyFailure::DATABASE;
+}
+
+/**
  * Un repositorio sobre una conexion cuya consulta a `license` siempre falla
  * con `$fallo`.
  */
@@ -46,12 +56,12 @@ function licenseUnreadableRepository(?Throwable $fallo = null): DatabaseLicenseR
     $connection = Mockery::mock(ConnectionInterface::class);
     $connection->shouldReceive('select')->andThrow($fallo ?? new QueryException('pgsql', 'SELECT 1 FROM license', [], DatabaseUnavailable::unreachable(10)));
 
-    return new DatabaseLicenseRepository($connection, new NullLogger);
+    return new DatabaseLicenseRepository($connection, new NullLogger, licenseUnreadableOutage(...));
 }
 
 it('lanza LicenseUnavailable si PostgreSQL no responde y devuelve null si no hay filas', function (): void {
     expect(static fn () => licenseUnreadableRepository()->current())->toThrow(LicenseUnavailable::class)
-        ->and((new DatabaseLicenseRepository(DB::connection(), new NullLogger))->current())->toBeNull();
+        ->and((new DatabaseLicenseRepository(DB::connection(), new NullLogger, licenseUnreadableOutage(...)))->current())->toBeNull();
 })->group('RF-PD-04', 'RNF-D-03');
 
 it('no convierte en unknown un fallo que no es de PostgreSQL caido', function (Throwable $fallo): void {

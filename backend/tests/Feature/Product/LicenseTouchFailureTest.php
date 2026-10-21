@@ -60,6 +60,7 @@ beforeEach(function (): void {
         static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(
             ReadOnlyLicenseConnection::wrapping(DB::connection()),
             Log::channel(),
+            static fn (Throwable $fallo): bool => false,
         ),
     );
 });

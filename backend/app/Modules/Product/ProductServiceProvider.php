@@ -195,6 +195,7 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
+use App\Support\Resilience\DependencyFailure;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -1166,7 +1167,13 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->app->bind(
             LicenseRepository::class,
-            static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(DB::connection(), Log::channel()),
+            // `unknown` solo con PostgreSQL caido o perdido (ADR-059 §4): la
+            // misma clasificacion que el `503`, que la persistencia no alcanza.
+            static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(
+                DB::connection(),
+                Log::channel(),
+                static fn (Throwable $failure): bool => DependencyFailure::dependencyOf($failure) === DependencyFailure::DATABASE,
+            ),
         );
 
         $this->app->bind(
