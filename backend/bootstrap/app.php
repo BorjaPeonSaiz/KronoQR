@@ -81,7 +81,6 @@ use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
-use App\Support\Redis\RedisCircuitOpen;
 use App\Support\Resilience\DependencyFailure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -97,6 +96,7 @@ use Illuminate\Support\Number;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -1378,10 +1378,45 @@ return Application::configure(basePath: dirname(__DIR__))
          * peticion. La averia ya consta una vez, como `<dependencia>.circuit_opened`.
          * La UNICA que se sigue informando es la primera `RedisException`, la que
          * abre el circuito: con PostgreSQL arriba, su fila es la de la averia.
+         *
+         * El predicado es UNO, `DependencyFailure::isOnRecordThroughItsCircuit()`,
+         * el mismo que usa `CaughtFailureHistory` para los fallos capturados.
+         *
+         * FUERA DE UNA PETICION (un trabajo, una orden) no hay respuesta que deje
+         * la linea, y callar del todo dejaria una conexion perdida en un trabajo
+         * sin ningun rastro. Ahi deja un `warning` `dependency.unavailable` con la
+         * dependencia y la clase —nunca el mensaje, que lleva host y puerto— y no
+         * sigue al informe por defecto ni a `error_events`: con PostgreSQL caido
+         * no se puede escribir, y la averia ya consta por su cortacircuitos. Lo
+         * que el trabajo haga despues (fallar, `scheduler.command_failed`) deja
+         * su propio rastro (§5).
          */
-        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DependencyFailure::dependencyOf($exception) === DependencyFailure::DATABASE);
+        $duringHttpRequest = static function (): bool {
+            try {
+                return request()->route() !== null;
+            } catch (Throwable) {
+                return false;
+            }
+        };
 
-        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => RedisCircuitOpen::isCauseOf($exception));
+        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DependencyFailure::isOnRecordThroughItsCircuit($exception) && $duringHttpRequest());
+
+        $exceptions->report(static function (Throwable $exception): ?bool {
+            if (! DependencyFailure::isOnRecordThroughItsCircuit($exception)) {
+                return null;
+            }
+
+            try {
+                app(LoggerInterface::class)->warning('dependency.unavailable', [
+                    'dependency' => DependencyFailure::dependencyOf($exception) ?? DependencyFailure::REDIS,
+                    'failure' => $exception::class,
+                ]);
+            } catch (Throwable) {
+                // Sin log no hay nada mas que hacer: el informe no puede lanzar.
+            }
+
+            return false;
+        });
 
         /*
          * LOS RECHAZOS ESPERADOS NO SON UN `ERROR` DEL LOG (V4-BE-2, V21-4-BE-6).
@@ -1411,7 +1446,18 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(static fn (Throwable $exception, Request $request): mixed => DependencyUnavailableResponse::for($exception, $request));
+        // El `render` FINAL: el unico que deja el rastro de la peticion.
+        // `ServerErrorReporter` no llega aqui con una dependencia caida (la
+        // trata como `503` sin renderizar), asi que la linea sale una vez.
+        $exceptions->render(static function (Throwable $exception, Request $request): mixed {
+            $response = DependencyUnavailableResponse::for($exception, $request);
+
+            if ($response !== null) {
+                DependencyUnavailableResponse::leaveTrail($exception, $request);
+            }
+
+            return $response;
+        });
 
         $exceptions->render(static function (Throwable $exception): mixed {
             if ($exception instanceof HttpResponseException) {

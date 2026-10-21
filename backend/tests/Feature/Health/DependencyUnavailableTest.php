@@ -6,6 +6,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Support\Database\DatabaseCircuitBreaker;
 use App\Support\Network\BoundedReachability;
 use App\Support\Redis\RedisCircuitBreaker;
+use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\QueryException;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -13,6 +16,8 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\MockClock;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
@@ -207,3 +212,25 @@ it('no declara ninguna cola de respaldo en base de datos que nadie consume (ADR-
     expect($fichero)->not->toMatch("/'driver' => 'failover',/")
         ->and(config('queue.connections.resilient.driver'))->toBe('failover-after-commit');
 })->group('RNF-D-03');
+
+it('en un trabajo o una orden, la base perdida deja un warning con la clase, sin mensaje y sin fila', function (): void {
+    // Fuera de una peticion no hay respuesta que deje `http.dependency_unavailable`:
+    // callar del todo dejaria una conexion perdida en un trabajo sin rastro.
+    event(new CommandStarting('reporting:weekly-summary', new ArrayInput([]), new NullOutput));
+    $lineas = dependencyUnavailableLog();
+    $filas = DB::table('error_events')->count();
+
+    $driver = new PDOException('SQLSTATE[HY000]: General error: 7 no connection to the server host=10.20.30.40');
+    $driver->errorInfo = ['HY000', 7, 'no connection to the server'];
+
+    app(ExceptionHandler::class)->report(new QueryException('pgsql', 'select 1', [], $driver));
+
+    $avisos = array_values(array_filter($lineas->getArrayCopy(), static fn (array $linea): bool => $linea['message'] === 'dependency.unavailable'));
+
+    expect($avisos)->toHaveCount(1)
+        ->and($avisos[0]['level'])->toBe('warning')
+        ->and($avisos[0]['context'])->toBe(['dependency' => 'database', 'failure' => QueryException::class])
+        ->and(array_column($lineas->getArrayCopy(), 'level'))->not->toContain('error')
+        ->and(json_encode($lineas->getArrayCopy()))->not->toContain('10.20.30.40')
+        ->and(DB::table('error_events')->count())->toBe($filas);
+})->group('RNF-D-03', 'RS-05');

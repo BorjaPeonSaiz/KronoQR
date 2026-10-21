@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Capture;
 
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
-use App\Support\Database\DatabaseUnavailable;
-use App\Support\Redis\RedisCircuitOpen;
+use App\Support\Resilience\DependencyFailure;
 use Throwable;
 
 /**
@@ -17,12 +16,15 @@ use Throwable;
  *
  * ## Lo que el manejador de excepciones no informa, aqui tampoco
  *
- * `bootstrap/app.php` descarta con `dontReportWhen` las dos averias que ya
- * constan una sola vez al abrirse su cortacircuitos (`database.circuit_opened`,
- * `redis.circuit_opened`): la base inalcanzable y el circuito de Redis abierto.
- * Este puerto no pasa por el manejador, asi que repite el mismo descarte. Sin
- * el, durante una caida cada elemento de cada lote de cincuenta escaneos
- * escribiria su fila, y el historico se convertiria en la segunda averia.
+ * `bootstrap/app.php` descarta las averias que ya constan una sola vez al
+ * abrirse su cortacircuitos (`database.circuit_opened`, `redis.circuit_opened`):
+ * PostgreSQL inalcanzable o perdido a mitad de camino, y el circuito de Redis
+ * abierto. Este puerto no pasa por el manejador, asi que repite el mismo
+ * descarte con **el mismo predicado**,
+ * {@see DependencyFailure::isOnRecordThroughItsCircuit()}. Sin el, durante una
+ * caida cada elemento de cada lote de cincuenta escaneos escribiria su fila, y
+ * el historico se convertiria en la segunda averia. Quien captura ya deja su
+ * propio apunte con la clase.
  *
  * ## No lanza
  *
@@ -35,7 +37,7 @@ final readonly class CaughtFailureHistory implements CaughtFailureReporter
     public function report(Throwable $failure): void
     {
         try {
-            if (DatabaseUnavailable::foundIn($failure) instanceof DatabaseUnavailable || RedisCircuitOpen::isCauseOf($failure)) {
+            if (DependencyFailure::isOnRecordThroughItsCircuit($failure)) {
                 return;
             }
 
