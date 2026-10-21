@@ -490,6 +490,44 @@ it('distingue «no lo conoce» de «no he podido preguntar» y conserva el error
         ->and($mensajes)->toContain('KQ_MSG_EN[u_rollback_audit_entry_unknown]=');
 })->group('RF-PD-10', 'RS-07');
 
+it('no da por listo un proceso de fondo que esta `running` sin salud: solo vale `healthy`', function (): void {
+    // 8b, U3p. Justo tras el `up -d` un contenedor con healthcheck esta `running` con la
+    // salud aun vacia, y un `horizon` roto que cae en bucle de reinicios pasaba por ahi: la
+    // actualizacion terminaba con 0 y horizon seguia en `Restarting`. Con `strict` (horizon,
+    // scheduler y reverb) solo cuenta `healthy`; sin el, `running` a secas sigue valiendo
+    // (servicio sin healthcheck, como los de una version anterior en la vuelta atras).
+    $fragmento = <<<'BASH'
+        probar() { local estado=0; service_is_healthy "$@" || estado=$?; echo "$1|${2:-}=${estado}"; }
+        probar "running"
+        probar "running "
+        probar "running" strict
+        probar "running " strict
+        probar "starting running" strict
+        probar "restarting " strict
+        probar "unhealthy running" strict
+        probar "healthy running" strict
+        probar "healthy running"
+        BASH;
+
+    $resultado = bashConElActualizador($fragmento);
+    $salida = $resultado->getOutput();
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($salida)->toContain("running|=0")
+        ->and($salida)->toContain("running |=0")
+        ->and($salida)->toContain("running|strict=1")
+        ->and($salida)->toContain("running |strict=1")
+        ->and($salida)->toContain("starting running|strict=1")
+        ->and($salida)->toContain("restarting |strict=1")
+        ->and($salida)->toContain("unhealthy running|strict=1")
+        ->and($salida)->toContain("healthy running|strict=0")
+        ->and($salida)->toContain("healthy running|=0");
+
+    // Y la espera de los tres procesos de fondo lo pide de verdad.
+    expect((string) file_get_contents(Repo::file('infra/scripts/update.sh')))
+        ->toContain('wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" strict ||');
+})->group('RF-PD-10');
+
 it('pregunta lo mismo y con la misma funcion en update.sh y en la etapa 8b', function (): void {
     // Dos copias de la misma pregunta es como se llego al fallo: no basta con
     // arreglar una. Ni el script ni el workflow pueden volver a preguntarlo

@@ -967,22 +967,28 @@ service_state() {
     awk -v s="${service}" '$1 == s { print $2 " " $3 }' || true
 }
 
+# `strict` (segundo argumento) es para los servicios que TIENEN healthcheck: `running` sin
+# salud es solo el primer instante tras el `up -d`, antes de que Docker empiece a sondear,
+# y un contenedor que arranca y cae en bucle de reinicios pasa por ahi. Aceptarlo daba por
+# sano un `horizon` roto (8b, U3p). Sin `strict`, `running` a secas vale: es un servicio
+# sin healthcheck (por ejemplo, el de una version anterior en la vuelta atras).
 service_is_healthy() {
-  local state="$1"
+  local state="$1" strict="${2:-}"
   case "${state}" in
-  "healthy "* | "running" | "running ") return 0 ;;
+  "healthy "*) return 0 ;;
+  "running" | "running ") [ "${strict}" = "strict" ] || return 0 ;;
   esac
   return 1
 }
 
 # Espera por CONDICION, nunca por `sleep` a ciegas (misma regla que install.sh).
 wait_for_healthy() {
-  local compose_fn="$1" service="$2" timeout="$3" waited=0 state
+  local compose_fn="$1" service="$2" timeout="$3" strict="${4:-}" waited=0 state
 
   kq_msg waiting "${service}" "${timeout}"
   while [ "${waited}" -lt "${timeout}" ]; do
     state="$(service_state "${compose_fn}" "${service}")"
-    if service_is_healthy "${state}"; then
+    if service_is_healthy "${state}" "${strict}"; then
       kq_msg waiting_ok "${service}"
       return 0
     fi
@@ -3245,7 +3251,7 @@ phase_start_and_verify() {
   # fichaje perdido: es un problema que una persona arregla con el sistema en pie
   # (`docker compose logs --tail 100 <servicio>`), no una razon para tirarlo.
   for service in horizon scheduler reverb; do
-    wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" ||
+    wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" strict ||
       rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}" "${service}")" workers_failed
   done
 
