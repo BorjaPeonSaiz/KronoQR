@@ -21,6 +21,12 @@ dataset('rechazos de una concesion de soporte', [
         ['length' => 2],
         'A support grant needs a reason of 3 to 200 characters, got 2.',
     ],
+    'motivo con un dato personal' => [
+        fn (): InvalidSupportGrant => InvalidSupportGrant::personalData('phone'),
+        'support.errors.reason_personal_data',
+        [],
+        'A support grant reason must not carry personal data, and this one looks like it carries a phone.',
+    ],
     'duracion fuera de rango' => [
         fn (): InvalidSupportGrant => InvalidSupportGrant::duration(73, 72),
         'support.errors.duration',

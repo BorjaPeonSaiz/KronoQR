@@ -48,6 +48,7 @@ use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\ListDataExportsHandler;
 use App\Modules\Product\Application\UseCase\PruneErrorEvents;
+use App\Modules\Product\Application\UseCase\PruneSupportGrantReasons;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
@@ -106,6 +107,7 @@ use App\Modules\Product\Infrastructure\Console\ProductErrorsPruneCommand;
 use App\Modules\Product\Infrastructure\Console\ProductExportAllCommand;
 use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
+use App\Modules\Product\Infrastructure\Console\SupportGrantsPruneReasonsCommand;
 use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ConfigurationCollector;
@@ -627,6 +629,16 @@ final class ProductServiceProvider extends ServiceProvider
                  * corren las tareas nocturnas que mas errores producen.
                  */
                 batchSize: Config::integer('compliance.retention.batch_size', 1000),
+            ),
+        );
+
+        // Tarea 11.3 C: el motivo de una concesion de soporte tiene plazo.
+        $this->app->bind(
+            PruneSupportGrantReasons::class,
+            static fn (Application $app): PruneSupportGrantReasons => new PruneSupportGrantReasons(
+                grants: $app->make(SupportGrantRepository::class),
+                clock: $app->make(Clock::class),
+                retentionDays: Config::integer('product.support_grant_reason_retention_days', 90),
             ),
         );
     }
@@ -1690,6 +1702,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductErrorsCommand::class,
                 ProductErrorsPruneCommand::class,
+                SupportGrantsPruneReasonsCommand::class,
             ]);
         }
     }

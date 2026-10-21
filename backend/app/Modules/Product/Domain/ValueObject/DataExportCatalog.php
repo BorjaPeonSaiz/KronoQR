@@ -395,6 +395,9 @@ final class DataExportCatalog
                 'revoked_at',
                 'revoked_by_user_uuid',
                 'accessed_at',
+                // Tarea 11.3 C: el motivo vacio no es un dato perdido; esta
+                // columna dice cuando se vacio.
+                'reason_purged_at',
             ]),
 
             // --- El diagnostico tecnico ---------------------------------------

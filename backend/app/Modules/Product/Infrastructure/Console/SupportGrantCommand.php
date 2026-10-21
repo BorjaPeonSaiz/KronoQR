@@ -55,7 +55,7 @@ use Illuminate\Support\Facades\Config;
 final class SupportGrantCommand extends Command
 {
     protected $signature = 'support:grant
-        {--reason= : Obligatorio. El incidente que motiva el acceso (3 a 200 caracteres)}
+        {--reason= : Obligatorio. El incidente que motiva el acceso (3 a 200 caracteres, sin nombres, correos, DNI ni telefonos; para una persona, su uuid)}
         {--hours= : Duracion en horas. Por defecto PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS}
         {--scope=diagnostics : diagnostics | read_only | configuration}
         {--as= : Correo de la cuenta de gestion a cuyo nombre se concede}';
@@ -73,6 +73,10 @@ final class SupportGrantCommand extends Command
             return self::FAILURE;
         }
 
+        // Tarea 11.3 C: antes de conceder, el recordatorio de que el motivo va
+        // tal cual a la auditoria y no puede llevar datos personales.
+        $this->line(self::text('support.reason_hint'));
+
         $author = $this->resolveAuthor($grants);
 
         if (! $author instanceof SupportGrantAuthor) {
@@ -89,6 +93,8 @@ final class SupportGrantCommand extends Command
         } catch (InvalidSupportGrant $invalid) {
             $this->error('No se ha concedido nada.');
             $this->line($invalid->getMessage());
+            // Tarea 11.3 C: el porque, en el idioma de la instalacion.
+            $this->line(self::text($invalid->translationKey, $invalid->parameters));
             $this->line('');
             $this->line('Uso:  php artisan support:grant --reason="Incidencia #123" --hours=24');
 
@@ -176,5 +182,15 @@ final class SupportGrantCommand extends Command
         $value = $this->option($name);
 
         return \is_string($value) ? trim($value) : '';
+    }
+
+    /**
+     * @param  array<string, string|int>  $parameters
+     */
+    private static function text(string $key, array $parameters = []): string
+    {
+        $text = __($key, $parameters);
+
+        return \is_string($text) ? $text : $key;
     }
 }

@@ -161,11 +161,31 @@ final readonly class DatabaseSupportGrantRepository implements SupportGrantRepos
             ->update(['accessed_at' => self::utc($accessedAt)]);
     }
 
+    public function purgeReasonsClosedBy(DateTimeImmutable $closedBy, DateTimeImmutable $now): int
+    {
+        // Una sola sentencia y sin lotes: la tabla son decenas de filas al año.
+        return $this->connection->update(
+            'UPDATE support_grants
+                SET reason = NULL, reason_purged_at = ?, updated_at = ?
+              WHERE reason IS NOT NULL
+                AND COALESCE(revoked_at, expires_at) <= ?',
+            [self::utc($now), self::utc($now), self::utc($closedBy)],
+        );
+    }
+
+    public function countReasonsClosedBy(DateTimeImmutable $closedBy): int
+    {
+        return $this->connection->table('support_grants')
+            ->whereNotNull('reason')
+            ->whereRaw('COALESCE(revoked_at, expires_at) <= ?', [self::utc($closedBy)])
+            ->count();
+    }
+
     private function selectWithAuthor(): string
     {
         return <<<'SQL'
             SELECT g.id, g.uuid, g.reason, g.scope, g.granted_at, g.expires_at,
-                   g.revoked_at, g.revoked_by_user_id, g.accessed_at,
+                   g.revoked_at, g.revoked_by_user_id, g.accessed_at, g.reason_purged_at,
                    u.id AS author_id, u.uuid AS author_uuid, u.name AS author_name
               FROM support_grants g
               INNER JOIN users u ON u.id = g.granted_by_user_id
@@ -204,7 +224,7 @@ final readonly class DatabaseSupportGrantRepository implements SupportGrantRepos
                 uuid: $row->string('author_uuid'),
                 name: $row->string('author_name'),
             ),
-            reason: $row->string('reason'),
+            reason: $row->nullableString('reason'),
             // Fallar cerrado: un alcance ilegible se sirve como el mas estrecho.
             scope: SupportScope::tryFrom($row->string('scope')) ?? SupportScope::default(),
             grantedAt: $row->instant('granted_at'),
@@ -212,6 +232,7 @@ final readonly class DatabaseSupportGrantRepository implements SupportGrantRepos
             revokedAt: $row->nullableInstant('revoked_at'),
             revokedByUserId: $row->nullableInt('revoked_by_user_id'),
             accessedAt: $row->nullableInstant('accessed_at'),
+            reasonPurgedAt: $row->nullableInstant('reason_purged_at'),
         );
     }
 

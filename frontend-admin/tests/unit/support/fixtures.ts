@@ -468,6 +468,7 @@ export function supportGrant(overrides: Partial<SupportGrant> = {}): SupportGran
     expires_at: '2026-09-09T09:00:00.000000Z',
     revoked_at: null,
     accessed_at: null,
+    reason_purged_at: null,
     ...overrides,
   }
 }

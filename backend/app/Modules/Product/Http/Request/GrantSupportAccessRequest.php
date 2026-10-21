@@ -8,6 +8,7 @@ use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Product\Application\Command\GrantSupportAccessCommand;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
@@ -62,6 +63,14 @@ final class GrantSupportAccessRequest extends FormRequest
                 'string',
                 'min:'.SupportGrant::REASON_MIN_LENGTH,
                 'max:'.SupportGrant::REASON_MAX_LENGTH,
+                // Tarea 11.3 C: el mismo detector que aplica el dominio, aqui
+                // para que el `422` llegue en `errors.reason` y en el idioma
+                // de quien lo escribe.
+                static function (string $attribute, mixed $value, Closure $fail): void {
+                    if (\is_string($value) && SupportGrant::personalDataIn($value) !== null) {
+                        $fail(__('support.errors.reason_personal_data'));
+                    }
+                },
             ],
             'scope' => ['sometimes', 'string', 'in:'.implode(',', SupportScope::names())],
             'hours' => ['sometimes', 'integer', 'min:1', 'max:'.self::maximumHours()],

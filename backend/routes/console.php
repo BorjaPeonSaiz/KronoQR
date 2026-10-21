@@ -810,6 +810,24 @@ ScheduledTaskOutput::toLog(Schedule::command('sanctum:prune-expired', ['--hours'
     ->runInBackground());
 
 /*
+ * El motivo de las concesiones de soporte cerradas (bloque 11 de la 2.3.0,
+ * tarea 11.3 C; RGPD art. 5.1.e, ADR-020).
+ *
+ * Vacia `support_grants.reason` pasados
+ * `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` (90 de serie, minimo 30) desde
+ * que la concesion se cerro. La concesion se sigue listando entera; el motivo
+ * original sigue en el asiento `support_grant.granted`, que no se toca. Sin
+ * asiento: es mantenimiento de una copia, como la purga de tokens.
+ *
+ * 03:45 UTC, en el mismo hueco que las otras dos limpiezas. La salida son
+ * recuentos, nunca un motivo (regla dura 21).
+ */
+ScheduledTaskOutput::toLog(Schedule::command('product:support-grants:prune-reasons')
+    ->dailyAt('03:45')
+    ->withoutOverlapping()
+    ->runInBackground());
+
+/*
  * Asientos pendientes de paquetes de diagnostico (ADR-020, enmienda del
  * 14-10-2026; RL-04, regla dura 6).
  *

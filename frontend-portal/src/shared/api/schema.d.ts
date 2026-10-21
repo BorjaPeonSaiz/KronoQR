@@ -12203,8 +12203,24 @@ export interface components {
              */
             status: "active" | "expired" | "revoked";
             scope: components["schemas"]["SupportScope"];
-            /** @description Para que incidente se concedio. Va tal cual al asiento de auditoria. */
-            reason: string;
+            /**
+             * @description Para que incidente se concedio. Va tal cual al asiento de auditoria
+             *     `support_grant.granted`, que lo conserva.
+             *
+             *     **`null` cuando ya se ha vaciado** (bloque 11 de la 2.3.0, tarea
+             *     11.3 C; RGPD art. 5.1.e): la fila lo guarda
+             *     `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` dias (90 de serie,
+             *     minimo 30) desde que la concesion se cerro —su `revoked_at` o, si no
+             *     se revoco, su `expires_at`— y despues una tarea diaria lo vacia. La
+             *     concesion se sigue listando con todo lo demas; el motivo original
+             *     sigue en `audit_log`.
+             */
+            reason: string | null;
+            /**
+             * @description Cuando se vacio `reason`. Nulo mientras el motivo se conserva; no
+             *     nulo exactamente cuando `reason` es `null`.
+             */
+            reason_purged_at: components["schemas"]["UtcTimestamp"] | null;
             /** @description La cuenta de gestion que la concedio. */
             granted_by: {
                 /** Format: uuid */
@@ -12409,6 +12425,13 @@ export interface components {
         GrantSupportAccessRequest: {
             /**
              * @description Obligatorio. El incidente que motiva el acceso.
+             *
+             *     **Sin datos personales.** Si hay que señalar a una persona, se usa
+             *     su `employee_uuid`, nunca su nombre. Un motivo que parece llevar
+             *     una direccion de correo, un DNI o NIE o un numero de telefono se
+             *     rechaza con `422` en `errors.reason`, tambien por consola
+             *     (`support:grant`). El motivo va tal cual al asiento de auditoria,
+             *     que no se puede corregir despues.
              * @example Incidencia #123: la cola del quiosco de recepcion no vacia
              */
             reason: string;

@@ -455,13 +455,14 @@ return [
             'columns' => [
                 'support_grant_uuid' => 'Grant identifier.',
                 'granted_by_user_uuid' => 'Who authorised it.',
-                'reason' => 'Which incident it was granted for.',
+                'reason' => 'Which incident it was granted for. Empty once cleared after its retention period (see reason_purged_at); the original reason is still in audit_log, entry support_grant.granted.',
                 'scope' => 'How far it reached: `diagnostics` (generate the diagnostics bundle only), `read_only` (read) or `configuration` (read and change settings).',
                 'granted_at' => 'When it was granted.',
                 'expires_at' => 'When it stopped being valid, with nobody doing anything.',
                 'revoked_at' => 'When it was revoked early, if it was.',
                 'revoked_by_user_uuid' => 'Who revoked it. Empty if it was revoked from the server console.',
                 'accessed_at' => 'Last time it was used. Empty if it was granted and never needed.',
+                'reason_purged_at' => 'When the reason was cleared, PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS after the grant closed. Empty while it is kept.',
             ],
         ],
 

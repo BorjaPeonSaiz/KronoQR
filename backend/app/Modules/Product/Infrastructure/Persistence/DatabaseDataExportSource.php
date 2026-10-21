@@ -626,7 +626,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(g.expires_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at,
                to_char(g.revoked_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS revoked_at,
                ru.uuid::text AS revoked_by_user_uuid,
-               to_char(g.accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS accessed_at
+               to_char(g.accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS accessed_at,
+               to_char(g.reason_purged_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS reason_purged_at
           FROM support_grants g
           JOIN users gu      ON gu.id = g.granted_by_user_id
           LEFT JOIN users ru ON ru.id = g.revoked_by_user_id

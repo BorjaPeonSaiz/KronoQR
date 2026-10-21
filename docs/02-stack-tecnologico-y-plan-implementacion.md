@@ -1767,6 +1767,9 @@ PRODUCT_DATA_EXPORT_RATE_LIMIT=30      # RF-PD-14 · peticiones por minuto POR C
 PRODUCT_DATA_EXPORT_STALE_AFTER=3600   # RF-PD-14 · segundos tras los que una exportación interrumpida a
                                        # medias pasa a `failed`/`stale` y libera la siguiente (RL-20)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
+PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS=90  # RL-11, ADR-020 · días que support_grants.reason
+                                       # se conserva desde el cierre de la concesión; después se vacía
+                                       # (el asiento support_grant.granted lo conserva). Mínimo 30
 PRODUCT_CLIENT_ERRORS_RATE_LIMIT=12    # RF-PD-15 · peticiones por minuto y por sesión del panel o del
                                        # portal a POST /api/v1/client-errors (por IP, ×4). El quiosco no
                                        # usa este canal: reporta dentro del latido (tarea 1.8)

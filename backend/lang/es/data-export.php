@@ -480,13 +480,14 @@ return [
             'columns' => [
                 'support_grant_uuid' => 'Identificador de la concesion.',
                 'granted_by_user_uuid' => 'Quien la autorizo.',
-                'reason' => 'Para que incidencia se concedio.',
+                'reason' => 'Para que incidencia se concedio. Vacio si ya se vacio por plazo (ver reason_purged_at); el motivo original sigue en audit_log, asiento support_grant.granted.',
                 'scope' => 'Hasta donde llegaba: `diagnostics` (solo generar el paquete de diagnostico), `read_only` (leer) o `configuration` (leer y cambiar ajustes).',
                 'granted_at' => 'Cuando se concedio.',
                 'expires_at' => 'Cuando dejaba de valer, sin que nadie hiciera nada.',
                 'revoked_at' => 'Cuando se revoco antes de tiempo, si se revoco.',
                 'revoked_by_user_uuid' => 'Quien la revoco. Vacio si la revoco la consola del servidor.',
                 'accessed_at' => 'Ultima vez que se uso. Vacio si se concedio y nunca hizo falta.',
+                'reason_purged_at' => 'Cuando se vacio el motivo, pasado PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS desde el cierre de la concesion. Vacio mientras se conserva.',
             ],
         ],
 

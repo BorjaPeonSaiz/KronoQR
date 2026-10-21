@@ -1341,6 +1341,7 @@ export const SUPPORT_GRANT_ACTIVE: SupportGrant = {
   expires_at: '2026-09-09T09:00:00.000000Z',
   revoked_at: null,
   accessed_at: null,
+  reason_purged_at: null,
 }
 
 /** La misma concesion, ya revocada: no desaparece de la lista (regla dura 5). */
@@ -4992,6 +4993,7 @@ export async function stubManagementApi(
             expires_at: '2026-09-09T09:30:00.000000Z',
             revoked_at: null,
             accessed_at: null,
+            reason_purged_at: null,
           }
 
           supportGrants.unshift(created)
