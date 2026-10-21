@@ -11,10 +11,12 @@ use DateTimeImmutable;
  * Se ha cambiado un departamento (RF-GP-02, AUD-2): hoy solo se le puede
  * cambiar el nombre.
  *
- * Deja asiento `department.renamed` en `audit_log` (regla dura 6). Lleva **la
- * lista de campos tocados y no sus valores**, con la misma convencion que
- * {@see EmployeeProfileUpdated}; si el dia de mañana el departamento gana otro
- * campo editable, entra en `changedFields` sin tocar el evento.
+ * Deja asiento `department.renamed` en `audit_log` (regla dura 6) con la lista
+ * de campos tocados y **el nombre anterior y el nuevo** (R7-RV-02): un asiento
+ * que solo dice `['name']` no permite saber como se llamaba el departamento al
+ * que apuntan los asientos anteriores. El nombre de un departamento es un dato
+ * de la organizacion («Pisos», «Cocina»), no de una persona: no esta sujeto a la
+ * regla dura 21, igual que el `department_id`.
  */
 final readonly class DepartmentRenamed implements DomainEvent
 {
@@ -24,6 +26,8 @@ final readonly class DepartmentRenamed implements DomainEvent
     public function __construct(
         public int $departmentId,
         public array $changedFields,
+        public string $previousName,
+        public string $name,
         private DateTimeImmutable $occurredAt,
     ) {}
 
