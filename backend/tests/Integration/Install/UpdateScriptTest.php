@@ -513,15 +513,15 @@ it('no da por listo un proceso de fondo que esta `running` sin salud: solo vale 
     $salida = $resultado->getOutput();
 
     expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
-        ->and($salida)->toContain("running|=0")
-        ->and($salida)->toContain("running |=0")
-        ->and($salida)->toContain("running|strict=1")
-        ->and($salida)->toContain("running |strict=1")
-        ->and($salida)->toContain("starting running|strict=1")
-        ->and($salida)->toContain("restarting |strict=1")
-        ->and($salida)->toContain("unhealthy running|strict=1")
-        ->and($salida)->toContain("healthy running|strict=0")
-        ->and($salida)->toContain("healthy running|=0");
+        ->and($salida)->toContain('running|=0')
+        ->and($salida)->toContain('running |=0')
+        ->and($salida)->toContain('running|strict=1')
+        ->and($salida)->toContain('running |strict=1')
+        ->and($salida)->toContain('starting running|strict=1')
+        ->and($salida)->toContain('restarting |strict=1')
+        ->and($salida)->toContain('unhealthy running|strict=1')
+        ->and($salida)->toContain('healthy running|strict=0')
+        ->and($salida)->toContain('healthy running|=0');
 
     // Y la espera de los tres procesos de fondo lo pide de verdad.
     expect((string) file_get_contents(Repo::file('infra/scripts/update.sh')))
