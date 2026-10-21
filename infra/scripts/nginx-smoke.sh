@@ -424,8 +424,10 @@ main() {
   problema "/api/v1/ready?x=$(head -c 20000 /dev/zero | tr '\0' 'a')" 414 uri-too-long --http1.1
 
   # ADR-059 §3: /scan/pin tiene su zona propia, con la tasa del entorno de la imagen (60).
-  if ! docker exec "${CONTENEDOR}" nginx -T 2>/dev/null | grep -qE 'limit_req_zone .*zone=scan_pin:10m +rate=60r/m;' ||
-    ! docker exec "${CONTENEDOR}" nginx -T 2>/dev/null | grep -qE 'location = /api/v1/scan/pin \{'; then
+  local configuracion variante
+  configuracion="$(docker exec "${CONTENEDOR}" nginx -T 2>/dev/null)"
+  if ! grep -qE 'limit_req_zone .*zone=scan_pin:10m +rate=60r/m;' <<<"${configuracion}" ||
+    ! grep -qE 'location = /api/v1/scan/pin {' <<<"${configuracion}"; then
     printf '  [FALLA] /api/v1/scan/pin no tiene su zona scan_pin a 60 r/m ni su location propia\n' >&2
     fallo=1
   else
@@ -434,8 +436,6 @@ main() {
   problema /api/v1/scan/pin 502 bad-gateway -X POST -H "${json}" -d '{}'
   # Las DOS variantes (con y sin barra final) llevan scan_pin: la segunda la enruta
   # Laravel igual y, sin su bloque, esquivaria el limite.
-  local configuracion variante
-  configuracion="$(docker exec "${CONTENEDOR}" nginx -T 2>/dev/null)"
   for variante in /api/v1/scan/pin /api/v1/scan/pin/; do
     if ! awk -v loc="  location = ${variante} {" '$0 == loc {dentro = 1} dentro && /limit_req zone=scan_pin / {ok = 1} dentro && /^  }$/ {exit} END {exit !ok}' <<<"${configuracion}"; then
       printf '  [FALLA] %s no lleva limit_req zone=scan_pin\n' "${variante}" >&2
