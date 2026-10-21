@@ -50,17 +50,26 @@ it('no confunde un uuid, un numero de incidencia ni una fecha con un dato person
 ])->group('RL-15', 'RF-PD-11');
 
 it('rechaza conceder con un dato personal en el motivo, y dice cual sin repetirlo', function (): void {
-    expect(fn (): SupportGrant => motivoSoporteConcedido('Revisar a lucia.ferrer@hotel.example'))
-        ->toThrow(function (InvalidSupportGrant $rejection): void {
-            expect($rejection->translationKey)->toBe('support.errors.reason_personal_data')
-                ->and($rejection->parameters)->toBe([])
-                ->and($rejection->getMessage())->toBe('A support grant reason must not carry personal data, and this one looks like it carries a email.')
-                ->and($rejection->getMessage())->not->toContain('lucia');
-        });
+    $rejection = null;
+
+    try {
+        motivoSoporteConcedido('Revisar a lucia.ferrer@hotel.example');
+    } catch (InvalidSupportGrant $caught) {
+        $rejection = $caught;
+    }
+
+    expect($rejection)->toBeInstanceOf(InvalidSupportGrant::class);
+
+    if ($rejection instanceof InvalidSupportGrant) {
+        expect($rejection->translationKey)->toBe('support.errors.reason_personal_data')
+            ->and($rejection->parameters)->toBe([])
+            ->and($rejection->getMessage())->toBe('A support grant reason must not carry personal data, and this one looks like it carries a email.')
+            ->and($rejection->getMessage())->not->toContain('lucia');
+    }
 })->group('RL-15', 'RF-PD-11');
 
 it('nombra la clase de dato en el mensaje tecnico', function (string $kind, string $mensaje): void {
-    expect(InvalidSupportGrant::personalData($kind)->getMessage())->toBe($mensaje);
+    expect(InvalidSupportGrant::personalData($kind === 'phone' ? 'phone' : 'national_id')->getMessage())->toBe($mensaje);
 })->with([
     ['national_id', 'A support grant reason must not carry personal data, and this one looks like it carries a national id.'],
     ['phone', 'A support grant reason must not carry personal data, and this one looks like it carries a phone.'],

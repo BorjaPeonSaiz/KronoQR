@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Tests\Support\Compliance\AuditPayloads;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -76,14 +77,13 @@ function suscribirPresencia(string $token, string $canal): TestResponse
  */
 function asientosDeSuscripcion(): array
 {
-    return DB::table('audit_log')
+    return array_values(DB::table('audit_log')
         ->where('action', 'personal_data.accessed')
         ->where('payload->dataset', 'live_presence_stream')
         ->orderBy('id')
         ->pluck('payload')
-        ->map(static fn (mixed $payload): array => (array) json_decode((string) $payload, true))
-        ->values()
-        ->all();
+        ->map(static fn (mixed $payload): array => AuditPayloads::decode($payload))
+        ->all());
 }
 
 it('deja asiento de la suscripcion al canal global, con canal y alcance y sin nombres', function (): void {

@@ -7,6 +7,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Tests\Support\Compliance\AuditPayloads;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -36,18 +37,17 @@ beforeEach(function (): void {
  */
 function lecturasDeCuentas(): array
 {
-    return DB::table('audit_log')
+    return array_values(DB::table('audit_log')
         ->where('action', 'personal_data.accessed')
         ->where('payload->dataset', 'management_accounts')
         ->orderBy('id')
         ->get(['actor_type', 'actor_id', 'payload'])
         ->map(static fn (object $row): array => [
-            'actor_type' => (string) $row->actor_type,
+            'actor_type' => AuditPayloads::text($row->actor_type),
             'actor_id' => $row->actor_id === null ? null : (int) $row->actor_id,
-            'payload' => (array) json_decode((string) $row->payload, true),
+            'payload' => AuditPayloads::decode($row->payload),
         ])
-        ->values()
-        ->all();
+        ->all());
 }
 
 it('el listado deja asiento con el recuento, los filtros y la busqueda como si o no', function (): void {

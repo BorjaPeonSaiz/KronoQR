@@ -8,6 +8,7 @@ use App\Modules\Reporting\Domain\Exception\ReportExportWriteFailed;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\Compliance\AuditPayloads;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
@@ -41,19 +42,18 @@ afterEach(function (): void {
  */
 function asientosDelDiferido(): array
 {
-    return DB::table('audit_log')
+    return array_values(DB::table('audit_log')
         ->whereIn('action', ['report_export.generated', 'personal_data.accessed'])
         ->orderBy('id')
         ->get(['id', 'action', 'actor_type', 'actor_id', 'payload'])
         ->map(static fn (object $row): array => [
             'id' => (int) $row->id,
-            'action' => (string) $row->action,
-            'actor_type' => (string) $row->actor_type,
+            'action' => AuditPayloads::text($row->action),
+            'actor_type' => AuditPayloads::text($row->actor_type),
             'actor_id' => $row->actor_id === null ? null : (int) $row->actor_id,
-            'payload' => (array) json_decode((string) $row->payload, true),
+            'payload' => AuditPayloads::decode($row->payload),
         ])
-        ->values()
-        ->all();
+        ->all());
 }
 
 it('deja la lectura a nombre de quien lo pidio, junto al asiento de generacion', function (ReportExportKind $kind, string $dataset): void {
