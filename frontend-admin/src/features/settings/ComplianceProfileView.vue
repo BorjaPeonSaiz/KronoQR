@@ -86,6 +86,13 @@ const jurisdictionName = computed(() => {
 /** Errores del 422 sobre `retention_years`; se limpian al editar el campo o al reintentar. */
 const serverRetentionErrors = ref<string[]>([])
 
+/** Errores del 422 sobre `personnel_record_retention_years`; mismo ciclo de vida que el anterior. */
+const serverPersonnelErrors = ref<string[]>([])
+
+/** Rango del contrato para `personnel_record_retention_years` (ADR-060). */
+const PERSONNEL_RETENTION_MIN = 1
+const PERSONNEL_RETENTION_MAX = 30
+
 /**
  * El formulario.
  *
@@ -103,6 +110,7 @@ const form = ref({
   breakRequiredAfterHours: '' as number | string,
   weekStartsOn: '1' as number | string,
   retentionYears: '' as number | string,
+  personnelRecordRetentionYears: '' as number | string,
   holidayCalendar: '',
 })
 
@@ -121,6 +129,7 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   week_starts_on: t('compliance.fields.weekStartsOn'),
   holiday_calendar: t('compliance.fields.holidayCalendar'),
   retention_years: t('compliance.fields.retentionYears'),
+  personnel_record_retention_years: t('compliance.fields.personnelRecordRetentionYears'),
   compliance_profile: t('compliance.heading'),
 }))
 
@@ -136,6 +145,7 @@ function fill(loaded: ComplianceProfileBody): void {
     breakRequiredAfterHours: String(loaded.break_required_after_hours),
     weekStartsOn: String(loaded.week_starts_on),
     retentionYears: String(loaded.retention_years),
+    personnelRecordRetentionYears: String(loaded.personnel_record_retention_years),
     // Una fecha por linea: es como se pega un calendario de festivos copiado de
     // un boletin oficial, y como se revisa de un vistazo.
     holidayCalendar: loaded.holiday_calendar.join('\n'),
@@ -205,6 +215,7 @@ const numericFields = [
   ['breakRequiredAfterHours', 'break_required_after_hours'],
   ['weekStartsOn', 'week_starts_on'],
   ['retentionYears', 'retention_years'],
+  ['personnelRecordRetentionYears', 'personnel_record_retention_years'],
 ] as const
 
 type NumericField = (typeof numericFields)[number][0]
@@ -222,7 +233,9 @@ type NumericField = (typeof numericFields)[number][0]
  * El rango sigue siendo cosa del servidor: aquí solo se comprueba que lo escrito
  * sea un entero, que es lo que hace falta para poder enviarlo.
  */
-function issueOf(field: NumericField): 'required' | 'notAWholeNumber' | 'belowFloor' | null {
+function issueOf(
+  field: NumericField,
+): 'required' | 'notAWholeNumber' | 'belowFloor' | 'personnelOutOfRange' | null {
   const raw = form.value[field]
 
   if (raw === '' || raw === null) {
@@ -239,6 +252,14 @@ function issueOf(field: NumericField): 'required' | 'notAWholeNumber' | 'belowFl
   // el viaje de ida y vuelta. El servidor sigue siendo la autoridad.
   if (field === 'retentionYears' && retentionFloor.value !== null && value < retentionFloor.value) {
     return 'belowFloor'
+  }
+
+  // Rango del contrato (1 a 30): igual que el suelo, solo evita el viaje de ida y vuelta.
+  if (
+    field === 'personnelRecordRetentionYears' &&
+    (value < PERSONNEL_RETENTION_MIN || value > PERSONNEL_RETENTION_MAX)
+  ) {
+    return 'personnelOutOfRange'
   }
 
   return null
@@ -260,6 +281,13 @@ function errorsFor(field: NumericField): string[] {
         retentionFloor.value ?? 0,
       ),
     )
+  } else if (issue === 'personnelOutOfRange') {
+    messages.push(
+      t('compliance.errors.personnelOutOfRange', {
+        min: PERSONNEL_RETENTION_MIN,
+        max: PERSONNEL_RETENTION_MAX,
+      }),
+    )
   } else if (issue !== null) {
     messages.push(t(`compliance.errors.${issue}`))
   }
@@ -267,6 +295,10 @@ function errorsFor(field: NumericField): string[] {
   // El mensaje del 422 del servidor, junto al campo y no solo en el aviso general.
   if (field === 'retentionYears' && issue === null) {
     messages.push(...serverRetentionErrors.value)
+  }
+
+  if (field === 'personnelRecordRetentionYears' && issue === null) {
+    messages.push(...serverPersonnelErrors.value)
   }
 
   return messages
@@ -321,6 +353,11 @@ const pendingChanges = computed<UpdateComplianceProfileRequest>(() => {
     ],
     ['week_starts_on', form.value.weekStartsOn, current.week_starts_on],
     ['retention_years', form.value.retentionYears, current.retention_years],
+    [
+      'personnel_record_retention_years',
+      form.value.personnelRecordRetentionYears,
+      current.personnel_record_retention_years,
+    ],
   ] as const
 
   for (const [field, raw, previous] of integers) {
@@ -373,6 +410,11 @@ const changesDetection = computed(() => {
 /** Si el cambio pendiente toca el plazo de conservacion, que es el irreversible. */
 const changesRetention = computed(() => 'retention_years' in pendingChanges.value)
 
+/** Si el cambio toca el plazo de la ficha de personal (ADR-060): minimiza y borra, no se deshace. */
+const changesPersonnelRetention = computed(
+  () => 'personnel_record_retention_years' in pendingChanges.value,
+)
+
 /** Se pide confirmacion con el antes y el despues de cada campo que cambia (R3-PA-09). */
 const confirming = ref(false)
 
@@ -411,6 +453,11 @@ const previewChanges = computed<Change[]>(() => {
     ['max_weekly_hours', 'maxWeeklyHours', 'max_weekly_hours'],
     ['break_required_after_hours', 'breakRequiredAfterHours', 'break_required_after_hours'],
     ['retention_years', 'retentionYears', 'retention_years'],
+    [
+      'personnel_record_retention_years',
+      'personnelRecordRetentionYears',
+      'personnel_record_retention_years',
+    ],
   ] as const
 
   for (const [key, label] of scalars) {
@@ -453,6 +500,7 @@ async function save(): Promise<void> {
   error.value = null
   saved.value = false
   serverRetentionErrors.value = []
+  serverPersonnelErrors.value = []
 
   try {
     fill((await updateComplianceProfile(pendingChanges.value)).data)
@@ -466,6 +514,9 @@ async function save(): Promise<void> {
 
     if (failure instanceof ApiError && failure.status === 422) {
       serverRetentionErrors.value = [...(failure.fieldErrors['retention_years'] ?? [])]
+      serverPersonnelErrors.value = [
+        ...(failure.fieldErrors['personnel_record_retention_years'] ?? []),
+      ]
     }
 
     announce(t('compliance.failed'))
@@ -683,6 +734,37 @@ async function save(): Promise<void> {
           />
         </template>
       </FormField>
+
+      <FormField
+        :label="t('compliance.fields.personnelRecordRetentionYears')"
+        :hint="t('compliance.hints.personnelRecordRetentionYears')"
+        :errors="errorsFor('personnelRecordRetentionYears')"
+      >
+        <template #default="{ id, describedBy, invalid }">
+          <input
+            :id="id"
+            v-model="form.personnelRecordRetentionYears"
+            type="number"
+            inputmode="numeric"
+            data-test="personnel-record-retention-years"
+            :min="PERSONNEL_RETENTION_MIN"
+            :max="PERSONNEL_RETENTION_MAX"
+            :aria-invalid="invalid ? 'true' : undefined"
+            :aria-describedby="describedBy"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            @input="serverPersonnelErrors = []"
+          />
+        </template>
+      </FormField>
+
+      <p
+        v-if="changesPersonnelRetention"
+        class="rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+        role="alert"
+        data-test="personnel-retention-warning"
+      >
+        {{ t('compliance.personnelRetentionWarning') }}
+      </p>
 
       <p
         v-if="changesRetention"
