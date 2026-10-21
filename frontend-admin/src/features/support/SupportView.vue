@@ -21,6 +21,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstantWithZone, FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { ApiError } from '@kronoqr/web-kit/http'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -149,6 +150,25 @@ const granting = ref(false)
 const grantError = ref<unknown>(null)
 const issuedToken = ref<string | null>(null)
 const copied = ref(false)
+
+/** El 422 de motivo con datos personales llega en `errors.reason`: va junto al campo. */
+const reasonErrors = computed<string[]>(() =>
+  grantError.value instanceof ApiError && grantError.value.status === 422
+    ? [...(grantError.value.fieldErrors['reason'] ?? [])]
+    : [],
+)
+
+/** El texto de la concesion: el motivo, o aviso de que ya se retiro (RGPD art. 5.1.e). */
+function reasonLabel(entry: SupportGrant): string {
+  if (entry.reason !== null) {
+    return entry.reason
+  }
+
+  return t('support.grant.list.reasonPurged', {
+    date:
+      entry.reason_purged_at === null ? t('common.empty') : instantLabel(entry.reason_purged_at),
+  })
+}
 
 const fieldLabels = computed<Record<string, string>>(() => ({
   reason: t('support.grant.fields.reason'),
@@ -383,10 +403,11 @@ const buttonClass =
 
         <FormField
           :label="t('support.grant.fields.reason')"
-          :hint="t('support.grant.fields.reasonHint')"
+          :hint="`${t('support.grant.fields.reasonHint')} ${t('support.grant.fields.reasonPersonalHint')}`"
+          :errors="reasonErrors"
           required
         >
-          <template #default="{ id, describedBy }">
+          <template #default="{ id, describedBy, invalid }">
             <input
               :id="id"
               v-model="reasonInput"
@@ -394,6 +415,7 @@ const buttonClass =
               maxlength="200"
               autocomplete="off"
               data-test="reason"
+              :aria-invalid="invalid ? 'true' : undefined"
               :aria-describedby="describedBy"
               class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
             />
@@ -510,7 +532,12 @@ const buttonClass =
           </thead>
           <tbody>
             <tr v-for="entry of grants" :key="entry.uuid" class="border-b border-kq-border">
-              <td class="px-3 py-2">{{ entry.reason }}</td>
+              <td
+                class="px-3 py-2"
+                :data-test="entry.reason === null ? 'reason-purged' : undefined"
+              >
+                {{ reasonLabel(entry) }}
+              </td>
               <td class="px-3 py-2">{{ t(`support.grant.scope.${entry.scope}.label`) }}</td>
               <td class="px-3 py-2">{{ entry.granted_by.name }}</td>
               <td class="px-3 py-2">{{ instantLabel(entry.granted_at) }}</td>
@@ -555,7 +582,7 @@ const buttonClass =
       @cancel="closeRevoke"
       @confirm="confirmRevoke"
     >
-      <p>{{ t('support.grant.revoke.explanation', { reason: revokeTarget.reason }) }}</p>
+      <p>{{ t('support.grant.revoke.explanation', { reason: reasonLabel(revokeTarget) }) }}</p>
     </ConfirmDialog>
   </section>
 </template>
