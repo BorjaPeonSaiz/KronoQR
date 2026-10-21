@@ -5,7 +5,7 @@
 | **Estado** | **Aceptado** por el propietario el 21-10-2026, con el cambio de la revisión de `seguridad-cumplimiento`: el portal del empleado falla abierto con Redis caído (§3). Lo implementan las tareas 10.2, 10.5 y 10.6 de la 2.3.0 y `devops-observabilidad` (zona de nginx de `/scan/pin`, §3) |
 | **Fecha** | 21 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 10 de la 2.3.0, tarea 10.1; hallazgos V6-AR-1 y R6-AR-04). Revisado por `seguridad-cumplimiento` el 21-10-2026 (§3, §2 y §5 corregidos) |
-| **Afecta a** | **Matiza** [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) (qué hace el límite de tasa cuando su almacén no responde) · Precisa [ADR-011](ADR-011-websockets-con-fallback-a-sondeo.md) (el reintento de la difusión de presencia) · Respeta [ADR-008](ADR-008-offline-first-con-idempotencia-por-scan-id.md), [ADR-019](ADR-019-la-licencia-nunca-bloquea-el-registro.md), [ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md), [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md) y [ADR-048](ADR-048-el-texto-libre-del-historico-de-errores-pasa-por-una-lista-blanca-de-palabras.md) · `Support/Resilience/CircuitBreaker`, `Support/Redis/*`, `Support/Database/*` · `ThrottleScanFailOpen` · `CachePinAttempts`, `CachePortalOriginAttempts`, `CacheLoginAttempts` · nginx (`kronoqr.conf.template`) · `bootstrap/app.php` (manejador de excepciones) · `config/queue.php` (`resilient`), `config/cache.php` (`resilient`, `limiter`) · `ConcurrencyLimitedReportRenderer` · `BroadcastPresenceChange` · `docs/api/openapi.yaml` (`info.description`) |
+| **Afecta a** | **Matiza** [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) (qué hace el límite de tasa cuando su almacén no responde) · Precisa [ADR-011](ADR-011-websockets-con-fallback-a-sondeo.md) (el reintento de la difusión de presencia) · Respeta [ADR-008](ADR-008-offline-first-con-idempotencia-por-scan-id.md), [ADR-019](ADR-019-la-licencia-nunca-bloquea-el-registro.md), [ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md), [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md) y [ADR-048](ADR-048-el-texto-libre-del-historico-de-errores-pasa-por-una-lista-blanca-de-palabras.md) · `Support/Resilience/CircuitBreaker`, `Support/Redis/*`, `Support/Database/*` · `ThrottleFailOpen` · `CachePinAttempts`, `CachePortalOriginAttempts`, `CacheLoginAttempts` · nginx (`kronoqr.conf.template`) · `bootstrap/app.php` (manejador de excepciones) · `config/queue.php` (`resilient`), `config/cache.php` (`resilient`, `limiter`) · `ConcurrencyLimitedReportRenderer` · `BroadcastPresenceChange` · `docs/api/openapi.yaml` (`info.description`) |
 | **Requisitos** | RNF-D-01, RNF-D-03, RF-AT-10, RN-15, RN-21, RS-02, RS-03, RS-12, RL-03, RL-05 · reglas duras 8, 15, 17, 19 y 21 |
 
 ## Contexto
@@ -16,7 +16,7 @@ PDF**, que reparte dos Chromium entre todas las peticiones. Las decisiones sobre
 faltan se han ido tomando por piezas, sin ADR:
 
 - **CH1 (2.2.0, `ed846a6`).** Con Redis caído, el límite de tasa de `/scan`, `/scan/batch` y
-  `/scan/pin` falla **abierto** (`ThrottleScanFailOpen`). El resto falla **cerrado**. La caché por
+  `/scan/pin` falla **abierto** (`ThrottleFailOpen`). El resto falla **cerrado**. La caché por
   defecto cae al disco del contenedor. Los oyentes del fichaje caen a `deferred`. ADR-038 no habla de
   la caída (R6-AR-04).
 - **Bloque 22 (2.2.0).** Dos cortacircuitos con el mismo mecanismo, uno por dependencia. Con
@@ -128,7 +128,7 @@ fichaje y en el portal hay tres capas, y con Redis caído solo cae una:
 
 **Fallo abierto en el límite de tasa de Laravel de estas zonas:**
 
-- **`scan`, `scan-batch` y `scan-pin`** (`ThrottleScanFailOpen`). Esto ratifica CH1. El límite por
+- **`scan`, `scan-batch` y `scan-pin`** (`ThrottleFailOpen`). Esto ratifica CH1. El límite por
   dispositivo es un control secundario. Perder unos minutos el techo por tablet es un riesgo
   acotado. Dejar de fichar no es aceptable.
 - **`portal`**: `POST /me/login`, `GET /me/workdays` y `GET /me/export`. **Cambio respecto a hoy:**
@@ -341,7 +341,7 @@ Lo dice el doc 02 §8.2.
   acotado por lo que ya llega a PHP, detrás del límite de nginx.
 - **ADR-038 queda matizado.** Cuando su almacén no responde, su límite por dispositivo e IP falla
   abierto en las tres rutas de escritura del fichaje y en la zona `portal`, y cerrado en las demás.
-  `ThrottleScanFailOpen` admite la zona `portal` y `ThrottleFailOpenScopeTest` la incluye en su
+  `ThrottleFailOpen` admite la zona `portal` y `ThrottleFailOpenScopeTest` la incluye en su
   lista cerrada.
 - **nginx gana una zona para `/scan/pin`** (unas 60 peticiones por minuto por IP, configurable
   desde el `.env`), documentada en el doc 02 §7.1 cuando se implemente.

@@ -2,19 +2,23 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Attendance\Http\Middleware;
+namespace App\Http\Middleware;
 
+use App\Support\Resilience\DependencyFailure;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Psr\Log\LoggerInterface;
-use RedisException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
- * **El limitador del fichaje falla ABIERTO si su almacen no responde** (CH1,
- * regla dura 19, RS-02).
+ * **El limitador del fichaje y del portal falla ABIERTO si su almacen no
+ * responde** (CH1, ADR-059 §3, regla dura 19, RS-02).
+ *
+ * Vive en `App\Http\Middleware` y no en `Attendance`: la zona `portal` es de
+ * `Identity`, y un middleware de un modulo no puede ser la pieza que comparten
+ * dos.
  *
  * `throttle:scan`, `throttle:scan-batch` y `throttle:scan-pin` cuentan en la
  * cache, que en produccion es Redis. Con Redis caido, `ThrottleRequests` lanzaba
@@ -73,9 +77,12 @@ use Throwable;
  *
  * Datos personales no hay ninguno (regla dura 21): ni empleado, ni codigo, ni IP.
  */
-final readonly class ThrottleScanFailOpen
+final readonly class ThrottleFailOpen
 {
-    /** Las tres zonas que pueden abrirse. Cualquier otra se rechaza al arrancar la ruta. */
+    /**
+     * Las cuatro zonas que pueden abrirse (ADR-059 §3): las tres de escritura
+     * del fichaje y la del portal. Cualquier otra se rechaza al declarar la ruta.
+     */
     public const array ZONES = ['scan', 'scan-batch', 'scan-pin', 'portal'];
 
     public function __construct(
@@ -84,7 +91,7 @@ final readonly class ThrottleScanFailOpen
     ) {}
 
     /**
-     * La declaracion de la ruta: `ThrottleScanFailOpen::zone('scan')`.
+     * La declaracion de la ruta: `ThrottleFailOpen::zone('scan')`.
      */
     public static function zone(string $zone): string
     {
@@ -144,17 +151,15 @@ final readonly class ThrottleScanFailOpen
     }
 
     /**
-     * El almacen del limitador no responde.
-     *
-     * `RedisException` es la del cliente `phpredis`, que es el del producto
-     * (`REDIS_CLIENT`). Se nombra tambien la de Predis por nombre, sin importarla:
-     * una instalacion que cambiara de cliente no deberia perder el fallo abierto,
-     * y Predis no es una dependencia del producto.
+     * El almacen del limitador no responde: Redis, con la misma clasificacion
+     * que el `503` de una dependencia caida ({@see DependencyFailure}, ADR-059
+     * §1) —la `RedisException` de phpredis, `RedisCircuitOpen` incluida, y la de
+     * conexion de Predis—. Una sola lista: si el manejador y este middleware
+     * discreparan, una averia daria `503` en una ruta que debe fallar abierta.
      */
     private static function isStoreUnavailable(Throwable $failure): bool
     {
-        return $failure instanceof RedisException
-            || is_a($failure, 'Predis\Connection\ConnectionException');
+        return DependencyFailure::dependencyOf($failure) === DependencyFailure::REDIS;
     }
 
     private function record(string $zone, string $phase, Throwable $failure): void

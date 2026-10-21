@@ -46,7 +46,7 @@ return [
      * Con Redis caido, `throttle` lanza, y eso es lo que se quiere en `auth`,
      * `portal`, `setup` y gestion: fallar CERRADO donde el limitador frena la
      * fuerza bruta de una credencial. Las tres rutas de fichaje lo capturan y
-     * fallan ABIERTO con `ThrottleScanFailOpen`, que es la unica excepcion.
+     * fallan ABIERTO con `ThrottleFailOpen`, que es la unica excepcion.
      */
     'limiter' => env('CACHE_STORE', 'database'),
 

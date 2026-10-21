@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
+use App\Http\Middleware\ThrottleFailOpen;
 use Illuminate\Support\Facades\Route as Router;
 
 /*
@@ -30,7 +30,7 @@ function throttleFailOpenRoutes(): array
 
     foreach (Router::getRoutes()->getRoutes() as $route) {
         foreach ($route->gatherMiddleware() as $middleware) {
-            if (\is_string($middleware) && str_starts_with($middleware, ThrottleScanFailOpen::class.':')) {
+            if (\is_string($middleware) && str_starts_with($middleware, ThrottleFailOpen::class.':')) {
                 $rutas[] = implode('|', array_diff($route->methods(), ['HEAD'])).' /'.$route->uri();
             }
         }
@@ -53,10 +53,10 @@ it('abre el limitador ante una caida de Redis solo en el fichaje y en el portal 
 })->group('RS-02', 'RS-12', 'RF-AT-10', 'RL-05');
 
 it('admite solo las cuatro zonas de la lista cerrada', function (): void {
-    expect(ThrottleScanFailOpen::ZONES)->toBe(['scan', 'scan-batch', 'scan-pin', 'portal']);
+    expect(ThrottleFailOpen::ZONES)->toBe(['scan', 'scan-batch', 'scan-pin', 'portal']);
 })->group('RS-02');
 
 it('se niega a abrir el limitador de una zona que no sea del fichaje ni del portal', function (string $zona): void {
-    expect(static fn (): string => ThrottleScanFailOpen::zone($zona))
+    expect(static fn (): string => ThrottleFailOpen::zone($zona))
         ->toThrow(InvalidArgumentException::class);
 })->with(['auth', '2fa', 'setup', 'management', 'branding'])->group('RS-02');

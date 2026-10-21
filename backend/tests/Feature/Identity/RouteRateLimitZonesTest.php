@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
+use App\Http\Middleware\ThrottleFailOpen;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route as Router;
@@ -91,9 +91,9 @@ function rutasConSesion(): array
  */
 function zonaDeLimiteDe(Route $route): string
 {
-    // Las tres rutas de fichaje declaran su zona con `ThrottleScanFailOpen` (CH1),
+    // Las tres rutas de fichaje declaran su zona con `ThrottleFailOpen` (CH1),
     // que es el mismo limitador con nombre y cuenta igual para esta prueba.
-    $prefijos = ['throttle:', ThrottleScanFailOpen::class.':'];
+    $prefijos = ['throttle:', ThrottleFailOpen::class.':'];
 
     foreach ($route->gatherMiddleware() as $middleware) {
         foreach ($prefijos as $prefijo) {
