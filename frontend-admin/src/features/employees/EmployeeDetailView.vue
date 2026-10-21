@@ -134,14 +134,14 @@ function departmentName(id: number | null): string {
 const fullName = computed(() =>
   employee.value === undefined
     ? ''
-    : personName(employee.value.first_name, employee.value.last_name),
+    : personName(employee.value.first_name, employee.value.last_name, employee.value.anonymized_at),
 )
 
 /** Ficha minimizada por retencion (ADR-060): sin nombre, correo, PIN ni contratos que gestionar. */
 const minimised = computed(
   () =>
     employee.value !== undefined &&
-    isMinimised(employee.value.first_name, employee.value.last_name),
+    isMinimised(employee.value.first_name, employee.value.last_name, employee.value.anonymized_at),
 )
 
 // --- Edicion de la ficha -----------------------------------------------------
@@ -608,6 +608,11 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
         class="mt-4 rounded-kq border border-kq-border-strong bg-kq-surface-alt p-4 text-kq-text"
       >
         {{ t('employees.detail.minimised') }}
+        <span v-if="employee.anonymized_at !== null" data-test="employee-minimised-at">
+          {{
+            t('employees.detail.minimisedAt', { date: instantInSiteZone(employee.anonymized_at) })
+          }}
+        </span>
       </p>
 
       <!-- Datos -->

@@ -385,7 +385,8 @@
         "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the credentials board.",
         "link": "Go to the credentials board"
       },
-      "minimised": "This record is minimised: the retention period after leaving expired and the name, email, PIN, photo and document were removed. The identifier, site, department and dates are kept. There is nothing left to edit and no credential to manage."
+      "minimised": "This record is minimised: the retention period after leaving expired and the name, email, PIN, photo and document were removed. The identifier, site, department and dates are kept. There is nothing left to edit and no credential to manage.",
+      "minimisedAt": "Minimised on {date}."
     },
     "offboard": {
       "heading": "Offboarding",

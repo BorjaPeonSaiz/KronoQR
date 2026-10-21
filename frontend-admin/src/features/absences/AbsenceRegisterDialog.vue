@@ -43,7 +43,7 @@ const selectedEmployee = ref<Employee | null>(null)
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
 function fullName(employee: Employee): string {
-  return personName(employee.first_name, employee.last_name)
+  return personName(employee.first_name, employee.last_name, employee.anonymized_at)
 }
 
 async function runSearch(term: string): Promise<void> {

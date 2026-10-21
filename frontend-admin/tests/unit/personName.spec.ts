@@ -28,3 +28,11 @@ describe('personName', () => {
     expect(visibleFullName('Youssef Amrani', PLACEHOLDER)).toBe('Youssef Amrani')
   })
 })
+
+describe('personName con anonymized_at', () => {
+  it('manda anonymized_at cuando el recurso lo trae', () => {
+    expect(isMinimisedPerson('', '', null)).toBe(false)
+    expect(isMinimisedPerson('Youssef', 'Amrani', '2026-10-01T08:30:00.000000Z')).toBe(true)
+    expect(visibleName('', '', PLACEHOLDER, '2026-10-01T08:30:00.000000Z')).toBe(PLACEHOLDER)
+  })
+})

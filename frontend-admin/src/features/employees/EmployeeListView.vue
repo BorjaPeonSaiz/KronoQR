@@ -247,7 +247,11 @@ function onCreated(result: EmployeeProvisioned): void {
   provisioned.value = result
   announce(
     t('employees.announce.created', {
-      name: fullName(result.employee.first_name, result.employee.last_name),
+      name: fullName(
+        result.employee.first_name,
+        result.employee.last_name,
+        result.employee.anonymized_at,
+      ),
     }),
   )
   void refetch()
@@ -264,8 +268,8 @@ function onPinDelivered(): void {
   void refetch()
 }
 
-function fullName(first: string, last: string): string {
-  return personName(first, last)
+function fullName(first: string, last: string, anonymizedAt: string | null): string {
+  return personName(first, last, anonymizedAt)
 }
 
 const selectClass =
@@ -442,7 +446,7 @@ const selectClass =
                   :to="{ name: 'employee', params: { uuid: employee.uuid } }"
                   class="text-kq-primary-strong underline"
                 >
-                  {{ fullName(employee.first_name, employee.last_name) }}
+                  {{ fullName(employee.first_name, employee.last_name, employee.anonymized_at) }}
                 </RouterLink>
               </th>
               <td class="px-3 py-2 font-mono">{{ employee.employee_code }}</td>
@@ -486,7 +490,13 @@ const selectClass =
     <PinRevealDialog
       v-if="provisioned !== null"
       :pin="provisioned.pin"
-      :employee-name="fullName(provisioned.employee.first_name, provisioned.employee.last_name)"
+      :employee-name="
+        fullName(
+          provisioned.employee.first_name,
+          provisioned.employee.last_name,
+          provisioned.employee.anonymized_at,
+        )
+      "
       :employee-code="provisioned.employee.employee_code"
       @acknowledged="closePinDialog"
       @delivered="onPinDelivered"

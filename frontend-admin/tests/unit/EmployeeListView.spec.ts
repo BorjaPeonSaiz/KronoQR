@@ -65,6 +65,7 @@ describe('EmployeeListView', () => {
             pin_status: 'pending',
             status: 'terminated',
             terminated_at: '2020-01-31',
+            anonymized_at: '2026-10-01T08:30:00.000000Z',
             employee_code: '0199F0C21F4A7C3E9B214D5E6F7A8B90',
           }),
         ]),

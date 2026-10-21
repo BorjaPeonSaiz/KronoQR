@@ -430,6 +430,7 @@ test(
       email: null,
       status: 'terminated',
       terminated_at: '2020-01-31',
+      anonymized_at: '2026-10-01T08:30:00.000000Z',
       pin_status: 'pending',
     }
 

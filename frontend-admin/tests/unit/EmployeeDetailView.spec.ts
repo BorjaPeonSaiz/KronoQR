@@ -134,14 +134,16 @@ describe('EmployeeDetailView', () => {
         pin_status: 'pending',
         status: 'terminated',
         terminated_at: '2020-01-31',
+        anonymized_at: '2026-10-01T08:30:00.000000Z',
         employee_code: '0199F0C21F4A7C3E9B214D5E6F7A8B90',
       }),
     )
 
     expect(wrapper.find('h1').text()).toBe(es.people.minimised)
-    expect(wrapper.find('[data-test="employee-minimised"]').text()).toBe(
+    expect(wrapper.find('[data-test="employee-minimised"]').text()).toContain(
       es.employees.detail.minimised,
     )
+    expect(wrapper.find('[data-test="employee-minimised-at"]').text()).toContain('1/10/26, 10:30 (CEST)')
     expect(wrapper.text()).toContain('0199F0C21F4A7C3E9B214D5E6F7A8B90')
     expect(() => buttonWith(wrapper, es.common.edit)).toThrow()
     expect(wrapper.text()).not.toContain(es.pin.heading)

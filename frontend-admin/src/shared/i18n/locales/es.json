@@ -385,7 +385,8 @@
         "description": "Esta persona no está de alta, así que el panel de credenciales no le asigna ninguna fila aquí. Su tarjeta se gestiona desde el tablero de credenciales.",
         "link": "Ir al tablero de credenciales"
       },
-      "minimised": "Esta ficha está minimizada: venció el plazo de conservación tras la baja y se retiraron el nombre, el correo, el PIN, la foto y el documento. Se conservan el identificador, el centro, el departamento y las fechas. Ya no hay datos que editar ni credencial que gestionar."
+      "minimised": "Esta ficha está minimizada: venció el plazo de conservación tras la baja y se retiraron el nombre, el correo, el PIN, la foto y el documento. Se conservan el identificador, el centro, el departamento y las fechas. Ya no hay datos que editar ni credencial que gestionar.",
+      "minimisedAt": "Minimizada el {date}."
     },
     "offboard": {
       "heading": "Baja",

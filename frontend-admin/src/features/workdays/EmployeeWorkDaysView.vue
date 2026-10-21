@@ -176,7 +176,7 @@ const { data: employee } = useQuery({
 const personLabel = computed(() =>
   employee.value === undefined
     ? props.uuid
-    : personName(employee.value.first_name, employee.value.last_name),
+    : personName(employee.value.first_name, employee.value.last_name, employee.value.anonymized_at),
 )
 
 /**
