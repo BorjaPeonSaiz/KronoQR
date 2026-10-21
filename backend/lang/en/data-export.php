@@ -225,6 +225,7 @@ return [
                 'pin_delivered_by_user_uuid' => 'Who handed it over.',
                 'created_at' => 'When the record was created.',
                 'updated_at' => 'Last change to the record.',
+                'anonymized_at' => 'When the record was minimised for retention (ADR-060): since then it has no name, email, ID or PIN, and its code is its uuid. Empty while it is kept whole.',
             ],
         ],
 
@@ -447,6 +448,8 @@ return [
                 'last_login_at' => 'Last sign-in.',
                 'created_at' => 'When it was created.',
                 'updated_at' => 'Last change.',
+                'deactivated_at' => 'When the account was deactivated. Empty while it is active.',
+                'anonymized_at' => 'When the account was minimised for retention (ADR-060): since then it has no name or email and is kept only as the author of what it did. Empty while it is kept whole.',
             ],
         ],
 

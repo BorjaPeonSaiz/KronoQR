@@ -177,6 +177,8 @@ final class DataExportCatalog
                 'pin_delivered_by_user_uuid',
                 'created_at',
                 'updated_at',
+                // ADR-060: cuando se minimizo la ficha; vacio mientras se conserva.
+                'anonymized_at',
             ]),
 
             ExportedDataset::csv('employment_contracts', [
@@ -383,6 +385,9 @@ final class DataExportCatalog
                 'last_login_at',
                 'created_at',
                 'updated_at',
+                // ADR-060: fecha de baja y, si ya se minimizo, cuando.
+                'deactivated_at',
+                'anonymized_at',
             ]),
 
             ExportedDataset::csv('support_grants', [

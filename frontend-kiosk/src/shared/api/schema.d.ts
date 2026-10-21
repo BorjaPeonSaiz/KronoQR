@@ -7817,7 +7817,17 @@ export interface components {
              * @example E7QK2MXPR
              */
             employee_code: string;
+            /**
+             * @description **Vacio solo en una ficha minimizada por retencion** (ADR-060,
+             *     tarea 11.3 A): la de una persona dada de baja hace mas de
+             *     `personnel_record_retention_years` de la que ya no queda registro.
+             *     Entonces nombre y apellidos son `''`, `email` es `null`,
+             *     `pin_status` es `pending` y `employee_code` es su `uuid` sin guiones.
+             *     El panel enseña un texto de sustitucion; el alta y la modificacion
+             *     siguen exigiendo un nombre.
+             */
             first_name: string;
+            /** @description Vacio solo en una ficha minimizada por retencion. Ver `first_name`. */
             last_name: string;
             /**
              * Format: email

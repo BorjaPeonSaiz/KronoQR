@@ -10,10 +10,12 @@ use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
 use App\Modules\Compliance\Application\Exception\RetentionNotConfirmed;
 use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
 use App\Modules\Compliance\Application\Port\AnonymizedManagementAccount;
+use App\Modules\Compliance\Application\Port\AnonymizedPersonnelRecord;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditPartitionArchive;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
 use App\Modules\Compliance\Application\Port\ManagementAccountArchive;
+use App\Modules\Compliance\Application\Port\PersonnelRecordArchive;
 use App\Modules\Compliance\Application\Port\RetentionMetrics;
 use App\Modules\Compliance\Application\Port\RetentionReportStore;
 use App\Modules\Compliance\Application\Port\TechnicalLogArchive;
@@ -102,6 +104,7 @@ final readonly class ApplyRetention
         private ResponsibleAccounts $accounts,
         private SerializedLedgerWrite $ledgerWrite,
         private ManagementAccountArchive $managementAccounts,
+        private PersonnelRecordArchive $personnelRecords,
     ) {}
 
     public function handle(RetentionRunCommand $command): RetentionOutcome
@@ -143,14 +146,121 @@ final readonly class ApplyRetention
         // instalacion se queda exactamente como estaba.
         $verified = $this->verifyPartitions($plan, $now);
 
+        $notes = $verified['notes'];
+
         $tallies = [
             ...$this->purgeWorkRecords($command, $plan),
             ...$this->dropPartitions($verified['anchors'], $command),
+            ...$this->anonymizePersonnelRecords($command, $plan, $notes),
             ...$this->anonymizeManagementAccounts($command, $plan),
             ...$this->purgeShortCycles($command, $plan),
         ];
 
-        return $this->finish($plan->executed($tallies, $verified['notes']), $now);
+        return $this->finish($plan->executed($tallies, $notes), $now);
+    }
+
+    /**
+     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060, tarea
+     * 11.3 A).
+     *
+     * **Despues de purgar el registro y soltar particiones**: una ficha no es
+     * candidata mientras quede algo suyo en el registro horario o en la
+     * particion de `audit_log` del año de su cese, y las dos cosas se acaban de
+     * ir. **Antes de las cuentas de gestion**: minimizar una ficha libera
+     * `pin_delivered_by_user_id`, que no impide nada hoy pero puede hacerlo.
+     *
+     * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
+     * (ADR-046): la funcion toma las fichas `FOR UPDATE` ya dentro y el asiento
+     * de cada persona va en la misma transaccion. Si un asiento falla, el lote
+     * entero se deshace. **La foto se borra despues del `COMMIT`**: un fichero
+     * no se puede deshacer, y borrarla antes dejaria una ficha sin minimizar y
+     * sin foto si el lote fallara. Si no se puede borrar, queda en el log y en
+     * las observaciones del informe, con el `employee_uuid` y sin la ruta.
+     *
+     * @param  list<string>  $notes
+     * @return list<RetentionTally>
+     */
+    private function anonymizePersonnelRecords(RetentionRunCommand $command, RetentionReport $plan, array &$notes): array
+    {
+        $cutoff = $plan->personnelRecordCutoff;
+
+        if ($cutoff === null) {
+            return [];
+        }
+
+        // Como con las cuentas: nada que minimizar, nada que pedir a la funcion.
+        if ($this->personnelRecords->inspect($cutoff)->isEmpty()) {
+            return [new RetentionTally(scope: RetentionScope::PersonnelRecords, dataset: 'employees', rows: 0)];
+        }
+
+        $total = 0;
+        $orphaned = 0;
+
+        do {
+            $this->assertResponsible($command);
+
+            /** @var list<AnonymizedPersonnelRecord> $batch */
+            $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
+                function () use ($command, $plan, $cutoff): array {
+                    $records = $this->personnelRecords->anonymize($cutoff, $command->batchSize);
+
+                    foreach ($records as $record) {
+                        $this->recordPersonnelRecordAnonymized($command, $plan, $cutoff, $record);
+                    }
+
+                    return $records;
+                },
+            ));
+
+            foreach ($batch as $record) {
+                if ($record->photoPath !== null && ! $this->personnelRecords->forgetPhoto($record->photoPath)) {
+                    $this->telemetry->photoOrphaned($record->employeeUuid);
+                    $orphaned++;
+                }
+            }
+
+            $total += \count($batch);
+        } while (\count($batch) >= max(1, $command->batchSize));
+
+        if ($orphaned > 0) {
+            $notes[] = $orphaned.' foto(s) de fichas minimizadas no se pudieron borrar del disco: la ficha ya no las '
+                .'apunta. El evento retention.personnel_photo_orphaned del log dice de que employee_uuid.';
+        }
+
+        return [new RetentionTally(
+            scope: RetentionScope::PersonnelRecords,
+            dataset: 'employees',
+            rows: $total,
+        )];
+    }
+
+    private function recordPersonnelRecordAnonymized(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        DateTimeImmutable $cutoff,
+        AnonymizedPersonnelRecord $record,
+    ): void {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actorFor($command),
+            action: AuditAction::RetentionPersonnelRecordAnonymized,
+            // Sin id, como el resto de asientos de la ficha: el uuid va en el payload.
+            subject: AuditSubject::of('employee'),
+            payload: AuditPayload::of([
+                'employee_uuid' => $record->employeeUuid,
+                'terminated_on' => $record->terminatedOn,
+                'cutoff_date' => $cutoff->format('Y-m-d'),
+                'personnel_record_retention_years' => $plan->policy->personnelRecordYears,
+                'retention_years' => $plan->policy->legalRecordYears,
+                'retention_floor_years' => $plan->policy->legalRecordFloorYears,
+                'jurisdiction' => $plan->policy->jurisdiction,
+                'site_id' => $plan->policy->siteId,
+                'fields' => AnonymizedPersonnelRecord::FIELDS,
+                'contracts_deleted' => $record->contractsDeleted,
+                'absences_deleted' => $record->absencesDeleted,
+                'tokens_deleted' => $record->tokensDeleted,
+                'confirmation' => $plan->confirmationToken(),
+            ]),
+        ));
     }
 
     private function assertConfirmed(RetentionRunCommand $command, RetentionReport $plan): void

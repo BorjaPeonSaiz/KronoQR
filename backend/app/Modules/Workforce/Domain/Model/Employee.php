@@ -55,6 +55,12 @@ final readonly class Employee
          * de serie para que las fichas anteriores al campo nazcan sin el.
          */
         public bool $teleworking = false,
+        /**
+         * Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), o
+         * `null` si se conserva entera. Una ficha minimizada es siempre de baja
+         * y es la unica que puede no tener nombre ni apellidos.
+         */
+        public ?DateTimeImmutable $anonymizedAt = null,
     ) {
         $this->assertIdentityIsComplete();
         $this->assertAssignmentIsValid();
@@ -70,7 +76,13 @@ final readonly class Employee
             throw new InvalidArgumentException('Un empleado necesita su UUID publico.');
         }
 
-        if (trim($this->firstName) === '' || trim($this->lastName) === '') {
+        if ($this->anonymizedAt !== null) {
+            // ADR-060: una ficha minimizada no tiene nombre, y solo puede
+            // estarlo la de alguien dado de baja.
+            if ($this->status !== EmploymentStatus::TERMINATED) {
+                throw new InvalidArgumentException('Solo se minimiza la ficha de una persona dada de baja.');
+            }
+        } elseif (trim($this->firstName) === '' || trim($this->lastName) === '') {
             throw new InvalidArgumentException('Un empleado necesita nombre y apellidos.');
         }
 
@@ -253,6 +265,7 @@ final readonly class Employee
             terminatedAt: $this->terminatedAt,
             locale: $locale ?? $this->locale,
             teleworking: $teleworking ?? $this->teleworking,
+            anonymizedAt: $this->anonymizedAt,
         );
     }
 
@@ -306,6 +319,7 @@ final readonly class Employee
             terminatedAt: $terminatedAtGiven ? $terminatedAt : $this->terminatedAt,
             locale: $this->locale,
             teleworking: $this->teleworking,
+            anonymizedAt: $this->anonymizedAt,
         );
     }
 

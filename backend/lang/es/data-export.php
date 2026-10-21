@@ -250,6 +250,7 @@ return [
                 'pin_delivered_by_user_uuid' => 'Quien se lo entrego.',
                 'created_at' => 'Cuando se creo la ficha.',
                 'updated_at' => 'Ultima modificacion de la ficha.',
+                'anonymized_at' => 'Cuando se minimizo la ficha por retencion (ADR-060): desde entonces no tiene nombre, correo, documento ni PIN, y el codigo es su uuid. Vacio mientras se conserva entera.',
             ],
         ],
 
@@ -472,6 +473,8 @@ return [
                 'last_login_at' => 'Ultimo acceso.',
                 'created_at' => 'Cuando se creo.',
                 'updated_at' => 'Ultima modificacion.',
+                'deactivated_at' => 'Cuando se dio de baja la cuenta. Vacio si sigue activa.',
+                'anonymized_at' => 'Cuando se minimizo la cuenta por retencion (ADR-060): desde entonces no tiene nombre ni correo, y se conserva solo como autora de lo que hizo. Vacio mientras se conserva entera.',
             ],
         ],
 

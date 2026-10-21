@@ -303,6 +303,14 @@ return [
         'batch_size' => (int) env('COMPLIANCE_RETENTION_BATCH_SIZE', 1000),
 
         /*
+         * Directorio del que cuelga `employees.photo_path`. Al minimizar una
+         * ficha vencida (ADR-060, tarea 11.3 A) su foto se borra de aqui despues
+         * del COMMIT. Hoy el producto no escribe fotos; el directorio existe para
+         * que una instalacion que las tenga no las conserve para siempre.
+         */
+        'personnel_photo_root' => storage_path('app/employee-photos'),
+
+        /*
          * Conexion con la que se sueltan las particiones de `audit_log`
          * (ADR-027, ADR-033). Es la del rol de MANTENIMIENTO, la unica que puede
          * hacerlo, y su credencial no vive en el `.env` de la aplicacion: la

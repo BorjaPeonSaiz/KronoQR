@@ -15590,11 +15590,11 @@ components:
             - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
         first_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 100
         last_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 150
         department:
           description: Departamento de la persona, o `null` si no tiene ninguno.
@@ -15664,12 +15664,21 @@ components:
             - E7QK2MXPR
         first_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 100
+          description: |
+            **Vacio solo en una ficha minimizada por retencion** (ADR-060,
+            tarea 11.3 A): la de una persona dada de baja hace mas de
+            `personnel_record_retention_years` de la que ya no queda registro.
+            Entonces nombre y apellidos son `''`, `email` es `null`,
+            `pin_status` es `pending` y `employee_code` es su `uuid` sin guiones.
+            El panel enseña un texto de sustitucion; el alta y la modificacion
+            siguen exigiendo un nombre.
         last_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 150
+          description: Vacio solo en una ficha minimizada por retencion. Ver `first_name`.
         email:
           type: [string, 'null']
           format: email
@@ -15881,11 +15890,11 @@ components:
           maxLength: 32
         first_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 100
         last_name:
           type: string
-          minLength: 1
+          minLength: 0
           maxLength: 150
         department_id:
           type: [integer, 'null']
