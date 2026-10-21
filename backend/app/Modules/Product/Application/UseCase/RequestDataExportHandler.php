@@ -11,11 +11,13 @@ use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Domain\Event\DataExportRequested;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
+use App\Modules\Product\Domain\ValueObject\DataExportFailure;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Pide la exportacion integra: crea la fila, deja el asiento y encola el trabajo
@@ -156,7 +158,22 @@ final readonly class RequestDataExportHandler
         }
 
         if ($command->requestedVia === DataExportOrigin::Panel) {
-            $this->queue->enqueue($export->uuid);
+            try {
+                $this->queue->enqueue($export->uuid);
+            } catch (Throwable $failure) {
+                // ADR-059 §5: una solicitud nunca se queda «en curso» sin un
+                // trabajo detras, o bloquearia la siguiente (RL-20). Se marca
+                // fallida aqui y la peticion responde el 503 de la dependencia.
+                // Si tampoco se puede marcar —PostgreSQL caido—, la retira la
+                // obsolescencia; ese segundo fallo no sustituye al primero.
+                try {
+                    $this->exports->markFailed($export->id, $this->clock->now(), DataExportFailure::Unexpected);
+                } catch (Throwable) {
+                    // Ver arriba: queda para la obsolescencia.
+                }
+
+                throw $failure;
+            }
         }
 
         return $export;

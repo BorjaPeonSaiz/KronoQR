@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
 use App\Modules\Reporting\Application\Port\ReportExportNotifier;
+use App\Modules\Reporting\Application\Port\ReportExportQueue;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Domain\Exception\ReportExportWriteFailed;
@@ -607,3 +608,28 @@ it('no entrega el fichero de una exportacion cuyo plazo ya vencio', function ():
 
     Api::guest()->get($enlace)->assertStatus(404);
 })->group('RF-IN-06');
+
+it('marca fallida la solicitud si no se puede encolar, y responde 503 sin dejarla en curso (ADR-059 §5)', function (): void {
+    app()->instance(ReportExportQueue::class, new class implements ReportExportQueue
+    {
+        public function enqueue(string $uuid): void
+        {
+            throw new RedisException('Connection refused');
+        }
+    });
+
+    $token = ManagementUsers::tokenFor(reportExportRequester());
+
+    Api::as($token)->post('/api/v1/reports/exports', reportExportBody())
+        ->assertValidResponse(503)
+        ->assertHeader('Retry-After');
+
+    expect(DB::table('report_exports')->value('status'))->toBe('failed')
+        ->and(DB::table('report_exports')->value('failure_reason'))->toBe('unexpected');
+
+    // Y la siguiente solicitud no choca con una «en curso» fantasma (RL-20).
+    app()->forgetInstance(ReportExportQueue::class);
+    Queue::fake();
+
+    Api::as($token)->post('/api/v1/reports/exports', reportExportBody())->assertStatus(202);
+})->group('RF-IN-06', 'RNF-D-03');

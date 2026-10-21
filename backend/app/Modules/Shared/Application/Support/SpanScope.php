@@ -206,6 +206,23 @@ final class SpanScope
     }
 
     /**
+     * Marca el span **en curso** como fallido, sin abrir uno nuevo: lo que hace
+     * {@see self::recordFailure()} con el propio, para quien no lo tiene a mano.
+     * Lo usa el `503` de una dependencia caida (ADR-059 §2) sobre el span de
+     * servidor de la peticion. La clase, nunca el mensaje.
+     */
+    public static function markCurrentFailed(Throwable $failure): void
+    {
+        try {
+            $span = Span::getCurrent();
+            $span->addEvent('exception', ['exception.type' => $failure::class]);
+            $span->setStatus(StatusCode::STATUS_ERROR, $failure::class);
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
      * Añade atributos al span **en curso** —el de servidor de la peticion, o el
      * del caso de uso activo— sin abrir uno nuevo.
      *

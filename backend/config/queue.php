@@ -27,7 +27,7 @@ return [
     | each backend supported by Laravel. You're also free to add more.
     |
     | Drivers: "sync", "database", "beanstalkd", "sqs", "redis",
-    |          "deferred", "background", "failover", "null"
+    |          "deferred", "background", "null"
     |
     */
 
@@ -83,13 +83,14 @@ return [
             'driver' => 'background',
         ],
 
-        'failover' => [
-            'driver' => 'failover',
-            'connections' => [
-                'database',
-                'deferred',
-            ],
-        ],
+        /*
+         * NO HAY CONEXION `failover` A BASE DE DATOS, y es deliberado (ADR-059
+         * §5). La de serie de Laravel (`database`, `deferred`) no la usaba nadie,
+         * no existe la tabla `jobs` y Horizon no consumiria esa cola: dejarla
+         * aqui la haria pasar por un respaldo que no existe. La cola que no puede
+         * fallar es la del quiosco (ADR-008). Lo unico que cae es `resilient`,
+         * mas abajo.
+         */
 
         /*
          * LOS TRABAJOS ACCESORIOS DEL FICHAJE NO TUMBAN EL FICHAJE (CH1, regla

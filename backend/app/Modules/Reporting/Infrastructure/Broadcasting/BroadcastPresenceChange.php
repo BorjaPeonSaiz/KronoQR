@@ -8,9 +8,15 @@ use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
+use App\Support\Database\DatabaseUnavailable;
+use App\Support\Resilience\DependencyFailure;
 use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Jobs\SyncJob;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -52,12 +58,26 @@ use Throwable;
  * listener corre dentro de la peticion: un Reverb caido convertiria un fichaje
  * **ya escrito** en un `500`. Por eso cualquier fallo se atrapa aqui.
  *
- * **No se reintenta, y es deliberado.** Este mensaje es una vista y caduca: un
- * reintento que reviviera cinco minutos despues la presencia de alguien
- * sobreescribiria en el panel un estado mas fresco, que es peor que no enviarlo.
- * La recuperacion correcta ya existe y es el sondeo cada 15 s del ADR-011. Lo que
- * queda es una linea de log —con `employee_uuid`, nunca con el nombre— y una
- * vista que se pone al dia sola.
+ * ## Se reintenta durante 60 s si falta PostgreSQL, y nada mas (ADR-059 §5)
+ *
+ * Con el WebSocket conectado el panel **no sondea** (ADR-011): un mensaje
+ * perdido deja a esa persona mal pintada hasta su siguiente fichaje. Por eso,
+ * si lo que falla es la base de datos —`stateOf()` la encuentra inalcanzable o
+ * pierde la conexion—, el trabajo **vuelve a la cola** con una espera igual al
+ * `Retry-After` del cortacircuitos, y lo intenta hasta 60 s despues de
+ * **encolarse** ({@see self::retryUntil()}, fijado al despachar), no desde
+ * `occurred_at`: un fichaje que llega de la cola offline con horas de retraso
+ * tambien se difunde. Pasado ese plazo, un `warning` y se abandona.
+ *
+ * Reintentar es seguro por dos motivos: el trabajo **relee** el estado al
+ * ejecutarse, asi que difunde el actual y no el del evento; y el panel descarta,
+ * por persona, un `occurred_at` anterior al ultimo que aplico
+ * (`presence.store.ts`). No se puede quitar ese orden sin revisar esto.
+ *
+ * Cualquier otro fallo —Reverb caido, por ejemplo— no se reintenta: un `warning`
+ * con `employee_uuid` (nunca el nombre, regla dura 21) y la clase de la
+ * excepcion, nunca su mensaje. Y en `deferred` o `sync` no hay cola a la que
+ * volver: `warning`, igual.
  *
  * ## Toda correccion difunde, no solo la de un tramo abierto
  *
@@ -68,6 +88,14 @@ use Throwable;
  */
 final class BroadcastPresenceChange implements ShouldQueue
 {
+    use InteractsWithQueue;
+
+    /** Cuanto se reintenta, desde que se encola, si falta PostgreSQL (ADR-059 §5). */
+    public const int RETRY_WINDOW_SECONDS = 60;
+
+    /** La espera si no hay `Retry-After` del cortacircuitos que leer. */
+    private const int DEFAULT_RELEASE_SECONDS = 10;
+
     /**
      * Los eventos del fichaje se publican dentro de la transaccion del caso de
      * uso: sin esto, la difusion saldria sobre una escritura que aun puede
@@ -88,6 +116,16 @@ final class BroadcastPresenceChange implements ShouldQueue
         private readonly Dispatcher $events,
         private readonly LoggerInterface $logger,
     ) {}
+
+    /**
+     * Hasta cuando se reintenta. Laravel lo llama **al despachar** —sobre una
+     * instancia sin constructor, asi que no puede usar las dependencias— y lo
+     * guarda en el trabajo: el plazo cuenta desde que se encolo.
+     */
+    public function retryUntil(object $event): DateTimeInterface
+    {
+        return new DateTimeImmutable('now', new DateTimeZone('UTC'))->modify('+'.self::RETRY_WINDOW_SECONDS.' seconds');
+    }
 
     public function clockedIn(EmployeeClockedIn $event): void
     {
@@ -120,13 +158,47 @@ final class BroadcastPresenceChange implements ShouldQueue
 
             $this->events->dispatch(new PresenceUpdated($entry, $occurredAt));
         } catch (Throwable $failure) {
+            if (DependencyFailure::dependencyOf($failure) === DependencyFailure::DATABASE && $this->retryLater($employeeUuid, $failure)) {
+                return;
+            }
+
             // Regla dura 19: nada de la vista en vivo puede impedir un fichaje.
-            // El identificador si, el nombre jamas (regla dura 21).
-            $this->logger->warning('No se ha podido difundir el cambio de presencia.', [
+            // El identificador si, el nombre jamas (regla dura 21), y la clase
+            // de la excepcion, nunca su mensaje: el del driver lleva el host.
+            $this->logger->warning('reporting.presence_broadcast_failed', [
                 'employee_uuid' => $employeeUuid,
                 'exception' => $failure::class,
-                'reason' => $failure->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Devuelve el trabajo a la cola si hay cola y queda plazo. `true` si se ha
+     * ocupado del fallo (devuelto, o abandonado con su aviso).
+     */
+    private function retryLater(string $employeeUuid, Throwable $failure): bool
+    {
+        $job = $this->job;
+
+        if ($job === null || $job instanceof SyncJob) {
+            // `deferred` o `sync`: no hay cola a la que volver.
+            return false;
+        }
+
+        $until = $job->retryUntil();
+
+        if ($until === null || time() >= $until) {
+            $this->logger->warning('reporting.presence_broadcast_expired', [
+                'employee_uuid' => $employeeUuid,
+                'exception' => $failure::class,
+                'retry_window_seconds' => self::RETRY_WINDOW_SECONDS,
+            ]);
+
+            return true;
+        }
+
+        $this->release(DatabaseUnavailable::foundIn($failure)->retryAfterSeconds ?? self::DEFAULT_RELEASE_SECONDS);
+
+        return true;
     }
 }

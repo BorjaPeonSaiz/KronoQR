@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\DependencyUnavailableResponse;
 use App\Exceptions\ProblemDetails;
 use App\Http\Middleware\NegotiateLocale;
 use App\Http\Middleware\PreventResponseCaching;
@@ -78,8 +79,8 @@ use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
-use App\Support\Database\DatabaseUnavailable;
 use App\Support\Redis\RedisCircuitOpen;
+use App\Support\Resilience\DependencyFailure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -1338,37 +1339,31 @@ return Application::configure(basePath: dirname(__DIR__))
          * nadie tradujo.
          */
         /*
-         * POSTGRESQL INALCANZABLE: `503` CON `Retry-After`, Y SIN INFORMAR (R3-CH-02).
+         * DEPENDENCIA CAIDA: `503` CON `Retry-After`, NUNCA `500` (ADR-059 §1,
+         * R3-CH-02, R3-CH-03, V3-CH-1, V21-3-CH-1).
          *
-         * El conector de PostgreSQL con cortacircuitos convierte «no hay
-         * servidor» en `DatabaseUnavailable`, y el framework la envuelve en un
-         * `QueryException`; se busca en la cadena `previous`. Va justo antes del
-         * `500` generico para que cualquier traduccion especifica de arriba siga
-         * ganando. Vale para toda ruta, no solo el fichaje: a quien la recibe le
-         * toca lo mismo en todas —reintentar pasado `Retry-After`—, y el quiosco
-         * conserva el fichaje en su cola ante cualquier `503`.
+         * PostgreSQL inalcanzable o perdido a mitad de una sentencia, del
+         * `COMMIT` o del `ROLLBACK`, y Redis caido al conectar o a mitad de una
+         * orden: `DependencyFailure` lo reconoce en la cadena `previous`. Va justo
+         * antes del `500` generico para que cualquier traduccion especifica de
+         * arriba siga ganando —el `503` del embudo de PDF que remite al CSV en el
+         * portal, por ejemplo—. Vale para toda ruta: a quien lo recibe le toca lo
+         * mismo en todas, reintentar pasado `Retry-After`, y el quiosco conserva
+         * el fichaje ante cualquier `503`.
          *
-         * Y NO SE INFORMA: ni `error_events` ni una linea de log por peticion. La
-         * averia ya consta una vez, como `database.circuit_opened`; informar cada
-         * peticion volveria a la base caida desde el historico de errores y
-         * escribiria cientos de lineas por segundo durante la caida.
+         * EL RASTRO, UNA LINEA POR PETICION Y NINGUNA FILA (§2): la respuesta deja
+         * `http.dependency_unavailable` en el log y marca el span de la peticion
+         * (`DependencyUnavailableResponse`). No se informa a `error_events`: con
+         * PostgreSQL caido es imposible, y con Redis caido seria una fila por
+         * peticion. La averia ya consta una vez, como `<dependencia>.circuit_opened`.
+         * La UNICA que se sigue informando es la primera `RedisException`, la que
+         * abre el circuito: con PostgreSQL arriba, su fila es la de la averia.
          */
-        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DatabaseUnavailable::foundIn($exception) instanceof DatabaseUnavailable);
+        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DependencyFailure::dependencyOf($exception) === DependencyFailure::DATABASE);
 
-        // Lo mismo con el circuito de Redis abierto (R3-CH-01): una ruta que
-        // falla cerrada sin Redis —panel, portal— informaria cada peticion a
-        // `error_events` y al log mientras dure la caida, que ya consta una vez
-        // como `redis.circuit_opened`. El PRIMER fallo, el que abre el circuito,
-        // es una `RedisException` normal y se sigue informando.
         $exceptions->dontReportWhen(static fn (Throwable $exception): bool => RedisCircuitOpen::isCauseOf($exception));
 
-        $exceptions->render(static function (Throwable $exception): mixed {
-            $unavailable = DatabaseUnavailable::foundIn($exception);
-
-            return $unavailable instanceof DatabaseUnavailable
-                ? ProblemDetails::dependencyUnavailable($unavailable->retryAfterSeconds)
-                : null;
-        });
+        $exceptions->render(static fn (Throwable $exception, Request $request): mixed => DependencyUnavailableResponse::for($exception, $request));
 
         $exceptions->render(static function (Throwable $exception): mixed {
             if ($exception instanceof HttpResponseException) {

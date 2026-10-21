@@ -327,6 +327,7 @@ final class ProblemDetails
         string $detail,
         array $errors = [],
         array $headers = [],
+        ?string $instance = null,
     ): JsonResponse {
         $body = [
             'type' => $type,
@@ -334,6 +335,12 @@ final class ProblemDetails
             'status' => $status,
             'detail' => $detail,
         ];
+
+        if ($instance !== null) {
+            // RFC 9457: la ruta que fallo, sin consulta. Es lo que permite
+            // casar la respuesta con su linea en el log del servidor.
+            $body['instance'] = $instance;
+        }
 
         if ($errors !== []) {
             $body['errors'] = $errors;
@@ -821,7 +828,8 @@ final class ProblemDetails
     }
 
     /**
-     * La base de datos no responde: `503` con `Retry-After`.
+     * Una dependencia —la base de datos o Redis— no responde: `503` con
+     * `Retry-After` (ADR-059).
      *
      * Mismo tipo que {@see self::serviceUnavailable()} —a quien lo recibe le
      * toca lo mismo: no es culpa suya, reintentar mas tarde— y con
@@ -832,7 +840,7 @@ final class ProblemDetails
      * **El detalle es fijo y no nombra nada**: ni base de datos, ni host, ni
      * puerto. Quien administra lo ve en `database.circuit_opened` y en `/ready`.
      */
-    public static function dependencyUnavailable(int $retryAfterSeconds): JsonResponse
+    public static function dependencyUnavailable(int $retryAfterSeconds, ?string $instance = null): JsonResponse
     {
         return self::response(
             self::TYPE_SERVICE_UNAVAILABLE,
@@ -840,6 +848,7 @@ final class ProblemDetails
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             'El servicio no esta disponible en este momento. Reintenta pasados unos segundos.',
             headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+            instance: $instance,
         );
     }
 
