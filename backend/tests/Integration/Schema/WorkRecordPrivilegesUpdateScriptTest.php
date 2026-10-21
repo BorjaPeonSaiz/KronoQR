@@ -210,3 +210,30 @@ it('el SQL de update.sh detecta un privilegio que sobra', function (): void {
 
     expect(array_values((array) $row)[0])->toBeString()->toContain('scan_events:UPDATE');
 })->group('RS-07', 'RL-04');
+
+it('vigila la minimizacion en sitio: trigger desactivado, DELETE devuelto y funcion de trigger ejecutable', function (): void {
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $application = Config::string('database.roles.application');
+    $sql = privilegiosActualizadorSql($application);
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement('ALTER TABLE employees DISABLE TRIGGER employees_guard_anonymized');
+        $migrator->statement('GRANT DELETE ON TABLE absences TO "'.$application.'"');
+        $migrator->statement('GRANT EXECUTE ON FUNCTION public.users_guard_anonymized() TO "'.$application.'"');
+        $row = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row));
+    $drift = (string) array_values((array) $row)[0];
+
+    expect($drift)->toContain('trigger:employees_guard_anonymized:DESACTIVADO')
+        ->toContain('absences:DELETE')
+        ->toContain('users_guard_anonymized:EJECUTABLE')
+        ->and(privilegiosActualizadorManipulado($drift))->toBeTrue()
+        ->and(privilegiosActualizadorManipulado('absences:DELETE,users_guard_anonymized:EJECUTABLE'))->toBeFalse()
+        ->and(privilegiosActualizadorManipulado('check:users_chk_anonymized_is_minimised:SIN_VALIDAR'))->toBeTrue();
+})->group('RS-07', 'RL-04');
