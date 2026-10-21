@@ -1,0 +1,45 @@
+# KronoQR — alertas por LOG de Loki (ruler), bloque 11 de la 2.3.0, ADR-060.
+#
+# Es la unica alerta del producto que sale de un evento de log y no de una
+# metrica: la aplicacion no tiene un contador para esto y el hecho es raro y
+# puntual. Va a Alertmanager (`ruler.alertmanager_url` de loki.yaml), asi que
+# hereda el enrutado por `destinatario`, la agrupacion y las ventanas de
+# mantenimiento de las demas. El directorio `fake` es el «tenant» de Loki con
+# `auth_enabled: false`; no es un nombre que se pueda cambiar.
+#
+# SOLO FUNCIONA SI LA INSTALACION ENVIA SUS LOGS A LOKI (`LOKI_URL` en el .env,
+# como indica operacion.md). Sin `LOKI_URL` el evento sigue en el log local y en
+# el informe de la purga (`retencion-purga-*.txt`), pero no hay alerta.
+#
+# NO LLEVA DATO PERSONAL: el evento trae `employee_uuid` y `trace_id`, nunca la
+# ruta ni el nombre (regla dura 21). La alerta ni siquiera los copia.
+
+groups:
+  - name: kronoqr-retention-logs
+    interval: 1m
+    rules:
+      #------------------------------------------------------------------------
+      # La ficha de una persona se ha minimizado (ya no tiene foto en la base de
+      # datos) pero el fichero de su foto no se ha podido borrar del disco. Es un
+      # dato personal que debia desaparecer y sigue ahi: la base ya no apunta a el,
+      # asi que NADIE mas lo va a encontrar. Cualquier evento es suficiente.
+      #
+      # Ventana de 1 h y sin `for:`: un evento de log no tiene «resuelto», asi que
+      # la alerta se apaga sola al salir de la ventana; el trabajo (borrar el
+      # fichero) es de una persona y el runbook dice como comprobarlo.
+      #------------------------------------------------------------------------
+      - alert: FotoDeFichaMinimizadaSinBorrar
+        expr: sum(count_over_time({service=~".+"} |= "retention.personnel_photo_orphaned" [1h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: retention
+        annotations:
+          summary: "Una ficha minimizada por retencion ha dejado su foto en el disco"
+          description: >-
+            La retencion ha minimizado la ficha de una persona, pero no ha podido
+            borrar el fichero de su foto. La base de datos ya no lo apunta: hay
+            que borrarlo a mano. El evento `retention.personnel_photo_orphaned`
+            del log dice de que `employee_uuid` (nunca la ruta).
+          runbook_url: docs/runbooks/solicitud-derechos-rgpd.md#6-bis-foto-que-la-purga-no-pudo-borrar

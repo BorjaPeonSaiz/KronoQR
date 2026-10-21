@@ -375,6 +375,35 @@ y se atiende con
 [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md), no insistiendo con la
 purga.
 
+### 6 bis. Foto que la purga no pudo borrar
+
+**Alerta que lleva aquí** (`observability/loki/rules/fake/retention.yml`, la única
+que sale de un evento de log): `FotoDeFichaMinimizadaSinBorrar`, severidad media,
+destinatario IT del cliente. Solo existe si la instalación envía sus logs a Loki
+(`LOKI_URL`); sin ella, el aviso queda en el informe de la purga
+(`retencion-purga-*.txt`: «foto(s) de fichas minimizadas no se pudieron borrar»).
+
+**Qué significa.** La purga minimizó la ficha de una persona (la base de datos ya
+no tiene su foto) pero no pudo borrar el fichero del disco: permisos, disco de
+solo lectura o volumen desmontado. La ficha **ya no apunta** al fichero, así que
+nadie más lo va a encontrar: es un dato personal que debía desaparecer. **Impacto
+en el fichaje: ninguno.**
+
+1. Busca el evento y el `employee_uuid` (nunca trae la ruta ni el nombre):
+
+   ```bash
+   docker compose logs --since 24h scheduler | grep retention.personnel_photo_orphaned
+   ```
+
+2. Arregla la causa que lo impidió (`docker compose exec app ls -ld storage/app/employee-photos`:
+   debe ser escribible por el usuario de la aplicación; `df -h` por si el volumen
+   está lleno o en solo lectura).
+3. Borra el fichero de esa persona en `storage/app/employee-photos/` del volumen
+   `app-storage`. Si no puedes identificar cuál es, compara con la copia de
+   seguridad previa a la purga; no borres el directorio entero.
+4. Anota en el registro interno de solicitudes la fecha y el `employee_uuid`.
+   La alerta se apaga sola a la hora; el borrado no queda en `audit_log`.
+
 ---
 
 ## 7. Derecho de OPOSICIÓN y de LIMITACIÓN
