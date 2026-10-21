@@ -703,7 +703,7 @@ it('sirve como problem+json los errores que genera nginx en la API', function ()
     }
 
     // Cabeceras de seguridad en cada cuerpo (`always` ya va dentro del snippet).
-    expect(substr_count($locations, 'include /etc/nginx/snippets/security-headers.conf;'))->toBe(7)
+    expect(substr_count($locations, 'include /etc/nginx/snippets/security-headers.conf;'))->toBe(9)
         ->and($locations)->toContain('default_type application/problem+json;');
 
     // Ni ruta interna, ni IP, ni version en un cuerpo estatico.
@@ -719,6 +719,39 @@ it('sirve como problem+json los errores que genera nginx en la API', function ()
 
     expect(repoContents('infra/docker/nginx/extra/spa.conf'))->not->toContain('api-error-pages.conf');
 })->group('RF-AT-10');
+
+it('sirve en problem+json los 400 y 414 que nginx genera antes de elegir location', function (): void {
+    // 10.5. Una linea de peticion ilegible o demasiado larga se rechaza antes de que
+    // exista `location`: solo vale el `error_page` del `server`.
+    $template = repoContents('infra/docker/nginx/templates/kronoqr.conf.template');
+
+    $locations = repoContents('infra/docker/nginx/snippets/api-error-locations.conf');
+
+    expect($template)->toContain('error_page 400 /__kronoqr/api-400;')
+        ->and($template)->toContain('error_page 414 /__kronoqr/api-414;', 'error_page 494 =400 /__kronoqr/api-400;')
+        ->and($locations)->toContain('location = /__kronoqr/api-400 {', 'location = /__kronoqr/api-414 {')
+        ->and($locations)->not->toContain('location @kronoqr_api_400')
+        ->and($locations)
+        ->toContain('urn:kronoqr:problem:bad-request')
+        ->toContain('urn:kronoqr:problem:uri-too-long');
+})->group('RF-AT-10');
+
+it('da a /api/v1/scan/pin su zona propia por IP con la tasa del .env', function (): void {
+    // ADR-059 §3. Si Redis cae, el limite de Laravel del PIN falla abierto y el de
+    // nginx es el que queda. La location exacta gana a `^~ /api/v1/scan`.
+    $template = repoContents('infra/docker/nginx/templates/kronoqr.conf.template');
+
+    expect($template)->toContain('zone=scan_pin:10m')
+        ->toContain('rate=${NGINX_SCAN_PIN_RATE_PER_MINUTE}r/m')
+        ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin \{[^}]*limit_req zone=scan_pin burst=10 nodelay;[^}]*\}/s')
+        // Sigue contando en las dos zonas de fichaje: la propia se SUMA, no sustituye.
+        ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin \{[^}]*zone=scan_kiosk_vlan[^}]*zone=scan_other/s');
+
+    // La variable existe en los tres sitios que la reparten, con el mismo defecto.
+    expect(repoContents('.env.example'))->toContain("\nNGINX_SCAN_PIN_RATE_PER_MINUTE=60\n")
+        ->and(repoContents('infra/docker/nginx/Dockerfile'))->toContain('NGINX_SCAN_PIN_RATE_PER_MINUTE=60')
+        ->and(repoContents('infra/compose.prod.yaml'))->toContain('NGINX_SCAN_PIN_RATE_PER_MINUTE: ${NGINX_SCAN_PIN_RATE_PER_MINUTE:-60}');
+})->group('RS-02', 'RF-AT-10');
 
 it('mantiene el alcance de la trazabilidad versionado y no en el entorno', function (): void {
     // RQ-13. `current_phase` decide a que requisitos se les exige prueba. Es

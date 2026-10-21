@@ -413,6 +413,22 @@ main() {
   problema /api/v1/auth/login 502 bad-gateway -X POST -H "${json}" -d '{}'
   problema /api/v1/scan 413 payload-too-large -X POST -H "${json}" \
     --data-binary @- < <(head -c 9437184 /dev/zero | tr '\0' 'a')
+
+  # 10.5: el 400 y el 414 que nginx genera antes de elegir `location` (cabeceras
+  # de mas de 8 KiB, linea de peticion de mas de 8 KiB) tambien salen problem+json.
+  problema /api/v1/ready 400 bad-request -H "Cookie: $(head -c 20000 /dev/zero | tr '\0' 'a')"
+  problema "/api/v1/ready?x=$(head -c 20000 /dev/zero | tr '\0' 'a')" 414 uri-too-long
+
+  # ADR-059 §3: /scan/pin tiene su zona propia, con la tasa del entorno de la imagen (60).
+  if ! docker exec "${CONTENEDOR}" nginx -T 2>/dev/null | grep -qE 'limit_req_zone .*zone=scan_pin:10m +rate=60r/m;' ||
+    ! docker exec "${CONTENEDOR}" nginx -T 2>/dev/null | grep -qE 'location = /api/v1/scan/pin \{'; then
+    printf '  [FALLA] /api/v1/scan/pin no tiene su zona scan_pin a 60 r/m ni su location propia\n' >&2
+    fallo=1
+  else
+    printf '  [ok]    /api/v1/scan/pin          zona scan_pin a 60 r/m\n'
+  fi
+  problema /api/v1/scan/pin 502 bad-gateway -X POST -H "${json}" -d '{}'
+
   # En paralelo: cada peticion que llega a la aplicacion espera el resolvedor.
   local _rafaga
   for _rafaga in $(seq 1 12); do
