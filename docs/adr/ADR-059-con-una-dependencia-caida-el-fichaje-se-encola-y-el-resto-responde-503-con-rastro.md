@@ -217,7 +217,7 @@ con una réplica.**
 | Trabajo | Con Redis caído | Con PostgreSQL caído |
 |---|---|---|
 | `BroadcastPresenceChange`, `RecordWorkedMinutes` (conexión `resilient`) | Se ejecutan en el mismo proceso **después de responder** (`deferred`), con aviso `queue.failed_over`. El fichaje no espera | Fichajes nuevos no hay (el fichaje responde `503`). Lo que ya estaba en la cola: ver la fila siguiente |
-| `BroadcastPresenceChange` en Horizon, si `stateOf()` encuentra PostgreSQL inalcanzable o perdido | — | **Se devuelve a la cola** con espera igual a `Retry-After`. Se reintenta hasta 60 s después de **encolarse** (`retryUntil()`, fijado al despachar), no desde `occurred_at`: un fichaje que llega de la cola offline con horas de retraso también se difunde. Pasado ese plazo, `warning` y se abandona. Otro fallo (Reverb caído, por ejemplo) no se reintenta, como hoy. Ejecutado en `deferred` o `sync` no hay a dónde devolverlo: `warning`, como hoy |
+| `BroadcastPresenceChange` en Horizon, si `stateOf()` encuentra PostgreSQL inalcanzable o perdido | — | **Se devuelve a la cola** con espera igual a `Retry-After`. Se reintenta hasta 60 s después de **encolarse** (el `createdAt` del payload, fijado al despachar; el trabajo mide el plazo él mismo, sin `retryUntil()`, para que el worker no lo dé por fallido antes de ejecutarlo), no desde `occurred_at`: un fichaje que llega de la cola offline con horas de retraso también se difunde. Pasado ese plazo, `warning` y se abandona. Otro fallo (Reverb caído, por ejemplo) no se reintenta, como hoy. Ejecutado en `deferred` o `sync` no hay a dónde devolverlo: `warning`, como hoy |
 | Exportación íntegra e informes en diferido (`tries = 1`) | No llegan a pedirse: la petición responde `503` por el límite de tasa y no crea nada | Fallan una vez, sin reintento, como hoy. El trabajo lo apunta en el log y, si PostgreSQL vuelve a tiempo, en `error_events` (tarea 10.3). La obsolescencia la marca fallida. Quien la pidió la repite |
 | Lo que ya estaba encolado en Redis | Espera en Redis y se ejecuta al volver | Según su propia política (filas de arriba) |
 | Tareas programadas (detección, resumen, métricas) | Corren. Lo que necesita Redis falla y deja `scheduler.command_failed` y `error_events` (tarea 10.3) | Fallan, dejan `scheduler.command_failed` en el log y se repiten en la próxima ejecución programada. No se reintentan antes |
@@ -383,7 +383,8 @@ Lo dice el doc 02 §8.2.
 - **Configuración de nginx:** la zona de `/scan/pin` existe y su tasa sale del `.env`.
 - **Unitaria o feature de `BroadcastPresenceChange`:**
   - con `DatabaseUnavailable`, en worker, se devuelve a la cola con espera;
-  - pasados 60 s desde que se encoló (`retryUntil()`), `warning` y fin;
+  - pasados 60 s desde que se encoló (`createdAt` del payload), `warning` y fin, también en un
+    worker real (`Worker::process`) y sin darlo por fallido;
   - en `deferred`, `warning` sin excepción.
 - **Feature del embudo:** lleno → `503 pdf-rendering-busy` con `Retry-After` por HTTP, en el portal
   y en el panel.

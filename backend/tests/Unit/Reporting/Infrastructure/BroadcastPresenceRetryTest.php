@@ -18,6 +18,7 @@ use Illuminate\Events\Dispatcher;
 use Illuminate\Queue\Jobs\SyncJob;
 use Mockery\MockInterface;
 use Tests\Support\Observability\RecordingLogger;
+use Tests\Support\Time\FixedClock;
 
 /*
  * LA DIFUSION DE PRESENCIA VUELVE A LA COLA SI FALTA POSTGRESQL, DURANTE 60 S
@@ -25,12 +26,15 @@ use Tests\Support\Observability\RecordingLogger;
  *
  * - en un worker, con `DatabaseUnavailable`, se devuelve a la cola con la espera
  *   del cortacircuitos;
- * - pasado el plazo de `retryUntil()`, `warning` y fin;
+ * - pasados 60 s desde `createdAt` del payload, `warning` y fin;
  * - en `deferred` (un `SyncJob`), `warning` sin excepcion;
  * - otro fallo no se reintenta.
  */
 
 const BROADCAST_PRESENCE_RETRY_EMPLOYEE = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90';
+
+/** El `createdAt` de los trabajos de esta prueba: 2026-03-14 07:00:00 UTC. */
+const BROADCAST_PRESENCE_RETRY_QUEUED_AT = 1773471600;
 
 function broadcastPresenceRetryReader(Throwable $fallo): LivePresenceReader
 {
@@ -72,11 +76,11 @@ function broadcastPresenceRetryEvent(): EmployeeClockedIn
  *
  * @param  ArrayObject<int, int>  $liberado
  */
-function broadcastPresenceRetryJob(?int $retryUntil, ArrayObject $liberado): Job
+function broadcastPresenceRetryJob(ArrayObject $liberado): Job
 {
     /** @var Job&MockInterface $job */
     $job = Mockery::mock(Job::class);
-    $job->allows('retryUntil')->andReturn($retryUntil);
+    $job->allows('payload')->andReturn(['createdAt' => BROADCAST_PRESENCE_RETRY_QUEUED_AT]);
     $job->allows('release')->andReturnUsing(static function (int $delay) use ($liberado): void {
         $liberado->append($delay);
     });
@@ -86,10 +90,10 @@ function broadcastPresenceRetryJob(?int $retryUntil, ArrayObject $liberado): Job
 
 it('vuelve a la cola con la espera del cortacircuitos si falta PostgreSQL y queda plazo', function (): void {
     $logger = new RecordingLogger;
-    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger);
+    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger, FixedClock::at('2026-03-14 07:00:30'));
     /** @var ArrayObject<int, int> $liberado */
     $liberado = new ArrayObject;
-    $listener->setJob(broadcastPresenceRetryJob(time() + 30, $liberado));
+    $listener->setJob(broadcastPresenceRetryJob($liberado));
 
     $listener->clockedIn(broadcastPresenceRetryEvent());
 
@@ -99,10 +103,10 @@ it('vuelve a la cola con la espera del cortacircuitos si falta PostgreSQL y qued
 
 it('se abandona con un warning pasado el plazo de 60 s desde que se encolo', function (): void {
     $logger = new RecordingLogger;
-    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger);
+    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger, FixedClock::at('2026-03-14 07:01:00'));
     /** @var ArrayObject<int, int> $liberado */
     $liberado = new ArrayObject;
-    $listener->setJob(broadcastPresenceRetryJob(time() - 1, $liberado));
+    $listener->setJob(broadcastPresenceRetryJob($liberado));
 
     $listener->clockedIn(broadcastPresenceRetryEvent());
 
@@ -112,7 +116,7 @@ it('se abandona con un warning pasado el plazo de 60 s desde que se encolo', fun
 
 it('en deferred no hay cola a la que volver: warning sin excepcion', function (): void {
     $logger = new RecordingLogger;
-    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger);
+    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(DatabaseUnavailable::circuitOpen(7)), new Dispatcher, $logger, FixedClock::at('2026-03-14 07:00:30'));
     $listener->setJob(new SyncJob(new Container, '{"job":"x","data":[]}', 'deferred', 'default'));
 
     $listener->clockedIn(broadcastPresenceRetryEvent());
@@ -122,10 +126,10 @@ it('en deferred no hay cola a la que volver: warning sin excepcion', function ()
 
 it('no reintenta otro fallo, y no escribe el mensaje de la excepcion', function (): void {
     $logger = new RecordingLogger;
-    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(new RuntimeException('reverb no responde en 10.20.30.40')), new Dispatcher, $logger);
+    $listener = new BroadcastPresenceChange(broadcastPresenceRetryReader(new RuntimeException('reverb no responde en 10.20.30.40')), new Dispatcher, $logger, FixedClock::at('2026-03-14 07:00:30'));
     /** @var ArrayObject<int, int> $liberado */
     $liberado = new ArrayObject;
-    $listener->setJob(broadcastPresenceRetryJob(time() + 30, $liberado));
+    $listener->setJob(broadcastPresenceRetryJob($liberado));
 
     $listener->clockedIn(broadcastPresenceRetryEvent());
 
@@ -134,9 +138,12 @@ it('no reintenta otro fallo, y no escribe el mensaje de la excepcion', function 
         ->and(json_encode($logger->lines))->not->toContain('10.20.30.40');
 })->group('RF-PA-01', 'RS-05');
 
-it('fija el plazo al despachar, 60 s despues de ahora y no de occurred_at', function (): void {
+it('no usa retryUntil: el worker no puede darlo por fallido antes de ejecutarlo', function (): void {
+    // Con `retryUntil()`, `Worker::markJobAsFailedIfAlreadyExceedsMaxAttempts`
+    // lo fallaria sin ejecutarlo, y nunca saldria el warning del plazo.
     $listener = new ReflectionClass(BroadcastPresenceChange::class)->newInstanceWithoutConstructor();
-    $hasta = $listener->retryUntil(broadcastPresenceRetryEvent());
 
-    expect($hasta->getTimestamp() - time())->toBeGreaterThanOrEqual(59)->toBeLessThanOrEqual(60);
+    expect(new ReflectionClass(BroadcastPresenceChange::class)->hasMethod('retryUntil'))->toBeFalse()
+        ->and($listener->tries)->toBe(0)
+        ->and($listener->maxExceptions)->toBe(1);
 })->group('RF-PA-01', 'RNF-D-03');

@@ -8,11 +8,10 @@ use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
+use App\Modules\Shared\Application\Port\Clock;
 use App\Support\Database\DatabaseUnavailable;
 use App\Support\Resilience\DependencyFailure;
 use DateTimeImmutable;
-use DateTimeInterface;
-use DateTimeZone;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
@@ -65,9 +64,19 @@ use Throwable;
  * si lo que falla es la base de datos —`stateOf()` la encuentra inalcanzable o
  * pierde la conexion—, el trabajo **vuelve a la cola** con una espera igual al
  * `Retry-After` del cortacircuitos, y lo intenta hasta 60 s despues de
- * **encolarse** ({@see self::retryUntil()}, fijado al despachar), no desde
- * `occurred_at`: un fichaje que llega de la cola offline con horas de retraso
- * tambien se difunde. Pasado ese plazo, un `warning` y se abandona.
+ * **encolarse** (`createdAt` del payload, que Laravel fija al despachar), no
+ * desde `occurred_at`: un fichaje que llega de la cola offline con horas de
+ * retraso tambien se difunde. Pasado ese plazo, un `warning` y se abandona.
+ *
+ * El plazo lo mide **el propio trabajo**, no `retryUntil()`. Con
+ * `retryUntil()`, `Worker::markJobAsFailedIfAlreadyExceedsMaxAttempts` falla el
+ * trabajo con `MaxAttemptsExceededException` **antes** de ejecutarlo en cuanto
+ * vence el plazo: deja una fila en `failed_jobs` y otra en `error_events`, nunca
+ * sale el `warning` de arriba, y bastaria con que Horizon fuera 60 s atrasado,
+ * sin averia ninguna, para que una difusion fallara sin haberse intentado. Por
+ * eso `$tries = 0` (sin tope de intentos: el tope es el plazo) y
+ * `$maxExceptions = 1` (una excepcion que escape —el contenedor no resuelve el
+ * listener, por ejemplo— falla a la primera en vez de reintentarse sin fin).
  *
  * Reintentar es seguro por dos motivos: el trabajo **relee** el estado al
  * ejecutarse, asi que difunde el actual y no el del evento; y el panel descarta,
@@ -111,21 +120,21 @@ final class BroadcastPresenceChange implements ShouldQueue
      */
     public string $connection = 'resilient';
 
+    /**
+     * Sin tope de intentos: el que manda es {@see self::RETRY_WINDOW_SECONDS},
+     * medido aqui. Pisa el `tries` del supervisor de Horizon, que es 1.
+     */
+    public int $tries = 0;
+
+    /** Lo que no sea devolverse a la cola a proposito no se reintenta. */
+    public int $maxExceptions = 1;
+
     public function __construct(
         private readonly LivePresenceReader $presence,
         private readonly Dispatcher $events,
         private readonly LoggerInterface $logger,
+        private readonly Clock $clock,
     ) {}
-
-    /**
-     * Hasta cuando se reintenta. Laravel lo llama **al despachar** —sobre una
-     * instancia sin constructor, asi que no puede usar las dependencias— y lo
-     * guarda en el trabajo: el plazo cuenta desde que se encolo.
-     */
-    public function retryUntil(object $event): DateTimeInterface
-    {
-        return new DateTimeImmutable('now', new DateTimeZone('UTC'))->modify('+'.self::RETRY_WINDOW_SECONDS.' seconds');
-    }
 
     public function clockedIn(EmployeeClockedIn $event): void
     {
@@ -185,9 +194,12 @@ final class BroadcastPresenceChange implements ShouldQueue
             return false;
         }
 
-        $until = $job->retryUntil();
+        // `createdAt` lo fija Laravel al despachar y viaja intacto en cada
+        // `release()`. Sin el no hay plazo que medir, y devolverlo seria
+        // reintentarlo sin fin: se abandona.
+        $queuedAt = $job->payload()['createdAt'] ?? null;
 
-        if ($until === null || time() >= $until) {
+        if (! is_int($queuedAt) || $this->clock->now()->getTimestamp() - $queuedAt >= self::RETRY_WINDOW_SECONDS) {
             $this->logger->warning('reporting.presence_broadcast_expired', [
                 'employee_uuid' => $employeeUuid,
                 'exception' => $failure::class,
