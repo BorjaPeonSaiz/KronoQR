@@ -70,7 +70,7 @@ final readonly class JournalTelemetry
 
     private function log(string $employeeUuid, WorkDayJournal $journal): void
     {
-        $this->logger->info('reporting.employee_workdays_read', [
+        $this->logger->info('reporting.employee_workdays_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'employee_uuid' => $employeeUuid,
             'from' => $journal->range->isoFrom(),

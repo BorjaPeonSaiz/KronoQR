@@ -49,7 +49,7 @@ final readonly class ComplianceProfileTelemetry
 
         SpanScope::annotateCurrent(['compliance_profile.resolved' => $profile !== null]);
 
-        $this->logger->info('product.compliance_profile_read', [
+        $this->logger->info('product.compliance_profile_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'resolved' => $profile !== null,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),

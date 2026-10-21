@@ -265,3 +265,22 @@ it('deja de valer la sesion en cuanto se da de baja a la persona', function (): 
 
     Api::as($token)->get('/api/v1/me/workdays')->assertStatus(401);
 })->group('RN-14', 'RF-ID-07');
+
+it('no deja una linea ERROR por un rechazo y apunta el acceso con employee_uuid (V4-BE-2, R4-BE-04)', function (): void {
+    $empleado = empleadoConPortal();
+
+    /** @var list<array{level: string, message: string, context: array<mixed>}> $apuntes */
+    $apuntes = [];
+    Log::listen(function (MessageLogged $evento) use (&$apuntes): void {
+        $apuntes[] = ['level' => $evento->level, 'message' => $evento->message, 'context' => $evento->context];
+    });
+
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => '999111'])->assertStatus(401);
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => PortalLogins::PIN])->assertOk();
+
+    $exito = array_values(array_filter($apuntes, static fn (array $apunte): bool => $apunte['message'] === 'auth.login_succeeded'));
+
+    expect(array_column($apuntes, 'level'))->not->toContain('error')
+        ->and($exito)->toHaveCount(1)
+        ->and($exito[0]['context']['employee_uuid'] ?? null)->toBe($empleado['uuid']);
+})->group('RS-03', 'RF-ID-06', 'RF-PD-15');

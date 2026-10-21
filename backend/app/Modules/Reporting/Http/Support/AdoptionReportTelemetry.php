@@ -84,7 +84,7 @@ final readonly class AdoptionReportTelemetry
             'reporting.indicators_with_value' => self::withValue($report),
         ]);
 
-        $this->logger->info('reporting.adoption_report_read', [
+        $this->logger->info('reporting.adoption_report_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'format' => $format->value,
             'from' => $report->range->isoFrom(),

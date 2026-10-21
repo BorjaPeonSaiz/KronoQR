@@ -222,7 +222,7 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
         }
 
         Log::warning(
-            'Configured QR minimum size does not fit on the card; printing the largest symbol that fits.',
+            'identity.card_qr_size_limited',
             ['configured_mm' => $configured, 'effective_mm' => $effective],
         );
     }

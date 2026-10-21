@@ -62,7 +62,7 @@ final readonly class IncidentTelemetry
         // `info` y no `notice`: leer la bandeja es lo que hace un responsable
         // varias veces al dia. Lo que destaca sobre el ruido es la resolucion,
         // que es la que cambia algo.
-        $this->logger->info('compliance.incident_board_read', [
+        $this->logger->info('compliance.incident_board_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'rows' => \count($view->page->rows),
             'total' => $view->page->total,

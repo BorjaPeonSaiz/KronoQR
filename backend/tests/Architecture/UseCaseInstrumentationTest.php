@@ -85,6 +85,7 @@ const USE_CASE_INSTRUMENTATION_SPAN_OPENERS = [
     'Http/Middleware/PropagateTraceContext.php' => 'el span de servidor de cada peticion',
     'Support/Observability/Tracing/DatabaseSpans.php' => 'el span de cada consulta',
     'Support/Observability/Tracing/ScheduledTaskSpans.php' => 'el span de cada tarea programada',
+    'Support/Observability/Tracing/WorkUnitSpans.php' => 'el span de cada orden de Artisan y de cada trabajo de cola',
 ];
 
 /** @var array<class-string, string> $excepciones */

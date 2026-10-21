@@ -57,7 +57,7 @@ final readonly class SettingsTelemetry
             'settings.unknown_keys' => \count($settings->unknownKeys),
         ]);
 
-        $this->logger->info('product.settings_read', [
+        $this->logger->info('product.settings_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'keys' => \count($settings->all()),
             'unknown_keys' => $settings->unknownKeys,

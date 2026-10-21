@@ -40,7 +40,7 @@ final readonly class LicenseTelemetry
      */
     public function measureRead(callable $read): LicenseOverview
     {
-        return $this->measure('product.license_read', $read, warn: false);
+        return $this->measure('product.license_retrieved', $read, warn: false);
     }
 
     /**

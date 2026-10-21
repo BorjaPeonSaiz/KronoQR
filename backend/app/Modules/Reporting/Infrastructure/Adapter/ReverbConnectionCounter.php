@@ -80,9 +80,10 @@ final readonly class ReverbConnectionCounter implements RealtimeConnectionCounte
 
             return is_numeric($connections) ? (int) $connections : null;
         } catch (Throwable $failure) {
-            $this->logger->warning('No se ha podido consultar las conexiones vivas de Reverb.', [
+            // Un identificador de evento y la clase; nunca el mensaje (L6), que
+            // lleva el host de Reverb.
+            $this->logger->warning('reporting.realtime_connections_unavailable', [
                 'exception' => $failure::class,
-                'reason' => $failure->getMessage(),
             ]);
 
             return null;

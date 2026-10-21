@@ -56,13 +56,17 @@ function errorVocabularyCoverageWords(string $text): array
  * conjunto de datos, con el sitio donde aparecen.
  *
  * @param  array<string, list<string>>  $texts  Sitio => textos.
+ * @param  bool  $allowNameClashes  Si se aceptan las palabras excluidas por ser
+ *                                  nombres. En lo que el propio producto escribe
+ *                                  —los eventos de su log— no: saldrian recortadas
+ *                                  y el remedio es no usarlas (V21-4-BE-5, ADR-048).
  * @return list<string>
  */
-function errorVocabularyCoverageMissing(array $texts): array
+function errorVocabularyCoverageMissing(array $texts, bool $allowNameClashes = true): array
 {
     // Solo las excluidas A PROPOSITO por ser nombres: una palabra que el
     // producto emite y no esta en ninguna de las dos listas es un olvido.
-    $excluded = ErrorVocabulary::nameClashes();
+    $excluded = $allowNameClashes ? ErrorVocabulary::nameClashes() : [];
     $missing = [];
 
     foreach ($texts as $where => $values) {
@@ -402,7 +406,16 @@ it('cubre las palabras de las excepciones que se lanzan en cualquier punto de ap
 })->group('RF-PD-15');
 
 it('cubre los identificadores de evento del log tecnico', function (): void {
-    $faltan = errorVocabularyCoverageMissing(errorVocabularyCoverageLogEvents());
+    // Sin admitir las excluidas por ser nombres: un evento `*_read` salia como
+    // `…_…` en Loki (V21-4-BE-5). El evento se nombra con otra palabra.
+    $faltan = array_values(array_filter(
+        errorVocabularyCoverageMissing(errorVocabularyCoverageLogEvents(), allowNameClashes: false),
+        // Unica excepcion, y no es un evento de log: el identificador de la
+        // comprobacion `license.white_label_without_plan` de `doctor`, que leen
+        // los textos traducidos y la documentacion. Su nombre lo revisa la
+        // tarea 11.5 junto con el aviso.
+        static fn (string $faltante): bool => ! str_starts_with($faltante, 'white (LicenseProbe.php)'),
+    ));
 
     expect($faltan)->toBe([], 'Partes de eventos de log fuera de ErrorVocabulary: '.implode(', ', $faltan));
 })->group('RF-PD-15');

@@ -60,7 +60,7 @@ final readonly class BrandingTelemetry
             'branding.locales' => $locales,
         ]);
 
-        $this->logger->info('product.branding_read', [
+        $this->logger->info('product.branding_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             // Dos hechos y una cuenta, ningun valor. Ver el docblock de la clase.
             'custom_accent' => $customAccent,
@@ -91,7 +91,7 @@ final readonly class BrandingTelemetry
             'branding.branded_icons' => $manifest->brandedIcons,
         ]);
 
-        $this->logger->info('product.branding_manifest_read', [
+        $this->logger->info('product.branding_manifest_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'custom_accent' => $manifest->customThemeColor,
             'branded_icons' => $manifest->brandedIcons,

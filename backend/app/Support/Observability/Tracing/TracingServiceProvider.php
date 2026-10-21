@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Observability\Tracing;
 
 use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -12,8 +13,10 @@ use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Log\Context\Repository as ContextRepository;
+use Illuminate\Queue\Events\JobAttempted;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\ServiceProvider;
 use OpenTelemetry\API\Globals;
@@ -106,11 +109,17 @@ final class TracingServiceProvider extends ServiceProvider
         $this->app->singleton(QueuedTraceContext::class);
         $this->app->singleton(ScheduledTaskSpans::class);
         $this->app->singleton(DatabaseSpans::class);
+        $this->app->singleton(WorkUnitSpans::class);
     }
 
     public function boot(): void
     {
         try {
+            // Antes de mirar si hay SDK: el `trace_id` de una orden o de un
+            // trabajo tiene que llegar al log tambien en la instalacion que no
+            // exporta trazas (ver `WorkUnitSpans`).
+            $this->listenToWorkUnits();
+
             $factory = $this->app->make(TracerFactory::class);
 
             if (! $factory->enabled()) {
@@ -241,6 +250,24 @@ final class TracingServiceProvider extends ServiceProvider
         $events->listen(ScheduledTaskFinished::class, static fn (ScheduledTaskFinished $event) => $spans->finished($event));
         $events->listen(ScheduledTaskSkipped::class, static fn (ScheduledTaskSkipped $event) => $spans->skipped($event));
         $events->listen(ScheduledTaskFailed::class, static fn (ScheduledTaskFailed $event) => $spans->failed($event));
+    }
+
+    /**
+     * Un span y un `trace_id` por orden de Artisan y por trabajo de cola (L2).
+     */
+    private function listenToWorkUnits(): void
+    {
+        $units = $this->app->make(WorkUnitSpans::class);
+        $events = $this->app->make(Dispatcher::class);
+
+        $events->listen(CommandStarting::class, static fn (CommandStarting $event) => $units->commandStarting($event));
+        $events->listen(CommandFinished::class, static fn (CommandFinished $event) => $units->commandFinished($event));
+        $events->listen(JobProcessing::class, static fn (JobProcessing $event) => $units->jobProcessing($event->job));
+        // `JobAttempted` y no `JobProcessed`/`JobFailed`: lo emiten el worker y
+        // la cola `sync` tras cada intento, haya ido bien o mal, uno por cada
+        // `JobProcessing`. Con los otros, un trabajo devuelto a la cola no
+        // cerraria su span.
+        $events->listen(JobAttempted::class, static fn (JobAttempted $event) => $units->jobFinished(! $event->successful()));
     }
 
     private function listenToDatabase(): void

@@ -69,7 +69,7 @@ final readonly class ComplianceSummaryTelemetry
             'reporting.scope' => $summary->scopeName(),
         ]);
 
-        $this->logger->info('reporting.compliance_summary_read', [
+        $this->logger->info('reporting.compliance_summary_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
             'from' => $summary->range->isoFrom(),
             'to' => $summary->range->isoTo(),

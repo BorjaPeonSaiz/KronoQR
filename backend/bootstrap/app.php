@@ -67,6 +67,7 @@ use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
@@ -84,6 +85,7 @@ use App\Support\Redis\RedisCircuitOpen;
 use App\Support\Resilience\DependencyFailure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -1380,6 +1382,34 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DependencyFailure::dependencyOf($exception) === DependencyFailure::DATABASE);
 
         $exceptions->dontReportWhen(static fn (Throwable $exception): bool => RedisCircuitOpen::isCauseOf($exception));
+
+        /*
+         * LOS RECHAZOS ESPERADOS NO SON UN `ERROR` DEL LOG (V4-BE-2, V21-4-BE-6).
+         *
+         * Una credencial que no vale, un bloqueo, un `409` de la zona horaria
+         * fija: el producto funcionando. Sin esto el manejador los informaba y
+         * cada uno dejaba una linea `ERROR` con la excepcion entera, duplicando
+         * el apunte `auth.login_failed` del diario y escondiendo los errores de
+         * verdad a quien opera. Lo que se deja de informar es lo que marca
+         * `BusinessRejection` **y** se traduce a un `4xx` en una peticion HTTP:
+         * un rechazo que nadie traduce es un `500`, un defecto del producto, y
+         * sigue llegando al log y a `error_events`. Fuera de una peticion (una
+         * orden de consola) todo se sigue informando, como hasta ahora.
+         */
+        $exceptions->dontReportWhen(static function (Throwable $exception): bool {
+            if (! $exception instanceof BusinessRejection) {
+                return false;
+            }
+
+            try {
+                $request = request();
+
+                return $request->route() !== null
+                    && app(ExceptionHandler::class)->render($request, $exception)->getStatusCode() < 500;
+            } catch (Throwable) {
+                return false;
+            }
+        });
 
         $exceptions->render(static fn (Throwable $exception, Request $request): mixed => DependencyUnavailableResponse::for($exception, $request));
 

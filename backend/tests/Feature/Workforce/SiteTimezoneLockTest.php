@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -188,3 +190,18 @@ it('el GET dice si la zona ya esta fija', function (): void {
         ->assertValidResponse(200)
         ->assertJsonPath('timezone_locked', true);
 })->group('RN-23');
+
+it('no deja una linea ERROR en el log por el 409, que es el producto funcionando (V21-4-BE-6)', function (): void {
+    $site = WorkforceFixtures::site('Hotel Marina', 'Europe/Madrid');
+    zonaFijaTramo($site);
+
+    /** @var list<string> $niveles */
+    $niveles = [];
+    Event::listen(MessageLogged::class, static function (MessageLogged $apunte) use (&$niveles): void {
+        $niveles[] = $apunte->level;
+    });
+
+    Api::as(zonaFijaToken())->patch('/api/v1/site', ['timezone' => 'Atlantic/Canary'])->assertStatus(409);
+
+    expect($niveles)->not->toContain('error');
+})->group('RN-23', 'RF-PD-15');
