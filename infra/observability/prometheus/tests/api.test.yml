@@ -158,8 +158,8 @@ tests:
   # R4-DV-06: el PIN tarda 1,2 s (su hash en una maquina lenta) y el fichaje con
   # tarjeta 50 ms. Antes, con la regla agrupada, el p95 conjunto lo dominaba el
   # PIN y saltaba sin averia. Ahora la del QR no ve el PIN, y la del PIN no salta
-  # con 1,2 s (los cubos del histograma son 1,0 y 3,0 s: toda la masa entre uno y
-  # otro queda del lado bueno del umbral de 3 s).
+  # con 1,2 s: el umbral de 2 s es un cubo (tarea 10.8), y toda la masa cae en
+  # `le="2.0"`, del lado bueno, sin interpolar.
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
@@ -171,6 +171,8 @@ tests:
         values: "0+30x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="1.0"}'
         values: "0x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="2.0"}'
+        values: "0+30x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
         values: "0+30x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
@@ -186,13 +188,16 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # LatenciaDelFichajePorPinAlta: toda la masa por encima de 3 s (cubo +Inf), con
-  # 30 PIN por minuto (mas de 20 en la ventana). `for: 5m`.
+  # LatenciaDelFichajePorPinAlta: toda la masa entre 2 y 3 s (2,5 s), con 30 PIN
+  # por minuto (mas de 20 en la ventana). `for: 5m`. Es el caso que la tarea 10.8
+  # hace visible: con el umbral en el cubo de 3 s esto no saltaba.
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="2.0"}'
         values: "0x30"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+        values: "0+30x30"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
         values: "0+30x30"
       - series: 'http_request_duration_seconds_count{route="attendance.scan.pin"}'
@@ -209,21 +214,21 @@ tests:
               destinatario: it-cliente
               component: api
             exp_annotations:
-              summary: "Mas del 5 % de los fichajes por PIN tardan mas de 3 s desde hace 10 min"
+              summary: "Mas del 5 % de los fichajes por PIN tardan mas de 2 s desde hace 10 min"
               description: >-
                 El fichaje por PIN paga un hash bcrypt de coste 12 a proposito
                 (RNF-P-08: p95 < 400 ms en el hardware de referencia). Por encima de
-                3 s en mas de uno de cada veinte, el servidor va justo de CPU o la
+                2 s en mas de uno de cada veinte, el servidor va justo de CPU o la
                 base de datos va lenta. El fichaje con tarjeta no se ve afectado salvo
                 que la causa sea comun: compara con LatenciaDelFichajeAlta. Con al
                 menos 20 peticiones por PIN en la ventana.
               runbook_url: docs/runbooks/errores-en-el-panel.md
 
-  # Valor limite por debajo: el 4 % por encima de 3 s (1 de cada 25). El umbral es
+  # Valor limite por debajo: el 4 % por encima de 2 s (1 de cada 25). El umbral es
   # `> 0.05`. (No se prueba el 5 % exacto: 1 - 19/20 no es 0,05 en coma flotante.)
   - interval: 1m
     input_series:
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="2.0"}'
         values: "0+24x30"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
         values: "0+25x30"
@@ -234,10 +239,10 @@ tests:
         alertname: LatenciaDelFichajePorPinAlta
         exp_alerts: []
 
-  # Poco trafico por PIN (10 en la ventana, minimo 20): nunca, aunque todos pasen de 3 s.
+  # Poco trafico por PIN (10 en la ventana, minimo 20): nunca, aunque todos pasen de 2 s.
   - interval: 1m
     input_series:
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="2.0"}'
         values: "0x30"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
         values: "0+1x30"
@@ -249,22 +254,22 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # LatenciaDelFichajePorLoteAlta: todos los lotes por encima de 3 s, 1 por
-  # minuto (10 en la ventana, por encima del minimo de 5). `for: 15m`.
+  # LatenciaDelFichajePorLoteAlta: todos los lotes por encima de 10 s, 1 por
+  # minuto (10 en la ventana, por encima del minimo de 5). `for: 5m`.
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="10.0"}'
         values: "0x40"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}'
         values: "0+1x40"
       - series: 'http_request_duration_seconds_count{route="attendance.scan.batch"}'
         values: "0+1x40"
     alert_rule_test:
-      - eval_time: 12m
+      - eval_time: 3m
         alertname: LatenciaDelFichajePorLoteAlta
         exp_alerts: []
-      - eval_time: 30m
+      - eval_time: 20m
         alertname: LatenciaDelFichajePorLoteAlta
         exp_alerts:
           - exp_labels:
@@ -272,20 +277,22 @@ tests:
               destinatario: it-cliente
               component: api
             exp_annotations:
-              summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 3 s desde hace 10 min"
+              summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 10 s desde hace 10 min"
               description: >-
                 El envio de la cola offline de un quiosco (hasta 50 fichajes por
-                lote) tarda mas de lo normal. Un lote lleno tras un corte largo puede
-                rozar los 3 s sin que haya averia: si coincide con un quiosco que se
-                esta vaciando, espera; si no, el servidor va lento. Los quioscos
-                siguen aceptando fichajes y los reenviaran (regla dura 19). Con al
-                menos 5 lotes en la ventana.
+                lote) tarda mas de 10 s, que es lo que costaria un lote lleno a
+                200 ms por fichaje: el servidor va lento, no es un quiosco que se
+                esta vaciando. Los quioscos siguen aceptando fichajes y los
+                reenviaran (regla dura 19). Con al menos 5 lotes en la ventana.
               runbook_url: docs/runbooks/errores-en-el-panel.md
 
-  # Lotes que acaban dentro de 3 s: nunca.
+  # Lotes de 5 s, un quiosco que se vacia tras un corte largo: por encima del
+  # antiguo umbral de 3 s y por debajo del de 10 s. Nunca.
   - interval: 1m
     input_series:
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}'
+        values: "0x40"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="10.0"}'
         values: "0+1x40"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}'
         values: "0+1x40"

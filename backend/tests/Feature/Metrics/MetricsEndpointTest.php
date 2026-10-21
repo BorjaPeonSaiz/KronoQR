@@ -146,3 +146,17 @@ it('sigue respondiendo 200 cuando Redis no contesta', function (): void {
 
     expect($response->headers->get('Content-Type'))->toBe(MetricsController::CONTENT_TYPE);
 })->group('RS-09', 'RQ-06');
+
+it('expone los cubos de 2 s y 10 s del histograma HTTP, sobre los que leen las alertas del PIN y del lote', function (): void {
+    // Tarea 10.8 de la 2.3.0: sin estos cubos, `LatenciaDelFichajePorPinAlta`
+    // (2 s) y `LatenciaDelFichajePorLoteAlta` (10 s) no tienen serie que leer.
+    // Una peticion rapida cae en todos los cubos: se cuentan en cada uno.
+    Api::guest()->get('/api/v1/health')->assertOk();
+
+    $body = (string) Api::guest()->fromIp('10.91.0.5')->get('/metrics')->getContent();
+
+    expect($body)
+        ->toMatch('/^http_request_duration_seconds_bucket\{route="health.live",.*le="2(\.0)?"\} [1-9]\d*$/m')
+        ->toMatch('/^http_request_duration_seconds_bucket\{route="health.live",.*le="10(\.0)?"\} [1-9]\d*$/m')
+        ->toMatch('/^http_request_duration_seconds_bucket\{route="health.live",.*le="3(\.0)?"\} [1-9]\d*$/m');
+})->group('RQ-06', 'RNF-D-01');

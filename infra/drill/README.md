@@ -94,8 +94,8 @@ simulacro evita.
 | `PurgaDeFicherosGeneradosNoPuedeBorrar` | `generated_files_remove_failed_total` +3 | it-cliente | permisos del disco de ficheros |
 | `ReverbSinRespuesta` | retira `websocket_connections_active` con el latido de presencia vivo | it-cliente | `reverb` parado o sin DNS |
 | `LatenciaDelFichajeAlta` | observaciones de `attendance.scan` entre 0,4 s y 1 s (p95 0,975 s) | it-cliente | servidor o base de datos lentos con tarjeta |
-| `LatenciaDelFichajePorPinAlta` | más de 3 s en el histograma de `attendance.scan.pin` | it-cliente | CPU justa: el PIN paga un bcrypt de coste 12 |
-| `LatenciaDelFichajePorLoteAlta` | más de 3 s en el histograma de `attendance.scan.batch` | it-cliente | lotes lentos tras un corte largo |
+| `LatenciaDelFichajePorPinAlta` | más de 2 s en el histograma de `attendance.scan.pin` | it-cliente | CPU justa: el PIN paga un bcrypt de coste 12 |
+| `LatenciaDelFichajePorLoteAlta` | más de 10 s en el histograma de `attendance.scan.batch` | it-cliente | lotes lentos: el servidor va justo |
 | `SondasDeBlackboxSinRespuesta` | `up` del job `kronoqr-loki` a 0 | it-cliente | blackbox-exporter parado o con configuración inválida |
 | `RechazoDeFirmaQr` | `scans_total{result="rejected_signature"}` +60 | seguridad | ráfaga de QR con firma falsa |
 | `ReconciliacionConFallos` | `projection_reconciliation_last_failures` 1 | it-cliente | excepción al reconciliar proyecciones |

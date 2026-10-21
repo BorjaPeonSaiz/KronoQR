@@ -103,17 +103,18 @@ http_requests_total{route="employees.index",status="200"} 100
 http_requests_total{route="portal.workdays",status="200"} 100
 
 # --- Latencia del fichaje, una serie por ruta (api.yml, bloque 9 de la 2.3.0) ----
-# Los cubos son los del middleware (0,4 s, 1 s, 3 s y +Inf, con las etiquetas `le` que expone el
-# producto). Todo el trafico por debajo del primer umbral de cada ruta: el QR vigila 0,5 s
-# (interpolado entre 0,4 y 1), el PIN y el lote 3 s. Las reglas aceptan `le` 3 y 3.0.
+# Los cubos son los del middleware (0,4 s, 1 s, 2 s, 10 s y +Inf, con las etiquetas `le` que
+# expone el producto). Todo el trafico por debajo del umbral de cada ruta: el QR vigila 0,5 s
+# (interpolado entre 0,4 y 1), el PIN 2 s y el lote 10 s, cada uno sobre su cubo (tarea 10.8 de
+# la 2.3.0). Las reglas aceptan `le` 2 y 2.0, 10 y 10.0.
 http_request_duration_seconds_bucket{route="attendance.scan",le="0.4"} 100
 http_request_duration_seconds_bucket{route="attendance.scan",le="1.0"} 100
 http_request_duration_seconds_bucket{route="attendance.scan",le="+Inf"} 100
 http_request_duration_seconds_count{route="attendance.scan"} 100
-http_request_duration_seconds_bucket{route="attendance.scan.pin",le="3.0"} 100
+http_request_duration_seconds_bucket{route="attendance.scan.pin",le="2.0"} 100
 http_request_duration_seconds_bucket{route="attendance.scan.pin",le="+Inf"} 100
 http_request_duration_seconds_count{route="attendance.scan.pin"} 100
-http_request_duration_seconds_bucket{route="attendance.scan.batch",le="3.0"} 100
+http_request_duration_seconds_bucket{route="attendance.scan.batch",le="10.0"} 100
 http_request_duration_seconds_bucket{route="attendance.scan.batch",le="+Inf"} 100
 http_request_duration_seconds_count{route="attendance.scan.batch"} 100
 

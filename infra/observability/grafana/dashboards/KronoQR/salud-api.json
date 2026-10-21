@@ -72,7 +72,7 @@
       "id": 2,
       "type": "stat",
       "title": "Latencia p95 del fichaje (10 min)",
-      "description": "Las tres rutas de fichaje juntas, como orientación. Desde el bloque 9 de la 2.3.0 las alertas son una por ruta: LatenciaDelFichajeAlta (tarjeta, > 500 ms), LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta (más del 5 % por encima de 3 s); mira el panel «p95 por ruta de fichaje».",
+      "description": "Las tres rutas de fichaje juntas, como orientación. Desde el bloque 9 de la 2.3.0 las alertas son una por ruta: LatenciaDelFichajeAlta (tarjeta, > 500 ms), LatenciaDelFichajePorPinAlta (más del 5 % por encima de 2 s) y LatenciaDelFichajePorLoteAlta (más del 5 % por encima de 10 s); mira el panel «p95 por ruta de fichaje».",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -928,7 +928,7 @@
       "id": 22,
       "type": "timeseries",
       "title": "Latencia p95 del fichaje con tarjeta (10 min)",
-      "description": "p95 de attendance.scan (tarjeta), el de LatenciaDelFichajeAlta (umbral 0,5 s; el histograma interpola entre sus cubos de 0,4 s y 1 s). El PIN y los lotes tienen su propio panel: su histograma no pasa de 3 s, así que se vigilan como fracción por encima de 3 s, no como p95.",
+      "description": "p95 de attendance.scan (tarjeta), el de LatenciaDelFichajeAlta (umbral 0,5 s; el histograma interpola entre sus cubos de 0,4 s y 1 s). El PIN y los lotes tienen su propio panel: se vigilan como fracción por encima de su umbral (2 s y 10 s, que son cubos del histograma), no como p95 interpolado.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -973,22 +973,22 @@
     {
       "id": 23,
       "type": "timeseries",
-      "title": "PIN y lotes: fracción por encima de 3 s (10 min)",
-      "description": "La misma expresión que LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta: 1 menos las peticiones que acaban en 3 s o menos, sobre todas. La línea roja es el 5 %: por encima, la alerta (con al menos 20 PIN o 5 lotes en la ventana). El histograma del middleware no distingue por encima de 3 s; con cubos de 2 s y 10 s (tarea 10.8) se podrán vigilar umbrales más finos.",
+      "title": "PIN por encima de 2 s y lotes por encima de 10 s (10 min)",
+      "description": "La misma expresión que LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta: 1 menos las peticiones que acaban dentro de su umbral (2 s el PIN, 10 s el lote), sobre todas. La línea roja es el 5 %: por encima, la alerta (con al menos 20 PIN o 5 lotes en la ventana). Los dos umbrales son cubos del histograma del middleware (tarea 10.8 de la 2.3.0), así que la fracción es exacta y no interpolada.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=\"+Inf\"}[10m]))",
-          "legendFormat": "PIN"
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=~\"2(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "PIN > 2 s"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=\"+Inf\"}[10m]))",
-          "legendFormat": "lote"
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=~\"10(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "lote > 10 s"
         }
       ],
       "fieldConfig": {
