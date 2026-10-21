@@ -44,10 +44,26 @@ function diagnosticsBundleUnitSections(): array
     ];
 }
 
-it('sella el manifiesto con la huella canonica de las secciones', function (): void {
+/**
+ * La huella esperada: el documento entero con el manifiesto sin su `sha256`
+ * (PR16), escrita aparte de la implementacion para que no se compruebe a si
+ * misma.
+ */
+function diagnosticsBundleUnitDigest(DiagnosticsBundle $bundle): string
+{
+    $manifest = $bundle->manifest->toArray();
+    unset($manifest['sha256']);
+
+    return CanonicalJson::digest(['manifest' => $manifest, ...$bundle->sections]);
+}
+
+it('sella el manifiesto con la huella canonica del documento, manifiesto incluido', function (): void {
     $bundle = diagnosticsBundleUnit(diagnosticsBundleUnitSections());
 
-    expect($bundle->manifest->sha256)->toBe(CanonicalJson::digest(diagnosticsBundleUnitSections()))
+    expect($bundle->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($bundle))
+        // Ya no es la de las secciones solas (PR16).
+        ->and($bundle->manifest->sha256)->not->toBe(CanonicalJson::digest(diagnosticsBundleUnitSections()))
+        ->and($bundle->manifest->toUnsealedArray())->not->toHaveKey('sha256')
         ->and($bundle->manifest->sections)->toBe(['installation', 'kiosks', 'metrics', 'audit'])
         ->and($bundle->manifest->toArray())->toMatchArray([
             'schema_version' => 1,
@@ -81,6 +97,52 @@ it('la huella denuncia un documento alterado, sin manifiesto o sin huella', func
 
         return $document;
     })()],
+    // PR16: el manifiesto tambien esta dentro de la huella. El primero es el
+    // caso reproducido: un paquete con datos personales que se hace pasar por
+    // anonimo.
+    'anonymized cambiado a mano' => [(static function (): array {
+        $document = DiagnosticsBundle::of(
+            productVersion: '2.2.1',
+            generatedAt: new DateTimeImmutable('2026-06-15T09:00:00+02:00'),
+            anonymized: false,
+            generatedBy: DiagnosticsActor::User,
+            sections: diagnosticsBundleUnitSections(),
+            maxBytes: DIAGNOSTICS_BUNDLE_UNIT_MAX,
+        )->toArray();
+        $document['manifest']['anonymized'] = true;
+
+        return $document;
+    })()],
+    'version cambiada' => [(static function (): array {
+        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
+        $document['manifest']['product_version'] = '9.9.9';
+
+        return $document;
+    })()],
+    'instante cambiado' => [(static function (): array {
+        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
+        $document['manifest']['generated_at'] = '2026-06-16T07:00:00.000000Z';
+
+        return $document;
+    })()],
+    'actor cambiado' => [(static function (): array {
+        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
+        $document['manifest']['generated_by'] = 'support_grant';
+
+        return $document;
+    })()],
+    'lista de secciones recortada' => [(static function (): array {
+        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
+        $document['manifest']['sections'] = ['installation'];
+
+        return $document;
+    })()],
+    'version del esquema cambiada' => [(static function (): array {
+        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
+        $document['manifest']['schema_version'] = 2;
+
+        return $document;
+    })()],
     'sin manifiesto' => [['installation' => []]],
     'manifiesto que no es objeto' => [['manifest' => 'x', 'installation' => []]],
     'huella que no es texto' => [['manifest' => ['sha256' => 7], 'installation' => []]],
@@ -106,7 +168,7 @@ it('si no cabe, sacrifica en su orden y deja constancia del tamaño, sin tocar l
         ->and($bundle->sections['metrics'])->toBe(['v' => $big])
         ->and($bundle->sections['kiosks'])->toBe([['v' => $big]])
         ->and($bundle->sections['installation'])->toBe(['v' => $big])
-        ->and($bundle->manifest->sha256)->toBe(CanonicalJson::digest($bundle->sections));
+        ->and($bundle->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($bundle));
 
     // Con un tope minimo se van todas las sacrificables y `installation` queda.
     $tiny = diagnosticsBundleUnit($sections, 10);
@@ -134,7 +196,7 @@ it('con el asiento pendiente vuelve a sellar: la constancia va en audit y dentro
             'generation_entry' => ['status' => 'pending', 'reason' => 'database_unavailable'],
         ])
         ->and($pending->manifest->sha256)->not->toBe($bundle->manifest->sha256)
-        ->and($pending->manifest->sha256)->toBe(CanonicalJson::digest($pending->sections))
+        ->and($pending->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($pending))
         ->and(DiagnosticsBundle::digestMatches($pending->toArray()))->toBeTrue()
         ->and($pending->manifest->sections)->toBe($bundle->manifest->sections)
         ->and($pending->manifest->generatedAt)->toBe($bundle->manifest->generatedAt)

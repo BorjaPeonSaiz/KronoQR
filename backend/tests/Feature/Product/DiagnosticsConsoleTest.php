@@ -310,6 +310,25 @@ it('--verify devuelve 2 con un solo byte cambiado', function (): void {
         ->and($result['output'])->toContain('vuelva a generar');
 })->group('RF-PD-09');
 
+it('--verify devuelve 2 si un paquete con datos personales se hace pasar por anonimo (PR16)', function (): void {
+    // El caso reproducido en la verificacion de la 2.2.0: se cambia
+    // `"anonymized": false` por `true` y `--verify` lo daba por integro y anonimo.
+    runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
+
+    $path = paqueteEscrito();
+    $content = (string) file_get_contents($path);
+
+    expect($content)->toContain('"anonymized": false');
+
+    file_put_contents($path, str_replace('"anonymized": false', '"anonymized": true', $content));
+
+    $result = runDiagnostics(['--verify' => $path]);
+
+    expect($result['code'])->toBe(2)
+        ->and($result['output'])->toContain('LA HUELLA NO COINCIDE')
+        ->and($result['output'])->not->toContain('Anonimo:   si');
+})->group('RF-PD-09', 'RL-19');
+
 it('--verify devuelve 2 si el fichero no existe o no es un paquete', function (): void {
     $result = runDiagnostics(['--verify' => directorioDePaquetes().'/no-existe.json']);
 

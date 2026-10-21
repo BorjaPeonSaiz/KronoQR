@@ -52,6 +52,20 @@ final readonly class DiagnosticsManifest
     }
 
     /**
+     * El manifiesto sin su `sha256`: la parte de el que entra en la huella
+     * (PR16). La huella no puede cubrirse a si misma.
+     *
+     * @return array{schema_version: int, product_version: string, generated_at: string, anonymized: bool, generated_by: string, sections: list<string>}
+     */
+    public function toUnsealedArray(): array
+    {
+        $manifest = $this->toArray();
+        unset($manifest['sha256']);
+
+        return $manifest;
+    }
+
+    /**
      * Nombre del fichero: `kronoqr-diagnostics-<version>-<YYYYMMDDTHHMMSSZ>.json`.
      *
      * Lleva la version y el instante porque el caso normal es que un cliente

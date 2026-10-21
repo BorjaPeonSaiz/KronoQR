@@ -2009,8 +2009,8 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
 
 Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
-nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del resto
-del documento, y con ella se comprueba que no se alteró ni se cortó por el
+nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del documento
+entero, cabecera incluida, y con ella se comprueba que no se alteró ni se cortó por el
 camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
 enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
 comando al generarlo:

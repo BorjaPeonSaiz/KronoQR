@@ -11918,8 +11918,12 @@ export interface components {
             /** @description Nombres de las secciones presentes, en el orden en que aparecen. */
             sections: string[];
             /**
-             * @description SHA-256 del documento sin este `manifest`, serializado en JSON
-             *     canonico (claves ordenadas, sin espacios). Soporte lo recalcula al
+             * @description SHA-256 del documento entero **con el `manifest` sin este campo**,
+             *     serializado en JSON canonico (claves ordenadas, sin espacios). Cubre
+             *     tambien el manifiesto (PR16, desde la 2.3.0): cambiar `anonymized`,
+             *     la version o la lista de secciones hace fallar la verificacion. Un
+             *     paquete generado con una version anterior, cuya huella cubria solo
+             *     las secciones, no verifica con esta. Soporte la recalcula al
              *     recibirlo para detectar una copia alterada o truncada.
              */
             sha256: string;

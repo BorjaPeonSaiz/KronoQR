@@ -2030,7 +2030,7 @@ through your contract's channel. **Support does not go into your server**
 It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 unencrypted on purpose: **open it before sending it** and check that it carries
 nothing you do not want to send. Its header (`manifest`) carries the
-fingerprint of the rest of the document, and with it you can check that it was
+fingerprint of the whole document, header included, and with it you can check that it was
 not altered or cut short on the way. Support checks it on receipt; to check it
 yourself before sending it, from the installation directory and with the path
 the command printed when it generated it:
