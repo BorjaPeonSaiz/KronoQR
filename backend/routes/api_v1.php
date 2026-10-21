@@ -1161,17 +1161,25 @@ Route::middleware([
  * PUERTA. El contador del portal es distinto del del quiosco, para que sondear
  * uno no deje a nadie sin poder fichar por el otro (regla dura 19).
  *
+ * CON REDIS CAIDO, LA ZONA `portal` FALLA ABIERTA (ADR-059 §3) y por eso se
+ * declara con `ThrottleScanFailOpen` y no con `throttle:portal`. Es la capa que
+ * cae; las otras dos —Nginx por origen y el bloqueo por empleado y por origen,
+ * que cuentan en el disco del contenedor— siguen. RL-03 y RL-05 piden el
+ * registro a disposicion del empleado tambien durante una averia. El PDF de
+ * `/me/export` sigue fallando cerrado por su embudo (§6): `503` que remite al
+ * CSV. `ThrottleFailOpenScopeTest` enumera el router con la lista cerrada.
+ *
  * LA CADUCIDAD DE LA LICENCIA NO TOCA ESTAS RUTAS (ADR-019, regla dura 15). El
  * portal es registro legal: se degradan funcionalidades accesorias, nunca esto.
  */
 Route::post('/me/login', PortalLoginController::class)
-    ->middleware('throttle:portal')
+    ->middleware(ThrottleScanFailOpen::zone('portal'))
     ->name('portal.login');
 
 Route::middleware([
     'auth:sanctum',
     'ability:'.TokenAbility::SELF_READ->value,
-    'throttle:portal',
+    ThrottleScanFailOpen::zone('portal'),
 ])->group(function (): void {
     Route::get('/me/workdays', MyWorkDayController::class)->name('portal.workdays');
 

@@ -31,11 +31,21 @@ use Throwable;
  * responde es cambiar un riesgo acotado —unos minutos sin el techo por tablet—
  * por uno seguro: jornadas sin registrar.
  *
- * **Nunca en `auth`, `2fa`, `portal`, `setup` ni en gestion.** Alli el limitador
- * es la defensa contra la fuerza bruta de una credencial, y fallar abierto la
- * desactivaria justo durante una averia, que es cuando nadie mira. Esas rutas
- * siguen con el `throttle` del framework y fallan CERRADAS. Lo vigila
- * `ThrottleFailOpenScopeTest`, que enumera el router.
+ * **Y en el portal del empleado (`portal`, ADR-059 §3).** `POST /me/login`,
+ * `GET /me/workdays` y `GET /me/export` fallan abiertos tambien: RL-03 y RL-05
+ * piden el registro «a disposicion» y una averia de Redis no es motivo para
+ * negarselo al empleado. El PIN del portal lo siguen frenando las capas que de
+ * verdad frenan la fuerza bruta y que no dependen de Redis: Nginx por IP
+ * (`portal_login`, `portal`) y los dos bloqueos que cuentan en el disco del
+ * contenedor (`CachePinAttempts` por empleado y `CachePortalOriginAttempts` por
+ * origen, sobre la cache `resilient`).
+ *
+ * **Nunca en `auth`, `2fa`, `setup` ni en gestion.** En el acceso al panel el
+ * limitador es la defensa contra la fuerza bruta de la contraseña y no tiene
+ * respaldo en disco: fallar abierto la desactivaria justo durante una averia,
+ * que es cuando nadie mira. Esas rutas siguen con el `throttle` del framework y
+ * responden `503` (ADR-059 §1). Lo vigila `ThrottleFailOpenScopeTest`, que
+ * enumera el router y solo admite estas cuatro zonas.
  *
  * ## Que se abre exactamente
  *
@@ -66,7 +76,7 @@ use Throwable;
 final readonly class ThrottleScanFailOpen
 {
     /** Las tres zonas que pueden abrirse. Cualquier otra se rechaza al arrancar la ruta. */
-    public const array ZONES = ['scan', 'scan-batch', 'scan-pin'];
+    public const array ZONES = ['scan', 'scan-batch', 'scan-pin', 'portal'];
 
     public function __construct(
         private ThrottleRequests $throttle,
@@ -79,7 +89,7 @@ final readonly class ThrottleScanFailOpen
     public static function zone(string $zone): string
     {
         if (! \in_array($zone, self::ZONES, true)) {
-            throw new \InvalidArgumentException('Only the clocking zones may fail open, not '.$zone.'.');
+            throw new \InvalidArgumentException('Only the clocking and portal zones may fail open, not '.$zone.'.');
         }
 
         return self::class.':'.$zone;
@@ -93,7 +103,7 @@ final readonly class ThrottleScanFailOpen
         if (! \in_array($zone, self::ZONES, true)) {
             // Defensa en profundidad: una ruta nueva que nombre la clase a mano
             // con otra zona no hereda el fallo abierto.
-            throw new \InvalidArgumentException('Only the clocking zones may fail open, not '.$zone.'.');
+            throw new \InvalidArgumentException('Only the clocking and portal zones may fail open, not '.$zone.'.');
         }
 
         $reachedNext = false;
