@@ -25,10 +25,15 @@ use Symfony\Component\HttpFoundation\Response;
  * - **`Content-Type` JSON** (`application/json` o `+json`) con un cuerpo que no
  *   es JSON valido → `400 bad-request`.
  * - **Cualquier otro `Content-Type`** con cuerpo → `415 unsupported-media-type`.
- *   Las excepciones son cerradas: `multipart/form-data` en las dos rutas de
- *   subida de ficheros, y el formulario de la autorizacion de canales del
- *   WebSocket, que es el formato fijo del cliente de Pusher.
+ *   La unica excepcion es cerrada: `multipart/form-data` en las dos rutas de
+ *   subida de ficheros.
  * - **Sin cuerpo** no se mira nada: un `POST` de accion sin datos es legitimo.
+ *
+ * **`broadcasting/auth` queda fuera, y no por una excepcion de aqui**: la
+ * declara `withBroadcasting()` en `bootstrap/app.php` con su propia lista de
+ * middleware, sin el grupo `api`, asi que este middleware no la ve. El cliente
+ * de Pusher le envia un formulario (`application/x-www-form-urlencoded`), que
+ * es su formato fijo.
  *
  * Va detras de la negociacion de idioma, para que el `400` y el `415` salgan en
  * el idioma pedido. En las rutas con sesion, la autenticacion va antes (es un
@@ -39,9 +44,6 @@ final class RejectUnreadableBody
 {
     /** Rutas, por su nombre, que reciben un fichero en `multipart/form-data`. */
     public const array MULTIPART_ROUTES = ['employees.import', 'absences.import'];
-
-    /** La autorizacion de canales: el cliente de Pusher envia un formulario. */
-    public const string FORM_PATH = 'api/v1/broadcasting/auth';
 
     private const array METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -65,10 +67,6 @@ final class RejectUnreadableBody
 
         if ($type === 'application/json' || str_ends_with($type, '+json')) {
             return self::isJson($content) ? $next($request) : ProblemDetails::httpError(JsonResponse::HTTP_BAD_REQUEST);
-        }
-
-        if ($type === 'application/x-www-form-urlencoded' && $request->is(self::FORM_PATH)) {
-            return $next($request);
         }
 
         return $this->unsupported();

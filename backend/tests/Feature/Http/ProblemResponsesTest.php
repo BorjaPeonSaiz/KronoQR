@@ -115,6 +115,16 @@ it('admite multipart solo en las rutas de subida', function (): void {
         ->not->toBe(415);
 })->group('RQ-06', 'RF-GP-05');
 
+it('no mira el formulario de broadcasting/auth, que va fuera del grupo api', function (): void {
+    // El cliente de Pusher envia un formulario. La ruta la declara
+    // `withBroadcasting()` sin el grupo `api`, asi que la puerta ni la ve: no
+    // hace falta (ni existe) una excepcion para ella.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    expect(problemResponsesRaw('POST', '/api/v1/broadcasting/auth', 'application/x-www-form-urlencoded', 'socket_id=1.1&channel_name=private-presence', $token)->getStatusCode())
+        ->not->toBe(415);
+})->group('RQ-06', 'RF-PA-01');
+
 it('deja pasar una peticion sin cuerpo', function (): void {
     $escenario = AttendanceFixtures::scenario();
 
