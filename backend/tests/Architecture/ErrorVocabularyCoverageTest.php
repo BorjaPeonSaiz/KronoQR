@@ -414,7 +414,15 @@ it('cubre los identificadores de evento del log tecnico', function (): void {
         // comprobacion `license.white_label_without_plan` de `doctor`, que leen
         // los textos traducidos y la documentacion. Su nombre lo revisa la
         // tarea 11.5 junto con el aviso.
-        static fn (string $faltante): bool => ! str_starts_with($faltante, 'white (LicenseProbe.php)'),
+        //
+        // Y `grant` de `support_grant.granted|used|revoked` (AuditAction.php):
+        // son acciones de `audit_log`, no eventos del log tecnico —ningun
+        // envoltorio las escribe en el log; solo `AuditedAuthenticationJournal`
+        // lo hace, y con las de `auth.*`—, y no se pueden renombrar: el nombre
+        // esta guardado en asientos encadenados por hash (regla dura 5). `grant`
+        // sigue excluida por ser un apellido (`NAME_CLASHES`).
+        static fn (string $faltante): bool => ! str_starts_with($faltante, 'white (LicenseProbe.php)')
+            && $faltante !== 'grant (AuditAction.php)',
     ));
 
     expect($faltan)->toBe([], 'Partes de eventos de log fuera de ErrorVocabulary: '.implode(', ', $faltan));
