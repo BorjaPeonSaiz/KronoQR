@@ -6,6 +6,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Support\Database\DatabaseCircuitBreaker;
 use App\Support\Network\BoundedReachability;
 use App\Support\Redis\RedisCircuitBreaker;
+use App\Support\Resilience\CircuitState;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\QueryException;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
+use Mockery\MockInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -191,9 +193,90 @@ it('responde 503 y no escribe nada si PostgreSQL se pierde a mitad de una transa
 
     expect(DB::table('departments')->where('name', 'Departamento a medias')->count())->toBe(0);
 })->with([
-    'al deshacer' => ['no connection to the server'],
     'a mitad de sentencia' => ['server closed the connection unexpectedly'],
 ])->group('RNF-D-03', 'RQ-06');
+
+/**
+ * Un PDO que hace todo con el de verdad y que, al deshacer, deshace de verdad y
+ * despues lanza lo que lanza pdo_pgsql cuando la conexion se ha ido: el servidor
+ * aborta la transaccion al perder el socket, y al cliente le llega el error.
+ */
+function dependencyUnavailableLosingPdo(PDO $real): PDO
+{
+    $perdida = static function (): never {
+        $fallo = new PDOException('SQLSTATE[HY000]: General error: 7 no connection to the server');
+        $fallo->errorInfo = ['HY000', 7, 'no connection to the server'];
+
+        throw $fallo;
+    };
+
+    /** @var PDO&MockInterface $doble */
+    $doble = Mockery::mock(PDO::class);
+
+    $doble->allows('beginTransaction')->andReturnUsing(static fn (): bool => $real->beginTransaction());
+    $doble->allows('commit')->andReturnUsing(static fn (): bool => $real->commit());
+    $doble->allows('inTransaction')->andReturnUsing(static fn (): bool => $real->inTransaction());
+    $doble->allows('prepare')->andReturnUsing(static fn (string $sql, array $opciones = []): PDOStatement|false => $real->prepare($sql, $opciones));
+    $doble->allows('lastInsertId')->andReturnUsing(static fn (?string $nombre = null): string|false => $real->lastInsertId($nombre));
+    $doble->allows('getAttribute')->andReturnUsing(static fn (int $atributo): mixed => $real->getAttribute($atributo));
+
+    $doble->allows('exec')->andReturnUsing(static function (string $sql) use ($real, $perdida): int|false {
+        $hecho = $real->exec($sql);
+
+        return str_starts_with(strtoupper($sql), 'ROLLBACK') ? $perdida() : $hecho;
+    });
+    $doble->allows('rollBack')->andReturnUsing(static function () use ($real, $perdida): never {
+        $real->rollBack();
+        $perdida();
+    });
+
+    return $doble;
+}
+
+it('responde 503 si la conexion se pierde al deshacer, sin escribir nada y sin abrir el circuito (V21-3-CH-1)', function (): void {
+    // Una conexion propia, fuera de la transaccion de la prueba: asi el
+    // `ROLLBACK` es el de verdad y no un `ROLLBACK TO SAVEPOINT`, y el recuento
+    // de transacciones que Laravel pone a cero al perder la conexion no toca el
+    // de la prueba.
+    config()->set('database.connections.dependency_lost', config('database.connections.'.config()->string('database.default')));
+    $conexion = DB::connection('dependency_lost');
+    $real = $conexion->getPdo();
+    $real->exec('CREATE TEMP TABLE dependency_lost_rollback (note text)');
+    $conexion->setPdo(dependencyUnavailableLosingPdo($real));
+
+    $fichero = sys_get_temp_dir().'/kronoqr-db-circuit-dependency-'.getmypid();
+    $breaker = new DatabaseCircuitBreaker($fichero, 10.0, new MockClock, resolve(LoggerInterface::class));
+    app()->instance(DatabaseCircuitBreaker::class, $breaker);
+
+    Route::middleware('api')->post('/api/v1/__dependency/lost-on-rollback', static function () use ($conexion): never {
+        $conexion->transaction(static function () use ($conexion): never {
+            $conexion->table('dependency_lost_rollback')->insert(['note' => 'a medias']);
+
+            // Cualquier fallo a mitad: lo que importa es que al deshacerlo la
+            // conexion ya no esta.
+            throw new RuntimeException('fallo a mitad de la transaccion');
+        });
+    });
+
+    $lineas = dependencyUnavailableLog();
+    $filas = DB::table('error_events')->count();
+
+    try {
+        $respuesta = Api::guest()->post('/api/v1/__dependency/lost-on-rollback');
+
+        dependencyUnavailableAssert($respuesta, $lineas, 'database', $filas, 10);
+
+        $quedan = $real->query('SELECT count(*) FROM dependency_lost_rollback');
+        assert($quedan instanceof PDOStatement);
+
+        expect($breaker->state())->toBe(CircuitState::Closed)
+            ->and(is_file($fichero))->toBeFalse()
+            ->and((int) $quedan->fetchColumn())->toBe(0);
+    } finally {
+        DB::purge('dependency_lost');
+        is_file($fichero) && unlink($fichero);
+    }
+})->group('RNF-D-03', 'RQ-06');
 
 it('sigue dando 500 a un fallo del producto que no es de una dependencia', function (): void {
     Route::middleware('api')->get('/api/v1/__dependency/defect', static fn (): never => throw new LogicException('defecto'));
