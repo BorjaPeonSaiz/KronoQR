@@ -211,7 +211,8 @@ it('despues el directorio y la exportacion integra enseñan la ficha minimizada'
         ->assertJsonPath('last_name', '')
         ->assertJsonPath('email', null)
         ->assertJsonPath('employee_code', strtoupper(str_replace('-', '', $ficha['uuid'])))
-        ->assertJsonPath('status', 'terminated');
+        ->assertJsonPath('status', 'terminated')
+        ->assertJsonPath('anonymized_at', static fn (mixed $value): bool => \is_string($value) && str_ends_with($value, 'Z'));
 
     $filas = iterator_to_array((new DatabaseDataExportSource(DB::connection()))->rows(DataExportCatalog::dataset('employees') ?? throw new LogicException('Sin conjunto employees.')), false);
     $fila = collect($filas)->first(static fn (array $row): bool => ($row['employee_uuid'] ?? null) === $ficha['uuid']);

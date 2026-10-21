@@ -459,6 +459,7 @@ export const EMPLOYEE: Employee = {
   locale: 'es',
   teleworking: false,
   pin_status: 'issued',
+  anonymized_at: null,
 }
 
 export const EMPLOYEES: EmployeeCollection = {
@@ -4140,6 +4141,7 @@ export async function stubManagementApi(
             locale: payload.locale ?? 'es',
             teleworking: payload.teleworking ?? false,
             pin_status: 'issued',
+            anonymized_at: null,
           }
 
           employeesState.push(created)

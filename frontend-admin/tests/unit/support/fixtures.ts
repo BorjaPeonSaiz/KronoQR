@@ -63,6 +63,7 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     locale: 'es',
     teleworking: false,
     pin_status: 'issued',
+    anonymized_at: null,
     ...overrides,
   }
 }

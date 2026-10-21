@@ -7863,6 +7863,16 @@ export interface components {
             locale: string;
             teleworking: components["schemas"]["Teleworking"];
             pin_status: components["schemas"]["PinStatus"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+             *     UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+             *     una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+             *     `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+             *     ya no se puede modificar.
+             * @example null
+             */
+            anonymized_at: string | null;
         };
         /**
          * Teleworking
@@ -8000,6 +8010,16 @@ export interface components {
             /** Format: date */
             terminated_at: string | null;
             teleworking: components["schemas"]["Teleworking"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+             *     UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+             *     una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+             *     `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+             *     ya no se puede modificar.
+             * @example null
+             */
+            anonymized_at: string | null;
         };
         /**
          * ScopedEmployeeCollection

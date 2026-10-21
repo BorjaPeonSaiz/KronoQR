@@ -461,6 +461,16 @@ it('declara la ficha reducida del responsable sin correo, idioma ni estado del P
         ]);
 })->group('RF-ID-03', 'RS-05', 'RQ-06');
 
+it('declara en la ficha y en la ficha reducida cuando se minimizo por retencion', function (): void {
+    // ADR-060, tarea 11.3 A: el panel reconoce una ficha minimizada por este
+    // campo, no por los nombres vacios, y lo ve tambien el responsable.
+    foreach (['Employee', 'ScopedEmployee'] as $schema) {
+        expect(Contract::value('components', 'schemas', $schema, 'required'))->toContain('anonymized_at')
+            ->and(Contract::value('components', 'schemas', $schema, 'properties', 'anonymized_at', 'type'))->toBe(['string', 'null'])
+            ->and(Contract::value('components', 'schemas', $schema, 'properties', 'anonymized_at', 'format'))->toBe('date-time');
+    }
+})->group('RL-11', 'RQ-06');
+
 it('no ofrece ningun verbo de borrado en toda la API salvo el declarado', function (): void {
     // Regla dura 5: nada se borra. La baja de un empleado es un cambio de estado
     // con fecha (RF-GP-03) y los centros y departamentos no se eliminan porque

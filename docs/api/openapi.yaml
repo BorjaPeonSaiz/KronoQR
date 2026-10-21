@@ -3516,6 +3516,7 @@ paths:
                         locale: es
                         teleworking: false
                         pin_status: delivered
+                        anonymized_at: null
                     meta:
                       page: 1
                       per_page: 25
@@ -3614,6 +3615,7 @@ paths:
                       locale: es
                       teleworking: false
                       pin_status: issued
+                      anonymized_at: null
                     pin:
                       employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
                       pin: '483920'
@@ -3683,6 +3685,7 @@ paths:
                     locale: es
                     teleworking: false
                     pin_status: delivered
+                    anonymized_at: null
                 ficha-del-responsable:
                   summary: La misma ficha, pedida por su responsable de departamento
                   value:
@@ -3695,6 +3698,7 @@ paths:
                     hired_at: '2026-08-14'
                     terminated_at: null
                     teleworking: false
+                    anonymized_at: null
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3777,6 +3781,7 @@ paths:
                     locale: es
                     teleworking: false
                     pin_status: delivered
+                    anonymized_at: null
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3896,6 +3901,7 @@ paths:
                     locale: es
                     teleworking: false
                     pin_status: delivered
+                    anonymized_at: null
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -15647,6 +15653,7 @@ components:
         - locale
         - teleworking
         - pin_status
+        - anonymized_at
       properties:
         uuid:
           type: string
@@ -15722,6 +15729,17 @@ components:
           $ref: '#/components/schemas/Teleworking'
         pin_status:
           $ref: '#/components/schemas/PinStatus'
+        anonymized_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+            UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+            una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+            `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+            ya no se puede modificar.
+          examples:
+            - null
 
     Teleworking:
       type: boolean
@@ -15879,6 +15897,7 @@ components:
         - status
         - hired_at
         - terminated_at
+        - anonymized_at
         - teleworking
       properties:
         uuid:
@@ -15910,6 +15929,17 @@ components:
           format: date
         teleworking:
           $ref: '#/components/schemas/Teleworking'
+        anonymized_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+            UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+            una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+            `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+            ya no se puede modificar.
+          examples:
+            - null
 
     ScopedEmployeeCollection:
       type: object

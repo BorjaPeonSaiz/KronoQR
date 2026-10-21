@@ -59,6 +59,9 @@ it('sirve al responsable la ficha de su gente sin correo, idioma ni estado del P
         $ficha->assertJsonMissingPath($campo);
     }
 
+    // ADR-060: el responsable tambien ve si la ficha esta minimizada.
+    $ficha->assertJsonPath('anonymized_at', null);
+
     expect($ficha->getContent())->not->toContain('persona@example.test');
 })->group('RF-ID-03', 'RS-05', 'RF-GP-01');
 
@@ -92,7 +95,8 @@ it('sigue dando la ficha completa y el filtro del PIN a admin y rrhh', function 
         ->assertValidResponse(200)
         ->assertJsonPath('email', 'persona@example.test')
         ->assertJsonPath('locale', 'es')
-        ->assertJsonPath('pin_status', 'pending');
+        ->assertJsonPath('pin_status', 'pending')
+        ->assertJsonPath('anonymized_at', null);
 
     Api::as($token)->get('/api/v1/employees?pin_status=pending')
         ->assertValidResponse(200)
