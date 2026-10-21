@@ -867,8 +867,17 @@ stopped running):
 | `ScanBatchItemNotProcessed` | 3 or more batch items not processed in 30 min on the same kiosk, `for: 5m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) (in Spanish) | One clock-in from that tablet has gone several syncs without the server managing to process it, and **the others from that kiosk wait behind it**: they are not lost, but they do not reach the record. Fix the cause on the server (look for `attendance.batch_scan_failed` in the `app` log). **Never clear the tablet's queue or unpair it** (§16.3 bis) |
 | `KioskDiscardedScansAttributed` | Discarded clock-in reports attributed to people from the same kiosk in the last hour, `for: 0m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) (in Spanish) | That tablet is sending clock-ins the server does not accept, and they belong to real people: usually an outdated app after an update (reload it with the queue empty); if the kiosk should not be sending anything, unpair it. HR will see that day's "Clocking discarded by the kiosk" incidents |
 | `ErroresDeServidorEnElFichaje` | > 1 % of `5xx` on `/api/v1/scan*`, 5 min | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor` first: the database and disk are the most frequent cause |
-| `LatenciaDelFichajeAlta` | p95 of clock-ins > 500 ms, 10 min | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Check whether it coincides with the shift change or with a recent update |
+| `LatenciaDelFichajeAlta` | p95 of card clock-ins > 500 ms, 10 min (at least 20 requests) | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Check whether it coincides with the shift change or with a recent update |
+| `LatenciaDelFichajePorPinAlta` | More than 5% of PIN clock-ins take over 3 s in 10 min (at least 20), `for: 5m` | Medium | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Compare with the card one: if only PIN is slow it is usually CPU. Card clock-ins are not affected |
+| `LatenciaDelFichajePorLoteAlta` | More than 5% of offline-queue uploads take over 3 s in 10 min (at least 5), `for: 15m` | Medium | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | A kiosk draining after a long outage can come close to that value; if not, the server is slow |
+| `ErroresDeServidorEnElPanel` | More than 5% of `5xx` (and at least 3) on the management routes in 10 min, `for: 5m` | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor` and the panel's error history. Clocking is not affected. With Redis down it cannot fire: `AlmacenDeMetricasCaido` says so |
+| `ErroresDeServidorEnElPortal` | More than 5% of `5xx` (and at least 3) on the employee portal in 10 min, `for: 5m` | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | People cannot look up their record; same procedure as the previous one |
 | `SondaDelBordeFallida` | The server is not responding, `for: 5m` | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `docker compose ps` and the `postgres`/`redis` logs, before the panel |
+| `ColaDeTrabajosAcumulada` | More than 50 jobs waiting in the queue for 10 min | High | IT | [`cola-de-trabajos-atascada.md`](../../runbooks/cola-de-trabajos-atascada.md) (in Spanish) | `docker compose ps horizon` and `horizon:status`. Clocking is not affected; exports and reports are delayed |
+| `ColaDeTrabajosSinProcesar` | Jobs are waiting (not yet picked up) and none has finished in 20 min, `for: 10m` | High | IT | [`cola-de-trabajos-atascada.md`](../../runbooks/cola-de-trabajos-atascada.md) (in Spanish) | Horizon stopped, paused or hung: an export requested by HR or by an employee is not generated until it is back |
+| `ReverbSinRespuesta` | Reverb does not answer the presence task, `for: 5m` | Medium | IT | [`reverb-parado.md`](../../runbooks/reverb-parado.md) (in Spanish) | `docker compose up -d reverb`. Only the panel's real time is lost: reloading gives the right data |
+| `LokiSinRespuesta` | Loki does not answer the internal probe, `for: 10m` | Medium | IT | [`loki-sin-respuesta.md`](../../runbooks/loki-sin-respuesta.md) (in Spanish) | `docker compose up -d loki` and its log. Clocking and the audit are not affected: the centralised technical trail is lost |
+| `SondasDeBlackboxSinRespuesta` | Prometheus cannot read a blackbox-exporter probe job (`up == 0`), `for: 5m` | High | IT | [`blackbox-sin-respuesta.md`](../../runbooks/blackbox-sin-respuesta.md) (in Spanish) | `docker compose up -d blackbox-exporter`. While it is down, the edge, certificate and Loki alerts stay silent: check by hand that the panel answers |
 | `AlmacenDeMetricasCaido` / `AlmacenDeMetricasAusente` | Redis (metrics store) is not responding, `for: 15s`; or the application publishes no metrics, `for: 2m` | Critical | IT | [`almacen-de-metricas-caido.md`](../../runbooks/almacen-de-metricas-caido.md) (in Spanish) | `docker compose ps redis` and `./doctor.sh`. **While it lasts, kiosk and queue alerts are not reliable** (they are inhibited): clocking keeps working, what is missing is visibility |
 | `CertificadoTlsProximoACaducar` | < 21 days | High | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | Start the renewal process with your certificate's issuer |
 | `CertificadoTlsCaducado` | Expired | Critical | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | All kiosks affected: place the renewed certificate and reload Nginx |
@@ -892,6 +901,7 @@ stopped running):
 | `DiscrepanciaEntreRegistroYAuditoria` | Any | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has written to the time record outside the application. Preserve the evidence (§2 of that runbook) before touching anything, and do not generate legal exports of the period until it is cleared up |
 | `ConciliacionDelRegistroAusente` | > 26 h without reconciling | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive and run `compliance:reconcile-work-record` by hand |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 days without the full reconciliation | High | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Run `compliance:reconcile-work-record --full` by hand. After installing or updating it does not fire until a Sunday has gone by |
+| `ConciliacionCompletaSinTramos` | The full pass reads 0 entries while clock-ins were accepted in the last 8 days, `for: 1h` | High | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) §5.1 (in Spanish) | A reconciliation that reads nothing looks perfect (0 discrepancies). Run `compliance:reconcile-work-record --full` by hand; if it still reads 0 with a full `shift_entries`, tell support; if it is empty, it is an incident |
 | `PurgaFueraDeLimitesRevisada` | The number of reviewed purges rises compared with a day earlier | Medium | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has marked an out-of-bounds purge as reviewed with `--acknowledge`. Check the `retention.purge_reviewed` entry in `audit_log` (who answers for it —an active administration or HR account, the only ones that can sign it— and the reason) and that it matches an incident already investigated; if nobody recognises it, handle it as `DiscrepanciaEntreRegistroYAuditoria`. It clears itself after a day |
 | `PurgaRevisadaQueExplicaBorrados` | The number of reviewed purges that explain deletions (`explains_deletions="true"`) rises compared with a day earlier | Critical (integrity) | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | An `--acknowledge` review makes earlier deletions up to the cut-off stop showing as discrepancies. Verify today with the person who signed (`responsible`) that they did it, check who had shell access to the server, and that a matching report exists. If nobody recognises it, it may be a forged purge + review pair: handle it as an integrity incident |
 | `CambioDeZonaRevisado` | The number of reviewed site time zone trail rows (`target="change"`) rises compared with a day earlier | Critical (integrity) | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has marked as reviewed, with `--acknowledge-site-change=change:<id>`, a time zone change made outside the command. Check today with the signer that they did it and that the current time zone is right; if nobody recognises it, it is an integrity incident |
@@ -994,8 +1004,9 @@ the package's. **If you changed a file that the new package also changes, the
 package's wins**, `update.sh` warns with the list, and **your version stays,
 intact, in `observability/` of the previous directory**: compare it
 (`diff -u <previous>/observability/<file> <new>/observability/<file>`), apply
-yours again and reload (`docker compose restart prometheus alertmanager
-grafana`). If the previous package is from a version that did not ship the
+yours again and reload (`docker compose up -d --force-recreate prometheus
+alertmanager blackbox-exporter`; `restart` is not enough for Alertmanager if you
+changed the `.env`). If the previous package is from a version that did not ship the
 fingerprint (up to 2.2.0), `update.sh` cannot know what you touched: it leaves
 the new package's files, warns how many files differ, and your files stay in
 the previous directory. That is what
@@ -1738,7 +1749,15 @@ updating**, and each one brings its "What to do":
   [`installation.md`](installation.md) §6.
 - **"Prometheus has … alert rule(s) from the package not loaded"**: after an
   update that changes `observability/`, Prometheus has to be recreated; the
-  command comes in the warning itself.
+  command comes in the warning itself. Since 2.3.0 `update.sh` recreates it on its own
+  (also when you update over the same directory); the warning remains for whoever edits
+  the rules by hand.
+- **"Alertmanager carries recipients or settings different from the .env"**: you changed
+  `ALERT_*` or `MAIL_*` in the `.env` and Alertmanager keeps the previous ones, because it
+  reads them once, at start. The warning names the variables that differ (never their
+  values) and gives the command to recreate it. If it says it **does not answer** or that
+  **Prometheus does not see it**, alerts are evaluated and reach nobody:
+  [`entrega-de-alertas.md`](../../runbooks/entrega-de-alertas.md) (in Spanish).
 
 **When updating from 2.2.0: the tablet app may change name and icon.** Since
 2.2.1 the tablet installs with your brand's name and icon, if you have it
@@ -1968,6 +1987,14 @@ the command to start each one:
 | `scheduler` | **Failure** (exits `6`) | Without it there is no nightly backup, no audit chain verification, no work record reconciliation and no purges. Clocking goes on and none of that raises an alarm |
 | `horizon` | **Failure** (exits `6`) | Without it no full export (the Labour Inspectorate's, or an employee's asking for their data), no deferred report and no incident notice gets done. Clocking goes on |
 | `reverb` | Warning | Only the panel's live presence stops updating; reloading gives the right figure |
+
+Since 2.3.0 all three also have a Docker `healthcheck` (`docker compose ps` shows
+`healthy` or `unhealthy`): `horizon` runs `horizon:status`, `reverb` its `/up` route and
+`scheduler` a heartbeat it renews every minute. A container that is
+**`running (unhealthy)`** is a live process that has stopped doing its job;
+`doctor.sh` reports it as a failure (`scheduler`, `horizon`) or a warning (`reverb`) and
+prints the `restart` command. None of the three takes part in clocking: being
+`unhealthy` does not stop the kiosks.
 
 It also warns if you run it from a directory that is not the current
 installation's (the one from before an update, for instance).

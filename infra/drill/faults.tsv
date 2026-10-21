@@ -3,6 +3,8 @@
 # Tres columnas separadas por TABULADOR:
 #   ALERTA     nombre exacto de la regla (infra/observability/prometheus/rules/)
 #   ACCION     set   sustituye (o anade) la serie indicada por la linea dada
+#              add   anade una serie que el estado sano NO publica (un contador que nace en su
+#                    primer suceso: el producto no declara un 0 que no existe)
 #              del   retira las series que casen con el selector dado (alertas de tipo absent())
 #              none  no toca ninguna serie (hoy ninguna receta la usa)
 #   ARGUMENTO  una linea de exposicion (set), un selector `metrica` o `metrica{etiqueta="valor"}` (del)
@@ -35,6 +37,9 @@ DiscoDeCopiasCasiLleno	set	kronoqr_backup_volume_free_ratio 0.10
 EntregaDeAlertasFallando	set	kronoqr_wal_replication_slots_inactive 1
 EspacioEnDiscoBajo	set	node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 10000000000
 FicheroGeneradoSinRetirarPasadoSuPlazo	set	generated_files_overdue 3
+ColaDeTrabajosSinProcesar	set	queue_jobs_waiting{queue="default"} 1
+ColaDeTrabajosAcumulada	set	queue_jobs_pending{queue="default"} 80
+
 KioskDiscardedScansAttributed	set	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 5
 KioskQueueStorageDegraded	set	kiosk_queue_storage_degraded{device="drill-kiosk-1"} 1
 KioskUnreportedDiscards	set	kiosk_unreported_discards{device="drill-kiosk-1"} 4
@@ -52,3 +57,16 @@ ScanBatchItemNotProcessed	set	scan_batch_items_not_processed_total 12
 SimulacroDeRestauracionCaducado	set	kronoqr_backup_restore_drill_last_result 0
 SimulacroDeRestauracionNuncaEjecutado	del	kronoqr_backup_restore_drill_last_success_timestamp_seconds
 SlotDeReplicacionParado	set	kronoqr_wal_replication_slots_inactive 1
+ReverbSinRespuesta	del	websocket_connections_active
+LokiSinRespuesta	set	probe_success{job="kronoqr-loki",instance="http://loki:3100/ready"} 0
+ErroresDeServidorEnElPanel	add	http_requests_total{route="employees.index",status="500"} 40
+ErroresDeServidorEnElPortal	add	http_requests_total{route="portal.workdays",status="500"} 40
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_bucket{route="attendance.scan",le="1.0"} 300
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_bucket{route="attendance.scan",le="+Inf"} 300
+LatenciaDelFichajeAlta	set	http_request_duration_seconds_count{route="attendance.scan"} 300
+LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_bucket{route="attendance.scan.pin",le="+Inf"} 300
+LatenciaDelFichajePorPinAlta	set	http_request_duration_seconds_count{route="attendance.scan.pin"} 300
+LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_bucket{route="attendance.scan.batch",le="+Inf"} 130
+LatenciaDelFichajePorLoteAlta	set	http_request_duration_seconds_count{route="attendance.scan.batch"} 130
+ConciliacionCompletaSinTramos	set	work_record_reconciliation_entries_checked{scope="full"} 0
+SondasDeBlackboxSinRespuesta	set	up{job="kronoqr-loki",instance="http://loki:3100/ready"} 0

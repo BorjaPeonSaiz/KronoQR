@@ -111,6 +111,7 @@ const RUNTIME_ENVIRONMENT_NOT_FORWARDED = [
     'BRANDING_PATH' => 'la interpola Compose en el volumen de marca; la aplicacion lee BRANDING_LOGO_ROOT',
     'DB_MAX_SLOT_WAL_KEEP_GB' => 'la interpola Compose en el `command:` de postgres (max_slot_wal_keep_size); ningun proceso de la aplicacion la lee',
     'BACKUP_WAL_KEY' => 'subclave del WAL derivada de BACKUP_ENCRYPTION_KEY (ADR-049): solo la recibe postgres, para su archive_command',
+    'KQ_OBSERVABILITY_REVISION' => 'la interpola Compose en la etiqueta de prometheus, alertmanager, blackbox-exporter, grafana, loki y tempo (V4-DV-4); ningun proceso la lee',
 ];
 
 const RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO = 'driver o servicio de Laravel que el producto no usa (PostgreSQL, Redis, SMTP y stderr/Loki son los suyos)';

@@ -233,6 +233,15 @@ colas de los quioscos y entra después, gane o pierda la actualización.
 
 **Alertas durante la ventana.** Mientras `update.sh` tiene el mantenimiento puesto, suena (sin notificar a nadie) `VentanaDeMantenimientoActiva`, de severidad `info`: existe solo para que Alertmanager **inhiba** las alertas de quiosco, API, certificado TLS y disco, que son síntomas esperados de una actualización en marcha. Auditoría, copias, integridad, autenticación e incidencias **no** se inhiben. La inhibición tiene un tope de **2 h** desde que se puso el mantenimiento: si `update.sh` muriera sin retirarlo (un `kill -9`, una caída del servidor) y alguien no lo advirtiera, pasadas 2 h las alertas vuelven a sonar solas, que es lo que se quiere. Si ves esta alerta activa **sin** una actualización en curso, comprueba que no hay mantenimiento a medias (§5, caso A) en vez de silenciarla.
 
+**Reglas y destinatarios de las alertas.** Prometheus solo lee sus reglas al arrancar y
+Alertmanager lee el `.env` una sola vez. Desde la 2.3.0 `update.sh` escribe en el `.env` la huella de
+`observability/` (`KQ_OBSERVABILITY_REVISION`) y el compose la pone como etiqueta de Prometheus,
+Alertmanager, blackbox-exporter, Grafana, Loki y Tempo: si el contenido cambia, **se recrean solos** al arrancar los
+procesos de fondo, también si actualizas encima del mismo directorio. `./doctor.sh` lo comprueba:
+avisa si Prometheus no tiene cargadas reglas del paquete y si Alertmanager lleva destinatarios
+distintos de los del `.env`. Si el aviso persiste, recrea a mano:
+`sudo docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter grafana loki tempo`.
+
 **Al terminar** (salida `0`):
 
 - Los quioscos sincronizan lo encolado. Cada fichaje conserva **su hora real**
@@ -685,7 +694,7 @@ pierde, pero la tablet no lo ve ni lo drena. Por eso:
 **Caso C — «ACTUALIZACION HECHA, PERO INCOMPLETA».** La versión nueva **ya
 atiende**: pasó todas las verificaciones, se retiró su mantenimiento, la API
 respondió `401` y los quioscos empezaron a entregarle sus fichajes. Lo que falló
-fue posterior —arrancar `horizon`, `scheduler` o `reverb`, o que la imagen no
+fue posterior —arrancar `horizon`, `scheduler` o `reverb` o que lleguen a estar sanos (su `healthcheck`), o que la imagen no
 traiga `product:doctor`—, y **desde ese punto el script ya no vuelve atrás**
 (decisión del fabricante): restaurar la copia previa borraría los fichajes que
 entraron después. Los datos están intactos y en la versión nueva, el asiento

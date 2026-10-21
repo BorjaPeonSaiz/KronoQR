@@ -72,7 +72,7 @@
       "id": 2,
       "type": "stat",
       "title": "Latencia p95 del fichaje (10 min)",
-      "description": "Umbral de la alerta LatenciaDelFichajeAlta: > 500 ms en 10 min, alta.",
+      "description": "Las tres rutas de fichaje juntas, como orientación. Desde el bloque 9 de la 2.3.0 las alertas son una por ruta: LatenciaDelFichajeAlta (tarjeta, > 500 ms), LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta (más del 5 % por encima de 3 s); mira el panel «p95 por ruta de fichaje».",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -364,7 +364,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Trabajos pendientes por cola",
-      "description": "queue_jobs_pending{queue} (doc 02 §8.2): un estado, calculado en el scrape.",
+      "description": "queue_jobs_pending{queue} (esperando + en ejecución + retrasados) y queue_jobs_waiting{queue} (solo los que esperan a un trabajador), doc 02 §8.2: estados calculados en el scrape. Una exportación íntegra larga (hasta 60 min) cuenta como pendiente pero no como en espera; ColaDeTrabajosAcumulada lee los pendientes (más de 50, 10 min) y ColaDeTrabajosSinProcesar los en espera.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
@@ -372,7 +372,13 @@
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
           "expr": "queue_jobs_pending",
-          "legendFormat": "{{queue}}"
+          "legendFormat": "{{queue}}: pendientes (con los en ejecución)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "queue_jobs_waiting",
+          "legendFormat": "{{queue}}: en espera de un trabajador"
         }
       ],
       "fieldConfig": {
@@ -637,6 +643,384 @@
         "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Conexiones WebSocket activas (Reverb)",
+      "description": "websocket_connections_active (doc 02 §8.2), runbook reverb-parado.md. La publica la tarea de presencia cada minuto preguntando a Reverb. Un hueco en la línea no es un cero: Reverb no ha contestado (alerta ReverbSinRespuesta, 5 min). Cero conexiones de madrugada es normal.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "websocket_connections_active",
+          "legendFormat": "conexiones"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Trabajos terminados por Horizon (20 min)",
+      "description": "Trabajos de cola que han terminado en los últimos 20 min, a partir de queue_job_duration_seconds_count. Si hay trabajos pendientes (panel «Trabajos pendientes por cola») y esta línea baja a cero durante 30 min, salta ColaDeTrabajosSinProcesar: Horizon parado o colgado (runbook cola-de-trabajos-atascada.md). ColaDeTrabajosAcumulada: más de 50 pendientes durante 10 min.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(queue_job_duration_seconds_count[20m]))",
+          "legendFormat": "terminados"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Casos de uso: p95 por caso (los 10 más lentos)",
+      "description": "use_case_duration_seconds{use_case,outcome} (doc 02 §8.2): cuánto tarda cada caso de uso de la capa de aplicación, también los que entran por consola, por la cola o desde otro caso de uso y que el borde HTTP no ve. Ninguna alerta lo lee todavía (V21-4-BE-3): se mira aquí al investigar una lentitud, tras errores-en-el-panel.md.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "topk(10, histogram_quantile(0.95, sum by (le, use_case) (rate(use_case_duration_seconds_bucket[5m]))))",
+          "legendFormat": "{{use_case}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Casos de uso que terminan en error (1 h)",
+      "description": "use_case_duration_seconds_count{outcome=error}: ejecuciones de un caso de uso que acabaron en avería, no en un rechazo de negocio (outcome=rejected). Cero es lo normal. La clasificación de qué es error y qué es rechazo se revisa en el bloque 10 de la 2.3.0; hasta entonces, un valor distinto de cero se contrasta con el histórico de errores del panel (errores-en-el-panel.md).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (use_case) (increase(use_case_duration_seconds_count{outcome=\"error\"}[1h]))",
+          "legendFormat": "{{use_case}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Errores 5xx por familia de rutas (10 min)",
+      "description": "Proporción de respuestas 5xx por familia: fichaje (ErroresDeServidorEnElFichaje, umbral 1 %), panel de gestión (ErroresDeServidorEnElPanel, 5 % con al menos 3 errores) y portal (ErroresDeServidorEnElPortal, igual). Lee las mismas reglas de grabación que las alertas (kronoqr:http_server_errors:* y kronoqr:http_requests:*), que suman también la primera petición de cada serie. Con Redis caído estas series desaparecen: lo dicen AlmacenDeMetricasCaido y SondaDelBordeFallida (errores-en-el-panel.md).",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 68 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr:http_server_errors:increase5m{family=\"fichaje\"} / kronoqr:http_requests:increase5m{family=\"fichaje\"}",
+          "legendFormat": "fichaje (5 min)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr:http_server_errors:increase10m{family=\"gestion\"} / kronoqr:http_requests:increase10m{family=\"gestion\"}",
+          "legendFormat": "panel de gestión"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr:http_server_errors:increase10m{family=\"portal\"} / kronoqr:http_requests:increase10m{family=\"portal\"}",
+          "legendFormat": "portal"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Almacén de métricas (Redis): 1 responde, 0 no",
+      "description": "kronoqr_metrics_store_up: con 0 las series que viven en Redis (quioscos, 5xx, latencia, colas) han desaparecido y su ausencia no significa cero. Salta AlmacenDeMetricasCaido (crítica, 15 s). Con Redis caído también fallan en cerrado el acceso al panel y al portal, el latido y el padrón del quiosco (almacen-de-metricas-caido.md). El fichaje sigue.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 76 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_metrics_store_up",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null }, { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Latencia p95 del fichaje con tarjeta (10 min)",
+      "description": "p95 de attendance.scan (tarjeta), el de LatenciaDelFichajeAlta (umbral 0,5 s; el histograma interpola entre sus cubos de 0,4 s y 1 s). El PIN y los lotes tienen su propio panel: su histograma no pasa de 3 s, así que se vigilan como fracción por encima de 3 s, no como p95.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"attendance.scan\"}[10m])))",
+          "legendFormat": "tarjeta"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "PIN y lotes: fracción por encima de 3 s (10 min)",
+      "description": "La misma expresión que LatenciaDelFichajePorPinAlta y LatenciaDelFichajePorLoteAlta: 1 menos las peticiones que acaban en 3 s o menos, sobre todas. La línea roja es el 5 %: por encima, la alerta (con al menos 20 PIN o 5 lotes en la ventana). El histograma del middleware no distingue por encima de 3 s; con cubos de 2 s y 10 s (tarea 10.8) se podrán vigilar umbrales más finos.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.pin\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "PIN"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "1 - sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=~\"3(\\\\.0)?\"}[10m])) / sum(rate(http_request_duration_seconds_bucket{route=\"attendance.scan.batch\", le=\"+Inf\"}[10m]))",
+          "legendFormat": "lote"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
     }
   ]
 }

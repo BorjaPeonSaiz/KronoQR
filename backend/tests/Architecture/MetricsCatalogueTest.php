@@ -67,6 +67,8 @@ function textfileSeries(): array
         'incidents_metrics_timestamp_seconds',
         // Attendance\Infrastructure\Metrics\TextfileProjectionMetrics
         'projection_divergence_total',
+        'projection_divergence_first_increase_timestamp_seconds',
+        'projection_divergence_last_increase_timestamp_seconds',
         'projection_reconciliation_last_run_timestamp_seconds',
         // Las dos siguientes las emite el adaptador desde la Fase 5 y nadie las
         // habia catalogado: el cuadro «Integridad del dato» de la 3.2 las

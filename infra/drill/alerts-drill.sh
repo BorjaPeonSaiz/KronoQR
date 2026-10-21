@@ -145,7 +145,7 @@ renderizar() {
       return linea
     }
     FILENAME == sel {
-      if ($1 == "set") { conjunto[clave($2)] = $2; orden[++n] = clave($2) }
+      if ($1 == "set" || $1 == "add") { conjunto[clave($2)] = $2; orden[++n] = clave($2) }
       if ($1 == "del") { borrar[$2] = 1 }
       next
     }

@@ -46,7 +46,7 @@ enum MetricStorage
     /**
      * No esta en Redis: se calcula **en el momento del scrape**.
      *
-     * Solo `queue_jobs_pending{queue}`, y es deliberado: la profundidad de una
+     * Solo `queue_jobs_pending{queue}` y `queue_jobs_waiting{queue}`, y es deliberado: la profundidad de una
      * cola es un ESTADO, no un acontecimiento. Un contador acumulado no puede
      * responder «cuantos trabajos hay ahora esperando», que es la unica
      * pregunta que esa serie contesta.

@@ -705,6 +705,439 @@
         "graphMode": "none",
         "justifyMode": "auto"
       }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "RPO real: edad del WAL sin archivar",
+      "description": "kronoqr_wal_unarchived_age_seconds: cuánto dato de la base lleva sin salir a la copia, es decir, lo que se perdería si el servidor desapareciera ahora. La línea roja es el umbral de ArchivadoDeWalDetenido (archive_timeout + 10 min); el objetivo es RPO ≤ 15 min (RNF-D-02). Runbook restaurar-backup.md.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_wal_unarchived_age_seconds",
+          "legendFormat": "edad del WAL sin archivar"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_wal_archive_timeout_seconds + 600",
+          "legendFormat": "umbral de la alerta"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 1500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "WAL: segmentos sin archivar, archivado fallando y slots inactivos",
+      "description": "kronoqr_wal_unarchived_segments (alerta ArchivadoDeWalDetenido a 3 o más), kronoqr_wal_archive_failing (ArchivadoDeWalFallando si vale 1) y kronoqr_wal_replication_slots_inactive (SlotDeReplicacionParado si es mayor que 0; KronoQR no usa ninguno). Cero es lo normal en las tres. Runbooks restaurar-backup.md y slot-replicacion-parado.md.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_wal_unarchived_segments",
+          "legendFormat": "segmentos sin archivar"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_wal_archive_failing",
+          "legendFormat": "archivado fallando"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_wal_replication_slots_inactive",
+          "legendFormat": "slots inactivos"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Volumen de copias: espacio libre",
+      "description": "kronoqr_backup_volume_free_ratio: fracción libre del volumen de copias. DiscoDeCopiasCasiLleno salta por debajo de 0,20 (runbook restaurar-backup.md). Una copia que no cabe es una copia que falla.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kronoqr_backup_volume_free_ratio",
+          "legendFormat": "libre"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null }, { "color": "green", "value": 0.2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Antigüedad de la última copia correcta, por tipo",
+      "description": "time() - kronoqr_backup_last_success_timestamp_seconds: segundos desde la última copia que terminó bien, por tipo (diaria, semanal). La diaria no debería pasar de 26 h (93600 s). Complementa «Antigüedad de la última copia verificada».",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "time() - kronoqr_backup_last_success_timestamp_seconds",
+          "legendFormat": "{{type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Latido de la medida del WAL",
+      "description": "time() - kronoqr_wal_exporter_last_run_timestamp_seconds: segundos desde la última medida del WAL. Se publica cada minuto; MedicionDeWalAusente salta a los 5 min (300 s): sin medida, ninguna otra serie del WAL es fiable ni el RPO se puede afirmar.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 48 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "time() - kronoqr_wal_exporter_last_run_timestamp_seconds",
+          "legendFormat": "segundos desde la última medida"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Conciliación del registro: discrepancias (siempre cero)",
+      "description": "work_record_reconciliation_discrepancies por alcance (ADR-057 §4): tramos de shift_entries que no cuadran con su último asiento de audit_log. Cero es cero: cualquier valor es un incidente de integridad (DiscrepanciaEntreRegistroYAuditoria, crítica; runbook discrepancia-registro-auditoria.md).",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 56 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (scope) (work_record_reconciliation_discrepancies)",
+          "legendFormat": "{{scope}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Conciliación del registro: tramos comprobados",
+      "description": "work_record_reconciliation_entries_checked por alcance: cuántos tramos cruzó la última pasada, la diaria (recent, últimos días) y la semanal completa (full). Cero (franja roja) habiendo fichajes delata que la pasada no está leyendo el registro: ConciliacionCompletaSinTramos salta si la completa lee 0 tramos con fichajes aceptados en los últimos 8 días (una conciliación que no lee nada da cero discrepancias y parece perfecta).",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 56 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "work_record_reconciliation_entries_checked",
+          "legendFormat": "{{scope}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Conciliación del registro: antigüedad de la última pasada",
+      "description": "time() - work_record_reconciliation_last_run_timestamp_seconds por alcance. ConciliacionDelRegistroAusente salta a las 26 h (93600 s) en la diaria y ConciliacionCompletaDelRegistroAusente a los 8 días en la completa. Una conciliación que no corre no puede dar la voz de alarma.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 56 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "time() - work_record_reconciliation_last_run_timestamp_seconds",
+          "legendFormat": "{{scope}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }, { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Divergencia de proyección: desde cuándo",
+      "description": "Cuándo hubo divergencias en la proyección (V21-4-DV-1): la primera pasada que encontró una y la última. Las escribe el propio contador, junto a projection_divergence_total, y sobreviven a reinicios y a la retención de Prometheus. Sin valor (\"Ninguna\") es el estado normal: cero es cero. Con valor, en rojo: es un incidente de integridad, y la fecha dice dónde empezar a buscar. Runbook divergencia-proyeccion.md §3.",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 64 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "projection_divergence_first_increase_timestamp_seconds * 1000",
+          "legendFormat": "Primera divergencia",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "projection_divergence_last_increase_timestamp_seconds * 1000",
+          "legendFormat": "Última divergencia",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "noValue": "Ninguna",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+
     }
   ]
 }

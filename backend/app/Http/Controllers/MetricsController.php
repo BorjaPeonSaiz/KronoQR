@@ -114,12 +114,10 @@ final readonly class MetricsController
     private function fromQueues(): array
     {
         try {
-            $family = $this->queues->collect();
+            return $this->queues->collect();
         } catch (Throwable) {
             return [];
         }
-
-        return $family instanceof MetricFamilySamples ? [$family] : [];
     }
 
     /**

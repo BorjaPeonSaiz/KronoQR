@@ -1,0 +1,72 @@
+# KronoQR — alertas de la propia pila de observabilidad (bloque 9 de la 2.3.0,
+# V21-4-DV-4).
+#
+# LOKI. Su imagen (3.7) no trae shell ni `wget`, asi que su servicio no puede
+# llevar `healthcheck` y `docker compose ps` no sabe decir si responde. Lo
+# pregunta blackbox-exporter por la red interna (`/ready`, job `kronoqr-loki`,
+# modulo `http_2xx_internal`) y esta regla convierte la respuesta en un aviso.
+#
+# QUE SE PIERDE SI LOKI CAE. Los registros tecnicos de `app`, `horizon` y
+# `scheduler` (el empuje de Monolog falla en silencio, regla dura 15: el logging
+# nunca bloquea el fichaje), y con ellos el rastro con el que se diagnostica
+# todo lo demas. NO se pierde el fichaje, ni el registro horario ni la
+# auditoria (`audit_log` es una tabla, no un log). Por eso `warning` y no
+# `high`: es urgente porque cada hora caido es una hora sin diagnostico, no
+# porque el hotel deje de funcionar.
+#
+# `component: host`: Loki se reinicia con `update.sh` y entra en la ventana de
+# mantenimiento y en la inhibicion de `VentanaDeMantenimientoActiva` sin tocar
+# ni el enrutado ni la lista de componentes silenciables.
+#
+# Si Prometheus mismo no estuviera, esta regla no existe: lo cubre
+# `EnrutadoDeAlertasCaido` para Alertmanager y `doctor.sh` para el resto.
+groups:
+  - name: kronoqr-observability
+    interval: 60s
+    rules:
+      - alert: LokiSinRespuesta
+        expr: probe_success{job="kronoqr-loki"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: host
+        annotations:
+          summary: "Loki no responde: los registros tecnicos no se estan guardando"
+          description: >-
+            La sonda interna de Loki (/ready) falla desde hace 10 min. Mientras
+            tanto los registros de la aplicacion no llegan a ninguna parte y el
+            rastro para diagnosticar un incidente se pierde. El fichaje, el
+            registro horario y la auditoria no se ven afectados.
+          runbook_url: docs/runbooks/loki-sin-respuesta.md
+
+      #------------------------------------------------------------------------
+      # QUIEN VIGILA AL VIGILANTE: blackbox-exporter (revision del bloque 9).
+      # `SondaDelBordeFallida`, `CertificadoTls*` y `LokiSinRespuesta` leen series
+      # que blackbox-exporter produce. Si blackbox cae, el scrape de los jobs de sonda
+      # falla, `probe_success` DESAPARECE y ninguna de las cuatro tiene nada que
+      # evaluar: el borde puede estar caido y nadie lo sabe. `up == 0` del propio job
+      # de sonda es la unica senal que sobrevive, porque la genera Prometheus y no
+      # blackbox.
+      #
+      # `kronoqr-uptime.*` casa con `kronoqr-uptime` y `kronoqr-uptime-tls-verified`; el
+      # segundo no existe con `TLS_ALLOW_SELF_SIGNED=true` y entonces no hay serie que
+      # vigilar, que es correcto. `component: host`: se calla en la ventana de
+      # mantenimiento y con `VentanaDeMantenimientoActiva` (update.sh recrea blackbox).
+      #------------------------------------------------------------------------
+      - alert: SondasDeBlackboxSinRespuesta
+        expr: up{job=~"kronoqr-loki|kronoqr-uptime.*"} == 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: host
+        annotations:
+          summary: "Prometheus no consigue leer la sonda {{ $labels.job }}: blackbox-exporter no responde"
+          description: >-
+            blackbox-exporter hace las comprobaciones desde fuera (el borde, el
+            certificado, Loki). Si no responde, esas alertas se quedan SIN SERIE y
+            callan: el servidor puede estar caido sin que nada lo diga. Recrea
+            blackbox-exporter y comprueba que su configuracion (observability/blackbox/
+            blackbox.yml) es valida.
+          runbook_url: docs/runbooks/blackbox-sin-respuesta.md

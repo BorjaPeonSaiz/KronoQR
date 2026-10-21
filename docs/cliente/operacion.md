@@ -850,8 +850,17 @@ la alimenta dejó de ejecutarse):
 | `ScanBatchItemNotProcessed` | 3 o más elementos de lote sin procesar en 30 min en un mismo quiosco, `for: 5m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) | Un mismo fichaje de esa tablet lleva varias sincronizaciones sin que el servidor consiga procesarlo, y **los demás de ese quiosco esperan detrás**: no se pierden, pero no llegan al registro. Corrige la causa en el servidor (busca `attendance.batch_scan_failed` en el registro de `app`). **Nunca borres la cola de la tablet ni la desvincules** (§16.3 bis) |
 | `KioskDiscardedScansAttributed` | Avisos de fichaje descartado atribuidos a personas desde un mismo quiosco en la última hora, `for: 0m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) | Esa tablet está enviando fichajes que el servidor no acepta y que son de personas reales: lo normal es una aplicación desfasada tras una actualización (recárgala con la cola vacía); si el quiosco no debería estar enviando nada, desvincúlalo. RRHH verá las incidencias «Fichaje descartado por el quiosco» de ese día |
 | `ErroresDeServidorEnElFichaje` | > 1 % de `5xx` en `/api/v1/scan*`, 5 min | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor` primero: base de datos y disco son la causa más frecuente |
-| `LatenciaDelFichajeAlta` | p95 del fichaje > 500 ms, 10 min | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Mira si coincide con el cambio de turno o con una actualización reciente |
+| `LatenciaDelFichajeAlta` | p95 del fichaje con tarjeta > 500 ms, 10 min (al menos 20 peticiones) | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Mira si coincide con el cambio de turno o con una actualización reciente |
+| `LatenciaDelFichajePorPinAlta` | Más del 5 % de los fichajes por PIN tardan más de 3 s en 10 min (al menos 20), `for: 5m` | Media | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Compara con la de tarjeta: si solo va lento el PIN suele ser CPU. El fichaje con tarjeta no se ve afectado |
+| `LatenciaDelFichajePorLoteAlta` | Más del 5 % de los envíos de cola offline tardan más de 3 s en 10 min (al menos 5), `for: 15m` | Media | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Un quiosco que se vacía tras un corte largo puede rozar ese valor; si no coincide, el servidor va lento |
+| `ErroresDeServidorEnElPanel` | Más del 5 % de `5xx` (y al menos 3) en las rutas de gestión en 10 min, `for: 5m` | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor` y el histórico de errores del panel. El fichaje no se ve afectado. Con Redis caído no puede saltar: lo dice `AlmacenDeMetricasCaido` |
+| `ErroresDeServidorEnElPortal` | Más del 5 % de `5xx` (y al menos 3) en el portal del empleado en 10 min, `for: 5m` | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Las personas no pueden consultar su registro; mismo procedimiento que la anterior |
 | `SondaDelBordeFallida` | El servidor no responde, `for: 5m` | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `docker compose ps` y los registros de `postgres`/`redis`, antes que el panel |
+| `ColaDeTrabajosAcumulada` | Más de 50 trabajos esperando en la cola durante 10 min | Alta | IT | [`cola-de-trabajos-atascada.md`](../runbooks/cola-de-trabajos-atascada.md) | `docker compose ps horizon` y `horizon:status`. El fichaje no se ve afectado; se retrasan exportaciones e informes |
+| `ColaDeTrabajosSinProcesar` | Hay trabajos en espera (no reservados) y en 20 min no ha terminado ninguno, `for: 10m` | Alta | IT | [`cola-de-trabajos-atascada.md`](../runbooks/cola-de-trabajos-atascada.md) | Horizon parado, en pausa o colgado: una exportación pedida por RRHH o por un empleado no se genera hasta que vuelva |
+| `ReverbSinRespuesta` | Reverb no contesta a la tarea de presencia, `for: 5m` | Media | IT | [`reverb-parado.md`](../runbooks/reverb-parado.md) | `docker compose up -d reverb`. Solo se pierde el tiempo real del panel: recargar da el dato correcto |
+| `LokiSinRespuesta` | Loki no responde a la sonda interna, `for: 10m` | Media | IT | [`loki-sin-respuesta.md`](../runbooks/loki-sin-respuesta.md) | `docker compose up -d loki` y su registro. No afecta al fichaje ni a la auditoría: se pierde el rastro técnico centralizado |
+| `SondasDeBlackboxSinRespuesta` | Prometheus no lee la sonda de un job de blackbox-exporter (`up == 0`), `for: 5m` | Alta | IT | [`blackbox-sin-respuesta.md`](../runbooks/blackbox-sin-respuesta.md) | `docker compose up -d blackbox-exporter`. Mientras esté caído, las alertas del borde, del certificado y de Loki callan: comprueba a mano que el panel responde |
 | `AlmacenDeMetricasCaido` / `AlmacenDeMetricasAusente` | Redis (almacén de métricas) no responde, `for: 15s`; o la aplicación no publica métricas, `for: 2m` | Crítica | IT | [`almacen-de-metricas-caido.md`](../runbooks/almacen-de-metricas-caido.md) | `docker compose ps redis` y `./doctor.sh`. **Mientras dure, las alertas de quiosco y cola no son fiables** (se inhiben): el fichaje sigue, lo que falta es visibilidad |
 | `CertificadoTlsProximoACaducar` | < 21 días | Alta | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Empieza el trámite de renovación con el emisor de tu certificado |
 | `CertificadoTlsCaducado` | Caducado | Crítica | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Todos los quioscos afectados: coloca el certificado renovado y recarga Nginx |
@@ -875,6 +884,7 @@ la alimenta dejó de ejecutarse):
 | `DiscrepanciaEntreRegistroYAuditoria` | Cualquiera | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha escrito en el registro horario por fuera de la aplicación. Preserva la evidencia (§2 de ese runbook) antes de tocar nada y no generes exportaciones legales del periodo hasta aclararlo |
 | `ConciliacionDelRegistroAusente` | > 26 h sin conciliar | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Comprueba que el `scheduler` sigue vivo y lanza `compliance:reconcile-work-record` a mano |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la conciliación completa | Alta | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Lanza `compliance:reconcile-work-record --full` a mano. Tras instalar o actualizar no suena hasta que ha pasado un domingo |
+| `ConciliacionCompletaSinTramos` | La pasada completa lee 0 tramos habiendo fichajes aceptados en 8 días, `for: 1h` | Alta | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) §5.1 | Una conciliación que no lee nada parece perfecta (0 discrepancias). Lanza `compliance:reconcile-work-record --full` a mano; si sigue en 0 con `shift_entries` llena, avisa a soporte; si está vacía, es un incidente |
 | `PurgaFueraDeLimitesRevisada` | Sube el número de purgas revisadas respecto a hace un día | Media | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha dado por revisada una purga no admisible con `--acknowledge`. Comprueba en `audit_log` el asiento `retention.purge_reviewed` (quién responde —una cuenta activa de administración o RRHH, la única que puede firmarla— y el motivo) y que corresponde a un incidente ya investigado; si nadie lo reconoce, trátalo como `DiscrepanciaEntreRegistroYAuditoria`. Se apaga sola en un día |
 | `PurgaRevisadaQueExplicaBorrados` | Sube el número de purgas revisadas que explican borrados (`explains_deletions="true"`) respecto a hace un día | Crítica (integridad) | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Una revisión con `--acknowledge` hace que los borrados anteriores al corte dejen de salir como discrepancia. Verifica hoy con quien firma (`responsible`) que lo hizo, contrasta quién tenía acceso por shell al servidor y que existe un informe que cuadra. Si nadie lo reconoce, es un posible par purga + revisión falsificado: trátalo como incidente de integridad |
 | `CambioDeZonaRevisado` | Sube el número de filas de la traza de la zona del centro (`target="change"`) revisadas respecto a hace un día | Crítica (integridad) | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha dado por revisado con `--acknowledge-site-change=change:<id>` un cambio de zona hecho por fuera de la orden. Verifica hoy con quien firma que lo hizo y que la zona actual es la correcta; si nadie lo reconoce, es un incidente de integridad |
@@ -980,7 +990,7 @@ del paquete**, `update.sh` lo avisa con la lista y **tu versión sigue, intacta,
 en `observability/` del directorio anterior**: compárala
 (`diff -u <anterior>/observability/<fichero> <nuevo>/observability/<fichero>`),
 vuelve a aplicar lo tuyo y recarga
-(`docker compose restart prometheus alertmanager grafana`). Si el paquete
+(`docker compose up -d --force-recreate prometheus alertmanager blackbox-exporter grafana loki tempo`; `restart` no basta con Alertmanager si has cambiado el `.env`). Si el paquete
 anterior es de una versión que no entregaba la huella (hasta la 2.2.0),
 `update.sh` no puede saber qué tocaste tú: deja lo del paquete nuevo, avisa de
 cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es lo que
@@ -1678,7 +1688,7 @@ que es donde está la causa.
 **Al actualizar a la 2.3.0: una vez que la versión nueva atiende, ya no hay
 vuelta atrás.** En cuanto retira su mantenimiento y la API responde `401`, los
 quioscos empiezan a entregarle lo que tenían en cola. Desde ese momento, si
-falla algo posterior —arrancar `horizon`, `scheduler` o `reverb`—, `update.sh`
+falla algo posterior —arrancar `horizon`, `scheduler` o `reverb`, o que lleguen a estar sanos—, `update.sh`
 **no restaura la copia previa**, porque borraría esos fichajes: sale con `5` y
 la pantalla dice «ACTUALIZACION HECHA, PERO INCOMPLETA». La versión nueva sigue
 en servicio con todos los datos y **no hay que restaurar nada**; hay que
@@ -1721,7 +1731,14 @@ y cada uno trae su «Que hacer»:
   está en [`instalacion.md`](instalacion.md) §6.
 - **«Prometheus no tiene cargadas … regla(s) de alerta del paquete»**: tras
   una actualización que cambia `observability/` hay que recrear Prometheus; la
-  orden viene en el propio aviso.
+  orden viene en el propio aviso. Desde la 2.3.0 `update.sh` lo recrea solo
+  (también si actualizas encima del mismo directorio); el aviso queda para quien
+  edita las reglas a mano.
+- **«Alertmanager lleva destinatarios o ajustes distintos de los del .env»**: cambiaste
+  `ALERT_*` o `MAIL_*` en el `.env` y Alertmanager sigue con los anteriores, porque los
+  lee una sola vez, al arrancar. El aviso nombra las variables que difieren (nunca sus
+  valores) y trae la orden para recrearlo. Si dice que **no contesta** o que **Prometheus
+  no lo ve**, las alertas se evalúan y no llegan a nadie: [`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md).
 
 **Al actualizar desde la 2.2.0: la aplicación de la tablet puede cambiar de
 nombre y de icono.** Desde la 2.2.1 la tablet se instala con el nombre y el
@@ -1951,6 +1968,14 @@ arrancar cada uno:
 | `scheduler` | **Fallo** (sale `6`) | Sin él no hay copia nocturna, ni verificación de la cadena de auditoría, ni conciliación del registro, ni purgas. El fichaje sigue y nada de eso avisa |
 | `horizon` | **Fallo** (sale `6`) | Sin él no termina ninguna exportación íntegra (la de la Inspección o la de un empleado que pide sus datos), ningún informe en diferido ni ningún aviso de incidencias. El fichaje sigue |
 | `reverb` | Aviso | Solo deja de actualizarse en vivo la presencia del panel; recargar da el dato bueno |
+
+Desde la 2.3.0 los tres tienen además un `healthcheck` de Docker (`docker compose
+ps` muestra `healthy` o `unhealthy`): `horizon` con `horizon:status`, `reverb` con
+su ruta `/up` y `scheduler` con un latido que renueva cada minuto. Un contenedor
+**`running (unhealthy)`** es un proceso vivo que ha dejado de hacer su trabajo;
+`doctor.sh` lo da por fallo (`scheduler`, `horizon`) o aviso (`reverb`) y trae la orden
+`restart`. Ninguno de los tres interviene en el fichaje: que estén `unhealthy` no
+detiene a los quioscos.
 
 También avisa si lo lanzas desde un directorio que no es el de la instalación
 vigente (el de antes de una actualización, por ejemplo).

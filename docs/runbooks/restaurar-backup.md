@@ -43,6 +43,12 @@ datos** por disco lleno.
 copia física semanal + WAL archivado con `archive_timeout=900`. **RTO ≤ 4 h** —
 el procedimiento de la §6, medido.
 
+**Dónde se ve el RPO.** El cuadro «KronoQR · Integridad del dato» (Grafana) tiene, juntos,
+el **RPO real** (la edad del WAL sin archivar frente al umbral de la alerta), los segmentos
+sin archivar, el archivado fallando, los slots inactivos, el espacio libre del volumen de
+copias, la antigüedad de la última copia correcta por tipo y el latido de la medida del WAL.
+Si una de estas alertas suena, ese es el primer sitio al que mirar.
+
 **Las tres cosas que hay que saber sin buscarlas:**
 
 1. **Sin `BACKUP_ENCRYPTION_KEY` no hay restauración posible.** Una copia solo se

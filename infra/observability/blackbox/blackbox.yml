@@ -23,7 +23,7 @@
 # caducidad del certificado, no su identidad: `probe_ssl_earliest_cert_expiry`
 # se calcula igual con un certificado no verificable.
 #
-# No hay modulo en texto plano: ninguna sonda del producto habla con
+# No hay modulo en texto plano PARA LA APLICACION (salvo el de Loki, al final): ninguna sonda del producto habla con
 # PHP-FPM sin pasar por las guardas del bloque 443 (TLS, `limit_req`).
 #
 # SEGUNDO MODULO, `http_2xx_tls_verified` (tarea 3.8, hallazgo H-05 de
@@ -74,3 +74,21 @@ modules:
       fail_if_not_ssl: true
       tls_config:
         insecure_skip_verify: false
+
+  # TERCER MODULO, `http_2xx_internal` (bloque 9 de la 2.3.0, V21-4-DV-4). Texto plano, SOLO para
+  # componentes de observabilidad de la red interna que no pueden llevar `healthcheck` porque su
+  # imagen no trae shell ni `wget` (Loki desde la 3.7: solo `/usr/bin/loki`). Es la excepcion a
+  # «no hay modulo en texto plano» de arriba: la regla protege a PHP-FPM (TLS, `limit_req`), y
+  # esta sonda nunca llega a la aplicacion. Ningun objetivo de aplicacion debe usarla.
+  http_2xx_internal:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      method: GET
+      preferred_ip_protocol: "ip4"
+      # Solo un 200 es «listo» (Loki devuelve 503 mientras arranca) y NUNCA se sigue una
+      # redireccion: un modulo en texto plano que sigue redirecciones podria acabar leyendo
+      # otro sitio que el que se declaro.
+      valid_status_codes: [200]
+      follow_redirects: false

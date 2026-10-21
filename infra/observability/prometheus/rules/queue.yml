@@ -1,0 +1,129 @@
+# KronoQR — alertas del trabajador de colas (Horizon) y del tiempo real (Reverb).
+# Bloque 9 de la 2.3.0 (V21-4-DV-2, CH2, V3-CH-3).
+#
+# EL HUECO QUE CIERRAN. Hasta la 2.2.1 existia `queue_jobs_pending` y ninguna
+# regla la leia. Con `horizon` parado el fichaje seguia (el quiosco encola), pero
+# no se generaba ninguna exportacion integra ni ningun informe diferido, no se
+# difundia la presencia al panel y nadie lo veia: RRHH lo notaba antes que IT.
+# Con `reverb` parado el panel en vivo pierde el tiempo real y cada
+# `BroadcastPresenceChange` ocupa 8 s del trabajador (dos fallos de DNS).
+#
+# TRES SENALES, CADA UNA CON LO QUE LA HACE FIABLE
+#
+#   · ColaDeTrabajosAcumulada. `queue_jobs_pending` es `LLEN + ZCARD(delayed) +
+#     ZCARD(reserved)`: cuenta tambien el trabajo que se esta ejecutando. Una
+#     exportacion integra legitima puede durar hasta 30 min (informes) o 60 min
+#     (exportacion de datos), asi que un umbral de "mayor que cero" saltaria
+#     con una exportacion grande sin ninguna averia. 50 son mas trabajos
+#     esperando de los que ningun hotel genera en un cambio de turno, y `for:
+#     10m` descarta la rafaga.
+#
+#   · ColaDeTrabajosSinProcesar. Es la que ve a `horizon` parado cuando hay UN
+#     solo trabajo esperando (una exportacion, que es justo el caso que pierde
+#     RRHH): hay trabajos EN ESPERA (`queue_jobs_waiting`, sin los reservados) y
+#     en 20 min no ha terminado NINGUNO (`queue_job_duration_seconds_count` no
+#     crece). Lee los «en espera» y no los pendientes porque una exportacion
+#     integra legitima dura hasta 30 min (informes) o 60 min (exportacion de
+#     datos, `TIMEOUT_SECONDS = 3600`) y es UN trabajo reservado: cuenta como
+#     pendiente mientras se ejecuta, y con `queue_jobs_pending` esta alerta saltaba
+#     con ella sin averia alguna. Si no existe la serie de terminados (nunca ha
+#     terminado un trabajo) la comparacion `unless on()` sobre un vector vacio deja
+#     pasar la alerta: es lo correcto, hay trabajos esperando y nadie los hace.
+#     El contador de terminados NACE en 1 (un contador en Redis no existe hasta su
+#     primer incremento): se cuentan por separado las series que ya existian
+#     (`increase`) y las nacidas dentro de la ventana (su valor), como en
+#     `api.yml`; sin eso, el primer trabajo de la historia no contaria como
+#     terminado.
+#
+#   · ReverbSinRespuesta. `websocket_connections_active` la publica
+#     `reporting:presence-metrics` cada minuto preguntando a Reverb por HTTP
+#     (ADR-011): si Reverb no contesta, la serie se OMITE (nulo no es cero: cero
+#     es "nadie tiene el panel abierto", lo normal de madrugada). La alerta es
+#     "la tarea corre (el latido es reciente) y la serie falta". Si la tarea
+#     tampoco corre, esa es otra averia (`scheduler` parado, `MedicionDeWalAusente`).
+#
+# COMPONENT `api` A PROPOSITO. Las tres son procesos de servidor de la propia
+# aplicacion que `update.sh` reinicia: caen en la ventana de mantenimiento y en
+# la inhibicion de `VentanaDeMantenimientoActiva` sin tocar ni el enrutado ni la
+# lista de componentes silenciables (AlertmanagerConfigTest). Un componente nuevo
+# habria ampliado esa lista por una sola familia.
+#
+# DESTINATARIO: IT del cliente. Son sintomas de infraestructura sin lectura de
+# negocio. Runbooks: cola-de-trabajos-atascada.md y reverb-parado.md.
+groups:
+  - name: kronoqr-queue
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Mas de 50 trabajos esperando durante 10 min seguidos.
+      #------------------------------------------------------------------------
+      - alert: ColaDeTrabajosAcumulada
+        expr: max by (queue) (queue_jobs_pending) > 50
+        for: 10m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "La cola {{ $labels.queue }} lleva 10 min con mas de 50 trabajos esperando"
+          description: >-
+            Horizon no da abasto o esta parado. Los informes en diferido, las
+            exportaciones integras y la difusion de la presencia al panel se
+            retrasan. El fichaje no se ve afectado: el quiosco ficha y encola
+            (regla dura 19). Revisa si el contenedor horizon esta en marcha y
+            sano y que dicen sus registros.
+          runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
+
+      #------------------------------------------------------------------------
+      # Hay trabajos esperando y en 20 min no ha terminado ninguno: Horizon
+      # parado, colgado o pausado. Detecta tambien UNA sola exportacion atascada.
+      #------------------------------------------------------------------------
+      - record: kronoqr:queue_jobs_finished:increase20m
+        expr: >-
+          (sum(increase(queue_job_duration_seconds_count[20m]) and queue_job_duration_seconds_count offset 20m) or vector(0))
+          +
+          (sum(queue_job_duration_seconds_count unless queue_job_duration_seconds_count offset 20m) or vector(0))
+
+      - alert: ColaDeTrabajosSinProcesar
+        expr: >-
+          max(queue_jobs_waiting) > 0
+          unless on ()
+          (kronoqr:queue_jobs_finished:increase20m > 0)
+        for: 10m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Hay trabajos esperando en la cola y ninguno ha terminado en los ultimos 30 min"
+          description: >-
+            Horizon no esta procesando: contenedor parado, en bucle de reinicio,
+            pausado o colgado. Mientras tanto las exportaciones integras (la que
+            se entrega a la Inspeccion o al empleado que ejerce su derecho de
+            acceso) y los informes en diferido se quedan en pending. Una
+            exportacion en curso, por larga que sea (hasta 60 min), no cuenta: un
+            trabajo que ya ha cogido un trabajador no esta «en espera». El
+            fichaje sigue.
+          runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
+
+      #------------------------------------------------------------------------
+      # Reverb no contesta a la tarea de presencia, que sigue corriendo.
+      #------------------------------------------------------------------------
+      - alert: ReverbSinRespuesta
+        expr: >-
+          ((time() - presence_metrics_timestamp_seconds) < 300)
+          unless on ()
+          websocket_connections_active
+        for: 5m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Reverb no responde: el panel en vivo ha perdido el tiempo real"
+          description: >-
+            La tarea de presencia corre pero Reverb no contesta a su consulta
+            desde hace 5 min. El panel de presencia deja de actualizarse solo
+            (recargar la pagina da el dato correcto) y cada difusion pendiente
+            ocupa al trabajador unos segundos. No se pierde ningun fichaje.
+          runbook_url: docs/runbooks/reverb-parado.md

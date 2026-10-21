@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Support\Scheduling\LogScheduledCommandFailure;
 use App\Support\Scheduling\ScheduledTaskOutput;
+use App\Support\Scheduling\SchedulerHeartbeat;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -40,6 +41,18 @@ use Illuminate\Support\Facades\Schedule;
  * `ScheduledTaskOutputTest`
  * (Architecture) falla si una tarea en segundo plano no pasa por el ayudante.
  */
+
+/*
+ * El latido del planificador (bloque 9 de la 2.3.0, O1). Cada minuto toca un
+ * fichero que el `healthcheck` del servicio `scheduler` lee: un `schedule:work`
+ * vivo pero con el bucle colgado deja de tocarlo y el contenedor pasa a
+ * `unhealthy`. Instantaneo y sin Redis ni base de datos: la sonda de que el
+ * planificador vive no puede depender de nada que pueda estar caido.
+ * Ver `SchedulerHeartbeat`.
+ */
+Schedule::call(new SchedulerHeartbeat)
+    ->name('scheduler:heartbeat')
+    ->everyMinute();
 
 /*
  * Copia de seguridad (RF-PR-04, RNF-D-02). Dos cadencias y un motivo para cada

@@ -64,6 +64,10 @@ groups:
             (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
             viven en Redis. Mientras dure, revisa los intentos de acceso en el
             registro de auditoria del panel.
+            Con Redis caido tambien fallan, porque cierran en seguro, el acceso al
+            panel y al portal, el latido y el padron del quiosco, la exportacion del
+            portal y la correccion de tramos; las alertas de 5xx del panel y del portal
+            no lo ven, porque sus series tambien viven en Redis.
             Restablece Redis antes de fiarte de un cuadro en verde.
           runbook_url: docs/runbooks/almacen-de-metricas-caido.md
 

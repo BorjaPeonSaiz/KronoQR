@@ -812,6 +812,7 @@ Nada de secretos en el repositorio. En desarrollo, `.env` local a partir de `.en
 http_request_duration_seconds{route,method,status}       histogram
 http_requests_total{route,method,status}                 counter
 queue_jobs_pending{queue}                                gauge
+queue_jobs_waiting{queue}                                gauge
 kronoqr_metrics_store_up                                 gauge
 queue_job_duration_seconds{job}                          histogram
 queue_jobs_failed_total{job}                             counter
@@ -850,6 +851,8 @@ compliance_metrics_week_start_seconds                    gauge
 application_errors_total{source,level}                   counter
 application_error_groups_opened_total{source,level}      counter
 projection_divergence_total                              counter
+projection_divergence_first_increase_timestamp_seconds   gauge
+projection_divergence_last_increase_timestamp_seconds    gauge
 projection_reconciliation_last_run_timestamp_seconds     gauge
 projection_reconciliation_work_days_inspected            gauge
 projection_reconciliation_last_corrections               gauge
@@ -899,7 +902,8 @@ kronoqr_backup_copies_total{type}                        gauge
 kronoqr_backup_last_verify_result                        gauge
 kronoqr_backup_last_verified_timestamp_seconds           gauge
 kronoqr_backup_verified_copy_age_seconds                 gauge
-kronoqr_wal_unarchived_age_seconds                       gauge   # exposicion real del RPO (ADR-049), cada minuto desde `scheduler`
+# Exposicion real del RPO (ADR-049): kronoqr_wal_unarchived_age_seconds, cada minuto desde `scheduler`
+kronoqr_wal_unarchived_age_seconds                       gauge
 kronoqr_wal_unarchived_segments                          gauge
 kronoqr_wal_unarchived_bytes                             gauge
 kronoqr_wal_last_archived_age_seconds                    gauge

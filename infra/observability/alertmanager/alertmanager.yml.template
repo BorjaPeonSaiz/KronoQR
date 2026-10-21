@@ -175,8 +175,8 @@ inhibit_rules:
   # `AlmacenDeMetricasAusente` esten activas, esas alertas no son fiables y se
   # inhiben (tambien las "resueltas": una alerta inhibida no se notifica).
   #
-  # ACOTADA A PROPOSITO: solo `component="kiosk"` y las dos alertas del fichaje
-  # que leen `http_requests_*`. NO inhibe `SondaDelBordeFallida` (sonda externa,
+  # ACOTADA A PROPOSITO: solo `component="kiosk"` y las alertas de errores y latencia (fichaje,
+  # panel, portal, PIN y lote) que leen `http_request*`. NO inhibe `SondaDelBordeFallida` (sonda externa,
   # no depende de Redis), ni copia, auditoria, integridad ni autenticacion, ni
   # las propias alertas del almacen (su componente es `metrics`). Sin `equal`:
   # es un estado de la instalacion entera. Va despues de la de severidad: la
@@ -184,7 +184,7 @@ inhibit_rules:
   - source_matchers:
       - alertname =~ "AlmacenDeMetricasCaido|AlmacenDeMetricasAusente"
     target_matchers:
-      - alertname =~ "ErroresDeServidorEnElFichaje|LatenciaDelFichajeAlta"
+      - alertname =~ "ErroresDeServidorEnElFichaje|ErroresDeServidorEnElPanel|ErroresDeServidorEnElPortal|LatenciaDelFichajeAlta|LatenciaDelFichajePorPinAlta|LatenciaDelFichajePorLoteAlta"
   - source_matchers:
       - alertname =~ "AlmacenDeMetricasCaido|AlmacenDeMetricasAusente"
     target_matchers:

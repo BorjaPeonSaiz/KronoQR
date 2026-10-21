@@ -62,6 +62,73 @@ groups:
     interval: 60s
     rules:
       #------------------------------------------------------------------------
+      # REGLAS DE GRABACION: EL RECUENTO POR FAMILIA DE RUTAS, EN UN SOLO SITIO.
+      #
+      # Tres familias (fichaje, gestion y portal) y dos magnitudes (peticiones 5xx
+      # y todas). El filtro de rutas de cada familia vive SOLO aqui; las alertas
+      # leen estas series y no repiten el selector.
+      #
+      # POR QUE NO BASTA `increase()`. Un contador en Redis no existe hasta su
+      # primer incremento: la serie `{route,method,status="500"}` nace ya con valor
+      # 1, y `increase()` necesita dos muestras, asi que el PRIMER error de cada
+      # serie no cuenta. Es justo el que importa tras una instalacion nueva o un
+      # reinicio de Redis. Cada magnitud suma dos mitades que no se solapan:
+      #
+      #   · `increase(X[w]) and X offset w`: las series que ya existian al empezar
+      #     la ventana (su aumento es el real);
+      #   · `X unless X offset w`: las series que NO existian (nacidas dentro de la
+      #     ventana): su valor actual es todo lo ocurrido desde que nacieron.
+      #
+      # Cada mitad lleva `or vector(0)`: sin series, la suma es 0 y no «vacio», y
+      # el cociente de la alerta da NaN (no salta) en vez de desaparecer. El mismo
+      # patron que `generated-files.yml`, con una suma en lugar de un `or`.
+      #------------------------------------------------------------------------
+      - record: kronoqr:http_server_errors:increase5m
+        labels:
+          family: fichaje
+        expr: >-
+          (sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."}[5m]) and http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} offset 5m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} unless http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."} offset 5m) or vector(0))
+      - record: kronoqr:http_requests:increase5m
+        labels:
+          family: fichaje
+        expr: >-
+          (sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?"}[5m]) and http_requests_total{route=~"attendance\\.scan(\\..*)?"} offset 5m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"attendance\\.scan(\\..*)?"} unless http_requests_total{route=~"attendance\\.scan(\\..*)?"} offset 5m) or vector(0))
+
+      - record: kronoqr:http_server_errors:increase10m
+        labels:
+          family: gestion
+        expr: >-
+          (sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."}[10m]) and http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} unless http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched", status=~"5.."} offset 10m) or vector(0))
+      - record: kronoqr:http_requests:increase10m
+        labels:
+          family: gestion
+        expr: >-
+          (sum(increase(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"}[10m]) and http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} unless http_requests_total{route!~"attendance\\.scan(\\..*)?|portal\\..*|health\\..*|unmatched"} offset 10m) or vector(0))
+
+      - record: kronoqr:http_server_errors:increase10m
+        labels:
+          family: portal
+        expr: >-
+          (sum(increase(http_requests_total{route=~"portal\\..*", status=~"5.."}[10m]) and http_requests_total{route=~"portal\\..*", status=~"5.."} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"portal\\..*", status=~"5.."} unless http_requests_total{route=~"portal\\..*", status=~"5.."} offset 10m) or vector(0))
+      - record: kronoqr:http_requests:increase10m
+        labels:
+          family: portal
+        expr: >-
+          (sum(increase(http_requests_total{route=~"portal\\..*"}[10m]) and http_requests_total{route=~"portal\\..*"} offset 10m) or vector(0))
+          +
+          (sum(http_requests_total{route=~"portal\\..*"} unless http_requests_total{route=~"portal\\..*"} offset 10m) or vector(0))
+
+      #------------------------------------------------------------------------
       # Proporcion de 5xx sobre el total, en las tres rutas de fichaje. Con
       # trafico cero la division es 0/0 (NaN) y Prometheus la descarta: no hay
       # falso positivo por falta de trafico, solo por errores de verdad.
@@ -69,9 +136,9 @@ groups:
       - alert: ErroresDeServidorEnElFichaje
         expr: >-
           (
-            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."}[5m]))
+            kronoqr:http_server_errors:increase5m{family="fichaje"}
             /
-            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?"}[5m]))
+            kronoqr:http_requests:increase5m{family="fichaje"}
           ) > 0.01
         for: 1m
         labels:
@@ -90,27 +157,120 @@ groups:
           runbook_url: docs/runbooks/errores-en-el-panel.md
 
       #------------------------------------------------------------------------
-      # p95 de latencia por encima de 500 ms, mismas tres rutas.
+      # p95 de latencia, UNA REGLA POR RUTA (bloque 9 de la 2.3.0, R4-DV-06).
+      #
+      # Hasta la 2.2.1 una sola regla agrupaba las tres rutas de fichaje con
+      # `attendance\.scan(\..*)?`. Cada una tiene un coste distinto y un
+      # presupuesto distinto, y mezclarlas daba dos fallos:
+      #
+      #   · el PIN paga un bcrypt de coste 12 a proposito (RNF-P-08, decision de
+      #     15-10-2026) y tarda de 1 s a 1,5 s en una maquina lenta: con pocas
+      #     peticiones por minuto dominaba el p95 conjunto y la alerta saltaba
+      #     sin averia alguna (dos veces en la verificacion de la 2.2.0);
+      #   · el lote procesa hasta `kiosk.batch_max_size` (50) fichajes en una
+      #     sola peticion, asi que su latencia crece con el numero de elementos.
+      #
+      # Cada ruta tiene su umbral y un MINIMO DE PETICIONES en la ventana: el p95
+      # de cinco peticiones es la mas lenta de las cinco, y de madrugada no dice
+      # nada. Los umbrales NO son un requisito del producto, son el punto en el
+      # que alguien delante de la tablet ya lo nota:
+      #
+      #   attendance.scan        500 ms  catalogo del §9.3 (RNF-P-02: p95 < 150 ms)
+      #   attendance.scan.pin    3 s     ~7 veces RNF-P-08 (p95 < 400 ms, a confirmar)
+      #   attendance.scan.batch  3 s     el ultimo cubo finito del histograma
+      #
+      # LOS CUBOS DEL HISTOGRAMA LIMITAN LO QUE SE PUEDE VIGILAR. `RecordHttpMetrics`
+      # mide con cubos 0,025 0,05 0,1 0,15 0,3 0,4 1 3 y +Inf, y `histogram_quantile`
+      # interpola dentro del cubo: con toda la masa a 1,2 s da 2,9 s, no 1,2 s. Un umbral
+      # entre dos cubos (el PIN a 2 s) saltaria con un PIN de 1,2 s, justo el falso positivo
+      # de R4-DV-06. Y un p95 por encima de 3 s cae en +Inf y devuelve 3, nunca mas: un
+      # umbral del lote a 10 s seria inalcanzable. Por eso el PIN y el lote se vigilan como
+      # «mas del 5 % de las peticiones tardan mas de 3 s» (= p95 > 3 s) sobre los cubos
+      # `le="3.0"` y `le="+Inf"`, que SI son exactos, y por eso son menos finos que el QR: un
+      # lote lleno tras un corte largo puede acercarse a esos 3 s (se compensa con
+      # `for: 15m` y un minimo de 5 lotes). Medirlos mejor exige cubos nuevos (2 s, 10 s)
+      # en el middleware, que cambian una serie existente: queda para el bloque de
+      # instrumentacion.
+      #
+      # `LatenciaDelFichajeAlta` conserva su nombre y es la del catalogo (QR).
       #------------------------------------------------------------------------
       - alert: LatenciaDelFichajeAlta
         expr: >-
           histogram_quantile(
             0.95,
-            sum(rate(http_request_duration_seconds_bucket{route=~"attendance\\.scan(\\..*)?"}[10m])) by (le)
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan"}[10m])) by (le)
           ) > 0.5
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan"}[10m])) >= 20
         for: 1m
         labels:
           severity: high
           destinatario: it-cliente
           component: api
         annotations:
-          summary: "El p95 de latencia del fichaje supera los 500 ms desde hace 10 min"
+          summary: "El p95 de latencia del fichaje con tarjeta supera los 500 ms desde hace 10 min"
           description: >-
             RNF-P-02 fija p95 < 150 ms; esta alerta suena muy por encima, a
             500 ms, porque a partir de ahi el retraso ya lo nota quien esta
             fichando delante del quiosco. Con 500 personas en el cambio de
             turno, una cola de peticiones lentas en el servidor se traduce
-            en gente esperando frente a la tablet.
+            en gente esperando frente a la tablet. Solo mide el fichaje con
+            tarjeta (attendance.scan), con al menos 20 peticiones en la
+            ventana; el PIN y el lote tienen la suya.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: LatenciaDelFichajePorPinAlta
+        expr: >-
+          (
+            1
+            -
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le=~"3(\\.0)?"}[10m]))
+            /
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan.pin"}[10m])) >= 20
+        for: 5m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de los fichajes por PIN tardan mas de 3 s desde hace 10 min"
+          description: >-
+            El fichaje por PIN paga un hash bcrypt de coste 12 a proposito
+            (RNF-P-08: p95 < 400 ms en el hardware de referencia). Por encima de
+            3 s en mas de uno de cada veinte, el servidor va justo de CPU o la
+            base de datos va lenta. El fichaje con tarjeta no se ve afectado salvo
+            que la causa sea comun: compara con LatenciaDelFichajeAlta. Con al
+            menos 20 peticiones por PIN en la ventana.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: LatenciaDelFichajePorLoteAlta
+        expr: >-
+          (
+            1
+            -
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le=~"3(\\.0)?"}[10m]))
+            /
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}[10m]))
+          ) > 0.05
+          and on ()
+          sum(increase(http_request_duration_seconds_count{route="attendance.scan.batch"}[10m])) >= 5
+        for: 15m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 3 s desde hace 10 min"
+          description: >-
+            El envio de la cola offline de un quiosco (hasta 50 fichajes por
+            lote) tarda mas de lo normal. Un lote lleno tras un corte largo puede
+            rozar los 3 s sin que haya averia: si coincide con un quiosco que se
+            esta vaciando, espera; si no, el servidor va lento. Los quioscos
+            siguen aceptando fichajes y los reenviaran (regla dura 19). Con al
+            menos 5 lotes en la ventana.
           runbook_url: docs/runbooks/errores-en-el-panel.md
 
       #------------------------------------------------------------------------
@@ -135,4 +295,76 @@ groups:
             datos o Redis no responden. El fichaje puede estar completamente
             parado en el servidor: el quiosco seguira encolando (regla dura
             19), pero nada llegara hasta que esto se resuelva.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      #------------------------------------------------------------------------
+      # 5xx FUERA DEL FICHAJE (bloque 9 de la 2.3.0, V21-4-DV-3). Hasta la 2.2.1
+      # solo se vigilaban las tres rutas de fichaje: un panel de gestion o un
+      # portal que devolvian 500 no avisaban a nadie (RRHH lo notaba antes que
+      # IT). El nombre de la ruta (`route`) separa las tres familias:
+      #
+      #   fichaje  attendance.scan, attendance.scan.batch, attendance.scan.pin
+      #   portal   portal.*
+      #   gestion  todo lo demas salvo `health.*` y `unmatched`: el panel, la
+      #            configuracion, la gestion de quioscos y sus rutas de
+      #            padron, latido y emparejamiento.
+      #
+      # DOS CONDICIONES, y las dos importan. La proporcion (> 5 %) sola salta con
+      # 1 error de 4 peticiones a las tres de la madrugada; el minimo de 3
+      # errores en 10 min solo, con un hotel de mil peticiones, no dice que
+      # algo falle. Juntas dicen «esta familia esta fallando de verdad».
+      #
+      # LA LIMITACION QUE NO SE PUEDE ARREGLAR AQUI. `http_requests_total` vive
+      # en Redis. Con Redis caido estas rutas fallan, y es justo cuando NO
+      # hay serie que evaluar: esa averia la cubren `AlmacenDeMetricasCaido` y
+      # `SondaDelBordeFallida` (que sondea `/ready`, y `/ready` mira Redis), no
+      # estas dos. Por eso su descripcion y la del almacen nombran las rutas.
+      #------------------------------------------------------------------------
+      - alert: ErroresDeServidorEnElPanel
+        expr: >-
+          (
+            kronoqr:http_server_errors:increase10m{family="gestion"}
+            /
+            kronoqr:http_requests:increase10m{family="gestion"}
+          ) > 0.05
+          and on ()
+          kronoqr:http_server_errors:increase10m{family="gestion"} >= 3
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+          description: >-
+            Las rutas de gestion (el panel, la configuracion, la gestion de
+            quioscos y sus rutas de padron, latido y emparejamiento) estan
+            devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+            rutas, con su propia alerta. Mira el historico de errores del panel
+            y product:doctor; la causa habitual es la base de datos, el disco o
+            un despliegue reciente.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      - alert: ErroresDeServidorEnElPortal
+        expr: >-
+          (
+            kronoqr:http_server_errors:increase10m{family="portal"}
+            /
+            kronoqr:http_requests:increase10m{family="portal"}
+          ) > 0.05
+          and on ()
+          kronoqr:http_server_errors:increase10m{family="portal"} >= 3
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+          description: >-
+            El portal del empleado (acceso con codigo y PIN, consulta de su
+            registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+            afectado, pero las personas no pueden consultar su registro ni
+            ejercer su derecho de acceso. Mira el historico de errores del
+            panel y product:doctor.
           runbook_url: docs/runbooks/errores-en-el-panel.md

@@ -295,15 +295,22 @@ check_background_services() {
 
   read_service_states
   for service in scheduler horizon reverb; do
-    report_service_state "${service}" "$(service_state_of "${service}")"
+    report_service_state "${service}" "$(service_state_of "${service}")" "$(service_health_of "${service}")"
   done
 }
 
 # Una sola lectura de `docker compose ps` para las dos comprobaciones de
-# servicios: «servicio estado» por linea.
+# servicios: «servicio estado salud» por linea. La salud va vacia si el servicio no
+# declara `healthcheck`; los procesos de fondo (`horizon`, `scheduler`, `reverb`) lo
+# declaran desde la 2.3.0 (O1) y un `running` con salud `unhealthy` es un proceso vivo
+# que ha dejado de hacer su trabajo.
 SERVICE_STATES=""
 read_service_states() {
-  SERVICE_STATES="$(compose_current ps -a --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
+  SERVICE_STATES="$(compose_current ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null || true)"
+}
+
+service_health_of() {
+  awk -v s="$1" '$1 == s { print $3 }' <<<"${SERVICE_STATES}" || true
 }
 
 service_state_of() {
@@ -314,9 +321,30 @@ service_state_of() {
 # misma que da `product:doctor` a Horizon (`queue.worker`): scheduler y horizon,
 # fallo; reverb y los demas, aviso (con `app` parada, `app` ya es un fallo aparte).
 report_service_state() {
-  local service="$1" state="$2"
+  local service="$1" state="$2" health="${3:-}"
 
+  if [ "${state}" = "running" ] && [ "${health}" = "unhealthy" ]; then
+    # En marcha pero con la comprobacion de salud fallando: `up -d` no lo arregla, hay que
+    # reiniciarlo. Misma gravedad que parado para scheduler y horizon; aviso para el resto.
+    case "${service}" in
+    scheduler | horizon)
+      check_fail "$(kq_format d_c_service_state "${service}" "${state} (${health})")" \
+        "$(kq_format d_f_service_unhealthy "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
+      ;;
+    *)
+      check_warn "$(kq_format d_c_service_state "${service}" "${state} (${health})")" \
+        "$(kq_format d_f_service_unhealthy "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
+      ;;
+    esac
+    return 0
+  fi
   if [ "${state}" = "running" ]; then
+    check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
+    return 0
+  fi
+  # La guarda de retencion de Loki y Tempo es de UN SOLO USO: termina y se queda `exited`.
+  # No es una averia (si saliera con error, Loki no arrancaria: esa es otra comprobacion).
+  if [ "${service}" = "retention-guard" ] && [ "${state}" = "exited" ]; then
     check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
     return 0
   fi
@@ -381,6 +409,7 @@ run_delegated_doctor() {
   check_orphan_restore_databases
   check_redis_restart_loop
   check_prometheus_rules
+  check_alertmanager
   check_app_storage
   check_maintenance_mode
   # Tambien con la aplicacion en marcha, que es el caso normal (V1-PL-03): la guia
@@ -461,6 +490,7 @@ run_external_checks() {
   check_orphan_restore_databases
   check_redis_restart_loop
   check_prometheus_rules
+  check_alertmanager
   check_app_storage
   check_disk_space
   check_certificates
@@ -492,11 +522,11 @@ check_services_state() {
   local service state
 
   read_service_states
-  # El tercer campo (salud) no se pide: `state` ya distingue "running" de
-  # cualquier otra cosa. `_` descarta lo que sobre sin dejar una variable sin usar.
-  while IFS=' ' read -r service state _; do
+  # `state` distingue "running" de cualquier otra cosa; `health` solo importa si es
+  # "unhealthy". `_` descarta lo que sobre sin dejar una variable sin usar.
+  while IFS=' ' read -r service state health _; do
     [ -n "${service}" ] || continue
-    report_service_state "${service}" "${state}"
+    report_service_state "${service}" "${state}" "${health}"
   done <<<"${SERVICE_STATES}"
   for service in scheduler horizon reverb; do
     [ -n "$(service_state_of "${service}")" ] || report_service_state "${service}" ""
@@ -972,6 +1002,66 @@ check_prometheus_rules() {
   shown="$(head -n 5 <<<"${missing}" | tr '\n' ' ')"
   check_warn "$(kq_format d_c_prom_rules_missing "${count}")" \
     "$(kq_format d_w_prom_rules_missing "${shown}" "${CURRENT_COMPOSE}")"
+}
+
+# Alertmanager: vivo, conectado a Prometheus y con los destinatarios del `.env` (bloque 9 de la
+# 2.3.0, V4-DV-4). `check_prometheus_rules` vigila que las reglas se EVALUAN; esto vigila que lo que
+# se evalua LLEGA a alguien. Tres cosas distintas, cada una con su arreglo:
+#
+#   1. No responde en su puerto interno: las alertas se evaluan y no se entregan (la alerta
+#      `EnrutadoDeAlertasCaido` lo dice tambien, pero la lee quien tiene Alertmanager).
+#   2. Prometheus no lo ve: las reglas saltan y nadie las recoge (mal `alerting:` o red).
+#   3. Lleva destinatarios o ajustes distintos de los del `.env`: Alertmanager lee `ALERT_*` y
+#      `MAIL_*` UNA vez, al arrancar, y quien cambia el correo del IT en el `.env` sin recrearlo
+#      sigue mandando a la direccion vieja. Se comparan los valores del `.env` con los del contenedor
+#      en marcha, y solo se NOMBRAN las variables que difieren, nunca sus valores (llevan
+#      contrasenas y URL con secretos).
+#
+#      SE PREGUNTA POR CADA VARIABLE DE LA LISTA (`printenv VAR`), NUNCA SE VUELCA EL ENTORNO
+#      ENTERO: el del contenedor lleva `MAIL_PASSWORD`, y un `env` completo pasaria la
+#      contrasena SMTP por este script y por cualquier registro que alguien le redirija. Esa
+#      variable no esta en la lista: su cambio se nota por el fichero del que la lee la plantilla.
+#
+# Avisos y no fallos, como `check_prometheus_rules`: se arreglan recreando un contenedor. Sin la
+# observabilidad encendida (perfil `observability`) no hay nada que mirar.
+KQ_ALERTMANAGER_ENV_VARS=(ALERT_EMAIL_IT ALERT_EMAIL_RRHH ALERT_EMAIL_SEGURIDAD ALERT_WEBHOOK_IT ALERT_WEBHOOK_RRHH ALERT_WEBHOOK_SEGURIDAD ALERT_MAINTENANCE_WEEKDAY ALERT_MAINTENANCE_START ALERT_MAINTENANCE_END MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_FROM_ADDRESS MAIL_SCHEME)
+check_alertmanager() {
+  local container prometheus response var configured running stale=""
+  container="$(compose_current ps -q alertmanager 2>/dev/null || true)"
+  container="${container%%$'\n'*}"
+  [ -n "${container}" ] || return 0
+
+  if ! compose_current exec -T alertmanager wget -qO- http://127.0.0.1:9093/-/ready >/dev/null 2>&1; then
+    check_warn "$(kq_text d_c_am_unreachable)" "$(kq_format d_w_am_unreachable "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    return 0
+  fi
+
+  prometheus="$(compose_current ps -q prometheus 2>/dev/null || true)"
+  if [ -n "${prometheus%%$'\n'*}" ]; then
+    response="$(compose_current exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alertmanagers 2>/dev/null || true)"
+    if [ -n "${response}" ] && ! grep -q '"activeAlertmanagers":\[{' <<<"${response}"; then
+      check_warn "$(kq_text d_c_am_not_seen)" "$(kq_format d_w_am_not_seen "${CURRENT_COMPOSE}")"
+      return 0
+    fi
+  fi
+
+  for var in "${KQ_ALERTMANAGER_ENV_VARS[@]}"; do
+    configured="$(env_value "${CURRENT_ENV}" "${var}")"
+    # Los valores por defecto de compose.prod.yaml (`${VAR:-sunday}`): sin la variable en el
+    # `.env` el contenedor lleva el de serie, y eso no es una diferencia.
+    case "${var}" in
+    ALERT_MAINTENANCE_WEEKDAY) [ -n "${configured}" ] || configured="sunday" ;;
+    ALERT_MAINTENANCE_START) [ -n "${configured}" ] || configured="02:00" ;;
+    ALERT_MAINTENANCE_END) [ -n "${configured}" ] || configured="04:00" ;;
+    esac
+    running="$(compose_current exec -T alertmanager printenv "${var}" 2>/dev/null || true)"
+    [ "${configured}" = "${running}" ] || stale+="${var} "
+  done
+  if [ -n "${stale}" ]; then
+    check_warn "$(kq_text d_c_am_stale)" "$(kq_format d_w_am_stale "${stale% }" "${CURRENT_COMPOSE}")"
+    return 0
+  fi
+  check_pass "$(kq_text d_c_am_ok)"
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

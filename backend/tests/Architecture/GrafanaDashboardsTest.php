@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Tests\Architecture\Support\AlertRules;
 use Tests\Architecture\Support\Doc82Series;
 use Tests\Architecture\Support\Repo;
 
@@ -205,7 +206,7 @@ function seriesUsadasEn(string $expresion): array
     $limpia = (string) preg_replace('/\{[^}]*\}/', '{}', $limpia);
     $limpia = (string) preg_replace('/\b(by|without|on|ignoring|group_left|group_right)\s*\([^)]*\)/', ' ', $limpia);
 
-    preg_match_all('/(?<![a-zA-Z0-9_:$])([a-z_][a-z0-9_]*)\s*(\(?)/', $limpia, $coincidencias, PREG_SET_ORDER);
+    preg_match_all('/(?<![a-zA-Z0-9_:$])([a-z_][a-z0-9_:]*)\s*(\(?)/', $limpia, $coincidencias, PREG_SET_ORDER);
 
     $series = [];
 
@@ -335,7 +336,8 @@ it('no grafica ninguna serie que no exista en el catalogo del §8.2', function (
     // nada», que es la conclusion contraria a la verdadera. Se compara contra el
     // bloque literal del §8.2 —la fuente— mas las series que emiten el
     // anfitrion, la sonda del borde y el actualizador.
-    $permitidas = array_merge(seriesDelDocumento(), SERIES_EXTERNAS);
+    // Las reglas de grabacion (`record:`) de rules/*.yml son series reales y declaradas.
+    $permitidas = array_merge(seriesDelDocumento(), SERIES_EXTERNAS, AlertRules::recordedNames());
     $consultas = consultasPromQlDe(cuadroDeMando($fichero));
     $desconocidas = [];
 

@@ -325,3 +325,164 @@ it('con la aplicacion en marcha recuerda tambien los digests anulados y explica 
         // Y en las dos ramas: con la aplicacion parada ya estaba.
         ->and(substr_count($doctor, 'check_image_digest_overrides "${CURRENT_ENV}"'))->toBe(2);
 })->group('RF-PD-13');
+
+it('falla con el procesador de trabajos en marcha pero «unhealthy», y la orden es reiniciarlo (O1, 2.3.0)', function (): void {
+    // `up -d` no arregla un contenedor vivo cuyo `healthcheck` falla: `horizon:status` dice que
+    // ningun maestro esta registrado o que esta en pausa. La orden correcta es `restart`.
+    $proceso = doctorConServicios([
+        'app' => 'running', 'scheduler' => 'running', 'horizon' => 'running unhealthy', 'reverb' => 'running',
+    ]);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=1 avisos=0')
+        ->and($proceso->getOutput())->toContain('[FALLA] Servicio horizon: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('sudo docker compose -f /opt/kronoqr-2.2.0/docker-compose.yml restart horizon')
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio scheduler: running');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('falla con el planificador «unhealthy» y solo avisa con Reverb «unhealthy» (O1, 2.3.0)', function (): void {
+    $proceso = doctorConServicios([
+        'app' => 'running', 'scheduler' => 'running unhealthy', 'horizon' => 'running healthy', 'reverb' => 'running unhealthy',
+    ]);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=1 avisos=1')
+        ->and($proceso->getOutput())->toContain('[FALLA] Servicio scheduler: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('[aviso] Servicio reverb: running (unhealthy)')
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio horizon: running');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('no tiene por averia la guarda de retencion de Loki, que es de un solo uso y se queda «exited» (V21-4-DV-4)', function (): void {
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_COMPOSE=/opt/kronoqr-2.2.0/docker-compose.yml; '
+        .'compose_current() { printf "app exited\nscheduler running\nhorizon running\nreverb running\nretention-guard exited\n"; }; '
+        .'check_services_state; printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
+    $proceso = new Process(['bash', '-c', $script], timeout: 30.0);
+    $proceso->run();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[ok]    Servicio retention-guard: exited')
+        // Solo `app` parada es aviso: la guarda no suma ninguno.
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=1');
+})->group('RF-PD-13', 'RNF-D-01');
+
+/**
+ * `check_alertmanager` con un `compose_current` falso que contesta a las cuatro
+ * preguntas que hace: quien esta en marcha, `/-/ready`, los Alertmanager que ve
+ * Prometheus y el entorno del contenedor.
+ *
+ * @param  array<string, string>  $envDelContenedor  variables del contenedor en marcha
+ */
+function doctorConAlertmanager(string $envDelFichero, array $envDelContenedor, bool $listo = true, bool $prometheusLoVe = true, bool $conPrometheus = true): Process
+{
+    $directorio = sys_get_temp_dir().'/kq-doctor-am-'.bin2hex(random_bytes(4));
+    mkdir($directorio, 0777, true);
+    file_put_contents($directorio.'/.env', $envDelFichero);
+
+    $entorno = '';
+    foreach ($envDelContenedor as $clave => $valor) {
+        $entorno .= $clave.'='.$valor.'\n';
+    }
+    $respuestaPrometheus = $prometheusLoVe
+        ? '{"status":"success","data":{"activeAlertmanagers":[{"url":"http://alertmanager:9093/api/v2/alerts"}],"droppedAlertmanagers":[]}}'
+        : '{"status":"success","data":{"activeAlertmanagers":[],"droppedAlertmanagers":[]}}';
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_COMPOSE=/opt/kronoqr/docker-compose.yml; CURRENT_ENV='.escapeshellarg($directorio.'/.env').'; '
+        .'compose_current() { local IFS=" "; case "$*" in '
+        .'"ps -q alertmanager") echo am123 ;; '
+        .'"ps -q prometheus") '.($conPrometheus ? 'echo pr456' : 'true').' ;; '
+        .'"exec -T alertmanager wget -qO- http://127.0.0.1:9093/-/ready") return '.($listo ? '0' : '1').' ;; '
+        .'"exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alertmanagers") printf %s '.escapeshellarg($respuestaPrometheus).' ;; '
+        .'"exec -T alertmanager printenv "*) var="$*"; var="${var##* }"; printf "%s" "$(printf '.escapeshellarg($entorno).' | sed -n "s/^${var}=//p")" ;; '
+        .'*) return 0 ;; esac; }; '
+        .'check_alertmanager; printf "fallos=%s avisos=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}"';
+
+    $process = new Process(['bash', '-c', $script], timeout: 30.0);
+    $process->run();
+
+    return $process;
+}
+
+it('da por bueno Alertmanager en marcha, visto por Prometheus y con los destinatarios del .env (V4-DV-4)', function (): void {
+    $proceso = doctorConAlertmanager(
+        "ALERT_EMAIL_IT=it@hotel.test\nALERT_WEBHOOK_IT=https://hooks.test/x?k=a=b\nMAIL_HOST=smtp.hotel.test\n",
+        ['ALERT_EMAIL_IT' => 'it@hotel.test', 'ALERT_WEBHOOK_IT' => 'https://hooks.test/x?k=a=b', 'MAIL_HOST' => 'smtp.hotel.test'] + doctorVentanaDeSerie(),
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[ok]    Alertmanager: en marcha, Prometheus lo ve')
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=0');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('avisa si el .env cambio los destinatarios y Alertmanager sigue con los anteriores, sin mostrar valores (V4-DV-4)', function (): void {
+    $proceso = doctorConAlertmanager(
+        "ALERT_EMAIL_IT=nuevo@hotel.test\nMAIL_HOST=smtp.hotel.test\n",
+        ['ALERT_EMAIL_IT' => 'viejo@hotel.test', 'MAIL_HOST' => 'smtp.hotel.test'] + doctorVentanaDeSerie(),
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[aviso] Alertmanager lleva destinatarios o ajustes distintos de los del .env')
+        ->and($proceso->getOutput())->toContain('difieren: ALERT_EMAIL_IT.')
+        ->and($proceso->getOutput())->toContain('up -d --force-recreate alertmanager')
+        ->and($proceso->getOutput())->not->toContain('nuevo@hotel.test')
+        ->and($proceso->getOutput())->not->toContain('viejo@hotel.test')
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=1');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('avisa si Alertmanager no contesta en su puerto interno (V4-DV-4)', function (): void {
+    $proceso = doctorConAlertmanager('', [], listo: false);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[aviso] Alertmanager no contesta')
+        ->and($proceso->getOutput())->toContain('se evaluan y NO se entregan');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('avisa si Prometheus no ve a Alertmanager como destino activo (V4-DV-4)', function (): void {
+    $proceso = doctorConAlertmanager('', [], prometheusLoVe: false);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[aviso] Prometheus no ve a Alertmanager')
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=1');
+})->group('RF-PD-13', 'RNF-D-01');
+
+it('no dice nada si la observabilidad esta apagada y Alertmanager no existe (V4-DV-4)', function (): void {
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; '
+        .'kq_msg_init es; CURRENT_COMPOSE=/opt/kronoqr/docker-compose.yml; '
+        .'compose_current() { return 0; }; '
+        .'check_alertmanager; printf "fallos=%s avisos=%s comprobaciones=%s\n" "${CHECKS_FAILED}" "${CHECKS_WARNED}" "${CHECKS_RUN}"';
+    $proceso = new Process(['bash', '-c', $script], timeout: 30.0);
+    $proceso->run();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('fallos=0 avisos=0 comprobaciones=0');
+})->group('RF-PD-13', 'RNF-D-01');
+
+/**
+ * Los valores de serie de la ventana de mantenimiento (`${VAR:-sunday}` en
+ * compose.prod.yaml): el contenedor los lleva aunque el `.env` no los defina.
+ *
+ * @return array<string, string>
+ */
+function doctorVentanaDeSerie(): array
+{
+    return ['ALERT_MAINTENANCE_WEEKDAY' => 'sunday', 'ALERT_MAINTENANCE_START' => '02:00', 'ALERT_MAINTENANCE_END' => '04:00'];
+}
+
+it('compara la ventana de mantenimiento con la del .env y nunca vuelca el entorno entero de Alertmanager (V4-DV-4)', function (): void {
+    // El cliente cambio el dia en el .env y el contenedor sigue con el de serie.
+    $proceso = doctorConAlertmanager(
+        "ALERT_MAINTENANCE_WEEKDAY=saturday\n",
+        doctorVentanaDeSerie(),
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('difieren: ALERT_MAINTENANCE_WEEKDAY.')
+        ->and($proceso->getOutput())->not->toContain('saturday');
+
+    // doctor.sh pregunta por cada variable de la lista y nunca ejecuta `env` (arrastra MAIL_PASSWORD).
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+    expect($doctor)->toContain('printenv "${var}"');
+    expect($doctor)->not->toContain('exec -T alertmanager env ');
+    expect($doctor)->not->toContain('alertmanager env 2>');
+})->group('RF-PD-13', 'RS-08');

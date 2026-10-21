@@ -2580,6 +2580,29 @@ jobs:
           # Y lo del paquete que el cliente no toco es lo del paquete.
           cmp infra/observability/prometheus/render-config.sh paquete-nuevo/observability/prometheus/render-config.sh
 
+      - name: "U1 · update.sh deja la huella de observability/ y el compose etiqueta con ella a los seis servicios que leen observability/ al arrancar (V4-DV-4)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Prometheus solo lee sus reglas al arrancar y Alertmanager renderiza su configuracion en el
+        # entrypoint. Con el directorio del paquete reutilizado (in place) la definicion de esos
+        # servicios no cambia, y `up -d` los dejaba con las reglas de la version anterior sin avisar.
+        # La huella de `observability/` en el .env, leida como etiqueta por el compose, hace que
+        # `up -d` los recree cuando cambia CUALQUIER fichero (tambien una edicion del cliente que
+        # viaja con la fusion). Aqui se exige la cadena entera que SI se puede comprobar sin
+        # arrancar la observabilidad (esta etapa instala con COMPOSE_PROFILES vacio): que update.sh
+        # escribio la huella correcta, y que el compose nuevo la pone en los seis servicios que leen observability/ al arrancar.
+        # Que `up -d` recree de verdad al cambiar una etiqueta es semantica de Docker Compose.
+        run: |
+          set -euo pipefail
+          . infra/scripts/lib/observability-merge.sh
+          esperada="$(kq_obs_manifest paquete-nuevo/observability | sha256sum | cut -c1-16)"
+          actual="$(sudo sed -n 's/^KQ_OBSERVABILITY_REVISION=//p' paquete-nuevo/.env)"
+          test -n "${actual}" || { echo "update.sh no ha escrito KQ_OBSERVABILITY_REVISION en el .env nuevo"; exit 1; }
+          test "${actual}" = "${esperada}" || { echo "huella del .env (${actual}) distinta de la de observability/ (${esperada})"; exit 1; }
+          configuracion="$(sudo env COMPOSE_PROFILES=observability docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml config)"
+          test "$(grep -c "kronoqr.observability.revision: ${esperada}$" <<<"${configuracion}")" -eq 6
+          # La huella va en el .env y no en la imagen: no es un secreto, y el .env sigue en 0600.
+          test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
+
       - name: "U1 · Ventana de mantenimiento medida: cifra y reparto por fases (V6-DV-9)"
         if: steps.anterior.outputs.skip != 'true'
         # La cifra de `operacion.md` §11 sale de AQUI, no de una estimacion: el informe de

@@ -1,0 +1,229 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/queue.yml
+# (bloque 9 de la 2.3.0: V21-4-DV-2, CH2, V3-CH-3).
+rule_files:
+  - ../rules/queue.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # ColaDeTrabajosAcumulada: 51 trabajos durante 10 min dispara; 50 nunca.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_pending{queue="default"}'
+        values: "51x20"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ColaDeTrabajosAcumulada
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: ColaDeTrabajosAcumulada
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              queue: default
+            exp_annotations:
+              summary: "La cola default lleva 10 min con mas de 50 trabajos esperando"
+              description: >-
+                Horizon no da abasto o esta parado. Los informes en diferido, las
+                exportaciones integras y la difusion de la presencia al panel se
+                retrasan. El fichaje no se ve afectado: el quiosco ficha y encola
+                (regla dura 19). Revisa si el contenedor horizon esta en marcha y
+                sano y que dicen sus registros.
+              runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
+
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_pending{queue="default"}'
+        values: "50x30"
+      - series: "queue_job_duration_seconds_count"
+        values: "0+5x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ColaDeTrabajosAcumulada
+        exp_alerts: []
+
+  # Una rafaga que se drena antes de 10 min no despierta a nadie.
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_pending{queue="default"}'
+        values: "80x6 0x20"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ColaDeTrabajosAcumulada
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ColaDeTrabajosSinProcesar: un solo trabajo esperando y ninguno terminado.
+  # Horizon parado: el contador de trabajos terminados deja de crecer en el
+  # minuto 5 y la cola se queda con 1 elemento.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "0x5 1x60"
+      - series: "queue_job_duration_seconds_count"
+        values: "0+3x5 15x60"
+    alert_rule_test:
+      # Alla por el minuto 25 el contador lleva 20 min plano y la cola 20 con 1.
+      - eval_time: 20m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Hay trabajos esperando en la cola y ninguno ha terminado en los ultimos 30 min"
+              description: >-
+                Horizon no esta procesando: contenedor parado, en bucle de reinicio,
+                pausado o colgado. Mientras tanto las exportaciones integras (la que
+                se entrega a la Inspeccion o al empleado que ejerce su derecho de
+                acceso) y los informes en diferido se quedan en pending. Una
+                exportacion en curso, por larga que sea (hasta 60 min), no cuenta: un
+                trabajo que ya ha cogido un trabajador no esta «en espera». El
+                fichaje sigue.
+              runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
+
+  # Sin ninguna serie de trabajos terminados (jamas ha corrido uno) y con un
+  # trabajo esperando: dispara igualmente, hay trabajo y nadie lo hace.
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Hay trabajos esperando en la cola y ninguno ha terminado en los ultimos 30 min"
+              description: >-
+                Horizon no esta procesando: contenedor parado, en bucle de reinicio,
+                pausado o colgado. Mientras tanto las exportaciones integras (la que
+                se entrega a la Inspeccion o al empleado que ejerce su derecho de
+                acceso) y los informes en diferido se quedan en pending. Una
+                exportacion en curso, por larga que sea (hasta 60 min), no cuenta: un
+                trabajo que ya ha cogido un trabajador no esta «en espera». El
+                fichaje sigue.
+              runbook_url: docs/runbooks/cola-de-trabajos-atascada.md
+
+  # Cola con trabajo pero Horizon sano (los trabajos siguen terminando): nunca.
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "3x60"
+      - series: "queue_job_duration_seconds_count"
+        values: "0+2x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []
+
+  # Cola vacia y nada que procesar (de madrugada): nunca.
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ReverbSinRespuesta: la tarea de presencia corre (latido fresco) y la serie
+  # de conexiones falta desde el minuto 10.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: "presence_metrics_timestamp_seconds"
+        values: "0+60x40"
+      - series: "websocket_connections_active"
+        values: "2x10 _x30"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ReverbSinRespuesta
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ReverbSinRespuesta
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Reverb no responde: el panel en vivo ha perdido el tiempo real"
+              description: >-
+                La tarea de presencia corre pero Reverb no contesta a su consulta
+                desde hace 5 min. El panel de presencia deja de actualizarse solo
+                (recargar la pagina da el dato correcto) y cada difusion pendiente
+                ocupa al trabajador unos segundos. No se pierde ningun fichaje.
+              runbook_url: docs/runbooks/reverb-parado.md
+
+  # Reverb responde (cero conexiones es lo normal de madrugada): nunca.
+  - interval: 1m
+    input_series:
+      - series: "presence_metrics_timestamp_seconds"
+        values: "0+60x40"
+      - series: "websocket_connections_active"
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ReverbSinRespuesta
+        exp_alerts: []
+
+  # La tarea de presencia no corre (latido viejo): es otra averia, no esta.
+  - interval: 1m
+    input_series:
+      - series: "presence_metrics_timestamp_seconds"
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ReverbSinRespuesta
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Una exportacion integra legitima de 45 min (revision del bloque 9): UN trabajo
+  # reservado, que cuenta como pendiente (queue_jobs_pending = 1) pero no esta en
+  # espera (queue_jobs_waiting = 0), y ningun otro trabajo termina mientras tanto.
+  # No salta.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_pending{queue="default"}'
+        values: "0x5 1x45 0x10"
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "0x60"
+      - series: "queue_job_duration_seconds_count"
+        values: "0+3x5 15x55"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []
+
+  # El contador de terminados NACE en su primer valor (un contador en Redis no existe
+  # hasta su primer incremento): el primer trabajo de la historia termina en el
+  # minuto 20 (la serie aparece con 1) y ya cuenta como terminado, asi que la cola
+  # con trabajos esperando no salta durante los 20 min siguientes.
+  - interval: 1m
+    input_series:
+      - series: 'queue_jobs_waiting{queue="default"}'
+        values: "1x40"
+      - series: "queue_job_duration_seconds_count"
+        values: "_x20 1x20"
+    alert_rule_test:
+      - eval_time: 28m
+        alertname: ColaDeTrabajosSinProcesar
+        exp_alerts: []

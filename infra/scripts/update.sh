@@ -992,21 +992,6 @@ wait_for_healthy() {
   return 1
 }
 
-# El maestro de Horizon registrado y en marcha (`horizon:status` sale con 0;
-# 1 en pausa, 2 inactivo). Desde `app`, que llega al mismo Redis. Nunca deshace:
-# devuelve 1 si no llega a tiempo y quien llama decide.
-wait_for_horizon_heartbeat() {
-  local waited=0
-  while [ "${waited}" -lt "${KQ_WAIT_WORKERS}" ]; do
-    if compose_new exec -T app php artisan horizon:status >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep "${KQ_POLL_SECONDS}"
-    waited=$((waited + KQ_POLL_SECONDS))
-  done
-  return 1
-}
-
 # Sonda por loopback a traves del borde. `--insecure` por el mismo motivo que
 # en install.sh: se comprueba que la aplicacion responde, no que el nombre del
 # certificado resuelva desde este servidor.
@@ -2172,6 +2157,36 @@ merge_observability() {
   return 0
 }
 
+# La huella de `observability/` en el .env, para que `up -d` recree Prometheus, Alertmanager y
+# Blackbox cuando cambia (bloque 9 de la 2.3.0, V4-DV-4). Prometheus solo lee sus reglas al
+# arrancar y Alertmanager renderiza su configuracion en el entrypoint: si el directorio del paquete
+# es el mismo (in place), la ruta del montaje no cambia, la definicion del servicio tampoco, y
+# `up -d` los dejaba corriendo con las reglas y los destinatarios de la version anterior, sin avisar.
+# Con la huella como etiqueta (`kronoqr.observability.revision`, compose.prod.yaml) cualquier cambio
+# del contenido, tambien una edicion del cliente que viaja con la fusion, recrea los seis servicios que lo leen (Prometheus, Alertmanager, Blackbox, Grafana, Loki y Tempo).
+#
+# Va DESPUES de la fusion (lleva lo que el cliente edito) y escribe SOLO el .env de la version
+# nueva: el de la vuelta atras no la lleva, y al volver se recrean con la etiqueta anterior. Nunca
+# deshace la actualizacion: sin huella, se quedan como estaban y el aviso dice como
+# recrearlos a mano.
+set_observability_revision() {
+  local dir="${PACKAGE_DIR}/observability" manifest tmp revision
+
+  [ -d "${dir}" ] || return 0
+  if ! manifest="$(kq_obs_manifest "${dir}")" || [ -z "${manifest}" ]; then
+    kq_msg check_warn "$(kq_format u_w_obs_revision "${ENV_FILE}" "${COMPOSE_FILE}")"
+    return 0
+  fi
+  tmp="$(mktemp)"
+  printf '%s\n' "${manifest}" >"${tmp}"
+  revision="$(sha256_of "${tmp}" | cut -c1-16)"
+  rm -f -- "${tmp}"
+  if [ -z "${revision}" ] || ! kq_env_set "${ENV_FILE}" "KQ_OBSERVABILITY_REVISION" "${revision}" || ! chmod 0600 "${ENV_FILE}"; then
+    kq_msg check_warn "$(kq_format u_w_obs_revision "${ENV_FILE}" "${COMPOSE_FILE}")"
+  fi
+  return 0
+}
+
 prepare_package() {
   local certs_from certs_to branding branding_from branding_to
 
@@ -2199,6 +2214,8 @@ prepare_package() {
     # tendra el .env vivo.
     write_wal_key "${ROLLBACK_ENV}"
     write_wal_key "${ENV_FILE}"
+    # In place no hay fusion (el directorio es el mismo): la huella es la del contenido que ya esta.
+    set_observability_revision
     return 0
   fi
 
@@ -2256,6 +2273,7 @@ prepare_package() {
   esac
 
   merge_observability
+  set_observability_revision
 }
 
 #------------------------------------------------------------------------------
@@ -3210,20 +3228,26 @@ phase_start_and_verify() {
   say "$(kq_format u_workers_up "${TARGET_VERSION}")"
   detail_note "--- up -d (resto de servicios, ${TARGET_VERSION}) ---"
   compose_new up -d --remove-orphans >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
+    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}" "arranque")" workers_failed
+  # Los tres procesos de fondo tienen `healthcheck` desde la 2.3.0 (O1): `horizon`
+  # con `horizon:status` (el maestro registrado y NO en pausa), `scheduler` con su
+  # latido y `reverb` con `/up`. `wait_for_healthy` espera a `healthy`, no solo a
+  # `running`, y por tanto ESPERA al maestro de Horizon (la espera de su latido, que
+  # era aparte, ya no hace falta: `product:doctor` de abajo lo encuentra registrado).
+  #
+  # Si uno no llega a `healthy` en KQ_WAIT_WORKERS segundos, ESTO NO SE DESHACE, y
+  # es una decision tomada: estamos DESPUES del 401 del paso 5 (ROLLBACK_ARMED=3), la
+  # version nueva atiende y los quioscos le entregan fichajes, y restaurar la copia
+  # previa los borraria (la decision del propietario del 20-10-2026, la misma de
+  # cualquier fallo posterior al 401). `rollback_and_die` aqui es `forward_incomplete`:
+  # salida 5, version nueva en servicio y la orden para arreglar el proceso a mano. Un
+  # `horizon` que no esta sano significa exportaciones e informes sin procesar, no
+  # fichaje perdido: es un problema que una persona arregla con el sistema en pie
+  # (`docker compose logs --tail 100 <servicio>`), no una razon para tirarlo.
   for service in horizon scheduler reverb; do
     wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" ||
-      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
+      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}" "${service}")" workers_failed
   done
-
-  # `product:doctor` va AQUI, con los trabajadores ya en marcha, y no antes: su
-  # sonda `queue.worker` pregunta a Horizon por su latido, y ejecutado antes de
-  # arrancarlo lo veia siempre parado y TODA actualizacion acababa «con avisos»
-  # (revision de la verificacion final). `wait_for_healthy` solo dice que el
-  # contenedor corre; el maestro de Horizon tarda unos segundos mas en
-  # registrarse, y se espera a el. Si no llega, no se deshace nada: lo dira
-  # `product:doctor`, que es informativo aqui.
-  wait_for_horizon_heartbeat || true
 
   # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
   # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva

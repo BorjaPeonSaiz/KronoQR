@@ -496,8 +496,9 @@ it('no cita en ninguna guia ni runbook un comando de consola que no exista', fun
     // anadir uno sea una decision y no un descuido. `horizon:continue` es de
     // Laravel Horizon y lo cita el arreglo de `queue.worker` de `product:doctor`
     // (`lang/*/doctor.php`): reanuda la cola que alguien dejo en pausa (§2 de
-    // la 2.2.1).
-    $laravel = ['horizon:continue', 'key:generate', 'migrate:status', 'schedule:list'];
+    // la 2.2.1). `horizon:status` es el `healthcheck` del contenedor `horizon` y
+    // lo cita el runbook de la cola de trabajos (bloque 9 de la 2.3.0).
+    $laravel = ['horizon:continue', 'horizon:status', 'key:generate', 'migrate:status', 'schedule:list'];
 
     $nonexistent = array_values(array_diff(
         ClientDocs::citedArtisanCommands([...ClientDocs::markdownFiles(), ...ClientDocs::runbookFiles()]),

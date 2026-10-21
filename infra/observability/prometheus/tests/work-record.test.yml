@@ -540,3 +540,84 @@ tests:
       - eval_time: 2882m
         alertname: ZonaDelCentroNoVerificable
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ConciliacionCompletaSinTramos (revision del bloque 9): la pasada completa leyo 0
+  # tramos y hay fichajes. Los fichajes NACEN en el minuto 2 con valor 40 (un
+  # contador de Redis no existe hasta su primer incremento).
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_entries_checked{scope="full"}'
+        values: "0x120"
+      - series: 'scans_total{result="clock_in"}'
+        values: "_ _ 40x120"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: seguridad
+              component: audit
+              scope: full
+            exp_annotations:
+              summary: "La conciliacion completa del registro horario ha leido 0 tramos habiendo fichajes"
+              description: >-
+                La ultima pasada semanal (compliance:reconcile-work-record --full) no
+                ha cruzado ningun tramo con su auditoria, y en los ultimos 8 dias ha
+                habido fichajes aceptados. Una conciliacion que no lee nada da cero
+                discrepancias y parece perfecta, pero no puede encontrar un borrado ni
+                una edicion. O el comando mira otra base o un filtro roto, o alguien ha
+                vaciado shift_entries. No te fies de un cero en las discrepancias hasta
+                aclararlo.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+  # Instalacion nueva: 0 tramos y 0 fichajes. Correcto, no salta.
+  - interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_entries_checked{scope="full"}'
+        values: "0x120"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts: []
+
+  # Rechazos de firma no son fichajes aceptados: no cuentan.
+  - interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_entries_checked{scope="full"}'
+        values: "0x120"
+      - series: 'scans_total{result="rejected_signature"}'
+        values: "_ _ 40x120"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts: []
+
+  # La pasada lee tramos: no salta aunque haya fichajes.
+  - interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_entries_checked{scope="full"}'
+        values: "1200x120"
+      - series: 'scans_total{result="clock_in"}'
+        values: "_ _ 40x120"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts: []
+
+  # La pasada diaria (`recent`) a cero no es esta alerta: solo vigila la completa.
+  - interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_entries_checked{scope="recent"}'
+        values: "0x120"
+      - series: 'scans_total{result="clock_in"}'
+        values: "_ _ 40x120"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ConciliacionCompletaSinTramos
+        exp_alerts: []

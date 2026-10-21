@@ -45,6 +45,17 @@ use DateTimeImmutable;
  * reinicio de contador, que es el comportamiento correcto de un `counter` — y
  * seguiria estando el sello de tiempo para delatar que algo paso.
  *
+ * ## Desde cuando: dos marcas de tiempo que sobreviven, junto al contador
+ *
+ * El acumulado a secas dice CUANTAS divergencias hubo, no CUANDO. Por eso el mismo
+ * fichero lleva `projection_divergence_first_increase_timestamp_seconds` (la
+ * primera pasada que encontro una divergencia) y
+ * `projection_divergence_last_increase_timestamp_seconds` (la ultima). Se escriben
+ * con el contador, se leen del fichero antes de reescribirlo y se OMITEN mientras
+ * no haya habido ninguna divergencia: ausente significa «nunca», que es el estado
+ * normal (cero es cero). No dependen de la retencion de Prometheus (90 dias): el
+ * cuadro de «Integridad del dato» las lee tal cual.
+ *
  * ## Se escribe siempre, tambien cuando todo esta bien
  *
  * Una serie que solo aparece cuando hay divergencias es indistinguible de una
@@ -63,6 +74,10 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
 
     private const string DIVERGENCE_METRIC = 'projection_divergence_total';
 
+    private const string FIRST_INCREASE_METRIC = 'projection_divergence_first_increase_timestamp_seconds';
+
+    private const string LAST_INCREASE_METRIC = 'projection_divergence_last_increase_timestamp_seconds';
+
     public function reconciliationCompleted(
         int $workDaysInspected,
         int $divergences,
@@ -72,11 +87,20 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
         DateTimeImmutable $at,
     ): void {
         $total = $this->previousCounter() + $divergences;
+        $first = $this->previousTimestamp(self::FIRST_INCREASE_METRIC);
+        $last = $this->previousTimestamp(self::LAST_INCREASE_METRIC);
+
+        if ($divergences > 0) {
+            $first ??= $at->getTimestamp();
+            $last = $at->getTimestamp();
+        }
 
         TextfileExposition::write(self::FILE, [
             '# HELP '.self::DIVERGENCE_METRIC.' Jornadas cuya proyeccion daily_totals no coincidia con sus eventos origen (RF-PR-02, ADR-007). Debe permanecer siempre en cero.',
             '# TYPE '.self::DIVERGENCE_METRIC.' counter',
             self::DIVERGENCE_METRIC.' '.$total,
+            ...$this->timestampLines(self::FIRST_INCREASE_METRIC, 'Momento de la primera pasada que encontro una divergencia. Ausente: nunca la ha habido.', $first),
+            ...$this->timestampLines(self::LAST_INCREASE_METRIC, 'Momento de la ultima pasada que encontro una divergencia. Ausente: nunca la ha habido.', $last),
             '# HELP projection_reconciliation_last_run_timestamp_seconds Momento de la ultima reconciliacion. Su ausencia delata que la tarea programada dejo de ejecutarse.',
             '# TYPE projection_reconciliation_last_run_timestamp_seconds gauge',
             'projection_reconciliation_last_run_timestamp_seconds '.$at->getTimestamp(),
@@ -100,6 +124,52 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
             '# TYPE projection_reconciliation_last_self_resolved gauge',
             'projection_reconciliation_last_self_resolved '.$selfResolved,
         ]);
+    }
+
+    /**
+     * Las tres lineas de un *gauge* de marca de tiempo, o ninguna si aun no hay
+     * marca (ausente significa «nunca»).
+     *
+     * @return list<string>
+     */
+    private function timestampLines(string $metric, string $help, ?int $timestamp): array
+    {
+        if ($timestamp === null) {
+            return [];
+        }
+
+        return [
+            '# HELP '.$metric.' '.$help,
+            '# TYPE '.$metric.' gauge',
+            $metric.' '.$timestamp,
+        ];
+    }
+
+    /**
+     * La marca de tiempo que dejo la escritura anterior, o `null` si no hay.
+     */
+    private function previousTimestamp(string $metric): ?int
+    {
+        $contents = $this->previousContents();
+
+        if ($contents === null || preg_match('/^'.preg_quote($metric, '/').'\s+(\d+)/m', $contents, $match) !== 1) {
+            return null;
+        }
+
+        return (int) $match[1];
+    }
+
+    private function previousContents(): ?string
+    {
+        $target = TextfileExposition::path(self::FILE);
+
+        if (! is_file($target)) {
+            return null;
+        }
+
+        $contents = file_get_contents($target);
+
+        return $contents === false ? null : $contents;
     }
 
     /**

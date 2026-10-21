@@ -113,7 +113,10 @@ it('calcula la profundidad de las colas en el momento del scrape', function (): 
 
     expect($body)
         ->toContain('# TYPE queue_jobs_pending gauge')
-        ->toMatch('/^queue_jobs_pending\{queue="[^"]+"\} \d+$/m');
+        ->toMatch('/^queue_jobs_pending\{queue="[^"]+"\} \d+$/m')
+        // Sin los reservados (bloque 9 de la 2.3.0): lo que espera a un trabajador.
+        ->toContain('# TYPE queue_jobs_waiting gauge')
+        ->toMatch('/^queue_jobs_waiting\{queue="[^"]+"\} \d+$/m');
 })->group('RQ-06');
 
 it('no publica ninguna serie que el catalogo no declare', function (): void {

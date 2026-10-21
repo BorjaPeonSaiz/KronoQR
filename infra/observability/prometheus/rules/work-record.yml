@@ -286,3 +286,48 @@ groups:
             tramo antiguo. O el scheduler estuvo parado el domingo, o el
             comando fallo antes de publicar la metrica.
           runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+      #------------------------------------------------------------------------
+      # La pasada completa lee CERO tramos habiendo fichajes (revision del bloque
+      # 9). Una conciliacion que no lee nada da `discrepancies = 0` y parece
+      # perfecta: sin tramos que cruzar no puede encontrar un borrado. Pasa si la
+      # consulta del comando apunta a otra base o a otro centro, si un filtro se
+      # rompe, o si alguien ha vaciado `shift_entries` (en cuyo caso el
+      # diagnostico es otro y mas grave). Se exige que haya habido fichajes
+      # aceptados (entrada, salida o pausa) en los ultimos 8 dias: en una
+      # instalacion nueva, sin un solo fichaje, 0 tramos es lo correcto.
+      #
+      # LOS FICHAJES SE CUENTAN CON LA RAMA DE LA SERIE NACIDA (como en api.yml):
+      # un contador de Redis nace en su primer valor y `increase()` no ve ese salto.
+      #
+      # `high` y no `critical`, y sin `integrity`: no prueba que se haya escrito
+      # fuera de la aplicacion, prueba que NO SE PUEDE saber. Destinatario
+      # seguridad, como el resto de la conciliacion.
+      #------------------------------------------------------------------------
+      - record: kronoqr:scans_accepted:increase8d
+        expr: >-
+          (sum(increase(scans_total{result=~"clock_in|clock_out|break_start|break_end"}[8d]) and scans_total{result=~"clock_in|clock_out|break_start|break_end"} offset 8d) or vector(0))
+          +
+          (sum(scans_total{result=~"clock_in|clock_out|break_start|break_end"} unless scans_total{result=~"clock_in|clock_out|break_start|break_end"} offset 8d) or vector(0))
+
+      - alert: ConciliacionCompletaSinTramos
+        expr: >-
+          work_record_reconciliation_entries_checked{scope="full"} == 0
+          and on ()
+          (kronoqr:scans_accepted:increase8d > 0)
+        for: 1h
+        labels:
+          severity: high
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "La conciliacion completa del registro horario ha leido 0 tramos habiendo fichajes"
+          description: >-
+            La ultima pasada semanal (compliance:reconcile-work-record --full) no
+            ha cruzado ningun tramo con su auditoria, y en los ultimos 8 dias ha
+            habido fichajes aceptados. Una conciliacion que no lee nada da cero
+            discrepancias y parece perfecta, pero no puede encontrar un borrado ni
+            una edicion. O el comando mira otra base o un filtro roto, o alguien ha
+            vaciado shift_entries. No te fies de un cero en las discrepancias hasta
+            aclararlo.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md

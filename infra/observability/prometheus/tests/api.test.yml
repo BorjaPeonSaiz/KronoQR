@@ -25,6 +25,7 @@ tests:
               severity: critical
               destinatario: it-cliente
               component: api
+              family: fichaje
             exp_annotations:
               summary: "Mas del 1 % de las peticiones de fichaje han fallado en los ultimos 5 min"
               description: >-
@@ -53,9 +54,11 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # LatenciaDelFichajeAlta: histograma con TODA la masa entre 0,4 s y 1,0 s.
-  # El p95 dentro de un unico cubo cae al 95 % de su ancho:
-  # 0,4 + 0,95*(1,0-0,4) = 0,97 s, por encima de los 500 ms del catalogo.
+  # LatenciaDelFichajeAlta (solo `attendance.scan`, bloque 9 de la 2.3.0,
+  # R4-DV-06): histograma con TODA la masa entre 0,4 s y 1,0 s. El p95 dentro de
+  # un unico cubo cae al 95 % de su ancho: 0,4 + 0,95*(1,0-0,4) = 0,97 s, por
+  # encima de los 500 ms del catalogo. 10 peticiones por minuto: 100 en la
+  # ventana de 10 min, por encima del minimo de 20.
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
@@ -71,11 +74,13 @@ tests:
         values: "0x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="0.4"}'
         values: "0x20"
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="1"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="1.0"}'
         values: "0+10x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="3"}'
         values: "0+10x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="+Inf"}'
+        values: "0+10x20"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan"}'
         values: "0+10x20"
     alert_rule_test:
       - eval_time: 15m
@@ -86,13 +91,15 @@ tests:
               destinatario: it-cliente
               component: api
             exp_annotations:
-              summary: "El p95 de latencia del fichaje supera los 500 ms desde hace 10 min"
+              summary: "El p95 de latencia del fichaje con tarjeta supera los 500 ms desde hace 10 min"
               description: >-
-                RNF-P-02 fija p95 < 150 ms; esta alerta suena muy por encima,
-                a 500 ms, porque a partir de ahi el retraso ya lo nota quien
-                esta fichando delante del quiosco. Con 500 personas en el
-                cambio de turno, una cola de peticiones lentas en el
-                servidor se traduce en gente esperando frente a la tablet.
+                RNF-P-02 fija p95 < 150 ms; esta alerta suena muy por encima, a
+                500 ms, porque a partir de ahi el retraso ya lo nota quien esta
+                fichando delante del quiosco. Con 500 personas en el cambio de
+                turno, una cola de peticiones lentas en el servidor se traduce
+                en gente esperando frente a la tablet. Solo mide el fichaje con
+                tarjeta (attendance.scan), con al menos 20 peticiones en la
+                ventana; el PIN y el lote tienen la suya.
               runbook_url: docs/runbooks/errores-en-el-panel.md
 
   #-----------------------------------------------------------------------------
@@ -114,15 +121,179 @@ tests:
         values: "0x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="0.4"}'
         values: "0+10x20"
-      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="1"}'
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="1.0"}'
         values: "0+10x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="3"}'
         values: "0+10x20"
       - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="+Inf"}'
         values: "0+10x20"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan"}'
+        values: "0+10x20"
     alert_rule_test:
       - eval_time: 15m
         alertname: LatenciaDelFichajeAlta
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Poco trafico (R4-DV-06): masa lenta entre 0,4 s y 1,0 s pero solo 1 peticion
+  # por minuto (10 en la ventana, por debajo del minimo de 20). No dispara: el
+  # p95 de diez peticiones es la mas lenta de las diez.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="0.4"}'
+        values: "0x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="1.0"}'
+        values: "0+1x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="+Inf"}'
+        values: "0+1x20"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: LatenciaDelFichajeAlta
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # R4-DV-06: el PIN tarda 1,2 s (su hash en una maquina lenta) y el fichaje con
+  # tarjeta 50 ms. Antes, con la regla agrupada, el p95 conjunto lo dominaba el
+  # PIN y saltaba sin averia. Ahora la del QR no ve el PIN, y la del PIN no salta
+  # con 1,2 s (los cubos del histograma son 1,0 y 3,0 s: toda la masa entre uno y
+  # otro queda del lado bueno del umbral de 3 s).
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="0.1"}'
+        values: "0+30x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan", le="+Inf"}'
+        values: "0+30x20"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan"}'
+        values: "0+30x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="1.0"}'
+        values: "0x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+        values: "0+30x20"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
+        values: "0+30x20"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.pin"}'
+        values: "0+30x20"
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: LatenciaDelFichajeAlta
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: LatenciaDelFichajePorPinAlta
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # LatenciaDelFichajePorPinAlta: toda la masa por encima de 3 s (cubo +Inf), con
+  # 30 PIN por minuto (mas de 20 en la ventana). `for: 5m`.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+        values: "0x30"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
+        values: "0+30x30"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.pin"}'
+        values: "0+30x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LatenciaDelFichajePorPinAlta
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LatenciaDelFichajePorPinAlta
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Mas del 5 % de los fichajes por PIN tardan mas de 3 s desde hace 10 min"
+              description: >-
+                El fichaje por PIN paga un hash bcrypt de coste 12 a proposito
+                (RNF-P-08: p95 < 400 ms en el hardware de referencia). Por encima de
+                3 s en mas de uno de cada veinte, el servidor va justo de CPU o la
+                base de datos va lenta. El fichaje con tarjeta no se ve afectado salvo
+                que la causa sea comun: compara con LatenciaDelFichajeAlta. Con al
+                menos 20 peticiones por PIN en la ventana.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Valor limite por debajo: el 4 % por encima de 3 s (1 de cada 25). El umbral es
+  # `> 0.05`. (No se prueba el 5 % exacto: 1 - 19/20 no es 0,05 en coma flotante.)
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+        values: "0+24x30"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
+        values: "0+25x30"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.pin"}'
+        values: "0+25x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LatenciaDelFichajePorPinAlta
+        exp_alerts: []
+
+  # Poco trafico por PIN (10 en la ventana, minimo 20): nunca, aunque todos pasen de 3 s.
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="3.0"}'
+        values: "0x30"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}'
+        values: "0+1x30"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.pin"}'
+        values: "0+1x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LatenciaDelFichajePorPinAlta
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # LatenciaDelFichajePorLoteAlta: todos los lotes por encima de 3 s, 1 por
+  # minuto (10 en la ventana, por encima del minimo de 5). `for: 15m`.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}'
+        values: "0x40"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}'
+        values: "0+1x40"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.batch"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: LatenciaDelFichajePorLoteAlta
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LatenciaDelFichajePorLoteAlta
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: api
+            exp_annotations:
+              summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 3 s desde hace 10 min"
+              description: >-
+                El envio de la cola offline de un quiosco (hasta 50 fichajes por
+                lote) tarda mas de lo normal. Un lote lleno tras un corte largo puede
+                rozar los 3 s sin que haya averia: si coincide con un quiosco que se
+                esta vaciando, espera; si no, el servidor va lento. Los quioscos
+                siguen aceptando fichajes y los reenviaran (regla dura 19). Con al
+                menos 5 lotes en la ventana.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Lotes que acaban dentro de 3 s: nunca.
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="3.0"}'
+        values: "0+1x40"
+      - series: 'http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}'
+        values: "0+1x40"
+      - series: 'http_request_duration_seconds_count{route="attendance.scan.batch"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: LatenciaDelFichajePorLoteAlta
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
@@ -188,3 +359,224 @@ tests:
       - eval_time: 20m
         alertname: SondaDelBordeFallida
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ErroresDeServidorEnElPanel (bloque 9 de la 2.3.0, V21-4-DV-3): una ruta de
+  # gestion con 2 5xx por minuto sobre 20 correctas (9 %) durante mas de 10 min.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+2x40"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: gestion
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+              description: >-
+                Las rutas de gestion (el panel, la configuracion, la gestion de
+                quioscos y sus rutas de padron, latido y emparejamiento) estan
+                devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+                rutas, con su propia alerta. Mira el historico de errores del panel
+                y product:doctor; la causa habitual es la base de datos, el disco o
+                un despliegue reciente.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Valor limite justo por debajo: 5 % exacto (1 error por 20 correctas). El umbral
+  # es `> 0.05` estricto: nunca dispara.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+19x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Poco trafico: 2 errores de 3 peticiones en 10 min (67 %) no son 3 errores.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+0.1x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "0+0.2x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Un 5xx en el fichaje o en el portal no cuenta aqui: tienen sus propias alertas.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="500"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "0+20x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ErroresDeServidorEnElPortal: igual, sobre las rutas portal.*.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="200"}'
+        values: "0+20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "0+2x40"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: portal
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+              description: >-
+                El portal del empleado (acceso con codigo y PIN, consulta de su
+                registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+                afectado, pero las personas no pueden consultar su registro ni
+                ejercer su derecho de acceso. Mira el historico de errores del
+                panel y product:doctor.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  # Poco trafico en el portal: nunca.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.login", method="POST", status="200"}'
+        values: "0+0.1x40"
+      - series: 'http_requests_total{route="portal.login", method="POST", status="500"}'
+        values: "0+0.2x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # CONTADORES QUE NACEN EN SU PRIMER VALOR (revision del bloque 9). En Redis un
+  # contador no existe hasta su primer incremento: la serie de 5xx nace con valor
+  # 1 (o mas) y `increase()` no ve ese primer salto. Aqui las series NO existen
+  # hasta el minuto 3 (`_`) y nacen ya con su valor.
+  #-----------------------------------------------------------------------------
+  # Fichaje: el primer 5xx de la historia (1) sobre 50 peticiones correctas = 1,96 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="200"}'
+        values: "_ _ _ 50x30"
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="500"}'
+        values: "_ _ _ 1x30"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ErroresDeServidorEnElFichaje
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: api
+              family: fichaje
+            exp_annotations:
+              summary: "Mas del 1 % de las peticiones de fichaje han fallado en los ultimos 5 min"
+              description: >-
+                Las rutas attendance.scan, attendance.scan.batch y
+                attendance.scan.pin estan devolviendo 5xx por encima del 1 %
+                de sus peticiones. El quiosco encola y confirma localmente
+                (regla dura 19: nunca bloquea al empleado), pero esos
+                fichajes no llegan al servidor hasta que el fallo se
+                resuelva. Revisa el estado de la base de datos, Redis y el
+                ultimo despliegue.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+      # Pasada la ventana de 5 min el suceso ya no cuenta y la alerta se apaga sola.
+      - eval_time: 20m
+        alertname: ErroresDeServidorEnElFichaje
+        exp_alerts: []
+
+  # Panel: 3 errores nacidos de golpe (3) sobre 20 peticiones correctas nacidas de golpe = 13 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "_ _ _ 20x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "_ _ _ 3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: gestion
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del panel de gestion han fallado en los ultimos 10 min"
+              description: >-
+                Las rutas de gestion (el panel, la configuracion, la gestion de
+                quioscos y sus rutas de padron, latido y emparejamiento) estan
+                devolviendo 5xx. El fichaje no se ve afectado: es otra familia de
+                rutas, con su propia alerta. Mira el historico de errores del panel
+                y product:doctor; la causa habitual es la base de datos, el disco o
+                un despliegue reciente.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+      - eval_time: 35m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Panel: un solo error nacido en 1 no llega al minimo de 3, por mucho que sea el 50 %.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="employees.index", method="GET", status="200"}'
+        values: "_ _ _ 1x40"
+      - series: 'http_requests_total{route="employees.index", method="GET", status="500"}'
+        values: "_ _ _ 1x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPanel
+        exp_alerts: []
+
+  # Portal: igual, tres errores nacidos de golpe.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="200"}'
+        values: "_ _ _ 20x40"
+      - series: 'http_requests_total{route="portal.workdays", method="GET", status="500"}'
+        values: "_ _ _ 3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ErroresDeServidorEnElPortal
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              family: portal
+            exp_annotations:
+              summary: "Mas del 5 % de las peticiones del portal del empleado han fallado en los ultimos 10 min"
+              description: >-
+                El portal del empleado (acceso con codigo y PIN, consulta de su
+                registro y exportacion) esta devolviendo 5xx. El fichaje no se ve
+                afectado, pero las personas no pueden consultar su registro ni
+                ejercer su derecho de acceso. Mira el historico de errores del
+                panel y product:doctor.
+              runbook_url: docs/runbooks/errores-en-el-panel.md

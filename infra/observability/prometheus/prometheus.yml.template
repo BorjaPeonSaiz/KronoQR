@@ -148,6 +148,27 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
+  # Loki, sondeado desde fuera (bloque 9 de la 2.3.0, V21-4-DV-4). Su imagen (3.7) no trae shell ni
+  # `wget`, asi que no puede llevar `healthcheck`: lo que Docker no puede preguntarle lo pregunta
+  # blackbox-exporter por la red interna, con el modulo en texto plano `http_2xx_internal`.
+  # `/ready` de Loki responde 200 cuando acepta registros. La alerta `LokiSinRespuesta`
+  # (rules/observability.yml) vive de `probe_success{job="kronoqr-loki"}`.
+  - job_name: kronoqr-loki
+    metrics_path: /probe
+    params:
+      module: [http_2xx_internal]
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - http://loki:3100/ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
   # SEGUNDA SONDA DE TLS, LA QUE SI VERIFICA IDENTIDAD (tarea 3.8, H-05).
   # `kronoqr-uptime` de arriba entra por la red de contenedores contra
   # `nginx:8443`, con `insecure_skip_verify: true` a proposito: nunca podria
