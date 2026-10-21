@@ -306,6 +306,17 @@ return [
         'footer' => 'Recibes este correo cada lunes porque tu instalación tiene activado el resumen semanal. Se envía una sola vez por semana.',
 
         'no_department' => 'tu ámbito',
+
+        // Lo que imprime `reporting:weekly-summary` cuando no envía nada, con
+        // dónde se arregla cada caso (RF-PR-05, V4-PL-4). Sin nombres ni
+        // direcciones: acaba en el log del planificador (regla dura 21).
+        'not_sent' => [
+            'disabled' => 'El resumen semanal está desactivado en esta instalación. Se enciende en el panel, en Ajustes: WEEKLY_SUMMARY_EMAIL.',
+            'mailer_silent' => 'Esta instalación no tiene un transporte de correo real (MAIL_MAILER). No es un fallo: el resumen es opcional y el resto del producto funciona igual.',
+            'not_in_plan' => 'El plan de la licencia de esta instalación no incluye el resumen semanal por correo; para tenerlo hay que ampliarlo. El registro horario y la exportación para la Inspección no dependen de ello.',
+            'license_inactive' => 'La licencia de esta instalación no está en vigor (caducada, sin activar o sin verificar), y mientras tanto el resumen semanal no se envía. Vuelve solo al renovarla o activarla, sin configurar nada: mira `php artisan license:show`. El registro horario y la exportación para la Inspección no dependen de ella.',
+            'no_recipients' => 'No hay ningún responsable de departamento activo y con correo al que escribir. Se asignan en el panel, en Departamentos.',
+        ],
     ],
 
     /*

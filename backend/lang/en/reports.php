@@ -258,6 +258,17 @@ return [
         'footer' => 'You get this email every Monday because your installation has the weekly summary switched on. It is sent once per week.',
 
         'no_department' => 'your scope',
+
+        // What `reporting:weekly-summary` prints when it sends nothing, with
+        // where each case is fixed (RF-PR-05, V4-PL-4). No names or addresses:
+        // it ends up in the scheduler log (hard rule 21).
+        'not_sent' => [
+            'disabled' => 'The weekly summary is switched off on this installation. Turn it on in the panel, under Settings: WEEKLY_SUMMARY_EMAIL.',
+            'mailer_silent' => 'This installation has no real mail transport (MAIL_MAILER). This is not a fault: the summary is optional and the rest of the product works the same.',
+            'not_in_plan' => 'The plan of this installation\'s licence does not include the weekly email summary; the plan has to be extended to get it. The time record and the export for the Labour Inspectorate do not depend on it.',
+            'license_inactive' => 'The licence of this installation is not in force (expired, not activated or not verifiable), and meanwhile the weekly summary is not sent. It comes back on its own once the licence is renewed or activated, with nothing to configure: see `php artisan license:show`. The time record and the export for the Labour Inspectorate do not depend on it.',
+            'no_recipients' => 'There is no active department manager with an email address to write to. They are assigned in the panel, under Departments.',
+        ],
     ],
 
     /*
