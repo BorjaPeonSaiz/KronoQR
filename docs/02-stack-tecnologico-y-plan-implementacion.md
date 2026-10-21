@@ -1713,6 +1713,9 @@ IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS=3600  # 60 min, 429 tambien con el PIN co
 IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR=60  # Techo de asientos auth.origin_locked por hora
                                        # (ADR-010: mismo candado que el fichaje). Por encima,
                                        # el bloqueo se aplica y solo queda log y metrica
+IDENTITY_DORMANT_ACCOUNT_DAYS=90       # ADR-060 · dias sin entrar tras los que una cuenta de gestion
+                                       # ACTIVA cuenta como sin uso. No se purga: doctor avisa
+                                       # (access.dormant_accounts) y management_accounts_dormant{role}
 IDENTITY_PIN_SEALING_SECRET_KEY=       # RF-AT-11 · X25519 en base64, generada en el servidor
                                        # del cliente. La pública se deriva y se sirve en
                                        # GET /kiosk/roster. Vacía = sin fichaje por PIN

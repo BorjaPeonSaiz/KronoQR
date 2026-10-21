@@ -13,6 +13,8 @@ use App\Modules\Identity\Application\Port\CredentialRepository;
 use App\Modules\Identity\Application\Port\CredentialSecretFactory;
 use App\Modules\Identity\Application\Port\DeviceRepository;
 use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
+use App\Modules\Identity\Application\Port\DormantAccountMetrics;
+use App\Modules\Identity\Application\Port\DormantAccounts;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
@@ -73,6 +75,7 @@ use App\Modules\Identity\Infrastructure\Console\CreateManagementUserCommand;
 use App\Modules\Identity\Infrastructure\Console\CredentialStatusCommand;
 use App\Modules\Identity\Infrastructure\Console\DeactivateManagementUserCommand;
 use App\Modules\Identity\Infrastructure\Console\DeliverCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\DormantAccountsCommand;
 use App\Modules\Identity\Infrastructure\Console\IssueCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\ListManagementUsersCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialBatchCommand;
@@ -86,6 +89,8 @@ use App\Modules\Identity\Infrastructure\Console\UnlockPortalOriginCommand;
 use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
 use App\Modules\Identity\Infrastructure\Metrics\RedisManagementAccountMetrics;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
+use App\Modules\Identity\Infrastructure\Metrics\TextfileDormantAccountMetrics;
+use App\Modules\Identity\Infrastructure\Persistence\DatabaseDormantAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
@@ -257,6 +262,8 @@ final class IdentityServiceProvider extends ServiceProvider
                 CreateManagementUserCommand::class,
                 ResetTwoFactorCommand::class,
                 DeactivateManagementUserCommand::class,
+                // Cuentas activas sin uso (ADR-060): solo cuenta y publica la metrica.
+                DormantAccountsCommand::class,
                 ResetManagementPasswordCommand::class,
                 // Solo lee. Su salida lleva correos: lo advierte su `--help`.
                 ListManagementUsersCommand::class,
@@ -546,6 +553,10 @@ final class IdentityServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(CredentialMetrics::class, TextfileCredentialMetrics::class);
+
+        // Cuentas activas sin uso (ADR-060, tarea 11.3 B).
+        $this->app->bind(DormantAccounts::class, static fn (): DatabaseDormantAccounts => new DatabaseDormantAccounts(DB::connection()));
+        $this->app->bind(DormantAccountMetrics::class, TextfileDormantAccountMetrics::class);
 
         $this->app->bind(
             MintCards::class,

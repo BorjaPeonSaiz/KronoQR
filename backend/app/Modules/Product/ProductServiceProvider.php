@@ -2199,6 +2199,7 @@ final class ProductServiceProvider extends ServiceProvider
                 Config::array('identity.two_factor.required_roles', []),
                 static fn (mixed $role): bool => \is_string($role),
             )),
+            dormantDays: Config::integer('identity.dormant_account_days', 90),
         );
     }
 }

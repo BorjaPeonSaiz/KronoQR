@@ -290,6 +290,12 @@ return [
                     .'and the nightly clean-up of expired tokens never deletes them. They come from versions '
                     .'before 2.2.0. This report only gives the number, never whose they are.',
             ],
+            'dormant_accounts' => [
+                'ok' => 'No active management account has gone more than :days days without signing in to the panel.',
+                'warning' => ':count active management account(s) (:roles) have gone more than :days days without '
+                    .'signing in to the panel. They can still sign in: an account nobody uses is an open door nobody '
+                    .'watches. This report only gives the number, never which ones.',
+            ],
         ],
 
         'tls' => [
@@ -854,6 +860,13 @@ return [
                     ."If the number does not go down within a few weeks, generate the diagnostic bundle\n"
                     ."and send it to support:\n"
                     .'  docker compose exec app php artisan product:diagnostics',
+            ],
+            'dormant_accounts' => [
+                'warning' => "Check the last sign-in of each account in the panel, under Accounts. If nobody\n"
+                    ."uses one any more, deactivate it:\n"
+                    ."  docker compose exec app php artisan identity:deactivate-user <account-email>\n"
+                    ."If the person is still there and was just away, nothing needs doing. The period\n"
+                    .'is set by IDENTITY_DORMANT_ACCOUNT_DAYS in the .env file.',
             ],
         ],
 

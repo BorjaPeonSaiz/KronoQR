@@ -44,6 +44,13 @@ final readonly class RetentionReport
         public array $shortCycleCutoffs,
         public array $tallies,
         public array $notes = [],
+        /**
+         * Ultima fecha de cese cuya ficha se minimiza (ADR-060, tarea 11.3 A).
+         * Nula en un informe anterior a la 2.3.0.
+         */
+        public ?DateTimeImmutable $personnelRecordCutoff = null,
+        /** Ultima fecha de baja cuya cuenta de gestion se minimiza (tarea 11.3 B). */
+        public ?DateTimeImmutable $managementAccountCutoff = null,
     ) {}
 
     /**
@@ -132,6 +139,8 @@ final readonly class RetentionReport
             shortCycleCutoffs: $this->shortCycleCutoffs,
             tallies: $tallies,
             notes: $notes,
+            personnelRecordCutoff: $this->personnelRecordCutoff,
+            managementAccountCutoff: $this->managementAccountCutoff,
         );
     }
 }

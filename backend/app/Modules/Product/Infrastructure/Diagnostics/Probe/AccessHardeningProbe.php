@@ -68,6 +68,8 @@ final readonly class AccessHardeningProbe implements DoctorProbe
         private AccessHardeningFacts $facts,
         private string $portalInternal,
         private array $secondFactorRoles = [],
+        /** Dias sin entrar a partir de los que una cuenta activa esta sin uso (ADR-060). */
+        private int $dormantDays = 90,
     ) {}
 
     public function family(): string
@@ -90,6 +92,7 @@ final readonly class AccessHardeningProbe implements DoctorProbe
             $this->missingSecondFactorRoles($required),
             $this->accountsPendingSecondFactor($required),
             $this->tokensWithoutExpiry(),
+            $this->dormantAccounts(),
         ];
     }
 
@@ -98,6 +101,29 @@ final readonly class AccessHardeningProbe implements DoctorProbe
      * art. 5.1.e). Aviso y no fallo: siguen funcionando como siempre; lo que
      * no hacen es caducar.
      */
+    /**
+     * Cuentas de gestion activas sin uso (ADR-060, tarea 11.3 B). Aviso y no
+     * fallo: una cuenta activa no se purga nunca, pero una que nadie usa es una
+     * puerta abierta que nadie vigila. El numero por rol, nunca quienes.
+     */
+    private function dormantAccounts(): DoctorFinding
+    {
+        $id = 'access.dormant_accounts';
+        $byRole = $this->facts->dormantAccountsByRole($this->dormantDays);
+        $count = array_sum($byRole);
+        $details = ['dormant_accounts' => $count, 'by_role' => $byRole, 'days' => $this->dormantDays];
+
+        if ($count === 0) {
+            return DoctorFinding::ok($id, $details, ['days' => $this->dormantDays]);
+        }
+
+        return DoctorFinding::warning(
+            $id,
+            params: ['count' => $count, 'days' => $this->dormantDays, 'roles' => implode(', ', array_keys($byRole))],
+            details: $details,
+        );
+    }
+
     private function tokensWithoutExpiry(): DoctorFinding
     {
         $id = 'access.tokens_without_expiry';

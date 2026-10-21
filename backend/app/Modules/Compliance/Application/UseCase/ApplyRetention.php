@@ -9,9 +9,11 @@ use App\Modules\Compliance\Application\Command\RetentionRunCommand;
 use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
 use App\Modules\Compliance\Application\Exception\RetentionNotConfirmed;
 use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
+use App\Modules\Compliance\Application\Port\AnonymizedManagementAccount;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditPartitionArchive;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
+use App\Modules\Compliance\Application\Port\ManagementAccountArchive;
 use App\Modules\Compliance\Application\Port\RetentionMetrics;
 use App\Modules\Compliance\Application\Port\RetentionReportStore;
 use App\Modules\Compliance\Application\Port\TechnicalLogArchive;
@@ -99,6 +101,7 @@ final readonly class ApplyRetention
         private Clock $clock,
         private ResponsibleAccounts $accounts,
         private SerializedLedgerWrite $ledgerWrite,
+        private ManagementAccountArchive $managementAccounts,
     ) {}
 
     public function handle(RetentionRunCommand $command): RetentionOutcome
@@ -143,6 +146,7 @@ final readonly class ApplyRetention
         $tallies = [
             ...$this->purgeWorkRecords($command, $plan),
             ...$this->dropPartitions($verified['anchors'], $command),
+            ...$this->anonymizeManagementAccounts($command, $plan),
             ...$this->purgeShortCycles($command, $plan),
         ];
 
@@ -412,6 +416,86 @@ final readonly class ApplyRetention
                 ]),
             ));
         });
+    }
+
+    /**
+     * Minimiza las cuentas de gestion vencidas (ADR-060, tarea 11.3 B).
+     *
+     * **Despues de soltar particiones**: una cuenta no es candidata mientras
+     * quede algun asiento suyo, y los de los años vencidos acaban de irse.
+     *
+     * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
+     * (ADR-046): la funcion toma las filas `FOR UPDATE` ya dentro, y el asiento
+     * de cada cuenta va en la misma transaccion que su minimizacion. Si un
+     * asiento falla, el lote entero se deshace: no queda una cuenta minimizada
+     * sin su constancia.
+     *
+     * @return list<RetentionTally>
+     */
+    private function anonymizeManagementAccounts(RetentionRunCommand $command, RetentionReport $plan): array
+    {
+        $cutoff = $plan->managementAccountCutoff;
+
+        if ($cutoff === null) {
+            return [];
+        }
+
+        // Nada que minimizar: no se le pide nada a la funcion, que calcula su
+        // corte con el reloj de la base de datos. Se vuelve a contar aqui, y no
+        // con el recuento del plan, porque la suelta de particiones de arriba
+        // puede haber liberado cuentas.
+        if ($this->managementAccounts->inspect($cutoff)->isEmpty()) {
+            return [new RetentionTally(scope: RetentionScope::ManagementAccounts, dataset: 'users', rows: 0)];
+        }
+
+        $total = 0;
+
+        do {
+            $this->assertResponsible($command);
+
+            /** @var list<AnonymizedManagementAccount> $batch */
+            $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
+                function () use ($command, $plan, $cutoff): array {
+                    $accounts = $this->managementAccounts->anonymize($cutoff, $command->batchSize);
+
+                    foreach ($accounts as $account) {
+                        $this->recordManagementAccountAnonymized($command, $plan, $cutoff, $account);
+                    }
+
+                    return $accounts;
+                },
+            ));
+
+            $total += \count($batch);
+        } while (\count($batch) >= max(1, $command->batchSize));
+
+        return [new RetentionTally(
+            scope: RetentionScope::ManagementAccounts,
+            dataset: 'users',
+            rows: $total,
+        )];
+    }
+
+    private function recordManagementAccountAnonymized(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        DateTimeImmutable $cutoff,
+        AnonymizedManagementAccount $account,
+    ): void {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actorFor($command),
+            action: AuditAction::RetentionManagementAccountAnonymized,
+            subject: AuditSubject::of('user', $account->userId),
+            payload: AuditPayload::of([
+                'user_uuid' => $account->userUuid,
+                'deactivated_on' => $account->deactivatedOn,
+                'cutoff_date' => $cutoff->format('Y-m-d'),
+                'retention_years' => $plan->policy->legalRecordYears,
+                'fields' => AnonymizedManagementAccount::FIELDS,
+                'tokens_deleted' => $account->tokensDeleted,
+                'confirmation' => $plan->confirmationToken(),
+            ]),
+        ));
     }
 
     /**

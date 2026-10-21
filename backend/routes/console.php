@@ -828,6 +828,22 @@ ScheduledTaskOutput::toLog(Schedule::command('product:support-grants:prune-reaso
     ->runInBackground());
 
 /*
+ * Cuentas de gestion activas sin uso (ADR-060, tarea 11.3 B).
+ *
+ *   management_accounts_dormant{role}
+ *
+ * Diaria, a las 05:00 UTC. No desactiva nada: una cuenta activa no se purga.
+ * Cuenta las que llevan mas de `IDENTITY_DORMANT_ACCOUNT_DAYS` sin entrar
+ * (`last_login_at`, o su alta si nunca entraron) para que alguien decida.
+ * `product:doctor` lo dice tambien (`access.dormant_accounts`). La salida son
+ * recuentos por rol (regla dura 21).
+ */
+ScheduledTaskOutput::toLog(Schedule::command('identity:dormant-accounts')
+    ->dailyAt('05:00')
+    ->withoutOverlapping()
+    ->runInBackground());
+
+/*
  * Asientos pendientes de paquetes de diagnostico (ADR-020, enmienda del
  * 14-10-2026; RL-04, regla dura 6).
  *

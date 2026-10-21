@@ -325,6 +325,12 @@ return [
                     .'caducan nunca y la limpieza nocturna de tokens caducados no los borra. Vienen de versiones '
                     .'anteriores a la 2.2.0. Este informe da solo el numero, nunca de quien son.',
             ],
+            'dormant_accounts' => [
+                'ok' => 'Ninguna cuenta de gestion activa lleva mas de :days dias sin entrar al panel.',
+                'warning' => ':count cuenta(s) de gestion activa(s) (:roles) llevan mas de :days dias sin entrar al '
+                    .'panel. Siguen pudiendo entrar: una cuenta que nadie usa es una puerta abierta que nadie vigila. '
+                    .'Este informe da solo el numero, nunca cuales.',
+            ],
         ],
 
         // --- Certificado -----------------------------------------------------
@@ -916,6 +922,13 @@ return [
                     ."Si el numero no baja en unas semanas, genera el paquete de diagnostico y\n"
                     ."enviaselo a soporte:\n"
                     .'  docker compose exec app php artisan product:diagnostics',
+            ],
+            'dormant_accounts' => [
+                'warning' => "Revisa en el panel, en Cuentas, el ultimo acceso de cada cuenta. Si alguna ya no\n"
+                    ."la usa nadie, desactivala:\n"
+                    ."  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>\n"
+                    ."Si la persona sigue y solo estaba fuera, no hay que hacer nada. El plazo lo fija\n"
+                    .'IDENTITY_DORMANT_ACCOUNT_DAYS en el fichero .env.',
             ],
         ],
 

@@ -785,6 +785,26 @@ enum AuditAction: string
     case RetentionPurgeReviewed = 'retention.purge_reviewed';
 
     /**
+     * La ficha de una persona dada de baja, minimizada en sitio al vencer su
+     * plazo (ADR-060, tarea 11.3 A; RL-11, RGPD art. 5.1.e). Un asiento por
+     * persona, en la misma transaccion que su minimizacion, a nombre de quien
+     * firmo la ejecucion. Sujeto `employee` sin id, como el resto de asientos
+     * de la ficha. El payload lleva el `employee_uuid`, la fecha de cese, el
+     * corte, los años aplicados, los campos vaciados y lo que se borro con ella
+     * (contratos, ausencias, sesiones del portal). **Ni el nombre ni el codigo**:
+     * es justo lo que se acaba de borrar.
+     */
+    case RetentionPersonnelRecordAnonymized = 'retention.personnel_record_anonymized';
+
+    /**
+     * La cuenta de gestion dada de baja, minimizada en sitio al vencer su plazo
+     * (ADR-060, tarea 11.3 B). Un asiento por cuenta, sujeto `user` por su id.
+     * El payload lleva el `user_uuid`, la fecha de baja, el corte, los años,
+     * los campos vaciados y los tokens borrados. Sin nombre ni correo.
+     */
+    case RetentionManagementAccountAnonymized = 'retention.management_account_anonymized';
+
+    /**
      * Sujeto de la accion —la parte anterior al punto— y familia del bloque D a
      * la que pertenece.
      *
