@@ -442,14 +442,13 @@ it('declara la ficha reducida del responsable sin correo, idioma ni estado del P
     // plantilla sin `email`, `locale` ni `pin_status`. Que el esquema reducido
     // no pueda alojarlos (`additionalProperties: false` y sin la propiedad) es
     // lo que impide que vuelvan «solo para el panel».
-    $scoped = Contract::value('components', 'schemas', 'ScopedEmployee');
-    $full = Contract::value('components', 'schemas', 'Employee');
+    $scoped = Contract::keys('components', 'schemas', 'ScopedEmployee', 'properties');
+    $full = Contract::keys('components', 'schemas', 'Employee', 'properties');
 
-    expect($scoped['additionalProperties'] ?? null)->toBeFalse()
-        ->and(array_keys($scoped['properties']))->not->toContain('email', 'locale', 'pin_status')
+    expect(Contract::value('components', 'schemas', 'ScopedEmployee', 'additionalProperties'))->toBeFalse()
+        ->and($scoped)->not->toContain('email', 'locale', 'pin_status')
         // Todo lo demas de la ficha, y nada que no este en ella.
-        ->and(array_keys($scoped['properties']))
-        ->toEqualCanonicalizing(array_values(array_diff(array_keys($full['properties']), ['email', 'locale', 'pin_status'])))
+        ->and($scoped)->toEqualCanonicalizing(array_values(array_diff($full, ['email', 'locale', 'pin_status'])))
         ->and(Contract::value('paths', '/api/v1/employees', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'anyOf'))
         ->toBe([
             ['$ref' => '#/components/schemas/EmployeeCollection'],

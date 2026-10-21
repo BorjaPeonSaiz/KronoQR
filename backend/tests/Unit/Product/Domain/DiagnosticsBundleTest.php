@@ -57,6 +57,27 @@ function diagnosticsBundleUnitDigest(DiagnosticsBundle $bundle): string
     return CanonicalJson::digest(['manifest' => $manifest, ...$bundle->sections]);
 }
 
+/**
+ * Un paquete sellado al que se le cambia a mano algo del manifiesto (PR16),
+ * sin recalcular la huella.
+ *
+ * @param  array<string, mixed>  $changes
+ * @return array<string, mixed>
+ */
+function diagnosticsBundleUnitTampered(array $changes, bool $anonymized = true): array
+{
+    $bundle = DiagnosticsBundle::of(
+        productVersion: '2.2.1',
+        generatedAt: new DateTimeImmutable('2026-06-15T09:00:00+02:00'),
+        anonymized: $anonymized,
+        generatedBy: DiagnosticsActor::User,
+        sections: diagnosticsBundleUnitSections(),
+        maxBytes: DIAGNOSTICS_BUNDLE_UNIT_MAX,
+    );
+
+    return ['manifest' => [...$bundle->manifest->toArray(), ...$changes], ...$bundle->sections];
+}
+
 it('sella el manifiesto con la huella canonica del documento, manifiesto incluido', function (): void {
     $bundle = diagnosticsBundleUnit(diagnosticsBundleUnitSections());
 
@@ -100,49 +121,12 @@ it('la huella denuncia un documento alterado, sin manifiesto o sin huella', func
     // PR16: el manifiesto tambien esta dentro de la huella. El primero es el
     // caso reproducido: un paquete con datos personales que se hace pasar por
     // anonimo.
-    'anonymized cambiado a mano' => [(static function (): array {
-        $document = DiagnosticsBundle::of(
-            productVersion: '2.2.1',
-            generatedAt: new DateTimeImmutable('2026-06-15T09:00:00+02:00'),
-            anonymized: false,
-            generatedBy: DiagnosticsActor::User,
-            sections: diagnosticsBundleUnitSections(),
-            maxBytes: DIAGNOSTICS_BUNDLE_UNIT_MAX,
-        )->toArray();
-        $document['manifest']['anonymized'] = true;
-
-        return $document;
-    })()],
-    'version cambiada' => [(static function (): array {
-        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
-        $document['manifest']['product_version'] = '9.9.9';
-
-        return $document;
-    })()],
-    'instante cambiado' => [(static function (): array {
-        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
-        $document['manifest']['generated_at'] = '2026-06-16T07:00:00.000000Z';
-
-        return $document;
-    })()],
-    'actor cambiado' => [(static function (): array {
-        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
-        $document['manifest']['generated_by'] = 'support_grant';
-
-        return $document;
-    })()],
-    'lista de secciones recortada' => [(static function (): array {
-        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
-        $document['manifest']['sections'] = ['installation'];
-
-        return $document;
-    })()],
-    'version del esquema cambiada' => [(static function (): array {
-        $document = diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray();
-        $document['manifest']['schema_version'] = 2;
-
-        return $document;
-    })()],
+    'anonymized cambiado a mano' => [diagnosticsBundleUnitTampered(['anonymized' => true], anonymized: false)],
+    'version cambiada' => [diagnosticsBundleUnitTampered(['product_version' => '9.9.9'])],
+    'instante cambiado' => [diagnosticsBundleUnitTampered(['generated_at' => '2026-06-16T07:00:00.000000Z'])],
+    'actor cambiado' => [diagnosticsBundleUnitTampered(['generated_by' => 'support_grant'])],
+    'lista de secciones recortada' => [diagnosticsBundleUnitTampered(['sections' => ['installation']])],
+    'version del esquema cambiada' => [diagnosticsBundleUnitTampered(['schema_version' => 2])],
     'sin manifiesto' => [['installation' => []]],
     'manifiesto que no es objeto' => [['manifest' => 'x', 'installation' => []]],
     'huella que no es texto' => [['manifest' => ['sha256' => 7], 'installation' => []]],
