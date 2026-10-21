@@ -36,6 +36,7 @@ const profile = {
     holiday_calendar: [],
     retention_years: 4,
     retention_years_floor: 4,
+    personnel_record_retention_years: 4,
     is_default: true,
     source: 'installation_default',
     updated_at: null,

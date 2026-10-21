@@ -577,6 +577,7 @@ return [
                 'name' => 'Nombre del perfil.',
                 'jurisdiction' => 'Ambito al que corresponde.',
                 'retention_years' => 'Años que se conserva el registro de jornada.',
+                'personnel_record_retention_years' => 'Años que se conserva la ficha de una persona dada de baja, desde su cese, antes de minimizarla (ADR-060).',
                 'min_rest_hours' => 'Descanso minimo entre jornadas, en horas.',
                 'max_daily_hours' => 'Jornada maxima diaria, en horas.',
                 'max_weekly_hours' => 'Jornada maxima semanal, en horas.',

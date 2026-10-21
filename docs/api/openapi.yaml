@@ -8276,6 +8276,7 @@ paths:
                       holiday_calendar: []
                       retention_years: 4
                       retention_years_floor: 4
+                      personnel_record_retention_years: 4
                       is_default: true
                       source: installation_default
                       updated_at: null
@@ -17127,6 +17128,7 @@ components:
         - holiday_calendar
         - retention_years
         - retention_years_floor
+        - personnel_record_retention_years
         - is_default
         - source
         - updated_at
@@ -17238,6 +17240,21 @@ components:
             una jurisdiccion sin suelo conocido recibe 1.
           examples:
             - 4
+        personnel_record_retention_years:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: |
+            RL-11, ADR-060: años que se conserva la **ficha** de una persona dada
+            de baja, contados desde su cese, antes de minimizarla en sitio
+            (nombre, correo, documento y PIN fuera; uuid, centro, departamento y
+            fechas dentro). **4 de serie.** No basta con que venza: la ficha solo
+            se minimiza cuando ya no queda nada suyo en el registro horario ni en
+            la cadena de auditoria viva, asi que nunca antes que el registro que
+            la nombra. Lo aplica `compliance:apply-retention`, con confirmacion;
+            nunca de forma automatica.
+          examples:
+            - 4
         is_default:
           type: boolean
           description: |
@@ -17314,6 +17331,13 @@ components:
           description: |
             Ademas del rango, no puede quedar por debajo del suelo legal de la
             jurisdiccion del perfil (`retention_years_floor`; 4 en España).
+        personnel_record_retention_years:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: |
+            Años que se conserva la ficha de una persona dada de baja antes de
+            minimizarla (ADR-060). Ver `ComplianceProfileBody`.
 
     InstallationSettings:
       type: object

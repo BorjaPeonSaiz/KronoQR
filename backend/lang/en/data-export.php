@@ -552,6 +552,7 @@ return [
                 'name' => 'Profile name.',
                 'jurisdiction' => 'Jurisdiction it corresponds to.',
                 'retention_years' => 'Years the time record is kept.',
+                'personnel_record_retention_years' => 'Years the record of a person who has left is kept, from their termination date, before it is minimised (ADR-060).',
                 'min_rest_hours' => 'Minimum rest between working days, in hours.',
                 'max_daily_hours' => 'Maximum daily working time, in hours.',
                 'max_weekly_hours' => 'Maximum weekly working time, in hours.',

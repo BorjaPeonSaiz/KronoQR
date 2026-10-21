@@ -58,6 +58,14 @@ enum ComplianceProfileField: string
     /** RL-02: años que se conserva el registro horario antes de poder purgarlo. */
     case RetentionYears = 'retention_years';
 
+    /**
+     * Años que se conserva la ficha de una persona dada de baja antes de
+     * minimizarla en sitio (ADR-060, tarea 11.3 A, RL-11). Entre 1 y 30, 4 de
+     * serie. Sin suelo legal propio: la ficha nunca se minimiza antes que el
+     * registro que la nombra, que si lo tiene.
+     */
+    case PersonnelRecordRetentionYears = 'personnel_record_retention_years';
+
     public function type(): ComplianceProfileFieldType
     {
         return match ($this) {
@@ -99,6 +107,7 @@ enum ComplianceProfileField: string
         return match ($this) {
             self::MaxWeeklyHours => 168,
             self::RetentionYears => 50,
+            self::PersonnelRecordRetentionYears => 30,
             // ISO-8601: de 1 (lunes) a 7 (domingo). El `CHECK` del esquema dice
             // lo mismo, y sin este caso el `422` se convertiria en un `500` de
             // PostgreSQL — un error del cliente presentado como una averia.
@@ -234,13 +243,14 @@ enum ComplianceProfileField: string
     /**
      * Si cambiarlo cambia **que datos puede purgar la retencion** (RL-02).
      *
-     * Solo uno, y es el unico campo del perfil cuyo error se paga con datos que
+     * Dos: los años del registro y, desde la 2.3.0, los de la ficha de personal
+     * (ADR-060). Son los dos campos del perfil cuyo error se paga con datos que
      * no vuelven. Se separa de la deteccion porque son dos consecuencias
      * distintas y quien lee el trail busca una o la otra.
      */
     public function affectsRetention(): bool
     {
-        return $this === self::RetentionYears;
+        return $this === self::RetentionYears || $this === self::PersonnelRecordRetentionYears;
     }
 
     /**

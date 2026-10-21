@@ -8942,6 +8942,18 @@ export interface components {
              */
             readonly retention_years_floor: number;
             /**
+             * @description RL-11, ADR-060: años que se conserva la **ficha** de una persona dada
+             *     de baja, contados desde su cese, antes de minimizarla en sitio
+             *     (nombre, correo, documento y PIN fuera; uuid, centro, departamento y
+             *     fechas dentro). **4 de serie.** No basta con que venza: la ficha solo
+             *     se minimiza cuando ya no queda nada suyo en el registro horario ni en
+             *     la cadena de auditoria viva, asi que nunca antes que el registro que
+             *     la nombra. Lo aplica `compliance:apply-retention`, con confirmacion;
+             *     nunca de forma automatica.
+             * @example 4
+             */
+            personnel_record_retention_years: number;
+            /**
              * @description Si es el perfil por defecto de la instalacion, que es el que rige en
              *     un centro sin perfil asignado. **Solo lectura.**
              */
@@ -8987,6 +8999,11 @@ export interface components {
              *     jurisdiccion del perfil (`retention_years_floor`; 4 en España).
              */
             retention_years?: number;
+            /**
+             * @description Años que se conserva la ficha de una persona dada de baja antes de
+             *     minimizarla (ADR-060). Ver `ComplianceProfileBody`.
+             */
+            personnel_record_retention_years?: number;
         };
         /**
          * InstallationSettings

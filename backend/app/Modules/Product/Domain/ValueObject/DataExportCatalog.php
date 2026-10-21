@@ -570,6 +570,7 @@ final class DataExportCatalog
                     'name',
                     'jurisdiction',
                     'retention_years',
+                    'personnel_record_retention_years',
                     'min_rest_hours',
                     'max_daily_hours',
                     'max_weekly_hours',

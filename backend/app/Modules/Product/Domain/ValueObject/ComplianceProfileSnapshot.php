@@ -69,6 +69,8 @@ final readonly class ComplianceProfileSnapshot
          * su convenio. El «quien» con valor probatorio esta en `audit_log`.
          */
         public ?DateTimeImmutable $updatedAt = null,
+        /** Años de la ficha de personal tras el cese (ADR-060, tarea 11.3 A). */
+        public int $personnelRecordRetentionYears = 4,
     ) {}
 
     /**
@@ -88,6 +90,7 @@ final readonly class ComplianceProfileSnapshot
             ComplianceProfileField::WeekStartsOn => $this->weekStartsOn,
             ComplianceProfileField::HolidayCalendar => $this->holidayCalendar,
             ComplianceProfileField::RetentionYears => $this->retentionYears,
+            ComplianceProfileField::PersonnelRecordRetentionYears => $this->personnelRecordRetentionYears,
         };
     }
 
@@ -162,6 +165,7 @@ final readonly class ComplianceProfileSnapshot
             // con el reloj inyectado, y este objeto solo describe el resultado de
             // aplicar unos cambios.
             updatedAt: $this->updatedAt,
+            personnelRecordRetentionYears: self::integer($values, ComplianceProfileField::PersonnelRecordRetentionYears),
         );
 
         if ($updated->maxWeeklyHours < $updated->maxDailyHours) {

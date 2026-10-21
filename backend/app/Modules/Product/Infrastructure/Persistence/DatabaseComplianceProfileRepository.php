@@ -97,6 +97,7 @@ final class DatabaseComplianceProfileRepository implements ComplianceProfileRepo
                 // sin repetidos del objeto de valor.
                 'holiday_calendar' => json_encode($profile->holidayCalendar, JSON_THROW_ON_ERROR),
                 'retention_years' => $profile->retentionYears,
+                'personnel_record_retention_years' => $profile->personnelRecordRetentionYears,
                 // La marca de «alguien ha tocado esto», que es lo que distingue
                 // un perfil ajustado al convenio de uno tal como se instalo. El
                 // instante entra por parametro (regla dura 2) y el actor puede
@@ -138,11 +139,11 @@ final class DatabaseComplianceProfileRepository implements ComplianceProfileRepo
 
     /**
      * @param  Builder  $query
-     * @return object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, is_default: bool, updated_at: string|null}|null
+     * @return object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, personnel_record_retention_years: int, is_default: bool, updated_at: string|null}|null
      */
     private function row(mixed $query): ?object
     {
-        /** @var object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, is_default: bool, updated_at: string|null}|null $row */
+        /** @var object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, personnel_record_retention_years: int, is_default: bool, updated_at: string|null}|null $row */
         $row = $query->select([
             'compliance_profiles.id',
             'compliance_profiles.name',
@@ -154,6 +155,7 @@ final class DatabaseComplianceProfileRepository implements ComplianceProfileRepo
             'compliance_profiles.week_starts_on',
             'compliance_profiles.holiday_calendar',
             'compliance_profiles.retention_years',
+            'compliance_profiles.personnel_record_retention_years',
             'compliance_profiles.is_default',
             'compliance_profiles.updated_at',
         ])->first();
@@ -162,7 +164,7 @@ final class DatabaseComplianceProfileRepository implements ComplianceProfileRepo
     }
 
     /**
-     * @param  object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, is_default: bool, updated_at: string|null}  $row
+     * @param  object{id: int, name: string, jurisdiction: string, min_rest_hours: int, max_daily_hours: int, max_weekly_hours: int, break_required_after_hours: int, week_starts_on: int, holiday_calendar: string, retention_years: int, personnel_record_retention_years: int, is_default: bool, updated_at: string|null}  $row
      */
     private function snapshot(object $row, ComplianceProfileSource $source): ComplianceProfileSnapshot
     {
@@ -182,6 +184,7 @@ final class DatabaseComplianceProfileRepository implements ComplianceProfileRepo
             updatedAt: $row->updated_at === null
                 ? null
                 : new DateTimeImmutable($row->updated_at, new DateTimeZone('UTC')),
+            personnelRecordRetentionYears: (int) $row->personnel_record_retention_years,
         );
     }
 

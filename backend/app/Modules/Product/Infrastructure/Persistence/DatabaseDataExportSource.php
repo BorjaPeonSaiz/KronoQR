@@ -744,6 +744,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         SELECT p.name,
                p.jurisdiction,
                p.retention_years::text            AS retention_years,
+               p.personnel_record_retention_years::text AS personnel_record_retention_years,
                p.min_rest_hours::text             AS min_rest_hours,
                p.max_daily_hours::text            AS max_daily_hours,
                p.max_weekly_hours::text           AS max_weekly_hours,

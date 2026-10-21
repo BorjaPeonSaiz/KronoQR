@@ -91,17 +91,18 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
             maximumWeeklyMinutes: $profile->max_weekly_hours * 60,
             weekStartsOn: $profile->week_starts_on,
             holidayCalendar: $this->decodeCalendar($profile->id, $profile->holiday_calendar),
+            personnelRecordRetentionYears: (int) $profile->personnel_record_retention_years,
         );
     }
 
     /**
      * El perfil asignado al centro, si tiene uno.
      *
-     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
+     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, personnel_record_retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
      */
     private function profileFor(int $siteId): ?object
     {
-        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
+        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, personnel_record_retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
         $profile = $this->connection->table('compliance_profiles')
             ->join('sites', 'sites.compliance_profile_id', '=', 'compliance_profiles.id')
             ->where('sites.id', $siteId)
@@ -115,11 +116,11 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
      * El perfil por defecto de la instalacion, que es lo que significa un centro
      * sin perfil asignado.
      *
-     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
+     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, personnel_record_retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
      */
     private function defaultProfile(): ?object
     {
-        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
+        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, personnel_record_retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
         $profile = $this->connection->table('compliance_profiles')
             ->where('is_default', true)
             ->select($this->columns())
@@ -139,6 +140,7 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
             'compliance_profiles.max_daily_hours',
             'compliance_profiles.break_required_after_hours',
             'compliance_profiles.retention_years',
+            'compliance_profiles.personnel_record_retention_years',
             'compliance_profiles.max_weekly_hours',
             'compliance_profiles.week_starts_on',
             'compliance_profiles.holiday_calendar',

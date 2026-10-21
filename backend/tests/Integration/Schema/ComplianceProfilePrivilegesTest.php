@@ -34,6 +34,8 @@ const COMPLIANCE_PROFILE_PRIVILEGES_MIGRATION = '2026_10_13_100100_restrict_appl
 const COMPLIANCE_PROFILE_PRIVILEGES_EDITABLE = [
     'name', 'retention_years', 'min_rest_hours', 'max_daily_hours', 'max_weekly_hours',
     'break_required_after_hours', 'week_starts_on', 'holiday_calendar', 'updated_at', 'updated_by_user_id',
+    // ADR-060, tarea 11.3 A: los años de la ficha de personal.
+    'personnel_record_retention_years',
 ];
 
 /**

@@ -99,11 +99,18 @@ final readonly class CompliancePolicy
          */
         public int $weekStartsOn,
         array $holidayCalendar,
+        /**
+         * RL-11, ADR-060: años que se conserva la ficha de una persona dada de
+         * baja antes de minimizarla. Con valor de serie porque solo lo leen la
+         * retencion y el perfil.
+         */
+        public int $personnelRecordRetentionYears = 4,
     ) {
         $this->positive($minimumRestMinutes, 'el descanso minimo entre jornadas (RN-10)');
         $this->positive($maximumDailyMinutes, 'la jornada diaria ordinaria (RN-11)');
         $this->positive($breakRequiredAfterMinutes, 'el tramo continuo sin pausa (RN-12)');
         $this->positive($retentionYears, 'los anos de retencion (RL-02)');
+        $this->positive($personnelRecordRetentionYears, 'los anos de la ficha de personal (RL-11)');
         // **Defensa redundante y deliberada** (RN-17). La guarda de abajo —«la
         // semana no puede caber por debajo del dia»— ya rechaza cualquier valor no
         // positivo, porque la jornada diaria si es positiva por la linea anterior.
