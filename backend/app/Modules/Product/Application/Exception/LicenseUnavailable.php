@@ -27,6 +27,6 @@ final class LicenseUnavailable extends RuntimeException
 {
     public static function because(Throwable $cause): self
     {
-        return new self('The licence could not be read from storage.', 0, $cause);
+        return new self('The license could not be read from storage.', 0, $cause);
     }
 }
