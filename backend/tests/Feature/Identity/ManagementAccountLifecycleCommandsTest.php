@@ -364,7 +364,7 @@ it('da de alta por consola con una temporal que se enseña una vez, caduca y dej
     expect($repetida)->toBe(1);
 })->group('RF-ID-10', 'RF-ID-02', 'RS-05');
 
-it('lista las cuentas de gestion por consola sin escribir nada', function (): void {
+it('lista las cuentas de gestion por consola y solo deja su asiento de lectura', function (): void {
     $rrhh = ManagementUsers::withRole(UserRole::RRHH, 'lista@hotel.example');
     ManagementUsers::withRole(UserRole::KIOSK);
 
@@ -376,7 +376,14 @@ it('lista las cuentas de gestion por consola sin escribir nada', function (): vo
         ->and($output)->toContain($rrhh->uuid)
         ->and($output)->toContain('lista@hotel.example')
         ->and($output)->toContain('own')
-        ->and(DB::table('audit_log')->count())->toBe($antes);
+        // Tarea 11.4 (V4-BE-4): listar las cuentas deja su asiento de lectura,
+        // a nombre del sistema, y nada mas.
+        ->and(DB::table('audit_log')->count())->toBe($antes + 1)
+        ->and(DB::table('audit_log')
+            ->where('action', 'personal_data.accessed')
+            ->where('payload->dataset', 'management_accounts')
+            ->where('actor_type', 'system')
+            ->count())->toBe(1);
 
     [$filtroMalo] = Commands::run('identity:list-users --status=borrada');
 
