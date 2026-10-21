@@ -54,5 +54,13 @@
     "El PDF no se puede generar ahora. Descarga el mismo registro en CSV.": "The PDF cannot be generated right now. Download the same record as CSV.",
     "El motor de PDF no tiene ahora ningun hueco libre. Vuelve en unos segundos o descarga el mismo documento en CSV, que no pasa por el motor de PDF.": "The PDF engine has no free slot right now. Come back in a few seconds or download the same document as CSV, which does not go through the PDF engine.",
     "Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.": "That person already has an open shift. Close or void it before leaving another one without a clock-out.",
-    "Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.": "The times given overlap another shift entry of that person. Review the work day before correcting."
+    "Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.": "The times given overlap another shift entry of that person. Review the work day before correcting.",
+    "La zona horaria no existe. Usa un identificador IANA como Europe/Madrid.": "That time zone does not exist. Use an IANA identifier such as Europe/Madrid.",
+    "Una revocacion tiene que declarar su motivo.": "A revocation must state its reason.",
+    "La instalacion no tiene una clave de firma de credenciales valida. Revisa la configuracion del servidor.": "The installation does not have a valid credential signing key. Check the server configuration.",
+    "Ese tramo ya no es la version vigente: lo corrigio o lo anulo alguien antes. Vuelve a cargar la jornada antes de repetir la operacion.": "That shift entry is no longer the current version: someone corrected or voided it first. Reload the work day before repeating the operation.",
+    "Las marcas enviadas son las que el tramo ya tiene: no hay nada que corregir.": "The times sent are the ones the shift entry already has: there is nothing to correct.",
+    "Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.": "That clock-in time would move the work day to another day. To move hours from one day to another, void the shift entry in the original work day and add it to the destination one: they are two actions, each with its own reason.",
+    "La hora de salida tiene que ser posterior a la de entrada.": "The clock-out time must be later than the clock-in time.",
+    "Esa persona no existe o no esta en alta: no se le pueden registrar horas.": "That person does not exist or is not active: hours cannot be recorded for them."
 }

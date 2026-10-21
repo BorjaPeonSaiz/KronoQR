@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ProblemDetails;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -168,6 +170,19 @@ it('traduce tambien el 400 y el 422', function (): void {
         ->assertJsonPath('title', 'Invalid request')
         ->assertJsonPath('detail', 'Check the fields indicated.');
 })->group('RQ-06', 'RF-PD-01');
+
+it('traduce tambien los errors por campo de texto fijo', function (): void {
+    // Los textos fijos de `bootstrap/app.php` cuelgan de un campo: tambien
+    // tienen que salir en el idioma pedido, no solo `title` y `detail`.
+    InstallationLocale::set('es', ['es', 'en']);
+    Route::middleware('api')->post('/api/v1/__problems/field', static fn (): never => throw new HttpResponseException(
+        ProblemDetails::validationFailed(['clocked_out_at' => ['La hora de salida tiene que ser posterior a la de entrada.']]),
+    ));
+
+    Api::guest()->withHeaders(['Accept-Language' => 'en'])->post('/api/v1/__problems/field', ['x' => 1])
+        ->assertStatus(422)
+        ->assertJsonPath('errors.clocked_out_at.0', 'The clock-out time must be later than the clock-in time.');
+})->group('RQ-06', 'RF-PD-01', 'RF-KI-05');
 
 it('responde un 422 del framework como validacion fallida y con errors', function (): void {
     Route::middleware('api')->post('/api/v1/__problems/unprocessable', static fn (): never => abort(422, 'No existe ninguna persona con ese identificador.'));

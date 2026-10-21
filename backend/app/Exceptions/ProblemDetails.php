@@ -347,7 +347,14 @@ final class ProblemDetails
         }
 
         if ($errors !== []) {
-            $body['errors'] = $errors;
+            // Tambien por campo: los textos fijos de `bootstrap/app.php` estan
+            // en español y su ingles en `lang/en.json`, como `title` y `detail`.
+            // Los que ya llegan traducidos (los de validacion de Laravel, los
+            // de `translated()`) no tienen entrada y salen tal cual.
+            $body['errors'] = array_map(
+                static fn (array $messages): array => array_map(self::localized(...), $messages),
+                $errors,
+            );
         }
 
         return new JsonResponse(
