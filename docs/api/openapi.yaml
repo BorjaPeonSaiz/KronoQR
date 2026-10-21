@@ -82,12 +82,16 @@ info:
     las rutas de subida de ficheros, que admiten ademas `multipart/form-data`.
     Una peticion sin cuerpo no se mira.
 
-    **Forma de los errores.** `title` y `detail` van en el idioma negociado
-    (abajo, **Idioma**) y la respuesta lleva `Content-Language`. Un `422`
-    siempre trae `errors`, con el detalle por campo. Todo `503` trae su `type`
+    **Forma de los errores.** En lo que responde la aplicacion, `title` y
+    `detail` van en el idioma negociado (abajo, **Idioma**) y la respuesta lleva
+    `Content-Language`. Un `422` siempre trae `errors`, con el detalle por campo.
+    Todo `503` de la aplicacion trae su `type`
     real —`maintenance`, `pdf-rendering-busy`, `not-ready` o
     `service-unavailable`— e `instance`, la ruta que fallo, que es lo que permite
     casar la respuesta con su linea en el registro del servidor.
+    Lo que contesta el servidor web sin llegar a la aplicacion (`400`, `414`,
+    `502`, `503`, `504`) lleva solo `type`, `title` en ingles y `status`: el
+    borde no ve el idioma pedido ni debe repetir lo que recibio.
 
     **Mantenimiento (RF-PD-10).** Mientras `update.sh` actualiza la instalacion,
     TODA ruta salvo `/health` y `/ready` responde `503` como `problem+json` con
