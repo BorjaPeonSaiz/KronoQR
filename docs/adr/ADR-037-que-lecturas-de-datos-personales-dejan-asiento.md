@@ -2,11 +2,11 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Aceptada. Enmiendas del 18-10-2026 (búsqueda de la exportación legal) y del 21-10-2026 (presencia por Reverb, cuentas de gestión e informes diferidos; [ver al final](#enmienda-del-21-de-octubre-de-2026-bloque-11-de-la-230)) |
 | **Fecha** | 27 de agosto de 2026 |
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `Shared/Application/Port/PersonalDataAccessLog` y sus llamantes · `Identity/Application/UseCase/CredentialStatusBoard` · `Workforce/Application/Query/EmployeeQueries` · `Compliance/Infrastructure/Persistence/DatabaseAuditTrail` |
-| **Requisitos** | RS-05, RL-15, RL-05, RF-QR-08, RF-GP-01, RF-PA-03, RF-IN-05 (enmienda del 18-10-2026) |
+| **Requisitos** | RS-05, RL-15, RL-05, RF-QR-08, RF-GP-01, RF-PA-03, RF-IN-05 (enmienda del 18-10-2026), RF-ID-10 y RF-IN-06 (enmienda del 21-10-2026) |
 
 ## Contexto
 
@@ -141,3 +141,62 @@ es justo lo que el trail tiene que poder enseñar.
   **entregado** (`per_page`), no lo que casa con el filtro; la ficha individual no deja ninguno.
 - Sabotaje: quitar la llamada a `recordDisclosure` en cualquiera de los dos casos de uso debe hacer
   fallar su prueba de asiento, no solo la de contenido.
+
+## Enmienda del 21 de octubre de 2026 (bloque 11 de la 2.3.0)
+
+**Tarea 11.4; hallazgos R4-BE-05, V4-BE-4 y V4-BE-5.** Diseño de `seguridad-cumplimiento`, aprobado por el propietario el 21-10-2026. **El criterio de las tres condiciones no cambia**: se aplica a tres lecturas que lo cumplían y no dejaban asiento, y a una que lo dejaba a nombre de quien no era.
+
+| Lectura | ¿Asiento? | Cómo |
+|---|---|---|
+| Suscripción al canal de presencia por Reverb (`broadcasting/auth`) | **Sí (nuevo)** | Conjunto, hacia una persona, y en tiempo real. `personal_data.accessed` con dataset `live_presence_stream`, `record_count = 0` y contexto `{channel: 'all'\|'department', department_id?, scope: 'all'\|'departments'}` |
+| `GET /management-accounts` | **Sí (nuevo)** | Conjunto de personas con su correo, su rol y el estado de su segundo factor. Dataset `management_accounts`, `record_count` = filas **entregadas**, contexto `{status?, role?, search: bool, page, per_page}` |
+| `identity:list-users` | **Sí (nuevo)** | La misma divulgación por una terminal, con actor `system`, como `credentials:status` |
+| Informe generado en diferido (RF-IN-06) | Sí, **a nombre de quien lo pidió** | Antes lo escribía el *worker* con actor `system` |
+| `GET /departments` | No | Ver abajo |
+| `GET /support/grants` | No | Ver abajo |
+
+**Presencia por Reverb.** Hasta ahora, `routes/channels.php` autorizaba con la *policy* de `PresenceBoard` y no llamaba a `PersonalDataAccessLog`: la vista que se sondea cada 15 s dejaba asiento (`live_presence`), y la misma información empujada por WebSocket no. Ahora:
+
+- **Qué se audita.** La autorización se saca a un autorizador de `Reporting` que usa el puerto, y el asiento se escribe **antes** de devolver `true`. Si el asiento falla, la suscripción no se concede (regla dura 6).
+- **Por qué `record_count = 0`.** Al suscribirse todavía no se ha entregado nada: el asiento dice quién tuvo el canal abierto y con qué alcance, no cuántos eventos recibió.
+- **Agrupación.** El dataset entra en `compliance.disclosure_grouping.datasets`, con la misma ventana de 900 s que `live_presence`, porque cada reconexión del panel vuelve a autorizar. `GroupedPersonalDataAccessLog::keyFor` añade `channel` a la clave cuando viene en el contexto: dos canales distintos son dos alcances distintos y no se funden en un asiento.
+- **Denegación.** Una suscripción denegada por el ámbito deja `access.denied`, agrupado por `GroupedAuthorizationJournal`, y nunca `personal_data.accessed`.
+
+**`GET /management-accounts` y `identity:list-users`.**
+
+- `ManagementAccountsQuery::page` escribe el asiento antes de devolver, sin agrupar.
+- **Nunca lleva el término buscado**, solo si hubo búsqueda (`search: bool`), por la misma razón que la búsqueda de la exportación legal.
+- **El `find()` que sigue a un `POST`** (alta, baja o restablecimiento) no deja asiento de lectura. Devuelve la cuenta sobre la que se acaba de actuar, y ese hecho ya tiene su asiento (`user.created`, `user.deactivated`…).
+
+**Informes diferidos.** `GeneratePeriodReport::handle` escribía `personal_data.accessed` dentro del *worker*, con actor `system`. Es la «entrada que miente» que esta decisión ya descartó para `/me/*`: quien se lleva el informe es la persona que lo pidió. Ahora:
+
+- **Cómo se calcula.** `GenerateReportExportHandler` usa `GeneratePeriodReport::compose()`, que calcula el asiento sin escribirlo, como `SendWeeklySummaries`.
+- **Cómo viaja.** El evento `ReportExportGenerated` lleva `disclosureDataset`, `disclosureRecordCount` y `disclosureContext`.
+- **Dónde se escribe.** `RecordReportExportLifecycle::generated` escribe dos asientos en la transacción de `completeAndPublish`: `report_export.generated` y `personal_data.accessed`, este con actor `user(requestedByUserId)` y contexto `{...disclosure, report_export_uuid, deferred: true}`.
+- **Si la generación falla**, no hay asiento de lectura, porque no se ha divulgado nada.
+- **Si no consta quién lo pidió**, el actor es `system` y el contexto lleva `report_export_uuid`, que remite a la petición.
+- **El resumen semanal no cambia.**
+
+**Lo que sigue sin asiento, y por qué.**
+
+- **`GET /departments`.** Divulga la estructura organizativa: cada departamento y el nombre de su responsable. Lo leen los cuatro roles de gestión para trabajar (ADR-051, A-27 de doc 07). No es un conjunto de la plantilla, sino de cargos, y un asiento por cada carga del panel llenaría el trail con la operativa ordinaria, que es lo que la primera alternativa descartada evita.
+- **`GET /support/grants`.** Solo lo ve `admin`. Lo que enseña (quién concedió, cuándo, con qué alcance y por qué) ya está en `audit_log`, en `support_grant.granted` y `support_grant.revoked`, visible para el cliente (ADR-020). El motivo, el único texto libre que podría nombrar a alguien, se vacía en la tabla a los 90 días ([ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) §6). Un asiento por lectura no añadiría ninguna respuesta a RL-15.
+
+**Verificación** (RS-05, RL-15):
+
+- **Presencia:**
+  - asiento con canal y alcance, sin nombres;
+  - tres suscripciones en la ventana dan una fila, y dos canales dan dos;
+  - una denegación da `access.denied` y no `accessed`;
+  - con `audit_log` averiado no hay suscripción;
+  - `403` por rol.
+- **Cuentas:**
+  - el listado deja asiento con el recuento y `search` booleano;
+  - el `POST` no deja asiento de lectura;
+  - la orden de consola sí lo deja;
+  - quitar la llamada a `recordDisclosure` pone la prueba en rojo.
+- **Diferido:**
+  - el asiento va a nombre de quien lo pidió, con `report_export_uuid` y en la misma transacción;
+  - ningún `accessed` con actor `system` en los diferidos que tienen solicitante;
+  - un fallo no deja asiento;
+  - el resumen semanal no cambia.
