@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Application\Query;
 
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Quien es el usuario de la sesion en curso, con sus roles y ambitos vigentes
@@ -21,6 +22,11 @@ final readonly class CurrentUserQuery
     public function __construct(private UserAccounts $accounts) {}
 
     public function handle(string $uuid): ?AuthenticatedUser
+    {
+        return UseCaseInstrumentation::run('identity.read_current_user', fn (): ?AuthenticatedUser => $this->doHandle($uuid));
+    }
+
+    private function doHandle(string $uuid): ?AuthenticatedUser
     {
         return $this->accounts->findByUuid($uuid);
     }

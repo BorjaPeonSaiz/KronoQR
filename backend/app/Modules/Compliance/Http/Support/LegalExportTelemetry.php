@@ -6,18 +6,16 @@ namespace App\Modules\Compliance\Http\Support;
 
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de una exportacion legal descargada desde el panel (doc 02
+ * El log de una exportacion legal descargada desde el panel (doc 02
  * §8.1, RF-IN-05).
  *
- * Mismo sitio y mismo motivo que `ScanTelemetry` y `CorrectionTelemetry`: en el
- * borde, para que el `trace_id` que llega en `traceparent` sea el padre del span
- * y para que el caso de uso se quede orquestando reglas sin un `try/finally` de
- * medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Aqui NO se cuenta
  *
@@ -56,19 +54,12 @@ final readonly class LegalExportTelemetry
      */
     public function measure(callable $generate): LegalExport
     {
-        $span = SpanScope::start('kronoqr.compliance', 'compliance.generate_legal_export', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $export = $generate();
-        } catch (Throwable $failure) {
-            $span->end();
+        $export = $generate();
 
-            throw $failure;
-        }
-
-        $span->end($this->spanAttributes($export));
-        $this->log($export, $span, microtime(true) - $startedAt);
+        SpanScope::annotateCurrent($this->spanAttributes($export));
+        $this->log($export, microtime(true) - $startedAt);
 
         return $export;
     }
@@ -89,13 +80,13 @@ final readonly class LegalExportTelemetry
         ];
     }
 
-    private function log(LegalExport $export, SpanScope $span, float $seconds): void
+    private function log(LegalExport $export, float $seconds): void
     {
         // `notice` y no `info`: una exportacion legal es un hecho raro —unas
         // pocas al año— y con relevancia legal. Que destaque sobre el ruido de
         // los fichajes es lo que permite ver de un vistazo quien se llevo que.
         $this->logger->notice('compliance.legal_export_generated', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'period_from' => $export->manifest->period->from,
             'period_to' => $export->manifest->period->to,
             'scope' => $export->manifest->scope->metricLabel(),

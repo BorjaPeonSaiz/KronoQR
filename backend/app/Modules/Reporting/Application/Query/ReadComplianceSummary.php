@@ -21,6 +21,7 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
@@ -115,6 +116,14 @@ final readonly class ReadComplianceSummary
      *                                              sincrono de la instalacion (`422`)
      */
     public function handle(ComplianceSummaryCriteria $criteria, int $maxRangeDays): ComplianceSummary
+    {
+        return UseCaseInstrumentation::run('reporting.read_compliance_summary', fn (): ComplianceSummary => $this->doHandle($criteria, $maxRangeDays));
+    }
+
+    /**
+     * @param  int  $maxRangeDays  Techo del rango sincrono, de `config/reporting.php`.
+     */
+    private function doHandle(ComplianceSummaryCriteria $criteria, int $maxRangeDays): ComplianceSummary
     {
         $site = $this->installation->installationSite();
 

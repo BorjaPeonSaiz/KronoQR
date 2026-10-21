@@ -20,6 +20,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Registrar la entrega de una tarjeta, con fecha y responsable (RF-QR-06).
@@ -65,6 +66,11 @@ final readonly class DeliverCredential
      * @throws CredentialDeliverySignerNotAllowed la cuenta ya no puede firmar la entrega
      */
     public function handle(DeliverCredentialCommand $command): ?CredentialView
+    {
+        return UseCaseInstrumentation::run('identity.deliver_credential', fn (): ?CredentialView => $this->doHandle($command));
+    }
+
+    private function doHandle(DeliverCredentialCommand $command): ?CredentialView
     {
         $credential = $this->credentials->findByUuid($command->credentialUuid);
 

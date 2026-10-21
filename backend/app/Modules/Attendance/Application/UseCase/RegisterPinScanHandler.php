@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
@@ -112,6 +113,11 @@ final readonly class RegisterPinScanHandler
     ) {}
 
     public function handle(RegisterPinScanCommand $command): RegisterScanResult
+    {
+        return UseCaseInstrumentation::run('attendance.register_pin_scan', fn (): RegisterScanResult => $this->doHandle($command));
+    }
+
+    private function doHandle(RegisterPinScanCommand $command): RegisterScanResult
     {
         // PIN-02: un reenvio NO vuelve a comprobar el PIN. Antes se verificaba
         // primero y el UNIQUE detectaba el reenvio despues, asi que cada reintento

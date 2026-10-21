@@ -17,6 +17,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
@@ -120,6 +121,15 @@ final readonly class ReadAdoptionReport
      *                                              sincrono de la instalacion (`422`)
      */
     public function handle(AdoptionReportCriteria $criteria, int $maxRangeDays, int $maxRows): AdoptionReport
+    {
+        return UseCaseInstrumentation::run('reporting.read_adoption_report', fn (): AdoptionReport => $this->doHandle($criteria, $maxRangeDays, $maxRows));
+    }
+
+    /**
+     * @param  int  $maxRangeDays  Techo del rango sincrono, de `config/reporting.php`.
+     * @param  int  $maxRows  Techo de filas del informe de horas, de `config/reporting.php`.
+     */
+    private function doHandle(AdoptionReportCriteria $criteria, int $maxRangeDays, int $maxRows): AdoptionReport
     {
         $site = $this->installation->installationSite();
 

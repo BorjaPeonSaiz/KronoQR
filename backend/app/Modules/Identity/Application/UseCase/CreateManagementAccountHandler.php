@@ -25,6 +25,7 @@ use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Identity\Domain\ValueObject\TemporaryPassword;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Alta de una cuenta de gestion con **contrasena temporal** (**RF-ID-10**,
@@ -73,13 +74,13 @@ final readonly class CreateManagementAccountHandler
      */
     public function handle(CreateManagementAccountCommand $command): ManagementAccountProvisioned
     {
-        return $this->telemetry->measure(
+        return UseCaseInstrumentation::run('identity.create_management_account', fn (): ManagementAccountProvisioned => $this->telemetry->measure(
             ManagementAccountChange::Created,
             null,
             $command->actorUuid,
             fn (): ManagementAccountProvisioned => $this->create($command),
             static fn (): string => 'created',
-        );
+        ));
     }
 
     private function create(CreateManagementAccountCommand $command): ManagementAccountProvisioned

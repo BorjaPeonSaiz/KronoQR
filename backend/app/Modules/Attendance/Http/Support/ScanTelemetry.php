@@ -7,26 +7,24 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Support\Facades\Context;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La traza, la metrica y el log de un escaneo (doc 02 §8.1 y §8.2).
+ * La metrica, el log y los atributos de peticion de un escaneo (doc 02 §8.1 y
+ * §8.2).
  *
- * ## Por que en el borde y no dentro del caso de uso
+ * ## El span es del caso de uso; aqui, lo que es de la peticion
  *
- * Tres razones, y ninguna es de comodidad:
- *
- * 1. **El `trace_id` llega en una cabecera HTTP.** Propagarlo desde el `fetch`
- *    del navegador del quiosco hasta la consulta SQL —que es lo que el §8.1
- *    promete— exige leer `traceparent`, y eso solo existe aqui.
- * 2. **La duracion que importa es la del endpoint.** RNF-P-01 fija p95 < 150 ms
- *    para el fichaje *visto por el quiosco*, no para el metodo `handle()`.
- * 3. **El caso de uso se queda limpio.** `RegisterScanHandler` orquesta reglas;
- *    un `try/finally` de medicion alrededor de cada rama seria ruido en el sitio
- *    donde menos conviene tenerlo.
+ * El span y la duracion del acto los abre `RegisterScanHandler` con
+ * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03), y cuelga del span
+ * de servidor que abre `PropagateTraceContext` con el `traceparent` del
+ * quiosco. Lo que solo se conoce en el borde —el `scan_id` y el `device_id` de
+ * la peticion— se añade a ese span de servidor con
+ * {@see SpanScope::annotateCurrent()}, y la duracion que importa para RNF-P-01
+ * es la del endpoint, que sigue midiendose aqui para `scans_total`.
  *
  * ## Lo que el log NO lleva
  *
@@ -53,8 +51,6 @@ use Throwable;
  */
 final readonly class ScanTelemetry
 {
-    private const string SPAN_NAME = 'attendance.register_scan';
-
     public function __construct(
         private ScanMetrics $metrics,
         private LoggerInterface $logger,
@@ -67,7 +63,7 @@ final readonly class ScanTelemetry
      */
     public function measure(string $scanId, string $deviceUuid, callable $process): RegisterScanResult
     {
-        $span = SpanScope::start('kronoqr.attendance', self::SPAN_NAME, SpanKind::KIND_SERVER, [
+        SpanScope::annotateCurrent([
             'scan.id' => $scanId,
             'device.id' => $deviceUuid,
         ]);
@@ -80,21 +76,15 @@ final readonly class ScanTelemetry
 
         $startedAt = microtime(true);
 
-        try {
-            $result = $process();
-        } catch (Throwable $failure) {
-            $span->end(['scan.result' => 'error']);
-
-            throw $failure;
-        }
+        $result = $process();
 
         $seconds = microtime(true) - $startedAt;
 
         $this->correlate(['employee_uuid' => $result->employeeUuid]);
 
         $this->metrics->scanProcessed($deviceUuid, $result->result, $seconds);
-        $span->end(['scan.result' => $result->result->value]);
-        $this->log($result, $deviceUuid, $seconds, $span);
+        SpanScope::annotateCurrent(['scan.result' => $result->result->value]);
+        $this->log($result, $deviceUuid, $seconds);
 
         return $result;
     }
@@ -118,10 +108,10 @@ final readonly class ScanTelemetry
         }
     }
 
-    private function log(RegisterScanResult $result, string $deviceUuid, float $seconds, SpanScope $span): void
+    private function log(RegisterScanResult $result, string $deviceUuid, float $seconds): void
     {
         $context = [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'scan_id' => $result->scanId,
             'device_id' => $deviceUuid,
             'employee_uuid' => $result->employeeUuid,

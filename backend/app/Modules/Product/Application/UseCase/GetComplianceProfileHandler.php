@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\ComplianceProfileRepository;
 use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 
 /**
@@ -43,6 +44,11 @@ final readonly class GetComplianceProfileHandler
     ) {}
 
     public function handle(): ?ComplianceProfileView
+    {
+        return UseCaseInstrumentation::run('product.get_compliance_profile', fn (): ?ComplianceProfileView => $this->doHandle());
+    }
+
+    private function doHandle(): ?ComplianceProfileView
     {
         $site = $this->sites->installationSite();
 

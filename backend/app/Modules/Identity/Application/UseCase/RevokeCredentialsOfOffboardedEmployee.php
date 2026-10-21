@@ -11,6 +11,7 @@ use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -74,6 +75,14 @@ final readonly class RevokeCredentialsOfOffboardedEmployee
      * @return int cuantas credenciales se han revocado
      */
     public function handle(string $employeeUuid, DateTimeImmutable $offboardedAt): int
+    {
+        return UseCaseInstrumentation::run('identity.revoke_credentials_of_offboarded_employee', fn (): int => $this->doHandle($employeeUuid, $offboardedAt));
+    }
+
+    /**
+     * @return int cuantas credenciales se han revocado
+     */
+    private function doHandle(string $employeeUuid, DateTimeImmutable $offboardedAt): int
     {
         $employeeId = $this->employees->internalIdFor($employeeUuid);
 

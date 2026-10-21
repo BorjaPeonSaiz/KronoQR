@@ -8,16 +8,15 @@ use App\Modules\Product\Application\UseCase\InstallationBranding;
 use App\Modules\Product\Application\UseCase\KioskManifest;
 use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de `GET /api/v1/branding` (doc 02 §8.1, RF-PD-08).
+ * El log de `GET /api/v1/branding` (doc 02 §8.1, RF-PD-08).
  *
- * Mismo sitio y mismo motivo que {@see SettingsTelemetry}: en el borde, para que
- * el `trace_id` de `traceparent` sea el padre del span y para que el caso de uso
- * se quede componiendo la marca sin un `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Que se registra, y por que tan poco
  *
@@ -47,29 +46,22 @@ final readonly class BrandingTelemetry
      */
     public function measureRead(callable $read): InstallationBranding
     {
-        $span = SpanScope::start('kronoqr.product', 'product.read_branding', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $branding = $read();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $branding = $read();
 
         $customAccent = $branding->accentColor !== null;
         $hasLogo = $branding->logo instanceof LogoImage;
         $locales = \count($branding->locales->available);
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'branding.custom_accent' => $customAccent,
             'branding.has_logo' => $hasLogo,
             'branding.locales' => $locales,
         ]);
 
         $this->logger->info('product.branding_read', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             // Dos hechos y una cuenta, ningun valor. Ver el docblock de la clase.
             'custom_accent' => $customAccent,
             'has_logo' => $hasLogo,
@@ -90,24 +82,17 @@ final readonly class BrandingTelemetry
      */
     public function measureManifest(callable $read): KioskManifest
     {
-        $span = SpanScope::start('kronoqr.product', 'product.read_branding_manifest', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $manifest = $read();
-        } catch (Throwable $failure) {
-            $span->end();
+        $manifest = $read();
 
-            throw $failure;
-        }
-
-        $span->end([
+        SpanScope::annotateCurrent([
             'branding.custom_accent' => $manifest->customThemeColor,
             'branding.branded_icons' => $manifest->brandedIcons,
         ]);
 
         $this->logger->info('product.branding_manifest_read', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'custom_accent' => $manifest->customThemeColor,
             'branded_icons' => $manifest->brandedIcons,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),

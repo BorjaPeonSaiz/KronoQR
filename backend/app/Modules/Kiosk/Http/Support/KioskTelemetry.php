@@ -7,18 +7,16 @@ namespace App\Modules\Kiosk\Http\Support;
 use App\Modules\Kiosk\Application\Query\DeviceFleetView;
 use App\Modules\Kiosk\Application\UseCase\HeartbeatOutcome;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de los dos endpoints de operacion del quiosco: el latido y
+ * El log de los dos endpoints de operacion del quiosco: el latido y
  * la lista de dispositivos del panel (doc 02 §8.1, **RF-PA-07**).
  *
- * Mismo sitio y mismo motivo que el resto de las telemetrias del producto: en el
- * borde, para que el `trace_id` de `traceparent` sea el padre del span y para
- * que el caso de uso se quede orquestando reglas sin un `try/finally` de
- * medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Que se registra: `device_id` y cifras. Nada mas
  *
@@ -52,8 +50,6 @@ use Throwable;
  */
 final readonly class KioskTelemetry
 {
-    private const string TRACER = 'kronoqr.kiosk';
-
     public function __construct(private LoggerInterface $logger) {}
 
     /**
@@ -63,25 +59,18 @@ final readonly class KioskTelemetry
      */
     public function measureHeartbeat(string $deviceUuid, ?int $batteryLevel, callable $beat): HeartbeatOutcome
     {
-        $span = SpanScope::start(self::TRACER, 'kiosk.record_heartbeat', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $outcome = $beat();
-        } catch (Throwable $failure) {
-            $span->end();
+        $outcome = $beat();
 
-            throw $failure;
-        }
-
-        $span->end([
+        SpanScope::annotateCurrent([
             'device.id' => $deviceUuid,
             'kiosk.client_errors_accepted' => $outcome->clientErrorsAccepted,
             'kiosk.battery_level' => $batteryLevel,
         ]);
 
         $this->logger->debug('kiosk.heartbeat_recorded', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'device_id' => $deviceUuid,
             'battery_level' => $batteryLevel,
             'client_errors_accepted' => $outcome->clientErrorsAccepted,
@@ -103,26 +92,19 @@ final readonly class KioskTelemetry
      */
     public function measureDeviceList(callable $list): DeviceFleetView
     {
-        $span = SpanScope::start(self::TRACER, 'kiosk.list_devices', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $fleet = $list();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $fleet = $list();
 
         $problems = \count($fleet->health->problems());
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'kiosk.devices' => \count($fleet->devices),
             'kiosk.devices_with_findings' => $problems,
         ]);
 
         $this->logger->info('kiosk.devices_listed', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'devices' => \count($fleet->devices),
             'devices_with_findings' => $problems,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),

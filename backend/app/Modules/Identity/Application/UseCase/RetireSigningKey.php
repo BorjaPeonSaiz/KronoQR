@@ -13,6 +13,7 @@ use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Identity\Domain\Event\SigningKeyRetired;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use Illuminate\Database\ConnectionInterface;
@@ -55,6 +56,11 @@ final readonly class RetireSigningKey
      * @throws InstallationSiteMissing antes de la puesta en marcha
      */
     public function handle(RetireSigningKeyCommand $command): SigningKeyRetirementReport
+    {
+        return UseCaseInstrumentation::run('identity.retire_signing_key', fn (): SigningKeyRetirementReport => $this->doHandle($command));
+    }
+
+    private function doHandle(RetireSigningKeyCommand $command): SigningKeyRetirementReport
     {
         $keyring = $this->keys->keyring();
 

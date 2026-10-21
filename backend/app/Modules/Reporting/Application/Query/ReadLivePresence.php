@@ -9,6 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 
 /**
@@ -69,6 +70,11 @@ final readonly class ReadLivePresence
      *                                 del que tomar la zona horaria (RF-PD-03)
      */
     public function handle(LivePresenceQuery $query): PresenceBoard
+    {
+        return UseCaseInstrumentation::run('reporting.read_live_presence', fn (): PresenceBoard => $this->doHandle($query));
+    }
+
+    private function doHandle(LivePresenceQuery $query): PresenceBoard
     {
         $site = $this->installation->installationSite();
 

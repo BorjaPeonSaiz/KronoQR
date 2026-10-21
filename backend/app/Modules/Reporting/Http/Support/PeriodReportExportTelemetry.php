@@ -9,9 +9,7 @@ use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
  * La traza, el log y el contador de una descarga de informe (doc 02 §8.1 y
@@ -70,20 +68,13 @@ final readonly class PeriodReportExportTelemetry
      */
     public function measure(PeriodReportQuery $query, ReportDelivery $format, callable $generate): PeriodReport
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.export_period_report', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $report = $generate();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $report = $generate();
 
         $elapsed = microtime(true) - $startedAt;
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'reporting.format' => $format->value,
             'reporting.range_days' => $query->range->days(),
             'reporting.granularity' => $query->granularity->value,
@@ -92,7 +83,7 @@ final readonly class PeriodReportExportTelemetry
         ]);
 
         $this->metrics->exported($format->value);
-        $this->log($query, $report, $format, $elapsed, $span);
+        $this->log($query, $report, $format, $elapsed);
 
         return $report;
     }
@@ -102,10 +93,9 @@ final readonly class PeriodReportExportTelemetry
         PeriodReport $report,
         ReportDelivery $format,
         float $elapsed,
-        SpanScope $span,
     ): void {
         $this->logger->info('reporting.period_report_exported', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'format' => $format->value,
             'from' => $query->range->isoFrom(),
             'to' => $query->range->isoTo(),

@@ -7,26 +7,24 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Command\ScanBatch;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Support\Facades\Context;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La traza y el log de una sincronizacion de lote (doc 02 §8.1).
+ * El log de una sincronizacion de lote (doc 02 §8.1).
  *
  * ## Un span del lote, no cincuenta
  *
  * Los contadores por escaneo —`scans_total`, `scan_processing_duration_seconds`—
- * los emite el caso de uso, que es quien mide cada elemento. Lo que falta y solo
- * existe aqui es el **span de la peticion**, que cuelga del `traceparent` que
- * envio el navegador del quiosco (§8.1) y permite ver un drenaje completo como
- * una sola cosa: cuantos elementos traia, cuanto tardo y cuantos quedaron sin
- * procesar.
- *
- * Abrir un span por elemento habria multiplicado por cincuenta el volumen de
- * trazas del peor momento del dia —la reconexion despues de un corte— para contar
- * lo que ya cuenta el histograma.
+ * los emite el caso de uso, que es quien mide cada elemento. El span del lote y
+ * el de cada escaneo los abre {@see UseCaseInstrumentation} en los casos de uso
+ * (V1-RV-03): `attendance.sync_scan_batch` con un `attendance.register_scan` por
+ * elemento, que es lo que ya cuenta el histograma y lo que ya producen sus
+ * consultas. Lo que solo existe aqui es lo de la **peticion**: el tamaño del
+ * lote y el `device.id` se añaden al span de servidor, que cuelga del
+ * `traceparent` del quiosco (§8.1), junto con cuantos quedaron sin procesar.
  *
  * ## Lo que el log NO lleva
  *
@@ -43,8 +41,6 @@ use Throwable;
  */
 final readonly class ScanBatchTelemetry
 {
-    private const string SPAN_NAME = 'attendance.sync_scan_batch';
-
     public function __construct(private LoggerInterface $logger) {}
 
     /**
@@ -54,10 +50,9 @@ final readonly class ScanBatchTelemetry
     public function measure(ScanBatch $batch, callable $process): array
     {
         $deviceUuid = $batch->earliest()->deviceUuid;
-        // El contexto activo trae el `traceparent` que el middleware de
-        // propagacion extrajo de la peticion, de modo que este span cuelga del
-        // que abrio el navegador del quiosco (§8.1). Lo hace {@see SpanScope}.
-        $span = SpanScope::start('kronoqr.attendance', self::SPAN_NAME, SpanKind::KIND_SERVER, [
+        // Al span de servidor de la peticion, que cuelga del `traceparent` del
+        // quiosco (§8.1).
+        SpanScope::annotateCurrent([
             'scan_batch.size' => $batch->size(),
             'device.id' => $deviceUuid,
         ]);
@@ -67,13 +62,7 @@ final readonly class ScanBatchTelemetry
 
         $startedAt = microtime(true);
 
-        try {
-            $outcomes = $process();
-        } catch (Throwable $failure) {
-            $span->end(['scan_batch.not_processed' => 0]);
-
-            throw $failure;
-        }
+        $outcomes = $process();
 
         $pending = 0;
         $heldBack = 0;
@@ -86,8 +75,8 @@ final readonly class ScanBatchTelemetry
             }
         }
 
-        $span->end(['scan_batch.not_processed' => $pending, 'scan_batch.held_back' => $heldBack]);
-        $this->log($batch, $deviceUuid, $pending, $heldBack, microtime(true) - $startedAt, $span);
+        SpanScope::annotateCurrent(['scan_batch.not_processed' => $pending, 'scan_batch.held_back' => $heldBack]);
+        $this->log($batch, $deviceUuid, $pending, $heldBack, microtime(true) - $startedAt);
 
         return $outcomes;
     }
@@ -107,10 +96,10 @@ final readonly class ScanBatchTelemetry
         }
     }
 
-    private function log(ScanBatch $batch, string $deviceUuid, int $pending, int $heldBack, float $seconds, SpanScope $span): void
+    private function log(ScanBatch $batch, string $deviceUuid, int $pending, int $heldBack, float $seconds): void
     {
         $context = [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'device_id' => $deviceUuid,
             'batch_size' => $batch->size(),
             'not_processed' => $pending,

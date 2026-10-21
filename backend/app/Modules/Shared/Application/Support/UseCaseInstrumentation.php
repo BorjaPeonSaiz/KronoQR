@@ -52,8 +52,11 @@ use Throwable;
  * Una averia cierra el span con `status=error` y un evento `exception` con
  * `exception.type` = la clase, **sin el mensaje ni la traza** (V21-4-BE-2, regla
  * dura 21): el mensaje de una `QueryException` lleva el SQL con sus valores y el
- * host. Un rechazo lleva el mismo evento sin `status=error`: no es una averia, y
- * buscar `status=error` en Tempo tiene que dar solo averias.
+ * host. Un rechazo **no lleva ni el evento ni el estado**: no es una averia, y
+ * buscar `status=error` en Tempo tiene que dar solo averias. Y la clase de un
+ * rechazo seria un oraculo: en el acceso al portal, `AccountTemporarilyLocked`
+ * frente a `AuthenticationFailed` es justo lo que RS-03 no deja distinguir.
+ * El span de un rechazo solo dice `outcome=rejected`.
  *
  * ## Medir no puede romper lo que se mide
  *
@@ -141,9 +144,10 @@ final class UseCaseInstrumentation
             // Ver el docblock de la clase: medir no puede romper lo que se mide.
         }
 
-        if ($failure instanceof Throwable) {
-            // Ver el docblock de la clase: la clase, nunca el mensaje.
-            $span->recordFailure($failure, $outcome === self::OUTCOME_ERROR);
+        if ($failure instanceof Throwable && $outcome === self::OUTCOME_ERROR) {
+            // Ver el docblock de la clase: la clase, nunca el mensaje, y solo
+            // de una averia.
+            $span->recordFailure($failure, true);
         }
 
         // `end()` ya es a prueba de fallos, y va despues de la metrica para que

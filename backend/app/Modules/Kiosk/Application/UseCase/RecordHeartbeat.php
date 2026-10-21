@@ -16,6 +16,7 @@ use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
@@ -141,6 +142,11 @@ final readonly class RecordHeartbeat
     ) {}
 
     public function handle(RecordHeartbeatCommand $command): HeartbeatOutcome
+    {
+        return UseCaseInstrumentation::run('kiosk.record_heartbeat', fn (): HeartbeatOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(RecordHeartbeatCommand $command): HeartbeatOutcome
     {
         $seenAt = $this->clock->now();
 

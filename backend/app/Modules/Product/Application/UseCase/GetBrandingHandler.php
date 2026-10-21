@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\ValueObject\SettingValue;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\LocalePolicy;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -84,6 +85,11 @@ final readonly class GetBrandingHandler
     ) {}
 
     public function handle(): InstallationBranding
+    {
+        return UseCaseInstrumentation::run('product.get_branding', fn (): InstallationBranding => $this->doHandle());
+    }
+
+    private function doHandle(): InstallationBranding
     {
         try {
             $branding = $this->branding->current();

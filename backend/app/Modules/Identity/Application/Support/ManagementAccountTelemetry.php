@@ -7,16 +7,18 @@ namespace App\Modules\Identity\Application\Support;
 use App\Modules\Identity\Application\Port\ManagementAccountChange;
 use App\Modules\Identity\Application\Port\ManagementAccountMetrics;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Traza, log y metrica de los casos de uso del ciclo de vida de las cuentas de
+ * Log y metrica de los casos de uso del ciclo de vida de las cuentas de
  * gestion (RF-ID-10, doc 02 §8).
  *
- * - **Span** `identity.account.<accion>` en el ambito `kronoqr.identity`.
+ * - **El span y la duracion** los pone el caso de uso con
+ *   {@see UseCaseInstrumentation}, que es la medida comun (V1-RV-03): aqui solo
+ *   se le añaden `user_uuid`, `actor_uuid` y `account.outcome`.
  * - **Log** `identity.account.<accion>` con `user_uuid`, `actor_uuid`,
  *   `outcome` y `trace_id`. **Nunca el nombre ni el correo** (regla dura 21):
  *   el log viaja al fabricante en el paquete de diagnostico.
@@ -47,18 +49,17 @@ final readonly class ManagementAccountTelemetry
         $name = 'identity.account.'.$action->value;
         $attributes = ['user_uuid' => $userUuid, 'actor_uuid' => $actorUuid];
 
-        $span = SpanScope::start('kronoqr.identity', $name, SpanKind::KIND_INTERNAL, $attributes);
+        // Al span del caso de uso, que esta activo (`UseCaseInstrumentation`).
+        SpanScope::annotateCurrent($attributes);
 
         try {
             $result = $act();
         } catch (Throwable $failure) {
-            $span->end(['outcome' => 'error']);
-
             // La clase y no el mensaje: el de una excepcion de infraestructura
             // puede llevar una consulta entera, con un correo dentro.
             $this->logger->warning($name.'_failed', [
                 ...$attributes,
-                'trace_id' => $span->traceId(),
+                'trace_id' => SpanScope::currentTraceId(),
                 'failure' => $failure::class,
             ]);
 
@@ -67,9 +68,9 @@ final readonly class ManagementAccountTelemetry
 
         $outcome = $outcomeOf($result);
 
-        $span->end(['outcome' => $outcome]);
+        SpanScope::annotateCurrent(['account.outcome' => $outcome]);
 
-        $this->logger->info($name, [...$attributes, 'outcome' => $outcome, 'trace_id' => $span->traceId()]);
+        $this->logger->info($name, [...$attributes, 'outcome' => $outcome, 'trace_id' => SpanScope::currentTraceId()]);
 
         return $result;
     }

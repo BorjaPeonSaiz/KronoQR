@@ -285,7 +285,7 @@ it('marca el span de una averia con status error y un evento con la clase, sin e
     });
 })->group('RQ-06', 'RNF-D-01', 'RS-05');
 
-it('un rechazo deja el evento con la clase pero no marca el span como error', function (): void {
+it('un rechazo no marca el span como error ni deja la clase, que seria un oraculo', function (): void {
     RecordingTracer::around(function (RecordingTracer $tracer): void {
         try {
             UseCaseInstrumentation::run('compliance.resolve_incident', static function (): never {
@@ -299,7 +299,7 @@ it('un rechazo deja el evento con la clase pero no marca el span como error', fu
 
         expect($span->getStatus()->getCode())->not->toBe(StatusCode::STATUS_ERROR)
             ->and($span->getAttributes()->get('outcome'))->toBe('rejected')
-            ->and($span->getEvents()[0]->getAttributes()->get('exception.type'))->toBe(IncidentNotFound::class);
+            ->and($span->getEvents())->toBe([]);
     });
 })->group('RQ-06', 'RNF-D-01');
 

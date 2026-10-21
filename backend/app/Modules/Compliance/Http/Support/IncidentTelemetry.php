@@ -7,18 +7,16 @@ namespace App\Modules\Compliance\Http\Support;
 use App\Modules\Compliance\Application\Port\IncidentBoardRow;
 use App\Modules\Compliance\Application\UseCase\IncidentBoardView;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de la bandeja de incidencias y de su resolucion (doc 02
+ * El log de la bandeja de incidencias y de su resolucion (doc 02
  * §8.1, RF-PA-05).
  *
- * Mismo sitio y mismo motivo que `LegalExportTelemetry` y `CorrectionTelemetry`:
- * en el borde, para que el `trace_id` que llega en `traceparent` sea el padre del
- * span y para que el caso de uso se quede orquestando reglas sin un
- * `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Aqui NO se cuenta
  *
@@ -51,18 +49,11 @@ final readonly class IncidentTelemetry
      */
     public function measureBoard(callable $read): IncidentBoardView
     {
-        $span = SpanScope::start('kronoqr.compliance', 'compliance.read_incident_board', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $view = $read();
-        } catch (Throwable $failure) {
-            $span->end();
+        $view = $read();
 
-            throw $failure;
-        }
-
-        $span->end([
+        SpanScope::annotateCurrent([
             'incident_board.rows' => \count($view->page->rows),
             'incident_board.total' => $view->page->total,
             'incident_board.page' => $view->page->page,
@@ -72,7 +63,7 @@ final readonly class IncidentTelemetry
         // varias veces al dia. Lo que destaca sobre el ruido es la resolucion,
         // que es la que cambia algo.
         $this->logger->info('compliance.incident_board_read', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'rows' => \count($view->page->rows),
             'total' => $view->page->total,
             'page' => $view->page->page,
@@ -87,18 +78,11 @@ final readonly class IncidentTelemetry
      */
     public function measureResolution(callable $resolve): IncidentBoardRow
     {
-        $span = SpanScope::start('kronoqr.compliance', 'compliance.resolve_incident', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $row = $resolve();
-        } catch (Throwable $failure) {
-            $span->end();
+        $row = $resolve();
 
-            throw $failure;
-        }
-
-        $span->end([
+        SpanScope::annotateCurrent([
             'incident.id' => $row->id,
             'incident.type' => $row->incident->type->value,
             'incident.severity' => $row->incident->severity->value,
@@ -109,7 +93,7 @@ final readonly class IncidentTelemetry
         // legal —cierra una revision sobre las horas de alguien— y tiene que
         // destacar sobre el ruido de las lecturas.
         $this->logger->notice('compliance.incident_resolved', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'incident_id' => $row->id,
             // El identificador publico de la persona afectada, nunca su nombre
             // (regla dura 21).

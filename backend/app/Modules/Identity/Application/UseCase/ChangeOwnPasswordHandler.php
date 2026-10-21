@@ -21,6 +21,7 @@ use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use DateTimeImmutable;
 use Psr\Log\LoggerInterface;
@@ -81,13 +82,13 @@ final readonly class ChangeOwnPasswordHandler
      */
     public function handle(ChangeOwnPasswordCommand $command): ChangeOwnPasswordOutcome
     {
-        return $this->telemetry->measure(
+        return UseCaseInstrumentation::run('identity.change_own_password', fn (): ChangeOwnPasswordOutcome => $this->telemetry->measure(
             ManagementAccountChange::PasswordChanged,
             $command->accountUuid,
             $command->accountUuid,
             fn (): ChangeOwnPasswordOutcome => $this->change($command),
             static fn (ChangeOwnPasswordOutcome $outcome): string => $outcome->name,
-        );
+        ));
     }
 
     private function change(ChangeOwnPasswordCommand $command): ChangeOwnPasswordOutcome

@@ -31,7 +31,6 @@ use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Application\Query\ManagementAccountView;
 use App\Modules\Identity\Application\Support\ActorReauthentication;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
-use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
 use App\Modules\Identity\Application\Support\TemporaryPasswordSettings;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\AuthenticateUserHandler;
@@ -669,20 +668,12 @@ final class IdentityServiceProvider extends ServiceProvider
      */
     private function registerPortal(): void
     {
-        // Sin dependencias desde que los apuntes los escribe
-        // `AuthenticationJournal` (ADR-039): aqui solo queda el span.
-        $this->app->bind(
-            PortalAccessTelemetry::class,
-            static fn (): PortalAccessTelemetry => new PortalAccessTelemetry,
-        );
-
         $this->app->bind(
             AuthenticatePortalEmployeeHandler::class,
             static fn (Application $app): AuthenticatePortalEmployeeHandler => new AuthenticatePortalEmployeeHandler(
                 pins: $app->make(EmployeePinVerifier::class),
                 sessions: $app->make(PortalSessionIssuer::class),
                 clock: $app->make(Clock::class),
-                telemetry: $app->make(PortalAccessTelemetry::class),
                 journal: $app->make(AuthenticationJournal::class),
                 sessionHours: max(1, Config::integer('identity.portal.token_hours', 2)),
                 origins: $app->make(PortalOriginAttempts::class),

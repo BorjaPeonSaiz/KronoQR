@@ -19,9 +19,8 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
-use OpenTelemetry\API\Trace\SpanKind;
-use Throwable;
 
 /**
  * Concilia el registro horario con su auditoria (ADR-057 §4, RL-04, RS-07).
@@ -78,38 +77,32 @@ final readonly class ReconcileWorkRecordWithAudit
             ? WorkRecordReconciliationWindow::full()
             : WorkRecordReconciliationWindow::recent($now, $windowDays);
 
-        // KIND_INTERNAL: no hay peticion detras, lo lanza el planificador o una
-        // persona en la consola del servidor.
-        $span = SpanScope::start(
-            'kronoqr.compliance',
+        // La medida comun (V1-RV-03): span, duracion y desenlace. Los recuentos
+        // del resultado van al cierre del span; `outcome` es el de la medida
+        // (`ok`/`error`) y el veredicto de la conciliacion va aparte.
+        return UseCaseInstrumentation::run(
             'compliance.reconcile_work_record',
-            SpanKind::KIND_INTERNAL,
-            ['scope' => $scope->value, 'window_days' => $window->days],
+            function () use ($scope, $window, $chunkSize, $now): WorkRecordReconciliationResult {
+                SpanScope::annotateCurrent(['scope' => $scope->value, 'window_days' => $window->days]);
+
+                $result = $this->reconcile($window, max(1, $chunkSize), $now);
+
+                $this->metrics->record($result, $this->clock->now());
+
+                return $result;
+            },
+            static fn (WorkRecordReconciliationResult $result): array => [
+                'reconciliation.outcome' => $result->isConsistent() ? 'consistent' : 'discrepancies',
+                'entries_checked' => $result->entriesChecked,
+                'discrepancies' => $result->discrepancyCount(),
+                'reviewed_purges' => $result->reviewedPurges,
+                'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
+                'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
+                'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
+                'reviewed_site_timezone_changes' => $result->reviewedSiteTimezoneChanges,
+                'reviewed_site_timezone_entries' => $result->reviewedSiteTimezoneEntries,
+            ],
         );
-
-        try {
-            $result = $this->reconcile($window, max(1, $chunkSize), $now);
-        } catch (Throwable $failure) {
-            $span->end(['outcome' => 'error']);
-
-            throw $failure;
-        }
-
-        $this->metrics->record($result, $this->clock->now());
-
-        $span->end([
-            'outcome' => $result->isConsistent() ? 'consistent' : 'discrepancies',
-            'entries_checked' => $result->entriesChecked,
-            'discrepancies' => $result->discrepancyCount(),
-            'reviewed_purges' => $result->reviewedPurges,
-            'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
-            'unverifiable_site_timezones' => $result->unverifiableSiteTimezones,
-            'unverifiable_site_timezone_changes' => $result->unverifiableSiteTimezoneChanges,
-            'reviewed_site_timezone_changes' => $result->reviewedSiteTimezoneChanges,
-            'reviewed_site_timezone_entries' => $result->reviewedSiteTimezoneEntries,
-        ]);
-
-        return $result;
     }
 
     private function reconcile(WorkRecordReconciliationWindow $window, int $chunkSize, DateTimeImmutable $runAt): WorkRecordReconciliationResult

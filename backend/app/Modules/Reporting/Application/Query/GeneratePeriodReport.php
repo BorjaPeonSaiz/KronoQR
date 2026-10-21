@@ -19,6 +19,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 
 /**
@@ -165,15 +166,20 @@ final readonly class GeneratePeriodReport
         ReportDataset $dataset = ReportDataset::PeriodReport,
         array $disclosureContext = [],
     ): PeriodReport {
-        $composed = $this->compose($query, $maxRangeDays, $maxRows, $delivery, $dataset, $disclosureContext);
+        return UseCaseInstrumentation::run(
+            'reporting.generate_period_report',
+            function () use ($query, $maxRangeDays, $maxRows, $delivery, $dataset, $disclosureContext): PeriodReport {
+                $composed = $this->compose($query, $maxRangeDays, $maxRows, $delivery, $dataset, $disclosureContext);
 
-        $this->disclosures->recordDisclosure(
-            $composed->dataset->value,
-            $composed->recordCount(),
-            $composed->disclosure,
+                $this->disclosures->recordDisclosure(
+                    $composed->dataset->value,
+                    $composed->recordCount(),
+                    $composed->disclosure,
+                );
+
+                return $composed->report;
+            },
         );
-
-        return $composed->report;
     }
 
     /**

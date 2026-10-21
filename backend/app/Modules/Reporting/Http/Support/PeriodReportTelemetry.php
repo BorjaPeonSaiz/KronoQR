@@ -8,18 +8,16 @@ use App\Http\Middleware\RecordHttpMetrics;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de la generacion de un informe por periodo (doc 02 §8.1 y
+ * El log de la generacion de un informe por periodo (doc 02 §8.1 y
  * §8.2, RF-IN-01).
  *
- * Mismo sitio y mismo motivo que `JournalTelemetry`, su hermana de este
- * directorio: en el borde, para que el `trace_id` que llega en `traceparent` sea
- * el padre del span y para que la consulta se quede consultando sin un
- * `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Por que aqui no hay un contador propio
  *
@@ -63,35 +61,28 @@ final readonly class PeriodReportTelemetry
      */
     public function measure(PeriodReportQuery $query, callable $generate): PeriodReport
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.generate_period_report', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $report = $generate();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $report = $generate();
 
         $elapsed = microtime(true) - $startedAt;
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'reporting.range_days' => $query->range->days(),
             'reporting.granularity' => $query->granularity->value,
             'reporting.group_by' => $query->grouping->value,
             'reporting.rows' => $report->rowCount(),
         ]);
 
-        $this->log($query, $report, $elapsed, $span);
+        $this->log($query, $report, $elapsed);
 
         return $report;
     }
 
-    private function log(PeriodReportQuery $query, PeriodReport $report, float $elapsed, SpanScope $span): void
+    private function log(PeriodReportQuery $query, PeriodReport $report, float $elapsed): void
     {
         $this->logger->info('reporting.period_report_generated', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'from' => $query->range->isoFrom(),
             'to' => $query->range->isoTo(),
             'range_days' => $query->range->days(),

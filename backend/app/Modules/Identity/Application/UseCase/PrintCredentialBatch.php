@@ -10,6 +10,7 @@ use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyPrinted;
 use App\Modules\Identity\Domain\ValueObject\CardFormat;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 
 /**
@@ -52,6 +53,11 @@ final readonly class PrintCredentialBatch
      * @throws CredentialAlreadyPrinted si alguna se imprime en paralelo: `409` y no sale ninguna
      */
     public function handle(PrintCredentialBatchCommand $command): PrintedCards
+    {
+        return UseCaseInstrumentation::run('identity.print_credential_batch', fn (): PrintedCards => $this->doHandle($command));
+    }
+
+    private function doHandle(PrintCredentialBatchCommand $command): PrintedCards
     {
         $profiles = $this->directory->activeProfiles();
 

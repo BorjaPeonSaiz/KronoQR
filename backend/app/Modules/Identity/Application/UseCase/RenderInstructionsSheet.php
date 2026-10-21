@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\Port\PortalAddressProvider;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * **La hoja que se entrega con la tarjeta** (tarea 5.11b, **RL-05**, RF-QR-06,
@@ -60,6 +61,11 @@ final readonly class RenderInstructionsSheet
     ) {}
 
     public function handle(?string $requestedLocale = null): InstructionsSheet
+    {
+        return UseCaseInstrumentation::run('identity.render_instructions_sheet', fn (): InstructionsSheet => $this->doHandle($requestedLocale));
+    }
+
+    private function doHandle(?string $requestedLocale = null): InstructionsSheet
     {
         $locale = $this->resolveLocale($requestedLocale);
         $portalUrl = $this->portal->current();

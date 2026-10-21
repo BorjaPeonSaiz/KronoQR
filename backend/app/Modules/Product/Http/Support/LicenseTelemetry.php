@@ -6,12 +6,10 @@ namespace App\Modules\Product\Http\Support;
 
 use App\Modules\Product\Domain\ValueObject\LicenseOverview;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de `GET /api/v1/license` y de `POST /license/activate`
+ * El log de `GET /api/v1/license` y de `POST /license/activate`
  * (doc 02 §8.1, RF-PD-04).
  *
  * ## Lo que este log NO puede llevar
@@ -42,7 +40,7 @@ final readonly class LicenseTelemetry
      */
     public function measureRead(callable $read): LicenseOverview
     {
-        return $this->measure('product.read_license', 'product.license_read', $read, warn: false);
+        return $this->measure('product.license_read', $read, warn: false);
     }
 
     /**
@@ -50,31 +48,23 @@ final readonly class LicenseTelemetry
      */
     public function measureActivation(callable $activate): LicenseOverview
     {
-        return $this->measure('product.activate_license', 'product.license_activated', $activate, warn: true);
+        return $this->measure('product.license_activated', $activate, warn: true);
     }
 
     /**
-     * @param  non-empty-string  $spanName
      * @param  non-empty-string  $logName
      * @param  callable(): LicenseOverview  $work
      */
-    private function measure(string $spanName, string $logName, callable $work, bool $warn): LicenseOverview
+    private function measure(string $logName, callable $work, bool $warn): LicenseOverview
     {
-        $span = SpanScope::start('kronoqr.product', $spanName, SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $overview = $work();
-        } catch (Throwable $failure) {
-            $span->end();
+        $overview = $work();
 
-            throw $failure;
-        }
-
-        $span->end(['license.state' => $overview->status->state->value]);
+        SpanScope::annotateCurrent(['license.state' => $overview->status->state->value]);
 
         $context = [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             // El estado, y ningun dato del cliente. Ver el docblock.
             'state' => $overview->status->state->value,
             'degraded_features' => \count($overview->status->degradedFeatures()),

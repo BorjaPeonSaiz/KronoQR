@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Query;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Domain\Model\EmploymentContract;
 
@@ -26,6 +27,14 @@ final readonly class EmploymentContractQueries
      * @return list<EmploymentContract>
      */
     public function forEmployee(string $employeeUuid): array
+    {
+        return UseCaseInstrumentation::run('workforce.list_employment_contracts', fn () => $this->doForEmployee($employeeUuid));
+    }
+
+    /**
+     * @return list<EmploymentContract>
+     */
+    private function doForEmployee(string $employeeUuid): array
     {
         return $this->contracts->forEmployee($employeeUuid);
     }

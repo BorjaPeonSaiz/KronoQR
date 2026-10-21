@@ -11,6 +11,7 @@ use App\Modules\Compliance\Domain\ValueObject\IncidentType;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 
@@ -69,6 +70,11 @@ final readonly class ReadIncidentBoard
      * @throws InstallationSiteMissing antes de la puesta en marcha, cuando no hay centro
      */
     public function handle(IncidentBoardQuery $query): IncidentBoardView
+    {
+        return UseCaseInstrumentation::run('compliance.read_incident_board', fn (): IncidentBoardView => $this->doHandle($query));
+    }
+
+    private function doHandle(IncidentBoardQuery $query): IncidentBoardView
     {
         $site = $this->installation->installationSite();
 

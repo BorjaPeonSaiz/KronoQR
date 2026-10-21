@@ -6,17 +6,18 @@ namespace App\Modules\Reporting\Http\Support;
 
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * Span y linea de log de la composicion del PDF del registro propio (PR19).
+ * La linea de log de la composicion del PDF del registro propio (PR19).
  *
- * La consulta ya la mide {@see JournalTelemetry} (`reporting.read_employee_workdays`).
+ * La consulta ya la mide su caso de uso (`reporting.read_employee_work_days`).
  * Lo que este añade es lo que solo ocurre con el PDF: arrancar Chromium, que es
  * la parte lenta y la que puede fallar. Sin su propio span, una descarga de
- * cuatro segundos se veria en la traza como una consulta lenta.
+ * cuatro segundos se veria en la traza como una consulta lenta. El span lo abre
+ * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03): renderizar no es un
+ * caso de uso de `Application`, pero es un acto con su duracion y su desenlace.
  *
  * **Sin metrica propia, y es deliberado.** `report_exports_total{format}` cuenta
  * los informes de gestion; meter aqui el registro personal mezclaria dos
@@ -38,26 +39,21 @@ final readonly class PersonalRecordPdfTelemetry
      */
     public function measure(WorkDayJournal $journal, int $rows, callable $render): mixed
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.render_personal_record_pdf', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $result = $render();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $result = UseCaseInstrumentation::run(
+            'reporting.render_personal_record_pdf',
+            $render,
+            static fn (): array => [
+                'reporting.range_days' => $journal->range->days(),
+                'reporting.rows' => $rows,
+            ],
+        );
 
         $elapsed = microtime(true) - $startedAt;
 
-        $span->end([
-            'reporting.range_days' => $journal->range->days(),
-            'reporting.rows' => $rows,
-        ]);
-
         $this->logger->info('reporting.personal_record_pdf_rendered', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'employee_uuid' => $journal->employeeUuid,
             'from' => $journal->range->isoFrom(),
             'to' => $journal->range->isoTo(),

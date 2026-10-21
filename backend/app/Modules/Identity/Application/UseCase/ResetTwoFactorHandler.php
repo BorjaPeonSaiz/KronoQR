@@ -19,6 +19,7 @@ use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
@@ -74,13 +75,13 @@ final readonly class ResetTwoFactorHandler
      */
     public function handle(ResetManagementTwoFactorCommand $command): TwoFactorResetOutcome
     {
-        return $this->telemetry->measure(
+        return UseCaseInstrumentation::run('identity.reset_management_two_factor', fn (): TwoFactorResetOutcome => $this->telemetry->measure(
             ManagementAccountChange::TwoFactorReset,
             $command->accountUuid,
             $command->actorUuid,
             fn (): TwoFactorResetOutcome => $this->reset($command),
             static fn (TwoFactorResetOutcome $outcome): string => $outcome->name,
-        );
+        ));
     }
 
     private function reset(ResetManagementTwoFactorCommand $command): TwoFactorResetOutcome

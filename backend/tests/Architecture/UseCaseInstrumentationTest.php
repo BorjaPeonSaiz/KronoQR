@@ -2,45 +2,18 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\RegisterPinScanHandler;
-use App\Modules\Attendance\Application\UseCase\RegisterScanBatchHandler;
-use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
-use App\Modules\Attendance\Application\UseCase\ReportDiscardedScans;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
-use App\Modules\Compliance\Application\UseCase\ApplyRetention;
 use App\Modules\Compliance\Application\UseCase\NotifyPendingIncidents;
 use App\Modules\Compliance\Application\UseCase\OpenIncident;
 use App\Modules\Compliance\Application\UseCase\PlanRetention;
-use App\Modules\Compliance\Application\UseCase\ReadIncidentBoard;
-use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
-use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
-use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
-use App\Modules\Identity\Application\UseCase\ChangeOwnPasswordHandler;
-use App\Modules\Identity\Application\UseCase\CreateManagementAccountHandler;
-use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
-use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
-use App\Modules\Identity\Application\UseCase\PrintCredential;
-use App\Modules\Identity\Application\UseCase\PrintCredentialBatch;
-use App\Modules\Identity\Application\UseCase\RenderInstructionsSheet;
-use App\Modules\Identity\Application\UseCase\ResetManagementPasswordHandler;
-use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
-use App\Modules\Identity\Application\UseCase\RetireSigningKey;
-use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmployee;
 use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
-use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
-use App\Modules\Identity\Application\UseCase\RotateSigningKey;
-use App\Modules\Kiosk\Application\UseCase\ListDevices;
-use App\Modules\Kiosk\Application\UseCase\RecordHeartbeat;
+use App\Modules\Kiosk\Application\UseCase\BuildKioskRoster;
 use App\Modules\Product\Application\UseCase\BuildTelemetryReportHandler;
-use App\Modules\Product\Application\UseCase\GetBrandingHandler;
-use App\Modules\Product\Application\UseCase\GetComplianceProfileHandler;
-use App\Modules\Product\Application\UseCase\GetKioskManifestHandler;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Application\UseCase\RevokeSupportGrantsOfDeactivatedAccount;
+use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\Query\ReadEmployeeWorkDays;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricCatalogue;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricDefinition;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricType;
@@ -50,27 +23,34 @@ use App\Modules\Workforce\Application\UseCase\IssueEmployeePinHandler;
 use Tests\Architecture\Support\ModuleTree;
 
 /*
- * TODO CASO DE USO SE MIDE (doc 02 §8, bloque 24 de la 2.2.1).
+ * TODO CASO DE USO Y TODA CONSULTA SE MIDEN CON EL MISMO AYUDANTE (doc 02 §8,
+ * bloque 24 de la 2.2.1 y bloque 10 de la 2.3.0).
  *
  * ## Que se exige
  *
- * Toda clase de `Modules/<Modulo>/Application/UseCase/` con un metodo publico
- * `handle`, `__invoke`, `execute` o `run` es un caso de uso —Compliance y Kiosk
- * no usan el sufijo `Handler`, asi que el sufijo no sirve para reconocerlos—, y
- * tiene que llamar a `UseCaseInstrumentation::run('<modulo>.<accion_snake>', …)`
- * con un literal. Las clases sin esos metodos —comandos, resultados, vistas— y
- * los enumerados e interfaces quedan fuera por construccion.
+ * 1. Toda clase de `Modules/<Modulo>/Application/UseCase/` con un metodo publico
+ *    `handle`, `__invoke`, `execute` o `run` es un caso de uso —Compliance y
+ *    Kiosk no usan el sufijo `Handler`, asi que el sufijo no sirve para
+ *    reconocerlos—, y tiene que llamar a
+ *    `UseCaseInstrumentation::run('<modulo>.<accion_snake>', …)` con un literal.
+ *    Las clases sin esos metodos —comandos, resultados, vistas— quedan fuera por
+ *    construccion, salvo las que entran por otro nombre
+ *    (`USE_CASE_INSTRUMENTATION_OTHER_ENTRIES`: el padron del quiosco entra por
+ *    `BuildKioskRoster::forSite`, V21-4-BE-1).
+ * 2. Toda clase de `Modules/<Modulo>/Application/Query/` que es un **servicio**
+ *    —recibe sus dependencias por el constructor— mide **cada** metodo publico:
+ *    la presencia en vivo, las cuentas de gestion o las `*Queries` de Workforce
+ *    solo las veia `http_request_duration_seconds` (V21-4-BE-1). Las vistas y
+ *    los criterios, que no tienen dependencias, quedan fuera.
+ * 3. Nadie fuera del andamiaje abre un span con `SpanScope::start`: las 28
+ *    telemetrias con span propio pasaron al ayudante (V1-RV-03, V4-BE-6). Solo
+ *    lo abren `UseCaseInstrumentation` y el armazon (el span de servidor, el de
+ *    cada consulta y el de cada tarea programada), que no son casos de uso.
  *
  * ## La lista de excepciones solo puede encoger, y cada motivo se comprueba
  *
- * - `telemetria_propia`: el caso de uso ya abre su span y mide su duracion
- *   (`SpanScope::start` o un `*Telemetry` con `measure`). Un contador suelto no
- *   basta: sin duracion ni span, se envuelve con el ayudante.
- * - `telemetria_http`: un controlador lo envuelve con un `*Telemetry` que mide
- *   (`->measure…`), y no tiene entrada por consola ni por cola, donde ese
- *   controlador no lo veria.
  * - `sin_logica`: no es un caso de uso aunque viva aqui (un ayudante de
- *   reintento).
+ *   reintento, un calculo sin entrada ni salida).
  * - `interno_anidado`: no tiene entrada propia —ningun controlador, comando,
  *   trabajo en cola, middleware, ruta ni migracion lo nombra—: solo lo invoca
  *   otro caso de uso ya medido, un oyente o un adaptador. Medirlo duplicaria la
@@ -83,48 +63,32 @@ use Tests\Architecture\Support\ModuleTree;
  * `USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS` solo baja.
  */
 
-const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 41;
+const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 11;
+
+const USE_CASE_INSTRUMENTATION_MAX_QUERY_EXCEPTIONS = 2;
 
 const USE_CASE_INSTRUMENTATION_PATTERN = '/^[a-z]+\.[a-z0-9_]+$/';
 
-const USE_CASE_INSTRUMENTATION_REASONS = ['telemetria_propia', 'telemetria_http', 'sin_logica', 'interno_anidado'];
+const USE_CASE_INSTRUMENTATION_REASONS = ['sin_logica', 'interno_anidado'];
+
+/** Casos de uso que entran por un metodo que no se llama `handle`. */
+const USE_CASE_INSTRUMENTATION_OTHER_ENTRIES = [
+    BuildKioskRoster::class => 'forSite',
+];
+
+/**
+ * Los unicos ficheros de `app/` que abren un span con `SpanScope`, y por que.
+ */
+const USE_CASE_INSTRUMENTATION_SPAN_OPENERS = [
+    'Modules/Shared/Application/Support/SpanScope.php' => 'el andamiaje',
+    'Modules/Shared/Application/Support/UseCaseInstrumentation.php' => 'la medida comun de los casos de uso',
+    'Http/Middleware/PropagateTraceContext.php' => 'el span de servidor de cada peticion',
+    'Support/Observability/Tracing/DatabaseSpans.php' => 'el span de cada consulta',
+    'Support/Observability/Tracing/ScheduledTaskSpans.php' => 'el span de cada tarea programada',
+];
 
 /** @var array<class-string, string> $excepciones */
 $excepciones = [
-    // --- Abren su span y miden su duracion.
-    ApplyRetention::class => 'telemetria_propia',
-    ReconcileWorkRecordWithAudit::class => 'telemetria_propia',
-    ReviewOutOfBoundsPurge::class => 'telemetria_propia',
-    AuthenticatePortalEmployeeHandler::class => 'telemetria_propia',
-    ChangeOwnPasswordHandler::class => 'telemetria_propia',
-    CreateManagementAccountHandler::class => 'telemetria_propia',
-    DeactivateManagementAccountHandler::class => 'telemetria_propia',
-    DeliverCredential::class => 'telemetria_propia',
-    PrintCredential::class => 'telemetria_propia',
-    PrintCredentialBatch::class => 'telemetria_propia',
-    RenderInstructionsSheet::class => 'telemetria_propia',
-    ResetManagementPasswordHandler::class => 'telemetria_propia',
-    ResetTwoFactorHandler::class => 'telemetria_propia',
-    RetireSigningKey::class => 'telemetria_propia',
-    RevokeCredentialsOfOffboardedEmployee::class => 'telemetria_propia',
-    RotateSigningKey::class => 'telemetria_propia',
-
-    // --- Medidos desde el controlador con un `*Telemetry` de `Http/Support`.
-    // Los cinco primeros son el camino del fichaje y el latido.
-    RegisterScanHandler::class => 'telemetria_http',
-    RegisterPinScanHandler::class => 'telemetria_http',
-    RegisterScanBatchHandler::class => 'telemetria_http',
-    ReportDiscardedScans::class => 'telemetria_http',
-    RecordHeartbeat::class => 'telemetria_http',
-    AddShiftEntryHandler::class => 'telemetria_http',
-    CorrectShiftHandler::class => 'telemetria_http',
-    VoidShiftHandler::class => 'telemetria_http',
-    ReadIncidentBoard::class => 'telemetria_http',
-    ListDevices::class => 'telemetria_http',
-    GetBrandingHandler::class => 'telemetria_http',
-    GetKioskManifestHandler::class => 'telemetria_http',
-    GetComplianceProfileHandler::class => 'telemetria_http',
-
     // --- No es un caso de uso: el reintento de la transaccion de plantilla.
     EmployeeWriteRetry::class => 'sin_logica',
 
@@ -137,9 +101,21 @@ $excepciones = [
     RecordPlanUsageHandler::class => 'interno_anidado',
     RevokeSupportGrantsOfDeactivatedAccount::class => 'interno_anidado',
     IssueDeviceToken::class => 'interno_anidado',
-    RotateDeviceTokenIfDue::class => 'interno_anidado',
     RevokeDeviceToken::class => 'interno_anidado',
     IssueEmployeePinHandler::class => 'interno_anidado',
+];
+
+/**
+ * Metodos de consulta que no se miden, `Clase::metodo => motivo`.
+ *
+ * @var array<string, string> $excepcionesDeConsulta
+ */
+$excepcionesDeConsulta = [
+    // Lo invocan `handle()` de la propia clase y `SendWeeklySummaries`, los dos
+    // medidos: es la mitad sin asiento del mismo acto.
+    GeneratePeriodReport::class.'::compose' => 'interno_anidado',
+    // La fecha de hoy en una zona: un calculo con el reloj, sin entrada ni salida.
+    ReadEmployeeWorkDays::class.'::todayIn' => 'sin_logica',
 ];
 
 /*
@@ -162,7 +138,39 @@ $casosDeUso = static function (): array {
             continue;
         }
 
-        if (preg_match('/^\s+public\s+function\s+(?:handle|__invoke|execute|run)\s*\(/m', $source) !== 1) {
+        $class = 'App\\Modules\\'.str_replace(['/', '.php'], ['\\', ''], $relative);
+        $entry = USE_CASE_INSTRUMENTATION_OTHER_ENTRIES[$class] ?? '(?:handle|__invoke|execute|run)';
+
+        if (preg_match('/^\s+public\s+function\s+'.$entry.'\s*\(/m', $source) !== 1) {
+            continue;
+        }
+
+        $found[$class] = $source;
+    }
+
+    ksort($found);
+
+    return $found;
+};
+
+/*
+ * Las consultas que son un servicio, `clase => codigo fuente`: en
+ * `Application/Query/` y con dependencias en el constructor (`private`). Las
+ * vistas y los criterios las declaran `public readonly`.
+ */
+$consultas = static function (): array {
+    $found = [];
+
+    foreach (ModuleTree::filesIn('') as $file) {
+        $relative = ModuleTree::relative($file);
+
+        if (preg_match('#^[A-Za-z]+/Application/Query/.+\.php$#', $relative) !== 1) {
+            continue;
+        }
+
+        $source = (string) file_get_contents($file);
+
+        if (preg_match('/public function __construct\((?:[^()]|\([^()]*\))*\bprivate\b/s', $source) !== 1) {
             continue;
         }
 
@@ -197,7 +205,7 @@ $entradas = static function (): array {
 };
 
 /**
- * Los literales que cada caso de uso pasa al ayudante.
+ * Los literales que un fichero pasa al ayudante.
  *
  * @return list<string>
  */
@@ -216,14 +224,59 @@ function useCaseInstrumentationMentions(string $source, string $class): bool
     return str_contains($source, 'use '.$class.';') || str_contains($source, '\\'.$class);
 }
 
-it('reconoce los casos de uso del arbol (red de seguridad de la prueba)', function () use ($casosDeUso, $entradas): void {
+/**
+ * El codigo de un fichero sin comentarios: el docblock del ayudante pone un
+ * ejemplo de uso que no es un acto medido.
+ */
+function useCaseInstrumentationCode(string $file): string
+{
+    $code = '';
+
+    foreach (token_get_all((string) file_get_contents($file)) as $token) {
+        if (! \is_array($token) || ! \in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            $code .= \is_array($token) ? $token[1] : $token;
+        }
+    }
+
+    return $code;
+}
+
+/**
+ * Los metodos publicos no estaticos de una clase con el cuerpo de cada uno,
+ * `metodo => cuerpo`. El cuerpo llega hasta el siguiente metodo: basta para ver
+ * si llama al ayudante.
+ *
+ * @return array<string, string>
+ */
+function useCaseInstrumentationPublicMethods(string $source): array
+{
+    preg_match_all('/^    public function (\w+)\(/m', $source, $matches, PREG_OFFSET_CAPTURE);
+
+    $methods = [];
+
+    foreach ($matches[1] as $index => [$name, $offset]) {
+        if ($name === '__construct') {
+            continue;
+        }
+
+        $next = preg_match('/^    (?:public|private|protected) (?:static )?function /m', $source, $following, PREG_OFFSET_CAPTURE, $offset + \strlen($name));
+        $end = $next === 1 ? $following[0][1] : \strlen($source);
+        $methods[$name] = substr($source, $offset, $end - $offset);
+    }
+
+    return $methods;
+}
+
+it('reconoce los casos de uso y las consultas del arbol (red de seguridad de la prueba)', function () use ($casosDeUso, $consultas, $entradas): void {
     // Si el recorrido o el reconocimiento se rompen, las comprobaciones de abajo
     // pasarian sobre un conjunto vacio.
     $todos = $casosDeUso();
     $medidos = array_filter($todos, static fn (string $source): bool => useCaseInstrumentationLiterals($source) !== []);
 
     expect(\count($todos))->toBeGreaterThan(100)
-        ->and(\count($medidos))->toBeGreaterThanOrEqual(85)
+        ->and(\count($medidos))->toBeGreaterThanOrEqual(115)
+        ->and($todos)->toHaveKey(BuildKioskRoster::class)
+        ->and(\count($consultas()))->toBeGreaterThanOrEqual(12)
         ->and(\count($entradas()))->toBeGreaterThan(100);
 })->group('RQ-06', 'RNF-D-01');
 
@@ -237,6 +290,48 @@ it('mide todo caso de uso con el ayudante, salvo la lista de excepciones', funct
     }
 
     expect($sinMedir)->toBe([], 'Casos de uso sin UseCaseInstrumentation::run(...): instrumentalos (doc 02 §8).');
+})->group('RQ-06', 'RNF-D-01');
+
+it('mide el padron del quiosco en su metodo de entrada, forSite', function () use ($casosDeUso): void {
+    foreach (USE_CASE_INSTRUMENTATION_OTHER_ENTRIES as $class => $method) {
+        $methods = useCaseInstrumentationPublicMethods($casosDeUso()[$class] ?? '');
+
+        expect($methods)->toHaveKey($method)
+            ->and(useCaseInstrumentationLiterals($methods[$method] ?? ''))->not->toBe([], $class.'::'.$method.' sin medir.');
+    }
+})->group('RQ-06', 'RNF-D-01');
+
+it('mide cada metodo publico de cada consulta, salvo la lista de excepciones', function () use ($consultas, $excepcionesDeConsulta): void {
+    $sinMedir = [];
+    $sobran = [];
+
+    foreach ($consultas() as $class => $source) {
+        foreach (useCaseInstrumentationPublicMethods($source) as $method => $body) {
+            $key = $class.'::'.$method;
+            $measured = useCaseInstrumentationLiterals($body) !== [];
+
+            if (! $measured && ! \array_key_exists($key, $excepcionesDeConsulta)) {
+                $sinMedir[] = $key;
+            }
+
+            if ($measured && \array_key_exists($key, $excepcionesDeConsulta)) {
+                $sobran[] = $key.' (ya usa el ayudante)';
+            }
+        }
+    }
+
+    foreach (array_keys($excepcionesDeConsulta) as $key) {
+        [$class, $method] = explode('::', $key);
+
+        if (! \array_key_exists($method, useCaseInstrumentationPublicMethods($consultas()[$class] ?? ''))) {
+            $sobran[] = $key.' (ya no existe)';
+        }
+    }
+
+    expect($sinMedir)->toBe([], 'Consultas sin UseCaseInstrumentation::run(...): instrumentalas (doc 02 §8).')
+        ->and($sobran)->toBe([])
+        ->and(array_values(array_unique(array_diff($excepcionesDeConsulta, USE_CASE_INSTRUMENTATION_REASONS))))->toBe([])
+        ->and(\count($excepcionesDeConsulta))->toBeLessThanOrEqual(USE_CASE_INSTRUMENTATION_MAX_QUERY_EXCEPTIONS);
 })->group('RQ-06', 'RNF-D-01');
 
 it('no deja en la lista excepciones que ya miden o que ya no existen', function () use ($casosDeUso, $excepciones): void {
@@ -261,55 +356,6 @@ it('solo admite motivos del catalogo cerrado y la lista no crece', function () u
         ->and(\count($excepciones))->toBeLessThanOrEqual(USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS);
 })->group('RQ-06', 'RNF-D-01');
 
-it('telemetria_propia: el caso de uso abre su span o mide con su Telemetry', function () use ($casosDeUso, $excepciones): void {
-    $todos = $casosDeUso();
-    $sinMedida = [];
-
-    foreach ($excepciones as $class => $motivo) {
-        if ($motivo !== 'telemetria_propia' || ! \array_key_exists($class, $todos)) {
-            continue;
-        }
-
-        if (preg_match('/SpanScope::start|->telemetry->measure\w*\(/', $todos[$class]) !== 1) {
-            $sinMedida[] = $class;
-        }
-    }
-
-    expect($sinMedida)->toBe([], 'Sin span ni duracion propios: envuelvelos con UseCaseInstrumentation.');
-})->group('RQ-06', 'RNF-D-01');
-
-it('telemetria_http: lo mide un controlador y no entra por consola ni por cola', function () use ($excepciones, $entradas): void {
-    $todasLasEntradas = $entradas();
-    $malClasificados = [];
-
-    foreach ($excepciones as $class => $motivo) {
-        if ($motivo !== 'telemetria_http') {
-            continue;
-        }
-
-        $medidoPorUnControlador = false;
-
-        foreach ($todasLasEntradas as $file => $source) {
-            if (! useCaseInstrumentationMentions($source, $class)) {
-                continue;
-            }
-
-            if (str_contains($file, '/Http/Controller/')) {
-                $medidoPorUnControlador = $medidoPorUnControlador
-                    || preg_match('/\$telemetry->measure\w*\(/', $source) === 1;
-            } else {
-                $malClasificados[] = $class.' (tambien entra por '.ModuleTree::relative($file, \dirname(ModuleTree::root(), 2)).')';
-            }
-        }
-
-        if (! $medidoPorUnControlador) {
-            $malClasificados[] = $class.' (ningun controlador lo mide)';
-        }
-    }
-
-    expect($malClasificados)->toBe([]);
-})->group('RQ-06', 'RNF-D-01');
-
 it('interno_anidado: ninguna entrada al producto lo nombra', function () use ($excepciones, $entradas): void {
     $todasLasEntradas = $entradas();
     $conEntradaPropia = [];
@@ -329,28 +375,58 @@ it('interno_anidado: ninguna entrada al producto lo nombra', function () use ($e
     expect($conEntradaPropia)->toBe([], 'Tiene entrada propia: instrumentalo.');
 })->group('RQ-06', 'RNF-D-01');
 
-it('nombra cada caso de uso con un literal unico de forma modulo.accion', function () use ($casosDeUso): void {
+it('nadie fuera del andamiaje abre un span propio con SpanScope', function (): void {
+    // V1-RV-03: el envoltorio de telemetria estaba copiado 27 veces, cada copia
+    // con su nivel de log y su regla de privacidad en un comentario. Ahora el
+    // span del acto lo abre `UseCaseInstrumentation`, y las telemetrias solo
+    // añaden atributos al span en curso (`SpanScope::annotateCurrent`).
+    $app = \dirname(ModuleTree::root());
+    $abren = [];
+
+    foreach (ModuleTree::phpFilesUnder($app) as $file) {
+        $relative = ModuleTree::relative($file, $app);
+
+        if (\array_key_exists($relative, USE_CASE_INSTRUMENTATION_SPAN_OPENERS)) {
+            continue;
+        }
+
+        if (preg_match('/SpanScope::start(?:Active)?\(/', (string) file_get_contents($file)) === 1) {
+            $abren[] = $relative;
+        }
+    }
+
+    expect($abren)->toBe([], 'Mide con UseCaseInstrumentation::run(...) en lugar de abrir un span propio.');
+})->group('RQ-06', 'RNF-D-01');
+
+it('nombra cada acto medido con un literal unico de forma modulo.accion, en todo app/', function (): void {
+    // Todo literal del ayudante, este donde este —casos de uso, consultas, el
+    // PDF del registro propio, la limpieza de ficheros—: dos actos con el mismo
+    // nombre serian una sola serie con dos poblaciones.
+    $app = \dirname(ModuleTree::root());
     $vistos = [];
     $malFormados = [];
     $repetidos = [];
 
-    foreach ($casosDeUso() as $class => $source) {
-        $module = strtolower(explode('\\', $class)[2]);
+    foreach (ModuleTree::phpFilesUnder($app) as $file) {
+        $relative = ModuleTree::relative($file, $app);
+        $module = preg_match('#^Modules/([A-Za-z]+)/#', $relative, $m) === 1 ? strtolower($m[1]) : null;
 
-        foreach (useCaseInstrumentationLiterals($source) as $useCase) {
-            if (preg_match(USE_CASE_INSTRUMENTATION_PATTERN, $useCase) !== 1 || ! str_starts_with($useCase, $module.'.')) {
-                $malFormados[] = $class.': '.$useCase;
+        foreach (useCaseInstrumentationLiterals(useCaseInstrumentationCode($file)) as $useCase) {
+            if (preg_match(USE_CASE_INSTRUMENTATION_PATTERN, $useCase) !== 1
+                || ($module !== null && ! str_starts_with($useCase, $module.'.'))) {
+                $malFormados[] = $relative.': '.$useCase;
             }
 
             if (\array_key_exists($useCase, $vistos)) {
-                $repetidos[] = $useCase.' ('.$vistos[$useCase].' y '.$class.')';
+                $repetidos[] = $useCase.' ('.$vistos[$useCase].' y '.$relative.')';
             }
 
-            $vistos[$useCase] = $class;
+            $vistos[$useCase] = $relative;
         }
     }
 
-    expect($malFormados)->toBe([])
+    expect(\count($vistos))->toBeGreaterThan(130)
+        ->and($malFormados)->toBe([])
         ->and($repetidos)->toBe([]);
 })->group('RQ-06', 'RNF-D-01');
 

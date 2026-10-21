@@ -32,6 +32,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -101,6 +102,11 @@ final readonly class AddShiftEntryHandler
      * @throws EntryDoesNotContinueWorkDay el tramo es de otro dia civil y no continua la jornada (RN-05)
      */
     public function handle(AddShiftEntryCommand $command): CorrectedShift
+    {
+        return UseCaseInstrumentation::run('attendance.add_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+    }
+
+    private function doHandle(AddShiftEntryCommand $command): CorrectedShift
     {
         $performedAt = $this->clock->now();
 

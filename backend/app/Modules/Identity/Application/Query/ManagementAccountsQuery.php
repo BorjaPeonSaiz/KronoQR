@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\Port\ManagementAccountFilter;
 use App\Modules\Identity\Application\Port\ManagementAccountRecord;
 use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Las cuentas de gestion vistas por quien las administra (**RF-ID-10**;
@@ -30,6 +31,11 @@ final readonly class ManagementAccountsQuery
 
     public function page(ManagementAccountFilter $filter, int $page, int $perPage): ManagementAccountListing
     {
+        return UseCaseInstrumentation::run('identity.list_management_accounts', fn (): ManagementAccountListing => $this->doPage($filter, $page, $perPage));
+    }
+
+    private function doPage(ManagementAccountFilter $filter, int $page, int $perPage): ManagementAccountListing
+    {
         $result = $this->directory->page($filter, $page, $perPage);
         $now = $this->clock->now();
 
@@ -49,6 +55,11 @@ final readonly class ManagementAccountsQuery
     }
 
     public function find(string $uuid): ?ManagementAccountView
+    {
+        return UseCaseInstrumentation::run('identity.find_management_account', fn (): ?ManagementAccountView => $this->doFind($uuid));
+    }
+
+    private function doFind(string $uuid): ?ManagementAccountView
     {
         $account = $this->directory->find($uuid);
 

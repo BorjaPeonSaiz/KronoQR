@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\Support;
 
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La traza y el log de una pasada de retencion (doc 02 §8.1).
+ * El log de una pasada de retencion (doc 02 §8.1). El span y la duracion los
+ * pone el caso de uso con {@see UseCaseInstrumentation}, la medida comun
+ * (V1-RV-03); aqui se le añaden los ambitos y recuentos del acto.
  *
  * **En `Application` y no en el borde**, por la misma razon que
  * `Identity\Application\Support\CredentialTelemetry`: este acto solo entra por
@@ -37,17 +39,16 @@ final readonly class RetentionTelemetry
     {
         // KIND_INTERNAL: no hay peticion detras; lo lanza el planificador o una
         // persona en una consola del servidor.
-        $span = SpanScope::start('kronoqr.compliance', $name, SpanKind::KIND_INTERNAL, $attributes);
+        // Al span del caso de uso, que esta activo (`UseCaseInstrumentation`).
+        SpanScope::annotateCurrent($attributes);
         $startedAt = microtime(true);
 
         try {
             $result = $act();
         } catch (Throwable $failure) {
-            $span->end(['outcome' => 'error']);
-
             $this->logger->error($name.'_failed', [
                 ...$attributes,
-                'trace_id' => $span->traceId(),
+                'trace_id' => SpanScope::currentTraceId(),
                 // La clase, no el mensaje: el de una excepcion de infraestructura
                 // puede arrastrar una consulta entera al paquete de diagnostico.
                 'failure' => $failure::class,
@@ -56,11 +57,9 @@ final readonly class RetentionTelemetry
             throw $failure;
         }
 
-        $span->end(['outcome' => 'ok']);
-
         $this->logger->notice($name, [
             ...$attributes,
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 

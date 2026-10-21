@@ -8,13 +8,13 @@ use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileEntry;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileRemoval;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use DateTimeImmutable;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -126,47 +126,57 @@ final readonly class GeneratedFileHousekeeping
      */
     public function sweepOrphans(GeneratedFileArea $area, callable $minimumAgeSeconds, DateTimeImmutable $now): int
     {
-        $span = SpanScope::start('kronoqr.product', 'generated_files.sweep', SpanKind::KIND_INTERNAL, [
-            'class' => $area->class->value,
-        ]);
+        // La medida comun (V1-RV-03): span activo, duracion y desenlace. Los
+        // recuentos se cuentan dentro y van al cierre del span.
+        $counts = UseCaseInstrumentation::run(
+            'shared.sweep_generated_files',
+            fn (): array => $this->sweep($area, $minimumAgeSeconds, $now),
+            static fn (array $counts): array => ['class' => $area->class->value, ...$counts],
+        );
 
+        return $counts['removed'];
+    }
+
+    /**
+     * @param  callable(GeneratedFileEntry): ?int  $minimumAgeSeconds
+     * @return array{removed: int, refused: int}
+     */
+    private function sweep(GeneratedFileArea $area, callable $minimumAgeSeconds, DateTimeImmutable $now): array
+    {
         $removed = 0;
         $refused = 0;
 
-        try {
-            foreach ($this->store->entries($area) as $entry) {
-                $minimum = $minimumAgeSeconds($entry);
+        foreach ($this->store->entries($area) as $entry) {
+            $minimum = $minimumAgeSeconds($entry);
 
-                if ($minimum === null || ! $entry->isOlderThan($minimum, $now)) {
-                    continue;
-                }
-
-                $outcome = $this->store->remove($area, $entry->name);
-
-                if ($outcome === GeneratedFileRemoval::Removed) {
-                    $this->metrics->orphanRemoved($area->class);
-                    $removed++;
-                } elseif ($outcome === GeneratedFileRemoval::Refused) {
-                    $this->metrics->refused($area->class);
-                    $refused++;
-                } elseif ($outcome === GeneratedFileRemoval::Failed) {
-                    // El log, con el motivo, lo escribe el adaptador.
-                    $this->metrics->removeFailed($area->class);
-                }
+            if ($minimum === null || ! $entry->isOlderThan($minimum, $now)) {
+                continue;
             }
-        } finally {
-            $span->end(['removed' => $removed, 'refused' => $refused]);
+
+            $outcome = $this->store->remove($area, $entry->name);
+
+            if ($outcome === GeneratedFileRemoval::Removed) {
+                $this->metrics->orphanRemoved($area->class);
+                $removed++;
+            } elseif ($outcome === GeneratedFileRemoval::Refused) {
+                $this->metrics->refused($area->class);
+                $refused++;
+            } elseif ($outcome === GeneratedFileRemoval::Failed) {
+                // El log, con el motivo, lo escribe el adaptador.
+                $this->metrics->removeFailed($area->class);
+            }
         }
 
         if ($removed > 0) {
+            // Dentro del span, que esta activo: el `trace_id` es el suyo.
             $this->logger->info('generated_files.orphans_removed', [
                 'class' => $area->class->value,
                 'count' => $removed,
-                'trace_id' => $span->traceId(),
+                'trace_id' => SpanScope::currentTraceId(),
             ]);
         }
 
-        return $removed;
+        return ['removed' => $removed, 'refused' => $refused];
     }
 
     /**

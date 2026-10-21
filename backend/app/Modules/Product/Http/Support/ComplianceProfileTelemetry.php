@@ -6,17 +6,16 @@ namespace App\Modules\Product\Http\Support;
 
 use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de `GET` y `PATCH /api/v1/compliance-profile` (doc 02 §8.1,
+ * El log de `GET` y `PATCH /api/v1/compliance-profile` (doc 02 §8.1,
  * RF-PD-07).
  *
- * Mismo sitio y mismo motivo que el resto de las telemetrias del producto: en el
- * borde, para que el `trace_id` de `traceparent` sea el padre del span y para que
- * el caso de uso se quede orquestando reglas sin un `try/finally` alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## El log del `PATCH` dice QUE campos, nunca sus valores
  *
@@ -44,21 +43,14 @@ final readonly class ComplianceProfileTelemetry
      */
     public function measureRead(callable $read): ?ComplianceProfileView
     {
-        $span = SpanScope::start('kronoqr.product', 'product.read_compliance_profile', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $profile = $read();
-        } catch (Throwable $failure) {
-            $span->end();
+        $profile = $read();
 
-            throw $failure;
-        }
-
-        $span->end(['compliance_profile.resolved' => $profile !== null]);
+        SpanScope::annotateCurrent(['compliance_profile.resolved' => $profile !== null]);
 
         $this->logger->info('product.compliance_profile_read', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'resolved' => $profile !== null,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),
         ]);
@@ -72,21 +64,14 @@ final readonly class ComplianceProfileTelemetry
      */
     public function measureUpdate(array $requestedFields, callable $update): ?ComplianceProfileView
     {
-        $span = SpanScope::start('kronoqr.product', 'product.update_compliance_profile', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $profile = $update();
-        } catch (Throwable $failure) {
-            $span->end();
+        $profile = $update();
 
-            throw $failure;
-        }
-
-        $span->end(['compliance_profile.requested_fields' => \count($requestedFields)]);
+        SpanScope::annotateCurrent(['compliance_profile.requested_fields' => \count($requestedFields)]);
 
         $this->logger->warning('product.compliance_profile_updated', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             // Los nombres de los campos, nunca sus valores. Ver el docblock.
             'requested_fields' => $requestedFields,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),

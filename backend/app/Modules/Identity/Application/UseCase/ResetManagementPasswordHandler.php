@@ -22,6 +22,7 @@ use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
 use App\Modules\Identity\Domain\ValueObject\TemporaryPassword;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
@@ -75,13 +76,13 @@ final readonly class ResetManagementPasswordHandler
      */
     public function handle(ResetManagementPasswordCommand $command): ManagementPasswordResetOutcome
     {
-        return $this->telemetry->measure(
+        return UseCaseInstrumentation::run('identity.reset_management_password', fn (): ManagementPasswordResetOutcome => $this->telemetry->measure(
             ManagementAccountChange::PasswordReset,
             $command->accountUuid,
             $command->actorUuid,
             fn (): ManagementPasswordResetOutcome => $this->reset($command),
             static fn (ManagementPasswordResetOutcome $outcome): string => $outcome->status->name,
-        );
+        ));
     }
 
     private function reset(ResetManagementPasswordCommand $command): ManagementPasswordResetOutcome
