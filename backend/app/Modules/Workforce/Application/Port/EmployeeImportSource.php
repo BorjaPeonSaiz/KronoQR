@@ -42,6 +42,10 @@ interface EmployeeImportSource
      * nombres y documentos de identidad en disco esperando a que alguien
      * confirme.
      *
+     * Si el fichero no se puede leer del disco, el adaptador lanza
+     * `ImportFileUnavailable` (de `Application/Exception`): es una averia, no un
+     * rechazo del contenido, y no lleva el marcador `BusinessRejection`.
+     *
      * @throws UnreadableImportFile
      */
     public function checksum(string $path): string;

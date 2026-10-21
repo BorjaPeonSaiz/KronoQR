@@ -62,6 +62,7 @@ const BUSINESS_REJECTION_FAILURES = [
     'Modules\Reporting\Application\Exception\ReportRenderingUnavailable' => 'el embudo de PDF no responde',
     'Modules\Reporting\Domain\Exception\ReportExportWriteFailed' => 'disco lleno o sin permisos',
     'Modules\Reporting\Domain\Exception\WeeklySummaryNotDelivered' => 'el SMTP no envio el correo',
+    'Modules\Workforce\Application\Exception\ImportFileUnavailable' => 'el temporal subido no se puede leer del disco: averia, no contenido',
     'Modules\Workforce\Domain\Exception\AbsenceWriteFailed' => 'la escritura fallo en el motor sin ser un caso de negocio',
 
     // --- El armazon, fuera de los modulos.
