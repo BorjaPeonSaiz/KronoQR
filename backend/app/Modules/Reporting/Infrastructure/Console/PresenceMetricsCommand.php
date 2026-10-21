@@ -29,7 +29,7 @@ final class PresenceMetricsCommand extends Command
     public function handle(PublishPresenceMetrics $metrics): int
     {
         if (! $metrics->handle()) {
-            $this->warn('Todavia no hay centro de trabajo: no hay nada que etiquetar (RF-PD-03).');
+            $this->warn('Todavia no hay centro de trabajo: no hay nada que etiquetar (RF-PD-03).', 'v');
 
             // Cero y no error: antes de la puesta en marcha esto es lo esperado,
             // y un planificador que fallara cada minuto llenaria el log de una
@@ -37,7 +37,11 @@ final class PresenceMetricsCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info('Metricas de presencia publicadas.');
+        // Las dos lineas, solo con `-v`: corre cada minuto y su salida va al log
+        // del planificador (`ScheduledTaskOutput`). Una linea por minuto no dice
+        // nada que no digan ya las metricas; un fallo si llega, porque sale por
+        // la salida de error del comando.
+        $this->info('Metricas de presencia publicadas.', 'v');
 
         return self::SUCCESS;
     }

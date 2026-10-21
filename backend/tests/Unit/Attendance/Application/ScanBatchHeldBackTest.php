@@ -13,6 +13,7 @@ use App\Modules\Attendance\Application\UseCase\ScanRegistration;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use Psr\Log\NullLogger;
 use Tests\Support\Attendance\RecordingScanMetrics;
+use Tests\Support\Shared\RecordingCaughtFailures;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -112,7 +113,7 @@ it('aplaza todo lo que viene detras del primer elemento no procesado sin llamar 
     $registro = new RegistroDeEscaneosDeLote(fallan: [LOTE_APLAZADO_IDS[1]]);
     $metricas = new RecordingScanMetrics;
 
-    $desenlaces = (new RegisterScanBatchHandler($registro, $metricas, FixedClock::at('2026-08-14 18:00:00'), new NullLogger))
+    $desenlaces = (new RegisterScanBatchHandler($registro, $metricas, FixedClock::at('2026-08-14 18:00:00'), new NullLogger, new RecordingCaughtFailures))
         ->handle(ScanBatch::of(loteDeCuatro()));
 
     expect(desenlacesDeLote(...$desenlaces))->toBe(['procesado', 'no_procesado', 'aplazado', 'aplazado'])
@@ -129,7 +130,7 @@ it('aplaza todo lo que viene detras del primer elemento no procesado sin llamar 
 it('no aplaza nada detras de un rechazo, que es un desenlace', function (): void {
     $registro = new RegistroDeEscaneosDeLote(rechaza: [LOTE_APLAZADO_IDS[0]]);
 
-    $desenlaces = (new RegisterScanBatchHandler($registro, new RecordingScanMetrics, FixedClock::at('2026-08-14 18:00:00'), new NullLogger))
+    $desenlaces = (new RegisterScanBatchHandler($registro, new RecordingScanMetrics, FixedClock::at('2026-08-14 18:00:00'), new NullLogger, new RecordingCaughtFailures))
         ->handle(ScanBatch::of(loteDeCuatro()));
 
     expect(desenlacesDeLote(...$desenlaces))->toBe(['procesado', 'procesado', 'procesado', 'procesado'])
@@ -151,9 +152,23 @@ it('distingue el aplazado del no procesado aunque los dos sean pendientes', func
 it('aplaza el lote entero si falla el primero', function (): void {
     $registro = new RegistroDeEscaneosDeLote(fallan: [LOTE_APLAZADO_IDS[0]]);
 
-    $desenlaces = (new RegisterScanBatchHandler($registro, new RecordingScanMetrics, FixedClock::at('2026-08-14 18:00:00'), new NullLogger))
+    $desenlaces = (new RegisterScanBatchHandler($registro, new RecordingScanMetrics, FixedClock::at('2026-08-14 18:00:00'), new NullLogger, new RecordingCaughtFailures))
         ->handle(ScanBatch::of(loteDeCuatro()));
 
     expect(desenlacesDeLote(...$desenlaces))->toBe(['no_procesado', 'aplazado', 'aplazado', 'aplazado'])
         ->and($registro->llamadas)->toBe([LOTE_APLAZADO_IDS[0]]);
 })->group('RN-21', 'RF-KI-04');
+
+it('lleva al historico de errores el fallo del elemento no procesado, una vez y el mismo', function (): void {
+    // F4c-1: capturarlo mantiene vivo el lote, pero no puede dejarlo fuera de
+    // `error_events` (RF-PD-15). Un rechazo es un desenlace y no entra.
+    $registro = new RegistroDeEscaneosDeLote(fallan: [LOTE_APLAZADO_IDS[1]], rechaza: [LOTE_APLAZADO_IDS[0]]);
+    $historico = new RecordingCaughtFailures;
+
+    (new RegisterScanBatchHandler($registro, new RecordingScanMetrics, FixedClock::at('2026-08-14 18:00:00'), new NullLogger, $historico))
+        ->handle(ScanBatch::of(loteDeCuatro()));
+
+    expect($historico->reported)->toHaveCount(1)
+        ->and($historico->reported[0])->toBeInstanceOf(RuntimeException::class)
+        ->and($historico->reported[0]->getMessage())->toBe('Fallo transitorio de la base de datos.');
+})->group('RF-PD-15', 'RN-21', 'RF-KI-04');

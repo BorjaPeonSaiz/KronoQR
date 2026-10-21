@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Job;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportFailure;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
@@ -103,7 +104,7 @@ final class GenerateDataExportJob implements ShouldQueue
 
     public function __construct(private readonly string $exportUuid) {}
 
-    public function handle(GenerateDataExportHandler $exports, LoggerInterface $logger): void
+    public function handle(GenerateDataExportHandler $exports, LoggerInterface $logger, CaughtFailureReporter $caughtFailures): void
     {
         $startedAt = microtime(true);
 
@@ -115,6 +116,11 @@ final class GenerateDataExportJob implements ShouldQueue
                 // La clase, nunca el mensaje. Ver el docblock.
                 'failure' => $failure::class,
             ]);
+
+            // Y al historico de errores (RF-PD-15): capturarlo evita el
+            // reintento, no que el IT del cliente lo vea. El mensaje lo sanea
+            // el historico en el servidor, no este log.
+            $caughtFailures->report($failure);
 
             return;
         }
@@ -180,6 +186,12 @@ final class GenerateDataExportJob implements ShouldQueue
                 'data_export_uuid' => $this->exportUuid,
                 'failure' => $ignored::class,
             ]);
+
+            try {
+                $container->make(CaughtFailureReporter::class)->report($ignored);
+            } catch (Throwable) {
+                // Ya va por el log de arriba; sin historico, se queda ahi.
+            }
         }
     }
 }

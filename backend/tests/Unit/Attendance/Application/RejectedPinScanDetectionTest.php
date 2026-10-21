@@ -29,6 +29,7 @@ use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
 use Psr\Log\NullLogger;
+use Tests\Support\Shared\RecordingCaughtFailures;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -230,6 +231,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         },
         clock: FixedClock::at(REJECTED_PIN_DETECTION_NOW),
         logger: new NullLogger,
+        caughtFailures: new RecordingCaughtFailures,
     );
 
     $result = $handler->handle(new DetectAnomaliesCommand($lookbackDays));

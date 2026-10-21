@@ -93,6 +93,7 @@ use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
 use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
+use App\Modules\Product\Infrastructure\Capture\CaughtFailureHistory;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Product\Infrastructure\Capture\ServerErrorReporter;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
@@ -173,6 +174,7 @@ use App\Modules\Product\Infrastructure\Telemetry\RedisTelemetryCounters;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
@@ -688,6 +690,13 @@ final class ProductServiceProvider extends ServiceProvider
                 basePath: $app->basePath(),
             ),
         );
+
+        // Los fallos que se capturan a proposito y no se propagan —el elemento
+        // de un lote de escaneos, los trabajos en cola, la deteccion, la
+        // reconciliacion, el resumen semanal— pasan por el mismo filtro y el
+        // mismo saneado que los que se escapan, sin pasar por Monolog. Ver
+        // `CaughtFailureReporter`.
+        $this->app->bind(CaughtFailureReporter::class, CaughtFailureHistory::class);
 
         $context = $this->app->make(ExecutionContext::class);
 

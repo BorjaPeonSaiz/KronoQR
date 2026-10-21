@@ -489,3 +489,30 @@ it('aplaza la salida si la entrada no se pudo procesar y las registra en orden a
         ->and(DB::table('shift_entries')->value('status'))->toBe('closed')
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RN-21', 'RF-KI-04', 'RF-AT-07');
+
+it('deja en error_events el fallo del elemento no procesado, sin datos personales', function (): void {
+    // F4c-1: el `catch` que mantiene vivo el lote no puede dejar el fallo fuera
+    // del historico (RF-PD-15). Con la ruta del lote y el dispositivo, nunca el
+    // nombre de quien fichaba ni el payload de su tarjeta (regla dura 21).
+    $escenario = escenarioDeLote();
+
+    app()->instance(CredentialResolver::class, new class implements CredentialResolver
+    {
+        public function resolve(string $qrPayload): CredentialResolution
+        {
+            throw new RuntimeException('Fallo transitorio resolviendo la credencial.');
+        }
+    });
+
+    sincronizar($escenario, [escaneoEncolado('2026-03-14T07:00:00Z')])
+        ->assertStatus(207)
+        ->assertValidResponse();
+
+    $fila = DB::table('error_events')->where('exception_class', RuntimeException::class)->first();
+
+    expect($fila)->not->toBeNull()
+        ->and($fila?->source)->toBe('api')
+        ->and($fila?->device_id)->toBe($escenario['deviceUuid'])
+        ->and((string) $fila?->context)->toContain('/api/v1/scan/batch')
+        ->and(json_encode($fila))->not->toContain(TARJETA_LOTE);
+})->group('RF-PD-15', 'RF-KI-04', 'RN-21');

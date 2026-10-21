@@ -9,6 +9,7 @@ use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use Illuminate\Bus\Queueable;
@@ -117,6 +118,7 @@ final class GenerateReportExportJob implements ShouldQueue
         QueuedJobFailureMetrics $metrics,
         Application $app,
         LoggerInterface $logger,
+        CaughtFailureReporter $caughtFailures,
     ): void {
         $startedAt = microtime(true);
 
@@ -131,6 +133,11 @@ final class GenerateReportExportJob implements ShouldQueue
                 // La clase, nunca el mensaje. Ver el docblock.
                 'failure' => $failure::class,
             ]);
+
+            // Y al historico de errores (RF-PD-15): capturarlo evita el
+            // reintento, no que el IT del cliente lo vea. El mensaje lo sanea
+            // el historico en el servidor, no este log.
+            $caughtFailures->report($failure);
 
             /*
              * LA METRICA SE INCREMENTA A MANO PORQUE LA EXCEPCION NO SALE.
@@ -237,6 +244,12 @@ final class GenerateReportExportJob implements ShouldQueue
                 'report_export_uuid' => $this->exportUuid,
                 'failure' => $ignored::class,
             ]);
+
+            try {
+                $container->make(CaughtFailureReporter::class)->report($ignored);
+            } catch (Throwable) {
+                // Ya va por el log de arriba; sin historico, se queda ahi.
+            }
         }
     }
 }

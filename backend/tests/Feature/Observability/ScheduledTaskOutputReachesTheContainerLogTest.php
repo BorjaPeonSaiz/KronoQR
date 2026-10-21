@@ -82,6 +82,29 @@ it('toda tarea registrada en segundo plano tiene su salida capturada por el ayud
     expect(array_unique($paths))->toHaveCount(count($paths));
 })->group('RNF-D-02', 'RL-08');
 
+it('toda orden registrada en primer plano tiene tambien su salida capturada', function (): void {
+    // V4-BE-1: las metricas de presencia y de incidencias corren en primer plano
+    // y Laravel tiraba su salida a /dev/null igual que la de segundo plano.
+    resolve(Kernel::class)->bootstrap();
+
+    $foreground = array_values(array_filter(
+        resolve(Schedule::class)->events(),
+        static fn ($event): bool => ! $event->runInBackground && \is_string($event->command) && str_contains($event->command, 'artisan'),
+    ));
+
+    $names = array_map(static fn ($event): string => ScheduledTaskOutput::nameOf($event), $foreground);
+
+    expect($names)->toContain('reporting:presence-metrics')
+        ->and($names)->toContain('compliance:incident-metrics');
+
+    foreach ($foreground as $event) {
+        expect($event->output)->toBe(
+            ScheduledTaskOutput::capturePath($event),
+            ScheduledTaskOutput::nameOf($event).' tira su salida a '.$event->output.'. Envuelvela en ScheduledTaskOutput.',
+        );
+    }
+})->group('RNF-D-02', 'RL-08');
+
 it('lleva al log del contenedor la salida saneada y el resumen de la tarea', function (): void {
     $log = scheduledTaskOutputContainerLog();
 

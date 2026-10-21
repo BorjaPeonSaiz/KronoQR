@@ -22,6 +22,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Domain\ValueObject\WeeklySummary;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
@@ -158,6 +159,7 @@ final readonly class SendWeeklySummaries
         private InstallationSiteProvider $installation,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private CaughtFailureReporter $caughtFailures,
         /**
          * `MAIL_MAILER` ya resuelto (regla dura 14): un caso de uso no lee
          * configuracion. Mismo criterio que `MailReportExportNotifier` —nombrado
@@ -293,6 +295,11 @@ final readonly class SendWeeklySummaries
                     // fabricante en el paquete de diagnostico.
                     'exception' => $failure::class,
                 ];
+
+                // Y al historico de errores (RF-PD-15), que sanea el mensaje en
+                // el servidor: un responsable sin resumen es una averia que el IT
+                // del cliente tiene que ver, no solo un recuento en el log.
+                $this->caughtFailures->report($failure);
             }
         }
 

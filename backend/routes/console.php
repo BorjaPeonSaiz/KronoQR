@@ -28,9 +28,10 @@ use Illuminate\Support\Facades\Schedule;
  * nombre de la tarea y su codigo, NUNCA su salida (regla dura 21: la de la
  * retencion son recuentos del registro horario del cliente).
  *
- * ADONDE VA LA SALIDA DE UNA TAREA EN SEGUNDO PLANO (V4-BE-1, RNF-D-02). Por
- * defecto Laravel la tira a `/dev/null`. Toda tarea con `runInBackground()` se
- * envuelve por eso en `ScheduledTaskOutput`, el ayudante unico: su salida y su
+ * ADONDE VA LA SALIDA DE UNA TAREA (V4-BE-1, RNF-D-02). Por
+ * defecto Laravel la tira a `/dev/null`, y no solo en segundo plano: tambien la
+ * de las tareas en primer plano. Toda tarea `Schedule::command()` se envuelve
+ * por eso en `ScheduledTaskOutput`, el ayudante unico: su salida y su
  * codigo de salida llegan al log del contenedor `scheduler` (y a Loki) como
  * `scheduler.task_output` y `scheduler.task_finished`, cada linea por el
  * saneador de Monolog (L1, regla dura 21). `toLog()` reenvia las lineas;
@@ -38,8 +39,8 @@ use Illuminate\Support\Facades\Schedule;
  * ya habian decidido no dejar su salida en el log: la propuesta de purga, las
  * dos conciliaciones del registro y las metricas de ausencias. Una tarea que sale 0 sin escribir
  * nada no deja apunte: eso ya lo dicen sus metricas y sus spans.
- * `ScheduledTaskOutputTest`
- * (Architecture) falla si una tarea en segundo plano no pasa por el ayudante.
+ * `ScheduledTaskOutputTest` (Architecture) falla si una tarea `Schedule::command()`
+ * no pasa por el ayudante, en segundo plano o en primero.
  */
 
 /*
@@ -264,9 +265,9 @@ ScheduledTaskOutput::toLog(Schedule::command('compliance:purge-legal-export-temp
  * proposito —dura milisegundos y encadenarla es mas barato que arrancar otro
  * proceso cada minuto—.
  */
-Schedule::command('reporting:presence-metrics')
+ScheduledTaskOutput::toLog(Schedule::command('reporting:presence-metrics')
     ->everyMinute()
-    ->withoutOverlapping();
+    ->withoutOverlapping());
 
 /*
  * Metricas de adopcion (doc 02 §8.2, RF-IN-08, tarea 3.1).
@@ -529,9 +530,9 @@ $absenceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:absence-met
  * destinatario es RRHH. Un minuto de resolucion no cambiaria ninguna decision y
  * son doce consultas agregadas mas por hora.
  */
-Schedule::command('compliance:incident-metrics')
+ScheduledTaskOutput::toLog(Schedule::command('compliance:incident-metrics')
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping());
 
 /*
  * Propuesta de purga por retencion (RL-02, RL-11, RF-PR-03, tarea 2.10).

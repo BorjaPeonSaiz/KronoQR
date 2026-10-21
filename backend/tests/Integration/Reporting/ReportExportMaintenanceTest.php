@@ -2,13 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Reporting\Application\Port\QueuedJobFailureMetrics;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
 use App\Modules\Reporting\Infrastructure\Job\GenerateReportExportJob;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
@@ -19,6 +23,7 @@ use Psr\Log\LoggerInterface;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InMemoryErrorEventSink;
 use Tests\Support\Reporting\RecordingQueuedJobFailureMetrics;
 use Tests\Support\Reporting\ReportExports;
 use Tests\Support\Time\FrozenTime;
@@ -392,10 +397,28 @@ it('una generacion fallida mueve la metrica de trabajos fallidos', function (): 
         $metricas,
         app(),
         app(LoggerInterface::class),
+        app(CaughtFailureReporter::class),
     );
 
     expect($metricas->failures)->toBe(['GenerateReportExportJob']);
 })->group('RF-IN-06');
+
+it('una generacion fallida deja su fallo en el historico de errores, como trabajo de cola', function (): void {
+    // F4c-1: el trabajo captura el fallo para no reintentar, y eso lo dejaba
+    // fuera de `error_events` (RF-PD-15). Por la cola de verdad, para que el
+    // origen sea el del worker y no el de una peticion.
+    $sink = new InMemoryErrorEventSink;
+    app()->instance(ErrorEventSink::class, $sink);
+    app()->make(ExecutionContext::class)->reset();
+
+    GenerateReportExportJob::dispatchSync('019a0000-0000-7000-8000-0000000000fe');
+
+    $error = $sink->only();
+
+    expect($error->source)->toBe(ErrorSource::Worker)
+        ->and($error->exceptionClass)->not->toBeNull()
+        ->and($error->context['job'] ?? null)->toBe(GenerateReportExportJob::class);
+})->group('RF-PD-15', 'RF-IN-06');
 
 it('rechaza desde el esquema una fila purgada que conserve datos personales', function (): void {
     /*
