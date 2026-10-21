@@ -14,6 +14,7 @@ use App\Modules\Product\Domain\ValueObject\LicenseState;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Shared\Domain\ValueObject\FeatureRestriction;
 
 /**
  * Sondas `license.*` de `product:doctor` (RF-PD-04, RF-PD-05).
@@ -30,12 +31,20 @@ use App\Modules\Shared\Domain\ValueObject\Feature;
  * Lo que hace esta sonda es **informar**: dice el estado, dice que sigue
  * funcionando y dice como renovar. Nada mas.
  *
- * ## `license.white_label_without_plan`
+ * ## `license.branding_not_applied`
  *
- * El caso concreto de un cliente que configuro su marca y despues dejo de tener
- * el plan que la cubre: el panel vuelve a la marca del producto y el cliente
+ * El caso concreto de un cliente que configuro su color o su logotipo y la
+ * licencia no los cubre: el panel vuelve al aspecto del producto y el cliente
  * llama pensando que se ha perdido su logotipo. Un `warning` con la explicacion
  * lo resuelve sin llamada.
+ *
+ * **El nombre no cuenta** (PR18). `LicensedBrandingProvider` no lo degrada
+ * nunca —encabeza la exportacion para la Inspeccion—, asi que un nombre
+ * configurado sin el plan no es una marca que se este dejando de mostrar, y el
+ * aviso no puede aconsejar borrarlo. Y el texto distingue **por que** no se
+ * aplica: sin el plan hay que ampliarlo; con la licencia caducada, ausente o sin
+ * verificar basta con renovarla, y la marca vuelve sola. Hasta la 2.2.1 esta
+ * comprobacion se llamaba `license.white_label_without_plan`.
  */
 final readonly class LicenseProbe implements DoctorProbe
 {
@@ -63,7 +72,7 @@ final readonly class LicenseProbe implements DoctorProbe
 
         return [
             $this->state($overview),
-            $this->whiteLabel($overview->status->allows(Feature::WhiteLabel)),
+            $this->branding($overview->status->availabilityOf(Feature::WhiteLabel)->restriction),
         ];
     }
 
@@ -112,24 +121,29 @@ final readonly class LicenseProbe implements DoctorProbe
         };
     }
 
-    private function whiteLabel(bool $allowed): DoctorFinding
+    /**
+     * @param  FeatureRestriction|null  $restriction  Por que la marca propia no se aplica; `null` si se aplica.
+     */
+    private function branding(?FeatureRestriction $restriction): DoctorFinding
     {
         $resolved = $this->settings->handle();
 
-        $configured = $resolved->get(SettingKey::BRANDING_APP_NAME)->isProductDefault === false
-            || $resolved->get(SettingKey::BRANDING_LOGO_PATH)->isProductDefault === false
+        // Solo el aspecto: el nombre se sirve siempre (ver el docblock, PR18).
+        $configured = $resolved->get(SettingKey::BRANDING_LOGO_PATH)->isProductDefault === false
             || $resolved->get(SettingKey::BRANDING_ACCENT_COLOR)->isProductDefault === false;
 
-        if (! $configured || $allowed) {
-            return DoctorFinding::ok('license.white_label_without_plan', [
+        if (! $configured || ! $restriction instanceof FeatureRestriction) {
+            return DoctorFinding::ok('license.branding_not_applied', [
                 'configured' => $configured,
-                'allowed' => $allowed,
+                'allowed' => ! $restriction instanceof FeatureRestriction,
             ]);
         }
 
         return DoctorFinding::warning(
-            'license.white_label_without_plan',
-            details: ['configured' => true, 'allowed' => false],
+            'license.branding_not_applied',
+            // Ampliar el plan o renovar: son dos remedios distintos.
+            $restriction === FeatureRestriction::NotInPlan ? null : 'license_inactive',
+            details: ['configured' => true, 'allowed' => false, 'restriction' => $restriction->value],
         );
     }
 }

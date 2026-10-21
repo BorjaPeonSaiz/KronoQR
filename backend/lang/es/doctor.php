@@ -644,10 +644,15 @@ return [
                 'warning_unknown' => 'No se ha podido leer la licencia porque la base de datos no responde. '
                     .'No significa que no haya licencia, y mientras tanto no se recorta ninguna funcion.',
             ],
-            'white_label_without_plan' => [
-                'ok' => 'La marca configurada y el plan contratado son coherentes.',
-                'warning' => 'Hay una marca propia configurada (nombre, color o logotipo) pero el plan '
-                    .'contratado no la incluye, asi que las aplicaciones estan enseñando la marca del producto.',
+            'branding_not_applied' => [
+                'ok' => 'El color y el logotipo configurados se aplican, o no hay ninguno configurado.',
+                'warning' => 'Hay un color o un logotipo propios configurados, pero el plan contratado no '
+                    .'incluye la marca propia: las pantallas y los documentos usan el color y el logotipo del '
+                    .'producto. El nombre de la instalacion se sigue mostrando, con cualquier plan.',
+                'warning_license_inactive' => 'Hay un color o un logotipo propios configurados, pero la '
+                    .'licencia no esta en vigor: las pantallas y los documentos usan el color y el logotipo del '
+                    .'producto hasta que se renueve. El nombre de la instalacion se sigue mostrando, y la '
+                    .'configuracion se conserva.',
             ],
         ],
     ],
@@ -1268,10 +1273,14 @@ return [
                 'warning_unknown' => 'No reactives la licencia. Arregla primero la base de datos (mira la '
                     .'comprobacion `database` de este mismo informe) y vuelve a ejecutar esta comprobacion.',
             ],
-            'white_label_without_plan' => [
-                'warning' => 'Si quieres tu marca en las pantallas, habla con tu proveedor para incluirla en el '
-                    .'plan. Si no, borra el nombre, el color y el logotipo en el panel, en Configuracion, para '
-                    .'que este aviso deje de salir.',
+            'branding_not_applied' => [
+                'warning' => 'Si quieres tu color y tu logotipo en las pantallas, habla con tu proveedor para '
+                    .'incluir la marca propia en el plan. Si no, puedes quitar el color y el logotipo en el panel, '
+                    .'en Configuracion, para que este aviso deje de salir. El nombre no lo toques: se sigue '
+                    .'mostrando y encabeza la exportacion para la Inspeccion.',
+                'warning_license_inactive' => 'Renueva o activa la licencia (mira la comprobacion `license.state` '
+                    .'de este mismo informe). El color y el logotipo vuelven solos, sin configurar nada: no '
+                    .'borres ni el nombre ni la marca.',
             ],
         ],
     ],

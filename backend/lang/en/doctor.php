@@ -584,10 +584,14 @@ return [
                 'warning_unknown' => 'The licence could not be read because the database is not responding. '
                     .'It does not mean there is no licence, and meanwhile no feature is cut back.',
             ],
-            'white_label_without_plan' => [
-                'ok' => 'The configured branding and the contracted plan are consistent.',
-                'warning' => 'Custom branding is configured (name, colour or logo) but the contracted plan does '
-                    .'not include it, so the applications are showing the product branding.',
+            'branding_not_applied' => [
+                'ok' => 'The configured colour and logo are applied, or none is configured.',
+                'warning' => 'A custom colour or logo is configured, but the contracted plan does not include '
+                    .'custom branding: screens and documents use the product colour and logo. The installation '
+                    .'name is still shown, on any plan.',
+                'warning_license_inactive' => 'A custom colour or logo is configured, but the licence is not in '
+                    .'force: screens and documents use the product colour and logo until it is renewed. The '
+                    .'installation name is still shown, and the configuration is kept.',
             ],
         ],
     ],
@@ -1204,10 +1208,14 @@ return [
                 'warning_unknown' => 'Do not activate the licence again. Fix the database first (see the '
                     .'`database` check in this same report) and run this check again.',
             ],
-            'white_label_without_plan' => [
-                'warning' => 'If you want your branding on the screens, talk to your provider about including '
-                    .'it in the plan. If not, clear the name, colour and logo in the panel under Settings so '
-                    .'this warning stops showing.',
+            'branding_not_applied' => [
+                'warning' => 'If you want your colour and logo on the screens, talk to your provider about '
+                    .'including custom branding in the plan. If not, you can clear the colour and logo in the '
+                    .'panel under Settings so this warning stops showing. Leave the name alone: it is still shown '
+                    .'and heads the export for the Labour Inspectorate.',
+                'warning_license_inactive' => 'Renew or activate the licence (see the `license.state` check in this '
+                    .'same report). The colour and logo come back on their own, with nothing to configure: do not '
+                    .'clear the name or the branding.',
             ],
         ],
     ],
