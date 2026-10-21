@@ -43,7 +43,7 @@ use RuntimeException;
  * Que es lo que hace honesta a la degradacion. El «que hacer» lo compone el
  * borde en el idioma negociado con `lang/{es,en}/license.php`.
  */
-final class FeatureNotLicensed extends RuntimeException
+final class FeatureNotLicensed extends RuntimeException implements BusinessRejection
 {
     private function __construct(
         public readonly Feature $feature,

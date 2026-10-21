@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha intentado corregir o anular una version que ya no es la vigente
  * (**RF-GP-04**, RN-13, ADR-035).
@@ -21,7 +23,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * **Sin el tipo ni la nota en el mensaje** (regla dura 21): solo el `uuid`
  * publico y el estado en el que esta, que es un valor de un catalogo de tres.
  */
-final class AbsenceNotActive extends WorkforceConflict
+final class AbsenceNotActive extends WorkforceConflict implements BusinessRejection
 {
     public static function forAbsence(string $absenceUuid, string $status): self
     {

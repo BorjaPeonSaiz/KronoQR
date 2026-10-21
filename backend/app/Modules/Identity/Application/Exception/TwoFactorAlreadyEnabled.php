@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -17,7 +18,7 @@ use RuntimeException;
  * factor. Reemplazarlo es un acto de administracion —`identity:2fa-reset`, con
  * asiento en `audit_log`— y no algo que se haga con una sesion pendiente.
  */
-final class TwoFactorAlreadyEnabled extends RuntimeException
+final class TwoFactorAlreadyEnabled extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

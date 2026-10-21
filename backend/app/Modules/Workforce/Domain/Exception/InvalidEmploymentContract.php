@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El contrato que se intenta registrar no describe una vigencia posible
  * (**RF-GP-02**).
@@ -18,7 +20,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * por el dominio —una importacion de nomina, un `psql`—, y esta da un mensaje
  * con significado a quien esta dando de alta el contrato.
  */
-final class InvalidEmploymentContract extends WorkforceDomainException
+final class InvalidEmploymentContract extends WorkforceDomainException implements BusinessRejection
 {
     public static function hoursMustBePositive(string $what, float $value): self
     {

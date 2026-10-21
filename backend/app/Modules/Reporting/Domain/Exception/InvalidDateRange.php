@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use InvalidArgumentException;
 
 /**
@@ -14,4 +15,4 @@ use InvalidArgumentException;
  * interna —un comando de consola, una exportacion— que no pase por un
  * `FormRequest`.
  */
-final class InvalidDateRange extends InvalidArgumentException {}
+final class InvalidDateRange extends InvalidArgumentException implements BusinessRejection {}

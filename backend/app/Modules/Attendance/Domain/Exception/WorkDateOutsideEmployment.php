@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Un tramo escrito a mano para una persona **dada de baja** cae en una jornada
  * fuera de su periodo de empleo: posterior a su fecha de cese o anterior a su
@@ -20,7 +22,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * el borde HTTP cuelga de `errors.work_date` en el idioma negociado. Solo la
  * lanza el alta manual: el escaneo no pasa por aqui.
  */
-final class WorkDateOutsideEmployment extends AttendanceDomainException
+final class WorkDateOutsideEmployment extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string>  $parameters  sustituciones del mensaje traducido

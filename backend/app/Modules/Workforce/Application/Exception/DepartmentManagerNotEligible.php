@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -18,7 +19,7 @@ use RuntimeException;
  * Sin el uuid en el mensaje: el mensaje acaba en el log y en `error_events`, y
  * ahi no hace falta para nada.
  */
-final class DepartmentManagerNotEligible extends RuntimeException
+final class DepartmentManagerNotEligible extends RuntimeException implements BusinessRejection
 {
     public const string FIELD = 'manager_user_uuid';
 

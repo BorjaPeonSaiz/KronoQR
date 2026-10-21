@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * El valor no cumple lo que su clave declara (RF-PD-01, ADR-017).
@@ -33,7 +34,7 @@ use App\Modules\Product\Domain\ValueObject\SettingKey;
  * anota en `invalidKeys` con estos mismos dos campos. Una fila corrupta no puede
  * dejar a un centro sin fichar (regla dura 19).
  */
-final class InvalidSettingValue extends ProductDomainException
+final class InvalidSettingValue extends ProductDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string|int>  $parameters  sustituciones del mensaje traducido

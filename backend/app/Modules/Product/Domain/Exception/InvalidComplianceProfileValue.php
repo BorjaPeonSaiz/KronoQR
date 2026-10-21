@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 
 /**
@@ -24,7 +25,7 @@ use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
  * lectura falla y lo dice: un umbral legal inventado en PHP es peor que una
  * pantalla que avisa.
  */
-final class InvalidComplianceProfileValue extends ProductDomainException
+final class InvalidComplianceProfileValue extends ProductDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string|int>  $parameters  sustituciones del mensaje traducido

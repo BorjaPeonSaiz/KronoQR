@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -19,7 +20,7 @@ use RuntimeException;
  * particiones se sueltan de la mas antigua a la mas nueva y cada una encadena
  * con la siguiente, asi que no hay forma de saltarse una rota y seguir.
  */
-final class AuditPartitionNotPurgeable extends RuntimeException
+final class AuditPartitionNotPurgeable extends RuntimeException implements BusinessRejection
 {
     public static function chainIsBroken(int $year, string $detail): self
     {

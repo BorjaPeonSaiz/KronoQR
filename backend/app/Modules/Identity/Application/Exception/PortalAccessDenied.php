@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -37,7 +38,7 @@ use RuntimeException;
  * **El detalle si se escribe en el log del servidor** (§8.1), donde tiene valor
  * para quien diagnostica y ninguno para quien prueba PIN.
  */
-final class PortalAccessDenied extends RuntimeException
+final class PortalAccessDenied extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

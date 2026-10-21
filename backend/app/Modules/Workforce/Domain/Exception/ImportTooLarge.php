@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El fichero trae mas lineas de las admitidas y **no se aplica nada**
  * (RF-GP-05).
@@ -22,7 +24,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * eso se cuelga del campo `file`. Un `409` diria que el problema esta en el
  * estado del sistema, y no lo esta.
  */
-final class ImportTooLarge extends WorkforceDomainException
+final class ImportTooLarge extends WorkforceDomainException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'import.too_many_rows';
 

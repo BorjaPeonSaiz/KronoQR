@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -18,7 +19,7 @@ use RuntimeException;
  * igual a un correo que no esta dado de alta, porque el contador se lleva por
  * clave y no por cuenta encontrada.
  */
-final class AccountTemporarilyLocked extends RuntimeException
+final class AccountTemporarilyLocked extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly int $retryAfterSeconds)
     {

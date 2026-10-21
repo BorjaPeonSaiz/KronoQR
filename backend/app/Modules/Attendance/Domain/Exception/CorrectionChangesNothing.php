@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se pidio corregir un tramo dejandole las mismas marcas que ya tenia.
  *
@@ -19,7 +21,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * `PATCH` que ya se aplico. Quien llama lo traduce a `422` sin haber tocado el
  * registro.
  */
-final class CorrectionChangesNothing extends AttendanceDomainException
+final class CorrectionChangesNothing extends AttendanceDomainException implements BusinessRejection
 {
     public static function forEntry(string $shiftEntryUuid): self
     {

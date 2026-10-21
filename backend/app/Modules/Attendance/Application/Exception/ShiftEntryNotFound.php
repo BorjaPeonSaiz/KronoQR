@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -15,7 +16,7 @@ use RuntimeException;
  * fue anulado o sustituido, que es lo que pasa cuando dos responsables corrigen
  * a la vez (ADR-026).
  */
-final class ShiftEntryNotFound extends RuntimeException
+final class ShiftEntryNotFound extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly string $shiftEntryUuid)
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha pedido registrar la entrega de una credencial que todavia no se ha
  * impreso (RF-QR-06, ADR-034).
@@ -14,7 +16,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * que despues distingue «se perdio antes de darsela» de «la perdio el
  * empleado» (doc 02 §5.5).
  */
-final class CredentialNotPrintedYet extends IdentityDomainException
+final class CredentialNotPrintedYet extends IdentityDomainException implements BusinessRejection
 {
     public static function forCredential(string $credentialUuid): self
     {

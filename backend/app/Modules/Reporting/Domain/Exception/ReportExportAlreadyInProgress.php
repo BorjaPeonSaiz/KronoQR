@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Domain\Exception;
 
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DomainException;
 
 /**
@@ -28,7 +29,7 @@ use DomainException;
  * —esta peticion no llego a crearse— y lo unico util que se puede decir es que
  * se reintente.
  */
-final class ReportExportAlreadyInProgress extends DomainException
+final class ReportExportAlreadyInProgress extends DomainException implements BusinessRejection
 {
     public function __construct(public readonly ?ReportExport $current = null)
     {

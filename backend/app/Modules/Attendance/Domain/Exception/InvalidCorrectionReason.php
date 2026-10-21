@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El motivo de una correccion no llega a existir (doc 01 Anexo C, RF-PA-04).
  *
@@ -14,7 +16,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * orden de consola o una importacion escriban en el registro legal una
  * correccion sin motivo utilizable.
  */
-final class InvalidCorrectionReason extends AttendanceDomainException
+final class InvalidCorrectionReason extends AttendanceDomainException implements BusinessRejection
 {
     public static function unknownCode(string $code): self
     {

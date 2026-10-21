@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se intenta dar de baja —o modificar— a quien ya esta de baja.
  *
@@ -12,7 +14,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * que decide desde cuando esa persona no podia fichar (RN-14). Cambiar un dato
  * asi exige una correccion trazada (RN-13, tarea 1.15), no un segundo `POST`.
  */
-final class EmployeeAlreadyTerminated extends WorkforceDomainException
+final class EmployeeAlreadyTerminated extends WorkforceDomainException implements BusinessRejection
 {
     public static function withUuid(string $uuid): self
     {

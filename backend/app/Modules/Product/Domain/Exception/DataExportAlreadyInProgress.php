@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\Model\DataExport;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * Se ha pedido una exportacion integra mientras hay otra `pending` o `running`
@@ -26,7 +27,7 @@ use App\Modules\Product\Domain\Model\DataExport;
  * —esta peticion no llego a crearse— y lo unico que se puede decir es que se
  * reintente.
  */
-final class DataExportAlreadyInProgress extends ProductDomainException
+final class DataExportAlreadyInProgress extends ProductDomainException implements BusinessRejection
 {
     public function __construct(public readonly ?DataExport $current)
     {

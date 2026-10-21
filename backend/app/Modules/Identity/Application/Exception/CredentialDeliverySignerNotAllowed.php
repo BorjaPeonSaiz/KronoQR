@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -19,7 +20,7 @@ use RuntimeException;
  *
  * El mensaje no lleva la cuenta (regla dura 21).
  */
-final class CredentialDeliverySignerNotAllowed extends RuntimeException
+final class CredentialDeliverySignerNotAllowed extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se registra dos veces la entrega del mismo PIN (RF-ID-09).
  *
@@ -13,7 +15,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * registro de entrega existe para poder afirmar. Si de verdad hubo una segunda
  * entrega, es que hubo un PIN nuevo: se restablece y se entrega ese.
  */
-final class PinAlreadyDelivered extends WorkforceConflict
+final class PinAlreadyDelivered extends WorkforceConflict implements BusinessRejection
 {
     public static function forEmployee(string $uuid): self
     {

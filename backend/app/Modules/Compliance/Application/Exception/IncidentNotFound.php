@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -19,7 +20,7 @@ use RuntimeException;
  * generica de `NotFound` del contrato. El numero queda en el log del servidor,
  * que es donde sirve para algo.
  */
-final class IncidentNotFound extends RuntimeException
+final class IncidentNotFound extends RuntimeException implements BusinessRejection
 {
     public static function withId(int $incidentId): self
     {

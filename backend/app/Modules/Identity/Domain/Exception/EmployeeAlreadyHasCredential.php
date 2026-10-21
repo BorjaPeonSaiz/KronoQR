@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha intentado emitir una segunda credencial activa para el mismo empleado
  * (doc 01 §5.2).
@@ -33,7 +35,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * anterior y emitir otra en el mismo acto—, que es lo que hace el `reissue` del
  * caso de uso.
  */
-final class EmployeeAlreadyHasCredential extends IdentityDomainException
+final class EmployeeAlreadyHasCredential extends IdentityDomainException implements BusinessRejection
 {
     public static function make(): self
     {

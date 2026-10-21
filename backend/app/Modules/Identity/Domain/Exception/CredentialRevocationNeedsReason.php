@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una revocacion sin motivo (RF-QR-03, regla dura 6).
  *
@@ -16,7 +18,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * (`credentials_chk_revocation_has_reason`): en un sistema con valor probatorio,
  * las reglas que importan no dependen solo del codigo de aplicacion.
  */
-final class CredentialRevocationNeedsReason extends IdentityDomainException
+final class CredentialRevocationNeedsReason extends IdentityDomainException implements BusinessRejection
 {
     public static function make(): self
     {

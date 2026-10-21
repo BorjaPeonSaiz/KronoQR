@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\LicenseRejection;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * La clave que se intenta activar no verifica (RF-PD-04).
@@ -18,7 +19,7 @@ use App\Modules\Product\Domain\ValueObject\LicenseRejection;
  * medias, volver a copiarla; si la firma no cuadra, pedir una nueva; si esta
  * compilacion no lleva clave publica, revisar el despliegue.
  */
-final class LicenseKeyRejected extends ProductDomainException
+final class LicenseKeyRejected extends ProductDomainException implements BusinessRejection
 {
     private function __construct(
         string $message,

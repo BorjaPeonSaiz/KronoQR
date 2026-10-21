@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -16,7 +17,7 @@ use RuntimeException;
  * **El mensaje no repite el correo** (regla dura 21): esta excepcion puede
  * acabar en un log o en `error_events`.
  */
-final class ManagementAccountEmailTaken extends RuntimeException
+final class ManagementAccountEmailTaken extends RuntimeException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'accounts.email_taken';
 

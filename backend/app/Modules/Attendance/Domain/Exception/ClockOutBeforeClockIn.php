@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DateTimeImmutable;
 
 /**
@@ -14,7 +15,7 @@ use DateTimeImmutable;
  * de marcas que no pueden haber ocurrido. La base de datos lo repite con
  * `shift_entries_chk_order` y lo aplica tambien a las versiones historicas.
  */
-final class ClockOutBeforeClockIn extends AttendanceDomainException
+final class ClockOutBeforeClockIn extends AttendanceDomainException implements BusinessRejection
 {
     public static function between(DateTimeImmutable $clockedInAt, DateTimeImmutable $clockedOutAt): self
     {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Exception;
 
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DateTimeImmutable;
 
 /**
@@ -23,7 +24,7 @@ use DateTimeImmutable;
  * **Nunca llega al quiosco**: ese camino no pasa por esta politica (regla dura
  * 19).
  */
-final class ShiftMarkInFuture extends AttendanceDomainException
+final class ShiftMarkInFuture extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, int>  $parameters  sustituciones del mensaje traducido

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Lo que se pide como concesion de soporte no puede serlo (RF-PD-11).
  *
@@ -20,7 +22,7 @@ namespace App\Modules\Product\Domain\Exception;
  * Misma pauta que {@see InvalidLicenseKey} y que `InvalidSettingValue`:
  * `Domain/` no sabe en que idioma se va a leer.
  */
-final class InvalidSupportGrant extends ProductDomainException
+final class InvalidSupportGrant extends ProductDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string|int>  $parameters

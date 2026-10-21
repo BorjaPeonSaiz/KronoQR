@@ -8,6 +8,7 @@ use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
 use OpenTelemetry\Context\ScopeInterface;
 use Throwable;
@@ -176,6 +177,63 @@ final class SpanScope
             }
 
             $this->span->end();
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
+     * Deja constancia de que el acto fallo, antes de {@see self::end()}
+     * (V21-4-BE-2).
+     *
+     * Un evento `exception` con `exception.type` = la clase, y **nada mas**. No
+     * es `recordException()` a proposito: ese metodo del SDK añade por su
+     * cuenta `exception.message` y `exception.stacktrace`, y el mensaje de una
+     * `QueryException` lleva el SQL con los valores enlazados y el host. Un
+     * atributo de traza acaba en el mismo sitio que un log (regla dura 21).
+     *
+     * Con `$isError`, ademas `status=error`, que es lo que se busca en Tempo
+     * para encontrar averias. Un rechazo de negocio no lo lleva.
+     */
+    public function recordFailure(Throwable $failure, bool $isError): void
+    {
+        try {
+            if (! $this->span instanceof SpanInterface) {
+                return;
+            }
+
+            $this->span->addEvent('exception', ['exception.type' => $failure::class]);
+
+            if ($isError) {
+                // La descripcion es la clase: el mensaje no sale de aqui.
+                $this->span->setStatus(StatusCode::STATUS_ERROR, $failure::class);
+            }
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
+     * Añade atributos al span **en curso** —el de servidor de la peticion, o el
+     * del caso de uso activo— sin abrir uno nuevo.
+     *
+     * Es lo que hacen las telemetrias del borde HTTP desde que el span de cada
+     * acto lo abre `UseCaseInstrumentation`: el `device.id` y el `scan.id` de un
+     * fichaje son de la peticion, no del caso de uso, y van al span de la
+     * peticion. Solo identificadores publicos (regla dura 21).
+     *
+     * @param  array<string, scalar|null>  $attributes
+     */
+    public static function annotateCurrent(array $attributes): void
+    {
+        try {
+            $span = Span::getCurrent();
+
+            foreach ($attributes as $key => $value) {
+                if ($key !== '') {
+                    $span->setAttribute($key, $value);
+                }
+            }
         } catch (Throwable) {
             // Ver el docblock de la clase: medir no puede romper lo que se mide.
         }

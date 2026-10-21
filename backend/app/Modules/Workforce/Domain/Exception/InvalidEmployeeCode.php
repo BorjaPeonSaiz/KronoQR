@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El codigo de empleado no tiene forma de codigo de empleado.
  *
@@ -13,7 +15,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * una excepcion acaba en el log tecnico y en `error_events`; la longitud basta
  * para diagnosticar.
  */
-final class InvalidEmployeeCode extends WorkforceDomainException
+final class InvalidEmployeeCode extends WorkforceDomainException implements BusinessRejection
 {
     public static function empty(): self
     {

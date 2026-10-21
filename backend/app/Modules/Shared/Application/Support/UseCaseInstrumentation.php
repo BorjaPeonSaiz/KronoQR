@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Application\Support;
 
-use DomainException;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use OpenTelemetry\API\Trace\SpanKind;
 use Throwable;
 
@@ -35,9 +35,25 @@ use Throwable;
  *   esperado de un producto que valida; no es una averia.
  * - `error`: cualquier otra excepcion. Esto si es una averia.
  *
- * Que es «de negocio» lo decide {@see self::isRejection()}: no hay una clase
- * base comun en los modulos —unos heredan de `DomainException` y otros de
- * `RuntimeException`—, y el marcador que si comparten todos es donde viven.
+ * Que es «de negocio» lo decide {@see self::isRejection()}: la excepcion lo
+ * declara implementando {@see BusinessRejection}. Lo que no lo declara es una
+ * averia, aunque viva en una carpeta de excepciones de un modulo: el disco
+ * lleno de una exportacion o el SMTP caido no son reglas que dicen que no
+ * (V21-1-AR-1). `BusinessRejectionClassificationTest` exige que cada excepcion
+ * del producto este en un lado o en otro a proposito.
+ *
+ * ## El span: activo, y marcado como error cuando es una averia
+ *
+ * El span del caso de uso se **activa** mientras dura: las consultas, los
+ * trabajos que encola y cada linea de log que escribe cuelgan de el, y quien
+ * escribe un apunte dentro lee su `trace_id` con
+ * {@see SpanScope::currentTraceId()} sin tener el span a mano.
+ *
+ * Una averia cierra el span con `status=error` y un evento `exception` con
+ * `exception.type` = la clase, **sin el mensaje ni la traza** (V21-4-BE-2, regla
+ * dura 21): el mensaje de una `QueryException` lleva el SQL con sus valores y el
+ * host. Un rechazo lleva el mismo evento sin `status=error`: no es una averia, y
+ * buscar `status=error` en Tempo tiene que dar solo averias.
  *
  * ## Medir no puede romper lo que se mide
  *
@@ -60,15 +76,6 @@ final class UseCaseInstrumentation
 
     public const string OUTCOME_ERROR = 'error';
 
-    /**
-     * Los espacios de nombres de las excepciones de negocio de los modulos. Las
-     * de `Application\Exception` incluyen dos que no lo son —una dependencia que
-     * no responde, un tope de capacidad—, y por eso se excluyen por su sufijo.
-     */
-    private const string REJECTION_NAMESPACE = '/^App\\\\Modules\\\\[A-Za-z]+\\\\(?:Domain|Application)\\\\Exception\\\\/';
-
-    private const string NOT_A_REJECTION_SUFFIX = '/(?:Unavailable|Busy)$/';
-
     private function __construct() {}
 
     /**
@@ -82,13 +89,15 @@ final class UseCaseInstrumentation
      */
     public static function run(string $useCase, callable $body, ?callable $describe = null): mixed
     {
-        $span = SpanScope::start(self::tracerOf($useCase), $useCase, SpanKind::KIND_INTERNAL);
+        $span = SpanScope::startActive(self::tracerOf($useCase), $useCase, SpanKind::KIND_INTERNAL);
         $startedAt = self::nanoseconds();
 
         try {
             $result = $body();
         } catch (Throwable $failure) {
-            self::finish($span, $useCase, self::isRejection($failure) ? self::OUTCOME_REJECTED : self::OUTCOME_ERROR, $startedAt, []);
+            $outcome = self::isRejection($failure) ? self::OUTCOME_REJECTED : self::OUTCOME_ERROR;
+
+            self::finish($span, $useCase, $outcome, $startedAt, [], $failure);
 
             throw $failure;
         }
@@ -109,28 +118,18 @@ final class UseCaseInstrumentation
     }
 
     /**
-     * Una excepcion de negocio: una `DomainException` o una clase de las
-     * carpetas de excepciones de un modulo, salvo las de indisponibilidad.
+     * Un rechazo de negocio: la excepcion lo declara con {@see BusinessRejection}.
+     * Cualquier otra es una averia.
      */
     public static function isRejection(Throwable $failure): bool
     {
-        if ($failure instanceof DomainException) {
-            return true;
-        }
-
-        if (preg_match(self::REJECTION_NAMESPACE, $failure::class) !== 1) {
-            return false;
-        }
-
-        // La clase y sus padres: `PairingCapacityExhausted` es una
-        // `PairingUnavailable` aunque su nombre no lo diga.
-        return array_all([$failure::class, ...array_values(class_parents($failure))], static fn (string $class): bool => preg_match(self::NOT_A_REJECTION_SUFFIX, $class) !== 1);
+        return $failure instanceof BusinessRejection;
     }
 
     /**
      * @param  array<string, scalar|null>  $attributes
      */
-    private static function finish(SpanScope $span, string $useCase, string $outcome, float $startedAt, array $attributes): void
+    private static function finish(SpanScope $span, string $useCase, string $outcome, float $startedAt, array $attributes, ?Throwable $failure = null): void
     {
         try {
             UseCaseMetricsRegistry::current()?->observe(
@@ -140,6 +139,11 @@ final class UseCaseInstrumentation
             );
         } catch (Throwable) {
             // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+
+        if ($failure instanceof Throwable) {
+            // Ver el docblock de la clase: la clase, nunca el mensaje.
+            $span->recordFailure($failure, $outcome === self::OUTCOME_ERROR);
         }
 
         // `end()` ya es a prueba de fallos, y va despues de la metrica para que

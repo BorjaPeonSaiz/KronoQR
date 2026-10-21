@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -22,7 +23,7 @@ use RuntimeException;
  * excepcion. La captura esta a tres lineas de distancia, en el mismo fichero
  * que la lanza.
  */
-final class ScanAlreadyRecorded extends RuntimeException
+final class ScanAlreadyRecorded extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly string $scanId)
     {

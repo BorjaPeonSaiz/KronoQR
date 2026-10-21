@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DomainException;
 
 /**
@@ -44,7 +45,7 @@ use DomainException;
  * el rango, sube la granularidad o espera a la generacion en diferido de
  * RF-IN-06.
  */
-final class ReportTooLargeForSynchronousDelivery extends DomainException
+final class ReportTooLargeForSynchronousDelivery extends DomainException implements BusinessRejection
 {
     public static function rangeTooWide(int $days, int $maximumDays): self
     {

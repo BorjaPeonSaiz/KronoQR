@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El nombre del quiosco esta vacio o pasa de 120 caracteres.
  *
@@ -12,4 +14,4 @@ namespace App\Modules\Kiosk\Domain\Exception;
  * caminos —la consola— y la garantia de que la invariante no depende de por donde
  * se entre.
  */
-final class InvalidDeviceName extends KioskDomainException {}
+final class InvalidDeviceName extends KioskDomainException implements BusinessRejection {}

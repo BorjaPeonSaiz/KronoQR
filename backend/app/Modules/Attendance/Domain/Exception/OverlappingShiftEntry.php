@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DateTimeImmutable;
 
 /**
@@ -15,7 +16,7 @@ use DateTimeImmutable;
  * dominio y la base de datos discrepasen en el borde, un fichaje que sale a las
  * 14:00 y otro que entra a las 14:00 pasaria por uno y lo rechazaria el otro.
  */
-final class OverlappingShiftEntry extends AttendanceDomainException
+final class OverlappingShiftEntry extends AttendanceDomainException implements BusinessRejection
 {
     public static function at(string $employeeUuid, DateTimeImmutable $instant): self
     {

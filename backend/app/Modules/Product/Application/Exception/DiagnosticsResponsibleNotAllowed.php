@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -14,7 +15,7 @@ use RuntimeException;
  * Se lanza antes de recolectar nada: no se genera ni se escribe ningun
  * asiento. El mensaje no lleva la cuenta (regla dura 21).
  */
-final class DiagnosticsResponsibleNotAllowed extends RuntimeException
+final class DiagnosticsResponsibleNotAllowed extends RuntimeException implements BusinessRejection
 {
     public static function missing(): self
     {

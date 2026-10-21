@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -24,7 +25,7 @@ use RuntimeException;
  * entonces el llavero solo tiene una clave— y con una rotacion anterior sin
  * cerrar.
  */
-final class SigningKeyRotationNotReady extends RuntimeException
+final class SigningKeyRotationNotReady extends RuntimeException implements BusinessRejection
 {
     public static function noCurrentKey(): self
     {

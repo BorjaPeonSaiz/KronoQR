@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Otro empleado ya tiene ese documento de identidad.
  *
@@ -12,7 +14,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * con ese indice —un alta contra una importacion simultanea— es el `409` de
  * cualquier otro dato ya usado, no un `500`.
  */
-final class EmployeeNationalIdAlreadyTaken extends WorkforceConflict
+final class EmployeeNationalIdAlreadyTaken extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {

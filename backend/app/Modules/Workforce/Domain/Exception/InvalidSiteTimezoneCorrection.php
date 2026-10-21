@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La correccion de la zona horaria del centro por consola no se puede firmar
  * asi (RN-23, ADR-056 §3): el motivo no explica nada, se pasa de largo, o quien
@@ -13,7 +15,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * `getMessage()` es tecnico y en ingles —va al log—; lo que lee la persona sale
  * de {@see self::$translationKey} y {@see self::$parameters}.
  */
-final class InvalidSiteTimezoneCorrection extends WorkforceDomainException
+final class InvalidSiteTimezoneCorrection extends WorkforceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, int>  $parameters  sustituciones del mensaje traducido

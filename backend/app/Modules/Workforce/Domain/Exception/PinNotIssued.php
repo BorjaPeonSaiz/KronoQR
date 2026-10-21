@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se intenta registrar la entrega de un PIN que no existe (RF-ID-09).
  *
@@ -11,7 +13,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * estado. La salida no es corregir el formulario, es restablecer el PIN y
  * entregar ese.
  */
-final class PinNotIssued extends WorkforceConflict
+final class PinNotIssued extends WorkforceConflict implements BusinessRejection
 {
     public static function forEmployee(string $uuid): self
     {

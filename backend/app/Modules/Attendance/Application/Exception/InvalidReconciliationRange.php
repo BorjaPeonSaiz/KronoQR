@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -14,7 +15,7 @@ use RuntimeException;
  * reves no se corrige en silencio dandole la vuelta — quien escribio
  * `--from=2026-04-01 --to=2026-03-01` creeria haber revisado marzo entero.
  */
-final class InvalidReconciliationRange extends RuntimeException
+final class InvalidReconciliationRange extends RuntimeException implements BusinessRejection
 {
     public static function endsBeforeItStarts(string $fromIsoDate, string $toIsoDate): self
     {

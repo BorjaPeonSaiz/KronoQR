@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Domain\Exception;
 
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DateTimeImmutable;
 
 /**
@@ -41,7 +42,7 @@ use DateTimeImmutable;
  * persona sale de {@see self::$translationKey} y {@see self::$parameters}, con la
  * cota en horas.
  */
-final class EntryDoesNotContinueWorkDay extends AttendanceDomainException
+final class EntryDoesNotContinueWorkDay extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string>  $parameters  sustituciones del mensaje traducido

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -18,7 +19,7 @@ use RuntimeException;
  * **Nunca lleva el nombre del empleado** (regla dura 21): identifica por uuid,
  * porque este mensaje acaba en el log tecnico.
  */
-final class EmployeeCannotBeClocked extends RuntimeException
+final class EmployeeCannotBeClocked extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly string $employeeUuid)
     {

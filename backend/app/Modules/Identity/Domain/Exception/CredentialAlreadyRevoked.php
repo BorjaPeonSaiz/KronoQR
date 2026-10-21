@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha pedido revocar una credencial que ya estaba revocada (RF-QR-03).
  *
@@ -15,7 +17,7 @@ namespace App\Modules\Identity\Domain\Exception;
  *
  * La API lo traduce a un 409, que es lo que el contrato describe.
  */
-final class CredentialAlreadyRevoked extends IdentityDomainException
+final class CredentialAlreadyRevoked extends IdentityDomainException implements BusinessRejection
 {
     public static function forCredential(string $credentialUuid): self
     {

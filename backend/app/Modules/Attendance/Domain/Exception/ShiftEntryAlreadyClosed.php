@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Un tramo cerrado no se vuelve a cerrar, y tampoco se reabre.
  *
@@ -12,7 +14,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * momento y motivo (RN-13, RL-04, ADR-026). Eso llega en la tarea 1.15 y pasa
  * por su propio caso de uso, nunca por este metodo.
  */
-final class ShiftEntryAlreadyClosed extends AttendanceDomainException
+final class ShiftEntryAlreadyClosed extends AttendanceDomainException implements BusinessRejection
 {
     public static function withUuid(string $shiftEntryUuid): self
     {

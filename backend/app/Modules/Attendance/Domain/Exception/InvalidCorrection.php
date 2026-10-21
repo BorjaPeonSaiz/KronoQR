@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una correccion que no llega a existir porque le falta lo que RN-13 exige.
  *
  * Hoy solo el autor: el motivo lo protege `CorrectionReason` y el momento lo
  * protege `TimeRange::assertUtc()`, cada uno en su objeto.
  */
-final class InvalidCorrection extends AttendanceDomainException
+final class InvalidCorrection extends AttendanceDomainException implements BusinessRejection
 {
     public static function withoutAuthor(): self
     {

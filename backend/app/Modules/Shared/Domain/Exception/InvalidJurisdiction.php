@@ -17,7 +17,7 @@ use RuntimeException;
  *
  * El codigo no es dato personal: puede ir al mensaje y al log.
  */
-final class InvalidJurisdiction extends RuntimeException
+final class InvalidJurisdiction extends RuntimeException implements BusinessRejection
 {
     public static function malformed(string $code): self
     {

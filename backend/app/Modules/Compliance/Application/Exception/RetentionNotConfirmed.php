@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -17,7 +18,7 @@ use RuntimeException;
  * ejecutar a ciegas la unica operacion del sistema que borra datos
  * (regla dura 5).
  */
-final class RetentionNotConfirmed extends RuntimeException
+final class RetentionNotConfirmed extends RuntimeException implements BusinessRejection
 {
     public static function withoutPhrase(): self
     {

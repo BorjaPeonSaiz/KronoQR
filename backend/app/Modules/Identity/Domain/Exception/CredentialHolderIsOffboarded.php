@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha intentado emitir o reemitir una credencial a una persona **de baja**
  * (RN-14).
@@ -21,7 +23,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * Se traduce a un `409` en la API, como `EmployeeAlreadyHasCredential`: no hay
  * ningun campo que corregir, la persona esta en un estado que no lo admite.
  */
-final class CredentialHolderIsOffboarded extends IdentityDomainException
+final class CredentialHolderIsOffboarded extends IdentityDomainException implements BusinessRejection
 {
     public static function make(): self
     {

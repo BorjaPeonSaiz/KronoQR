@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Domain\Exception;
 
 use App\Modules\Kiosk\Domain\ValueObject\ConfirmOutcome;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * El codigo no tiene la forma de un codigo de emparejamiento.
@@ -15,7 +16,7 @@ use App\Modules\Kiosk\Domain\ValueObject\ConfirmOutcome;
  * la consola o desde un cliente que se salta el contrato — el borde HTTP lo para
  * antes con un `422` de validacion.
  */
-final class InvalidPairingCode extends KioskDomainException
+final class InvalidPairingCode extends KioskDomainException implements BusinessRejection
 {
     public function __construct()
     {

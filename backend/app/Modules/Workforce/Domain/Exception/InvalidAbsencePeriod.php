@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El periodo de una ausencia no describe ningun intervalo (**RF-GP-04**).
  *
@@ -16,7 +18,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * en un log tecnico y en `error_events`, que viaja al fabricante dentro del
  * paquete de diagnostico. Aqui solo van fechas y, cuando hace falta, el `uuid`.
  */
-final class InvalidAbsencePeriod extends WorkforceDomainException
+final class InvalidAbsencePeriod extends WorkforceDomainException implements BusinessRejection
 {
     public static function isInverted(string $startsOn, string $endsOn): self
     {

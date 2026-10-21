@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha intentado cerrar una incidencia que ya estaba cerrada (RF-PA-05).
  *
@@ -19,7 +21,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * ya esta trabajada— y distinguirlos solo le diria si llego tarde por segundos o
  * por horas.
  */
-final class IncidentAlreadyClosed extends ComplianceDomainException
+final class IncidentAlreadyClosed extends ComplianceDomainException implements BusinessRejection
 {
     public static function inStatus(string $status): self
     {

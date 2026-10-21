@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha pedido imprimir una credencial cuyo token ya se acuño (ADR-034,
  * RF-QR-04).
@@ -22,7 +24,7 @@ namespace App\Modules\Identity\Domain\Exception;
  *
  * La API lo traduce a un 409.
  */
-final class CredentialAlreadyPrinted extends IdentityDomainException
+final class CredentialAlreadyPrinted extends IdentityDomainException implements BusinessRejection
 {
     public static function forCredential(string $credentialUuid): self
     {
