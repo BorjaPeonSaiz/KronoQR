@@ -89,7 +89,17 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 7 integrados (#182 a #187, #189 y #190). **Bloque 8** (`fix/portal-sesion-y-estados`): 8.1–8.10 ✅, revisiones aplicadas, CI manual 39491859900 en verde; PR y merge en curso. Lo que conviene saber del bloque 8:
+**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 8 integrados (#182 a #187 y #189 a #191). **Bloque 9** (`feat/alertas-cola-y-servicios`): 9.1–9.6 ✅, revisiones aplicadas, CI manual 39518306982 en verde (con una repetición de `PeriodReportVolumeTest`, la prueba inestable que D4 lleva al B22); PR y merge en curso. Lo que conviene saber del bloque 9:
+- `make alerts-drill` da 44/44. Los comandos de Docker del drill van sin `MSYS_NO_PATHCONV=1`.
+- **Contadores de Redis que nacen en 1:** toda alerta sobre un contador nuevo usa las reglas de grabación de `api.yml`, que suman la rama `unless … offset`.
+- La alerta de cola usa `queue_jobs_waiting` (solo `LLEN`), no `queue_jobs_pending`, que incluye los trabajos reservados.
+- **Workers:** horizon, scheduler (latido en `/tmp`) y reverb tienen healthcheck, y `update.sh` espera a que estén sanos. Si tras el 401 no lo están, la salida es 5 sin deshacer (decisión mía, coherente con la del B6). `retention-guard` no tiene healthcheck, porque es de un solo uso.
+- **`KQ_OBSERVABILITY_REVISION`:** la huella de `observability/` recrea seis servicios. Está en EXCLUIDAS de `assert-runtime-env.sh`; toda variable nueva del `.env` que no sea de la app tiene que ir ahí y en `RuntimeEnvironmentTest`.
+- La divergencia de la proyección guarda la primera y la última marca de tiempo en el textfile.
+- La alerta `ConciliacionCompletaSinTramos` vigila que la conciliación lea tramos.
+- Seguimiento: la tarea 10.8 (cubos de 2 s y 10 s para la latencia del PIN y del lote).
+
+Lo que conviene saber del bloque 8 (#191):
 - Contrato nuevo:
   - `EmployeeWorkDays.today` (día civil del centro; el portal ya no pide «hoy» aparte);
   - `privacy_notice.retention_years` en `/branding`, leído del perfil de cumplimiento; el portal y el quiosco lo interpolan;
@@ -121,7 +131,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 8 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 9 (alertas y healthchecks; rama `feat/alertas-cola-y-servicios` desde `origin/main`), marcando ✅ el título del bloque 8 en su primer commit.
+**Siguiente acción:** si el bloque 9 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 10 (errores: 503 cuando toca y siempre con rastro; rama `fix/degradacion-y-errores` desde `origin/main`, con ADR nuevo de degradación), marcando ✅ el título del bloque 9 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
