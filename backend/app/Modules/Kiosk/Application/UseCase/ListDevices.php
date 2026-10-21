@@ -11,6 +11,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 
 /**
@@ -75,6 +76,11 @@ final readonly class ListDevices
     ) {}
 
     public function handle(): DeviceFleetView
+    {
+        return UseCaseInstrumentation::run('kiosk.list_devices', fn (): DeviceFleetView => $this->doHandle());
+    }
+
+    private function doHandle(): DeviceFleetView
     {
         // `UTC` antes de la puesta en marcha, cuando todavia no hay centro
         // (RF-PD-03). El panel pinta igual: la hora sale en UTC y lo dice, en

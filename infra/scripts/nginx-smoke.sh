@@ -413,14 +413,51 @@ main() {
   problema /api/v1/auth/login 502 bad-gateway -X POST -H "${json}" -d '{}'
   problema /api/v1/scan 413 payload-too-large -X POST -H "${json}" \
     --data-binary @- < <(head -c 9437184 /dev/zero | tr '\0' 'a')
+
+  # 10.5: el 400 y el 414 que nginx genera antes de elegir `location` (cabeceras
+  # de mas de 8 KiB, linea de peticion de mas de 8 KiB) tambien salen problem+json.
+  # SOLO EN HTTP/1.1: por HTTP/2 nginx no puede devolver una respuesta a una
+  # cabecera o una URI que desborda el buffer (resetea la conexion, y curl da
+  # error sin cuerpo), asi que no hay problem+json que ofrecer. Por eso se fuerza
+  # --http1.1; afirmar el caso HTTP/2 seria falso.
+  problema /api/v1/ready 400 bad-request --http1.1 -H "Cookie: $(head -c 20000 /dev/zero | tr '\0' 'a')"
+  problema "/api/v1/ready?x=$(head -c 20000 /dev/zero | tr '\0' 'a')" 414 uri-too-long --http1.1
+
+  # ADR-059 §3: /scan/pin tiene su zona propia, con la tasa del entorno de la imagen (60).
+  local configuracion variante
+  configuracion="$(docker exec "${CONTENEDOR}" nginx -T 2>/dev/null)"
+  if ! grep -qE 'limit_req_zone .*zone=scan_pin:10m +rate=60r/m;' <<<"${configuracion}" ||
+    ! grep -qE 'location = /api/v1/scan/pin {' <<<"${configuracion}"; then
+    printf '  [FALLA] /api/v1/scan/pin no tiene su zona scan_pin a 60 r/m ni su location propia\n' >&2
+    fallo=1
+  else
+    printf '  [ok]    /api/v1/scan/pin          zona scan_pin a 60 r/m\n'
+  fi
+  problema /api/v1/scan/pin 502 bad-gateway -X POST -H "${json}" -d '{}'
+  # Las DOS variantes (con y sin barra final) llevan scan_pin: la segunda la enruta
+  # Laravel igual y, sin su bloque, esquivaria el limite.
+  for variante in /api/v1/scan/pin /api/v1/scan/pin/; do
+    if ! awk -v loc="  location = ${variante} {" '$0 == loc {dentro = 1} dentro && /limit_req zone=scan_pin / {ok = 1} dentro && /^  }$/ {exit} END {exit !ok}' <<<"${configuracion}"; then
+      printf '  [FALLA] %s no lleva limit_req zone=scan_pin\n' "${variante}" >&2
+      fallo=1
+    else
+      printf '  [ok]    %-24s limit_req scan_pin\n' "${variante}"
+    fi
+  done
+  problema /api/v1/scan/pin/ 502 bad-gateway -X POST -H "${json}" -d '{}'
+
   # En paralelo: cada peticion que llega a la aplicacion espera el resolvedor.
   local _rafaga
   for _rafaga in $(seq 1 12); do
     curl -s -k -o /dev/null --max-time 20 -X POST \
       "https://127.0.0.1:${PUERTO}/api/v1/auth/login" &
   done
-  wait
+  # La comprobacion va ANTES del wait: las peticiones aceptadas tardan ~5 s en el
+  # resolvedor y a 5 r/m la zona se vacia (una cada 12 s). Esperar a que acaben deja
+  # el exceso en el filo de la rafaga y el 429 depende de los milisegundos.
+  sleep 2
   problema /api/v1/auth/login 429 too-many-requests -X POST
+  wait
   comprobar /admin/ 200 '<!doctype html'
 
   proxy_de_confianza

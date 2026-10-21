@@ -20,7 +20,7 @@ use RuntimeException;
  * puede ser un correo (regla dura 21)—; lo que lee la persona sale de
  * {@see self::$translationKey}.
  */
-final class InvalidResponsibleReference extends RuntimeException
+final class InvalidResponsibleReference extends RuntimeException implements BusinessRejection
 {
     private function __construct(public readonly string $translationKey, string $message)
     {

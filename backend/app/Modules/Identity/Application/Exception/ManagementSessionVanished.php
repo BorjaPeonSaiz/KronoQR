@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -13,7 +14,7 @@ use RuntimeException;
  * Es la señal con la que `ChangeOwnPasswordHandler` deshace la transaccion
  * entera; no sale del caso de uso, que la traduce a `401`.
  */
-final class ManagementSessionVanished extends RuntimeException
+final class ManagementSessionVanished extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\SetupStep;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * No se puede cerrar el asistente todavia, o ya estaba cerrado (RF-PD-03).
@@ -18,7 +19,7 @@ use App\Modules\Product\Domain\ValueObject\SetupStep;
  * que falta obliga a adivinar, y quien pone en marcha la instalacion no tiene la
  * consola del servidor delante para averiguarlo.
  */
-final class SetupNotCompletable extends ProductDomainException
+final class SetupNotCompletable extends ProductDomainException implements BusinessRejection
 {
     public const string PENDING_TRANSLATION_KEY = 'setup.steps_still_pending';
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -20,7 +21,7 @@ use RuntimeException;
  * El mensaje dice **cuantas quedan y en que centro**, porque lo siguiente que
  * hara quien lo lea es ir a buscarlas.
  */
-final class SigningKeyStillInUse extends RuntimeException
+final class SigningKeyStillInUse extends RuntimeException implements BusinessRejection
 {
     public static function withCards(string $keyId, int $cards, string $siteName): self
     {

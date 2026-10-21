@@ -12,7 +12,7 @@ use Throwable;
  *
  * It extends `RedisException` on purpose: everything that already degrades when
  * Redis does not answer —the `resilient` cache, the `failover-after-commit`
- * queue, `ThrottleScanFailOpen`, the metric writer and reader— recognises that
+ * queue, `ThrottleFailOpen`, the metric writer and reader— recognises that
  * class and keeps doing exactly what it did, only without waiting for a network
  * timeout first.
  *

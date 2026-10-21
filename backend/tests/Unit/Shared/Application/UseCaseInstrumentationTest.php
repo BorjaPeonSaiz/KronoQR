@@ -2,15 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Kiosk\Application\Exception\PairingCapacityExhausted;
 use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Shared\Application\Port\UseCaseMetrics;
+use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use Illuminate\Contracts\Redis\Factory;
+use OpenTelemetry\API\Trace\StatusCode;
 use Tests\Support\Telemetry\RecordingTracer;
 
 /*
@@ -239,21 +242,77 @@ it('observa rejected con una excepcion de negocio y la relanza igual', function 
     expect($capturada)->toBe($fallo)
         ->and($observado->getArrayCopy()[0][1] ?? null)->toBe('rejected');
 })->with([
-    // Una `DomainException`, como las bases de Attendance, Workforce e Identity.
-    'DomainException' => [new DomainException('regla de negocio')],
-    // Una de un modulo cuya base hereda de `RuntimeException`: cuenta donde vive.
-    'Product\Domain\Exception' => [DiagnosticsAuditNotDeferred::in('/tmp/pendientes')],
+    // Lo declara la excepcion con `BusinessRejection`, viva donde viva.
     'Compliance\Application\Exception' => [IncidentNotFound::withId(7)],
+    'Attendance\Domain\Exception' => [ShiftAlreadyOpen::forEmployee('0199a1f0-0000-7000-8000-000000000000')],
 ])->group('RQ-06', 'RNF-D-01');
 
-it('una excepcion de indisponibilidad de un modulo es error y no rejected', function (Throwable $fallo): void {
+it('una averia es error y no rejected, aunque viva en una carpeta de excepciones de un modulo', function (Throwable $fallo): void {
     expect(UseCaseInstrumentation::isRejection($fallo))->toBeFalse();
 })->with([
-    // Por su nombre, y por el de su padre aunque el suyo no lo diga.
     'ReportRenderingBusy' => [ReportRenderingBusy::allSlotsTaken(30)],
-    'PairingCapacityExhausted (es una PairingUnavailable)' => [new PairingCapacityExhausted(3, 3)],
+    'PairingCapacityExhausted' => [new PairingCapacityExhausted(3, 3)],
+    // V21-1-AR-1: el disco lleno y el fallo de E/S ya no cuentan como rechazo.
+    'DiagnosticsAuditNotDeferred (disco)' => [DiagnosticsAuditNotDeferred::in('/tmp/pendientes')],
+    // Una `DomainException` sin marcador ya no es un rechazo por serlo.
+    'DomainException suelta' => [new DomainException('de una libreria')],
     'RuntimeException suelta' => [new RuntimeException('Redis no responde')],
 ])->group('RQ-06', 'RNF-D-01');
+
+it('marca el span de una averia con status error y un evento con la clase, sin el mensaje', function (): void {
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        try {
+            UseCaseInstrumentation::run('workforce.update_site', static function (): never {
+                // Como el mensaje de una QueryException: el SQL con sus valores.
+                throw new RuntimeException('insert into employees values (Maria Gonzalez, 48291736K)');
+            });
+        } catch (RuntimeException) {
+            // Esperado: lo que se mira es el span.
+        }
+
+        $span = $tracer->finishedSpans()[0];
+        $events = $span->getEvents();
+
+        expect($span->getStatus()->getCode())->toBe(StatusCode::STATUS_ERROR)
+            ->and($span->getStatus()->getDescription())->toBe(RuntimeException::class)
+            ->and($events)->toHaveCount(1)
+            ->and($events[0]->getName())->toBe('exception')
+            ->and($events[0]->getAttributes()->get('exception.type'))->toBe(RuntimeException::class)
+            ->and($events[0]->getAttributes()->has('exception.message'))->toBeFalse()
+            ->and($events[0]->getAttributes()->has('exception.stacktrace'))->toBeFalse()
+            ->and($volcado = (string) json_encode([$span->getAttributes()->toArray(), $events[0]->getAttributes()->toArray(), $span->getStatus()->getDescription()]))->not->toContain('Maria')
+            ->and($volcado)->not->toContain('48291736K');
+    });
+})->group('RQ-06', 'RNF-D-01', 'RS-05');
+
+it('un rechazo no marca el span como error ni deja la clase, que seria un oraculo', function (): void {
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        try {
+            UseCaseInstrumentation::run('compliance.resolve_incident', static function (): never {
+                throw IncidentNotFound::withId(7);
+            });
+        } catch (IncidentNotFound) {
+            // Esperado.
+        }
+
+        $span = $tracer->finishedSpans()[0];
+
+        expect($span->getStatus()->getCode())->not->toBe(StatusCode::STATUS_ERROR)
+            ->and($span->getAttributes()->get('outcome'))->toBe('rejected')
+            ->and($span->getEvents())->toBe([]);
+    });
+})->group('RQ-06', 'RNF-D-01');
+
+it('activa el span mientras dura el caso de uso y lo suelta al terminar', function (): void {
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        $dentro = UseCaseInstrumentation::run('workforce.update_site', static fn (): ?string => SpanScope::currentTraceId());
+
+        expect($dentro)->not->toBeNull()
+            ->and($dentro)->toBe($tracer->finishedSpans()[0]->getTraceId())
+            // Fuera, ya no hay span en curso.
+            ->and(SpanScope::currentTraceId())->toBeNull();
+    });
+})->group('RQ-06', 'RNF-D-01');
 
 it('cierra el span con los atributos que describen el resultado, sin pisar outcome', function (): void {
     RecordingTracer::around(function (RecordingTracer $tracer): void {

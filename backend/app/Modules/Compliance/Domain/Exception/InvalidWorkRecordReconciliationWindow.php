@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una ventana de conciliacion que no cubre ni un dia (ADR-057 §4).
  *
@@ -11,7 +13,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * discrepancias» todas las noches: la alerta callaria sin que nadie hubiera
  * comprobado nada. Por eso se rechaza en voz alta en lugar de ajustarse sola.
  */
-final class InvalidWorkRecordReconciliationWindow extends ComplianceDomainException
+final class InvalidWorkRecordReconciliationWindow extends ComplianceDomainException implements BusinessRejection
 {
     public static function notPositive(int $days): self
     {

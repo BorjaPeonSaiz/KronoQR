@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El fichero que se manda aplicar **no es el que se valido** (RF-GP-05).
  *
@@ -24,7 +26,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * revisado y lo enviado son distintos—. La accion siguiente es volver a validar,
  * no corregir un campo.
  */
-final class ImportFileChanged extends WorkforceConflict
+final class ImportFileChanged extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {

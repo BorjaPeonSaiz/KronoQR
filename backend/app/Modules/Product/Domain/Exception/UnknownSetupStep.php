@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La ruta nombra un paso del asistente que no esta en el catalogo (RF-PD-03).
  *
@@ -12,7 +14,7 @@ namespace App\Modules\Product\Domain\Exception;
  * caso en que el paso **si** existe y lo que no existe es la potestad de
  * declararlo hecho a mano.
  */
-final class UnknownSetupStep extends ProductDomainException
+final class UnknownSetupStep extends ProductDomainException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'setup.unknown_step';
 

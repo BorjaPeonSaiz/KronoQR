@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Ya hay registro horario y se ha pedido otra zona horaria para el centro
  * (RN-23, ADR-056).
@@ -22,7 +24,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * 21)—; lo que ve una persona sale de {@see self::$translationKey} y
  * {@see self::$parameters}, que el borde HTTP resuelve en el idioma negociado.
  */
-final class SiteTimezoneLocked extends WorkforceConflict
+final class SiteTimezoneLocked extends WorkforceConflict implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'site.errors.timezone_locked';
 

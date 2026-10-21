@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Dos escrituras simultaneas de la plantilla se han cruzado y PostgreSQL ha
  * deshecho esta para romper el ciclo (`40P01`), tambien despues de reintentarla
@@ -16,7 +18,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * en el `409` de dato duplicado; este es el `409` de reserva para que nunca
  * salga un `500`. Nada se ha escrito: basta con repetir la peticion.
  */
-final class ConcurrentEmployeeWrite extends WorkforceConflict
+final class ConcurrentEmployeeWrite extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha pedido registrar dos veces la entrega de la misma credencial
  * (RF-QR-06).
@@ -13,7 +15,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * consulta meses despues cuando alguien discute un fichaje. Misma razon que
  * {@see CredentialAlreadyRevoked} y misma traduccion: 409.
  */
-final class CredentialAlreadyDelivered extends IdentityDomainException
+final class CredentialAlreadyDelivered extends IdentityDomainException implements BusinessRejection
 {
     public static function forCredential(string $credentialUuid): self
     {

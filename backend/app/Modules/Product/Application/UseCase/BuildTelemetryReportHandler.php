@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Application\UseCase;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\Port\PlanUsageCounter;
 use App\Modules\Product\Application\Port\TelemetryCounters;
 use App\Modules\Product\Application\Port\TelemetryFacts;
@@ -119,6 +120,10 @@ final readonly class BuildTelemetryReportHandler
                 'license' => $status->license,
                 'days_until_expiry' => $status->daysUntilExpiry(),
             ];
+        } catch (LicenseUnavailable) {
+            // No se pudo leer: ni `absent` ni `unverifiable`, que serian una
+            // afirmacion sobre la licencia (V21-4-PL-1).
+            return ['state' => 'unknown', 'license' => null, 'days_until_expiry' => null];
         } catch (Throwable) {
             return ['state' => 'unverifiable', 'license' => null, 'days_until_expiry' => null];
         }

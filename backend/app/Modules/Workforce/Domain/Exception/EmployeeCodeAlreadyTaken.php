@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El codigo de empleado generado ya existe.
  *
@@ -17,7 +19,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * log tecnico y en `error_events`. Quien la captura ya tiene el codigo en la
  * mano: no necesita que viaje dentro.
  */
-final class EmployeeCodeAlreadyTaken extends WorkforceConflict
+final class EmployeeCodeAlreadyTaken extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {

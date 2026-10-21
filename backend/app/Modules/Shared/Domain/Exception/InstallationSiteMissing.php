@@ -15,7 +15,7 @@ use RuntimeException;
  * `409`: no es un error del cliente ni del servidor, es un estado de la
  * instalacion que alguien tiene que resolver una sola vez.
  */
-final class InstallationSiteMissing extends RuntimeException
+final class InstallationSiteMissing extends RuntimeException implements BusinessRejection
 {
     public static function make(): self
     {

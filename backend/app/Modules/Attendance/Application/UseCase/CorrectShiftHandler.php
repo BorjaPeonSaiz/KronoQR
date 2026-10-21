@@ -27,6 +27,7 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
@@ -108,6 +109,11 @@ final readonly class CorrectShiftHandler
      * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
     public function handle(CorrectShiftCommand $command): CorrectedShift
+    {
+        return UseCaseInstrumentation::run('attendance.correct_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+    }
+
+    private function doHandle(CorrectShiftCommand $command): CorrectedShift
     {
         // Regla dura 9 y RN-13: el momento de la correccion lo fija el servidor
         // una sola vez, y no es ninguna de las dos marcas del tramo.

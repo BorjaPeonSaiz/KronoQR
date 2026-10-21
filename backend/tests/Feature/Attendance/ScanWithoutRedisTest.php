@@ -317,6 +317,7 @@ it('no abre el limitador de una ruta de gestion con Redis caido', function (): v
 
     $respuesta = Api::as($gestion)->get('/api/v1/employees');
 
-    expect($respuesta->status())->toBe(500)
+    expect($respuesta->status())->toBe(503)
+        ->and($respuesta->headers->get('Retry-After'))->not->toBeNull()
         ->and($respuesta->headers->get('Content-Type'))->toBe('application/problem+json');
 })->group('RS-02', 'RQ-06');

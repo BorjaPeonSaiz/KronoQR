@@ -36,6 +36,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -218,6 +219,14 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * Nula en el camino normal: entonces la resuelve el `CredentialResolver`.
      */
     public function handle(RegisterScanCommand $command, ?CredentialResolution $resolution = null): RegisterScanResult
+    {
+        return UseCaseInstrumentation::run('attendance.register_scan', fn (): RegisterScanResult => $this->doHandle($command, $resolution));
+    }
+
+    /**
+     * @param  CredentialResolution|null  $resolution  Quien es el portador, si ya se sabe.
+     */
+    private function doHandle(RegisterScanCommand $command, ?CredentialResolution $resolution = null): RegisterScanResult
     {
         // Regla dura 9: la recepcion la fija el servidor una sola vez, antes de
         // hacer nada, para que un reintento interno no la desplace.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DomainException;
 
 /**
@@ -31,7 +32,7 @@ use DomainException;
  * tiempo— y lo que necesita saber es si tiene que esperar o si tiene que volver
  * a la pantalla.
  */
-final class ReportExportLinkUnavailable extends DomainException
+final class ReportExportLinkUnavailable extends DomainException implements BusinessRejection
 {
     private function __construct(public readonly bool $expired)
     {

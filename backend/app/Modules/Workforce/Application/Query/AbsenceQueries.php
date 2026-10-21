@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\Query;
 
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceFilter;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\AbsenceView;
@@ -54,6 +55,14 @@ final readonly class AbsenceQueries
      */
     public function page(AbsenceFilter $filter, int $page, int $perPage): array
     {
+        return UseCaseInstrumentation::run('workforce.list_absences', fn () => $this->doPage($filter, $page, $perPage));
+    }
+
+    /**
+     * @return array{items: list<AbsenceView>, total: int, page: int, per_page: int, total_pages: int}
+     */
+    private function doPage(AbsenceFilter $filter, int $page, int $perPage): array
+    {
         $total = $this->absences->countMatching($filter);
         $items = $this->absences->search($filter, $perPage, ($page - 1) * $perPage);
 
@@ -95,6 +104,11 @@ final readonly class AbsenceQueries
 
     public function find(string $uuid): ?AbsenceView
     {
+        return UseCaseInstrumentation::run('workforce.find_absence', fn (): ?AbsenceView => $this->doFind($uuid));
+    }
+
+    private function doFind(string $uuid): ?AbsenceView
+    {
         return $this->absences->viewOf($uuid);
     }
 
@@ -105,6 +119,14 @@ final readonly class AbsenceQueries
      * @return list<AbsenceView>
      */
     public function historyOf(string $uuid): array
+    {
+        return UseCaseInstrumentation::run('workforce.read_absence_history', fn () => $this->doHistoryOf($uuid));
+    }
+
+    /**
+     * @return list<AbsenceView>
+     */
+    private function doHistoryOf(string $uuid): array
     {
         return $this->absences->historyOf($uuid);
     }

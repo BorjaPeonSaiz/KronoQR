@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * RN-05: la jornada es una fecha civil real en la zona del centro.
  *
@@ -11,7 +13,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * base de datos igual que al construir, porque una jornada con fecha imposible
  * corrompe el indice de `daily_totals` y la exportacion legal.
  */
-final class InvalidWorkDate extends AttendanceDomainException
+final class InvalidWorkDate extends AttendanceDomainException implements BusinessRejection
 {
     public static function notACivilDate(string $value): self
     {

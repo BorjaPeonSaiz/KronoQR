@@ -46,6 +46,10 @@ map $kronoqr_kiosk_vlan $kronoqr_scan_key_other {
 
 limit_req_zone $kronoqr_scan_key_vlan  zone=scan_kiosk_vlan:10m rate=600r/m;
 limit_req_zone $kronoqr_scan_key_other zone=scan_other:10m      rate=30r/m;
+# `/api/v1/scan/pin` (ADR-059 §3): zona PROPIA por IP, ademas de las dos de arriba.
+# Si Redis cae, el limite de Laravel del PIN falla abierto y este es el unico que
+# queda en el borde. La tasa sale de NGINX_SCAN_PIN_RATE_PER_MINUTE (60 de serie).
+limit_req_zone $binary_remote_addr     zone=scan_pin:10m        rate=${NGINX_SCAN_PIN_RATE_PER_MINUTE}r/m;
 limit_req_zone $binary_remote_addr     zone=auth:10m            rate=5r/m;
 limit_req_zone $binary_remote_addr     zone=portal:10m          rate=10r/m;
 limit_req_zone $binary_remote_addr     zone=portal_login:10m    rate=10r/m;
@@ -321,6 +325,16 @@ server {
   # Cuerpos problem+json de los errores de nginx en la API (F4a-2, CH4).
   include /etc/nginx/snippets/api-error-locations.conf;
 
+  # 400 y 414 se resuelven antes de elegir `location` (linea de peticion o cabeceras
+  # ilegibles): ahi solo cuenta el `error_page` del `server`, y no se puede saber si
+  # iba a la API. Salen problem+json para todos; las locations de la API los repiten
+  # (api-error-pages.conf) por si el error llega ya dentro de una.
+  error_page 400 /__kronoqr/api-400;
+  # 494 es el codigo interno de «cabecera o cookie demasiado grande»: nginx lo mira
+  # antes de convertirlo en 400, asi que sin esta linea ese 400 sale en HTML.
+  error_page 494 =400 /__kronoqr/api-400;
+  error_page 414 /__kronoqr/api-414;
+
   location = /metrics {
     if ($kronoqr_metrics_allowed = 0) {
       return 403;
@@ -330,12 +344,35 @@ server {
   }
 
   #--- Fichaje: las dos zonas del §7.1 ---------------------------------------
-  # Cubre /api/v1/scan, /api/v1/scan/batch y /api/v1/scan/pin.
+  # Cubre /api/v1/scan y /api/v1/scan/batch; /scan/pin tiene su bloque justo debajo.
   # nodelay: la rafaga se sirve de inmediato. Un cambio de turno es una rafaga
   # legitima, y encolarla seria exactamente el sintoma que hay que evitar.
   location ^~ /api/v1/scan {
     limit_req zone=scan_kiosk_vlan burst=50 nodelay;
     limit_req zone=scan_other burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  # PIN del quiosco (ADR-059 §3): exacta, gana a `^~ /api/v1/scan`. Mantiene las dos
+  # zonas de fichaje y suma la suya por IP (scan_pin, rafaga 10): un PIN es la
+  # via de reserva, no el flujo normal, y adivinarlo es lo que este limite frena
+  # aunque Redis (y con el el limite de Laravel) este caido.
+  location = /api/v1/scan/pin {
+    limit_req zone=scan_kiosk_vlan burst=50 nodelay;
+    limit_req zone=scan_other burst=10 nodelay;
+    limit_req zone=scan_pin burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  # Misma zona con barra final: Laravel enruta `/scan/pin/` a la misma accion, y sin
+  # este bloque caeria en `^~ /api/v1/scan` sin scan_pin (ver el comentario de
+  # /api/v1/me/login, mas abajo). Con Redis caido seria el limite que falta.
+  location = /api/v1/scan/pin/ {
+    limit_req zone=scan_kiosk_vlan burst=50 nodelay;
+    limit_req zone=scan_other burst=10 nodelay;
+    limit_req zone=scan_pin burst=10 nodelay;
     include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }

@@ -7,19 +7,16 @@ namespace App\Modules\Reporting\Http\Support;
 use App\Http\Middleware\RecordHttpMetrics;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de una consulta del registro horario (doc 02 §8.1 y §8.2,
+ * El log de una consulta del registro horario (doc 02 §8.1 y §8.2,
  * RF-PA-03).
  *
- * Mismo sitio y mismo motivo que `Attendance\Http\Support\CorrectionTelemetry`
- * —nombrada asi y no como `{@see}` porque Pint resolveria la referencia a un
- * `use` de otro modulo, que la frontera del §1.6 prohibe—: en el borde, para que
- * el `trace_id` que llega en `traceparent` sea el padre del span y para que el
- * caso de uso se quede consultando sin un `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Por que aqui no hay un contador propio
  *
@@ -55,33 +52,26 @@ final readonly class JournalTelemetry
      */
     public function measure(string $employeeUuid, callable $read): WorkDayJournal
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.read_employee_workdays', SpanKind::KIND_SERVER);
 
-        try {
-            $journal = $read();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $journal = $read();
 
         // El span no lleva `employee_uuid`: una traza describe **la forma** de la
         // consulta —cuantos dias, cuantas jornadas— y de quien era se responde
         // desde `audit_log`, que es donde ese dato tiene retencion y control de
         // acceso.
-        $span->end([
+        SpanScope::annotateCurrent([
             'reporting.range_days' => $journal->range->days(),
             'reporting.work_days' => $journal->dayCount(),
         ]);
-        $this->log($employeeUuid, $journal, $span);
+        $this->log($employeeUuid, $journal);
 
         return $journal;
     }
 
-    private function log(string $employeeUuid, WorkDayJournal $journal, SpanScope $span): void
+    private function log(string $employeeUuid, WorkDayJournal $journal): void
     {
-        $this->logger->info('reporting.employee_workdays_read', [
-            'trace_id' => $span->traceId(),
+        $this->logger->info('reporting.employee_workdays_retrieved', [
+            'trace_id' => SpanScope::currentTraceId(),
             'employee_uuid' => $employeeUuid,
             'from' => $journal->range->isoFrom(),
             'to' => $journal->range->isoTo(),

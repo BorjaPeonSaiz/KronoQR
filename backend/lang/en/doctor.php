@@ -581,6 +581,8 @@ return [
                     .'Nothing to do.',
                 'warning_unverifiable' => 'The stored licence cannot be verified (:reason). Clocking in and '
                     .'reading the record work normally.',
+                'warning_unknown' => 'The licence could not be read because the database is not responding. '
+                    .'It does not mean there is no licence, and meanwhile no feature is cut back.',
             ],
             'white_label_without_plan' => [
                 'ok' => 'The configured branding and the contracted plan are consistent.',
@@ -1199,6 +1201,8 @@ return [
                     .'the validity period starts.',
                 'warning_unverifiable' => "Run `docker compose exec app php artisan license:show`, which explains the exact reason and\n"
                     .'what to do about it. If it says the key is truncated, copy it again in full and activate it.',
+                'warning_unknown' => 'Do not activate the licence again. Fix the database first (see the '
+                    .'`database` check in this same report) and run this check again.',
             ],
             'white_label_without_plan' => [
                 'warning' => 'If you want your branding on the screens, talk to your provider about including '

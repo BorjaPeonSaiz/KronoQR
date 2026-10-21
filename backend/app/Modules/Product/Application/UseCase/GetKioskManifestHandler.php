@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Application\UseCase;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\LogoFormat;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
 use Throwable;
@@ -68,6 +69,11 @@ final readonly class GetKioskManifestHandler
     public function __construct(private GetBrandingHandler $branding) {}
 
     public function handle(): KioskManifest
+    {
+        return UseCaseInstrumentation::run('product.get_kiosk_manifest', fn (): KioskManifest => $this->doHandle());
+    }
+
+    private function doHandle(): KioskManifest
     {
         $branding = $this->branding->handle();
         $logoUrl = $branding->logoUrl();

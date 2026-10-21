@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Persistence;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
+use Closure;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
@@ -26,9 +28,19 @@ use Throwable;
  * sintoma en casa del cliente seria «el panel se ha caido» y la causa seria la
  * licencia. ADR-019 existe precisamente para que eso no pase.
  *
- * Asi que {@see self::current()} devuelve `null` ante cualquier `Throwable` y
- * deja un `warning` sin datos personales ni clave. `null` significa «sin
- * licencia», que es un estado normal del producto y no una averia.
+ * Asi que {@see self::current()} **no deja escapar el fallo del motor**: deja
+ * un `warning` sin datos personales ni clave y, **si lo que falta es
+ * PostgreSQL** (circuito abierto o conexion perdida, `DependencyFailure`), lanza
+ * {@see LicenseUnavailable}, que cada consumidor traduce a `unknown` —no degrada
+ * nada, no avisa de nada—: `null` significa «sin licencia», y con PostgreSQL
+ * caido eso era mentira (V21-4-PL-1).
+ *
+ * **Cualquier otro fallo sigue siendo `null`**, como antes de la 2.3.0: un
+ * permiso retirado (`42501`), una tabla renombrada (`42P01`). Con PostgreSQL
+ * respondiendo, no poder leer la tabla no es una caida, y como `unknown` lo
+ * concede todo, aceptarlo convertiria una sola sentencia SQL en un salto de
+ * licencia. Una fila que se lee pero esta mal formada tambien es `null`: ahi
+ * se sabe que no hay una licencia utilizable.
  *
  * ## Sin cache
  *
@@ -44,9 +56,13 @@ use Throwable;
  */
 final readonly class DatabaseLicenseRepository implements LicenseRepository
 {
+    /**
+     * @param  Closure(Throwable): bool  $isDatabaseOutage  Si el fallo es PostgreSQL caido o perdido. Lo da el proveedor del modulo con `DependencyFailure`, que es del armazon (`App\Support`) y que la capa de persistencia no alcanza (Deptrac): asi la clasificacion es la misma que la del `503` sin abrir la frontera.
+     */
     public function __construct(
         private ConnectionInterface $connection,
         private LoggerInterface $logger,
+        private Closure $isDatabaseOutage,
     ) {}
 
     public function current(): ?StoredLicense
@@ -61,6 +77,16 @@ final readonly class DatabaseLicenseRepository implements LicenseRepository
             $this->logger->warning('product.license_unreadable', [
                 'reason' => $exception::class,
             ]);
+
+            // `unknown` SOLO si lo que falta es PostgreSQL: el circuito abierto
+            // o la conexion perdida. `unknown` lo concede todo (ADR-059 §4), y
+            // si cualquier fallo valiera, un `REVOKE SELECT ON license` o un
+            // `RENAME` —una sola sentencia SQL— saltaria la licencia. Cualquier
+            // otro fallo es lo de antes: no hay licencia que se pueda usar, y
+            // el gate deniega lo accesorio.
+            if (($this->isDatabaseOutage)($exception)) {
+                throw LicenseUnavailable::because($exception);
+            }
 
             return null;
         }

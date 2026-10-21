@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Exception;
 
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use DateTimeImmutable;
 
 /**
@@ -22,7 +23,7 @@ use DateTimeImmutable;
  * de {@see self::$translationKey} y {@see self::$parameters}. Solo la lanza el
  * camino manual del panel: el escaneo de una persona de baja ya se rechaza antes.
  */
-final class ShiftMarkAfterTermination extends AttendanceDomainException
+final class ShiftMarkAfterTermination extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string>  $parameters  sustituciones del mensaje traducido

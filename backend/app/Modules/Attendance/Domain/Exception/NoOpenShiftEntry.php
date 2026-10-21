@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * No hay tramo que cerrar en esta jornada.
  *
@@ -13,7 +15,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * Es la senal de una carrera, y por eso se lanza en vez de convertirse en una
  * entrada silenciosa.
  */
-final class NoOpenShiftEntry extends AttendanceDomainException
+final class NoOpenShiftEntry extends AttendanceDomainException implements BusinessRejection
 {
     public static function forEmployeeOn(string $employeeUuid, string $workDate): self
     {

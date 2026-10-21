@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
 
 /**
@@ -21,7 +22,7 @@ use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
  * de salud —lo problematico es `sick_leave`— y sin el, el mensaje no diria por
  * que hace falta el texto. La nota en si no aparece nunca (regla dura 21).
  */
-final class AbsenceRequiresNote extends WorkforceDomainException
+final class AbsenceRequiresNote extends WorkforceDomainException implements BusinessRejection
 {
     public static function forType(AbsenceType $type): self
     {

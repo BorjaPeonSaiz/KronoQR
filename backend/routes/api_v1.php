@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\ReadinessController;
+use App\Http\Middleware\ThrottleFailOpen;
 use App\Modules\Attendance\Http\Controller\DiscardedScanController;
 use App\Modules\Attendance\Http\Controller\PinScanController;
 use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
 use App\Modules\Attendance\Http\Controller\ShiftEntryController;
 use App\Modules\Attendance\Http\Controller\VoidShiftEntryController;
-use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
 use App\Modules\Compliance\Http\Controller\IncidentController;
 use App\Modules\Compliance\Http\Controller\LegalExportController;
 use App\Modules\Compliance\Http\Controller\LegalExportEmployeeSearchController;
@@ -139,13 +139,14 @@ Route::get('/ready', ReadinessController::class)->name('health.ready');
  * para que la clave del limite pueda ser el dispositivo del token. Delante solo
  * podria limitar por IP, que es justo lo que no distingue quioscos.
  *
- * Y NO ES EL `throttle` DEL FRAMEWORK SINO `ThrottleScanFailOpen` (CH1): el mismo
+ * Y NO ES EL `throttle` DEL FRAMEWORK SINO `ThrottleFailOpen` (CH1): el mismo
  * limitador con nombre, que si Redis no responde deja pasar el fichaje en vez de
- * devolver un `500` (regla dura 19). Solo las tres rutas de fichaje; `auth`,
- * `portal` y gestion siguen fallando cerradas.
+ * devolver un `500` (regla dura 19). Fallan abiertas las tres rutas de fichaje y
+ * la zona `portal` (ADR-059 §3); `auth`, `2fa`, la puesta en marcha y la gestion
+ * siguen fallando cerradas, con `503`.
  */
 Route::post('/scan', ScanController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan')])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleFailOpen::zone('scan')])
     ->name('attendance.scan');
 
 /*
@@ -160,7 +161,7 @@ Route::post('/scan', ScanController::class)
  * el envio, y cada resultado lleva su propio codigo.
  */
 Route::post('/scan/batch', ScanBatchController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan-batch')])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleFailOpen::zone('scan-batch')])
     ->name('attendance.scan.batch');
 
 /*
@@ -188,7 +189,7 @@ Route::post('/scan/batch', ScanBatchController::class)
  * el tercero no ve a quien prueba codigos al azar. Hacen falta los tres.
  */
 Route::post('/scan/pin', PinScanController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan-pin')])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleFailOpen::zone('scan-pin')])
     ->name('attendance.scan.pin');
 
 /*
@@ -1156,22 +1157,31 @@ Route::middleware([
  * la vez, y se declara en `IdentityServiceProvider`.
  *
  * TRES CONTROLES DISTINTOS Y NINGUNO SUSTITUYE A LOS OTROS, igual que en
- * `/scan/pin`: Nginx limita por origen (§7.2), `throttle:portal` limita por IP y
- * por codigo, y el bloqueo escalonado del §7.5 cuenta FALLOS POR EMPLEADO Y POR
+ * `/scan/pin`: Nginx limita por origen (§7.2), la zona `portal` de Laravel
+ * limita por IP y por codigo (con Redis caido es la que cae, ver abajo), y el
+ * bloqueo escalonado del §7.5 cuenta FALLOS POR EMPLEADO Y POR
  * PUERTA. El contador del portal es distinto del del quiosco, para que sondear
  * uno no deje a nadie sin poder fichar por el otro (regla dura 19).
+ *
+ * CON REDIS CAIDO, LA ZONA `portal` FALLA ABIERTA (ADR-059 §3) y por eso se
+ * declara con `ThrottleFailOpen` y no con `throttle:portal`. Es la capa que
+ * cae; las otras dos —Nginx por origen y el bloqueo por empleado y por origen,
+ * que cuentan en el disco del contenedor— siguen. RL-03 y RL-05 piden el
+ * registro a disposicion del empleado tambien durante una averia. El PDF de
+ * `/me/export` sigue fallando cerrado por su embudo (§6): `503` que remite al
+ * CSV. `ThrottleFailOpenScopeTest` enumera el router con la lista cerrada.
  *
  * LA CADUCIDAD DE LA LICENCIA NO TOCA ESTAS RUTAS (ADR-019, regla dura 15). El
  * portal es registro legal: se degradan funcionalidades accesorias, nunca esto.
  */
 Route::post('/me/login', PortalLoginController::class)
-    ->middleware('throttle:portal')
+    ->middleware(ThrottleFailOpen::zone('portal'))
     ->name('portal.login');
 
 Route::middleware([
     'auth:sanctum',
     'ability:'.TokenAbility::SELF_READ->value,
-    'throttle:portal',
+    ThrottleFailOpen::zone('portal'),
 ])->group(function (): void {
     Route::get('/me/workdays', MyWorkDayController::class)->name('portal.workdays');
 

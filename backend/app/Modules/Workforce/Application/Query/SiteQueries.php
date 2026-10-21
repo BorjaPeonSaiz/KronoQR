@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Query;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkRecordPresence;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneLock;
@@ -25,6 +26,11 @@ final readonly class SiteQueries
     ) {}
 
     public function installationSite(): ?SiteView
+    {
+        return UseCaseInstrumentation::run('workforce.read_installation_site', fn (): ?SiteView => $this->doInstallationSite());
+    }
+
+    private function doInstallationSite(): ?SiteView
     {
         $site = $this->sites->installationSite();
 

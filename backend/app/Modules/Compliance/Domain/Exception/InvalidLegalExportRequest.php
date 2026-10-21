@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Lo que se ha pedido exportar no describe un periodo defendible (RF-IN-05,
  * RL-06).
@@ -15,7 +17,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * creyendo que pidio otro. En un documento con efectos legales, adivinar la
  * intencion es peor que negarse.
  */
-final class InvalidLegalExportRequest extends ComplianceDomainException
+final class InvalidLegalExportRequest extends ComplianceDomainException implements BusinessRejection
 {
     public static function invertedPeriod(string $from, string $to): self
     {

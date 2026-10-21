@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use InvalidArgumentException;
 
 /**
@@ -15,4 +16,4 @@ use InvalidArgumentException;
  * y sin esta comprobacion el comando habria reenviado la primera semana de 2027
  * rotulada como la ultima de 2026.
  */
-final class InvalidIsoWeek extends InvalidArgumentException {}
+final class InvalidIsoWeek extends InvalidArgumentException implements BusinessRejection {}

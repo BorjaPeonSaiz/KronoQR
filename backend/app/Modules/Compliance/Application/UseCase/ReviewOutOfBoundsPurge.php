@@ -22,9 +22,8 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use OpenTelemetry\API\Trace\SpanKind;
-use Throwable;
 
 /**
  * Da por revisado un asiento de purga del registro horario que la conciliacion
@@ -97,28 +96,20 @@ final readonly class ReviewOutOfBoundsPurge
      */
     public function handle(ReviewOutOfBoundsPurgeCommand $command): PurgeReviewOutcome
     {
-        $span = SpanScope::start(
-            'kronoqr.compliance',
+        // La medida comun (V1-RV-03): `PurgeReviewRejected` es un rechazo de
+        // negocio (`BusinessRejection`) y cuenta como `rejected`, no como averia.
+        return UseCaseInstrumentation::run(
             'compliance.review_out_of_bounds_purge',
-            SpanKind::KIND_INTERNAL,
-            ['audit_entry_id' => $command->purgeAuditEntryId],
+            function () use ($command): PurgeReviewOutcome {
+                SpanScope::annotateCurrent(['audit_entry_id' => $command->purgeAuditEntryId]);
+
+                return $this->review($command);
+            },
+            static fn (PurgeReviewOutcome $outcome): array => [
+                'review_entry_id' => $outcome->reviewAuditEntryId,
+                'explains_deletions' => $outcome->explainsDeletions,
+            ],
         );
-
-        try {
-            $outcome = $this->review($command);
-        } catch (Throwable $failure) {
-            $span->end(['outcome' => $failure instanceof PurgeReviewRejected ? 'rejected' : 'error']);
-
-            throw $failure;
-        }
-
-        $span->end([
-            'outcome' => 'reviewed',
-            'review_entry_id' => $outcome->reviewAuditEntryId,
-            'explains_deletions' => $outcome->explainsDeletions,
-        ]);
-
-        return $outcome;
     }
 
     private function review(ReviewOutOfBoundsPurgeCommand $command): PurgeReviewOutcome

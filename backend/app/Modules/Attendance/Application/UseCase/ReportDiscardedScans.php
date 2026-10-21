@@ -16,6 +16,7 @@ use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttribution;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 
 /**
@@ -70,6 +71,14 @@ final readonly class ReportDiscardedScans
      * @return list<string> Los `scan_id` acusados, en el orden en que llegaron.
      */
     public function handle(ReportDiscardedScansCommand $command): array
+    {
+        return UseCaseInstrumentation::run('attendance.report_discarded_scans', fn () => $this->doHandle($command));
+    }
+
+    /**
+     * @return list<string> Los `scan_id` acusados, en el orden en que llegaron.
+     */
+    private function doHandle(ReportDiscardedScansCommand $command): array
     {
         // Una sola recepcion para todo el envio: es cuando llegaron los avisos.
         $recordedAt = $this->clock->now();

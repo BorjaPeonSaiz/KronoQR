@@ -205,7 +205,7 @@ it('avisa en el log cuando el minimo configurado no cabe en la tarjeta', functio
     $warning->once()->withArgs(
         /** @param  array<string, float>  $context */
         function (string $message, array $context): bool {
-            expect($message)->toContain('does not fit')
+            expect($message)->toBe('identity.card_qr_size_limited')
                 ->and($context)->toBe(['configured_mm' => 45.0, 'effective_mm' => 41.4]);
 
             return true;

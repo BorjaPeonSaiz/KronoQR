@@ -13,6 +13,7 @@ use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Identity\Domain\ValueObject\CardFormat;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 
 /**
@@ -45,6 +46,11 @@ final readonly class PrintCredential
      * @throws CredentialAlreadyRevoked imprimir una tarjeta retirada produciria un QR muerto
      */
     public function handle(PrintCredentialCommand $command): ?PrintedCards
+    {
+        return UseCaseInstrumentation::run('identity.print_credential', fn (): ?PrintedCards => $this->doHandle($command));
+    }
+
+    private function doHandle(PrintCredentialCommand $command): ?PrintedCards
     {
         $credential = $this->resolve($command);
 

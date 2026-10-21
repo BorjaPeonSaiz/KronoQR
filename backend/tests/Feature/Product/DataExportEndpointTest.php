@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Application\Port\DataExportQueue;
 use App\Modules\Product\Infrastructure\Job\GenerateDataExportJob;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
@@ -348,3 +349,20 @@ it('el umbral de obsolescencia nunca es menor que el tiempo maximo de generacion
             'PRODUCT_DATA_EXPORT_STALE_AFTER no puede ser menor que el timeout del trabajo de cola.',
         );
 })->group('RF-PD-14');
+
+it('marca fallida la exportacion si no se puede encolar, y responde 503 sin dejarla en curso (ADR-059 §5)', function (): void {
+    app()->instance(DataExportQueue::class, new class implements DataExportQueue
+    {
+        public function enqueue(string $uuid): void
+        {
+            throw new RedisException('Connection refused');
+        }
+    });
+
+    Api::as(exportAdminToken())->post('/api/v1/data-export')
+        ->assertValidResponse(503)
+        ->assertHeader('Retry-After');
+
+    expect(DB::table('data_exports')->value('status'))->toBe('failed')
+        ->and(DB::table('data_exports')->value('failure_reason'))->toBe('unexpected');
+})->group('RF-PD-14', 'RL-20', 'RNF-D-03');

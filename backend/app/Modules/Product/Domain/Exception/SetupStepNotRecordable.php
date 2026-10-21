@@ -6,6 +6,7 @@ namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\SetupStep;
 use App\Modules\Product\Domain\ValueObject\SetupStepState;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * Se intenta marcar a mano un paso que no admite esa marca (RF-PD-03).
@@ -23,7 +24,7 @@ use App\Modules\Product\Domain\ValueObject\SetupStepState;
  * `422` y no `403`: no es una cuestion de permisos —el administrador tiene todos
  * los que hacen falta—, es que la peticion no cabe en el modelo.
  */
-final class SetupStepNotRecordable extends ProductDomainException
+final class SetupStepNotRecordable extends ProductDomainException implements BusinessRejection
 {
     public const string DERIVED_TRANSLATION_KEY = 'setup.step_is_derived';
 

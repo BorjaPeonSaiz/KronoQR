@@ -34,7 +34,11 @@ final class IncidentMetricsCommand extends Command
     {
         $open = $metrics->handle();
 
-        $this->info('Metrica publicada: '.$open.' incidencia(s) abiertas.');
+        // Solo con `-v`: corre cada cinco minutos y su salida va al log del
+        // planificador (`ScheduledTaskOutput`). Una linea por pasada no dice nada
+        // que no diga ya el gauge; un fallo si llega, porque sale por la salida
+        // de error del comando.
+        $this->info('Metrica publicada: '.$open.' incidencia(s) abiertas.', 'v');
 
         return self::SUCCESS;
     }

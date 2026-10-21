@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una busqueda de la persona de la exportacion legal que no cumple los limites
  * de RF-IN-05.
@@ -16,7 +18,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * traduzca el `422` sin volver a medir el termino: la regla vive en
  * `EmployeeSearch` y en ningun otro sitio.
  */
-final class InvalidEmployeeSearch extends ComplianceDomainException
+final class InvalidEmployeeSearch extends ComplianceDomainException implements BusinessRejection
 {
     /** Cota minima incumplida. */
     public const string MIN = 'min';

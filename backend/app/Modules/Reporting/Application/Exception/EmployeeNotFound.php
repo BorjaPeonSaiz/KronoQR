@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -21,7 +22,7 @@ use RuntimeException;
  * por `GET /employees`: ocultarle si un UUID existe no protegeria nada y le
  * costaria un diagnostico.
  */
-final class EmployeeNotFound extends RuntimeException
+final class EmployeeNotFound extends RuntimeException implements BusinessRejection
 {
     public static function withUuid(string $employeeUuid): self
     {

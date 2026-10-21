@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una persona no puede tener dos ausencias activas el mismo dia
  * (**RF-GP-04**).
@@ -33,7 +35,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * es un dato de salud. Van el UUID publico y las fechas, que es lo que hace
  * falta para encontrarla.
  */
-final class OverlappingAbsence extends WorkforceConflict
+final class OverlappingAbsence extends WorkforceConflict implements BusinessRejection
 {
     public static function forEmployee(string $employeeUuid, string $startsOn, string $endsOn): self
     {

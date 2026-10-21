@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Alguien pide escribir o leer una clave que el catalogo no declara (RF-PD-01).
  *
@@ -23,7 +25,7 @@ namespace App\Modules\Product\Domain\Exception;
  * {@see self::$translationKey} y lo resuelve el borde HTTP en el idioma
  * negociado, igual que en {@see InvalidSettingValue}.
  */
-final class UnknownSettingKey extends ProductDomainException
+final class UnknownSettingKey extends ProductDomainException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'settings.unknown_key';
 

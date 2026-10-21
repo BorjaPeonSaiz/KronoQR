@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -18,7 +19,7 @@ use RuntimeException;
  * comprobacion y la firma. Los roles los decidio el propietario el 18-10-2026
  * (doc 01 RF-PR-03, §7.2 «Firmas por consola»).
  */
-final class RetentionResponsibleNotActive extends RuntimeException
+final class RetentionResponsibleNotActive extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly int $userId)
     {

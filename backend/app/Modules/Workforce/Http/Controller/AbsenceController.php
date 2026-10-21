@@ -24,8 +24,8 @@ use App\Modules\Workforce\Http\Resource\AbsenceResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * Ausencias: listado, detalle con historial, alta, correccion y anulacion
@@ -146,7 +146,11 @@ final class AbsenceController extends Controller
             // cuerpo, asi que hay un campo que corregir en el formulario. El
             // `exists:` del `FormRequest` lo caza antes; esto cubre la carrera
             // entre la validacion y la escritura.
-            throw new UnprocessableEntityHttpException('No existe ninguna persona con ese identificador.');
+            // Con `errors`, como cualquier 422 (F4a-5): sale por el mismo
+            // traductor que el `exists:` del `FormRequest`.
+            throw ValidationException::withMessages([
+                'employee_uuid' => [trans('validation.exists', ['attribute' => 'employee_uuid'])],
+            ]);
         }
 
         return $this->respondWith($request, $queries, $absence->uuid, JsonResponse::HTTP_CREATED);

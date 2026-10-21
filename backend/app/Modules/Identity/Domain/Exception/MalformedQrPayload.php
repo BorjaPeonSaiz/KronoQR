@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El texto leido del QR no tiene la forma `FH1.<key_id>.<token>.<sig>` del
  * doc 02 §5.1.
@@ -17,7 +19,7 @@ namespace App\Modules\Identity\Domain\Exception;
  * Por eso el constructor no acepta el payload recibido: un mensaje que lo
  * incluyera acabaria en un log, y ahi puede haber una tarjeta valida de alguien.
  */
-final class MalformedQrPayload extends IdentityDomainException
+final class MalformedQrPayload extends IdentityDomainException implements BusinessRejection
 {
     public static function badFormat(): self
     {

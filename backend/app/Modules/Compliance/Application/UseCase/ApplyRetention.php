@@ -29,6 +29,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
@@ -101,6 +102,11 @@ final readonly class ApplyRetention
     ) {}
 
     public function handle(RetentionRunCommand $command): RetentionOutcome
+    {
+        return UseCaseInstrumentation::run('compliance.apply_retention', fn (): RetentionOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(RetentionRunCommand $command): RetentionOutcome
     {
         // Primera comprobacion de la cuenta, en los dos modos y antes de
         // planificar: una simulacion con un responsable que no vale no sirve de

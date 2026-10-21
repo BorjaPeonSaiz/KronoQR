@@ -11,10 +11,12 @@ use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Domain\Event\ReportExportRequested;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Pide un informe en diferido: crea la fila, deja el asiento y encola el trabajo
@@ -176,7 +178,22 @@ final readonly class RequestReportExport
             );
         }
 
-        $this->queue->enqueue($export->uuid);
+        try {
+            $this->queue->enqueue($export->uuid);
+        } catch (Throwable $failure) {
+            // ADR-059 §5: una solicitud nunca se queda «en curso» sin un trabajo
+            // detras, o bloquearia la siguiente de esta persona. Se marca
+            // fallida aqui y la peticion responde el 503 de la dependencia. Si
+            // tampoco se puede marcar —PostgreSQL caido—, la retira la
+            // obsolescencia; ese segundo fallo no sustituye al primero.
+            try {
+                $this->exports->save($export->fail($this->clock->now(), ReportExportFailure::Unexpected));
+            } catch (Throwable) {
+                // Ver arriba: queda para la obsolescencia.
+            }
+
+            throw $failure;
+        }
 
         return $export;
     }

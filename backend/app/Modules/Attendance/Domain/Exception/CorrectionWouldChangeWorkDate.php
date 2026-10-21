@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La correccion mueve la hora de entrada a otro dia civil, y con ella el tramo a
  * otra jornada (RN-05, ADR-006, regla dura 4).
@@ -31,7 +33,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * registro legal es exactamente el mismo, y ademas se lee: «este tramo no
  * ocurrio el dia 14, ocurrio el 15».
  */
-final class CorrectionWouldChangeWorkDate extends AttendanceDomainException
+final class CorrectionWouldChangeWorkDate extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  bool  $byVoiding  la causa es anular el tramo que abria la jornada, no mover una entrada

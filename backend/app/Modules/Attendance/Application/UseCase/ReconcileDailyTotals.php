@@ -17,6 +17,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsSnapshot;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
@@ -118,6 +119,7 @@ final readonly class ReconcileDailyTotals
         private ProjectionMetrics $metrics,
         private Clock $clock,
         private LoggerInterface $logger,
+        private CaughtFailureReporter $caughtFailures,
     ) {}
 
     public function handle(ReconcileDailyTotalsCommand $command): ReconciliationReport
@@ -236,6 +238,11 @@ final readonly class ReconcileDailyTotals
                 'work_date' => $date->isoDate,
                 'exception' => $failure::class,
             ]);
+
+            // Al historico de errores (RF-PD-15): una jornada que no se puede
+            // leer no es un caso de negocio, y el codigo de salida en rojo no
+            // dice cual ni por que.
+            $this->caughtFailures->report($failure);
 
             return [];
         }
@@ -396,9 +403,17 @@ final readonly class ReconcileDailyTotals
                 'sqlstate' => $sqlState,
             ]);
 
-            return self::isContention($sqlState)
-                ? CorrectionAttempt::contended($suspicion)
-                : CorrectionAttempt::failed($suspicion);
+            if (self::isContention($sqlState)) {
+                // Un candado que no se pudo tomar no es una averia: la pasada
+                // siguiente lo vuelve a intentar.
+                return CorrectionAttempt::contended($suspicion);
+            }
+
+            // Al historico de errores (RF-PD-15): una proyeccion que diverge y no
+            // se puede corregir es una averia que el IT del cliente tiene que ver.
+            $this->caughtFailures->report($failure);
+
+            return CorrectionAttempt::failed($suspicion);
         }
     }
 

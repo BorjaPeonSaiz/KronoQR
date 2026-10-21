@@ -12,7 +12,7 @@ use App\Support\Resilience\CircuitBreaker;
  * While open, {@see CircuitBreakingPhpRedisConnector} fails every connection at
  * once with {@see RedisCircuitOpen}, a `RedisException`, so the existing
  * fallbacks —the `resilient` cache, the `failover-after-commit` queue,
- * `ThrottleScanFailOpen`, the metric writer and reader— keep working without
+ * `ThrottleFailOpen`, the metric writer and reader— keep working without
  * waiting first. Logs `redis.circuit_opened` and `redis.circuit_closed`.
  */
 final class RedisCircuitBreaker extends CircuitBreaker

@@ -17,6 +17,7 @@ use App\Modules\Identity\Domain\Policy\DeactivationVerdict;
 use App\Modules\Identity\Domain\Policy\ManagementAccountDeactivationGuard;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 
@@ -73,13 +74,13 @@ final readonly class DeactivateManagementAccountHandler
 
     public function handle(DeactivateManagementAccountCommand $command): AccountDeactivationOutcome
     {
-        return $this->telemetry->measure(
+        return UseCaseInstrumentation::run('identity.deactivate_management_account', fn (): AccountDeactivationOutcome => $this->telemetry->measure(
             ManagementAccountChange::Deactivated,
             $command->accountUuid,
             $command->actorUuid,
             fn (): AccountDeactivationOutcome => $this->deactivate($command),
             static fn (AccountDeactivationOutcome $outcome): string => $outcome->name,
-        );
+        ));
     }
 
     private function deactivate(DeactivateManagementAccountCommand $command): AccountDeactivationOutcome

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -14,7 +15,7 @@ use RuntimeException;
  * fue sustituida. `409`, como la anterior: el estado del recurso no es el que la
  * peticion supone.
  */
-final class TwoFactorNotEnrolled extends RuntimeException
+final class TwoFactorNotEnrolled extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

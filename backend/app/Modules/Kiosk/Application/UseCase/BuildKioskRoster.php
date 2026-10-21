@@ -10,6 +10,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ClockingEmployees;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Compone el padron minimo del centro de un quiosco (`GET /api/v1/kiosk/roster`,
@@ -59,6 +60,11 @@ final readonly class BuildKioskRoster
     ) {}
 
     public function forSite(int $siteId, string $deviceUuid): KioskRoster
+    {
+        return UseCaseInstrumentation::run('kiosk.build_kiosk_roster', fn (): KioskRoster => $this->doForSite($siteId, $deviceUuid));
+    }
+
+    private function doForSite(int $siteId, string $deviceUuid): KioskRoster
     {
         $members = $this->employees->atSite($siteId);
 

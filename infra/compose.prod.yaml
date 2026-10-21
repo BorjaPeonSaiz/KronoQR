@@ -676,6 +676,8 @@ services:
       # Con el defecto de la imagen (8m) tambien aqui: vacia, la directiva
       # `client_max_body_size` es invalida y nginx no arranca.
       NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-8m}
+      # Tasa por IP de /api/v1/scan/pin (ADR-059 §3). Defecto tambien aqui: vacia, `rate=r/m` no arranca.
+      NGINX_SCAN_PIN_RATE_PER_MINUTE: ${NGINX_SCAN_PIN_RATE_PER_MINUTE:-60}
     ports:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"

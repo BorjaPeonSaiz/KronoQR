@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La revision de una discrepancia de la zona del centro no se puede escribir
  * asi (RN-23, ADR-056; bloque 2 de la 2.3.0).
@@ -12,7 +14,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * ingles —va al log—; lo que lee quien teclea la orden sale de
  * {@see self::$translationKey} y {@see self::$parameters}.
  */
-final class SiteTimezoneReviewRejected extends ComplianceDomainException
+final class SiteTimezoneReviewRejected extends ComplianceDomainException implements BusinessRejection
 {
     /** La clave del rechazo por cuenta: la consola la distingue para salir con 2. */
     public const string RESPONSIBLE_NOT_ACTIVE = 'work-record-review.responsible_inactive';

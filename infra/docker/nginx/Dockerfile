@@ -158,7 +158,11 @@ USER 101
 # sin consultar su jornada, y para KIOSK_VLAN_CIDR frenaria el fichaje en el
 # cambio de turno. Esas se EXIGEN, y quien las comprueba es
 # docker-entrypoint.d/04-kronoqr-required-env.sh.
-ENV NGINX_CLIENT_MAX_BODY_SIZE=8m
+#
+# NGINX_SCAN_PIN_RATE_PER_MINUTE (ADR-059 §3): tasa por IP de /api/v1/scan/pin.
+# Sin defecto, `rate=r/m` seria una directiva rota.
+ENV NGINX_CLIENT_MAX_BODY_SIZE=8m \
+    NGINX_SCAN_PIN_RATE_PER_MINUTE=60
 
 EXPOSE 8080 8443
 

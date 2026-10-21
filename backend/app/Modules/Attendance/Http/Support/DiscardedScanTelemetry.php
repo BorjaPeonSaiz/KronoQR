@@ -7,15 +7,15 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Command\ReportDiscardedScansCommand;
 use App\Modules\Shared\Application\Support\SpanScope;
 use Illuminate\Support\Facades\Context;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La traza y el log de un envio de avisos de fichajes descartados (RN-22,
+ * El log de un envio de avisos de fichajes descartados (RN-22,
  * ADR-047, doc 02 §8.1).
  *
- * Un span por peticion que cuelga del `traceparent` del quiosco, y un apunte de
+ * Los atributos de la peticion en el span en curso —el del acto lo abre
+ * `ReportDiscardedScans` con `UseCaseInstrumentation`—, y un apunte de
  * log con el dispositivo, cuantos avisos traia y sus `scan_id` —que genera la
  * tablet y no identifican a nadie—. **Nunca el `qr_payload` ni el codigo de
  * empleado** (regla dura 21), y tampoco si se atribuyo cada aviso: eso se queda
@@ -27,8 +27,6 @@ use Throwable;
  */
 final readonly class DiscardedScanTelemetry
 {
-    private const string SPAN_NAME = 'attendance.report_discarded_scans';
-
     public function __construct(private LoggerInterface $logger) {}
 
     /**
@@ -37,7 +35,9 @@ final readonly class DiscardedScanTelemetry
      */
     public function measure(ReportDiscardedScansCommand $command, callable $process): array
     {
-        $span = SpanScope::start('kronoqr.attendance', self::SPAN_NAME, SpanKind::KIND_SERVER, [
+        // El span del acto lo abre `ReportDiscardedScans` (UseCaseInstrumentation);
+        // lo que es de la peticion va al span de servidor.
+        SpanScope::annotateCurrent([
             'discarded_scans.size' => \count($command->reports),
             'device.id' => $command->deviceUuid,
         ]);
@@ -50,18 +50,12 @@ final readonly class DiscardedScanTelemetry
 
         $startedAt = microtime(true);
 
-        try {
-            $acknowledged = $process();
-        } catch (Throwable $failure) {
-            $span->end(['discarded_scans.acknowledged' => 0]);
+        $acknowledged = $process();
 
-            throw $failure;
-        }
-
-        $span->end(['discarded_scans.acknowledged' => \count($acknowledged)]);
+        SpanScope::annotateCurrent(['discarded_scans.acknowledged' => \count($acknowledged)]);
 
         $this->logger->warning('attendance.discarded_scans_reported', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'device_id' => $command->deviceUuid,
             'reports' => \count($command->reports),
             'scan_ids' => $acknowledged,

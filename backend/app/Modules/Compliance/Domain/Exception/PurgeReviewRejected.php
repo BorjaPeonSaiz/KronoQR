@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * No se puede dar por revisado ese asiento de purga (RL-04, RS-07, ADR-057
  * enmienda del 10-10-2026 §6).
@@ -14,7 +16,7 @@ namespace App\Modules\Compliance\Domain\Exception;
  * `lang/{es,en}/work-record-review.php`. Ningun parametro es texto libre: el
  * motivo de la revision no viaja nunca en una excepcion (regla dura 21).
  */
-final class PurgeReviewRejected extends ComplianceDomainException
+final class PurgeReviewRejected extends ComplianceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, int>  $parameters

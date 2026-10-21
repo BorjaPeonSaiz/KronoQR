@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * El fichero de plantilla no se puede leer (**RF-GP-05**).
  *
@@ -15,7 +17,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * este endpoint que no es un informe: cualquier otra cosa, incluidas cuarenta
  * lineas rechazadas, sale con `200` y su informe.
  */
-final class UnreadableImportFile extends WorkforceDomainException
+final class UnreadableImportFile extends WorkforceDomainException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'import.unreadable_file';
 

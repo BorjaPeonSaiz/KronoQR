@@ -6,9 +6,14 @@ use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
+use Illuminate\Database\QueryException;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\SDK\Trace\ImmutableSpan;
 use Spectator\Spectator;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -16,6 +21,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Telemetry\RecordingTracer;
 use Tests\Support\Time\FrozenTime;
 
 /*
@@ -489,3 +495,90 @@ it('aplaza la salida si la entrada no se pudo procesar y las registra en orden a
         ->and(DB::table('shift_entries')->value('status'))->toBe('closed')
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RN-21', 'RF-KI-04', 'RF-AT-07');
+
+it('deja en error_events el fallo del elemento no procesado, sin datos personales', function (): void {
+    // F4c-1: el `catch` que mantiene vivo el lote no puede dejar el fallo fuera
+    // del historico (RF-PD-15). Con la ruta del lote y el dispositivo, nunca el
+    // nombre de quien fichaba ni el payload de su tarjeta (regla dura 21).
+    $escenario = escenarioDeLote();
+
+    app()->instance(CredentialResolver::class, new class implements CredentialResolver
+    {
+        public function resolve(string $qrPayload): CredentialResolution
+        {
+            throw new RuntimeException('Fallo transitorio resolviendo la credencial.');
+        }
+    });
+
+    sincronizar($escenario, [escaneoEncolado('2026-03-14T07:00:00Z')])
+        ->assertStatus(207)
+        ->assertValidResponse();
+
+    $fila = DB::table('error_events')->where('exception_class', RuntimeException::class)->first();
+
+    expect($fila)->not->toBeNull()
+        ->and($fila?->source)->toBe('api')
+        ->and($fila?->device_id)->toBe($escenario['deviceUuid'])
+        ->and((string) $fila?->context)->toContain('/api/v1/scan/batch')
+        ->and(json_encode($fila))->not->toContain(TARJETA_LOTE);
+})->group('RF-PD-15', 'RF-KI-04', 'RN-21');
+
+it('con la conexion cortada en el tercer elemento responde el lote parcial sin fila, sin linea de 503 y sin span en error', function (): void {
+    // ADR-059 §2: el elemento que pierde la conexion es una averia que ya consta
+    // por su cortacircuitos, no un defecto. El lote no responde `503` —responde
+    // lo que hizo—, asi que tampoco deja la linea `http.dependency_unavailable`
+    // ni marca la peticion como fallida. Antes, `ServerErrorReporter` renderizaba
+    // el fallo para saber su estado y ese render dejaba los dos rastros, mas una
+    // fila en `error_events` porque el filtro solo reconocia el circuito abierto.
+    $escenario = escenarioDeLote();
+    $real = app(CredentialResolver::class);
+
+    app()->instance(CredentialResolver::class, new class($real) implements CredentialResolver
+    {
+        private int $llamadas = 0;
+
+        public function __construct(private readonly CredentialResolver $real) {}
+
+        public function resolve(string $qrPayload): CredentialResolution
+        {
+            if (++$this->llamadas === 3) {
+                $driver = new PDOException('SQLSTATE[HY000]: General error: 7 no connection to the server');
+                $driver->errorInfo = ['HY000', 7, 'no connection to the server'];
+
+                throw new QueryException('pgsql', 'select * from credentials where payload = ?', [TARJETA_LOTE], $driver);
+            }
+
+            return $this->real->resolve($qrPayload);
+        }
+    });
+
+    /** @var ArrayObject<int, string> $lineas */
+    $lineas = new ArrayObject;
+    Event::listen(MessageLogged::class, static function (MessageLogged $apunte) use ($lineas): void {
+        $lineas->append($apunte->message);
+    });
+    $filas = DB::table('error_events')->count();
+
+    RecordingTracer::around(function (RecordingTracer $tracer) use ($escenario, $lineas, $filas): void {
+        $respuesta = sincronizar($escenario, [
+            escaneoEncolado('2026-03-14T07:00:00Z'),
+            escaneoEncolado('2026-03-14T15:00:00Z'),
+            escaneoEncolado('2026-03-14T16:00:00Z'),
+        ]);
+
+        $respuesta->assertStatus(207)->assertValidResponse();
+
+        $peticion = array_values(array_filter(
+            $tracer->finishedSpans(),
+            static fn (ImmutableSpan $span): bool => $span->getAttributes()->has('http.request.method'),
+        ));
+
+        expect($peticion)->toHaveCount(1)
+            ->and($respuesta->json('results.0.outcome.action'))->toBe('clock_in')
+            ->and($respuesta->json('results.1.outcome.action'))->toBe('clock_out')
+            ->and($respuesta->json('results.2.status'))->not->toBe($respuesta->json('results.0.status'))
+            ->and(DB::table('error_events')->count())->toBe($filas)
+            ->and($lineas->getArrayCopy())->not->toContain('http.dependency_unavailable')
+            ->and(array_map(static fn (ImmutableSpan $span): string => $span->getStatus()->getCode(), $peticion))->not->toContain(StatusCode::STATUS_ERROR);
+    });
+})->group('RNF-D-03', 'RF-KI-04', 'RN-21', 'RF-PD-15');

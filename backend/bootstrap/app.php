@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\DependencyUnavailableResponse;
 use App\Exceptions\ProblemDetails;
 use App\Http\Middleware\NegotiateLocale;
 use App\Http\Middleware\PreventResponseCaching;
 use App\Http\Middleware\PropagateTraceContext;
 use App\Http\Middleware\RecordHttpMetrics;
+use App\Http\Middleware\RejectUnreadableBody;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
@@ -65,6 +67,7 @@ use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
@@ -78,10 +81,10 @@ use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
-use App\Support\Database\DatabaseUnavailable;
-use App\Support\Redis\RedisCircuitOpen;
+use App\Support\Resilience\DependencyFailure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -93,6 +96,7 @@ use Illuminate\Support\Number;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -247,6 +251,10 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(append: [
             NegotiateLocale::class,
+            // Un cuerpo que no se puede leer: `400` si es JSON mal formado y `415`
+            // si es de otro tipo (D6). Detras del idioma, para que salgan en el
+            // pedido. Ver `RejectUnreadableBody`.
+            RejectUnreadableBody::class,
             /*
              * El rastro de uso de un acceso de soporte (tarea 5.9, RF-PD-11,
              * ADR-020, regla dura 6).
@@ -453,13 +461,26 @@ return Application::configure(basePath: dirname(__DIR__))
          * cabeceras de la excepcion (`Allow`).
          */
         $exceptions->render(static function (HttpException $exception): mixed {
+            // Un `422` del framework (`abort(422)`, una
+            // `UnprocessableEntityHttpException`) sale como lo que es, una
+            // validacion fallida, y con `errors`, que el contrato exige (F4a-5).
+            if ($exception->getStatusCode() === 422) {
+                return ProblemDetails::validationFailed(['request' => [$exception->getMessage() !== '' ? $exception->getMessage() : 'La peticion no se ha podido atender.']]);
+            }
+
             if ($exception->getStatusCode() !== 503) {
                 return ProblemDetails::httpError($exception->getStatusCode(), ProblemDetails::headersOf($exception));
             }
 
-            $retryAfter = $exception->getHeaders()['Retry-After'] ?? '60';
+            $retryAfter = (int) ($exception->getHeaders()['Retry-After'] ?? '60');
 
-            return ProblemDetails::maintenance((int) $retryAfter);
+            // Solo es `maintenance` si la instalacion lo esta de verdad (F4a-6):
+            // cualquier otro `503` del framework es un servicio no disponible, y
+            // leer «se esta actualizando» durante una averia confunde a quien
+            // tiene que actuar.
+            return app()->isDownForMaintenance()
+                ? ProblemDetails::maintenance($retryAfter)
+                : ProblemDetails::dependencyUnavailable($retryAfter);
         });
 
         /*
@@ -1338,36 +1359,104 @@ return Application::configure(basePath: dirname(__DIR__))
          * nadie tradujo.
          */
         /*
-         * POSTGRESQL INALCANZABLE: `503` CON `Retry-After`, Y SIN INFORMAR (R3-CH-02).
+         * DEPENDENCIA CAIDA: `503` CON `Retry-After`, NUNCA `500` (ADR-059 §1,
+         * R3-CH-02, R3-CH-03, V3-CH-1, V21-3-CH-1).
          *
-         * El conector de PostgreSQL con cortacircuitos convierte «no hay
-         * servidor» en `DatabaseUnavailable`, y el framework la envuelve en un
-         * `QueryException`; se busca en la cadena `previous`. Va justo antes del
-         * `500` generico para que cualquier traduccion especifica de arriba siga
-         * ganando. Vale para toda ruta, no solo el fichaje: a quien la recibe le
-         * toca lo mismo en todas —reintentar pasado `Retry-After`—, y el quiosco
-         * conserva el fichaje en su cola ante cualquier `503`.
+         * PostgreSQL inalcanzable o perdido a mitad de una sentencia, del
+         * `COMMIT` o del `ROLLBACK`, y Redis caido al conectar o a mitad de una
+         * orden: `DependencyFailure` lo reconoce en la cadena `previous`. Va justo
+         * antes del `500` generico para que cualquier traduccion especifica de
+         * arriba siga ganando —el `503` del embudo de PDF que remite al CSV en el
+         * portal, por ejemplo—. Vale para toda ruta: a quien lo recibe le toca lo
+         * mismo en todas, reintentar pasado `Retry-After`, y el quiosco conserva
+         * el fichaje ante cualquier `503`.
          *
-         * Y NO SE INFORMA: ni `error_events` ni una linea de log por peticion. La
-         * averia ya consta una vez, como `database.circuit_opened`; informar cada
-         * peticion volveria a la base caida desde el historico de errores y
-         * escribiria cientos de lineas por segundo durante la caida.
+         * EL RASTRO, UNA LINEA POR PETICION Y NINGUNA FILA (§2): la respuesta deja
+         * `http.dependency_unavailable` en el log y marca el span de la peticion
+         * (`DependencyUnavailableResponse`). No se informa a `error_events`: con
+         * PostgreSQL caido es imposible, y con Redis caido seria una fila por
+         * peticion. La averia ya consta una vez, como `<dependencia>.circuit_opened`.
+         * La UNICA que se sigue informando es la primera `RedisException`, la que
+         * abre el circuito: con PostgreSQL arriba, su fila es la de la averia.
+         *
+         * El predicado es UNO, `DependencyFailure::isOnRecordThroughItsCircuit()`,
+         * el mismo que usa `CaughtFailureHistory` para los fallos capturados.
+         *
+         * FUERA DE UNA PETICION (un trabajo, una orden) no hay respuesta que deje
+         * la linea, y callar del todo dejaria una conexion perdida en un trabajo
+         * sin ningun rastro. Ahi deja un `warning` `dependency.unavailable` con la
+         * dependencia y la clase —nunca el mensaje, que lleva host y puerto— y no
+         * sigue al informe por defecto ni a `error_events`: con PostgreSQL caido
+         * no se puede escribir, y la averia ya consta por su cortacircuitos. Lo
+         * que el trabajo haga despues (fallar, `scheduler.command_failed`) deja
+         * su propio rastro (§5).
          */
-        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DatabaseUnavailable::foundIn($exception) instanceof DatabaseUnavailable);
+        $duringHttpRequest = static function (): bool {
+            try {
+                return request()->route() !== null;
+            } catch (Throwable) {
+                return false;
+            }
+        };
 
-        // Lo mismo con el circuito de Redis abierto (R3-CH-01): una ruta que
-        // falla cerrada sin Redis —panel, portal— informaria cada peticion a
-        // `error_events` y al log mientras dure la caida, que ya consta una vez
-        // como `redis.circuit_opened`. El PRIMER fallo, el que abre el circuito,
-        // es una `RedisException` normal y se sigue informando.
-        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => RedisCircuitOpen::isCauseOf($exception));
+        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DependencyFailure::isOnRecordThroughItsCircuit($exception) && $duringHttpRequest());
 
-        $exceptions->render(static function (Throwable $exception): mixed {
-            $unavailable = DatabaseUnavailable::foundIn($exception);
+        $exceptions->report(static function (Throwable $exception): ?bool {
+            if (! DependencyFailure::isOnRecordThroughItsCircuit($exception)) {
+                return null;
+            }
 
-            return $unavailable instanceof DatabaseUnavailable
-                ? ProblemDetails::dependencyUnavailable($unavailable->retryAfterSeconds)
-                : null;
+            try {
+                app(LoggerInterface::class)->warning('dependency.unavailable', [
+                    'dependency' => DependencyFailure::dependencyOf($exception) ?? DependencyFailure::REDIS,
+                    'failure' => $exception::class,
+                ]);
+            } catch (Throwable) {
+                // Sin log no hay nada mas que hacer: el informe no puede lanzar.
+            }
+
+            return false;
+        });
+
+        /*
+         * LOS RECHAZOS ESPERADOS NO SON UN `ERROR` DEL LOG (V4-BE-2, V21-4-BE-6).
+         *
+         * Una credencial que no vale, un bloqueo, un `409` de la zona horaria
+         * fija: el producto funcionando. Sin esto el manejador los informaba y
+         * cada uno dejaba una linea `ERROR` con la excepcion entera, duplicando
+         * el apunte `auth.login_failed` del diario y escondiendo los errores de
+         * verdad a quien opera. Lo que se deja de informar es lo que marca
+         * `BusinessRejection` **y** se traduce a un `4xx` en una peticion HTTP:
+         * un rechazo que nadie traduce es un `500`, un defecto del producto, y
+         * sigue llegando al log y a `error_events`. Fuera de una peticion (una
+         * orden de consola) todo se sigue informando, como hasta ahora.
+         */
+        $exceptions->dontReportWhen(static function (Throwable $exception): bool {
+            if (! $exception instanceof BusinessRejection) {
+                return false;
+            }
+
+            try {
+                $request = request();
+
+                return $request->route() !== null
+                    && app(ExceptionHandler::class)->render($request, $exception)->getStatusCode() < 500;
+            } catch (Throwable) {
+                return false;
+            }
+        });
+
+        // El `render` FINAL: el unico que deja el rastro de la peticion.
+        // `ServerErrorReporter` no llega aqui con una dependencia caida (la
+        // trata como `503` sin renderizar), asi que la linea sale una vez.
+        $exceptions->render(static function (Throwable $exception, Request $request): mixed {
+            $response = DependencyUnavailableResponse::for($exception, $request);
+
+            if ($response !== null) {
+                DependencyUnavailableResponse::leaveTrail($exception, $request);
+            }
+
+            return $response;
         });
 
         $exceptions->render(static function (Throwable $exception): mixed {

@@ -57,6 +57,28 @@ caso() {
   printf '  [ok]    %s\n' "${descripcion}"
 }
 
+# pin_rate DESCRIPCION VALOR SALIDA_ESPERADA TEXTO: NGINX_SCAN_PIN_RATE_PER_MINUTE
+# (ADR-059 §3). VALOR "-" = variable ausente (el defecto de la imagen la pone).
+pin_rate() {
+  local descripcion="$1" valor="$2" esperada="$3" texto="$4" salida codigo=0
+
+  if [ "${valor}" = "-" ]; then
+    salida="$(env -u NGINX_SCAN_PIN_RATE_PER_MINUTE KIOSK_VLAN_CIDR=10.0.20.0/24 PORTAL_INTERNAL_CIDR=172.28.0.0/16 \
+      METRICS_ALLOW_CIDR=172.29.0.20/32 bash "${ENTRYPOINT}" 2>&1)" || codigo=$?
+  else
+    salida="$(env NGINX_SCAN_PIN_RATE_PER_MINUTE="${valor}" KIOSK_VLAN_CIDR=10.0.20.0/24 PORTAL_INTERNAL_CIDR=172.28.0.0/16 \
+      METRICS_ALLOW_CIDR=172.29.0.20/32 bash "${ENTRYPOINT}" 2>&1)" || codigo=$?
+  fi
+
+  if [ "${codigo}" != "${esperada}" ] || { [ -n "${texto}" ] && ! grep -qF -- "${texto}" <<<"${salida}"; }; then
+    printf '  [FALLA] %s: salio con %s (se esperaba %s) o falta "%s"\n%s\n' "${descripcion}" "${codigo}" "${esperada}" "${texto}" "${salida}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %s\n' "${descripcion}"
+}
+
 # real_ip DESCRIPCION LISTA ESPERADO: lo que rinde 06-kronoqr-real-ip.envsh,
 # cargado con `.` como hace el punto de entrada de la imagen, en `sh`.
 real_ip() {
@@ -145,6 +167,16 @@ main() {
   caso "basura en la red del panel no rompe el registro" 1 "ADMIN_INTERNAL_CIDR=" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
   ADMIN_NET=""
   caso "red del panel vacia: abierta, y lo dice" 0 "ADMIN_INTERNAL_CIDR vacia" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+
+  # ADR-059 §3: la tasa de /scan/pin tiene defecto en la imagen y se valida si viene.
+  pin_rate "tasa del PIN ausente: vale el defecto de la imagen" "-" 0 "CIDR IPv4 validos"
+  pin_rate "tasa del PIN 60" 60 0 ""
+  pin_rate "tasa del PIN 6000 (limite alto)" 6000 0 ""
+  pin_rate "tasa del PIN 0" 0 1 "NGINX_SCAN_PIN_RATE_PER_MINUTE='0'"
+  pin_rate "tasa del PIN 6001" 6001 1 "no es un entero entre 1 y 6000"
+  pin_rate "tasa del PIN vacia" "" 1 "NGINX_SCAN_PIN_RATE_PER_MINUTE=''"
+  pin_rate "tasa del PIN con unidad" "60r/m" 1 "Que hacer: corrige NGINX_SCAN_PIN_RATE_PER_MINUTE"
+  pin_rate "basura con comillas en la tasa no rompe el registro" '60"}' 1 "no es un entero"
 
   admin_net "red del panel vacia rinde 0.0.0.0/0 (sin filtro)" "" "0.0.0.0/0"
   admin_net "red del panel con valor se rinde tal cual" "10.20.0.0/24" "10.20.0.0/24"

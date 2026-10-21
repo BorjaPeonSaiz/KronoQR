@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha pedido descargar una exportacion que todavia esta `pending` o `running`
  * (**RF-PD-14**).
@@ -17,7 +19,7 @@ namespace App\Modules\Product\Domain\Exception;
  * que esperar. La fila sigue en la lista con su estado para que se sepa que
  * existio (regla dura 5).
  */
-final class DataExportNotReady extends ProductDomainException
+final class DataExportNotReady extends ProductDomainException implements BusinessRejection
 {
     public function __construct(public readonly string $uuid)
     {

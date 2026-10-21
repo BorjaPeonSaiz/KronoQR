@@ -9,6 +9,7 @@ use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use Illuminate\Bus\Queueable;
@@ -117,6 +118,7 @@ final class GenerateReportExportJob implements ShouldQueue
         QueuedJobFailureMetrics $metrics,
         Application $app,
         LoggerInterface $logger,
+        CaughtFailureReporter $caughtFailures,
     ): void {
         $startedAt = microtime(true);
 
@@ -126,11 +128,16 @@ final class GenerateReportExportJob implements ShouldQueue
         try {
             $export = $exports->handle($this->exportUuid);
         } catch (Throwable $failure) {
-            $logger->error('El informe en diferido no se pudo generar.', [
+            $logger->error('reporting.report_export_failed', [
                 'report_export_uuid' => $this->exportUuid,
                 // La clase, nunca el mensaje. Ver el docblock.
                 'failure' => $failure::class,
             ]);
+
+            // Y al historico de errores (RF-PD-15): capturarlo evita el
+            // reintento, no que el IT del cliente lo vea. El mensaje lo sanea
+            // el historico en el servidor, no este log.
+            $caughtFailures->report($failure);
 
             /*
              * LA METRICA SE INCREMENTA A MANO PORQUE LA EXCEPCION NO SALE.
@@ -163,7 +170,7 @@ final class GenerateReportExportJob implements ShouldQueue
          * duracion, filas y tamaño. Ni el nombre de quien lo pidio, ni el de nadie
          * que salga dentro, ni la ruta del fichero (regla dura 21).
          */
-        $logger->info('Informe en diferido generado.', [
+        $logger->info('reporting.report_export_generated', [
             'report_export_uuid' => $export->uuid,
             'kind' => $export->kind->value,
             'format' => $export->format,
@@ -198,7 +205,7 @@ final class GenerateReportExportJob implements ShouldQueue
         /** @var LoggerInterface $logger */
         $logger = $container->make(LoggerInterface::class);
 
-        $logger->error('El trabajo del informe en diferido termino sin poder cerrarse.', [
+        $logger->error('reporting.report_export_job_failed', [
             'report_export_uuid' => $this->exportUuid,
             'failure' => $exception::class,
         ]);
@@ -233,10 +240,16 @@ final class GenerateReportExportJob implements ShouldQueue
              */
             $container->make(ReportExportStorage::class)->deleteAllFor($this->exportUuid);
         } catch (Throwable $ignored) {
-            $logger->error('Tampoco se pudo marcar el informe en diferido como fallido.', [
+            $logger->error('reporting.report_export_failure_not_recorded', [
                 'report_export_uuid' => $this->exportUuid,
                 'failure' => $ignored::class,
             ]);
+
+            try {
+                $container->make(CaughtFailureReporter::class)->report($ignored);
+            } catch (Throwable) {
+                // Ya va por el log de arriba; sin historico, se queda ahi.
+            }
         }
     }
 }

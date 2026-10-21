@@ -6,18 +6,16 @@ namespace App\Modules\Product\Http\Support;
 
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de `GET` y `PATCH /api/v1/settings` (doc 02 §8.1,
+ * El log de `GET` y `PATCH /api/v1/settings` (doc 02 §8.1,
  * RF-PD-01).
  *
- * Mismo sitio y mismo motivo que el resto de las telemetrias del producto: en el
- * borde, para que el `trace_id` de `traceparent` sea el padre del span y para que
- * el caso de uso se quede orquestando reglas sin un `try/finally` de medicion
- * alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## El log del `PATCH` dice QUE claves, nunca sus valores
  *
@@ -50,24 +48,17 @@ final readonly class SettingsTelemetry
      */
     public function measureRead(callable $read): ResolvedSettings
     {
-        $span = SpanScope::start('kronoqr.product', 'product.read_settings', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $settings = $read();
-        } catch (Throwable $failure) {
-            $span->end();
+        $settings = $read();
 
-            throw $failure;
-        }
-
-        $span->end([
+        SpanScope::annotateCurrent([
             'settings.keys' => \count($settings->all()),
             'settings.unknown_keys' => \count($settings->unknownKeys),
         ]);
 
-        $this->logger->info('product.settings_read', [
-            'trace_id' => $span->traceId(),
+        $this->logger->info('product.settings_retrieved', [
+            'trace_id' => SpanScope::currentTraceId(),
             'keys' => \count($settings->all()),
             'unknown_keys' => $settings->unknownKeys,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),
@@ -82,21 +73,14 @@ final readonly class SettingsTelemetry
      */
     public function measureUpdate(array $requestedKeys, callable $update): ResolvedSettings
     {
-        $span = SpanScope::start('kronoqr.product', 'product.update_settings', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $settings = $update();
-        } catch (Throwable $failure) {
-            $span->end();
+        $settings = $update();
 
-            throw $failure;
-        }
-
-        $span->end(['settings.requested_keys' => \count($requestedKeys)]);
+        SpanScope::annotateCurrent(['settings.requested_keys' => \count($requestedKeys)]);
 
         $this->logger->notice('product.settings_updated', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             // Los nombres de las claves, nunca sus valores. Ver el docblock.
             'requested_keys' => $requestedKeys,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),

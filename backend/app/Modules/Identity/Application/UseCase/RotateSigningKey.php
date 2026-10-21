@@ -17,6 +17,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
 use Illuminate\Support\Str;
@@ -80,6 +81,11 @@ final readonly class RotateSigningKey
      * @throws SigningKeyRotationNotReady si la configuracion no esta en solape
      */
     public function handle(RotateSigningKeyCommand $command): SigningKeyRotationReport
+    {
+        return UseCaseInstrumentation::run('identity.rotate_signing_key', fn (): SigningKeyRotationReport => $this->doHandle($command));
+    }
+
+    private function doHandle(RotateSigningKeyCommand $command): SigningKeyRotationReport
     {
         $keyring = $this->keys->keyring();
 

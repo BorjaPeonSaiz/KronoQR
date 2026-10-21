@@ -340,6 +340,12 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
                 // desaparece obliga a quien consulta el log a escribir dos
                 // consultas para la misma pregunta.
                 'subject_uuid' => $subjectUuid,
+                // En el portal y en el PIN del quiosco el sujeto es un empleado,
+                // y el log de todo el producto lo identifica como
+                // `employee_uuid` (doc 02 §8.1, R4-BE-04): una consulta por esa
+                // clave en Loki tiene que encontrar tambien sus accesos. Siempre
+                // presente en esos canales, aunque sea nulo, por lo mismo.
+                ...($channel !== AuthChannel::MANAGEMENT ? ['employee_uuid' => $subjectUuid] : []),
                 'ip_hash' => $this->addresses->of($this->context->ip()),
                 ...$extra,
             ]);

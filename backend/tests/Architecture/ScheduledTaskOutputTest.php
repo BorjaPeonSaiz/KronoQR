@@ -74,6 +74,29 @@ it('envuelve en ScheduledTaskOutput cada tarea con runInBackground()', function 
         .implode("\n", $sinAyudante));
 })->group('RNF-D-02', 'RL-08');
 
+it('envuelve tambien cada tarea en primer plano: Laravel tira igual su salida a /dev/null', function (): void {
+    // `reporting:presence-metrics` y `compliance:incident-metrics` corren en
+    // primer plano y su salida —el aviso de un fallo incluido— se perdia igual
+    // (V4-BE-1). Lo que no sea un `Schedule::command()` (el latido es un
+    // `Schedule::call()` sin salida) queda fuera.
+    $commands = array_values(array_filter(
+        scheduledTaskOutputStatements(),
+        static fn (string $statement): bool => str_contains($statement, 'Schedule::command('),
+    ));
+
+    expect(count($commands))->toBeGreaterThan(20);
+
+    $sinAyudante = array_filter(
+        $commands,
+        static fn (string $statement): bool => preg_match(
+            '/^(\$\w+ = )?ScheduledTaskOutput::(toLog|summaryOnly)\( ?Schedule::command\(.*\)$/',
+            $statement,
+        ) !== 1,
+    );
+
+    expect(array_values($sinAyudante))->toBe([], "Estas tareas tiran su salida a /dev/null:\n".implode("\n", $sinAyudante));
+})->group('RNF-D-02', 'RL-08');
+
 it('nadie declara la salida de una tarea a mano', function (string $metodo): void {
     $aMano = array_filter(
         scheduledTaskOutputStatements(),

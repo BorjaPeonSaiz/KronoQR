@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Adapter;
 
+use App\Modules\Workforce\Application\Exception\ImportFileUnavailable;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use Generator;
@@ -62,7 +63,7 @@ final class SimpleExcelImportSource implements EmployeeImportSource
         $digest = @hash_file('sha256', $path);
 
         if (! \is_string($digest)) {
-            throw new UnreadableImportFile('the file cannot be read from disk');
+            throw ImportFileUnavailable::fromDisk();
         }
 
         return $digest;
@@ -72,6 +73,8 @@ final class SimpleExcelImportSource implements EmployeeImportSource
     {
         try {
             $headers = $this->readerFor($path)->getHeaders();
+        } catch (ImportFileUnavailable $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw new UnreadableImportFile($exception::class);
         }
@@ -107,6 +110,8 @@ final class SimpleExcelImportSource implements EmployeeImportSource
 
         try {
             $rows = $this->readerFor($path)->getRows();
+        } catch (ImportFileUnavailable $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw new UnreadableImportFile($exception::class);
         }
@@ -289,7 +294,7 @@ final class SimpleExcelImportSource implements EmployeeImportSource
         $contents = @file_get_contents($path);
 
         if ($contents === false) {
-            throw new UnreadableImportFile('the file cannot be opened');
+            throw ImportFileUnavailable::fromDisk();
         }
 
         return mb_check_encoding($contents, 'UTF-8') ? 'UTF-8' : 'Windows-1252';
@@ -300,7 +305,7 @@ final class SimpleExcelImportSource implements EmployeeImportSource
         $handle = @fopen($path, 'rb');
 
         if ($handle === false) {
-            throw new UnreadableImportFile('the file cannot be opened');
+            throw ImportFileUnavailable::fromDisk();
         }
 
         // 8 KB: una cabecera con veinte columnas no llega ni a 500 bytes, y el

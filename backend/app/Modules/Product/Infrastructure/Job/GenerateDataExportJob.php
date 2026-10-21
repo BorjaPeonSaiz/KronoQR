@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Job;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportFailure;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
@@ -103,18 +104,23 @@ final class GenerateDataExportJob implements ShouldQueue
 
     public function __construct(private readonly string $exportUuid) {}
 
-    public function handle(GenerateDataExportHandler $exports, LoggerInterface $logger): void
+    public function handle(GenerateDataExportHandler $exports, LoggerInterface $logger, CaughtFailureReporter $caughtFailures): void
     {
         $startedAt = microtime(true);
 
         try {
             $export = $exports->handle($this->exportUuid);
         } catch (Throwable $failure) {
-            $logger->error('La exportacion integra no se pudo generar.', [
+            $logger->error('product.data_export_failed', [
                 'data_export_uuid' => $this->exportUuid,
                 // La clase, nunca el mensaje. Ver el docblock.
                 'failure' => $failure::class,
             ]);
+
+            // Y al historico de errores (RF-PD-15): capturarlo evita el
+            // reintento, no que el IT del cliente lo vea. El mensaje lo sanea
+            // el historico en el servidor, no este log.
+            $caughtFailures->report($failure);
 
             return;
         }
@@ -128,7 +134,7 @@ final class GenerateDataExportJob implements ShouldQueue
          * **Sin una sola PII**: identificador, duracion, tamaño y estado. Ni el
          * nombre del fichero de nadie ni la ruta del servidor (regla dura 21).
          */
-        $logger->info('Exportacion integra generada.', [
+        $logger->info('product.data_export_generated', [
             'data_export_uuid' => $export->uuid,
             'status' => $export->status->value,
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
@@ -159,7 +165,7 @@ final class GenerateDataExportJob implements ShouldQueue
         /** @var LoggerInterface $logger */
         $logger = $container->make(LoggerInterface::class);
 
-        $logger->error('El trabajo de exportacion integra termino sin poder cerrarse.', [
+        $logger->error('product.data_export_job_failed', [
             'data_export_uuid' => $this->exportUuid,
             'failure' => $exception::class,
         ]);
@@ -176,10 +182,16 @@ final class GenerateDataExportJob implements ShouldQueue
                 $exports->markFailed($export->id, $clock->now(), DataExportFailure::Unexpected);
             }
         } catch (Throwable $ignored) {
-            $logger->error('Tampoco se pudo marcar la exportacion integra como fallida.', [
+            $logger->error('product.data_export_failure_not_recorded', [
                 'data_export_uuid' => $this->exportUuid,
                 'failure' => $ignored::class,
             ]);
+
+            try {
+                $container->make(CaughtFailureReporter::class)->report($ignored);
+            } catch (Throwable) {
+                // Ya va por el log de arriba; sin historico, se queda ahi.
+            }
         }
     }
 }

@@ -114,3 +114,14 @@ it('pliega las letras latinas a su forma sin tilde', function (string $entrada, 
     'aleman y nordico' => ['ßæøå', 'ssaeoa'],
     'otra escritura se queda como esta' => ['Wáng 王', 'wang 王'],
 ])->group('RF-PD-15');
+
+it('pliega a nada un texto que no es UTF-8 valido, y asi no casa con ninguna palabra', function (string $entrada): void {
+    // Falla cerrado. Un mensaje de PostgreSQL o de un fichero importado puede
+    // traer bytes en Latin-1: la expresion con `/u` no los acepta y lo que no
+    // se puede plegar no se puede comparar, asi que no sobrevive al saneado.
+    expect(ErrorVocabulary::fold($entrada))->toBe('')
+        ->and(ErrorVocabulary::contains($entrada))->toBeFalse();
+})->with([
+    'codigo en Latin-1' => ["c\xF3digo"],
+    'un byte suelto de continuacion' => ["employee\x80"],
+])->group('RF-PD-15', 'RL-19');

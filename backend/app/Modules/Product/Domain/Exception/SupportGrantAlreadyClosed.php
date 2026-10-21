@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se ha intentado revocar una concesion que ya estaba revocada (RF-PD-11).
  *
@@ -18,7 +20,7 @@ namespace App\Modules\Product\Domain\Exception;
  * cerrar, y revocarla deja constancia de que alguien la retiro a proposito
  * ademas de que expiro.
  */
-final class SupportGrantAlreadyClosed extends ProductDomainException
+final class SupportGrantAlreadyClosed extends ProductDomainException implements BusinessRejection
 {
     public function __construct(public readonly string $uuid)
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La fecha de cese no es admisible (RF-GP-03, RN-14).
  *
@@ -25,7 +27,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * sale de {@see self::$translationKey} y {@see self::$parameters}, que el borde
  * HTTP resuelve en el idioma negociado.
  */
-final class InvalidEmploymentPeriod extends WorkforceDomainException
+final class InvalidEmploymentPeriod extends WorkforceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string>  $parameters  sustituciones del mensaje traducido

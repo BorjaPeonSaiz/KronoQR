@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -27,7 +28,7 @@ use RuntimeException;
  * `enrolment_required: true`. Un callejon sin salida del que solo se sale con
  * consola es justo lo que RF-PD-03 prohibe por escrito.
  */
-final class ManagementAccountAlreadyExists extends RuntimeException
+final class ManagementAccountAlreadyExists extends RuntimeException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'setup.administrator_exists';
 

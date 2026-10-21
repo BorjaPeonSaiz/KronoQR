@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * La carga util de una clave de licencia no cumple lo que exige RF-PD-04.
  *
@@ -26,7 +28,7 @@ namespace App\Modules\Product\Domain\Exception;
  * `ProblemDetails::translated()` en el idioma negociado (misma pauta que
  * `InvalidSettingValue`, tarea 5.1).
  */
-final class InvalidLicenseKey extends ProductDomainException
+final class InvalidLicenseKey extends ProductDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string|int>  $parameters

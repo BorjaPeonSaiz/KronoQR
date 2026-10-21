@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Application\Support;
 
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * El span y el log estructurado de los actos del ciclo de vida de una credencial
- * (doc 02 §8.1).
+ * El log estructurado de los actos del ciclo de vida de una credencial
+ * (doc 02 §8.1). El span y la duracion los pone cada caso de uso con
+ * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03); aqui se le añaden
+ * los identificadores publicos del acto.
  *
  * **Por que dentro de `Application` y no en el borde HTTP**, al reves que
  * `ScanTelemetry`: estos tres actos —imprimir, imprimir por lotes, entregar—
@@ -29,10 +31,7 @@ use Throwable;
  *
  * **Medir no puede romper una impresion.** Todo va envuelto, y lo envuelve
  * {@see SpanScope}: perder una traza es infinitamente mas barato que dejar a
- * alguien sin tarjeta el dia que entra a trabajar. Que esta clase viva en
- * `Application` es tambien el motivo por el que ese andamiaje comun esta en
- * `Shared\Application` y no en `Shared\Infrastructure`; el propio `SpanScope` lo
- * explica.
+ * alguien sin tarjeta el dia que entra a trabajar.
  */
 final readonly class CredentialTelemetry
 {
@@ -50,19 +49,16 @@ final readonly class CredentialTelemetry
      */
     public function measure(string $name, array $attributes, callable $act): mixed
     {
-        // KIND_INTERNAL y no KIND_SERVER: el acto puede venir del endpoint o del
-        // comando de consola, y ninguno de los dos es «este» span.
-        $span = SpanScope::start('kronoqr.identity', $name, SpanKind::KIND_INTERNAL, $attributes);
+        // Al span del caso de uso, que esta activo (`UseCaseInstrumentation`).
+        SpanScope::annotateCurrent($attributes);
         $startedAt = microtime(true);
 
         try {
             $result = $act();
         } catch (Throwable $failure) {
-            $span->end(['outcome' => 'error']);
-
             $this->logger->warning($name.'_failed', [
                 ...$attributes,
-                'trace_id' => $span->traceId(),
+                'trace_id' => SpanScope::currentTraceId(),
                 // La clase de la excepcion, no su mensaje: el mensaje de una
                 // excepcion de dominio puede llevar el UUID de una credencial, que
                 // es publico, pero el de una de infraestructura puede llevar una
@@ -73,11 +69,9 @@ final readonly class CredentialTelemetry
             throw $failure;
         }
 
-        $span->end(['outcome' => 'ok']);
-
         $this->logger->info($name, [
             ...$attributes,
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 

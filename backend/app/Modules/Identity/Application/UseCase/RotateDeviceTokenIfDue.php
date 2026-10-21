@@ -15,6 +15,7 @@ use App\Modules\Identity\Domain\ValueObject\DeviceTokenRotationOutcome;
 use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -55,6 +56,11 @@ final readonly class RotateDeviceTokenIfDue
     ) {}
 
     public function handle(RotateDeviceTokenCommand $command): ?IssuedAccessToken
+    {
+        return UseCaseInstrumentation::run('identity.rotate_device_token_if_due', fn (): ?IssuedAccessToken => $this->doHandle($command));
+    }
+
+    private function doHandle(RotateDeviceTokenCommand $command): ?IssuedAccessToken
     {
         $device = $this->devices->findByUuid($command->deviceUuid);
 

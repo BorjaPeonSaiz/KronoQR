@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -20,4 +21,4 @@ use RuntimeException;
  * lanzando. Un `rollBack()` a mano dentro del `closure` dejaria a
  * `DB::transaction()` intentando confirmar una transaccion que ya no existe.
  */
-final class PairingRaceLost extends RuntimeException {}
+final class PairingRaceLost extends RuntimeException implements BusinessRejection {}

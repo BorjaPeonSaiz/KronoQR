@@ -66,11 +66,24 @@ final readonly class RecordHttpMetrics
     public const string UNMATCHED_ROUTE = 'unmatched';
 
     /**
-     * Cubos en segundos, alrededor del presupuesto de RNF-P-02.
+     * Cubos en segundos, alrededor del presupuesto de RNF-P-02, mas los dos
+     * umbrales de las alertas que no son de la tarjeta: 2 s
+     * (`LatenciaDelFichajePorPinAlta`) y 10 s (`LatenciaDelFichajePorLoteAlta`).
+     *
+     * Un umbral solo es exacto si coincide con un cubo: entre dos cubos,
+     * `histogram_quantile` interpola y una alerta a 2 s con cubos 1 y 3 saltaba
+     * con un PIN de 1,2 s; y por encima del ultimo cubo finito todo cae en
+     * `+Inf`, asi que un lote a 10 s era inalcanzable (bloque 9 y tarea 10.8 de
+     * la 2.3.0). Los cubos que ya existian se conservan: quitar uno romperia las
+     * consultas y los paneles que lo leen. Un cubo nuevo es una serie nueva por
+     * ruta, y estas rutas son decenas, no miles.
+     *
+     * `HttpLatencyBucketsTest` (Architecture) comprueba que las alertas leen cubos
+     * que existen aqui.
      *
      * @var list<float>
      */
-    private const array BUCKETS = [0.025, 0.05, 0.1, 0.15, 0.3, 0.4, 1.0, 3.0];
+    public const array BUCKETS = [0.025, 0.05, 0.1, 0.15, 0.3, 0.4, 1.0, 2.0, 3.0, 10.0];
 
     public function __construct(private Redis $redis) {}
 

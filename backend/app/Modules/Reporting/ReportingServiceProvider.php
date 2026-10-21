@@ -112,6 +112,7 @@ use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReade
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
@@ -393,6 +394,7 @@ final class ReportingServiceProvider extends ServiceProvider
                 $app->make(InstallationSiteProvider::class),
                 $app->make(Clock::class),
                 $app->make(ConnectionInterface::class),
+                $app->make(CaughtFailureReporter::class),
                 Config::string('mail.default'),
             ),
         );

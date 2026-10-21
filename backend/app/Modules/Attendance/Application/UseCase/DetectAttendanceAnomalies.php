@@ -28,6 +28,7 @@ use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
@@ -97,6 +98,7 @@ final readonly class DetectAttendanceAnomalies
         private IncidentDetectionMetrics $detectionMetrics,
         private Clock $clock,
         private LoggerInterface $logger,
+        private CaughtFailureReporter $caughtFailures,
     ) {}
 
     public function handle(DetectAnomaliesCommand $command): AnomalyScanResult
@@ -252,6 +254,10 @@ final readonly class DetectAttendanceAnomalies
                     'shift_entry_uuid' => $anomaly->shiftEntryUuid,
                     'exception' => $failure::class,
                 ]);
+
+                // Al historico de errores (RF-PD-15): una incidencia que no se
+                // abre es una situacion detectada que nadie va a revisar.
+                $this->caughtFailures->report($failure);
             }
         }
 

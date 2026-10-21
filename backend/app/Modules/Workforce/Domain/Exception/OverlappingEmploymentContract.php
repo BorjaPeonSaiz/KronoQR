@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Una persona no puede tener dos contratos vigentes el mismo dia
  * (**RF-GP-02**, RF-IN-03).
@@ -29,7 +31,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * ahi. La accion siguiente es releer los contratos de esa persona, no reescribir
  * el formulario.
  */
-final class OverlappingEmploymentContract extends WorkforceConflict
+final class OverlappingEmploymentContract extends WorkforceConflict implements BusinessRejection
 {
     public static function forEmployee(string $employeeUuid, string $validFrom): self
     {

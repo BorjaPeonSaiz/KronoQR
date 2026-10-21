@@ -7,17 +7,15 @@ namespace App\Modules\Reporting\Http\Support;
 use App\Http\Middleware\RecordHttpMetrics;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log de la vista de cumplimiento (doc 02 §8.1 y §8.2, RF-PA-06).
+ * El log de la vista de cumplimiento (doc 02 §8.1 y §8.2, RF-PA-06).
  *
- * Mismo sitio y mismo motivo que sus hermanas de este directorio
- * ({@see PeriodReportTelemetry}, `JournalTelemetry`): en el borde, para que el
- * `trace_id` que llega en `traceparent` sea el padre del span y para que la
- * consulta se quede consultando sin un `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Que lleva el log y que no
  *
@@ -59,27 +57,20 @@ final readonly class ComplianceSummaryTelemetry
      */
     public function measure(callable $read): ComplianceSummary
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.compliance_summary', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $summary = $read();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $summary = $read();
 
         $elapsed = microtime(true) - $startedAt;
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'reporting.range_days' => $summary->range->days(),
             'reporting.findings' => $summary->findingCount(),
             'reporting.scope' => $summary->scopeName(),
         ]);
 
-        $this->logger->info('reporting.compliance_summary_read', [
-            'trace_id' => $span->traceId(),
+        $this->logger->info('reporting.compliance_summary_retrieved', [
+            'trace_id' => SpanScope::currentTraceId(),
             'from' => $summary->range->isoFrom(),
             'to' => $summary->range->isoTo(),
             'range_days' => $summary->range->days(),

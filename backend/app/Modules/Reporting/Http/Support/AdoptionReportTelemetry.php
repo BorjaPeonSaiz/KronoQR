@@ -9,17 +9,15 @@ use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicator;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionReport;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza y el log del cuadro de impacto y adopcion (doc 02 §8.1, **RF-IN-08**).
+ * El log del cuadro de impacto y adopcion (doc 02 §8.1, **RF-IN-08**).
  *
- * Mismo sitio y mismo motivo que sus hermanas de este directorio
- * ({@see ComplianceSummaryTelemetry}, {@see PeriodReportTelemetry}): en el borde,
- * para que el `trace_id` que llega en `traceparent` sea el padre del span y para
- * que la consulta se quede consultando sin un `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Que lleva el log, y sobre todo que NO lleva
  *
@@ -74,27 +72,20 @@ final readonly class AdoptionReportTelemetry
      */
     public function measure(ReportDelivery $format, callable $read): AdoptionReport
     {
-        $span = SpanScope::start('kronoqr.reporting', 'reporting.adoption_report', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
-        try {
-            $report = $read();
-        } catch (Throwable $failure) {
-            $span->end();
-
-            throw $failure;
-        }
+        $report = $read();
 
         $elapsed = microtime(true) - $startedAt;
 
-        $span->end([
+        SpanScope::annotateCurrent([
             'reporting.format' => $format->value,
             'reporting.range_days' => $report->range->days(),
             'reporting.indicators_with_value' => self::withValue($report),
         ]);
 
-        $this->logger->info('reporting.adoption_report_read', [
-            'trace_id' => $span->traceId(),
+        $this->logger->info('reporting.adoption_report_retrieved', [
+            'trace_id' => SpanScope::currentTraceId(),
             'format' => $format->value,
             'from' => $report->range->isoFrom(),
             'to' => $report->range->isoTo(),

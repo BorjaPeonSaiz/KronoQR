@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se intento resolver un escaneo como vuelta de pausa sin decir de que tramo
  * vuelve.
@@ -19,7 +21,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * silenciosa aqui reparte las horas de una jornada entre dos dias y nadie se
  * entera hasta la nomina.
  */
-final class BreakEndWithoutShiftEntry extends AttendanceDomainException
+final class BreakEndWithoutShiftEntry extends AttendanceDomainException implements BusinessRejection
 {
     public static function create(): self
     {

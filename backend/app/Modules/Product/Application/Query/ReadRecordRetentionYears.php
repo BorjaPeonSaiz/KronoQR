@@ -6,6 +6,7 @@ namespace App\Modules\Product\Application\Query;
 
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -37,6 +38,11 @@ final readonly class ReadRecordRetentionYears
     ) {}
 
     public function handle(): ?int
+    {
+        return UseCaseInstrumentation::run('product.read_record_retention_years', fn (): ?int => $this->doHandle());
+    }
+
+    private function doHandle(): ?int
     {
         try {
             $site = $this->sites->installationSite();

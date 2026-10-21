@@ -8,6 +8,7 @@ use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
 use OpenTelemetry\Context\ScopeInterface;
 use Throwable;
@@ -16,17 +17,16 @@ use Throwable;
  * El andamiaje de un span: abrirlo sin que abrirlo pueda romper nada, cerrarlo
  * igual, y responder cual es el `trace_id` que va al log (doc 02 §8.1).
  *
- * ## Por que existe
+ * ## Quien abre spans, y quien no
  *
- * Siete clases de telemetria —tres en `Attendance`, una en `Compliance`, una en
- * `Reporting` y dos en `Identity`— repetian palabra por palabra el mismo
- * `try/catch` alrededor de `Globals::tracerProvider()`, el mismo `$span->end()`
- * protegido y el mismo `traceIdOf()`. Lo que las diferencia de verdad —sus
- * atributos, su nivel de log y sus reglas de minimizacion de datos personales—
- * sigue en cada una: eso es dominio de cada acto y no debe fusionarse. Lo que
- * estaba duplicado era el andamiaje, y con el se habian colado **dos respuestas
- * distintas** a «que `trace_id` se escribe en el log». Ahora hay una sola, y
- * esta aqui.
+ * Solo dos clases de consumidores: {@see UseCaseInstrumentation}, que abre el
+ * span de cada caso de uso, de cada consulta y de cada acto medido, y el
+ * armazon (abajo). Las telemetrias de los modulos **no abren spans**: añaden
+ * sus atributos al span en curso con {@see self::annotateCurrent()} y fechan su
+ * log con {@see self::currentTraceId()}. `UseCaseInstrumentationTest` lo exige.
+ * Lo que las diferencia de verdad —sus atributos, su nivel de log y sus reglas
+ * de minimizacion de datos personales— sigue en cada una: eso es dominio de
+ * cada acto y no debe fusionarse.
  *
  * ## Medir no puede romper lo que se mide
  *
@@ -41,14 +41,9 @@ use Throwable;
  *
  * ## Por que en `Application` y no en `Infrastructure`
  *
- * Porque dos de sus siete consumidores son casos de uso.
- * `Identity\Application\Support\CredentialTelemetry` esta dentro de
- * `Application` a proposito —los actos de credencial entran por el endpoint y
- * por el comando de consola, y instrumentar solo el borde HTTP dejaria sin traza
- * el alta masiva de una temporada—, y `Application` no puede depender de
- * `Infrastructure` sin invertir la direccion de las dependencias. Un ayudante en
- * `Shared/Infrastructure/Telemetry/` habria obligado a esa arista o a dejar dos
- * de las siete copias sin consolidar. Aqui no depende de nadie: solo de la
+ * Porque la usan los casos de uso, por {@see UseCaseInstrumentation}, y
+ * `Application` no puede depender de `Infrastructure` sin invertir la direccion
+ * de las dependencias. Aqui no depende de nadie: solo de la
  * **API** de OpenTelemetry, que es una abstraccion —no el SDK— y que las capas
  * `Application` ya tienen concedida.
  *
@@ -82,7 +77,8 @@ final class SpanScope
      * el span cuelga del que abrio el navegador del quiosco o del portal (§8.1).
      *
      * **No lo activa.** El span mide el acto; no se convierte en el contexto en
-     * curso. Es el comportamiento de seis de las siete telemetrias.
+     * curso. Es lo que necesita el armazon: el span de una consulta o de una
+     * tarea programada se cierra fuera de la pila en la que se abrio.
      *
      * @param  non-empty-string  $tracer  `kronoqr.<modulo>`.
      * @param  non-empty-string  $name
@@ -108,14 +104,11 @@ final class SpanScope
      * Igual que {@see self::start()}, pero ademas **activa** el span mientras
      * dura el acto.
      *
-     * Existe por un caso concreto y documentado:
-     * `Identity\Application\Support\PortalAccessTelemetry` mide el acceso al
-     * portal y **no escribe sus apuntes**. Los escribe el rastro de
-     * autenticacion, desde dentro del acto medido y sin el span a mano, asi que
-     * su unica forma de fecharlos es leer {@see self::currentTraceId()} — y eso
-     * daba una respuesta distinta de la de las otras seis cuando la peticion
-     * llega sin `traceparent`: el span propio abre entonces una traza nueva que
-     * el contexto ambiente no conoce, y el log se quedaba sin identificador.
+     * Es lo que usan {@see UseCaseInstrumentation} y el span de servidor: lo que
+     * ocurre dentro —un apunte del rastro de autenticacion, una consulta, otro
+     * caso de uso— se fecha leyendo {@see self::currentTraceId()} sin el span a
+     * mano. Sin activarlo, una peticion sin `traceparent` abriria una traza nueva
+     * que el contexto ambiente no conoce, y el log se quedaria sin identificador.
      *
      * Activando el span, el contexto en curso **es** el span propio: las dos
      * lecturas devuelven el mismo identificador siempre, y la divergencia deja de
@@ -176,6 +169,80 @@ final class SpanScope
             }
 
             $this->span->end();
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
+     * Deja constancia de que el acto fallo, antes de {@see self::end()}
+     * (V21-4-BE-2).
+     *
+     * Un evento `exception` con `exception.type` = la clase, y **nada mas**. No
+     * es `recordException()` a proposito: ese metodo del SDK añade por su
+     * cuenta `exception.message` y `exception.stacktrace`, y el mensaje de una
+     * `QueryException` lleva el SQL con los valores enlazados y el host. Un
+     * atributo de traza acaba en el mismo sitio que un log (regla dura 21).
+     *
+     * Con `$isError`, ademas `status=error`, que es lo que se busca en Tempo
+     * para encontrar averias. Un rechazo de negocio no lo lleva.
+     */
+    public function recordFailure(Throwable $failure, bool $isError): void
+    {
+        try {
+            if (! $this->span instanceof SpanInterface) {
+                return;
+            }
+
+            $this->span->addEvent('exception', ['exception.type' => $failure::class]);
+
+            if ($isError) {
+                // La descripcion es la clase: el mensaje no sale de aqui.
+                $this->span->setStatus(StatusCode::STATUS_ERROR, $failure::class);
+            }
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
+     * Marca el span **en curso** como fallido, sin abrir uno nuevo: lo que hace
+     * {@see self::recordFailure()} con el propio, para quien no lo tiene a mano.
+     * Lo usa el `503` de una dependencia caida (ADR-059 §2) sobre el span de
+     * servidor de la peticion. La clase, nunca el mensaje.
+     */
+    public static function markCurrentFailed(Throwable $failure): void
+    {
+        try {
+            $span = Span::getCurrent();
+            $span->addEvent('exception', ['exception.type' => $failure::class]);
+            $span->setStatus(StatusCode::STATUS_ERROR, $failure::class);
+        } catch (Throwable) {
+            // Ver el docblock de la clase: medir no puede romper lo que se mide.
+        }
+    }
+
+    /**
+     * Añade atributos al span **en curso** —el de servidor de la peticion, o el
+     * del caso de uso activo— sin abrir uno nuevo.
+     *
+     * Es lo que hacen las telemetrias del borde HTTP desde que el span de cada
+     * acto lo abre `UseCaseInstrumentation`: el `device.id` y el `scan.id` de un
+     * fichaje son de la peticion, no del caso de uso, y van al span de la
+     * peticion. Solo identificadores publicos (regla dura 21).
+     *
+     * @param  array<string, scalar|null>  $attributes
+     */
+    public static function annotateCurrent(array $attributes): void
+    {
+        try {
+            $span = Span::getCurrent();
+
+            foreach ($attributes as $key => $value) {
+                if ($key !== '') {
+                    $span->setAttribute($key, $value);
+                }
+            }
         } catch (Throwable) {
             // Ver el docblock de la clase: medir no puede romper lo que se mide.
         }

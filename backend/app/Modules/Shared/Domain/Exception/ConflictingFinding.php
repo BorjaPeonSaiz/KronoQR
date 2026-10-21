@@ -41,7 +41,7 @@ use RuntimeException;
  * fecha y tipo. El mensaje acaba en el log tecnico y de ahi en el paquete de
  * diagnostico (ADR-020).
  */
-final class ConflictingFinding extends RuntimeException
+final class ConflictingFinding extends RuntimeException implements BusinessRejection
 {
     private function __construct(
         string $message,

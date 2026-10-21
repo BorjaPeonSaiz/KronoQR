@@ -1125,6 +1125,13 @@ parameters:
       - IdentityDomainEvent
       - KioskDomainEvent
       - ProductDomainEvent
+      # ADR-059 §5: `BroadcastPresenceChange` reconoce con
+      # `DependencyFailure` (`App\Support\Resilience`) que le falta PostgreSQL para
+      # volver a la cola en lugar de darse por terminado. Es la misma
+      # clasificacion que usa el manejador de excepciones; copiarla aqui seria
+      # una segunda lista de SQLSTATE que mantener. Misma direccion que la de
+      # `ProductInfrastructure`: un modulo que alcanza el armazon, nunca al reves.
+      - AppFramework
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca

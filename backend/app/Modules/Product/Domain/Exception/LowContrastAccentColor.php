@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * El acento nuevo no alcanza el contraste minimo sobre las superficies claras y nadie ha
@@ -21,7 +22,7 @@ use App\Modules\Product\Domain\ValueObject\SettingKey;
  * El mensaje tecnico va en ingles (doc 02 §3.5); el de usuario sale de
  * `settings.errors.low_contrast_accent` en el idioma negociado.
  */
-final class LowContrastAccentColor extends ProductDomainException
+final class LowContrastAccentColor extends ProductDomainException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'settings.errors.low_contrast_accent';
 

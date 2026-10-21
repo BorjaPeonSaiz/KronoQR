@@ -7,7 +7,9 @@ namespace App\Modules\Attendance\Application\UseCase;
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\Command\ScanBatch;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -84,6 +86,7 @@ final readonly class RegisterScanBatchHandler
         private ScanMetrics $metrics,
         private Clock $clock,
         private LoggerInterface $logger,
+        private CaughtFailureReporter $caughtFailures,
     ) {}
 
     /**
@@ -91,6 +94,15 @@ final readonly class RegisterScanBatchHandler
      *                                decir, por `occurred_at` ascendente.
      */
     public function handle(ScanBatch $batch): array
+    {
+        return UseCaseInstrumentation::run('attendance.sync_scan_batch', fn () => $this->doHandle($batch));
+    }
+
+    /**
+     * @return list<ScanBatchOutcome> En el mismo orden en que se procesaron, es
+     *                                decir, por `occurred_at` ascendente.
+     */
+    private function doHandle(ScanBatch $batch): array
     {
         $this->measureSyncDelay($batch);
 
@@ -147,6 +159,11 @@ final readonly class RegisterScanBatchHandler
                 // argumentos que pueden contener el payload del QR.
                 'exception' => $failure::class,
             ]);
+
+            // Y al historico de errores (RF-PD-15): capturarlo aqui es lo que
+            // mantiene vivo el lote, no una razon para que el IT del cliente no
+            // lo vea. El historico sanea el mensaje en el servidor.
+            $this->caughtFailures->report($failure);
 
             return ScanBatchOutcome::notProcessed($scan->scanId);
         }

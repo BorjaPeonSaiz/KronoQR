@@ -10,6 +10,7 @@ use App\Modules\Shared\Application\Support\TraceparentHeader;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use App\Support\Resilience\DependencyFailure;
 use Closure;
 use DateTimeImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -196,10 +197,16 @@ final readonly class ServerErrorReporter
      * dominio a `409`, `422` o `403` vive en `bootstrap/app.php` y cambia cuando
      * un modulo anade la suya; cualquier copia de esa lista aqui nace obsoleta.
      *
-     * Renderizar dos veces es seguro porque `render()` **no informa**: compone
-     * una respuesta a partir de la excepcion y nada mas. Las devoluciones del
-     * producto devuelven `ProblemDetails`, que no escribe en ninguna parte —el
-     * asiento de `AccessOutOfScope`, por ejemplo, lo escribe `ScopeGuard` antes
+     * **Una dependencia caida es `503` sin preguntar** (ADR-059 §1): su `render`
+     * es el unico que escribe —deja la linea `http.dependency_unavailable` y
+     * marca el span de la peticion, una vez y en la respuesta final—, y
+     * renderizarla aqui la escribiria por un fallo que quiza ni es la respuesta
+     * (el elemento de un lote). Por eso se resuelve antes, sin renderizar.
+     *
+     * Para todo lo demas, renderizar dos veces es seguro porque `render()` **no
+     * informa**: compone una respuesta a partir de la excepcion y nada mas. Las
+     * devoluciones del producto devuelven `ProblemDetails`, que no escribe en
+     * ninguna parte —el asiento de `AccessOutOfScope`, por ejemplo, lo escribe `ScopeGuard` antes
      * de lanzar—, y una prueba comprueba que la respuesta final no cambia por
      * tener la captacion encendida.
      *
@@ -208,6 +215,10 @@ final readonly class ServerErrorReporter
      */
     private function renderedStatus(Request $request, Throwable $exception): int
     {
+        if (DependencyFailure::dependencyOf($exception) !== null) {
+            return 503;
+        }
+
         try {
             return ($this->handler)()->render($request, $exception)->getStatusCode();
         } catch (Throwable) {

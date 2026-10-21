@@ -13097,6 +13097,31 @@ export interface components {
                 "application/problem+json": components["schemas"]["ValidationProblem"];
             };
         };
+        /**
+         * @description El cuerpo no es de un tipo que esta ruta acepte: lleva `Content-Type`
+         *     distinto de `application/json` (o `+json`), o `multipart/form-data` en una
+         *     ruta que no es de subida de ficheros. No se ha leido ni guardado nada.
+         *     En las rutas con sesion se responde despues de autenticar; en las
+         *     puertas de acceso, que no la piden, decir que el cuerpo no se entiende
+         *     no revela nada de ninguna credencial. `title` y `detail`, en el idioma
+         *     negociado.
+         */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:kronoqr:problem:unsupported-media-type",
+                 *       "title": "Tipo de contenido no admitido",
+                 *       "status": 415,
+                 *       "detail": "El tipo de contenido del cuerpo no es uno que esta ruta acepte."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Falta el token o no es valido. */
         Unauthenticated: {
             headers: {
@@ -13411,6 +13436,24 @@ export interface components {
                     restriction?: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
                     since?: components["schemas"]["UtcTimestamp"] | null;
                 };
+            };
+        };
+        /**
+         * @description Una dependencia de la instalacion —la base de datos o Redis— no responde
+         *     (ADR-059). Reintentar pasado `Retry-After`, que es el plazo durante el
+         *     cual el servidor no volvera a intentar la conexion. El cuerpo es fijo y
+         *     no nombra la dependencia; la causa queda en el registro del servidor
+         *     (`http.dependency_unavailable`). Una actualizacion en curso responde el
+         *     mismo codigo con `type: urn:kronoqr:problem:maintenance`.
+         */
+        DependencyUnavailable: {
+            headers: {
+                /** @description Segundos hasta el siguiente intento, minimo 1. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /**
@@ -14166,6 +14209,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description **Escaneo rechazado.** Respuesta unica y generica para toda causa de
              *     rechazo, y de tiempo constante entre las de credencial (regla dura 17,
@@ -14197,6 +14241,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     syncScanBatch: {
@@ -14251,7 +14296,9 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordPinScan: {
@@ -14298,6 +14345,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description **Fichaje rechazado.** Exactamente la misma respuesta que la de `/scan`, y no
              *     una propia: si este endpoint tuviera su tipo de problema, distinguir «PIN» de
@@ -14316,6 +14364,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     reportDiscardedScans: {
@@ -14347,7 +14396,9 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getKioskRoster: {
@@ -14372,6 +14423,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordKioskHeartbeat: {
@@ -14399,7 +14451,9 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     requestKioskPairing: {
@@ -14434,6 +14488,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidRequest"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -14476,6 +14531,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidRequest"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description **Emparejamiento rechazado.** Respuesta unica, generica y de tiempo
              *     constante para las tres causas —solicitud desconocida, secreto que no
@@ -14499,6 +14555,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     confirmKioskPairing: {
@@ -14536,6 +14593,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["SiteNotConfigured"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description **Dos cuerpos distintos, y la diferencia importa.**
              *
@@ -14561,6 +14619,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listDevices: {
@@ -14585,6 +14644,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     unpairDevice: {
@@ -14627,6 +14687,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     logIn: {
@@ -14667,8 +14728,10 @@ export interface operations {
                 };
             };
             401: components["responses"]["InvalidCredentials"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     verifyTwoFactor: {
@@ -14696,8 +14759,10 @@ export interface operations {
             };
             401: components["responses"]["InvalidCredentials"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     enrolTwoFactor: {
@@ -14724,6 +14789,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     confirmTwoFactor: {
@@ -14752,8 +14818,10 @@ export interface operations {
             401: components["responses"]["InvalidCredentials"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     logOut: {
@@ -14774,6 +14842,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getCurrentUser: {
@@ -14797,6 +14866,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     changeOwnPassword: {
@@ -14840,6 +14910,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description No se ha cambiado nada. `errors.current_password` dice que la
              *     contrasena actual no coincide; `errors.new_password`, que regla de
@@ -14855,6 +14926,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listManagementAccounts: {
@@ -14912,6 +14984,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createManagementAccount: {
@@ -14944,8 +15017,10 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     deactivateManagementAccount: {
@@ -14997,8 +15072,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     resetManagementAccountPassword: {
@@ -15038,8 +15115,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     resetManagementAccountTwoFactor: {
@@ -15080,8 +15159,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     logInToPortal: {
@@ -15119,7 +15200,9 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["PortalAccessDenied"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["PortalLoginThrottled"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     logOutOfPortal: {
@@ -15140,6 +15223,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listMyWorkDays: {
@@ -15198,6 +15282,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     exportMyWorkDays: {
@@ -15383,6 +15468,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createEmployee: {
@@ -15413,8 +15499,10 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getEmployee: {
@@ -15447,6 +15535,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateEmployee: {
@@ -15483,8 +15572,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EmployeeConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     offboardEmployee: {
@@ -15521,6 +15612,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EmployeeConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no cumple el contrato. Ademas de los errores de forma,
              *     `errors.terminated_at` señala una fecha de cese **posterior a hoy en
@@ -15536,6 +15628,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     resetEmployeePin: {
@@ -15573,6 +15666,7 @@ export interface operations {
             409: components["responses"]["EmployeeConflict"];
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordEmployeePinDelivery: {
@@ -15607,6 +15701,7 @@ export interface operations {
             409: components["responses"]["EmployeeConflict"];
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listEmploymentContracts: {
@@ -15643,6 +15738,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     registerEmploymentContract: {
@@ -15694,8 +15790,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listLivePresence: {
@@ -15782,6 +15880,7 @@ export interface operations {
             409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getComplianceSummary: {
@@ -15873,6 +15972,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listEmployeeWorkDays: {
@@ -15931,6 +16031,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listDepartments: {
@@ -15955,6 +16056,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createDepartment: {
@@ -15982,8 +16084,10 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getDepartment: {
@@ -16014,6 +16118,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateDepartment: {
@@ -16048,8 +16153,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getSite: {
@@ -16074,6 +16181,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateSite: {
@@ -16102,8 +16210,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SiteConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     issueCredential: {
@@ -16141,6 +16251,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
@@ -16185,8 +16296,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     credentialStatusBoard: {
@@ -16284,6 +16397,7 @@ export interface operations {
             409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     printCredentialBatch: {
@@ -16336,6 +16450,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
@@ -16447,6 +16562,7 @@ export interface operations {
             };
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getCredentialInstructionsSheet: {
@@ -16530,6 +16646,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
              *     por campo para pintarlo junto al formulario, sin releer nada.
@@ -16569,6 +16686,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     correctShiftEntry: {
@@ -16634,6 +16752,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
              *     por campo para pintarlo junto al formulario, sin releer nada.
@@ -16672,6 +16791,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     voidShiftEntry: {
@@ -16728,6 +16848,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
              *     por campo para pintarlo junto al formulario, sin releer nada.
@@ -16760,6 +16881,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     generatePeriodReport: {
@@ -16909,6 +17031,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     exportPeriodReport: {
@@ -17290,6 +17413,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getAdoptionReport: {
@@ -17378,6 +17502,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     exportAdoptionReport: {
@@ -17563,6 +17688,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     searchLegalExportEmployees: {
@@ -17594,8 +17720,10 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listReportExports: {
@@ -17619,6 +17747,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     requestReportExport: {
@@ -17665,6 +17794,7 @@ export interface operations {
                     };
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no es valida: rango invertido o por encima de los 366 dias
              *     del calendario, granularidad o agrupacion desconocidas, o un `format`
@@ -17679,6 +17809,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     showReportExport: {
@@ -17716,6 +17847,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     downloadReportExport: {
@@ -17783,6 +17915,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listIncidents: {
@@ -17864,6 +17997,7 @@ export interface operations {
             409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     resolveIncident: {
@@ -17909,8 +18043,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getComplianceProfile: {
@@ -17935,6 +18071,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateComplianceProfile: {
@@ -17962,6 +18099,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no cumple el contrato o deja el perfil en un estado que
              *     no admite: un campo fuera de su rango, la jornada semanal por
@@ -17979,6 +18117,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getLicense: {
@@ -18002,6 +18141,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     activateLicense: {
@@ -18031,8 +18171,10 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getInstallationSettings: {
@@ -18056,6 +18198,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateInstallationSettings: {
@@ -18082,6 +18225,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no se puede aplicar y no se guarda ninguna clave.
              *
@@ -18105,6 +18249,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getBranding: {
@@ -18126,6 +18271,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getBrandingLogo: {
@@ -18183,6 +18329,7 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getBrandingManifest: {
@@ -18204,6 +18351,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     generateDiagnosticsBundle: {
@@ -18237,8 +18385,10 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listErrorEvents: {
@@ -18274,6 +18424,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     resolveErrorEvent: {
@@ -18306,6 +18457,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     reportClientErrors: {
@@ -18333,8 +18485,10 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listSupportGrants: {
@@ -18358,6 +18512,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     grantSupportAccess: {
@@ -18384,8 +18539,10 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     revokeSupportAccess: {
@@ -18417,6 +18574,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listDataExports: {
@@ -18440,6 +18598,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     requestDataExport: {
@@ -18481,6 +18640,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     downloadDataExport: {
@@ -18528,6 +18688,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getSetupStatus: {
@@ -18549,6 +18710,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createFirstAdministrator: {
@@ -18590,8 +18752,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createInstallationSite: {
@@ -18630,8 +18794,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getSetupSteps: {
@@ -18655,6 +18821,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordSetupStep: {
@@ -18703,8 +18870,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     completeSetup: {
@@ -18740,6 +18909,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     importEmployees: {
@@ -18795,8 +18965,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listAbsences: {
@@ -18886,6 +19058,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createAbsence: {
@@ -18930,8 +19103,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     importAbsences: {
@@ -18974,8 +19149,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getAbsence: {
@@ -19015,6 +19192,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     correctAbsence: {
@@ -19076,8 +19254,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     voidAbsence: {
@@ -19132,8 +19312,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     presenceUpdated: {

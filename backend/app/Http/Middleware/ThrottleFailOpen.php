@@ -2,19 +2,23 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Attendance\Http\Middleware;
+namespace App\Http\Middleware;
 
+use App\Support\Resilience\DependencyFailure;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Psr\Log\LoggerInterface;
-use RedisException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
- * **El limitador del fichaje falla ABIERTO si su almacen no responde** (CH1,
- * regla dura 19, RS-02).
+ * **El limitador del fichaje y del portal falla ABIERTO si su almacen no
+ * responde** (CH1, ADR-059 §3, regla dura 19, RS-02).
+ *
+ * Vive en `App\Http\Middleware` y no en `Attendance`: la zona `portal` es de
+ * `Identity`, y un middleware de un modulo no puede ser la pieza que comparten
+ * dos.
  *
  * `throttle:scan`, `throttle:scan-batch` y `throttle:scan-pin` cuentan en la
  * cache, que en produccion es Redis. Con Redis caido, `ThrottleRequests` lanzaba
@@ -31,11 +35,21 @@ use Throwable;
  * responde es cambiar un riesgo acotado —unos minutos sin el techo por tablet—
  * por uno seguro: jornadas sin registrar.
  *
- * **Nunca en `auth`, `2fa`, `portal`, `setup` ni en gestion.** Alli el limitador
- * es la defensa contra la fuerza bruta de una credencial, y fallar abierto la
- * desactivaria justo durante una averia, que es cuando nadie mira. Esas rutas
- * siguen con el `throttle` del framework y fallan CERRADAS. Lo vigila
- * `ThrottleFailOpenScopeTest`, que enumera el router.
+ * **Y en el portal del empleado (`portal`, ADR-059 §3).** `POST /me/login`,
+ * `GET /me/workdays` y `GET /me/export` fallan abiertos tambien: RL-03 y RL-05
+ * piden el registro «a disposicion» y una averia de Redis no es motivo para
+ * negarselo al empleado. El PIN del portal lo siguen frenando las capas que de
+ * verdad frenan la fuerza bruta y que no dependen de Redis: Nginx por IP
+ * (`portal_login`, `portal`) y los dos bloqueos que cuentan en el disco del
+ * contenedor (`CachePinAttempts` por empleado y `CachePortalOriginAttempts` por
+ * origen, sobre la cache `resilient`).
+ *
+ * **Nunca en `auth`, `2fa`, `setup` ni en gestion.** En el acceso al panel el
+ * limitador es la defensa contra la fuerza bruta de la contraseña y no tiene
+ * respaldo en disco: fallar abierto la desactivaria justo durante una averia,
+ * que es cuando nadie mira. Esas rutas siguen con el `throttle` del framework y
+ * responden `503` (ADR-059 §1). Lo vigila `ThrottleFailOpenScopeTest`, que
+ * enumera el router y solo admite estas cuatro zonas.
  *
  * ## Que se abre exactamente
  *
@@ -63,10 +77,13 @@ use Throwable;
  *
  * Datos personales no hay ninguno (regla dura 21): ni empleado, ni codigo, ni IP.
  */
-final readonly class ThrottleScanFailOpen
+final readonly class ThrottleFailOpen
 {
-    /** Las tres zonas que pueden abrirse. Cualquier otra se rechaza al arrancar la ruta. */
-    public const array ZONES = ['scan', 'scan-batch', 'scan-pin'];
+    /**
+     * Las cuatro zonas que pueden abrirse (ADR-059 §3): las tres de escritura
+     * del fichaje y la del portal. Cualquier otra se rechaza al declarar la ruta.
+     */
+    public const array ZONES = ['scan', 'scan-batch', 'scan-pin', 'portal'];
 
     public function __construct(
         private ThrottleRequests $throttle,
@@ -74,12 +91,12 @@ final readonly class ThrottleScanFailOpen
     ) {}
 
     /**
-     * La declaracion de la ruta: `ThrottleScanFailOpen::zone('scan')`.
+     * La declaracion de la ruta: `ThrottleFailOpen::zone('scan')`.
      */
     public static function zone(string $zone): string
     {
         if (! \in_array($zone, self::ZONES, true)) {
-            throw new \InvalidArgumentException('Only the clocking zones may fail open, not '.$zone.'.');
+            throw new \InvalidArgumentException('Only the clocking and portal zones may fail open, not '.$zone.'.');
         }
 
         return self::class.':'.$zone;
@@ -93,7 +110,7 @@ final readonly class ThrottleScanFailOpen
         if (! \in_array($zone, self::ZONES, true)) {
             // Defensa en profundidad: una ruta nueva que nombre la clase a mano
             // con otra zona no hereda el fallo abierto.
-            throw new \InvalidArgumentException('Only the clocking zones may fail open, not '.$zone.'.');
+            throw new \InvalidArgumentException('Only the clocking and portal zones may fail open, not '.$zone.'.');
         }
 
         $reachedNext = false;
@@ -134,17 +151,15 @@ final readonly class ThrottleScanFailOpen
     }
 
     /**
-     * El almacen del limitador no responde.
-     *
-     * `RedisException` es la del cliente `phpredis`, que es el del producto
-     * (`REDIS_CLIENT`). Se nombra tambien la de Predis por nombre, sin importarla:
-     * una instalacion que cambiara de cliente no deberia perder el fallo abierto,
-     * y Predis no es una dependencia del producto.
+     * El almacen del limitador no responde: Redis, con la misma clasificacion
+     * que el `503` de una dependencia caida ({@see DependencyFailure}, ADR-059
+     * §1) —la `RedisException` de phpredis, `RedisCircuitOpen` incluida, y la de
+     * conexion de Predis—. Una sola lista: si el manejador y este middleware
+     * discreparan, una averia daria `503` en una ruta que debe fallar abierta.
      */
     private static function isStoreUnavailable(Throwable $failure): bool
     {
-        return $failure instanceof RedisException
-            || is_a($failure, 'Predis\Connection\ConnectionException');
+        return DependencyFailure::dependencyOf($failure) === DependencyFailure::REDIS;
     }
 
     private function record(string $zone, string $phase, Throwable $failure): void

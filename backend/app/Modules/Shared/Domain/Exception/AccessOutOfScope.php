@@ -21,7 +21,7 @@ use RuntimeException;
  * dependiera del manejador de excepciones, un `catch` en cualquier sitio dejaria
  * el intento sin traza.
  */
-final class AccessOutOfScope extends RuntimeException
+final class AccessOutOfScope extends RuntimeException implements BusinessRejection
 {
     public function __construct()
     {

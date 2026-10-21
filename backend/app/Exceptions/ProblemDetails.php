@@ -327,25 +327,84 @@ final class ProblemDetails
         string $detail,
         array $errors = [],
         array $headers = [],
+        ?string $instance = null,
     ): JsonResponse {
         $body = [
             'type' => $type,
-            'title' => $title,
+            'title' => self::localized($title),
             'status' => $status,
-            'detail' => $detail,
+            'detail' => self::localized($detail),
         ];
 
+        // Todo `503` dice que ruta fallo (F4a-6): el cliente lo enseña y quien
+        // administra lo casa con su linea en el log.
+        $instance ??= $status === JsonResponse::HTTP_SERVICE_UNAVAILABLE ? self::currentPath() : null;
+
+        if ($instance !== null) {
+            // RFC 9457: la ruta que fallo, sin consulta. Es lo que permite
+            // casar la respuesta con su linea en el log del servidor.
+            $body['instance'] = $instance;
+        }
+
         if ($errors !== []) {
-            $body['errors'] = $errors;
+            // Tambien por campo: los textos fijos de `bootstrap/app.php` estan
+            // en español y su ingles en `lang/en.json`, como `title` y `detail`.
+            // Los que ya llegan traducidos (los de validacion de Laravel, los
+            // de `translated()`) no tienen entrada y salen tal cual.
+            $body['errors'] = array_map(
+                static fn (array $messages): array => array_map(self::localized(...), $messages),
+                $errors,
+            );
         }
 
         return new JsonResponse(
             $body,
             $status,
             // El tipo de medio es parte del contrato: un cliente que espera
-            // `problem+json` y recibe `json` no sabe que hacer con el cuerpo.
-            ['Content-Type' => 'application/problem+json', ...$headers],
+            // `problem+json` y recibe `json` no sabe que hacer con el cuerpo. Y
+            // el idioma de `title` y `detail`, que es el negociado (F4a-3).
+            ['Content-Type' => 'application/problem+json', 'Content-Language' => self::locale(), ...$headers],
         );
+    }
+
+    /**
+     * El texto fijo de un error, en el idioma negociado por la peticion (F4a-3).
+     *
+     * Los textos de esta clase estan escritos en español y son la clave: el
+     * ingles vive en `lang/en.json`. Un texto que no tiene traduccion —el
+     * mensaje de una excepcion de dominio, por ejemplo, que ya llega
+     * traducido o en ingles tecnico— sale tal cual.
+     */
+    private static function localized(string $text): string
+    {
+        try {
+            $translated = __($text);
+
+            return \is_string($translated) && $translated !== '' ? $translated : $text;
+        } catch (\Throwable) {
+            return $text;
+        }
+    }
+
+    private static function locale(): string
+    {
+        try {
+            return app()->getLocale();
+        } catch (\Throwable) {
+            return 'es';
+        }
+    }
+
+    /** La ruta de la peticion en curso, sin la consulta, o `null` fuera de una. */
+    private static function currentPath(): ?string
+    {
+        try {
+            $request = request();
+
+            return '/'.ltrim($request->path(), '/');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -821,7 +880,8 @@ final class ProblemDetails
     }
 
     /**
-     * La base de datos no responde: `503` con `Retry-After`.
+     * Una dependencia —la base de datos o Redis— no responde: `503` con
+     * `Retry-After` (ADR-059).
      *
      * Mismo tipo que {@see self::serviceUnavailable()} —a quien lo recibe le
      * toca lo mismo: no es culpa suya, reintentar mas tarde— y con
@@ -832,7 +892,7 @@ final class ProblemDetails
      * **El detalle es fijo y no nombra nada**: ni base de datos, ni host, ni
      * puerto. Quien administra lo ve en `database.circuit_opened` y en `/ready`.
      */
-    public static function dependencyUnavailable(int $retryAfterSeconds): JsonResponse
+    public static function dependencyUnavailable(int $retryAfterSeconds, ?string $instance = null): JsonResponse
     {
         return self::response(
             self::TYPE_SERVICE_UNAVAILABLE,
@@ -840,6 +900,7 @@ final class ProblemDetails
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             'El servicio no esta disponible en este momento. Reintenta pasados unos segundos.',
             headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+            instance: $instance,
         );
     }
 

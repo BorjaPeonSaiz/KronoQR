@@ -93,6 +93,7 @@ use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
 use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
+use App\Modules\Product\Infrastructure\Capture\CaughtFailureHistory;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Product\Infrastructure\Capture\ServerErrorReporter;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
@@ -173,6 +174,7 @@ use App\Modules\Product\Infrastructure\Telemetry\RedisTelemetryCounters;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
@@ -193,6 +195,7 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
+use App\Support\Resilience\DependencyFailure;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -689,6 +692,13 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
+        // Los fallos que se capturan a proposito y no se propagan —el elemento
+        // de un lote de escaneos, los trabajos en cola, la deteccion, la
+        // reconciliacion, el resumen semanal— pasan por el mismo filtro y el
+        // mismo saneado que los que se escapan, sin pasar por Monolog. Ver
+        // `CaughtFailureReporter`.
+        $this->app->bind(CaughtFailureReporter::class, CaughtFailureHistory::class);
+
         $context = $this->app->make(ExecutionContext::class);
 
         foreach ($context->listeners() as $event => $listener) {
@@ -1157,7 +1167,13 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->app->bind(
             LicenseRepository::class,
-            static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(DB::connection(), Log::channel()),
+            // `unknown` solo con PostgreSQL caido o perdido (ADR-059 §4): la
+            // misma clasificacion que el `503`, que la persistencia no alcanza.
+            static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(
+                DB::connection(),
+                Log::channel(),
+                static fn (Throwable $failure): bool => DependencyFailure::dependencyOf($failure) === DependencyFailure::DATABASE,
+            ),
         );
 
         $this->app->bind(
@@ -1840,6 +1856,8 @@ final class ProductServiceProvider extends ServiceProvider
                 queueName: self::text(Config::get('queue.connections.redis.queue')) ?? 'default',
                 realtimeEnabled: (bool) Config::get('realtime.enabled', true),
                 broadcastConnection: self::text(Config::get('broadcasting.default')) ?? 'null',
+                realtimeHost: self::text(Config::get('broadcasting.connections.reverb.options.host')),
+                realtimePort: self::number(Config::get('broadcasting.connections.reverb.options.port')),
             ),
         );
 

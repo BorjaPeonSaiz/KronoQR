@@ -405,3 +405,32 @@ it('con PostgreSQL caido y sin poder guardar el pendiente, no sale ningun paquet
         ->and($result['output'])->toContain('no se ha podido')
         ->and($result['output'])->toContain('guardar la constancia');
 })->group('RF-PD-09', 'RL-04', 'RS-08');
+
+it('con PostgreSQL caido la licencia sale como unknown, sin degradar nada ni aconsejar reactivarla (V21-4-PL-1)', function (): void {
+    diagnosticsDbDownBreakDatabase();
+
+    $result = diagnosticsDbDownRun();
+    expect($result['code'])->toBe(0, $result['output']);
+
+    $bundle = diagnosticsDbDownDecode(diagnosticsDbDownFiles('diagnostics')[0]);
+
+    /** @var array<string, mixed> $license */
+    $license = $bundle['license'];
+    /** @var array{checks: list<array<string, mixed>>} $doctor */
+    $doctor = $bundle['doctor'];
+
+    $state = array_values(array_filter(
+        $doctor['checks'],
+        static fn (array $check): bool => $check['id'] === 'license.state',
+    ));
+
+    expect($license['state'])->toBe('unknown')
+        // No se sabe que esta degradado: no se dice que lo este.
+        ->and($license['degraded_features'])->toBe([])
+        ->and($state)->toHaveCount(1)
+        // Un `warning`, como cualquier estado de licencia (regla dura 15).
+        ->and($state[0]['status'])->toBe('warning')
+        ->and(json_encode($state[0]))->not->toContain('license:activate')
+        ->and(json_encode($state[0]))->not->toContain('No hay ninguna licencia')
+        ->and(json_encode($bundle))->not->toContain('"absent"');
+})->group('RF-PD-09', 'RF-PD-04', 'RNF-D-03');

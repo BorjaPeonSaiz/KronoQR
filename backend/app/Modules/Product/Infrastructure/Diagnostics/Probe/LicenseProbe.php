@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
@@ -50,7 +51,15 @@ final readonly class LicenseProbe implements DoctorProbe
 
     public function run(): array
     {
-        $overview = $this->licenses->handle();
+        try {
+            $overview = $this->licenses->handle();
+        } catch (LicenseUnavailable) {
+            // V21-4-PL-1: con la base caida no se sabe si hay licencia, y decir
+            // «no hay ninguna» mandaba a reactivarla en plena caida. Un
+            // `warning` como cualquier otro estado (regla dura 15) y ninguna
+            // comprobacion de marca, que tambien depende de la licencia.
+            return [DoctorFinding::warning('license.state', 'unknown', details: ['state' => 'unknown'])];
+        }
 
         return [
             $this->state($overview),

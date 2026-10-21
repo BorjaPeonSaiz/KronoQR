@@ -10,6 +10,7 @@ use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeZone;
 
 /**
@@ -102,6 +103,11 @@ final readonly class ReadEmployeeWorkDays
     ) {}
 
     public function handle(EmployeeWorkDayRange $query): WorkDayJournal
+    {
+        return UseCaseInstrumentation::run('reporting.read_employee_work_days', fn (): WorkDayJournal => $this->doHandle($query));
+    }
+
+    private function doHandle(EmployeeWorkDayRange $query): WorkDayJournal
     {
         $timeZone = $this->journal->timeZoneOf($query->employeeUuid);
 

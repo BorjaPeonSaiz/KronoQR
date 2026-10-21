@@ -176,21 +176,19 @@ groups:
       # que alguien delante de la tablet ya lo nota:
       #
       #   attendance.scan        500 ms  catalogo del §9.3 (RNF-P-02: p95 < 150 ms)
-      #   attendance.scan.pin    3 s     ~7 veces RNF-P-08 (p95 < 400 ms, a confirmar)
-      #   attendance.scan.batch  3 s     el ultimo cubo finito del histograma
+      #   attendance.scan.pin    2 s     5 veces RNF-P-08 (p95 < 400 ms, a confirmar)
+      #   attendance.scan.batch  10 s    un lote lleno (50) a 200 ms por fichaje
       #
-      # LOS CUBOS DEL HISTOGRAMA LIMITAN LO QUE SE PUEDE VIGILAR. `RecordHttpMetrics`
-      # mide con cubos 0,025 0,05 0,1 0,15 0,3 0,4 1 3 y +Inf, y `histogram_quantile`
-      # interpola dentro del cubo: con toda la masa a 1,2 s da 2,9 s, no 1,2 s. Un umbral
-      # entre dos cubos (el PIN a 2 s) saltaria con un PIN de 1,2 s, justo el falso positivo
-      # de R4-DV-06. Y un p95 por encima de 3 s cae en +Inf y devuelve 3, nunca mas: un
-      # umbral del lote a 10 s seria inalcanzable. Por eso el PIN y el lote se vigilan como
-      # «mas del 5 % de las peticiones tardan mas de 3 s» (= p95 > 3 s) sobre los cubos
-      # `le="3.0"` y `le="+Inf"`, que SI son exactos, y por eso son menos finos que el QR: un
-      # lote lleno tras un corte largo puede acercarse a esos 3 s (se compensa con
-      # `for: 15m` y un minimo de 5 lotes). Medirlos mejor exige cubos nuevos (2 s, 10 s)
-      # en el middleware, que cambian una serie existente: queda para el bloque de
-      # instrumentacion.
+      # UN UMBRAL SOLO ES EXACTO SI ES UN CUBO. `RecordHttpMetrics` mide con cubos
+      # 0,025 0,05 0,1 0,15 0,3 0,4 1 2 3 10 y +Inf, y `histogram_quantile` interpola
+      # dentro del cubo: con toda la masa a 1,2 s y cubos 1 y 3 daba 2,9 s. Hasta la
+      # tarea 10.8 el ultimo cubo finito era 3 s, y el PIN y el lote se vigilaban a 3 s
+      # porque sus umbrales reales (2 s y 10 s) no se podian medir. Ahora 2 y 10 son
+      # cubos, y las dos alertas leen «mas del 5 % de las peticiones tardan mas de N s»
+      # (= p95 > N s) sobre `le="N"` y `le="+Inf"`, que son exactos: sin interpolar,
+      # un PIN de 1,2 s no salta y un lote de 9 s tampoco. El cubo de 3 s se conserva
+      # porque lo leen paneles anteriores; `HttpLatencyBucketsTest` exige que todo
+      # `le` que lea una alerta o un panel exista en el middleware.
       #
       # `LatenciaDelFichajeAlta` conserva su nombre y es la del catalogo (QR).
       #------------------------------------------------------------------------
@@ -224,7 +222,7 @@ groups:
           (
             1
             -
-            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le=~"3(\\.0)?"}[10m]))
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le=~"2(\\.0)?"}[10m]))
             /
             sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.pin", le="+Inf"}[10m]))
           ) > 0.05
@@ -236,11 +234,11 @@ groups:
           destinatario: it-cliente
           component: api
         annotations:
-          summary: "Mas del 5 % de los fichajes por PIN tardan mas de 3 s desde hace 10 min"
+          summary: "Mas del 5 % de los fichajes por PIN tardan mas de 2 s desde hace 10 min"
           description: >-
             El fichaje por PIN paga un hash bcrypt de coste 12 a proposito
             (RNF-P-08: p95 < 400 ms en el hardware de referencia). Por encima de
-            3 s en mas de uno de cada veinte, el servidor va justo de CPU o la
+            2 s en mas de uno de cada veinte, el servidor va justo de CPU o la
             base de datos va lenta. El fichaje con tarjeta no se ve afectado salvo
             que la causa sea comun: compara con LatenciaDelFichajeAlta. Con al
             menos 20 peticiones por PIN en la ventana.
@@ -251,26 +249,25 @@ groups:
           (
             1
             -
-            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le=~"3(\\.0)?"}[10m]))
+            sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le=~"10(\\.0)?"}[10m]))
             /
             sum(rate(http_request_duration_seconds_bucket{route="attendance.scan.batch", le="+Inf"}[10m]))
           ) > 0.05
           and on ()
           sum(increase(http_request_duration_seconds_count{route="attendance.scan.batch"}[10m])) >= 5
-        for: 15m
+        for: 5m
         labels:
           severity: warning
           destinatario: it-cliente
           component: api
         annotations:
-          summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 3 s desde hace 10 min"
+          summary: "Mas del 5 % de los lotes de los quioscos tardan mas de 10 s desde hace 10 min"
           description: >-
             El envio de la cola offline de un quiosco (hasta 50 fichajes por
-            lote) tarda mas de lo normal. Un lote lleno tras un corte largo puede
-            rozar los 3 s sin que haya averia: si coincide con un quiosco que se
-            esta vaciando, espera; si no, el servidor va lento. Los quioscos
-            siguen aceptando fichajes y los reenviaran (regla dura 19). Con al
-            menos 5 lotes en la ventana.
+            lote) tarda mas de 10 s, que es lo que costaria un lote lleno a
+            200 ms por fichaje: el servidor va lento, no es un quiosco que se
+            esta vaciando. Los quioscos siguen aceptando fichajes y los
+            reenviaran (regla dura 19). Con al menos 5 lotes en la ventana.
           runbook_url: docs/runbooks/errores-en-el-panel.md
 
       #------------------------------------------------------------------------

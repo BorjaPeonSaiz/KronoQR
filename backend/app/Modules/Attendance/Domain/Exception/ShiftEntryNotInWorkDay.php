@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Se pidio corregir o anular un tramo que la jornada no tiene.
  *
@@ -24,7 +26,7 @@ namespace App\Modules\Attendance\Domain\Exception;
  * en los dos casos el tramo no esta. La capa HTTP si puede, consultando el
  * historico, y ahi es donde tiene sentido hacerlo.
  */
-final class ShiftEntryNotInWorkDay extends AttendanceDomainException
+final class ShiftEntryNotInWorkDay extends AttendanceDomainException implements BusinessRejection
 {
     public static function withUuid(string $shiftEntryUuid, string $isoDate): self
     {

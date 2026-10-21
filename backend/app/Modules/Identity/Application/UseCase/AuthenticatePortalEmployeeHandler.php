@@ -8,7 +8,6 @@ use App\Modules\Identity\Application\Command\AuthenticatePortalEmployeeCommand;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Exception\PortalOriginLocked;
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
-use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
 use App\Modules\Identity\Domain\Policy\OriginLockAuditCeiling;
 use App\Modules\Identity\Domain\Policy\OriginLockoutPolicy;
 use App\Modules\Identity\Domain\ValueObject\OriginAttemptHistory;
@@ -18,6 +17,8 @@ use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
@@ -116,7 +117,12 @@ use DateTimeImmutable;
  * Los apuntes del rechazo los emite **el verificador del PIN y solo el**, que es
  * el unico que sabe por que se rechaza y el que ya lleva la cuenta: repetirlos
  * aqui daria dos apuntes por intento y dos incrementos por fallo.
- * {@see PortalAccessTelemetry} conserva unicamente el span.
+ * El span lo abre {@see UseCaseInstrumentation}, **activo** mientras dura el
+ * intento: el journal fecha sus apuntes con {@see SpanScope::currentTraceId()}
+ * desde dentro, sin el span a mano. Sin activarlo, una peticion sin
+ * `traceparent` dejaba el apunte con `trace_id: null`. Y sin atributos de la
+ * credencial: el span solo lleva el desenlace `ok`/`rejected`/`error`, que es
+ * el mismo para un codigo que no existe y para uno bloqueado (RS-03).
  */
 final readonly class AuthenticatePortalEmployeeHandler
 {
@@ -124,7 +130,6 @@ final readonly class AuthenticatePortalEmployeeHandler
         private EmployeePinVerifier $pins,
         private PortalSessionIssuer $sessions,
         private Clock $clock,
-        private PortalAccessTelemetry $telemetry,
         private AuthenticationJournal $journal,
         /**
          * Vida de la sesion, en horas, ya resuelta de la configuracion (regla
@@ -147,7 +152,7 @@ final readonly class AuthenticatePortalEmployeeHandler
      */
     public function handle(AuthenticatePortalEmployeeCommand $command): PortalSession
     {
-        return $this->telemetry->measure(fn (): PortalSession => $this->authenticate($command));
+        return UseCaseInstrumentation::run('identity.portal_login', fn (): PortalSession => $this->authenticate($command));
     }
 
     private function authenticate(AuthenticatePortalEmployeeCommand $command): PortalSession

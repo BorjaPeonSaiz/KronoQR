@@ -7,18 +7,16 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\UseCase\CorrectedShift;
 use App\Modules\Shared\Application\Support\SpanScope;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
-use Throwable;
 
 /**
- * La traza, la metrica y el log de una correccion (doc 02 §8.1 y §8.2,
+ * La metrica y el log de una correccion (doc 02 §8.1 y §8.2,
  * RF-PA-04).
  *
- * Mismo sitio y mismo motivo que {@see ScanTelemetry}: en el borde, para que el
- * `trace_id` que llega en `traceparent` sea el padre del span, para medir lo que
- * de verdad tarda el endpoint y para que el caso de uso se quede orquestando
- * reglas sin un `try/finally` de medicion alrededor.
+ * En el borde, junto al controlador. El span del acto lo abre el caso de uso
+ * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * span en curso los atributos que solo conoce la peticion y se escribe el log
+ * con su `trace_id`.
  *
  * ## Que se cuenta y cuando
  *
@@ -65,20 +63,12 @@ final readonly class CorrectionTelemetry
      */
     public function measure(string $operation, string $reasonCode, callable $apply): CorrectedShift
     {
-        $span = SpanScope::start(
-            'kronoqr.attendance',
-            'attendance.'.$operation.'_shift_entry',
-            SpanKind::KIND_SERVER,
-            ['correction.reason_code' => $reasonCode],
-        );
+        // El span del acto lo abre el caso de uso (`UseCaseInstrumentation`,
+        // `attendance.<operacion>_shift_entry`); el motivo es de la peticion y va
+        // al span de servidor.
+        SpanScope::annotateCurrent(['correction.reason_code' => $reasonCode]);
 
-        try {
-            $corrected = $apply();
-        } catch (Throwable $failure) {
-            $span->end(['correction.action' => 'error']);
-
-            throw $failure;
-        }
+        $corrected = $apply();
 
         $this->metrics->correctionRecorded($reasonCode);
 
@@ -93,19 +83,19 @@ final readonly class CorrectionTelemetry
             $this->metrics->manualEntryAdded();
         }
 
-        $span->end(['correction.action' => $corrected->action->value]);
-        $this->log($corrected, $reasonCode, $span);
+        SpanScope::annotateCurrent(['correction.action' => $corrected->action->value]);
+        $this->log($corrected, $reasonCode);
 
         return $corrected;
     }
 
-    private function log(CorrectedShift $corrected, string $reasonCode, SpanScope $span): void
+    private function log(CorrectedShift $corrected, string $reasonCode): void
     {
         // `notice` y no `info`: una correccion manual es poco frecuente y tiene
         // relevancia legal. Que destaque sobre el ruido de los fichajes es lo
         // que permite revisar de un vistazo quien toco que la semana pasada.
         $this->logger->notice('attendance.shift_corrected', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'employee_uuid' => $corrected->employeeUuid,
             'shift_entry_uuid' => $corrected->shiftEntryUuid,
             'superseded_shift_entry_uuid' => $corrected->supersededShiftEntryUuid,

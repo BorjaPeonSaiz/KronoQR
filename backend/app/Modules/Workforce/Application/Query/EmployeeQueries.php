@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\Query;
 
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
@@ -53,6 +54,22 @@ final readonly class EmployeeQueries
      * @return array{items: list<Employee>, total: int, page: int, per_page: int, total_pages: int}
      */
     public function page(
+        AccessScope $scope,
+        ?int $departmentId,
+        ?EmploymentStatus $status,
+        ?string $search,
+        ?PinStatus $pinStatus,
+        ?bool $teleworking,
+        int $page,
+        int $perPage,
+    ): array {
+        return UseCaseInstrumentation::run('workforce.list_employees', fn () => $this->doPage($scope, $departmentId, $status, $search, $pinStatus, $teleworking, $page, $perPage));
+    }
+
+    /**
+     * @return array{items: list<Employee>, total: int, page: int, per_page: int, total_pages: int}
+     */
+    private function doPage(
         AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
@@ -120,6 +137,11 @@ final readonly class EmployeeQueries
 
     public function find(string $uuid): ?Employee
     {
+        return UseCaseInstrumentation::run('workforce.find_employee', fn (): ?Employee => $this->doFind($uuid));
+    }
+
+    private function doFind(string $uuid): ?Employee
+    {
         return $this->employees->findByUuid($uuid);
     }
 
@@ -131,6 +153,11 @@ final readonly class EmployeeQueries
      * matiz por el que se podria enumerar la plantilla (regla dura 17).
      */
     public function pinStatus(string $uuid): PinStatus
+    {
+        return UseCaseInstrumentation::run('workforce.read_pin_status', fn (): PinStatus => $this->doPinStatus($uuid));
+    }
+
+    private function doPinStatus(string $uuid): PinStatus
     {
         return $this->pins->statusFor($uuid) ?? PinStatus::Pending;
     }
@@ -146,6 +173,15 @@ final readonly class EmployeeQueries
      * @return array<string, PinStatus> Indexado por UUID de empleado.
      */
     public function pinStatusesFor(array $employees): array
+    {
+        return UseCaseInstrumentation::run('workforce.read_pin_statuses', fn () => $this->doPinStatusesFor($employees));
+    }
+
+    /**
+     * @param  list<Employee>  $employees
+     * @return array<string, PinStatus> Indexado por UUID de empleado.
+     */
+    private function doPinStatusesFor(array $employees): array
     {
         return $this->pins->statusesFor(array_map(
             static fn (Employee $employee): string => $employee->uuid,

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Exception\IncidentNotFound;
+use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\RedisMetricReader;
@@ -83,9 +85,9 @@ it('el ayudante llega a Redis por el registro que enlaza el proveedor', function
 
     try {
         UseCaseInstrumentation::run('workforce.create_site', static function (): never {
-            throw new DomainException('el centro ya existe');
+            throw IncidentNotFound::withId(7);
         });
-    } catch (DomainException) {
+    } catch (IncidentNotFound) {
         // Esperado: lo que se mira es la serie.
     }
 
@@ -94,6 +96,23 @@ it('el ayudante llega a Redis por el registro que enlaza el proveedor', function
     expect(useCaseMetricsKeys())
         ->toContain(RedisUseCaseMetrics::DURATION.':use_case=workforce.create_site,outcome=rejected')
         ->toContain(RedisUseCaseMetrics::DURATION.':use_case=workforce.create_site,outcome=ok');
+})->group('RQ-06', 'RNF-D-01');
+
+it('una averia de E/S llega a Redis como error, no como rejected', function (): void {
+    // V21-1-AR-1: con el disco lleno, la exportacion fallaba como `rejected` y
+    // ninguna serie decia que habia una averia.
+    try {
+        UseCaseInstrumentation::run('product.generate_data_export', static function (): never {
+            throw DiagnosticsAuditNotDeferred::in('/var/lib/kronoqr/pendientes');
+        });
+    } catch (DiagnosticsAuditNotDeferred) {
+        // Esperado.
+    }
+
+    $claves = useCaseMetricsKeys();
+
+    expect($claves)->toContain(RedisUseCaseMetrics::DURATION.':use_case=product.generate_data_export,outcome=error')
+        ->and($claves)->not->toContain(RedisUseCaseMetrics::DURATION.':use_case=product.generate_data_export,outcome=rejected');
 })->group('RQ-06', 'RNF-D-01');
 
 it('/metrics lo publica con use_case y outcome y nada mas', function (): void {

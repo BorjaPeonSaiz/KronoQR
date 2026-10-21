@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -14,7 +15,7 @@ use RuntimeException;
  * `422` y no `401`: la sesion sigue siendo valida, y devolver al panel al acceso
  * por un codigo mal tecleado seria castigar al administrador legitimo.
  */
-final class ActorReauthenticationFailed extends RuntimeException
+final class ActorReauthenticationFailed extends RuntimeException implements BusinessRejection
 {
     public const string TRANSLATION_KEY = 'accounts.reauthentication_failed';
 

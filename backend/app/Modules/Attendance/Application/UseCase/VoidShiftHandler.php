@@ -18,6 +18,7 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -58,6 +59,11 @@ final readonly class VoidShiftHandler
      * @throws CorrectionWouldChangeWorkDate la jornada quedaria abierta por un tramo de otro dia civil (RN-05)
      */
     public function handle(VoidShiftCommand $command): CorrectedShift
+    {
+        return UseCaseInstrumentation::run('attendance.void_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+    }
+
+    private function doHandle(VoidShiftCommand $command): CorrectedShift
     {
         $performedAt = $this->clock->now();
 

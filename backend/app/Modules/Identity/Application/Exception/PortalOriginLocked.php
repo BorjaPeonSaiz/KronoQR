@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use RuntimeException;
 
 /**
@@ -16,7 +17,7 @@ use RuntimeException;
  * (RS-03), y ocultarlo solo haria que una persona legitima tras la misma red
  * creyera que su PIN esta mal y siguiera tecleando.
  */
-final class PortalOriginLocked extends RuntimeException
+final class PortalOriginLocked extends RuntimeException implements BusinessRejection
 {
     public function __construct(public readonly int $retryAfterSeconds)
     {

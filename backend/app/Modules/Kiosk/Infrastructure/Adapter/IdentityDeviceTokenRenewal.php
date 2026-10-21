@@ -11,7 +11,6 @@ use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Domain\ValueObject\RenewedDeviceToken;
 use App\Modules\Shared\Application\Support\SpanScope;
 use Illuminate\Contracts\Debug\ExceptionHandler;
-use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -31,8 +30,6 @@ use Throwable;
  */
 final readonly class IdentityDeviceTokenRenewal implements DeviceTokenRenewal
 {
-    private const string TRACER = 'kronoqr.kiosk';
-
     public function __construct(
         private RotateDeviceTokenIfDue $rotate,
         private KioskMetrics $metrics,
@@ -42,16 +39,15 @@ final readonly class IdentityDeviceTokenRenewal implements DeviceTokenRenewal
 
     public function renewIfDue(string $deviceUuid, int $presentedTokenId): ?RenewedDeviceToken
     {
-        $span = SpanScope::start(self::TRACER, 'kiosk.rotate_device_token', SpanKind::KIND_INTERNAL);
 
         try {
             $issued = $this->rotate->handle(new RotateDeviceTokenCommand($deviceUuid, $presentedTokenId));
             $token = $issued === null ? null : new RenewedDeviceToken($issued->plainTextToken, $issued->expiresAt);
         } catch (Throwable $failure) {
-            $span->end(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'failed']);
+            SpanScope::annotateCurrent(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'failed']);
             $this->metrics->tokenRotation('failed');
             $this->logger->warning('kiosk.device_token_rotation_failed', [
-                'trace_id' => $span->traceId(),
+                'trace_id' => SpanScope::currentTraceId(),
                 'device_id' => $deviceUuid,
                 'exception' => $failure::class,
             ]);
@@ -66,15 +62,15 @@ final readonly class IdentityDeviceTokenRenewal implements DeviceTokenRenewal
         }
 
         if ($token === null) {
-            $span->end(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'none']);
+            SpanScope::annotateCurrent(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'none']);
 
             return null;
         }
 
-        $span->end(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'issued']);
+        SpanScope::annotateCurrent(['device.id' => $deviceUuid, 'kiosk.token_rotation' => 'issued']);
         $this->metrics->tokenRotation('issued');
         $this->logger->info('kiosk.device_token_rotated', [
-            'trace_id' => $span->traceId(),
+            'trace_id' => SpanScope::currentTraceId(),
             'device_id' => $deviceUuid,
             'expires_at' => $token->expiresAt->format('Y-m-d\TH:i:s\Z'),
         ]);

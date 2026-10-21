@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Otro empleado ya tiene ese correo.
  *
@@ -11,7 +13,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * es parcial —`WHERE email IS NOT NULL`— precisamente para que los cientos de
  * empleados sin correo no choquen entre si.
  */
-final class EmployeeEmailAlreadyTaken extends WorkforceConflict
+final class EmployeeEmailAlreadyTaken extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {

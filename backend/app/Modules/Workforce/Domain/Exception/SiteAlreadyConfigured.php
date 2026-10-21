@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\Exception;
 
+use App\Modules\Shared\Domain\Exception\BusinessRejection;
+
 /**
  * Ya existe el centro de trabajo de la instalacion y no cabe un segundo
  * (ADR-040). Es un conflicto de estado, no un error de formulario: `409`.
@@ -13,7 +15,7 @@ namespace App\Modules\Workforce\Domain\Exception;
  * queda mirando un «ya existe» sin saber que el centro se consulta y se modifica
  * en `/api/v1/site`.
  */
-final class SiteAlreadyConfigured extends WorkforceConflict
+final class SiteAlreadyConfigured extends WorkforceConflict implements BusinessRejection
 {
     public static function make(): self
     {
