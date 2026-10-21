@@ -89,7 +89,25 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 8 integrados (#182 a #187 y #189 a #191). **Bloque 9** (`feat/alertas-cola-y-servicios`): 9.1–9.6 ✅, revisiones aplicadas, CI manual 39518306982 en verde (con una repetición de `PeriodReportVolumeTest`, la prueba inestable que D4 lleva al B22); PR y merge en curso. Lo que conviene saber del bloque 9:
+**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 9 integrados (#182 a #187, #189 a #191 y #193). **Bloque 10** (`fix/degradacion-y-errores`): 10.1–10.8 ✅, revisiones aplicadas, CI manual 39630579067 en verde; PR y merge en curso.
+
+Lo que conviene saber del bloque 10 (detalle en Engram `2.3.0/b10-adr-059`):
+
+- **ADR-059 aceptado.** Decisiones del propietario:
+  - con Redis caído, el portal sigue abierto (zona `portal` en fallo abierto, con los bloqueos del PIN en disco); el panel se cierra con 503;
+  - las rutas que daban 500 pasan a 503 con `Retry-After` y una línea `http.dependency_unavailable`;
+  - la IP del log de nginx se queda en claro, registrado en doc 07 §6.
+- **Licencia `unknown`:** solo con la base caída de verdad. Cualquier otro fallo de lectura deniega lo accesorio, para que un `REVOKE` no sirva de salto de licencia.
+- **Pruebas en `Domain/`:** tocar una excepción del dominio la mete en `mutate-changed`, y necesita pruebas de su clave, sus parámetros y su mensaje (`Tests\Support\Shared\RejectionTranslations`).
+- **Deptrac:** el local da falsos verdes por la caché y el bind mount. Hay que medir en una copia `/tmp/kq` con `--no-cache`.
+- **nginx con HTTP/2:** los 400 y 414 cortan la conexión; el smoke los prueba con `--http1.1`. La zona `/scan/pin` tiene también su variante con barra final.
+- **`update.sh`:** espera a `healthy` estricto en horizon, scheduler y reverb (carrera de U3p).
+- **Pendiente:**
+  - las demás esperas de `update.sh` (postgres, redis, app y nginx) siguen aceptando `running` sin salud. No se endurecen, porque la vuelta atrás puede relanzar una versión sin healthcheck;
+  - `EntryDoesNotContinueWorkDay::$concernsNextEntry` y `CorrectionWouldChangeWorkDate::$byVoiding` no los lee la producción: o el panel los usa, o se eliminan;
+  - caos real con Horizon y una E2E del panel ante un 415.
+
+Lo que conviene saber del bloque 9 (#193):
 - `make alerts-drill` da 44/44. Los comandos de Docker del drill van sin `MSYS_NO_PATHCONV=1`.
 - **Contadores de Redis que nacen en 1:** toda alerta sobre un contador nuevo usa las reglas de grabación de `api.yml`, que suman la rama `unless … offset`.
 - La alerta de cola usa `queue_jobs_waiting` (solo `LLEN`), no `queue_jobs_pending`, que incluye los trabajos reservados.
@@ -131,7 +149,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 9 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 10 (errores: 503 cuando toca y siempre con rastro; rama `fix/degradacion-y-errores` desde `origin/main`, con ADR nuevo de degradación), marcando ✅ el título del bloque 9 en su primer commit.
+**Siguiente acción:** si el bloque 10 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 11 (minimización y asientos), marcando ✅ el título del bloque 10 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
