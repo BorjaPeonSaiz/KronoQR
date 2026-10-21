@@ -8,6 +8,7 @@ use App\Http\Middleware\NegotiateLocale;
 use App\Http\Middleware\PreventResponseCaching;
 use App\Http\Middleware\PropagateTraceContext;
 use App\Http\Middleware\RecordHttpMetrics;
+use App\Http\Middleware\RejectUnreadableBody;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
@@ -248,6 +249,10 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(append: [
             NegotiateLocale::class,
+            // Un cuerpo que no se puede leer: `400` si es JSON mal formado y `415`
+            // si es de otro tipo (D6). Detras del idioma, para que salgan en el
+            // pedido. Ver `RejectUnreadableBody`.
+            RejectUnreadableBody::class,
             /*
              * El rastro de uso de un acceso de soporte (tarea 5.9, RF-PD-11,
              * ADR-020, regla dura 6).
@@ -454,13 +459,26 @@ return Application::configure(basePath: dirname(__DIR__))
          * cabeceras de la excepcion (`Allow`).
          */
         $exceptions->render(static function (HttpException $exception): mixed {
+            // Un `422` del framework (`abort(422)`, una
+            // `UnprocessableEntityHttpException`) sale como lo que es, una
+            // validacion fallida, y con `errors`, que el contrato exige (F4a-5).
+            if ($exception->getStatusCode() === 422) {
+                return ProblemDetails::validationFailed(['request' => [$exception->getMessage() !== '' ? $exception->getMessage() : 'La peticion no se ha podido atender.']]);
+            }
+
             if ($exception->getStatusCode() !== 503) {
                 return ProblemDetails::httpError($exception->getStatusCode(), ProblemDetails::headersOf($exception));
             }
 
-            $retryAfter = $exception->getHeaders()['Retry-After'] ?? '60';
+            $retryAfter = (int) ($exception->getHeaders()['Retry-After'] ?? '60');
 
-            return ProblemDetails::maintenance((int) $retryAfter);
+            // Solo es `maintenance` si la instalacion lo esta de verdad (F4a-6):
+            // cualquier otro `503` del framework es un servicio no disponible, y
+            // leer «se esta actualizando» durante una averia confunde a quien
+            // tiene que actuar.
+            return app()->isDownForMaintenance()
+                ? ProblemDetails::maintenance($retryAfter)
+                : ProblemDetails::dependencyUnavailable($retryAfter);
         });
 
         /*

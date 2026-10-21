@@ -331,10 +331,14 @@ final class ProblemDetails
     ): JsonResponse {
         $body = [
             'type' => $type,
-            'title' => $title,
+            'title' => self::localized($title),
             'status' => $status,
-            'detail' => $detail,
+            'detail' => self::localized($detail),
         ];
+
+        // Todo `503` dice que ruta fallo (F4a-6): el cliente lo enseña y quien
+        // administra lo casa con su linea en el log.
+        $instance ??= $status === JsonResponse::HTTP_SERVICE_UNAVAILABLE ? self::currentPath() : null;
 
         if ($instance !== null) {
             // RFC 9457: la ruta que fallo, sin consulta. Es lo que permite
@@ -350,9 +354,50 @@ final class ProblemDetails
             $body,
             $status,
             // El tipo de medio es parte del contrato: un cliente que espera
-            // `problem+json` y recibe `json` no sabe que hacer con el cuerpo.
-            ['Content-Type' => 'application/problem+json', ...$headers],
+            // `problem+json` y recibe `json` no sabe que hacer con el cuerpo. Y
+            // el idioma de `title` y `detail`, que es el negociado (F4a-3).
+            ['Content-Type' => 'application/problem+json', 'Content-Language' => self::locale(), ...$headers],
         );
+    }
+
+    /**
+     * El texto fijo de un error, en el idioma negociado por la peticion (F4a-3).
+     *
+     * Los textos de esta clase estan escritos en español y son la clave: el
+     * ingles vive en `lang/en.json`. Un texto que no tiene traduccion —el
+     * mensaje de una excepcion de dominio, por ejemplo, que ya llega
+     * traducido o en ingles tecnico— sale tal cual.
+     */
+    private static function localized(string $text): string
+    {
+        try {
+            $translated = __($text);
+
+            return \is_string($translated) && $translated !== '' ? $translated : $text;
+        } catch (\Throwable) {
+            return $text;
+        }
+    }
+
+    private static function locale(): string
+    {
+        try {
+            return app()->getLocale();
+        } catch (\Throwable) {
+            return 'es';
+        }
+    }
+
+    /** La ruta de la peticion en curso, sin la consulta, o `null` fuera de una. */
+    private static function currentPath(): ?string
+    {
+        try {
+            $request = request();
+
+            return '/'.ltrim($request->path(), '/');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
