@@ -641,6 +641,8 @@ return [
                     .'adelante. No hay que hacer nada.',
                 'warning_unverifiable' => 'La licencia guardada no se puede verificar (:reason). Se ficha y se '
                     .'consulta el registro con normalidad.',
+                'warning_unknown' => 'No se ha podido leer la licencia porque la base de datos no responde. '
+                    .'No significa que no haya licencia, y mientras tanto no se recorta ninguna funcion.',
             ],
             'white_label_without_plan' => [
                 'ok' => 'La marca configurada y el plan contratado son coherentes.',
@@ -1263,6 +1265,8 @@ return [
                     .'la vigencia.',
                 'warning_unverifiable' => "Ejecuta `docker compose exec app php artisan license:show`, que explica el motivo exacto y que\n"
                     .'hacer con el. Si dice que la clave esta cortada, vuelve a copiarla entera y activala.',
+                'warning_unknown' => 'No reactives la licencia. Arregla primero la base de datos (mira la '
+                    .'comprobacion `database` de este mismo informe) y vuelve a ejecutar esta comprobacion.',
             ],
             'white_label_without_plan' => [
                 'warning' => 'Si quieres tu marca en las pantallas, habla con tu proveedor para incluirla en el '

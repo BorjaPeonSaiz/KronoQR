@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Persistence;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
@@ -26,9 +27,13 @@ use Throwable;
  * sintoma en casa del cliente seria «el panel se ha caido» y la causa seria la
  * licencia. ADR-019 existe precisamente para que eso no pase.
  *
- * Asi que {@see self::current()} devuelve `null` ante cualquier `Throwable` y
- * deja un `warning` sin datos personales ni clave. `null` significa «sin
- * licencia», que es un estado normal del producto y no una averia.
+ * Asi que {@see self::current()} **no deja escapar el fallo del motor**: deja
+ * un `warning` sin datos personales ni clave y lanza {@see LicenseUnavailable},
+ * que cada consumidor traduce a `unknown` —no degrada nada, no avisa de nada—.
+ * Lo que ya no hace es devolver `null`: `null` significa «sin licencia», y con
+ * PostgreSQL caido eso era mentira (V21-4-PL-1). Una fila que se lee pero esta
+ * mal formada sigue siendo `null` y luego `absent`: ahi si se sabe que no hay
+ * una licencia utilizable.
  *
  * ## Sin cache
  *
@@ -62,7 +67,7 @@ final readonly class DatabaseLicenseRepository implements LicenseRepository
                 'reason' => $exception::class,
             ]);
 
-            return null;
+            throw LicenseUnavailable::because($exception);
         }
 
         if ($rows === []) {

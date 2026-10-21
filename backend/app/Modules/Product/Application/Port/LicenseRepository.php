@@ -29,7 +29,13 @@ use DateTimeImmutable;
  */
 interface LicenseRepository
 {
-    /** La licencia activada, o `null` si esta instalacion no tiene ninguna. */
+    /**
+     * La licencia activada, o `null` si esta instalacion no tiene ninguna.
+     *
+     * Si no se ha podido leer, el adaptador lanza `LicenseUnavailable`, de
+     * `Application\Exception` (nombrada en prosa: un puerto no depende de esa
+     * capa, Deptrac). No saber no es «no hay» (V21-4-PL-1).
+     */
     public function current(): ?StoredLicense;
 
     /**

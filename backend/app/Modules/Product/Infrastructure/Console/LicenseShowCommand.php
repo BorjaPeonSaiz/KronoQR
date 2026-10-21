@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Console;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseOverview;
@@ -71,7 +72,23 @@ final class LicenseShowCommand extends Command
 
     public function handle(DescribeLicenseHandler $licenses): int
     {
-        $overview = $licenses->handle();
+        try {
+            $overview = $licenses->handle();
+        } catch (LicenseUnavailable) {
+            // V21-4-PL-1: no saber no es «no hay». Sin consejo de reactivarla.
+            $this->line('');
+            $this->line('Licencia de KronoQR');
+            $this->line('===================');
+            $this->line('');
+            $this->line('Estado: DESCONOCIDO (la base de datos no responde; el sistema sigue funcionando)');
+            $this->line('');
+            $this->line('No significa que no haya licencia. No la reactives: arregla primero la base de datos');
+            $this->line('(`docker compose exec app php artisan product:doctor`) y vuelve a mirar.');
+            $this->line('');
+
+            return self::ATTENTION;
+        }
+
         $status = $overview->status;
 
         $this->line('');

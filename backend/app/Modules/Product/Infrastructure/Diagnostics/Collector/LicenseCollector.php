@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Diagnostics\Collector;
 
+use App\Modules\Product\Application\Exception\LicenseUnavailable;
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
@@ -47,7 +48,12 @@ final readonly class LicenseCollector implements DiagnosticsCollector
 
     public function collect(DiagnosticsOptions $options): array
     {
-        $overview = $this->licenses->handle();
+        try {
+            $overview = $this->licenses->handle();
+        } catch (LicenseUnavailable) {
+            return self::unknown();
+        }
+
         $status = $overview->status;
         $license = $status->license;
 
@@ -84,6 +90,34 @@ final readonly class LicenseCollector implements DiagnosticsCollector
                 ],
                 $overview->usage,
             ),
+        ];
+    }
+
+    /**
+     * La seccion cuando la licencia no se ha podido leer (V21-4-PL-1): `unknown`
+     * y ningun dato, ni siquiera `degraded_features`, porque no se sabe que
+     * esta degradado. Mismas claves que la seccion normal, para que quien lee
+     * el paquete no tenga dos formas.
+     *
+     * @return array<string, mixed>
+     */
+    private static function unknown(): array
+    {
+        return [
+            'state' => 'unknown',
+            'rejection' => null,
+            'days_until_expiry' => null,
+            'days_since_expiry' => null,
+            'expiry_warning_days' => null,
+            'plan' => null,
+            'valid_from' => null,
+            'valid_until' => null,
+            'features' => [],
+            'degraded_features' => [],
+            'key_fingerprint' => null,
+            'activated_at' => null,
+            'last_verified_at' => null,
+            'plan_usage' => [],
         ];
     }
 }

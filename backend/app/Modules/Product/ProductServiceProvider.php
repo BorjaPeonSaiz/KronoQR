@@ -1849,6 +1849,8 @@ final class ProductServiceProvider extends ServiceProvider
                 queueName: self::text(Config::get('queue.connections.redis.queue')) ?? 'default',
                 realtimeEnabled: (bool) Config::get('realtime.enabled', true),
                 broadcastConnection: self::text(Config::get('broadcasting.default')) ?? 'null',
+                realtimeHost: self::text(Config::get('broadcasting.connections.reverb.options.host')),
+                realtimePort: self::number(Config::get('broadcasting.connections.reverb.options.port')),
             ),
         );
 

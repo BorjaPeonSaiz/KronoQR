@@ -1267,7 +1267,7 @@ change does not get in.
 | `product.version` | `2.2.1` | Version of KronoQR running on your server |
 | `product.php_version` | `8.4.24` | PHP version |
 | `product.database_version` | `17.11` | PostgreSQL version, the number only. No distribution, no compiler and no path on your server |
-| `license.state` | `active` | Licence state: `active`, `expiring`, `expired`, `absent`, `not_yet_valid` or `unverifiable` |
+| `license.state` | `active` | Licence state: `active`, `expiring`, `expired`, `absent`, `not_yet_valid`, `unverifiable` or `unknown` (the database did not respond and it could not be read) |
 | `license.plan` | `estandar` | Name of the contracted plan |
 | `license.features` | `["advanced_reports","telemetry"]` | Accessory features included in the plan |
 | `license.days_until_expiry` | `114` | Days left until it expires |

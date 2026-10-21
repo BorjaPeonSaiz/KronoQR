@@ -1250,7 +1250,7 @@ no entra.
 | `product.version` | `2.2.1` | Versión de KronoQR que corre en tu servidor |
 | `product.php_version` | `8.4.24` | Versión de PHP |
 | `product.database_version` | `17.11` | Versión de PostgreSQL, solo el número. Sin la distribución, sin el compilador y sin ninguna ruta de tu servidor |
-| `license.state` | `active` | Estado de la licencia: `active`, `expiring`, `expired`, `absent`, `not_yet_valid` o `unverifiable` |
+| `license.state` | `active` | Estado de la licencia: `active`, `expiring`, `expired`, `absent`, `not_yet_valid`, `unverifiable` o `unknown` (la base de datos no respondia y no se pudo leer) |
 | `license.plan` | `estandar` | Nombre del plan contratado |
 | `license.features` | `["advanced_reports","telemetry"]` | Funciones accesorias incluidas en el plan |
 | `license.days_until_expiry` | `114` | Días que faltan para que caduque |

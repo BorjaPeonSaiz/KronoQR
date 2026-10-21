@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Support\Network\BoundedReachability;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
@@ -113,6 +114,14 @@ final readonly class ServiceInspector
         private string $queueName,
         private bool $realtimeEnabled,
         private string $broadcastConnection,
+        /**
+         * Donde escucha Reverb para el servidor (`broadcasting.connections.reverb.options`).
+         * Solo para conectar: ni el host ni el puerto salen en el paquete.
+         */
+        private ?string $realtimeHost = null,
+        private ?int $realtimePort = null,
+        private float $realtimeTimeoutSeconds = 1.0,
+        private BoundedReachability $reachability = new BoundedReachability,
     ) {}
 
     /**
@@ -194,11 +203,54 @@ final readonly class ServiceInspector
      */
     public function realtime(): array
     {
+        $configured = $this->broadcastConnection !== 'null' && $this->broadcastConnection !== 'log';
+
         return [
             'enabled' => $this->realtimeEnabled,
             'broadcast_connection' => $this->broadcastConnection,
-            'configured' => $this->broadcastConnection !== 'null' && $this->broadcastConnection !== 'log',
+            'configured' => $configured,
+            ...$this->realtimeReachability($configured),
         ];
+    }
+
+    /**
+     * Si Reverb responde (V4-PL-2): sin esto, «la presencia en vivo no se
+     * actualiza» no distinguia un Reverb parado de una licencia caducada sin
+     * pedir una segunda ronda.
+     *
+     * Una conexion TCP con un segundo de techo, nombre incluido, y nada mas
+     * ({@see BoundedReachability}): no se habla el
+     * protocolo de Pusher, que necesitaria el secreto de la aplicacion, y un
+     * paquete que se genera con la base caida no puede quedarse esperando.
+     *
+     * **Anonimizado como el resto (ADR-020):** ni el host ni el puerto, que
+     * describen la red del cliente; solo si responde, cuanto tarda y, si no, la
+     * clase del fallo. `reachable: null` cuando no hay a quien preguntar: tiempo
+     * real apagado o con un driver que no es Reverb.
+     *
+     * @return array{reachable: bool|null, latency_ms?: float, error?: string}
+     */
+    private function realtimeReachability(bool $configured): array
+    {
+        if (! $this->realtimeEnabled || ! $configured || $this->broadcastConnection !== 'reverb'
+            || $this->realtimeHost === null || $this->realtimeHost === '' || $this->realtimePort === null) {
+            return ['reachable' => null];
+        }
+
+        $startedAt = microtime(true);
+
+        try {
+            // La misma sonda acotada que el cortacircuitos de PostgreSQL y la
+            // salud: con techo tambien para la resolucion del nombre, que es lo
+            // que se queda colgado cuando el contenedor no existe.
+            if (! $this->reachability->reachable($this->realtimeHost, $this->realtimePort, $this->realtimeTimeoutSeconds)) {
+                return ['reachable' => false, 'error' => 'unreachable'];
+            }
+
+            return ['reachable' => true, 'latency_ms' => round((microtime(true) - $startedAt) * 1000, 2)];
+        } catch (Throwable $failure) {
+            return ['reachable' => false, 'error' => $failure::class];
+        }
     }
 
     /**
