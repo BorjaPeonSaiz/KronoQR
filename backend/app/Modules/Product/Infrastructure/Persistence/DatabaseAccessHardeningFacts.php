@@ -59,4 +59,11 @@ final readonly class DatabaseAccessHardeningFacts implements AccessHardeningFact
             })
             ->count();
     }
+
+    public function accessTokensWithoutExpiry(): int
+    {
+        return $this->connection->table('personal_access_tokens')
+            ->whereNull('expires_at')
+            ->count();
+    }
 }

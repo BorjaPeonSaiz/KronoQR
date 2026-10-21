@@ -779,6 +779,37 @@ ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
     ->runInBackground());
 
 /*
+ * Tokens de acceso caducados (bloque 11 de la 2.3.0, tarea 11.3 D, F4; RGPD
+ * art. 5.1.e).
+ *
+ * `personal_access_tokens` guarda una fila por sesion del panel, del portal,
+ * de cada quiosco y de cada concesion de soporte, con su `last_used_at`. Una
+ * vez caducada ya no autentica a nadie, pero seguia en la tabla para siempre:
+ * un rastro de cuando y desde donde entro cada persona que nadie necesita.
+ *
+ * `--hours=24`: se borran las que caducaron hace **mas de un dia**, no las que
+ * acaban de caducar. Un quiosco que rota su token dentro de la ventana de
+ * solape (ADR-021) o una sesion que acaba de vencer no desaparecen bajo los pies
+ * de quien la estaba usando; y la fila de un dia sirve para responder a «por que
+ * me echo» con la tabla delante.
+ *
+ * SIN ASIENTO: un token caducado no es evidencia legal. Lo que si lo es —quien
+ * inicio sesion, la emision y la revocacion de cada credencial— ya esta en
+ * `audit_log` y no depende de esta fila.
+ *
+ * Los tokens con `expires_at` nulo no los toca: Sanctum no los da por caducados.
+ * Hoy ningun emisor los crea; los que queden de versiones antiguas los cuenta
+ * `product:doctor` (`identity.tokens_without_expiry`).
+ *
+ * 03:40 UTC: cinco minutos despues de la purga del historico de errores, en el
+ * mismo hueco sin nada mas corriendo.
+ */
+ScheduledTaskOutput::toLog(Schedule::command('sanctum:prune-expired', ['--hours' => 24])
+    ->dailyAt('03:40')
+    ->withoutOverlapping()
+    ->runInBackground());
+
+/*
  * Asientos pendientes de paquetes de diagnostico (ADR-020, enmienda del
  * 14-10-2026; RL-04, regla dura 6).
  *

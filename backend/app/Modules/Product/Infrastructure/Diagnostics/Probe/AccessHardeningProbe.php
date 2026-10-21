@@ -89,7 +89,25 @@ final readonly class AccessHardeningProbe implements DoctorProbe
             $this->shortPins($length),
             $this->missingSecondFactorRoles($required),
             $this->accountsPendingSecondFactor($required),
+            $this->tokensWithoutExpiry(),
         ];
+    }
+
+    /**
+     * Tokens que `sanctum:prune-expired` no borrara nunca (tarea 11.3 D, RGPD
+     * art. 5.1.e). Aviso y no fallo: siguen funcionando como siempre; lo que
+     * no hacen es caducar.
+     */
+    private function tokensWithoutExpiry(): DoctorFinding
+    {
+        $id = 'access.tokens_without_expiry';
+        $count = $this->facts->accessTokensWithoutExpiry();
+
+        if ($count === 0) {
+            return DoctorFinding::ok($id, ['tokens_without_expiry' => 0]);
+        }
+
+        return DoctorFinding::warning($id, params: ['count' => $count], details: ['tokens_without_expiry' => $count]);
     }
 
     /**

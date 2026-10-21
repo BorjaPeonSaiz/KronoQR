@@ -284,6 +284,12 @@ return [
                     .'it yet. They will on their next panel sign-in, but until then someone holding only their '
                     .'password could enrol it in their place. This report only gives the number.',
             ],
+            'tokens_without_expiry' => [
+                'ok' => 'Every access token has an expiry date, so expired ones are deleted every night.',
+                'warning' => ':count access token(s) have no expiry date. They still work, but they never expire '
+                    .'and the nightly clean-up of expired tokens never deletes them. They come from versions '
+                    .'before 2.2.0. This report only gives the number, never whose they are.',
+            ],
         ],
 
         'tls' => [
@@ -839,6 +845,15 @@ return [
                     ."  docker compose exec app php artisan identity:reset-password <account-email>\n"
                     ."An account nobody uses any more, deactivate it:\n"
                     .'  docker compose exec app php artisan identity:deactivate-user <account-email>',
+            ],
+            'tokens_without_expiry' => [
+                'warning' => "Nothing is broken. A kiosk's are cut short on their own the next time it renews\n"
+                    ."its token. A management account's disappear when its password is changed or the\n"
+                    ."account is deactivated:\n"
+                    ."  docker compose exec app php artisan identity:reset-password <account-email>\n"
+                    ."If the number does not go down within a few weeks, generate the diagnostic bundle\n"
+                    ."and send it to support:\n"
+                    .'  docker compose exec app php artisan product:diagnostics',
             ],
         ],
 

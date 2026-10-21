@@ -319,6 +319,12 @@ return [
                     .'han dado de alta. Lo haran en su proximo acceso al panel, pero hasta entonces quien tenga '
                     .'solo su contraseña podria darlo de alta en su lugar. Este informe da solo el numero.',
             ],
+            'tokens_without_expiry' => [
+                'ok' => 'Todos los tokens de acceso tienen fecha de caducidad, asi que los caducados se borran cada noche.',
+                'warning' => ':count token(s) de acceso no tienen fecha de caducidad. Siguen funcionando, pero no '
+                    .'caducan nunca y la limpieza nocturna de tokens caducados no los borra. Vienen de versiones '
+                    .'anteriores a la 2.2.0. Este informe da solo el numero, nunca de quien son.',
+            ],
         ],
 
         // --- Certificado -----------------------------------------------------
@@ -901,6 +907,15 @@ return [
                     ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
                     ."Una cuenta que ya no usa nadie, desactivala:\n"
                     .'  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>',
+            ],
+            'tokens_without_expiry' => [
+                'warning' => "No hay nada roto. Los de un quiosco se recortan solos la proxima vez que renueve\n"
+                    ."su token. Los de una cuenta de gestion desaparecen al cambiarle la contraseña o al\n"
+                    ."desactivarla:\n"
+                    ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
+                    ."Si el numero no baja en unas semanas, genera el paquete de diagnostico y\n"
+                    ."enviaselo a soporte:\n"
+                    .'  docker compose exec app php artisan product:diagnostics',
             ],
         ],
 
