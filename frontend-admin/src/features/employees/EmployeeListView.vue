@@ -20,6 +20,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
@@ -38,6 +39,7 @@ const PIN_STATUSES: readonly PinStatus[] = ['pending', 'issued', 'delivered']
 type TeleworkingFilterValue = '' | 'true' | 'false'
 
 const { t } = useI18n()
+const { personName } = usePersonName()
 const route = useRoute()
 const router = useRouter()
 
@@ -263,7 +265,7 @@ function onPinDelivered(): void {
 }
 
 function fullName(first: string, last: string): string {
-  return `${first} ${last}`
+  return personName(first, last)
 }
 
 const selectClass =

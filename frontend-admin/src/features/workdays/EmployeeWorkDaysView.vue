@@ -42,6 +42,7 @@ import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-k
 import { FALLBACK_TIMEZONE, todayInZone } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ATTENDANCE_CORRECT, EMPLOYEES_MANAGE } from '@/features/auth/abilities'
@@ -57,6 +58,7 @@ import { UNBOUNDED_RANGE } from './workdays.api'
 const props = defineProps<{ uuid: string }>()
 
 const { t } = useI18n()
+const { personName } = usePersonName()
 const route = useRoute()
 const session = useSessionStore()
 const queryClient = useQueryClient()
@@ -174,7 +176,7 @@ const { data: employee } = useQuery({
 const personLabel = computed(() =>
   employee.value === undefined
     ? props.uuid
-    : `${employee.value.first_name} ${employee.value.last_name}`,
+    : personName(employee.value.first_name, employee.value.last_name),
 )
 
 /**

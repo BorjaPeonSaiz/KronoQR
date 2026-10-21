@@ -417,3 +417,32 @@ test(
     await expect(page.getByText(/Esta persona está de baja desde/)).toBeVisible()
   },
 )
+
+test(
+  'una ficha minimizada se pinta con texto de sustitucion y sin acciones que ya no tienen sentido',
+  { tag: ['@RF-GP-01', '@RL-11'] },
+  async ({ page }) => {
+    const minimised: Employee = {
+      ...EMPLOYEE,
+      employee_code: EMPLOYEE_UUID.replaceAll('-', '').toUpperCase(),
+      first_name: '',
+      last_name: '',
+      email: null,
+      status: 'terminated',
+      terminated_at: '2020-01-31',
+      pin_status: 'pending',
+    }
+
+    await stubManagementApi(page, { employees: [minimised] })
+    await logIn(page)
+
+    await page.goto('/employees')
+    await expect(page.getByRole('link', { name: 'Persona minimizada' })).toBeVisible()
+
+    await page.getByRole('link', { name: 'Persona minimizada' }).click()
+    await expect(page.getByRole('heading', { name: 'Persona minimizada', level: 1 })).toBeVisible()
+    await expect(page.getByTestId('employee-minimised')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Editar' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Contratos', level: 2 })).toHaveCount(0)
+  },
+)

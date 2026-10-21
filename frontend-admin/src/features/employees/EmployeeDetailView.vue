@@ -15,6 +15,7 @@ import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/we
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import { RouterLink } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
@@ -43,6 +44,7 @@ import {
 const props = defineProps<{ uuid: string }>()
 
 const { t, locale } = useI18n()
+const { personName, isMinimised } = usePersonName()
 const { locales: offered, multilingual } = useOfferedLocales()
 const queryClient = useQueryClient()
 const session = useSessionStore()
@@ -130,7 +132,16 @@ function departmentName(id: number | null): string {
 }
 
 const fullName = computed(() =>
-  employee.value === undefined ? '' : `${employee.value.first_name} ${employee.value.last_name}`,
+  employee.value === undefined
+    ? ''
+    : personName(employee.value.first_name, employee.value.last_name),
+)
+
+/** Ficha minimizada por retencion (ADR-060): sin nombre, correo, PIN ni contratos que gestionar. */
+const minimised = computed(
+  () =>
+    employee.value !== undefined &&
+    isMinimised(employee.value.first_name, employee.value.last_name),
 )
 
 // --- Edicion de la ficha -----------------------------------------------------
@@ -590,6 +601,15 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
         </p>
       </header>
 
+      <p
+        v-if="minimised"
+        role="status"
+        data-test="employee-minimised"
+        class="mt-4 rounded-kq border border-kq-border-strong bg-kq-surface-alt p-4 text-kq-text"
+      >
+        {{ t('employees.detail.minimised') }}
+      </p>
+
       <!-- Datos -->
       <section
         class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
@@ -597,7 +617,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-xl font-semibold">{{ t('employees.detail.dataHeading') }}</h2>
           <button
-            v-if="!editing"
+            v-if="!editing && !minimised"
             type="button"
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
             @click="startEditing"
@@ -726,6 +746,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
       <!-- PIN -->
       <section
+        v-if="!minimised"
         class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
       >
         <h2 class="text-xl font-semibold">{{ t('pin.heading') }}</h2>
@@ -759,6 +780,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
       <!-- Contratos (RF-GP-02) -->
       <EmployeeContractsSection
+        v-if="!minimised"
         :employee-uuid="employee.uuid"
         :can-register="employee.status !== 'terminated'"
       />
@@ -780,6 +802,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
       <!-- Credencial (RF-QR-04, RF-QR-06, RF-QR-08) -->
       <section
+        v-if="!minimised"
         class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
       >
         <h2 class="text-xl font-semibold">{{ t('employees.detail.credentialHeading') }}</h2>

@@ -291,6 +291,9 @@
     "description": "La dirección no corresponde a ninguna sección del panel.",
     "backToEmployees": "Ir a la plantilla"
   },
+  "people": {
+    "minimised": "Persona minimizada"
+  },
   "employees": {
     "title": "Plantilla",
     "subtitle": "Altas, fichas y bajas. Nada se borra: una baja conserva la ficha y su registro horario.",
@@ -381,7 +384,8 @@
         "title": "La tarjeta no se gestiona desde esta ficha",
         "description": "Esta persona no está de alta, así que el panel de credenciales no le asigna ninguna fila aquí. Su tarjeta se gestiona desde el tablero de credenciales.",
         "link": "Ir al tablero de credenciales"
-      }
+      },
+      "minimised": "Esta ficha está minimizada: venció el plazo de conservación tras la baja y se retiraron el nombre, el correo, el PIN, la foto y el documento. Se conservan el identificador, el centro, el departamento y las fechas. Ya no hay datos que editar ni credencial que gestionar."
     },
     "offboard": {
       "heading": "Baja",
@@ -1585,7 +1589,8 @@
       "breakRequiredAfterHours": "Tramo continuo máximo sin pausa (h)",
       "weekStartsOn": "La semana empieza en",
       "holidayCalendar": "Calendario de festivos",
-      "retentionYears": "Años de conservación del registro"
+      "retentionYears": "Años de conservación del registro",
+      "personnelRecordRetentionYears": "Años de conservación de la ficha tras la baja"
     },
     "hints": {
       "name": "Cómo se llama el convenio que describe este perfil. Aparece en el informe de retención.",
@@ -1596,7 +1601,8 @@
       "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
       "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
       "retentionFloor": "Mínimo legal: {years} año ({region}). | Mínimo legal: {years} años ({region}).",
-      "retentionYears": "Antes de ese plazo nada puede purgarse. El mínimo lo fija la ley de cada país; en España, el art. 34.9 ET."
+      "retentionYears": "Antes de ese plazo nada puede purgarse. El mínimo lo fija la ley de cada país; en España, el art. 34.9 ET.",
+      "personnelRecordRetentionYears": "Plazo, contado desde la baja, tras el cual se minimiza la ficha de la persona (nombre, correo, PIN, foto y documento) y se borran sus contratos y ausencias. Entre 1 y 30 años; 4 de serie. Nunca vence antes que el registro horario que la nombra."
     },
     "weekDays": {
       "1": "Lunes",
@@ -1613,8 +1619,10 @@
     "errors": {
       "belowFloor": "No puede ser inferior al mínimo legal: {years} año. | No puede ser inferior al mínimo legal: {years} años.",
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
-      "required": "Este campo no puede quedarse vacío."
-    }
+      "required": "Este campo no puede quedarse vacío.",
+      "personnelOutOfRange": "Escribe un número de años entre {min} y {max}."
+    },
+    "personnelRetentionWarning": "Vas a cambiar el plazo de la ficha de personal. Al vencer tras la baja, la ficha se minimiza (nombre, correo, PIN, foto y documento) y se borran sus contratos y ausencias; no se puede deshacer. Ninguna minimización se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita."
   },
   "complianceSummary": {
     "title": "Cumplimiento",
@@ -2323,7 +2331,8 @@
         "reasonHint": "El número o la referencia de la incidencia, entre 3 y 200 caracteres. Va tal cual al registro de auditoría: sin nombres de personas ni datos de salud.",
         "scope": "Alcance",
         "hours": "Horas",
-        "hoursHint": "Cuánto tiempo estará activo el acceso: entre 1 y 72 horas."
+        "hoursHint": "Cuánto tiempo estará activo el acceso: entre 1 y 72 horas.",
+        "reasonPersonalHint": "No escribas nombres, correos, DNI ni teléfonos: si tienes que señalar a una persona, usa su uuid. El motivo va tal cual al registro de auditoría y no se puede corregir después."
       },
       "scope": {
         "diagnostics": {
@@ -2371,7 +2380,8 @@
           "actions": "Acciones"
         },
         "usedAgo": "Hace {hours} h {minutes} min",
-        "neverUsed": "Nunca"
+        "neverUsed": "Nunca",
+        "reasonPurged": "Motivo retirado el {date}"
       },
       "revoke": {
         "action": "Revocar",

@@ -125,6 +125,36 @@ describe('EmployeeDetailView', () => {
     expect(wrapper.text()).not.toContain(es.employees.fields.nationalId)
   })
 
+  it('una ficha minimizada se rotula como tal y no ofrece editar, PIN, contratos ni tarjeta', async () => {
+    const wrapper = await mountDetail(
+      employee({
+        first_name: '',
+        last_name: '',
+        email: null,
+        pin_status: 'pending',
+        status: 'terminated',
+        terminated_at: '2020-01-31',
+        employee_code: '0199F0C21F4A7C3E9B214D5E6F7A8B90',
+      }),
+    )
+
+    expect(wrapper.find('h1').text()).toBe(es.people.minimised)
+    expect(wrapper.find('[data-test="employee-minimised"]').text()).toBe(
+      es.employees.detail.minimised,
+    )
+    expect(wrapper.text()).toContain('0199F0C21F4A7C3E9B214D5E6F7A8B90')
+    expect(() => buttonWith(wrapper, es.common.edit)).toThrow()
+    expect(wrapper.text()).not.toContain(es.pin.heading)
+    expect(wrapper.text()).not.toContain(es.employees.detail.credentialHeading)
+  })
+
+  it('una ficha normal no lleva el aviso de minimizada y conserva sus acciones', async () => {
+    const wrapper = await mountDetail(employee())
+
+    expect(wrapper.find('[data-test="employee-minimised"]').exists()).toBe(false)
+    expect(buttonWith(wrapper, es.common.edit)).toBeDefined()
+  })
+
   it('enseña el estado del PIN y explica que significa', async () => {
     const wrapper = await mountDetail(employee({ pin_status: 'issued' }))
 
