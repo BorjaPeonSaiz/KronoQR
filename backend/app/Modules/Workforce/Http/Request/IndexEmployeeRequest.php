@@ -31,7 +31,14 @@ final class IndexEmployeeRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return Gate::allows('viewAny', Employee::class);
+        if (! Gate::allows('viewAny', Employee::class)) {
+            return false;
+        }
+
+        // DIV-1: quien no recibe `pin_status` en la ficha tampoco puede filtrar
+        // por el, o el filtro diria lo que la ficha calla. `403` y no ignorarlo:
+        // un filtro ignorado devolveria la plantilla entera como si casara.
+        return ! $this->has('pin_status') || Gate::allows('viewContactAndPin', Employee::class);
     }
 
     /**

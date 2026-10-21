@@ -64,11 +64,15 @@ final class EmployeeController extends Controller
         // fila a fila serian cien consultas en un listado de cien personas.
         $pinStatuses = $queries->pinStatusesFor($page['items']);
 
+        // DIV-1: el responsable recibe la ficha reducida (`ScopedEmployee`).
+        $includesContactAndPin = Gate::allows('viewContactAndPin', Employee::class);
+
         return response()->json([
             'data' => array_map(
                 static fn (Employee $employee): array => (new EmployeeResource(
                     $employee,
                     $pinStatuses[$employee->uuid] ?? PinStatus::Pending,
+                    $includesContactAndPin,
                 ))->toArray($request),
                 $page['items'],
             ),
@@ -108,7 +112,11 @@ final class EmployeeController extends Controller
             $employee->uuid,
         );
 
-        return (new EmployeeResource($employee, $queries->pinStatus($uuid)))->response();
+        return (new EmployeeResource(
+            $employee,
+            $queries->pinStatus($uuid),
+            Gate::allows('viewContactAndPin', Employee::class),
+        ))->response();
     }
 
     public function store(

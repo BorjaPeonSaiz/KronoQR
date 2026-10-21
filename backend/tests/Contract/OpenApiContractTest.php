@@ -437,6 +437,31 @@ it('declara el alcance por departamento en la sesion de gestion', function (): v
         ->toBe(['kind', 'department_ids']);
 })->group('RF-ID-03', 'RQ-06');
 
+it('declara la ficha reducida del responsable sin correo, idioma ni estado del PIN', function (): void {
+    // DIV-1 (RGPD art. 5.1.c): el responsable de departamento recibe su
+    // plantilla sin `email`, `locale` ni `pin_status`. Que el esquema reducido
+    // no pueda alojarlos (`additionalProperties: false` y sin la propiedad) es
+    // lo que impide que vuelvan «solo para el panel».
+    $scoped = Contract::value('components', 'schemas', 'ScopedEmployee');
+    $full = Contract::value('components', 'schemas', 'Employee');
+
+    expect($scoped['additionalProperties'] ?? null)->toBeFalse()
+        ->and(array_keys($scoped['properties']))->not->toContain('email', 'locale', 'pin_status')
+        // Todo lo demas de la ficha, y nada que no este en ella.
+        ->and(array_keys($scoped['properties']))
+        ->toEqualCanonicalizing(array_values(array_diff(array_keys($full['properties']), ['email', 'locale', 'pin_status'])))
+        ->and(Contract::value('paths', '/api/v1/employees', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'anyOf'))
+        ->toBe([
+            ['$ref' => '#/components/schemas/EmployeeCollection'],
+            ['$ref' => '#/components/schemas/ScopedEmployeeCollection'],
+        ])
+        ->and(Contract::value('paths', '/api/v1/employees/{uuid}', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'oneOf'))
+        ->toBe([
+            ['$ref' => '#/components/schemas/Employee'],
+            ['$ref' => '#/components/schemas/ScopedEmployee'],
+        ]);
+})->group('RF-ID-03', 'RS-05', 'RQ-06');
+
 it('no ofrece ningun verbo de borrado en toda la API salvo el declarado', function (): void {
     // Regla dura 5: nada se borra. La baja de un empleado es un cambio de estado
     // con fecha (RF-GP-03) y los centros y departamentos no se eliminan porque

@@ -3467,6 +3467,16 @@ paths:
         regla con la que se calcula el campo `pin_status` de cada ficha—. Un
         filtro que se resolviera en el navegador daria un `meta.total` que
         describe otra cosa y una paginacion que no cuadra.
+
+        **El responsable de departamento recibe la ficha reducida**
+        (`ScopedEmployeeCollection`, DIV-1, RGPD art. 5.1.c): sin `email`, sin
+        `locale` y sin `pin_status`. Le basta con saber quien es su gente para
+        ver su presencia y sus jornadas; el correo, el idioma y la situacion de
+        su PIN son de RRHH, que es quien los gestiona. Los campos **no
+        aparecen**, no llegan a `null`: `null` en `email` significa «no tiene
+        correo», y lo cierto es «no te corresponde». Por lo mismo **no puede
+        filtrar por `pin_status`**: el filtro diria lo que la ficha calla, y
+        enviarlo responde `403`.
       tags: [Workforce]
       security:
         - managementToken: ['employees:read']
@@ -3480,11 +3490,16 @@ paths:
         - $ref: '#/components/parameters/PerPage'
       responses:
         '200':
-          description: Pagina de la plantilla.
+          description: |
+            Pagina de la plantilla. `EmployeeCollection` para `admin` y `rrhh`;
+            `ScopedEmployeeCollection` para `responsable_departamento`. Es
+            `anyOf` y no `oneOf` porque una pagina vacia vale para las dos.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EmployeeCollection'
+                anyOf:
+                  - $ref: '#/components/schemas/EmployeeCollection'
+                  - $ref: '#/components/schemas/ScopedEmployeeCollection'
               examples:
                 primera-pagina:
                   value:
@@ -3636,15 +3651,23 @@ paths:
         `404`: la persona existe y el problema es de autorizacion— y el intento
         queda en `audit_log` con el `employee_uuid` del recurso y nunca con su
         nombre (RS-05, regla dura 21).
+
+        **El responsable de departamento recibe la ficha reducida**
+        (`ScopedEmployee`, DIV-1): sin `email`, sin `locale` y sin
+        `pin_status`, omitidos y no a `null`. Ver `GET /api/v1/employees`.
       security:
         - managementToken: ['employees:read']
       responses:
         '200':
-          description: Ficha del empleado.
+          description: |
+            Ficha del empleado. `Employee` para `admin` y `rrhh`;
+            `ScopedEmployee` para `responsable_departamento`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Employee'
+                oneOf:
+                  - $ref: '#/components/schemas/Employee'
+                  - $ref: '#/components/schemas/ScopedEmployee'
               examples:
                 ficha:
                   value:
@@ -3660,6 +3683,18 @@ paths:
                     locale: es
                     teleworking: false
                     pin_status: delivered
+                ficha-del-responsable:
+                  summary: La misma ficha, pedida por su responsable de departamento
+                  value:
+                    uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                    employee_code: E7QK2MXPR
+                    first_name: Youssef
+                    last_name: Amrani
+                    department_id: 3
+                    status: active
+                    hired_at: '2026-08-14'
+                    terminated_at: null
+                    teleworking: false
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3679,7 +3714,10 @@ paths:
         centro no cambia: es el de la instalacion (ADR-040).
 
         **Cada cambio efectivo deja asiento `employee.updated`** con la lista
-        de campos tocados y ningun valor (AUD-2, regla dura 21). Un `PATCH` que
+        de campos tocados y ningun valor (AUD-2, regla dura 21), salvo el
+        departamento: si cambia, el asiento lleva el anterior y el nuevo
+        (`previous_department_id` y `department_id`, R4-SC-05), porque decide
+        que responsable ve y corrige la jornada de la persona. Un `PATCH` que
         no cambia nada no deja asiento.
 
         **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
@@ -11582,6 +11620,10 @@ components:
 
         Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
         ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+
+        **Solo `admin` y `rrhh`.** Un `responsable_departamento` no recibe
+        `pin_status` en la ficha (DIV-1) y por eso tampoco puede filtrar por
+        el: enviarlo responde `403`.
       schema:
         $ref: '#/components/schemas/PinStatus'
       example: issued
@@ -15799,6 +15841,77 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Employee'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+
+    ScopedEmployee:
+      type: object
+      title: ScopedEmployee
+      description: |
+        La ficha que recibe el **responsable de departamento** de su gente
+        (RF-ID-03, DIV-1, RGPD art. 5.1.c): la de `Employee` **sin `email`, sin
+        `locale` y sin `pin_status`**. El correo y el idioma son datos de
+        contacto que gestiona RRHH, y la situacion del PIN es un dato de
+        seguridad de la credencial: ninguno hace falta para ver la presencia y
+        las jornadas de un equipo. Los tres campos se omiten, no llegan a
+        `null`.
+
+        Lo decide la policy (`EmployeePolicy::viewContactAndPin`), no la
+        presentacion, para que la autorizacion negativa lo pruebe por rol
+        (regla dura 18).
+      additionalProperties: false
+      required:
+        - uuid
+        - employee_code
+        - first_name
+        - last_name
+        - department_id
+        - status
+        - hired_at
+        - terminated_at
+        - teleworking
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        employee_code:
+          type: string
+          minLength: 1
+          maxLength: 32
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        department_id:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/EmploymentStatus'
+        hired_at:
+          type: string
+          format: date
+        terminated_at:
+          type: [string, 'null']
+          format: date
+        teleworking:
+          $ref: '#/components/schemas/Teleworking'
+
+    ScopedEmployeeCollection:
+      type: object
+      title: ScopedEmployeeCollection
+      description: Pagina de la plantilla de un responsable de departamento, con la ficha reducida.
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopedEmployee'
         meta:
           $ref: '#/components/schemas/PageMeta'
 

@@ -1719,6 +1719,16 @@ export interface paths {
          *     regla con la que se calcula el campo `pin_status` de cada ficha—. Un
          *     filtro que se resolviera en el navegador daria un `meta.total` que
          *     describe otra cosa y una paginacion que no cuadra.
+         *
+         *     **El responsable de departamento recibe la ficha reducida**
+         *     (`ScopedEmployeeCollection`, DIV-1, RGPD art. 5.1.c): sin `email`, sin
+         *     `locale` y sin `pin_status`. Le basta con saber quien es su gente para
+         *     ver su presencia y sus jornadas; el correo, el idioma y la situacion de
+         *     su PIN son de RRHH, que es quien los gestiona. Los campos **no
+         *     aparecen**, no llegan a `null`: `null` en `email` significa «no tiene
+         *     correo», y lo cierto es «no te corresponde». Por lo mismo **no puede
+         *     filtrar por `pin_status`**: el filtro diria lo que la ficha calla, y
+         *     enviarlo responde `403`.
          */
         get: operations["listEmployees"];
         put?: never;
@@ -1785,6 +1795,10 @@ export interface paths {
          *     `404`: la persona existe y el problema es de autorizacion— y el intento
          *     queda en `audit_log` con el `employee_uuid` del recurso y nunca con su
          *     nombre (RS-05, regla dura 21).
+         *
+         *     **El responsable de departamento recibe la ficha reducida**
+         *     (`ScopedEmployee`, DIV-1): sin `email`, sin `locale` y sin
+         *     `pin_status`, omitidos y no a `null`. Ver `GET /api/v1/employees`.
          */
         get: operations["getEmployee"];
         put?: never;
@@ -1799,7 +1813,10 @@ export interface paths {
          *     centro no cambia: es el de la instalacion (ADR-040).
          *
          *     **Cada cambio efectivo deja asiento `employee.updated`** con la lista
-         *     de campos tocados y ningun valor (AUD-2, regla dura 21). Un `PATCH` que
+         *     de campos tocados y ningun valor (AUD-2, regla dura 21), salvo el
+         *     departamento: si cambia, el asiento lleva el anterior y el nuevo
+         *     (`previous_department_id` y `department_id`, R4-SC-05), porque decide
+         *     que responsable ve y corrige la jornada de la persona. Un `PATCH` que
          *     no cambia nada no deja asiento.
          *
          *     **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
@@ -7946,6 +7963,43 @@ export interface components {
             meta: components["schemas"]["PageMeta"];
         };
         /**
+         * ScopedEmployee
+         * @description La ficha que recibe el **responsable de departamento** de su gente
+         *     (RF-ID-03, DIV-1, RGPD art. 5.1.c): la de `Employee` **sin `email`, sin
+         *     `locale` y sin `pin_status`**. El correo y el idioma son datos de
+         *     contacto que gestiona RRHH, y la situacion del PIN es un dato de
+         *     seguridad de la credencial: ninguno hace falta para ver la presencia y
+         *     las jornadas de un equipo. Los tres campos se omiten, no llegan a
+         *     `null`.
+         *
+         *     Lo decide la policy (`EmployeePolicy::viewContactAndPin`), no la
+         *     presentacion, para que la autorizacion negativa lo pruebe por rol
+         *     (regla dura 18).
+         */
+        ScopedEmployee: {
+            /** Format: uuid */
+            uuid: string;
+            employee_code: string;
+            first_name: string;
+            last_name: string;
+            /** Format: int64 */
+            department_id: number | null;
+            status: components["schemas"]["EmploymentStatus"];
+            /** Format: date */
+            hired_at: string;
+            /** Format: date */
+            terminated_at: string | null;
+            teleworking: components["schemas"]["Teleworking"];
+        };
+        /**
+         * ScopedEmployeeCollection
+         * @description Pagina de la plantilla de un responsable de departamento, con la ficha reducida.
+         */
+        ScopedEmployeeCollection: {
+            data: components["schemas"]["ScopedEmployee"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
          * PageMeta
          * @description Situacion de la pagina devuelta dentro del total.
          */
@@ -13644,6 +13698,10 @@ export interface components {
          *
          *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
          *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+         *
+         *     **Solo `admin` y `rrhh`.** Un `responsable_departamento` no recibe
+         *     `pin_status` en la ficha (DIV-1) y por eso tampoco puede filtrar por
+         *     el: enviarlo responde `403`.
          * @example issued
          */
         PinStatusFilter: components["schemas"]["PinStatus"];
@@ -15425,6 +15483,10 @@ export interface operations {
                  *
                  *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
                  *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+                 *
+                 *     **Solo `admin` y `rrhh`.** Un `responsable_departamento` no recibe
+                 *     `pin_status` en la ficha (DIV-1) y por eso tampoco puede filtrar por
+                 *     el: enviarlo responde `403`.
                  * @example issued
                  */
                 pin_status?: components["parameters"]["PinStatusFilter"];
@@ -15455,13 +15517,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pagina de la plantilla. */
+            /**
+             * @description Pagina de la plantilla. `EmployeeCollection` para `admin` y `rrhh`;
+             *     `ScopedEmployeeCollection` para `responsable_departamento`. Es
+             *     `anyOf` y no `oneOf` porque una pagina vacia vale para las dos.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmployeeCollection"];
+                    "application/json": components["schemas"]["EmployeeCollection"] | components["schemas"]["ScopedEmployeeCollection"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -15522,13 +15588,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ficha del empleado. */
+            /**
+             * @description Ficha del empleado. `Employee` para `admin` y `rrhh`;
+             *     `ScopedEmployee` para `responsable_departamento`.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Employee"];
+                    "application/json": components["schemas"]["Employee"] | components["schemas"]["ScopedEmployee"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
