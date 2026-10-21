@@ -745,7 +745,9 @@ it('da a /api/v1/scan/pin su zona propia por IP con la tasa del .env', function 
         ->toContain('rate=${NGINX_SCAN_PIN_RATE_PER_MINUTE}r/m')
         ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin \{[^}]*limit_req zone=scan_pin burst=10 nodelay;[^}]*\}/s')
         // Sigue contando en las dos zonas de fichaje: la propia se SUMA, no sustituye.
-        ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin \{[^}]*zone=scan_kiosk_vlan[^}]*zone=scan_other/s');
+        ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin \{[^}]*zone=scan_kiosk_vlan[^}]*zone=scan_other/s')
+        // Y con barra final: Laravel la enruta igual, y sin su bloque esquivaria la zona.
+        ->and($template)->toMatch('/location = \/api\/v1\/scan\/pin\/ \{[^}]*zone=scan_kiosk_vlan[^}]*zone=scan_other[^}]*zone=scan_pin/s');
 
     // La variable existe en los tres sitios que la reparten, con el mismo defecto.
     expect(repoContents('.env.example'))->toContain("\nNGINX_SCAN_PIN_RATE_PER_MINUTE=60\n")

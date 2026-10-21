@@ -428,6 +428,19 @@ main() {
     printf '  [ok]    /api/v1/scan/pin          zona scan_pin a 60 r/m\n'
   fi
   problema /api/v1/scan/pin 502 bad-gateway -X POST -H "${json}" -d '{}'
+  # Las DOS variantes (con y sin barra final) llevan scan_pin: la segunda la enruta
+  # Laravel igual y, sin su bloque, esquivaria el limite.
+  local configuracion variante
+  configuracion="$(docker exec "${CONTENEDOR}" nginx -T 2>/dev/null)"
+  for variante in /api/v1/scan/pin /api/v1/scan/pin/; do
+    if ! awk -v loc="  location = ${variante} {" '$0 == loc {dentro = 1} dentro && /limit_req zone=scan_pin / {ok = 1} dentro && /^  }$/ {exit} END {exit !ok}' <<<"${configuracion}"; then
+      printf '  [FALLA] %s no lleva limit_req zone=scan_pin\n' "${variante}" >&2
+      fallo=1
+    else
+      printf '  [ok]    %-24s limit_req scan_pin\n' "${variante}"
+    fi
+  done
+  problema /api/v1/scan/pin/ 502 bad-gateway -X POST -H "${json}" -d '{}'
 
   # En paralelo: cada peticion que llega a la aplicacion espera el resolvedor.
   local _rafaga

@@ -366,6 +366,17 @@ server {
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
+  # Misma zona con barra final: Laravel enruta `/scan/pin/` a la misma accion, y sin
+  # este bloque caeria en `^~ /api/v1/scan` sin scan_pin (ver el comentario de
+  # /api/v1/me/login, mas abajo). Con Redis caido seria el limite que falta.
+  location = /api/v1/scan/pin/ {
+    limit_req zone=scan_kiosk_vlan burst=50 nodelay;
+    limit_req zone=scan_other burst=10 nodelay;
+    limit_req zone=scan_pin burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
   #--- Autenticacion del panel: 5 r/m ----------------------------------------
   # PP-10: con ADMIN_INTERNAL_CIDR definida, fuera de su rango 403 antes de
   # llegar a PHP-FPM; vacia, no filtra.
