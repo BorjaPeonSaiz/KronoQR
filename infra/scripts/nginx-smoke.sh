@@ -416,8 +416,12 @@ main() {
 
   # 10.5: el 400 y el 414 que nginx genera antes de elegir `location` (cabeceras
   # de mas de 8 KiB, linea de peticion de mas de 8 KiB) tambien salen problem+json.
-  problema /api/v1/ready 400 bad-request -H "Cookie: $(head -c 20000 /dev/zero | tr '\0' 'a')"
-  problema "/api/v1/ready?x=$(head -c 20000 /dev/zero | tr '\0' 'a')" 414 uri-too-long
+  # SOLO EN HTTP/1.1: por HTTP/2 nginx no puede devolver una respuesta a una
+  # cabecera o una URI que desborda el buffer (resetea la conexion, y curl da
+  # error sin cuerpo), asi que no hay problem+json que ofrecer. Por eso se fuerza
+  # --http1.1; afirmar el caso HTTP/2 seria falso.
+  problema /api/v1/ready 400 bad-request --http1.1 -H "Cookie: $(head -c 20000 /dev/zero | tr '\0' 'a')"
+  problema "/api/v1/ready?x=$(head -c 20000 /dev/zero | tr '\0' 'a')" 414 uri-too-long --http1.1
 
   # ADR-059 §3: /scan/pin tiene su zona propia, con la tasa del entorno de la imagen (60).
   if ! docker exec "${CONTENEDOR}" nginx -T 2>/dev/null | grep -qE 'limit_req_zone .*zone=scan_pin:10m +rate=60r/m;' ||
@@ -448,8 +452,12 @@ main() {
     curl -s -k -o /dev/null --max-time 20 -X POST \
       "https://127.0.0.1:${PUERTO}/api/v1/auth/login" &
   done
-  wait
+  # La comprobacion va ANTES del wait: las peticiones aceptadas tardan ~5 s en el
+  # resolvedor y a 5 r/m la zona se vacia (una cada 12 s). Esperar a que acaben deja
+  # el exceso en el filo de la rafaga y el 429 depende de los milisegundos.
+  sleep 2
   problema /api/v1/auth/login 429 too-many-requests -X POST
+  wait
   comprobar /admin/ 200 '<!doctype html'
 
   proxy_de_confianza
