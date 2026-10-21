@@ -3,15 +3,12 @@
 declare(strict_types=1);
 
 use App\Modules\Reporting\Application\Support\PresenceChannels;
-use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
-use App\Modules\Shared\Application\Authorization\ScopeGuard;
-use App\Modules\Shared\Application\Port\FeatureGate;
-use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Reporting\Http\Support\PresenceChannelAuthorizer;
 use Illuminate\Support\Facades\Broadcast;
-use Illuminate\Support\Facades\Gate;
 
 /*
  * Autorizacion de los canales de la presencia en vivo (ADR-011, RF-ID-03, regla
+ * dura 18).
  * dura 18).
  *
  * LA SUSCRIPCION A UN CANAL ES UN ENDPOINT MAS. Se autoriza con los mismos dos
@@ -62,20 +59,14 @@ use Illuminate\Support\Facades\Gate;
  * departamentos que existen hoy**: su alcance es una lista y la lista puede
  * quedarse corta mañana, cuando se cree un departamento nuevo. Suscribirlo al
  * global le daria en tiempo real justo lo que RF-ID-03 le niega en el listado.
+ *
+ * La decision y su asiento `personal_data.accessed` los toma
+ * `PresenceChannelAuthorizer` (tarea 11.4 de la 2.3.0): este fichero solo
+ * declara los canales.
  */
 Broadcast::channel(
     PresenceChannels::ALL,
-    static function (mixed $user): bool {
-        if (! app(FeatureGate::class)->isEnabled(Feature::RealtimePresence)) {
-            return false;
-        }
-
-        if (! Gate::forUser($user)->allows('view', PresenceBoard::class)) {
-            return false;
-        }
-
-        return PresenceChannels::mayJoinAll(app(ScopeGuard::class)->scopeOf($user));
-    },
+    static fn (mixed $user): bool => app(PresenceChannelAuthorizer::class)->joinAll($user),
 );
 
 /*
@@ -83,28 +74,12 @@ Broadcast::channel(
  * responsable de ESE departamento.
  *
  * `{departmentId}` llega como cadena desde el nombre del canal —lo parte
- * Laravel— y se convierte aqui: un `presence.department.3abc` no puede
- * confundirse con el 3. `is_numeric` antes del casting, porque `(int) '3abc'` es
- * `3` y eso seria una autorizacion concedida a un canal que nadie pidio.
+ * Laravel— y el autorizador lo exige en cifras: un `presence.department.3abc`
+ * no puede confundirse con el 3, porque `(int) '3abc'` es `3` y eso seria una
+ * autorizacion concedida a un canal que nadie pidio.
  */
 Broadcast::channel(
     PresenceChannels::DEPARTMENT_PREFIX.'{departmentId}',
-    static function (mixed $user, string $departmentId): bool {
-        if (! app(FeatureGate::class)->isEnabled(Feature::RealtimePresence)) {
-            return false;
-        }
-
-        if (! Gate::forUser($user)->allows('view', PresenceBoard::class)) {
-            return false;
-        }
-
-        if (! ctype_digit($departmentId)) {
-            return false;
-        }
-
-        return PresenceChannels::mayJoinDepartment(
-            app(ScopeGuard::class)->scopeOf($user),
-            (int) $departmentId,
-        );
-    },
+    static fn (mixed $user, string $departmentId): bool => app(PresenceChannelAuthorizer::class)
+        ->joinDepartment($user, $departmentId),
 );
