@@ -843,25 +843,49 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
     // Prefijo que no es FH1, clave desconocida, firma que no valida, credencial
     // revocada, empleado de baja: una sola forma para las cinco.
     expect(Contract::keys('paths', '/api/v1/scan', 'post', 'responses'))
-        ->toBe(['200', '400', '401', '403', '422', '429'])
+        ->toBe(['200', '400', '401', '403', '422', '429', '503'])
         ->and(Contract::value(
             'paths', '/api/v1/scan', 'post', 'responses', '422',
             'content', 'application/problem+json', 'schema',
         ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
 })->group('RS-03', 'RF-QR-02');
 
-it('describe como respuesta global el 503 de base de datos inalcanzable, con Retry-After y reenvio idempotente (R3-CH-02)', function (): void {
-    // No se declara ruta a ruta porque no depende de la ruta: lo produce el
-    // manejador de excepciones en cualquiera que necesite la base. Lo que el
-    // contrato tiene que decir es el tipo, la cabecera y que el reenvio es
-    // seguro aunque el fichaje pudiera haberse registrado (regla dura 8).
+it('describe como respuesta global el 503 de una dependencia caida, con Retry-After y reenvio idempotente (R3-CH-02, ADR-059)', function (): void {
+    // Lo produce el manejador de excepciones en cualquier ruta que necesite la
+    // base o Redis. El contrato dice el tipo, la cabecera, que el reenvio es
+    // seguro aunque el fichaje pudiera haberse registrado (regla dura 8) y que
+    // un 500 nunca es una averia de infraestructura.
     $descripcion = Contract::value('info', 'description');
 
     expect($descripcion)->toBeString()
-        ->toContain('Base de datos inalcanzable')
+        ->toContain('Dependencia caida: base de datos o Redis')
+        ->toContain('Nunca `500`')
         ->toContain('urn:kronoqr:problem:service-unavailable')
         ->toContain('Retry-After')
         ->toContain('Puede que el fichaje se haya registrado o no');
+})->group('RQ-06', 'RNF-D-03');
+
+it('declara el 503 de dependencia caida en toda ruta salvo las dos sondas (ADR-059)', function (): void {
+    $sin503 = [];
+
+    foreach (Contract::keys('paths') as $path) {
+        if (\in_array($path, ['/api/v1/health', '/api/v1/ready'], true)) {
+            continue;
+        }
+
+        foreach (Contract::keys('paths', $path) as $method) {
+            if (! \in_array($method, ['get', 'post', 'put', 'patch', 'delete'], true)) {
+                continue;
+            }
+
+            if (! \in_array('503', Contract::keys('paths', $path, $method, 'responses'), true)) {
+                $sin503[] = strtoupper($method).' '.$path;
+            }
+        }
+    }
+
+    expect($sin503)->toBe([])
+        ->and(Contract::keys('components', 'responses', 'DependencyUnavailable', 'headers'))->toBe(['Retry-After']);
 })->group('RQ-06', 'RNF-D-03');
 
 it('hace imposible que el rechazo describa su causa', function (): void {
@@ -1306,7 +1330,7 @@ it('busca a la persona de la exportacion con los mismos ambitos y sin el DNI en 
             ['managementToken' => ['reports:*']],
         ])
         ->and(Contract::has('paths', $path, 'post', 'parameters'))->toBeFalse()
-        ->and(Contract::keys('paths', $path, 'post', 'responses'))->toBe(['200', '401', '403', '422', '429'])
+        ->and(Contract::keys('paths', $path, 'post', 'responses'))->toBe(['200', '401', '403', '422', '429', '503'])
         ->and(Contract::keys('paths', $path, 'post', 'responses', '200', 'headers'))->toContain('Cache-Control');
 })->group('RF-IN-05', 'RF-ID-02', 'RS-04');
 
@@ -1427,7 +1451,7 @@ it('acota el cierre de sesion del portal al token de portal, sin limite que lo i
     // cierra es la del token, nunca una indicada por el cliente.
     expect(Contract::value('paths', '/api/v1/me/logout', 'post', 'security'))
         ->toBe([['employeeToken' => ['self:read']]])
-        ->and(Contract::keys('paths', '/api/v1/me/logout', 'post', 'responses'))->toBe(['204', '401', '403'])
+        ->and(Contract::keys('paths', '/api/v1/me/logout', 'post', 'responses'))->toBe(['204', '401', '403', '503'])
         ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'requestBody'))->toBeFalse()
         ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'responses', '204', 'content'))->toBeFalse();
 })->group('RF-ID-05', 'RF-ID-07', 'RS-04');
@@ -1459,7 +1483,7 @@ it('no distingue las causas del rechazo del acceso al portal', function (): void
     // que responde a la IP y no a la credencial.
     $responses = Contract::keys('paths', '/api/v1/me/login', 'post', 'responses');
 
-    expect($responses)->toBe(['200', '400', '401', '429']);
+    expect($responses)->toBe(['200', '400', '401', '429', '503']);
 
     $unauthorised = Contract::value('paths', '/api/v1/me/login', 'post', 'responses', '401');
 
