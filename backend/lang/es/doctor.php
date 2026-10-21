@@ -128,7 +128,12 @@ return [
                 'warning_unknown' => 'No se han podido consultar los permisos sobre el registro horario.',
             ],
             'audit_chain' => [
-                'ok' => 'El registro de auditoria esta encadenado correctamente.',
+                'ok' => 'El ultimo cierre anual del registro de auditoria (:year) cuadra: estan todas sus filas '
+                    .'y su ultimo eslabon. Esta comprobacion no recorre la cadena entera; eso lo hace '
+                    .'`php artisan compliance:verify-audit-chain`.',
+                'ok_no_anchor' => 'Todavia no hay ningun cierre anual del registro de auditoria que comprobar, '
+                    .'que es lo normal durante el primer año. Esta comprobacion no recorre la cadena; para '
+                    .'verificarla entera, `php artisan compliance:verify-audit-chain`.',
                 'failure' => 'El ultimo cierre anual del registro de auditoria no cuadra: faltan filas o el '
                     .'encadenado esta roto. Puede significar que alguien ha modificado el registro por fuera '
                     .'de la aplicacion, o que una restauracion quedo incompleta.',

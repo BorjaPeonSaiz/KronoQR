@@ -100,7 +100,12 @@ return [
                 'warning_unknown' => 'The privileges on the work record could not be read.',
             ],
             'audit_chain' => [
-                'ok' => 'The audit log is correctly chained.',
+                'ok' => 'The last yearly seal of the audit log (:year) adds up: all its rows and its last link '
+                    .'are there. This check does not walk the whole chain; '
+                    .'`php artisan compliance:verify-audit-chain` does.',
+                'ok_no_anchor' => 'There is no yearly seal of the audit log to check yet, which is normal during '
+                    .'the first year. This check does not walk the chain; to verify all of it, '
+                    .'`php artisan compliance:verify-audit-chain`.',
                 'failure' => 'The last yearly seal of the audit log does not add up: rows are missing or the '
                     .'chain is broken. It may mean someone modified the log outside the application, or that a '
                     .'restore was left incomplete.',
