@@ -8,8 +8,16 @@ use RuntimeException;
 use Throwable;
 
 /**
- * La licencia no se ha podido leer: la base de datos no responde o la tabla no
- * esta donde deberia (V21-4-PL-1, RF-PD-04, ADR-019).
+ * La licencia no se ha podido leer porque **la base de datos no responde**: el
+ * circuito de PostgreSQL esta abierto o la conexion se ha perdido (V21-4-PL-1,
+ * RF-PD-04, ADR-019, ADR-059 §4).
+ *
+ * ## Solo esa causa
+ *
+ * Con PostgreSQL respondiendo, un fallo al leer `license` —un permiso retirado,
+ * una tabla renombrada— **no** es esto: el adaptador devuelve «sin licencia» y
+ * se deniega lo accesorio. `unknown` lo concede todo, y si cualquier fallo lo
+ * produjera, una sola sentencia SQL saltaria la licencia.
  *
  * ## Por que no es «sin licencia»
  *

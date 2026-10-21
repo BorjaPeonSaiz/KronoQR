@@ -9,6 +9,7 @@ use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
+use App\Support\Resilience\DependencyFailure;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
@@ -28,12 +29,18 @@ use Throwable;
  * licencia. ADR-019 existe precisamente para que eso no pase.
  *
  * Asi que {@see self::current()} **no deja escapar el fallo del motor**: deja
- * un `warning` sin datos personales ni clave y lanza {@see LicenseUnavailable},
- * que cada consumidor traduce a `unknown` —no degrada nada, no avisa de nada—.
- * Lo que ya no hace es devolver `null`: `null` significa «sin licencia», y con
- * PostgreSQL caido eso era mentira (V21-4-PL-1). Una fila que se lee pero esta
- * mal formada sigue siendo `null` y luego `absent`: ahi si se sabe que no hay
- * una licencia utilizable.
+ * un `warning` sin datos personales ni clave y, **si lo que falta es
+ * PostgreSQL** (circuito abierto o conexion perdida, `DependencyFailure`), lanza
+ * {@see LicenseUnavailable}, que cada consumidor traduce a `unknown` —no degrada
+ * nada, no avisa de nada—: `null` significa «sin licencia», y con PostgreSQL
+ * caido eso era mentira (V21-4-PL-1).
+ *
+ * **Cualquier otro fallo sigue siendo `null`**, como antes de la 2.3.0: un
+ * permiso retirado (`42501`), una tabla renombrada (`42P01`). Con PostgreSQL
+ * respondiendo, no poder leer la tabla no es una caida, y como `unknown` lo
+ * concede todo, aceptarlo convertiria una sola sentencia SQL en un salto de
+ * licencia. Una fila que se lee pero esta mal formada tambien es `null`: ahi
+ * se sabe que no hay una licencia utilizable.
  *
  * ## Sin cache
  *
@@ -67,7 +74,17 @@ final readonly class DatabaseLicenseRepository implements LicenseRepository
                 'reason' => $exception::class,
             ]);
 
-            throw LicenseUnavailable::because($exception);
+            // `unknown` SOLO si lo que falta es PostgreSQL: el circuito abierto
+            // o la conexion perdida. `unknown` lo concede todo (ADR-059 §4), y
+            // si cualquier fallo valiera, un `REVOKE SELECT ON license` o un
+            // `RENAME` —una sola sentencia SQL— saltaria la licencia. Cualquier
+            // otro fallo es lo de antes: no hay licencia que se pueda usar, y
+            // el gate deniega lo accesorio.
+            if (DependencyFailure::dependencyOf($exception) === DependencyFailure::DATABASE) {
+                throw LicenseUnavailable::because($exception);
+            }
+
+            return null;
         }
 
         if ($rows === []) {
