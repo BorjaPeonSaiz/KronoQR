@@ -61,15 +61,21 @@ function dependencyUnavailableCircuitFile(): string
     return sys_get_temp_dir().'/kronoqr-redis-circuit-dependency-'.getmypid();
 }
 
-/** Redis caido y con el circuito ya abierto. */
-function dependencyUnavailableRedisDown(): void
+/**
+ * Redis caido. De serie con el circuito ya abierto; con `$circuitOpen = false`,
+ * cerrado: la primera peticion intenta conectar, recibe la `RedisException` y
+ * es la que lo abre.
+ */
+function dependencyUnavailableRedisDown(bool $circuitOpen = true): void
 {
     RedisOutage::begin();
 
     $breaker = new RedisCircuitBreaker(dependencyUnavailableCircuitFile(), 10.0, new MockClock, resolve(LoggerInterface::class));
     app()->instance(RedisCircuitBreaker::class, $breaker);
     resolve('redis')->extend('phpredis', fn (): CountingRedisConnector => new CountingRedisConnector($breaker, new BoundedReachability));
-    $breaker->recordFailure(new RedisException('Connection refused [tcp://10.20.30.40:6379]'));
+    if ($circuitOpen) {
+        $breaker->recordFailure(new RedisException('Connection refused [tcp://10.20.30.40:6379]'));
+    }
 }
 
 /**
@@ -148,6 +154,59 @@ it('responde 503 con rastro en el latido y el padron del quiosco con Redis caido
     'latido' => ['POST', '/api/v1/kiosk/heartbeat'],
     'padron' => ['GET', '/api/v1/kiosk/roster'],
 ])->group('RNF-D-03', 'RF-AT-10');
+
+it('responde 503 con rastro en el resto de familias que fallan cerradas con Redis caido', function (Closure $peticion): void {
+    // ADR-059 §3 y §8: segundo factor, descartes del quiosco, emparejamiento,
+    // `broadcasting/auth`, y la solicitud y la descarga de informes y de la
+    // exportacion integra. El limite de tasa de cada una va antes que la
+    // validacion y que el controlador, asi que el cuerpo no importa.
+    $escenario = AttendanceFixtures::scenario();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $tokens = [
+        'kiosk' => $escenario['token'],
+        'admin' => ManagementUsers::tokenFor($admin),
+        'pending' => ManagementUsers::pendingTokenFor($admin),
+    ];
+    dependencyUnavailableRedisDown();
+    $lineas = dependencyUnavailableLog();
+    $filas = DB::table('error_events')->count();
+
+    dependencyUnavailableAssert($peticion($tokens), $lineas, 'redis', $filas);
+})->with([
+    'segundo factor' => [static fn (array $t): TestResponse => Api::as($t['pending'])->post('/api/v1/auth/2fa/verify', ['code' => '123456'])],
+    'descartes del quiosco' => [static fn (array $t): TestResponse => Api::as($t['kiosk'])->post('/api/v1/scan/discarded', ['scans' => []])],
+    'emparejamiento' => [static fn (array $t): TestResponse => Api::guest()->post('/api/v1/kiosk/pair', [])],
+    'broadcasting/auth' => [static fn (array $t): TestResponse => Api::as($t['admin'])->post('/api/v1/broadcasting/auth', ['socket_id' => '1.1', 'channel_name' => 'private-presence'])],
+    'exportacion del informe por periodo' => [static fn (array $t): TestResponse => Api::as($t['admin'])->get('/api/v1/reports/period/export?from=2026-03-01&to=2026-03-15&format=csv')],
+    'solicitud de informe en diferido' => [static fn (array $t): TestResponse => Api::as($t['admin'])->post('/api/v1/reports/exports', ['kind' => 'period'])],
+    'descarga de informe en diferido' => [static fn (array $t): TestResponse => Api::guest()->get('/api/v1/reports/exports/019a0000-0000-7000-8000-000000000001/download')],
+    'solicitud de la exportacion integra' => [static fn (array $t): TestResponse => Api::as($t['admin'])->post('/api/v1/data-export', [])],
+    'descarga de la exportacion integra' => [static fn (array $t): TestResponse => Api::as($t['admin'])->get('/api/v1/data-export/019a0000-0000-7000-8000-000000000001/download')],
+])->group('RNF-D-03', 'RQ-06');
+
+it('con el circuito cerrado, la RedisException al conectar deja una fila y una sola linea', function (): void {
+    // ADR-059 §2: la primera `RedisException`, la que abre el circuito, es la
+    // fila de la averia en `error_events`; la peticion que la recibe responde
+    // `503` con su linea, una vez aunque el historico la haya clasificado.
+    AttendanceFixtures::scenario();
+    $gestion = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    dependencyUnavailableRedisDown(circuitOpen: false);
+    $lineas = dependencyUnavailableLog();
+    $filas = DB::table('error_events')->count();
+
+    $respuesta = Api::as($gestion)->get('/api/v1/employees');
+
+    $respuesta->assertStatus(503)->assertHeader('Retry-After', '10');
+
+    $rastro = array_values(array_filter($lineas->getArrayCopy(), static fn (array $linea): bool => $linea['message'] === 'http.dependency_unavailable'));
+    $nuevas = DB::table('error_events')->orderBy('id')->skip($filas)->take(10)->get();
+
+    expect($rastro)->toHaveCount(1)
+        ->and($rastro[0]['context']['dependency'] ?? null)->toBe('redis')
+        ->and($nuevas)->toHaveCount(1)
+        ->and($nuevas[0]->exception_class ?? null)->toBe(RedisException::class)
+        ->and(json_encode($nuevas[0]))->not->toContain('10.20.30.40');
+})->group('RNF-D-03', 'RF-PD-15', 'RQ-06');
 
 it('responde el mismo 503 al acceso del panel con Redis caido, exista o no la cuenta (RS-03)', function (): void {
     $correo = ManagementUsers::withRole(UserRole::ADMIN)->email;
