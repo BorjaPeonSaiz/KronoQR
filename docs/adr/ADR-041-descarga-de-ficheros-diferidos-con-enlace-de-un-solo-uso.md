@@ -138,3 +138,24 @@ En concreto:
   contiene nombres ni la ruta absoluta del fichero.
 - **Contrato:** las dos rutas nuevas están en `openapi.yaml`, y la de descarga declarada con su propio
   esquema `reportDownloadToken` (`apiKey` en `query`) y **sin `bearerAuth`**.
+
+## Enmienda 2.3.0 (bloque 14, V5-PA-4): más clases, avance y cancelación
+
+Lo que la sección de consecuencias anticipaba —«si algún día la exportación para la Inspección se
+genera en diferido, este es el mecanismo»— ocurre en la 2.3.0, **sin cambiar el mecanismo del
+enlace**:
+
+- `report_exports.kind` admite `legal` (la exportación para la Inspección, el mismo fichero que
+  `GET /reports/legal-export`, solo CSV y sin degradarse nunca por la licencia) y `adoption` (el cuadro
+  de impacto). El auditor entra en las rutas de gestión con `reports:legal`; toda clase que no sea
+  `legal` sigue exigiendo `reports:*` además del rol.
+- **Cancelar** es `POST /reports/exports/{uuid}/cancel`: estado `cancelled` con `cancelled_at` (dos
+  `CHECK` nuevos), asiento `report_export.cancelled` y el turno de la persona liberado en el acto. No
+  es un `DELETE`: la fila se queda, y sobre una ya terminada responde `409` —tirar un fichero generado
+  no es cancelar—. El trabajador lo descubre entre fases (y cada 500 filas en la legal), borra el
+  fichero a medias y no publica nada.
+- **El avance** (`progress`: fase y, si se puede medir, porcentaje) vive en la caché y no en la fila,
+  porque la exportación legal escribe dentro de una sola transacción y un avance escrito en la fila no
+  lo vería nadie hasta el final. Es una indicación: si falta, la exportación sigue igual de viva.
+- **Los asientos de la generación siguen siendo de quien la pidió**: `legal_export.generated` con las
+  mismas claves que la síncrona, y `adoption_report.exported`, ambos en la transacción del cierre.

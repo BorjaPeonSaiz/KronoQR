@@ -265,6 +265,8 @@ function managementEndpoints(): array
         ]],
         'listar los informes en diferido' => ['GET', '/api/v1/reports/exports', []],
         'consultar un informe en diferido' => ['GET', '/api/v1/reports/exports/019a12b4-5c6d-7e8f-9012-3456789abcde', []],
+        // Cancelar (V5-PA-4, 2.3.0): ruta propia con su `Gate::authorize`.
+        'cancelar un informe en diferido' => ['POST', '/api/v1/reports/exports/019a12b4-5c6d-7e8f-9012-3456789abcde/cancel', []],
 
         // Contratos historizados (tarea 2.8, RF-GP-02). Ambito `employees:*` y
         // policy propia: las condiciones laborales pactadas son de `rrhh+`.
@@ -529,10 +531,23 @@ it('deniega a un token de quiosco cualquier endpoint de gestion', function (stri
  */
 function endpointsDeniedToAuditor(): array
 {
-    return [
+    $endpoints = [
         ...managementEndpoints(),
         'ver las jornadas de un empleado' => ['GET', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays?from=2026-03-01&to=2026-03-31', []],
     ];
+
+    // Desde la 2.3.0 (V5-PA-4) el auditor pide en diferido la exportacion para
+    // la Inspeccion, y por eso lista, consulta y cancela LAS SUYAS: la consulta
+    // filtra por dueño. Pedir cualquier otra clase sigue siendo `403`, y esa
+    // fila —`kind: period`— se queda. El control positivo esta en
+    // `DeferredLongExportsTest`.
+    unset(
+        $endpoints['listar los informes en diferido'],
+        $endpoints['consultar un informe en diferido'],
+        $endpoints['cancelar un informe en diferido'],
+    );
+
+    return $endpoints;
 }
 
 it('deniega a un auditor todo salvo la exportacion para la Inspeccion', function (string $method, string $uri, array $body): void {

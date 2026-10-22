@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Resource;
 
-use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Application\Support\ReportExportView;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -32,7 +32,7 @@ final class ReportExportCollectionResource extends JsonResource
     public static $wrap = null;
 
     /**
-     * @param  list<ReportExport>  $exports
+     * @param  list<ReportExportView>  $exports
      */
     public function __construct(array $exports)
     {
@@ -44,12 +44,12 @@ final class ReportExportCollectionResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var list<ReportExport> $exports */
+        /** @var list<ReportExportView> $exports */
         $exports = $this->resource;
 
         return [
             'data' => array_map(
-                static fn (ReportExport $export): array => ReportExportResource::payload($export),
+                static fn (ReportExportView $view): array => ReportExportResource::payload($view->export, $view->progress),
                 $exports,
             ),
         ];

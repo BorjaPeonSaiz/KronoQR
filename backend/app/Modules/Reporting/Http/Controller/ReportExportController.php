@@ -7,10 +7,12 @@ namespace App\Modules\Reporting\Http\Controller;
 use App\Exceptions\ProblemDetails;
 use App\Http\Controllers\Controller;
 use App\Modules\Reporting\Application\Command\RequestReportExportCommand;
+use App\Modules\Reporting\Application\UseCase\CancelReportExport;
 use App\Modules\Reporting\Application\UseCase\ListReportExports;
 use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
+use App\Modules\Reporting\Domain\Exception\ReportExportNotCancellable;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Http\Request\RequestReportExportRequest;
@@ -66,7 +68,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class ReportExportController extends Controller
 {
-    /** `GET /api/v1/reports/exports` — las 20 mas recientes de quien pregunta. */
+    /** `GET /api/v1/reports/exports` — las 20 mas recientes de quien pregunta, con su avance. */
     public function index(Request $request, ListReportExports $exports): JsonResponse
     {
         Gate::authorize('view', ReportExport::class);
@@ -127,6 +129,32 @@ final class ReportExportController extends Controller
     }
 
     /**
+     * `POST /api/v1/reports/exports/{uuid}/cancel` — detiene una exportacion en
+     * curso (V5-PA-4).
+     *
+     * `200` con la fila ya `cancelled` —tambien si ya lo estaba: es idempotente—,
+     * `404` si no existe o es de otra persona, y `409` con la fila dentro si ya
+     * termino. El asiento lo escribe el caso de uso dentro de su transaccion.
+     */
+    public function cancel(string $uuid, Request $request, CancelReportExport $exports): JsonResponse
+    {
+        Gate::authorize('cancel', ReportExport::class);
+
+        try {
+            $cancelled = $exports->handle($uuid, self::actorUserId($request));
+        } catch (ReportExportNotCancellable $finished) {
+            return ProblemDetails::reportExportNotCancellable(ReportExportResource::payload($finished->current));
+        }
+
+        if ($cancelled === null) {
+            // Sin detalle, como la consulta: una exportacion ajena no existe.
+            throw new NotFoundHttpException;
+        }
+
+        return (new ReportExportResource($cancelled))->response();
+    }
+
+    /**
      * La comprobacion de licencia, una por clase de informe.
      *
      * **Se hace antes de tocar nada**, de modo que un `402` no deja fila creada ni
@@ -135,10 +163,20 @@ final class ReportExportController extends Controller
      */
     private function assertLicensed(FeatureGate $features, ReportExportKind $kind): void
     {
-        $availability = $features->statusOf(match ($kind) {
+        $feature = match ($kind) {
             ReportExportKind::Period => Feature::AdvancedReports,
             ReportExportKind::Payroll => Feature::PayrollExport,
-        });
+            ReportExportKind::Adoption => Feature::ImpactDashboard,
+            // La exportacion para la Inspeccion no se degrada jamas (regla dura
+            // 15, RL-06): ni en sincrono ni en diferido.
+            ReportExportKind::Legal => null,
+        };
+
+        if ($feature === null) {
+            return;
+        }
+
+        $availability = $features->statusOf($feature);
 
         if (! $availability->enabled) {
             throw FeatureNotLicensed::from($availability);

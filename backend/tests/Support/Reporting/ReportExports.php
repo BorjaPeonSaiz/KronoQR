@@ -74,12 +74,13 @@ final class ReportExports
         string $from = '2026-03-01',
         string $to = '2026-03-31',
         ?AccessScope $scope = null,
+        ?ReportExportParameters $parameters = null,
     ): ReportExport {
         return app(ReportExportRepository::class)->create(
             uuid: Str::uuid7()->toString(),
             kind: $kind,
             format: $format,
-            parameters: new ReportExportParameters(
+            parameters: $parameters ?? new ReportExportParameters(
                 from: $from,
                 to: $to,
                 granularity: ReportGranularity::Day,

@@ -219,9 +219,15 @@ function authorizationMatrix(): array
         'GET api/v1/reports/payroll-export' => [$admin, $rrhh],
         'GET api/v1/reports/adoption' => [$admin, $rrhh],
         'GET api/v1/reports/adoption/export' => [$admin, $rrhh],
-        'GET api/v1/reports/exports' => [$admin, $rrhh],
+        // El diferido admite al auditor desde la 2.3.0 (V5-PA-4): consulta,
+        // cancela y descarga las suyas, que solo pueden ser `kind: legal`. Pedir
+        // con el cuerpo vacio de esta matriz cae en la policy mas estrecha —la de
+        // nomina— y le responde 403; su `kind: legal` lo prueba
+        // `DeferredLongExportsTest`.
+        'GET api/v1/reports/exports' => [$admin, $rrhh, $auditor],
         'POST api/v1/reports/exports' => [$admin, $rrhh],
-        'GET api/v1/reports/exports/{uuid}' => [$admin, $rrhh],
+        'GET api/v1/reports/exports/{uuid}' => [$admin, $rrhh, $auditor],
+        'POST api/v1/reports/exports/{uuid}/cancel' => [$admin, $rrhh, $auditor],
 
         // Plantilla: lee el responsable; escribe rrhh y admin.
         'GET api/v1/employees' => [$admin, $rrhh, $responsable],

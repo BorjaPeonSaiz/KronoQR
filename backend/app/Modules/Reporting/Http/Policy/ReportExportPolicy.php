@@ -76,6 +76,27 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * **Se registra contra {@see ReportExport}, que es un objeto de dominio y no un
  * modelo Eloquent**, igual que las hermanas de este directorio: asi la
  * autorizacion se decide **antes** de tocar la base de datos.
+ *
+ * ## Desde la 2.3.0, dos clases mas y el auditor (V5-PA-4)
+ *
+ * - `requestLegal` — la exportacion para la Inspeccion en diferido: el mismo
+ *   conjunto que `LegalExportPolicy::generate()` de la sincrona,
+ *   `{admin, rrhh, auditor}`. Sin el `auditor`, el rol cuya funcion es
+ *   precisamente esta seguiria colgado de una descarga de 60 s.
+ * - `requestAdoption` — el cuadro de impacto: `{admin, rrhh}`, el de
+ *   `AdoptionReportPolicy::export()`.
+ * - `view`, `download` y `cancel` admiten ademas al `auditor`, que solo puede
+ *   tener exportaciones `legal`: la consulta filtra por dueño, asi que no ve
+ *   ninguna otra.
+ *
+ * **El fabricante sigue sin entrar en ninguna**, tampoco en la legal en
+ * diferido: la sincrona sigue a su alcance si una concesion lo justifica, y
+ * esta familia de rutas deja ficheros con la plantilla en el disco del
+ * cliente durante dias.
+ *
+ * **El ambito del token se comprueba ademas del rol** (doc 02 §7.3): las
+ * rutas aceptan `reports:legal` o `reports:*`, y `RequestReportExportRequest`
+ * exige `reports:*` para toda clase que no sea `legal`.
  */
 final class ReportExportPolicy
 {
@@ -91,10 +112,22 @@ final class ReportExportPolicy
         return self::isPayrollReader($actor);
     }
 
+    /** `POST /api/v1/reports/exports` con `kind: legal` (RF-IN-05). */
+    public function requestLegal(ManagementActor $actor): bool
+    {
+        return self::isOwnerRole($actor);
+    }
+
+    /** `POST /api/v1/reports/exports` con `kind: adoption` (RF-IN-08). */
+    public function requestAdoption(ManagementActor $actor): bool
+    {
+        return self::isReportReader($actor);
+    }
+
     /** `GET /api/v1/reports/exports` y `GET /api/v1/reports/exports/{uuid}`. */
     public function view(ManagementActor $actor): bool
     {
-        return self::isReportReader($actor);
+        return self::isOwnerRole($actor);
     }
 
     /**
@@ -106,7 +139,38 @@ final class ReportExportPolicy
      */
     public function download(ManagementActor $actor): bool
     {
-        return self::isReportReader($actor);
+        return self::isOwnerRole($actor);
+    }
+
+    /**
+     * `POST /api/v1/reports/exports/{uuid}/cancel` (V5-PA-4).
+     *
+     * Como `view`: la puerta previa de rol. Que la exportacion sea **suya** lo
+     * decide la consulta, y la ajena responde `404`.
+     */
+    public function cancel(ManagementActor $actor): bool
+    {
+        return self::isOwnerRole($actor);
+    }
+
+    /**
+     * Los roles que pueden tener alguna exportacion en diferido: los de los
+     * informes y el `auditor`, que solo puede tener las `legal`.
+     *
+     * @return list<UserRole>
+     */
+    private static function owners(): array
+    {
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::AUDITOR];
+    }
+
+    private static function isOwnerRole(ManagementActor $actor): bool
+    {
+        if ($actor->isSupportActor()) {
+            return false;
+        }
+
+        return $actor->actsAs(...self::owners());
     }
 
     /**

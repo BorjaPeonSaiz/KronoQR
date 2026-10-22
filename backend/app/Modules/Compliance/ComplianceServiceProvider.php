@@ -42,6 +42,7 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedPersonalDataAccessLog;
+use App\Modules\Compliance\Infrastructure\Adapter\QueuedLegalRecordFiles;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\AuditChainHeadCommand;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
@@ -129,6 +130,7 @@ use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Event\SupportAccessRevoked;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
+use App\Modules\Reporting\Domain\Event\ReportExportCancelled;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportFileMissing;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
@@ -137,6 +139,7 @@ use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -575,6 +578,10 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->bind(LegalExportWriter::class, CsvLegalExportWriter::class);
 
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
+
+        // La misma exportacion, escrita por la cola de informes de `Reporting`
+        // (V5-PA-4). Puerto de `Shared`: ningun modulo importa clases de otro.
+        $this->app->bind(LegalRecordFileWriter::class, QueuedLegalRecordFiles::class);
 
         // La busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
         // Lee `employees` como la propia exportacion; el asiento lo escribe el
@@ -1055,6 +1062,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportRequested::class, [RecordReportExportLifecycle::class, 'requested']);
         Event::listen(ReportExportGenerated::class, [RecordReportExportLifecycle::class, 'generated']);
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
+        Event::listen(ReportExportCancelled::class, [RecordReportExportLifecycle::class, 'cancelled']);
         Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
         // ADR-045 §d (C5). Actor `system` y no la cuenta que lo pidio: lo detecta
         // la purga diaria. Por eso va en su propio listener y no en el de arriba.

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Application\UseCase;
 
+use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Support\IssuedReportExportLink;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
@@ -67,6 +69,7 @@ final readonly class ShowReportExport
 
     public function __construct(
         private ReportExportRepository $exports,
+        private ReportExportProgressBoard $progress,
         private Clock $clock,
         private ConnectionInterface $connection,
         /**
@@ -133,6 +136,16 @@ final readonly class ShowReportExport
             }
         );
 
-        return $issued;
+        if ($issued === null || $issued->export->status !== ReportExportStatus::Running) {
+            return $issued;
+        }
+
+        // Una `running` no tiene enlace: lo que la pantalla quiere es por donde va.
+        return new IssuedReportExportLink(
+            $issued->export,
+            null,
+            null,
+            $this->progress->of([$issued->export->uuid])[$issued->export->uuid] ?? null,
+        );
     }
 }

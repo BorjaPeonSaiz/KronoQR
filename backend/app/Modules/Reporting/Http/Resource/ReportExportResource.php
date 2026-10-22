@@ -6,6 +6,8 @@ namespace App\Modules\Reporting\Http\Resource;
 
 use App\Modules\Reporting\Application\Support\IssuedReportExportLink;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportProgress;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -63,7 +65,7 @@ final class ReportExportResource extends JsonResource
 
         return [
             'data' => [
-                ...self::payload($export),
+                ...self::payload($export, $this->link?->progress),
                 'download' => $this->downloadPayload(),
             ],
         ];
@@ -78,7 +80,7 @@ final class ReportExportResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-    public static function payload(ReportExport $export): array
+    public static function payload(ReportExport $export, ?ReportExportProgress $progress = null): array
     {
         return [
             'uuid' => $export->uuid,
@@ -105,6 +107,7 @@ final class ReportExportResource extends JsonResource
             'started_at' => UtcInstant::format($export->startedAt),
             'completed_at' => UtcInstant::format($export->completedAt),
             'failed_at' => UtcInstant::format($export->failedAt),
+            'cancelled_at' => UtcInstant::format($export->cancelledAt),
             'failure_reason' => $export->failureReason?->value,
             'file_name' => $export->fileName,
             'size_bytes' => $export->sizeBytes,
@@ -117,6 +120,26 @@ final class ReportExportResource extends JsonResource
             'download_count' => $export->downloadCount,
             'notified_at' => UtcInstant::format($export->notifiedAt),
             'notification_channel' => $export->notificationChannel?->value,
+            // Solo de una `running`: el avance anotado antes de una cancelacion
+            // no describe nada (V5-PA-4).
+            'progress' => $progress === null || $export->status !== ReportExportStatus::Running
+                ? null
+                : self::progressPayload($progress),
+        ];
+    }
+
+    /**
+     * `ReportExportProgress` del contrato. El instante sale en UTC, como todos
+     * (regla dura 3).
+     *
+     * @return array{stage: string, percent: int|null, updated_at: string}
+     */
+    private static function progressPayload(ReportExportProgress $progress): array
+    {
+        return [
+            'stage' => $progress->stage->value,
+            'percent' => $progress->percent,
+            'updated_at' => UtcInstant::of($progress->updatedAt),
         ];
     }
 
