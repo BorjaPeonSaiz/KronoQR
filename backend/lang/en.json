@@ -8,6 +8,8 @@
     "La exportacion todavia no ha terminado": "The export has not finished yet",
     "Sigue en curso. Vuelve a consultarla dentro de unos segundos.": "It is still in progress. Check again in a few seconds.",
     "Ya tienes un informe en curso": "You already have a report in progress",
+    "Ese informe ya ha terminado": "That report has already finished",
+    "Ya no hay nada que cancelar: el informe termino antes. Si se genero, puedes descargarlo desde esta misma pantalla.": "There is nothing left to cancel: the report finished first. If it was generated, you can download it from this same screen.",
     "Ese enlace de descarga ya se ha usado": "That download link has already been used",
     "Cada enlace sirve para una sola descarga. Vuelve a la pantalla de informes y pulsa «Descargar» otra vez.": "Each link works for a single download. Go back to the reports screen and press «Download» again.",
     "Ese enlace de descarga ha caducado": "That download link has expired",

@@ -294,6 +294,170 @@ describe('useLivePresenceStore', () => {
     store.disconnect()
   })
 
+  it('si la primera foto falla, sondea y en cuanto llega una pasa a tiempo real (R3-PA-03)', async () => {
+    vi.useFakeTimers()
+    const sockets: FakeSocket[] = []
+    overrideSocketFactory(() => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+
+      return socket
+    })
+    let failing = true
+    const realtimeBoard = board({
+      realtime: {
+        ...board().meta.realtime,
+        enabled: true,
+        key: 'kronoqr',
+        poll_interval_seconds: 5,
+      },
+    })
+    stubFetch((url) => {
+      requests.push(url)
+
+      if (url.includes('/api/v1/attendance/live')) {
+        return failing ? jsonResponse({}, 503) : jsonResponse(realtimeBoard)
+      }
+
+      return jsonResponse({ auth: 'kronoqr:firma' })
+    })
+    const store = useLivePresenceStore()
+
+    await store.connect()
+
+    expect(store.meta).toBeNull()
+    expect(store.transport).toBe('polling')
+    expect(sockets).toHaveLength(0)
+
+    failing = false
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    expect(store.meta).not.toBeNull()
+    expect(sockets).toHaveLength(1)
+
+    sockets[0]?.receive('pusher:connection_established', {
+      socket_id: '1.1',
+      activity_timeout: 120,
+    })
+    await flush(8)
+    sockets[0]?.receive('pusher_internal:subscription_succeeded', {}, 'private-presence.all')
+    await flush()
+
+    expect(store.realtimeState).toBe('live')
+    expect(store.transport).toBe('realtime')
+
+    store.disconnect()
+  })
+
+  it('un presence.updated avanza la ultima actualizacion y el contacto con el canal (V2-PA-02, V21-3-PA-4)', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'))
+    const sockets: FakeSocket[] = []
+    overrideSocketFactory(() => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+
+      return socket
+    })
+    serve(
+      board({
+        realtime: {
+          ...board().meta.realtime,
+          enabled: true,
+          key: 'kronoqr',
+          poll_interval_seconds: 5,
+        },
+      }),
+    )
+    const store = useLivePresenceStore()
+
+    await store.connect()
+    sockets[0]?.receive('pusher:connection_established', {
+      socket_id: '1.1',
+      activity_timeout: 120,
+    })
+    await flush(8)
+    sockets[0]?.receive('pusher_internal:subscription_succeeded', {}, 'private-presence.all')
+    await flush()
+
+    expect(store.lastUpdatedAt).toBe('2026-03-14T09:00:00.000000Z')
+
+    // Pasan 10 min sin fichajes: un latido mueve el contacto, no la ultima actualizacion.
+    vi.setSystemTime(new Date('2030-01-01T00:10:00Z'))
+    sockets[0]?.receive('pusher:ping', {})
+
+    expect(store.lastContactAt).toBe('2026-03-14T09:10:00.000Z')
+    expect(store.lastUpdatedAt).toBe('2026-03-14T09:00:00.000000Z')
+
+    // Un fichaje mueve las dos.
+    vi.setSystemTime(new Date('2030-01-01T00:12:00Z'))
+    sockets[0]?.receive(
+      'presence.updated',
+      {
+        entry: { ...YOUSSEF, employee_uuid: 'u-3', full_name: 'Zoe Ruiz' },
+        occurred_at: '2026-03-14T09:12:00.000000Z',
+      },
+      'private-presence.all',
+    )
+
+    expect(store.lastUpdatedAt).toBe('2026-03-14T09:12:00.000Z')
+    expect(store.lastContactAt).toBe('2026-03-14T09:12:00.000Z')
+
+    store.disconnect()
+    expect(store.lastContactAt).toBeNull()
+  })
+
+  it('un cambio de filtro que falla vacia la lista y los mensajes del canal no la rellenan a medias (V2-PA-05)', async () => {
+    let failing = false
+    stubFetch(() => (failing ? jsonResponse({}, 503) : jsonResponse(board())))
+    const store = useLivePresenceStore()
+
+    await store.load()
+    failing = true
+    await store.applyFilters({ status: 'absent' })
+
+    expect(store.filters.status).toBe('absent')
+    expect(store.entries).toEqual([])
+    expect(store.refreshFailure?.kind).toBe('filter')
+
+    store.applyMessage({
+      entry: { ...YOUSSEF, status: 'absent', shift_entry_uuid: null, clocked_in_at: null },
+      occurred_at: '2026-03-14T13:05:00.000000Z',
+    })
+
+    expect(store.entries).toEqual([])
+
+    failing = false
+    await store.load()
+
+    expect(store.refreshFailure).toBeNull()
+    expect(store.entries.length).toBeGreaterThan(0)
+  })
+
+  it('la respuesta tardia de un filtro anterior no pisa la del filtro nuevo', async () => {
+    const releases: (() => void)[] = []
+    stubFetch(
+      (url) =>
+        new Promise<Response>((resolve) => {
+          const absent = url.includes('status=absent')
+
+          releases.push(() => resolve(jsonResponse(board({}, absent ? [LUCIA] : [YOUSSEF]))))
+        }),
+    )
+    const store = useLivePresenceStore()
+
+    const first = store.applyFilters({ status: 'present' })
+    const second = store.applyFilters({ status: 'absent' })
+
+    // Contesta primero la segunda y despues, tarde, la primera.
+    releases[1]?.()
+    await second
+    releases[0]?.()
+    await first
+
+    expect(store.entries.map((entry) => entry.employee_uuid)).toEqual([LUCIA.employee_uuid])
+  })
+
   it('el «ahora» es el del servidor: la foto mas lo que ha pasado en el reloj local', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'))

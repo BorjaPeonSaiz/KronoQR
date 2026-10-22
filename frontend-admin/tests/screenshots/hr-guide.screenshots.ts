@@ -288,6 +288,7 @@ test('genera la ficha de un empleado con su credencial y su PIN', async ({ page 
         },
       },
     ],
+    meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
     summary: {
       employees: 1,
       pending_print: 0,
@@ -354,6 +355,7 @@ test('genera el tablero de credenciales con la hoja de instrucciones', async ({
         },
       },
     ],
+    meta: { page: 1, per_page: 50, total: 2, total_pages: 1 },
     summary: {
       employees: 2,
       pending_print: 0,

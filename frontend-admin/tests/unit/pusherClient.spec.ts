@@ -210,6 +210,65 @@ describe('RealtimeClient', () => {
     expect(sockets).toHaveLength(3)
   })
 
+  it('la espera de reconexion se topa en 30 s y vuelve a 1 s cuando el canal se restablece (R2-PA-05)', async () => {
+    const { client, sockets } = harness()
+
+    client.connect()
+
+    // 1, 2, 4, 8, 16 s y despues siempre 30 s, no 32.
+    for (const wait of [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]) {
+      const before = sockets.length
+
+      sockets.at(-1)?.onclose?.({})
+      vi.advanceTimersByTime(wait - 1)
+      expect(sockets).toHaveLength(before)
+      vi.advanceTimersByTime(1)
+      expect(sockets).toHaveLength(before + 1)
+    }
+
+    // Se restablece: la siguiente caida vuelve a esperar 1 s.
+    sockets.at(-1)?.established()
+    await flush()
+    sockets.at(-1)?.receive('pusher_internal:subscription_succeeded', {}, 'private-presence.all')
+
+    const before = sockets.length
+
+    sockets.at(-1)?.onclose?.({})
+    vi.advanceTimersByTime(1_000)
+
+    expect(sockets).toHaveLength(before + 1)
+  })
+
+  it('avisa de cada mensaje del servidor, tambien de un latido, para saber que el canal sigue vivo', () => {
+    const onActivity = vi.fn()
+    const sockets: FakeSocket[] = []
+    const client = new RealtimeClient({
+      key: 'kronoqr',
+      path: '/app',
+      channels: ['presence.all'],
+      event: 'presence.updated',
+      authorize: async () => 'firma',
+      onEvent: () => undefined,
+      onStateChange: () => undefined,
+      onActivity,
+      origin: 'wss://panel.example',
+      createSocket: (url) => {
+        const socket = new FakeSocket(url)
+        sockets.push(socket)
+
+        return socket
+      },
+    })
+
+    client.connect()
+    sockets[0]?.established()
+    const afterHandshake = onActivity.mock.calls.length
+    sockets[0]?.receive('pusher:pong')
+
+    expect(afterHandshake).toBeGreaterThan(0)
+    expect(onActivity.mock.calls.length).toBeGreaterThan(afterHandshake)
+  })
+
   it('una firma denegada cierra y reintenta: el sondeo cubre mientras tanto', async () => {
     const { client, sockets, states, authorize } = harness()
 

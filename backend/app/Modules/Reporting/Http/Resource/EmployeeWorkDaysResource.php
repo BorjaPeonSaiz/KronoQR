@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Resource;
 
+use App\Modules\Reporting\Application\Support\WorkDayJournalPage;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
@@ -59,8 +60,10 @@ final class EmployeeWorkDaysResource extends JsonResource
      * @param  WorkDayJournal  $resource
      * @param  string  $today  El dia civil de hoy en la zona del centro, tal como
      *                         lo resuelve `ReadEmployeeWorkDays::todayIn()`.
+     * @param  WorkDayJournalPage|null  $page  La pagina, en la ruta del panel (V5-PA-2). Sin ella
+     *                                         —el portal—, `meta` solo lleva el total.
      */
-    public function __construct($resource, private readonly string $today)
+    public function __construct($resource, private readonly string $today, private readonly ?WorkDayJournalPage $page = null)
     {
         parent::__construct($resource);
     }
@@ -91,7 +94,14 @@ final class EmployeeWorkDaysResource extends JsonResource
             'from' => $journal->range->isoFrom(),
             'to' => $journal->range->isoTo(),
             'data' => $days,
-            'meta' => ['total' => $journal->dayCount()],
+            'meta' => $this->page === null
+                ? ['total' => $journal->dayCount()]
+                : [
+                    'total' => $this->page->total,
+                    'page' => $this->page->page,
+                    'per_page' => $this->page->perPage,
+                    'total_pages' => $this->page->totalPages(),
+                ],
         ];
     }
 

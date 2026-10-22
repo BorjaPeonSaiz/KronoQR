@@ -27,8 +27,8 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { listDepartments } from '@/shared/api/organisation.api'
@@ -36,16 +36,14 @@ import type {
   InstallationSettings,
   PayrollExportFormat,
   PayrollExportGranularity,
-  ReportExport,
-  ReportExportCollection,
 } from '@/shared/api/types'
 import { fetchInstallationSettings, settingValue } from '@/features/settings/settings.api'
 import { downloadPayrollExport, type PayrollExportQuery } from './payrollExport.api'
-import {
-  reportExceedsSynchronousBudget,
-  requestReportExport,
-  REPORT_EXPORTS_QUERY_KEY,
-} from './reportExports.api'
+import { shouldDeferExport } from './deferral'
+import { isActiveExport } from './exportPresentation'
+import ReportExportJobStatus from './ReportExportJobStatus.vue'
+import { reportExceedsSynchronousBudget } from './reportExports.api'
+import { useReportExportJob } from './useReportExportJob'
 
 const GRANULARITIES: readonly PayrollExportGranularity[] = ['range', 'month', 'day']
 const FORMATS: readonly PayrollExportFormat[] = ['csv', 'xlsx']
@@ -91,7 +89,19 @@ const COLUMN_LABEL_KEYS: Readonly<Record<string, string>> = {
 const LABEL_SEPARATOR = '='
 
 const { t } = useI18n()
-const queryClient = useQueryClient()
+
+const {
+  job,
+  alreadyInProgress,
+  requesting: backgroundRequesting,
+  cancelling,
+  downloading: jobDownloading,
+  error: backgroundError,
+  start,
+  cancel,
+  download: downloadJob,
+  dismiss,
+} = useReportExportJob()
 
 const { data: departments } = useQuery({
   queryKey: ['departments'] as const,
@@ -207,6 +217,38 @@ const oversizedQuery = ref<PayrollExportQuery | null>(null)
 /** Los criterios de la ULTIMA descarga (contrato, `X-Kronoqr-Export-Criteria`), tal cual llegan: no se reordenan ni se resumen. */
 const lastDownloadCriteria = ref<readonly string[]>([])
 
+// El 422 de «demasiado grande» habla de UNA consulta: en cuanto se toca cualquier
+// campo ya no es la del formulario, y ofrecerla (o pedirla) seria pedir otra nomina.
+watch([from, to, granularity, departmentFilter, employeeUuid, format], () => {
+  oversizedQuery.value = null
+})
+
+/**
+ * Toda la plantilla, o mas de un mes, se genera en segundo plano por omision
+ * (decision del propietario, 14.4); una persona o un departamento en un periodo
+ * corto sigue siendo al momento. Los dos caminos se mantienen.
+ */
+async function submit(): Promise<void> {
+  if (!canSubmit.value || downloading.value || backgroundRequesting.value) {
+    return
+  }
+
+  if (
+    shouldDeferExport({
+      from: from.value,
+      to: to.value,
+      wholeWorkforce: departmentFilter.value === '' && employeeUuid.value.trim() === '',
+    })
+  ) {
+    // La consulta que hay AHORA en el formulario, nunca la que dio un 422 antes.
+    await requestBackgroundGeneration(currentQuery())
+
+    return
+  }
+
+  await download()
+}
+
 async function download(): Promise<void> {
   if (!canSubmit.value || downloading.value) {
     return
@@ -239,48 +281,34 @@ async function download(): Promise<void> {
 
 // --- Generacion en segundo plano (RF-IN-06 aplicado a la nomina) -------------
 
-const backgroundRequesting = ref(false)
-const backgroundError = ref<unknown>(null)
-const backgroundRequested = ref<ReportExport | null>(null)
+/** El boton «Generar en segundo plano»: la consulta que dio el 422, si sigue siendo la del formulario. */
+function requestFromButton(): Promise<void> {
+  return requestBackgroundGeneration(oversizedQuery.value ?? currentQuery())
+}
 
-async function requestBackgroundGeneration(): Promise<void> {
-  const query = oversizedQuery.value ?? (canSubmit.value ? currentQuery() : null)
-
-  if (query === null || backgroundRequesting.value) {
+async function requestBackgroundGeneration(query: PayrollExportQuery): Promise<void> {
+  if (
+    !canSubmit.value ||
+    backgroundRequesting.value ||
+    (job.value !== null && isActiveExport(job.value))
+  ) {
     return
   }
 
-  backgroundRequesting.value = true
-  backgroundError.value = null
+  dismiss()
+  downloadError.value = null
 
-  try {
-    const resource = await requestReportExport({
-      kind: 'payroll',
-      format: format.value,
-      from: query.from,
-      to: query.to,
-      // `PayrollExportGranularity` ('range'|'month'|'day') es un subconjunto
-      // de `ReportGranularity`: siempre cabe, y `?? 'range'` cubre el caso en
-      // que `query` venga de `oversizedQuery` sin granularidad explicita.
-      granularity: query.granularity ?? 'range',
-      ...(query.departmentId === undefined ? {} : { departmentId: query.departmentId }),
-      ...(query.employeeUuid === undefined ? {} : { employeeUuid: query.employeeUuid }),
-    })
-
-    backgroundRequested.value = resource.data
-
-    queryClient.setQueryData<ReportExportCollection>(REPORT_EXPORTS_QUERY_KEY, (previous) => {
-      const rest = (previous?.data ?? []).filter((row) => row.uuid !== resource.data.uuid)
-
-      return { data: [resource.data, ...rest].slice(0, 20) }
-    })
-
-    announce(t('payrollExport.backgroundRequested'))
-  } catch (failure) {
-    backgroundError.value = failure
-  } finally {
-    backgroundRequesting.value = false
-  }
+  await start({
+    kind: 'payroll',
+    format: format.value,
+    from: query.from,
+    to: query.to,
+    // `PayrollExportGranularity` ('range'|'month'|'day') es un subconjunto
+    // de `ReportGranularity`: siempre cabe.
+    granularity: query.granularity ?? 'range',
+    ...(query.departmentId === undefined ? {} : { departmentId: query.departmentId }),
+    ...(query.employeeUuid === undefined ? {} : { employeeUuid: query.employeeUuid }),
+  })
 }
 
 const fieldClass =
@@ -305,7 +333,7 @@ const fieldClass =
       </RouterLink>
     </p>
 
-    <form class="flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="download">
+    <form class="flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
       <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
         <legend class="sr-only">{{ t('payrollExport.filters.legend') }}</legend>
 
@@ -379,7 +407,7 @@ const fieldClass =
         <button
           type="submit"
           class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-          :disabled="!canSubmit || downloading"
+          :disabled="!canSubmit || downloading || backgroundRequesting"
           data-test="payroll-download"
         >
           {{ downloading ? t('payrollExport.downloading') : t('payrollExport.download') }}
@@ -388,9 +416,9 @@ const fieldClass =
         <button
           type="button"
           class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-          :disabled="!canSubmit || backgroundRequesting || backgroundRequested !== null"
+          :disabled="!canSubmit || backgroundRequesting || (job !== null && isActiveExport(job))"
           data-test="payroll-background"
-          @click="requestBackgroundGeneration"
+          @click="requestFromButton"
         >
           {{
             backgroundRequesting
@@ -447,12 +475,17 @@ const fieldClass =
       </RouterLink>
     </p>
 
-    <p v-if="backgroundRequested !== null" role="status" data-test="background-requested">
-      {{ t('reports.period.background.requested') }}
-      <RouterLink :to="{ name: 'reports', hash: '#report-exports' }" class="font-medium underline">
-        {{ t('reports.period.background.seeExports') }}
-      </RouterLink>
-    </p>
+    <ReportExportJobStatus
+      v-if="job !== null"
+      :job="job"
+      :already-in-progress="alreadyInProgress"
+      :cancelling="cancelling"
+      :downloading="jobDownloading"
+      :can-open-reports="true"
+      @cancel="cancel"
+      @download="downloadJob"
+      @dismiss="dismiss"
+    />
 
     <section
       class="max-w-3xl rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"

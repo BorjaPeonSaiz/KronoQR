@@ -3,8 +3,11 @@ import { useSessionStore } from '@/features/auth/session.store'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
 import { useBrandingStore } from '@/shared/branding/branding.store'
-import { announce, clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { announce, announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import AppShellView from '@/shared/ui/AppShellView.vue'
+import { chunkLoadFailed, clearChunkLoadFailure } from '@/router/chunkLoadRecovery'
+import type { ReportExport } from '@/shared/api/types'
+import { trackedExports } from '@/features/reports/useReportReadyNotices'
 import { managementUser } from './support/fixtures'
 import {
   createTestPinia,
@@ -14,6 +17,7 @@ import {
   settle,
   stubFetch,
 } from './support/harness'
+import { flushPromises } from '@vue/test-utils'
 
 beforeEach(() => {
   window.sessionStorage.clear()
@@ -70,13 +74,53 @@ describe('AppShellView', () => {
 
     expect(admin.text()).toContain(es.app.nav.accounts)
     expect(hr.text()).not.toContain(es.app.nav.accounts)
+    // Sin desmontar, su consulta de exportaciones seguiria viva en las pruebas siguientes.
+    admin.unmount()
+    hr.unmount()
   })
 
-  it('el auditor (solo reports:legal) ve una unica entrada, «Inspeccion» (bloque 25)', async () => {
+  it('el auditor (solo reports:legal) solo alcanza «Inspeccion»; estando en otra pantalla, el enlace sigue para volver (bloque 25)', async () => {
     const wrapper = await mountShell(['reports:legal'])
     const links = wrapper.find('nav').findAll('a')
 
     expect(links.map((link) => link.text())).toEqual([es.app.nav.legalExport])
+  })
+
+  it('con un unico enlace y ya en esa pantalla, no hay menu lateral (V21-3-UX-3)', async () => {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.user = managementUser({ roles: ['auditor'], abilities: ['reports:legal'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    await router.push('/reports/legal-export')
+
+    const wrapper = await mountView(AppShellView, { pinia, router })
+
+    expect(wrapper.find('nav').exists()).toBe(false)
+    // Lo demas del marco sigue: quien ha entrado, cambiar la contrasena y salir.
+    expect(wrapper.text()).toContain(es.app.changePassword)
+    expect(wrapper.text()).toContain(es.app.signOut)
+  })
+
+  it('con varias secciones el menu sigue, tambien estando en una de ellas', async () => {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.user = managementUser({ abilities: ['attendance:read', 'employees:read'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    await router.push('/live')
+
+    const wrapper = await mountView(AppShellView, { pinia, router })
+
+    expect(wrapper.find('nav').exists()).toBe(true)
   })
 
   it('no ofrece ninguna seccion a quien no tiene ambitos de gestion', async () => {
@@ -181,5 +225,172 @@ describe('AppShellView — marca de la instalacion (RF-PD-08)', () => {
 
     expect(name.classes()).toContain('truncate')
     expect(name.attributes('title')).toBe(longName)
+  })
+})
+
+function exportRow(uuid: string, status: ReportExport['status']): ReportExport {
+  return { uuid, status } as ReportExport
+}
+
+describe('AppShellView — informe listo fuera de Informes (V21-5-PA-1, V5-PA-3, R3-PA-08)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('avisa en la cabecera de lo que termina mientras se esta en otra pantalla, sin anunciar lo que ya estaba completado', async () => {
+    vi.useFakeTimers()
+    let polls = 0
+    stubFetch((url) => {
+      if (!url.includes('/api/v1/reports/exports')) {
+        return jsonResponse({}, 404)
+      }
+
+      polls += 1
+
+      // Primera lista: dos viejas completadas y una en curso. Segunda: la de curso termina.
+      return jsonResponse({
+        data: [
+          exportRow('viejo-1', 'completed'),
+          exportRow('viejo-2', 'completed'),
+          exportRow('nuevo', polls === 1 ? 'running' : 'completed'),
+        ],
+      })
+    })
+
+    const wrapper = await mountShell(['reports:*'])
+    await flushPromises()
+
+    expect(polls).toBe(1)
+    expect(wrapper.find('[data-test="report-ready"]').exists()).toBe(false)
+    expect(announcement.value).toBe('')
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await flushPromises()
+
+    expect(polls).toBe(2)
+    expect(wrapper.find('[data-test="report-ready"]').text()).toContain(
+      es.reportExports.ready.message.split(' | ')[0] ?? '',
+    )
+    // `/forbidden` es hija del marco en el router real: la prueba monta dos marcos anidados
+    // y los dos anuncian, de ahi el espacio duro con que `announce` distingue la repeticion.
+    expect(announcement.value.trim()).toBe(es.reportExports.ready.announce.split(' | ')[0])
+
+    // Ya no hay nada en curso: el sondeo se apaga solo.
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    expect(polls).toBe(2)
+
+    for (const button of wrapper.findAll('[data-test="report-ready-dismiss"]')) {
+      await button.trigger('click')
+    }
+
+    expect(wrapper.find('[data-test="report-ready"]').exists()).toBe(false)
+  })
+
+  /** Una exportacion que tarda un sondeo en completarse; `nuevo` termina en el segundo. */
+  async function mountWithFinishingExport(
+    beforeFinish: () => void,
+  ): Promise<Awaited<ReturnType<typeof mountShell>>> {
+    vi.useFakeTimers()
+    let polls = 0
+
+    stubFetch((url) => {
+      if (!url.includes('/api/v1/reports/exports')) {
+        return jsonResponse({}, 404)
+      }
+
+      polls += 1
+
+      return jsonResponse({
+        data: [
+          exportRow('viejo', 'completed'),
+          exportRow('nuevo', polls === 1 ? 'running' : 'completed'),
+        ],
+      })
+    })
+
+    const wrapper = await mountShell(['reports:*'])
+
+    await flushPromises()
+    beforeFinish()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await flushPromises()
+
+    return wrapper
+  }
+
+  it('si una pantalla sigue la exportacion, la cabecera no repite el aviso ni el anuncio', async () => {
+    const wrapper = await mountWithFinishingExport(() => trackedExports.add('nuevo'))
+
+    expect(wrapper.text()).not.toContain(es.reportExports.ready.open)
+    expect(announcement.value).toBe('')
+
+    trackedExports.delete('nuevo')
+  })
+
+  it('al desmontarse la pantalla que la seguia, la cabecera si avisa de lo que termina despues', async () => {
+    const wrapper = await mountWithFinishingExport(() => {
+      trackedExports.add('nuevo')
+      // La pantalla se desmonta antes de que termine: retira su registro.
+      trackedExports.delete('nuevo')
+    })
+
+    expect(wrapper.text()).toContain(es.reportExports.ready.open)
+    expect(announcement.value.trim()).toBe(es.reportExports.ready.announce.split(' | ')[0])
+  })
+
+  it('quien no puede pedir informes no consulta las exportaciones', async () => {
+    const spy = stubFetch(() => jsonResponse({ data: [] }))
+
+    await mountShell(['employees:*'])
+    await settle()
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('AppShellView — un trozo que no carga (V21-3-UX-1)', () => {
+  afterEach(() => {
+    clearChunkLoadFailure()
+  })
+
+  it('enseña un aviso con «Recargar» cuando la pantalla pedida no se puede abrir', async () => {
+    const wrapper = await mountShell(['employees:*'])
+
+    expect(wrapper.find('[data-test="chunk-load-failed"]').exists()).toBe(false)
+    expect(chunkLoadFailed.value).toBe(false)
+
+    // Lo activa `installChunkLoadRecovery` en el segundo fallo; aqui se simula con su estado real.
+    const { installChunkLoadRecovery } = await import('@/router/chunkLoadRecovery')
+    const { createMemoryHistory, createRouter } = await import('vue-router')
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { render: () => null } },
+        {
+          path: '/lazy',
+          component: () =>
+            Promise.reject(new TypeError('Failed to fetch dynamically imported module: x')),
+        },
+      ],
+    })
+
+    installChunkLoadRecovery(router, {
+      storage: { getItem: () => '1', setItem: () => undefined, removeItem: () => undefined },
+      reload: vi.fn(),
+    })
+    await router.push('/')
+    await router.push('/lazy').catch(() => undefined)
+    await settle(1)
+
+    const notice = wrapper.find('[data-test="chunk-load-failed"]')
+
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain(es.app.chunkLoadFailed.title)
+    expect(wrapper.find('[data-test="chunk-load-reload"]').exists()).toBe(true)
+
+    await wrapper.find('[data-test="chunk-load-dismiss"]').trigger('click')
+
+    expect(wrapper.find('[data-test="chunk-load-failed"]').exists()).toBe(false)
   })
 })

@@ -12,6 +12,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
+use App\Modules\Reporting\Domain\Event\ReportExportCancelled;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
 use App\Modules\Reporting\Domain\Event\ReportExportRequested;
@@ -121,16 +122,66 @@ final readonly class RecordReportExportLifecycle
         // arriba: o constan los dos o ninguno.
         // El `payload` lo construye el mismo adaptador que el de la lectura
         // sincrona: un solo sitio para la forma de `personal_data.accessed`.
-        $this->disclosures->recordDisclosureAs(
-            AuditActor::user($event->requestedByUserId),
-            $event->disclosureDataset,
-            $event->disclosureRecordCount,
-            [
-                ...$event->disclosureContext,
+        if ($event->disclosureDataset !== null) {
+            $this->disclosures->recordDisclosureAs(
+                AuditActor::user($event->requestedByUserId),
+                $event->disclosureDataset,
+                $event->disclosureRecordCount,
+                [
+                    ...$event->disclosureContext,
+                    'report_export_uuid' => $event->uuid,
+                    'deferred' => true,
+                ],
+            );
+        }
+
+        if ($event->legalExport !== null) {
+            $this->legalExportGenerated($event, $event->legalExport);
+        }
+    }
+
+    /**
+     * La exportacion para la Inspeccion generada en diferido deja **el mismo
+     * asiento que la sincrona** (`legal_export.generated`, regla dura 6), con
+     * sus mismas claves —periodo, alcance y recuentos— y dos mas: la
+     * exportacion de la que sale y la marca de diferido. Actor: quien la pidio,
+     * no `system` (V5-PA-4). «Quien saco el registro de la plantilla» se
+     * contesta asi con una sola consulta, venga de donde venga.
+     *
+     * @param  array<string, scalar|null>  $facts
+     */
+    private function legalExportGenerated(ReportExportGenerated $event, array $facts): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::user($event->requestedByUserId),
+            action: AuditAction::LegalExportGenerated,
+            subject: AuditSubject::of('legal_export'),
+            payload: AuditPayload::of([
+                ...$facts,
                 'report_export_uuid' => $event->uuid,
                 'deferred' => true,
-            ],
-        );
+            ]),
+        ));
+    }
+
+    /**
+     * Quien pidio un informe en diferido lo detuvo (V5-PA-4, RS-05). Sin
+     * parametros —estan en `report_export.requested`, con el mismo `uuid`— y sin
+     * nombres (regla dura 21).
+     */
+    public function cancelled(ReportExportCancelled $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::user($event->requestedByUserId),
+            action: AuditAction::ReportExportCancelled,
+            subject: AuditSubject::of('report_export'),
+            payload: AuditPayload::of([
+                'report_export_uuid' => $event->uuid,
+                'kind' => $event->kind,
+                'format' => $event->format,
+                'previous_status' => $event->previousStatus,
+            ]),
+        ));
     }
 
     /**

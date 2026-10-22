@@ -69,11 +69,15 @@ final class EmployeeWorkDayController extends Controller
             $uuid,
         );
 
-        $journal = $telemetry->measure(
+        $page = $telemetry->measurePage(
             $uuid,
-            static fn () => $workDays->handle($request->toQuery($uuid)),
+            static fn () => $workDays->page($request->toQuery($uuid), $request->page(), $request->perPage()),
         );
 
-        return (new EmployeeWorkDaysResource($journal, $workDays->todayIn($journal->timeZone)))->response();
+        return (new EmployeeWorkDaysResource(
+            $page->journal,
+            $workDays->todayIn($page->journal->timeZone),
+            $page,
+        ))->response();
     }
 }

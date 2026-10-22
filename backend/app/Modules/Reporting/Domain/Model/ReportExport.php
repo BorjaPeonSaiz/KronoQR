@@ -113,6 +113,13 @@ final readonly class ReportExport
         public int $downloadCount,
         public ?DateTimeImmutable $notifiedAt,
         public ?ReportExportNotificationChannel $notificationChannel,
+        /**
+         * Cuando lo cancelo quien lo pidio (V5-PA-4). Nulo salvo en `cancelled`.
+         *
+         * Ultimo y con valor por omision para que las filas y los dobles de
+         * prueba anteriores a la 2.3.0 se construyan igual.
+         */
+        public ?DateTimeImmutable $cancelledAt = null,
     ) {}
 
     /** Sigue ocupando el turno de esa persona: un segundo `POST` suyo recibe `409`. */
@@ -216,6 +223,36 @@ final readonly class ReportExport
             failedAt: $failedAt,
             failureReason: $reason,
         );
+    }
+
+    /**
+     * Cualquiera de los dos estados en curso → `cancelled` (V5-PA-4).
+     *
+     * La decide quien lo pidio, y por eso **no lleva motivo**: no fallo nada.
+     * Desde `pending` el trabajo ni siquiera arrancara —encontrara la fila
+     * cerrada y no hara nada—; desde `running`, el trabajador lo descubre en su
+     * siguiente comprobacion, borra el fichero a medias y no publica la
+     * generacion.
+     *
+     * **Sobre una fila ya cerrada, lanza**, igual que el resto de transiciones:
+     * cancelar una `completed` seria tirar un fichero ya generado y anunciado en
+     * `audit_log`, y eso no es cancelar (regla dura 5). Quien llama distingue
+     * el caso idempotente —ya `cancelled`— antes de llegar aqui, con
+     * {@see self::wasCancelled()}.
+     */
+    public function cancel(DateTimeImmutable $cancelledAt): self
+    {
+        if (! $this->isInProgress()) {
+            throw InvalidReportExportTransition::from($this->status, 'cancelar');
+        }
+
+        return $this->withLifecycle(status: ReportExportStatus::Cancelled, cancelledAt: $cancelledAt);
+    }
+
+    /** Ya la cancelo quien la pidio: un segundo «cancelar» no cambia nada. */
+    public function wasCancelled(): bool
+    {
+        return $this->status === ReportExportStatus::Cancelled;
     }
 
     /**
@@ -341,7 +378,7 @@ final readonly class ReportExport
     /**
      * La copia con el estado del ciclo de vida cambiado.
      *
-     * **Cinco parametros opcionales y ninguna forma de borrar**: los campos del
+     * **Seis parametros opcionales y ninguna forma de borrar**: los campos del
      * ciclo de vida solo se ponen, nunca se deshacen — una fecha de fallo no se
      * retira—.
      *
@@ -357,6 +394,7 @@ final readonly class ReportExport
         ?DateTimeImmutable $completedAt = null,
         ?DateTimeImmutable $failedAt = null,
         ?ReportExportFailure $failureReason = null,
+        ?DateTimeImmutable $cancelledAt = null,
     ): self {
         return $this->rebuild(
             status: $status ?? $this->status,
@@ -378,6 +416,7 @@ final readonly class ReportExport
             downloadCount: $this->downloadCount,
             notifiedAt: $this->notifiedAt,
             notificationChannel: $this->notificationChannel,
+            cancelledAt: $cancelledAt ?? $this->cancelledAt,
         );
     }
 
@@ -420,6 +459,7 @@ final readonly class ReportExport
             downloadCount: $this->downloadCount,
             notifiedAt: $this->notifiedAt,
             notificationChannel: $this->notificationChannel,
+            cancelledAt: $this->cancelledAt,
         );
     }
 
@@ -471,6 +511,7 @@ final readonly class ReportExport
             downloadCount: $this->downloadCount,
             notifiedAt: $this->notifiedAt,
             notificationChannel: $this->notificationChannel,
+            cancelledAt: $this->cancelledAt,
         );
     }
 
@@ -509,6 +550,7 @@ final readonly class ReportExport
             downloadCount: $downloadCount ?? $this->downloadCount,
             notifiedAt: $this->notifiedAt,
             notificationChannel: $this->notificationChannel,
+            cancelledAt: $this->cancelledAt,
         );
     }
 
@@ -535,13 +577,14 @@ final readonly class ReportExport
             downloadCount: $this->downloadCount,
             notifiedAt: $notifiedAt,
             notificationChannel: $channel,
+            cancelledAt: $this->cancelledAt,
         );
     }
 
     /**
      * El unico sitio donde se construye una copia, y **sin una sola rama**.
      *
-     * Los diecinueve campos mutables son obligatorios: quien copia dice que pasa
+     * Los veinte campos mutables son obligatorios: quien copia dice que pasa
      * con todos, uno a uno. Es verboso a proposito —la alternativa era un metodo
      * con veinte `??` y tres banderas de «borrar», que PHPStan rechaza por
      * complejidad y que nadie puede leer— y tiene una consecuencia util: **una
@@ -574,6 +617,7 @@ final readonly class ReportExport
         int $downloadCount,
         ?DateTimeImmutable $notifiedAt,
         ?ReportExportNotificationChannel $notificationChannel,
+        ?DateTimeImmutable $cancelledAt,
     ): self {
         return new self(
             id: $this->id,
@@ -605,6 +649,7 @@ final readonly class ReportExport
             downloadCount: $downloadCount,
             notifiedAt: $notifiedAt,
             notificationChannel: $notificationChannel,
+            cancelledAt: $cancelledAt,
         );
     }
 }

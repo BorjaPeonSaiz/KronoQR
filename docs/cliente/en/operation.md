@@ -1889,6 +1889,70 @@ the script tells you which one to go to first.
 **A second run** on an already updated installation: exits `3`, "already on the
 version", and touches nothing.
 
+**When updating to 2.3.0: the panel says more clearly what it could not
+read.** None of this changes data or prevents clocking:
+
+- **Incidents** gains a "Refresh" button and the time of the last read (in the
+  centre's zone). If a read fails, the panel says so and keeps the previous list
+  with its time; if a filter or page change fails, it **removes the rows**
+  instead of leaving the previous filter's rows under the new one.
+- **Presence** tells "nobody has clocked" apart from "the channel is stalled":
+  with live updates on it also shows when the channel was last checked. If the
+  first read fails, it goes back to live updates by itself as soon as a good one
+  arrives.
+- **"Report ready to download"** is announced in the header from any screen
+  (not only in Reports), and only for reports that finish while you are in the
+  panel, not for those already downloadable.
+- **If a screen does not open** after a server update, the panel shows a notice
+  with "Reload the page" instead of doing nothing.
+- **Audit accounts** no longer see a side menu with a single link.
+- **When correcting a shift**, the time fields do not accept a time later than
+  the current one in the centre's zone, and explain why.
+- The error history explains what to do about `kiosk.update.unreachable`
+  (§11.1, below).
+
+**When updating to 2.3.0: long reports in the background, and two changes for
+API users.** None of this changes the record or prevents clocking:
+
+- **The Labour Inspectorate export, the payroll output and the impact dashboard
+  can be requested in the background**, as the period report already could: you
+  see how far it has got, you can **cancel** it while it is being generated and,
+  when it finishes, you download it with its single-use link. The usual direct
+  download still exists. The Inspectorate export in the background **does not
+  depend on the licence** and leaves the same `legal_export.generated` entry as
+  the direct one, in the name of whoever requested it. A vendor support access
+  cannot request it in the background.
+- **Audit accounts** see in Reports the list of **their own** background exports
+  and can cancel them. Only their own, and only Inspectorate ones.
+- **If you use the API** (your own integrations, not the panel):
+  `GET /api/v1/credentials/status` **now paginates**: it returns 30 people by
+  default (`page`, `per_page` up to 100, and `meta.total`); the `summary` count is
+  still the whole workforce. And `GET /api/v1/employees/{uuid}/workdays` returns
+  31 work days per page.
+- **The full data export moves to format version 6**: `report_exports.csv`
+  gains the `cancelled_at` column. If you compare exports from before and after,
+  that column is the difference (`manifest.json` says so).
+
+**When updating to 2.3.0: large exports are generated in the background, with
+progress and cancellation.** None of this changes what each file contains:
+
+- **The labour-inspection export, the payroll output and the impact dashboard
+  export** are requested in the background when they cover **the whole
+  workforce or more than a month**. The screen shows the stage ("Reading the
+  data", "Writing the file", "Sealing…") and a progress bar, and has a **"Cancel
+  the export"** button. Only the labour-inspection export gives a percentage;
+  for the others the bar is indeterminate. You can keep using the panel: when
+  it finishes, the screen itself (or the header notice) offers **"Download"**.
+- **One export in progress per person.** If you request another while one is
+  running, the panel shows you the one already running instead of creating
+  another.
+- A **short** query (one person or one department over up to a month) is still
+  delivered immediately, as before.
+- **A person's time record and the credentials board** load in pages from the
+  server (31 workdays and 30 people per page). Workdays are never split across
+  pages, and the credentials summary still counts the whole workforce.
+- The manufacturer's support access does **not** request background exports.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet

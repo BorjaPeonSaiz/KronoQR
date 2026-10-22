@@ -37,7 +37,12 @@
 // `urn:kronoqr:problem:conflict`, indistinguible desde aquí-.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
-import { formatCivilDate, formatInstant, readLocalTimestamp } from '@kronoqr/web-kit/datetime'
+import {
+  formatCivilDate,
+  formatInstant,
+  readLocalTimestamp,
+  readWallClock,
+} from '@kronoqr/web-kit/datetime'
 import { isApiError, type ApiError } from '@kronoqr/web-kit/http'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -250,20 +255,57 @@ const canSubmit = computed(() => {
   return props.entry !== undefined
 })
 
-const clockInHint = computed(() =>
-  clockInCleared.value
-    ? t('corrections.dialog.clockInCannotBeCleared')
-    : t('corrections.dialog.zoneHint', { zone: props.timeZone }),
-)
+// NADA EN EL FUTURO (F1, RL-01, RL-04). El servidor rechaza con `422` una jornada o
+// una marca posteriores a su hora mas un margen de pocos minutos
+// (`ATTENDANCE_FUTURE_TOLERANCE_MINUTES`): un registro horario anota lo que ya
+// ha ocurrido. El `max` de los campos es AYUDA, no barrera: es la hora actual
+// del centro al abrir el dialogo, sin el margen -que el cliente no conoce-, asi
+// que nunca deja teclear algo que el servidor aceptaria de menos, y no se
+// bloquea el envio: un 10:05 redondeado a las 10:04:30 es legitimo.
+const latestInput = ((): string | null => {
+  let wall: ReturnType<typeof readWallClock>
+
+  try {
+    wall = readWallClock(Date.now(), props.timeZone)
+  } catch {
+    // Una zona que el navegador no conoce: sin `max`, el servidor sigue siendo la barrera.
+    return null
+  }
+
+  if (wall === null) {
+    return null
+  }
+
+  const two = (value: number): string => String(value).padStart(2, '0')
+
+  return `${wall.year}-${two(wall.month)}-${two(wall.day)}T${two(wall.hour)}:${two(wall.minute)}`
+})()
+
+const latestWorkDate = latestInput === null ? undefined : latestInput.slice(0, 10)
+
+function isAfterNow(value: string): boolean {
+  return latestInput !== null && value !== '' && value > latestInput
+}
+
+const clockInHint = computed(() => {
+  if (clockInCleared.value) {
+    return t('corrections.dialog.clockInCannotBeCleared')
+  }
+
+  return `${t('corrections.dialog.zoneHint', { zone: props.timeZone })} ${t('corrections.dialog.futureHint')}`
+})
 
 const clockOutHint = computed(() => {
   if (clockOutCleared.value) {
     return t('corrections.dialog.clockOutCannotBeCleared')
   }
 
-  return props.mode === 'correct' && originalClockOut === ''
-    ? t('corrections.dialog.clockOutCloseHint')
-    : t('corrections.dialog.clockOutOpenHint')
+  const base =
+    props.mode === 'correct' && originalClockOut === ''
+      ? t('corrections.dialog.clockOutCloseHint')
+      : t('corrections.dialog.clockOutOpenHint')
+
+  return `${base} ${t('corrections.dialog.futureHint')}`
 })
 
 function fieldErrors(field: string): readonly string[] {
@@ -279,7 +321,20 @@ function fieldErrors(field: string): readonly string[] {
     return [t('corrections.wouldChangeWorkDate')]
   }
 
-  return isApiError(error.value) ? (error.value.fieldErrors[field] ?? []) : []
+  const fromServer = isApiError(error.value) ? (error.value.fieldErrors[field] ?? []) : []
+
+  // El `422` por hora futura llega con el texto del servidor; se le antepone la
+  // explicacion de la regla cuando lo tecleado esta de verdad en el futuro.
+  const typed =
+    field === 'clocked_in_at'
+      ? clockInInput.value
+      : field === 'clocked_out_at'
+        ? clockOutInput.value
+        : ''
+
+  return fromServer.length > 0 && isAfterNow(typed)
+    ? [t('corrections.dialog.futureRejected'), ...fromServer]
+    : fromServer
 }
 
 function conflictKindFor(caught: ApiError): ConflictKind {
@@ -603,7 +658,7 @@ const inputClass =
           type="date"
           required
           :min="workDateMin"
-          :max="workDateMax"
+          :max="workDateMax ?? latestWorkDate"
           :class="inputClass"
           :aria-describedby="field.describedBy"
           :aria-invalid="field.invalid"
@@ -624,6 +679,7 @@ const inputClass =
           v-model="clockInInput"
           type="datetime-local"
           :required="mode === 'add'"
+          :max="latestInput ?? undefined"
           :class="inputClass"
           :aria-describedby="field.describedBy"
           :aria-invalid="field.invalid"
@@ -642,6 +698,7 @@ const inputClass =
           :id="field.id"
           v-model="clockOutInput"
           type="datetime-local"
+          :max="latestInput ?? undefined"
           :class="inputClass"
           :aria-describedby="field.describedBy"
           :aria-invalid="field.invalid"

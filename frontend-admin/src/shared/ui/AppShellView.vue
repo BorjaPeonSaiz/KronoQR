@@ -7,10 +7,13 @@
 // esta en la policy de cada endpoint (regla dura 18).
 import { announcement } from '@kronoqr/web-kit/announcer'
 import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { REPORTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
+import { useReportReadyNotices } from '@/features/reports/useReportReadyNotices'
+import { chunkLoadFailed, clearChunkLoadFailure } from '@/router/chunkLoadRecovery'
 import LicenseNotice from '@/features/settings/LicenseNotice.vue'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import { NAVIGATION_SECTIONS } from '@/shared/ui/navigation'
@@ -47,6 +50,36 @@ const navigation = computed<NavItem[]>(() =>
 function isActive(name: string): boolean {
   return route.name === name || route.meta.section === name
 }
+
+// «Informe listo» en cualquier pantalla (V21-5-PA-1): el marco esta siempre
+// montado, asi que es quien observa las exportaciones en segundo plano de quien
+// puede pedirlas. En «Informes» la lista ya esta a la vista y el aviso se retira.
+const reportsEnabled = computed(
+  () => session.isAuthenticated && !session.passwordChangeRequired && session.can(REPORTS_MANAGE),
+)
+const { readyCount, dismiss: dismissReportReady } = useReportReadyNotices(reportsEnabled)
+
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'reports') {
+      dismissReportReady()
+    }
+  },
+)
+
+function reloadPage(): void {
+  window.location.reload()
+}
+
+// Un menu de UN solo enlace a la pantalla en la que ya se esta no ayuda a nadie
+// (el auditor, cuya unica pantalla es la Inspeccion; V21-3-UX-3): se retira. Si la
+// persona esta en otra pantalla -cambiar la contrasena-, el enlace sigue ahi para volver.
+const showNavigation = computed(
+  () =>
+    navigation.value.length > 1 ||
+    (navigation.value.length === 1 && !isActive(navigation.value[0]?.name ?? '')),
+)
 
 const roleLabels = computed(() => session.roles.map((role) => t(`app.roles.${role}`)).join(', '))
 
@@ -91,7 +124,7 @@ async function signOut(): Promise<void> {
           <p class="text-xs text-kq-text-muted">{{ t('app.title') }}</p>
         </div>
 
-        <nav v-if="navigation.length > 0" :aria-label="t('app.nav.label')" class="md:flex-1">
+        <nav v-if="showNavigation" :aria-label="t('app.nav.label')" class="md:flex-1">
           <!-- Hueco de 6 px entre secciones: el anillo de foco (3 px, a 2 px
                de la caja) tiene que caber sin tocar a la vecina, porque
                `--kq-color-focus` es el mismo tono que el fondo de la activa
@@ -121,7 +154,35 @@ async function signOut(): Promise<void> {
         </nav>
 
         <div
-          class="flex flex-wrap items-center gap-3 md:flex-col md:items-stretch md:gap-2 md:border-t md:border-kq-border md:pt-3"
+          v-if="readyCount > 0 && route.name !== 'reports'"
+          class="rounded-kq border border-kq-success bg-kq-success-soft p-3 text-sm text-kq-success"
+          data-test="report-ready"
+        >
+          <p class="font-semibold">
+            {{ t('reportExports.ready.message', { count: readyCount }, readyCount) }}
+          </p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <RouterLink
+              :to="{ name: 'reports', hash: '#report-exports' }"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-kq-text hover:bg-kq-surface-alt"
+              data-test="report-ready-open"
+              @click="dismissReportReady"
+            >
+              {{ t('reportExports.ready.open') }}
+            </RouterLink>
+            <button
+              type="button"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-kq-text hover:bg-kq-surface-alt"
+              data-test="report-ready-dismiss"
+              @click="dismissReportReady"
+            >
+              {{ t('reportExports.ready.dismiss') }}
+            </button>
+          </div>
+        </div>
+
+        <div
+          class="flex flex-wrap items-center gap-3 md:mt-auto md:flex-col md:items-stretch md:gap-2 md:border-t md:border-kq-border md:pt-3"
         >
           <p class="min-w-0 text-xs text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.displayName, roles: roleLabels }) }}
@@ -155,6 +216,37 @@ async function signOut(): Promise<void> {
       <!-- Region viva unica del panel: aqui se anuncia todo lo que cambia sin
            mover el foco (WCAG 2.2 AA, 4.1.3). -->
       <p role="status" aria-live="polite" class="sr-only">{{ announcement }}</p>
+
+      <!-- Un trozo de la aplicacion no carga y ya se recargo una vez (tras una
+           actualizacion del servidor, o sin red): el clic no abre nada y sin
+           este aviso no se sabria por que (V21-3-UX-1). -->
+      <div
+        v-if="chunkLoadFailed"
+        role="alert"
+        class="m-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
+        data-test="chunk-load-failed"
+      >
+        <p class="font-semibold">{{ t('app.chunkLoadFailed.title') }}</p>
+        <p class="mt-1">{{ t('app.chunkLoadFailed.advice') }}</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt"
+            data-test="chunk-load-reload"
+            @click="reloadPage"
+          >
+            {{ t('app.chunkLoadFailed.reload') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt"
+            data-test="chunk-load-dismiss"
+            @click="clearChunkLoadFailure"
+          >
+            {{ t('app.chunkLoadFailed.dismiss') }}
+          </button>
+        </div>
+      </div>
 
       <main id="main" class="mx-auto max-w-6xl p-4">
         <RouterView />

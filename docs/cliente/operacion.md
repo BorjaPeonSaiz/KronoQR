@@ -1867,6 +1867,72 @@ script te dice a cuál ir primero.
 **Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
 en la versión», y no toca nada.
 
+**Al actualizar a la 2.3.0: el panel avisa mejor de lo que no se ha podido
+leer.** Nada de esto cambia datos ni impide fichar:
+
+- **Incidencias** gana un botón «Actualizar» y la hora de la última lectura
+  (en la zona del centro). Si una lectura falla, el panel lo dice y conserva la
+  lista anterior con su hora; si falla un cambio de filtro o de página, **retira
+  las filas** en vez de dejar las del filtro anterior bajo el nuevo.
+- **Presencia** distingue «nadie ha fichado» de «el canal está parado»: con el
+  tiempo real en directo enseña también a qué hora se comprobó el canal. Si la
+  primera lectura falla, vuelve sola al tiempo real en cuanto llega una buena.
+- **«Informe listo para descargar»** se avisa en la cabecera desde cualquier
+  pantalla (no solo en Informes), y solo de los informes que terminan mientras
+  estás en el panel, no de los ya descargables.
+- **Si una pantalla no se abre** tras una actualización del servidor, el panel
+  muestra un aviso con «Recargar la página» en lugar de quedarse sin hacer nada.
+- **Las cuentas de auditoría** ya no ven un menú lateral con un único enlace.
+- **Al corregir un tramo**, los campos de hora no admiten una hora posterior a
+  la actual en la zona del centro y explican por qué.
+- El histórico de errores explica qué hacer con `kiosk.update.unreachable`
+  (§11.1, a continuación).
+
+**Al actualizar a la 2.3.0: informes largos en segundo plano, y dos cambios para
+quien use la API.** Nada de esto cambia el registro ni impide fichar:
+
+- **La exportación para la Inspección, la nómina y el cuadro de impacto se
+  pueden pedir en segundo plano**, como ya ocurría con el informe por periodo:
+  se ve por dónde va, se puede **cancelar** mientras se genera y, al terminar, se
+  descarga con su enlace de un solo uso. La descarga directa de siempre sigue
+  existiendo. La exportación para la Inspección en segundo plano **no depende de
+  la licencia** y deja el mismo asiento `legal_export.generated` que la directa,
+  a nombre de quien la pidió. Un acceso de soporte del fabricante no puede
+  pedirla en segundo plano.
+- **Las cuentas de auditoría** ven en Informes la lista de **sus** exportaciones
+  en segundo plano y pueden cancelarlas. Solo las suyas, y solo de la Inspección.
+- **Si usas la API** (integraciones propias, no el panel):
+  `GET /api/v1/credentials/status` **ahora pagina**: devuelve 30 personas por
+  omisión (`page`, `per_page` hasta 100, y `meta.total`); el recuento de
+  `summary` sigue siendo el de toda la plantilla. Y
+  `GET /api/v1/employees/{uuid}/workdays` devuelve 31 jornadas por página.
+- **La exportación íntegra pasa a la versión 6 del formato**:
+  `report_exports.csv` gana la columna `cancelled_at`. Si comparas exportaciones
+  de antes y de después, esa columna es la diferencia (`manifest.json` lo dice).
+
+**Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
+plano, con avance y cancelación.** Nada de esto cambia lo que contiene cada
+fichero:
+
+- **La exportación para la Inspección, la salida a nómina y la exportación del
+  cuadro de impacto** se piden en segundo plano cuando abarcan **toda la
+  plantilla o más de un mes**. La pantalla enseña la fase («Leyendo los
+  datos», «Escribiendo el fichero», «Sellando…») y una barra de avance, y
+  tiene un botón **«Cancelar la exportación»**. Solo la exportación para la
+  Inspección da un porcentaje; en las demás la barra es indeterminada. Puedes
+  seguir usando el panel: al terminar, la propia pantalla (o el aviso de la
+  cabecera) ofrece **«Descargar»**.
+- **Una exportación en curso por persona.** Si pides otra mientras hay una
+  corriendo, el panel te enseña la que ya está en marcha en vez de crear otra.
+- Una consulta **corta** (una persona o un departamento en un periodo de hasta
+  un mes) sigue entregándose al momento, como antes.
+- **El registro horario de una persona y el tablero de credenciales** cargan
+  por páginas desde el servidor (31 jornadas y 30 personas por página). Las
+  jornadas no se parten entre páginas, y el resumen de credenciales sigue
+  contando la plantilla entera.
+- El acceso de soporte del fabricante **no** pide exportaciones en segundo
+  plano.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

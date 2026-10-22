@@ -11,8 +11,9 @@ import { describe, expect, it } from 'vitest'
 import { describeIncidentContext } from '@/features/incidents/incidentContext'
 import type { Translate } from '@/features/incidents/incidentContext'
 import { createAppI18n } from '@/shared/i18n'
+import { testMessages } from './support/i18n'
 
-const i18n = createAppI18n('es')
+const i18n = createAppI18n('es', testMessages)
 const t: Translate = (key, params) => String(i18n.global.t(key, params ?? {}))
 
 // Zona distinta de UTC a proposito: si el codigo usara la zona del navegador

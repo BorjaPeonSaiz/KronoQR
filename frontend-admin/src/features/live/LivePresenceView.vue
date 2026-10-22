@@ -78,6 +78,16 @@ const generatedAtLabel = computed(() =>
     : formatInstant(store.lastUpdatedAt, store.timeZone, locale.value),
 )
 
+/** El ultimo cambio de filtro fallo: no hay lista que enseñar, la que habia era de otro filtro. */
+const filterFailed = computed(() => store.meta !== null && store.refreshFailure?.kind === 'filter')
+
+/** Marca de «el canal sigue vivo»: solo tiene sentido mientras el canal esta en directo. */
+const contactLabel = computed(() =>
+  store.transport === 'realtime' && store.realtimeState === 'live' && store.lastContactAt !== null
+    ? formatInstant(store.lastContactAt, store.timeZone, locale.value)
+    : '',
+)
+
 /** Aviso no bloqueante cuando hay datos previos: que ha fallado y que se esta viendo. */
 const noticeKind = computed<'filter' | 'poll' | 'realtime' | null>(() => {
   if (store.meta === null) {
@@ -160,7 +170,11 @@ const selectClass =
       </p>
     </div>
 
-    <dl v-if="store.meta !== null" class="mt-4 flex flex-wrap gap-6" data-test="counts">
+    <dl
+      v-if="store.meta !== null && !filterFailed"
+      class="mt-4 flex flex-wrap gap-6"
+      data-test="counts"
+    >
       <div>
         <dt class="text-sm text-kq-text-muted">{{ t('live.counts.present') }}</dt>
         <dd class="text-3xl font-bold tabular-nums" data-test="present-count">
@@ -180,6 +194,13 @@ const selectClass =
         </dd>
       </div>
     </dl>
+    <p
+      v-if="contactLabel !== '' && !filterFailed"
+      class="mt-1 text-sm text-kq-text-muted"
+      data-test="channel-contact"
+    >
+      {{ t('live.counts.contact', { moment: contactLabel, zone: store.timeZone }) }}
+    </p>
 
     <form class="mt-4 flex flex-wrap items-end gap-4" role="search" @submit.prevent="submitFilters">
       <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
@@ -238,7 +259,7 @@ const selectClass =
     <LoadingPanel v-if="store.loading" :label="t('live.loading')" class="mt-4" />
 
     <ErrorNotice
-      v-else-if="store.error !== null && store.meta === null"
+      v-else-if="store.error !== null && (store.meta === null || filterFailed)"
       :error="store.error"
       class="mt-4"
     />

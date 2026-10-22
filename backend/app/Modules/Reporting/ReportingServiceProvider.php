@@ -7,10 +7,14 @@ namespace App\Modules\Reporting;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Reporting\Application\Generation\AdoptionReportExportGeneration;
+use App\Modules\Reporting\Application\Generation\LegalReportExportGeneration;
+use App\Modules\Reporting\Application\Generation\PeriodReportExportGeneration;
 use App\Modules\Reporting\Application\Port\AbsenceCensusReader;
 use App\Modules\Reporting\Application\Port\AbsenceMetrics;
 use App\Modules\Reporting\Application\Port\AdoptionFactsReader;
 use App\Modules\Reporting\Application\Port\AdoptionMetrics;
+use App\Modules\Reporting\Application\Port\AdoptionReportFileWriter;
 use App\Modules\Reporting\Application\Port\ComplianceFactsReader;
 use App\Modules\Reporting\Application\Port\ComplianceIncidentLinks;
 use App\Modules\Reporting\Application\Port\ComplianceMetrics;
@@ -30,6 +34,7 @@ use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Application\Port\ReportExportDocumentWriter;
 use App\Modules\Reporting\Application\Port\ReportExportMetrics;
 use App\Modules\Reporting\Application\Port\ReportExportNotifier;
+use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportQueue;
 use App\Modules\Reporting\Application\Port\ReportExportRecipients;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
@@ -44,6 +49,7 @@ use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
 use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\Query\ReadAdoptionReport;
 use App\Modules\Reporting\Application\UseCase\DownloadReportExport;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
@@ -51,6 +57,7 @@ use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\Policy\AdoptionIndicators;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionReport;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
@@ -64,6 +71,7 @@ use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
 use App\Modules\Reporting\Http\Policy\ReportExportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\CacheReportExportProgressBoard;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\FilesystemReportExportStorage;
 use App\Modules\Reporting\Infrastructure\Adapter\LaravelReportingEventPublisher;
@@ -76,6 +84,8 @@ use App\Modules\Reporting\Infrastructure\Console\ComplianceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PurgeExpiredReportExportsCommand;
 use App\Modules\Reporting\Infrastructure\Console\WeeklySummaryCommand;
+use App\Modules\Reporting\Infrastructure\Export\AdoptionReportFiles;
+use App\Modules\Reporting\Infrastructure\Export\AdoptionReportPdfWriter;
 use App\Modules\Reporting\Infrastructure\Export\ConfigurablePayrollDocumentWriter;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportCriteriaNarrator;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
@@ -118,12 +128,14 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\ConnectionInterface;
@@ -628,6 +640,7 @@ final class ReportingServiceProvider extends ServiceProvider
             ShowReportExport::class,
             static fn (Application $app): ShowReportExport => new ShowReportExport(
                 $app->make(ReportExportRepository::class),
+                $app->make(ReportExportProgressBoard::class),
                 $app->make(Clock::class),
                 $app->make(ConnectionInterface::class),
                 Config::integer('reporting.export.link_ttl_minutes'),
@@ -672,20 +685,87 @@ final class ReportingServiceProvider extends ServiceProvider
             ),
         );
 
+        $this->registerDeferredGenerations();
+
         $this->app->bind(
             GenerateReportExportHandler::class,
-            fn (Application $app): GenerateReportExportHandler => new GenerateReportExportHandler(
+            static fn (Application $app): GenerateReportExportHandler => new GenerateReportExportHandler(
                 $app->make(ReportExportRepository::class),
+                $app->make(PeriodReportExportGeneration::class),
+                $app->make(LegalReportExportGeneration::class),
+                $app->make(AdoptionReportExportGeneration::class),
+                $app->make(ReportExportStorage::class),
+                $app->make(ReportExportNotifier::class),
+                $app->make(ReportExportProgressBoard::class),
+                $app->make(ReportingEventPublisher::class),
+                $app->make(Clock::class),
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.export.retention_days'),
+            ),
+        );
+    }
+
+    /**
+     * Las tres formas de escribir el fichero de un informe en diferido, y el
+     * avance que anotan mientras lo escriben (V5-PA-4).
+     *
+     * **Todas con los techos del diferido**: el lector del informe por periodo
+     * con `REPORTING_EXPORT_TIMEOUT_SECONDS`, el cuadro de impacto con el mismo
+     * lector y su `statement_timeout` de diferido, y el PDF del cuadro detras del
+     * embudo de Chromium con la espera de la cola. La exportacion para la
+     * Inspeccion la escribe `Compliance` por su puerto de `Shared`.
+     */
+    private function registerDeferredGenerations(): void
+    {
+        $this->app->bind(
+            ReportExportProgressBoard::class,
+            static fn (Application $app): CacheReportExportProgressBoard => new CacheReportExportProgressBoard(
+                $app->make(CacheRepository::class),
+                $app->make(LoggerInterface::class),
+                Config::integer('reporting.export.stale_after_seconds'),
+            ),
+        );
+
+        $this->app->bind(
+            PeriodReportExportGeneration::class,
+            static fn (Application $app): PeriodReportExportGeneration => new PeriodReportExportGeneration(
                 $app->make(self::DEFERRED_PERIOD_REPORT),
                 $app->make(ReportExportDocumentWriter::class),
                 $app->make(PayrollDocumentWriter::class),
                 $app->make(ReportCriteriaNarrator::class),
                 $app->make(ReportExportStorage::class),
-                $app->make(ReportExportNotifier::class),
-                $app->make(ReportingEventPublisher::class),
-                $app->make(Clock::class),
-                $app->make(ConnectionInterface::class),
-                Config::integer('reporting.export.retention_days'),
+            ),
+        );
+
+        $this->app->bind(
+            AdoptionReportFileWriter::class,
+            static fn (Application $app): AdoptionReportFiles => new AdoptionReportFiles(
+                new AdoptionReportPdfWriter(
+                    self::limitedRenderer($app, Config::integer('reporting.pdf.queued_wait_seconds')),
+                    $app->make(BrandingProvider::class),
+                    $app->make(BrandingLogoReader::class),
+                ),
+                $app->make(ReportIssuerDirectory::class),
+            ),
+        );
+
+        $this->app->bind(
+            AdoptionReportExportGeneration::class,
+            fn (Application $app): AdoptionReportExportGeneration => new AdoptionReportExportGeneration(
+                new ReadAdoptionReport(
+                    new DatabaseAdoptionFactsReader(
+                        $app->make(ConnectionInterface::class),
+                        $app->make(WorkDayCompletionReader::class),
+                        Config::integer('reporting.export.statement_timeout_seconds'),
+                    ),
+                    $app->make(AdoptionIndicators::class),
+                    $this->deferredPeriodReport($app),
+                    $app->make(InstallationSiteProvider::class),
+                    $app->make(OperationalSettingsProvider::class),
+                    $app->make(Clock::class),
+                ),
+                $app->make(AdoptionReportFileWriter::class),
+                $app->make(ReportExportStorage::class),
             ),
         );
     }

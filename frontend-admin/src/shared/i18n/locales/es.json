@@ -34,7 +34,13 @@
       "empleado": "Empleado",
       "kiosk": "Quiosco"
     },
-    "changePassword": "Cambiar mi contraseña"
+    "changePassword": "Cambiar mi contraseña",
+    "chunkLoadFailed": {
+      "title": "No se ha podido abrir esa pantalla.",
+      "advice": "Es probable que la aplicación se haya actualizado o que se haya perdido la conexión. Recarga la página; si el aviso vuelve, comprueba la red y avisa a quien administra la instalación.",
+      "reload": "Recargar la página",
+      "dismiss": "Cerrar el aviso"
+    }
   },
   "auth": {
     "heading": "Acceso al panel de gestión",
@@ -864,7 +870,9 @@
       "timeDoesNotExist": "Esa hora no existió en esta zona: el reloj saltó al cambiar de horario. Elige otra.",
       "noChange": "Cambia al menos una hora o cómo terminó el tramo para poder guardar: una corrección que no cambia nada es una fila de auditoría que miente.",
       "voidSummary": "Este tramo dejará de contar para el total del día. La versión que tenía se conserva y sigue siendo consultable en el historial.",
-      "previewCaption": "Lo que cambia en este tramo"
+      "previewCaption": "Lo que cambia en este tramo",
+      "futureHint": "No puede ser posterior a ahora: el registro anota lo que ya ha ocurrido (se admite un margen de pocos minutos).",
+      "futureRejected": "Esa hora es posterior a la actual. Un registro horario solo anota lo que ya ha ocurrido: no se puede rellenar por adelantado ni cerrar un turno con una salida prevista. Pon la hora real, o deja la salida en blanco y ciérralo cuando ocurra."
     }
   },
   "chartWithTable": {
@@ -1114,14 +1122,17 @@
     "intro": "Los informes que no caben en una respuesta al momento se generan aquí. Cada enlace de descarga es de un solo uso y caduca: si lo necesitas otra vez, pídelo de nuevo.",
     "kind": {
       "period": "Horas por periodo",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "legal": "Inspección de Trabajo",
+      "adoption": "Impacto y adopción"
     },
     "status": {
       "pending": "En cola",
       "running": "Generando",
       "completed": "Lista para descargar",
       "failed": "Fallida",
-      "purged": "Caducada"
+      "purged": "Caducada",
+      "cancelled": "Cancelada"
     },
     "list": {
       "loading": "Cargando las exportaciones…",
@@ -1143,7 +1154,6 @@
       "downloading": "Descargando…",
       "downloaded": "Descarga de «{filename}» lista.",
       "criteriaToggle": "Ver los criterios",
-      "readyAnnounce": "Una exportación está lista para descargar.",
       "failedReason": "No se pudo generar: {reason}",
       "purgedNotice": "El fichero ya se purgó por antigüedad. La fila queda como constancia, pero no se puede volver a descargar.",
       "failureReasons": {
@@ -1156,6 +1166,44 @@
       "empty": {
         "title": "Todavía no hay ninguna exportación en segundo plano",
         "description": "Cuando un informe no quepa en una respuesta al momento, o pidas la salida a nómina en segundo plano, aparecerá aquí."
+      }
+    },
+    "ready": {
+      "announce": "Un informe listo para descargar en Informes. | {count} informes listos para descargar en Informes.",
+      "message": "Tienes un informe listo para descargar. | Tienes {count} informes listos para descargar.",
+      "open": "Ir a Informes",
+      "dismiss": "Descartar"
+    },
+    "job": {
+      "running": "Generando",
+      "queued": "En cola: empezará en cuanto haya hueco.",
+      "stage": {
+        "reading": "Leyendo los datos",
+        "writing": "Escribiendo el fichero",
+        "sealing": "Sellando y comprobando el fichero"
+      },
+      "progressLabel": "Avance de la exportación",
+      "keepWorking": "Puedes seguir usando el panel: te avisamos al terminar.",
+      "cancel": "Cancelar la exportación",
+      "cancelling": "Cancelando…",
+      "completed": "La exportación está lista para descargar.",
+      "cancelled": "Exportación cancelada. No se ha guardado ningún fichero.",
+      "dismiss": "Cerrar",
+      "alreadyRunning": "Ya tenías una exportación en curso (solo se admite una por persona): es la que ves aquí.",
+      "seeExisting": "Ver mis exportaciones",
+      "progressInList": "{stage}",
+      "announce": {
+        "started": "Exportación pedida. Se genera en segundo plano.",
+        "alreadyRunning": "Ya había una exportación en curso; se muestra esa.",
+        "requestFailed": "No se ha podido pedir la exportación.",
+        "stage": "Exportación: {stage}.",
+        "completed": "La exportación está lista para descargar.",
+        "failed": "La exportación ha fallado.",
+        "cancelled": "Exportación cancelada."
+      },
+      "deferred": {
+        "legal": "Esta exportación es grande (toda la plantilla o más de un mes): se genera en segundo plano.",
+        "generic": "Esta exportación es grande (toda la plantilla o más de un mes): se genera en segundo plano y te avisamos al terminar."
       }
     }
   },
@@ -1321,6 +1369,9 @@
         "break_start": "Pausa",
         "unknown": "Sin dato"
       }
+    },
+    "pagination": {
+      "label": "Páginas de jornadas"
     }
   },
   "live": {
@@ -1332,7 +1383,8 @@
       "present": "Dentro ahora",
       "absent": "Fuera ahora",
       "lastUpdate": "Última actualización",
-      "snapshotAt": "{moment} ({zone})"
+      "snapshotAt": "{moment} ({zone})",
+      "contact": "Canal en directo comprobado a las {moment} ({zone}). Si no hay cambios, es que nadie ha fichado desde la última actualización."
     },
     "status": {
       "present": "Dentro ahora",
@@ -1366,7 +1418,7 @@
     },
     "notice": {
       "poll": "No se ha podido actualizar la lista (fallo de red o del servidor). Se muestran los datos de la última actualización correcta, el {moment} ({zone}); se reintentará solo.",
-      "filter": "No se ha podido aplicar el filtro elegido. La lista sigue siendo la de la última actualización correcta, el {moment} ({zone}), y puede no corresponder al filtro.",
+      "filter": "No se ha podido aplicar el filtro elegido, así que no se muestra ninguna lista: la que había era de otro filtro. Se reintentará solo.",
       "realtime": "La conexión en tiempo real se ha cortado y se está reintentando. Mientras tanto la lista se actualiza por sondeo; última actualización correcta el {moment} ({zone})."
     },
     "transport": {
@@ -1557,6 +1609,15 @@
       "heading": "Incidencias de la jornada",
       "none": "Sin incidencias en esta jornada.",
       "linkToInbox": "Ver en la bandeja de incidencias"
+    },
+    "refresh": {
+      "button": "Actualizar",
+      "busy": "Actualizando…",
+      "readAt": "Leída el {moment}"
+    },
+    "notice": {
+      "refresh": "No se ha podido actualizar la bandeja (fallo de red o del servidor). Se muestran los datos de la última lectura correcta, el {moment}; las antigüedades siguen corriendo. Pulsa «Actualizar» para reintentarlo.",
+      "filter": "No se ha podido aplicar el filtro o la página elegidos, así que no se muestra ninguna fila: las que había eran de otro filtro. Pulsa «Actualizar» para reintentarlo."
     }
   },
   "compliance": {
@@ -2465,7 +2526,8 @@
       "whatToDoHeading": "Qué hacer"
     },
     "whatToDoByCode": {
-      "kioskPinSealFailed": "La tablet no puede cifrar el PIN para enviarlo, así que no puede validar fichajes con PIN. Casi siempre es una tablet con una versión antigua de la aplicación (le falta el permiso de seguridad para el cifrado) o un navegador donde el cifrado no arranca. Mira la versión de esa tablet en Quioscos: si aparece «Aplicación desactualizada», sigue el «Qué hacer» de esa tablet. Si la versión es la actual, contacta con soporte con el identificador de traza (trace_id). Los fichajes con QR siguen funcionando."
+      "kioskPinSealFailed": "La tablet no puede cifrar el PIN para enviarlo, así que no puede validar fichajes con PIN. Casi siempre es una tablet con una versión antigua de la aplicación (le falta el permiso de seguridad para el cifrado) o un navegador donde el cifrado no arranca. Mira la versión de esa tablet en Quioscos: si aparece «Aplicación desactualizada», sigue el «Qué hacer» de esa tablet. Si la versión es la actual, contacta con soporte con el identificador de traza (trace_id). Los fichajes con QR siguen funcionando.",
+      "kioskUpdateUnreachable": "La tablet lleva unos 30 minutos sin encontrar la versión de la aplicación que le pide el servidor, así que no puede completar la actualización urgente. Los fichajes siguen funcionando y se guardan en la cola. Mira en Quioscos que la tablet tiene red y la cola a 0; si es así, el servidor está pidiendo una versión que no puede servirle: genera el paquete de diagnóstico (Soporte) y abre un caso con soporte. No desregistres su service worker por esto: no lo arregla. Guía: operacion.md §11.1."
     },
     "whatToDo": {
       "api": {

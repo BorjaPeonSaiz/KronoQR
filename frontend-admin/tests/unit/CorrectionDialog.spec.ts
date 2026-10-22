@@ -7,7 +7,7 @@
 // cambio de jornada se pinta con la pista propia y no con el texto crudo del
 // servidor, y las horas se convierten con la zona del centro (regla dura 3),
 // nunca con la del navegador de la prueba.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import CorrectionDialog from '@/features/workdays/CorrectionDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { CorrectedShiftEntry } from '@/shared/api/types'
@@ -908,5 +908,160 @@ describe('CorrectionDialog, causas del 422 de cambio de jornada (@RN-05)', () =>
     expect(preview).toContain(es.workdays.history.fields.closedBy)
     expect(preview).toContain(es.workdays.history.closedBy.clock_out)
     expect(preview).toContain(es.workdays.history.closedBy.break_start)
+  })
+})
+
+describe('CorrectionDialog, hora futura (V2-PA-04, F1, RL-01, RL-04)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function mountCorrect() {
+    return mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+  }
+
+  it('las horas llevan max = ahora en la zona del centro, no la del navegador, y el campo explica la regla', async () => {
+    // 10:04 UTC del 20 de julio son las 12:04 en Madrid (CEST, +02:00).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-20T10:04:30Z'))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'add',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: undefined,
+        entry: undefined,
+      },
+    })
+
+    expect(wrapper.find('[data-test="dialog-clock-in"]').attributes('max')).toBe('2026-07-20T12:04')
+    expect(wrapper.find('[data-test="dialog-clock-out"]').attributes('max')).toBe(
+      '2026-07-20T12:04',
+    )
+    expect(wrapper.find('[data-test="dialog-work-date"]').attributes('max')).toBe('2026-07-20')
+    expect(wrapper.text()).toContain(es.corrections.dialog.futureHint)
+  })
+
+  it('un 422 por hora futura se queda junto al campo con la explicacion de la regla y no cierra el dialogo', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: { clocked_out_at: ['La salida no puede ser posterior a la hora actual.'] },
+      }),
+    )
+
+    const wrapper = await mountCorrect()
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2099-01-01T10:00')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    const clockOut = wrapper.find('[data-test="dialog-clock-out"]')
+
+    expect(clockOut.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.text()).toContain(es.corrections.dialog.futureRejected)
+    expect(wrapper.text()).toContain('La salida no puede ser posterior a la hora actual.')
+    expect((clockOut.element as HTMLInputElement).value).toBe('2099-01-01T10:00')
+    expect(wrapper.emitted('success')).toBeUndefined()
+    expect(wrapper.emitted('cancel')).toBeUndefined()
+  })
+
+  it('un 422 que no es por hora futura no lleva la explicacion de la regla', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: { clocked_out_at: ['La salida no puede ser anterior a la entrada.'] },
+      }),
+    )
+
+    const wrapper = await mountCorrect()
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T05:30')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).not.toContain(es.corrections.dialog.futureRejected)
+  })
+})
+
+describe('CorrectionDialog, 403 (V2-PA-03, RF-ID-03, regla dura 18)', () => {
+  const forbidden = () =>
+    problemResponse(403, 'urn:kronoqr:problem:forbidden', {
+      detail: 'Este tramo esta fuera de tu alcance.',
+    })
+
+  it('corregir fuera de alcance deja el dialogo abierto, conserva lo escrito y no da exito', async () => {
+    const spy = stubFetch(forbidden)
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T14:30')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="dialog-error"]').text()).toContain(es.errors.forbidden.title)
+    expect((wrapper.find('[data-test="dialog-clock-out"]').element as HTMLInputElement).value).toBe(
+      '2026-03-14T14:30',
+    )
+    expect((wrapper.find('[data-test="dialog-reason"]').element as HTMLSelectElement).value).toBe(
+      'AJUSTE_ACORDADO_CON_RRHH',
+    )
+    expect(wrapper.emitted('success')).toBeUndefined()
+    expect(wrapper.emitted('cancel')).toBeUndefined()
+    // Sigue pudiendose cancelar, y reintentar si el rol cambia.
+    expect(wrapper.find('[data-test="dialog-cancel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('anular siendo responsable (que no puede) deja el dialogo abierto y no da exito', async () => {
+    stubFetch(forbidden)
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'void',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('ERROR_DE_ESCANEO_DUPLICADO')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[data-test="dialog-error"]').text()).toContain(es.errors.forbidden.title)
+    expect((wrapper.find('[data-test="dialog-reason"]').element as HTMLSelectElement).value).toBe(
+      'ERROR_DE_ESCANEO_DUPLICADO',
+    )
+    expect(wrapper.emitted('success')).toBeUndefined()
+    expect(wrapper.emitted('cancel')).toBeUndefined()
   })
 })

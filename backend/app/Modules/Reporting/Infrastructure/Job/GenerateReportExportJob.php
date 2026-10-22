@@ -16,6 +16,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Psr\Log\LoggerInterface;
@@ -107,10 +108,30 @@ final class GenerateReportExportJob implements ShouldQueue
     /** Ver el docblock: no se reintenta solo. */
     public int $tries = 1;
 
+    /**
+     * La conexion y la cola propias de los informes (`config/queue.php`): su
+     * `retry_after` va por encima de {@see self::TIMEOUT_SECONDS}. Con el de la
+     * conexion normal (90 s), otro proceso recogia el trabajo a mitad.
+     */
+    public const string QUEUE_CONNECTION = 'reports';
+
+    public const string QUEUE = 'reports';
+
+    /**
+     * Margen por debajo del techo con el que {@see self::failed()} todavia da
+     * por vivo al proceso que genera: quien muere por su propio `$timeout` lo
+     * hace a los 1800 s de recogerlo, unos milisegundos despues de `started_at`.
+     */
+    private const int STILL_RUNNING_MARGIN_SECONDS = 60;
+
     /** Ver {@see self::TIMEOUT_SECONDS}. */
     public int $timeout = self::TIMEOUT_SECONDS;
 
-    public function __construct(private readonly string $exportUuid) {}
+    public function __construct(private readonly string $exportUuid)
+    {
+        $this->onConnection(self::QUEUE_CONNECTION);
+        $this->onQueue(self::QUEUE);
+    }
 
     public function handle(
         GenerateReportExportHandler $exports,
@@ -215,11 +236,59 @@ final class GenerateReportExportJob implements ShouldQueue
             $exports = $container->make(ReportExportRepository::class);
             /** @var Clock $clock */
             $clock = $container->make(Clock::class);
+            /** @var ConnectionInterface $connection */
+            $connection = $container->make(ConnectionInterface::class);
 
-            $export = $exports->findByUuid($this->exportUuid);
+            /*
+             * RELEIDA CON BLOQUEO, Y SIN TOCAR UNA QUE OTRO PROCESO ESTA
+             * GENERANDO (2.3.0). Si la fila sigue `running` y no ha agotado su
+             * techo, quien la esta escribiendo esta vivo —una segunda reserva
+             * del mismo trabajo, un aviso tardio—: marcarla y borrar su fichero
+             * aqui seria romperle el trabajo por debajo. La cerrara el, o la
+             * obsolescencia si muere.
+             */
+            /** @var bool $closed */
+            $closed = $connection->transaction(function () use ($exports, $clock): bool {
+                $export = $exports->lockByUuid($this->exportUuid);
 
-            if ($export !== null && $export->isInProgress()) {
-                $exports->save($export->fail($clock->now(), ReportExportFailure::Unexpected));
+                if ($export === null) {
+                    return true;
+                }
+
+                $now = $clock->now();
+                $startedAt = $export->startedAt;
+                $writerMayBeAlive = $startedAt !== null
+                    && $now->getTimestamp() - $startedAt->getTimestamp() < self::TIMEOUT_SECONDS - self::STILL_RUNNING_MARGIN_SECONDS;
+
+                if ($export->wasCancelled()) {
+                    // Cancelada y su trabajador muerto: deja de ocupar el turno.
+                    // Si puede seguir vivo, lo confirmara el al parar.
+                    if (! $writerMayBeAlive) {
+                        $exports->confirmStopped($this->exportUuid, $now);
+                    }
+
+                    return ! $writerMayBeAlive;
+                }
+
+                if (! $export->isInProgress()) {
+                    return true;
+                }
+
+                if ($writerMayBeAlive) {
+                    return false;
+                }
+
+                $exports->save($export->fail($now, ReportExportFailure::Unexpected));
+
+                return true;
+            });
+
+            if (! $closed) {
+                $logger->warning('reporting.report_export_job_failed_while_running', [
+                    'report_export_uuid' => $this->exportUuid,
+                ]);
+
+                return;
             }
 
             /*

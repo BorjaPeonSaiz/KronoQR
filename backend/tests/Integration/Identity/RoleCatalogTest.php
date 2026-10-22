@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Tests\Architecture\Support\Repo;
 use Tests\Support\Database\RefreshDatabase;
 
 /*
@@ -142,3 +143,40 @@ it('concede accounts:* solo a admin', function (): void {
 
     expect($roles)->toBe(['admin']);
 })->group('RF-ID-10', 'RF-ID-02');
+
+it('concede a cada rol de gestion exactamente lo que dice docs/api/role-abilities.json', function (): void {
+    /*
+     * El panel ata su menu, sus rutas y sus fixtures a ese fichero
+     * (`frontend-admin/tests/unit/roleCatalog.spec.ts`, 2.3.0, tarea 14.7). Si
+     * una migracion cambia un rol y el fichero no, el panel enseñaria entradas
+     * que el servidor deniega, o esconderia las que concede. Esta prueba es la
+     * mitad del servidor de ese contrato: la tabla real tras migrar, rol por rol.
+     */
+    $catalog = json_decode(Repo::contents('docs/api/role-abilities.json'), true, 512, JSON_THROW_ON_ERROR);
+    expect($catalog)->toBeArray()->toHaveKey('roles');
+
+    /** @var array<string, list<string>> $declared */
+    $declared = \is_array($catalog) && \is_array($catalog['roles'] ?? null) ? $catalog['roles'] : [];
+
+    $management = array_map(static fn (UserRole $role): string => $role->value, UserRole::managementRoles());
+    $keys = array_keys($declared);
+    sort($management);
+    sort($keys);
+
+    expect($keys)->toBe($management, 'docs/api/role-abilities.json no lista exactamente los roles de gestion.');
+
+    foreach ($declared as $role => $abilities) {
+        $granted = DB::table('role_has_permissions')
+            ->join('roles', 'roles.id', '=', 'role_has_permissions.role_id')
+            ->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')
+            ->where('roles.name', $role)
+            ->where('roles.guard_name', 'web')
+            ->orderBy('permissions.name')
+            ->pluck('permissions.name')
+            ->all();
+
+        sort($abilities);
+
+        expect($granted)->toBe($abilities, 'El rol '.$role.' no tiene en la base los ambitos que declara docs/api/role-abilities.json.');
+    }
+})->group('RF-ID-02', 'RF-ID-03');

@@ -1,8 +1,8 @@
 // El auditor solo ve la Inspeccion (bloque 25 de la 2.2.1, RF-ID-02).
 //
 // Su sesion lleva unicamente `reports:legal`: ni presencia, ni cumplimiento, ni
-// plantilla, ni departamentos. La interfaz lo refleja (menu de una entrada y
-// guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
+// plantilla, ni departamentos. La interfaz lo refleja (sin menu lateral, porque su
+// unico enlace llevaria a la pantalla en la que ya esta, y guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
@@ -20,15 +20,13 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
   })
 
   test(
-    'aterriza en Inspeccion con un menu de una sola entrada',
+    'aterriza en Inspeccion sin menu lateral de un solo enlace (V21-3-UX-3)',
     { tag: ['@RF-ID-02', '@regla-dura-18'] },
     async ({ page }) => {
       await expect(page).toHaveURL(/\/reports\/legal-export$/)
 
-      const links = page.getByRole('navigation').getByRole('link')
-
-      await expect(links).toHaveCount(1)
-      await expect(links.first()).toHaveText('Inspección')
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expect(page.getByRole('banner').getByRole('navigation')).toHaveCount(0)
     },
   )
 
@@ -45,7 +43,7 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
         await page.goto(path)
 
         await expect(page).toHaveURL(/\/reports\/legal-export$/)
-        await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(1)
+        await expect(page.getByRole('banner').getByRole('navigation')).toHaveCount(0)
       },
     )
   }
@@ -57,13 +55,16 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
       await page.getByLabel(/Desde/).fill('2026-03-01')
       await page.getByLabel(/Hasta/).fill('2026-03-31')
 
+      // Toda la plantilla se genera en segundo plano (14.4): primero el avance y,
+      // al terminar, la descarga con un enlace nuevo.
+      await page.getByRole('button', { name: 'Generar y descargar' }).click()
+      await expect(page.getByTestId('export-job')).toBeVisible()
+
       const download = page.waitForEvent('download')
 
-      await page.getByRole('button', { name: 'Generar y descargar' }).click()
+      await page.getByTestId('export-job-download').click()
 
-      expect((await download).suggestedFilename()).toBe(
-        'registro-horario-2026-03-01_2026-03-31.csv',
-      )
+      expect((await download).suggestedFilename()).toMatch(/\.csv$/)
     },
   )
   test(

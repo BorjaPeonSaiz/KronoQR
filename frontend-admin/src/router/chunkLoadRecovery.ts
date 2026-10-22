@@ -12,11 +12,27 @@ import {
   isChunkLoadError,
   type ChunkReloadMark,
 } from '@kronoqr/web-kit/chunkLoadRecovery'
+import { readonly, ref } from 'vue'
 import type { Router } from 'vue-router'
 
 export { isChunkLoadError }
 
 export const CHUNK_RELOAD_MARK = 'kronoqr:admin:chunk-reload'
+
+const failed = ref(false)
+
+/**
+ * Un trozo no carga y ya se recargo una vez (o no se puede garantizar la marca):
+ * la pantalla pedida no se va a abrir. Lo pinta el marco de la aplicacion como aviso con
+ * «Recargar»; sin el, el clic del menu no hacia nada y no se sabia por que
+ * (V21-3-UX-1).
+ */
+export const chunkLoadFailed = readonly(failed)
+
+/** Descarta el aviso: lo hace una navegacion correcta y la propia persona. */
+export function clearChunkLoadFailure(): void {
+  failed.value = false
+}
 
 export type MarkStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -57,5 +73,13 @@ export function installChunkLoadRecovery(router: Router, options: ChunkRecoveryO
   installShared(router, {
     mark: storageMark(() => options.storage ?? window.sessionStorage),
     reload: options.reload,
+    onGiveUp: () => {
+      failed.value = true
+    },
+  })
+  router.afterEach((_to, _from, failure) => {
+    if (!failure) {
+      failed.value = false
+    }
   })
 }

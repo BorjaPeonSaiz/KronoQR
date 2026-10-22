@@ -379,7 +379,9 @@ export const MANAGER_USER: ManagementUser = {
 /**
  * Administrador de instalacion (RF-ID-02): el unico rol que lleva
  * `settings:*` (doc 02 §7.3, nota 5) y por tanto el unico que ve «Quioscos»
- * (RF-PD-06, tarea 5.6). Abilities `['*']`, como el que crea el asistente.
+ * (RF-PD-06, tarea 5.6). Lleva los ambitos que el servidor concede al rol `admin`
+ * (`docs/api/role-abilities.json`; `roleCatalog.spec.ts` los compara), no un
+ * comodin: una fixture mas ancha que el servidor deja pasar pantallas que darian 403.
  */
 export const ADMIN_USER: ManagementUser = {
   uuid: '0199f0aa-4444-7000-8000-0123456789ae',
@@ -387,15 +389,30 @@ export const ADMIN_USER: ManagementUser = {
   email: 'direccion@hotel.example',
   locale: 'es',
   roles: ['admin'],
-  abilities: ['*'],
+  abilities: [
+    'attendance:read',
+    'attendance:correct',
+    'incidents:*',
+    'employees:read',
+    'employees:*',
+    'credentials:*',
+    'reports:*',
+    'reports:legal',
+    'audit:read',
+    'settings:*',
+    'license:*',
+    'support:*',
+    'diagnostics:*',
+    'accounts:*',
+  ],
   scope: { kind: 'all', department_ids: [] },
 }
 
 /**
- * Auditor (RF-ID-02): `attendance:read` sin `attendance:correct`. Sirve para
- * comprobar que quien solo puede LEER el registro horario no ve ningun boton
- * de las tres operaciones de correccion (RF-PA-04, tarea 5.11b) — el mismo
- * `attendance:read` con el que se abre `EmployeeWorkDaysView`, y nada mas.
+ * Auditor (RF-ID-02): desde la 2.2.1 (bloque 25) lleva solo `reports:legal`, la
+ * exportacion para la Inspeccion; ni presencia, ni registro horario, ni
+ * correcciones. Sirve para comprobar que su unica pantalla es esa y que no ve
+ * ningun control de nada mas.
  */
 export const AUDITOR_USER: ManagementUser = {
   uuid: '0199f0aa-5555-7000-8000-0123456789af',
@@ -469,6 +486,7 @@ export const EMPLOYEES: EmployeeCollection = {
 
 export const CREDENTIAL_BOARD: CredentialStatusBoard = {
   data: [],
+  meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   summary: {
     employees: 1,
     pending_print: 1,
@@ -489,6 +507,7 @@ export const RETIRING_KEY_ID = 'a2'
  */
 export const CREDENTIAL_BOARD_IN_ROTATION: CredentialStatusBoard = {
   data: [],
+  meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   summary: {
     employees: 60,
     pending_print: 12,
@@ -521,6 +540,7 @@ export const CREDENTIAL_BOARD_PENDING_REPRINT: CredentialStatusBoard = {
       },
     },
   ],
+  meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
   summary: CREDENTIAL_BOARD_IN_ROTATION.summary,
 }
 
@@ -940,6 +960,8 @@ export const REPORT_EXPORT_COMPLETED: ReportExport = {
   started_at: '2026-07-01T08:00:02.000000Z',
   completed_at: '2026-07-01T08:00:40.000000Z',
   failed_at: null,
+  cancelled_at: null,
+  progress: null,
   failure_reason: null,
   file_name: 'kronoqr-horas-2026-01-01_2026-06-30.csv',
   size_bytes: 1_048_576,
@@ -1503,8 +1525,8 @@ export interface ManagementApiOptions {
    * completo; `manager` es `MANAGER_USER`, un `responsable_departamento` con
    * `incidents:*` y sin plantilla ni credenciales (RF-ID-03); `admin` es
    * `ADMIN_USER`, el unico que ve «Quioscos» (RF-PD-06, tarea 5.6); `auditor`
-   * es `AUDITOR_USER`, con `attendance:read` y sin `attendance:correct` (RF-ID-02,
-   * tarea 5.11b): ve el registro horario y ningun boton de sus tres correcciones.
+   * es `AUDITOR_USER`, con solo `reports:legal` (RF-ID-02, bloque 25 de la 2.2.1): su unica
+   * pantalla es la exportacion para la Inspeccion.
    */
   readonly role?: 'rrhh' | 'manager' | 'admin' | 'auditor'
   /** `Site.timezone_locked` de partida (RN-23): `true` = ya hubo fichajes y la zona no se puede cambiar. Por omision, `false`. */
@@ -2164,6 +2186,8 @@ export async function stubManagementApi(
    */
   const reportExportDownloadTokens = new Map<string, string>()
   let reportExportTokenSequence = 0
+  /** Las exportaciones que el panel ha cancelado (`POST /reports/exports/{uuid}/cancel`). */
+  const cancelledReportExports = new Set<string>()
 
   /** El estado de cada fila EN ESTE INSTANTE: pending -> running -> completed. */
   function currentReportExports(): ReportExport[] {
@@ -2176,6 +2200,10 @@ export async function stubManagementApi(
         return row
       }
 
+      if (cancelledReportExports.has(row.uuid)) {
+        return { ...row, status: 'cancelled', cancelled_at: row.requested_at, progress: null }
+      }
+
       const elapsedMs = now - createdAt
 
       if (elapsedMs < 300) {
@@ -2183,7 +2211,13 @@ export async function stubManagementApi(
       }
 
       if (elapsedMs < 800) {
-        return { ...row, status: 'running', started_at: row.requested_at }
+        return {
+          ...row,
+          status: 'running',
+          started_at: row.requested_at,
+          // Sin porcentaje: la barra es indeterminada, como en todo lo que no es la exportacion legal.
+          progress: { stage: 'writing', percent: null, updated_at: row.requested_at },
+        }
       }
 
       return {
@@ -2750,6 +2784,31 @@ export async function stubManagementApi(
       // la fila esta `completed`, MINTA un enlace de descarga nuevo que
       // invalida el anterior (decision 3 de la ficha, ADR-041). Va ANTES del
       // `switch`: lleva un `uuid` dinamico en la ruta.
+      const reportExportCancelMatch = /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)\/cancel$/.exec(
+        url.pathname,
+      )
+
+      if (method === 'POST' && reportExportCancelMatch !== null) {
+        const target = currentReportExports().find(
+          (candidate) => candidate.uuid === reportExportCancelMatch[1],
+        )
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Exportación no encontrada')
+
+          return
+        }
+
+        if (target.status === 'pending' || target.status === 'running') {
+          cancelledReportExports.add(target.uuid)
+        }
+
+        const after = currentReportExports().find((candidate) => candidate.uuid === target.uuid)
+
+        await json(route, 200, { data: { ...after, download: null } })
+        return
+      }
+
       const reportExportStatusMatch = /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)$/.exec(
         url.pathname,
       )
@@ -4811,7 +4870,7 @@ export async function stubManagementApi(
           return
         case 'POST /api/v1/reports/exports': {
           const payload = request.postDataJSON() as {
-            kind?: 'period' | 'payroll'
+            kind?: ReportExport['kind']
             format?: 'csv' | 'xlsx' | 'pdf'
             from?: string
             to?: string
@@ -4845,7 +4904,7 @@ export async function stubManagementApi(
           const uuid = `0199f7b1-${String(reportExports.length).padStart(4, '0')}-7c3d-9e4f-5a6b7c8d9e02`
           const created: ReportExport = {
             uuid,
-            kind: payload.kind === 'payroll' ? 'payroll' : 'period',
+            kind: payload.kind ?? 'period',
             format: payload.format ?? 'csv',
             status: 'pending',
             parameters: {
@@ -4864,6 +4923,8 @@ export async function stubManagementApi(
             started_at: null,
             completed_at: null,
             failed_at: null,
+            cancelled_at: null,
+            progress: null,
             failure_reason: null,
             file_name: null,
             size_bytes: null,

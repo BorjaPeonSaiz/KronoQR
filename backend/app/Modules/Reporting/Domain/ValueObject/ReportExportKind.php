@@ -29,12 +29,31 @@ namespace App\Modules\Reporting\Domain\ValueObject;
  * {@see self::allows()} es la unica lista: un PDF de nomina no lo importa
  * ningun programa de nomina, y ofrecerlo seria ofrecer un fichero que quien lo
  * descarga no puede usar para lo unico que lo pidio.
+ *
+ * ## Y desde la 2.3.0, dos mas que no son el informe por periodo (V5-PA-4)
+ *
+ * - `legal` — **la exportacion para la Inspeccion** (RF-IN-05, RL-06): el mismo
+ *   fichero que `GET /reports/legal-export`, generado por el mismo escritor de
+ *   `Compliance`. Existe en diferido porque la plantilla entera de un periodo
+ *   largo no cabe en los 60 s de nginx, y un requerimiento no puede acabar en
+ *   un error generico. **No se degrada nunca** (regla dura 15).
+ * - `adoption` — el cuadro de impacto (RF-IN-08), el mismo de
+ *   `GET /reports/adoption/export`. Un agregado sin personas: el PDF arranca un
+ *   navegador y el cuadro cruza dos periodos.
+ *
+ * Ninguna de las dos usa la consulta del informe por periodo, y por eso
+ * {@see self::isPeriodReport()} distingue las dos familias: quien genera el
+ * fichero elige el camino con ella y no con una lista de casos repetida.
  */
 enum ReportExportKind: string
 {
     case Period = 'period';
 
     case Payroll = 'payroll';
+
+    case Legal = 'legal';
+
+    case Adoption = 'adoption';
 
     /**
      * El catalogo, para el `CHECK` de la migracion y para las reglas del
@@ -60,8 +79,40 @@ enum ReportExportKind: string
     public function allows(): array
     {
         return match ($this) {
-            self::Period => ['csv', 'xlsx', 'pdf'],
+            self::Period, self::Adoption => ['csv', 'xlsx', 'pdf'],
             self::Payroll => ['csv', 'xlsx'],
+            // RL-06: tabular, legible y no propietario. El escritor de la
+            // Inspeccion solo sabe escribir CSV, y es a proposito.
+            self::Legal => ['csv'],
         };
+    }
+
+    /**
+     * Todos los formatos que admite alguna clase, sin repetir: el catalogo del
+     * `CHECK` de la migracion y de la regla del `FormRequest`.
+     *
+     * @return list<string>
+     */
+    public static function formats(): array
+    {
+        $formats = [];
+
+        foreach (self::cases() as $kind) {
+            foreach ($kind->allows() as $format) {
+                $formats[$format] = $format;
+            }
+        }
+
+        return array_values($formats);
+    }
+
+    /**
+     * Sale de la consulta del informe por periodo (`GeneratePeriodReport`): los
+     * parametros llevan granularidad y agrupacion, y el alcance del solicitante
+     * acota las filas.
+     */
+    public function isPeriodReport(): bool
+    {
+        return $this === self::Period || $this === self::Payroll;
     }
 }

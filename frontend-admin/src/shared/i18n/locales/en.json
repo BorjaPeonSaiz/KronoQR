@@ -34,7 +34,13 @@
       "empleado": "Employee",
       "kiosk": "Kiosk"
     },
-    "changePassword": "Change my password"
+    "changePassword": "Change my password",
+    "chunkLoadFailed": {
+      "title": "That screen could not be opened.",
+      "advice": "The application has probably been updated or the connection was lost. Reload the page; if this notice comes back, check the network and tell whoever administers the installation.",
+      "reload": "Reload the page",
+      "dismiss": "Close this notice"
+    }
   },
   "auth": {
     "heading": "Sign in to the management console",
@@ -864,7 +870,9 @@
       "timeDoesNotExist": "That time did not exist in this zone: the clock skipped it when daylight saving changed. Choose another.",
       "noChange": "Change at least one time or how the shift ended to save: a correction that changes nothing is an audit row that lies.",
       "voidSummary": "This entry will stop counting towards the daily total. The version it had is kept and stays available in the history.",
-      "previewCaption": "What changes on this entry"
+      "previewCaption": "What changes on this entry",
+      "futureHint": "It cannot be later than now: the record only notes what has already happened (a margin of a few minutes is allowed).",
+      "futureRejected": "That time is later than the current one. A time record only notes what has already happened: it cannot be filled in ahead of time, nor can a shift be closed with a planned exit. Enter the real time, or leave the exit blank and close it when it happens."
     }
   },
   "chartWithTable": {
@@ -1114,14 +1122,17 @@
     "intro": "Reports that do not fit in an immediate response are generated here. Every download link is single-use and expires: ask again if you need it a second time.",
     "kind": {
       "period": "Hours by period",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "legal": "Labour inspection",
+      "adoption": "Impact and adoption"
     },
     "status": {
       "pending": "Queued",
       "running": "Generating",
       "completed": "Ready to download",
       "failed": "Failed",
-      "purged": "Expired"
+      "purged": "Expired",
+      "cancelled": "Cancelled"
     },
     "list": {
       "loading": "Loading the exports…",
@@ -1143,7 +1154,6 @@
       "downloading": "Downloading…",
       "downloaded": "Download of “{filename}” ready.",
       "criteriaToggle": "See the criteria",
-      "readyAnnounce": "An export is ready to download.",
       "failedReason": "It could not be generated: {reason}",
       "purgedNotice": "The file has already been purged for age. The row stays as a record, but it can no longer be downloaded.",
       "failureReasons": {
@@ -1156,6 +1166,44 @@
       "empty": {
         "title": "No background export yet",
         "description": "When a report does not fit in an immediate response, or you request the payroll export in the background, it will show up here."
+      }
+    },
+    "ready": {
+      "announce": "One report is ready to download in Reports. | {count} reports are ready to download in Reports.",
+      "message": "You have one report ready to download. | You have {count} reports ready to download.",
+      "open": "Go to Reports",
+      "dismiss": "Dismiss"
+    },
+    "job": {
+      "running": "Generating",
+      "queued": "Queued: it starts as soon as there is room.",
+      "stage": {
+        "reading": "Reading the data",
+        "writing": "Writing the file",
+        "sealing": "Sealing and checking the file"
+      },
+      "progressLabel": "Export progress",
+      "keepWorking": "You can keep using the panel: we will tell you when it finishes.",
+      "cancel": "Cancel the export",
+      "cancelling": "Cancelling…",
+      "completed": "The export is ready to download.",
+      "cancelled": "Export cancelled. No file was kept.",
+      "dismiss": "Close",
+      "alreadyRunning": "You already had an export running (only one per person is allowed): it is the one shown here.",
+      "seeExisting": "See my exports",
+      "progressInList": "{stage}",
+      "announce": {
+        "started": "Export requested. It is being generated in the background.",
+        "alreadyRunning": "An export was already running; that one is shown.",
+        "requestFailed": "The export could not be requested.",
+        "stage": "Export: {stage}.",
+        "completed": "The export is ready to download.",
+        "failed": "The export failed.",
+        "cancelled": "Export cancelled."
+      },
+      "deferred": {
+        "legal": "This export is large (whole workforce or more than a month): it is generated in the background.",
+        "generic": "This export is large (whole workforce or more than a month): it is generated in the background and we will tell you when it finishes."
       }
     }
   },
@@ -1321,6 +1369,9 @@
         "break_start": "Break",
         "unknown": "Not recorded"
       }
+    },
+    "pagination": {
+      "label": "Workday pages"
     }
   },
   "live": {
@@ -1332,7 +1383,8 @@
       "present": "In now",
       "absent": "Out now",
       "lastUpdate": "Last update",
-      "snapshotAt": "{moment} ({zone})"
+      "snapshotAt": "{moment} ({zone})",
+      "contact": "Live channel checked at {moment} ({zone}). If nothing changed, nobody has clocked since the last update."
     },
     "status": {
       "present": "In now",
@@ -1366,7 +1418,7 @@
     },
     "notice": {
       "poll": "The list could not be refreshed (network or server failure). The data shown is from the last successful update, on {moment} ({zone}); it will retry by itself.",
-      "filter": "The chosen filter could not be applied. The list is still the one from the last successful update, on {moment} ({zone}), and may not match the filter.",
+      "filter": "The chosen filter could not be applied, so no list is shown: the previous one belonged to another filter. It will retry by itself.",
       "realtime": "The real-time connection dropped and is being retried. Meanwhile the list refreshes by polling; last successful update on {moment} ({zone})."
     },
     "transport": {
@@ -1557,6 +1609,15 @@
       "heading": "Incidents in this work day",
       "none": "No incidents in this work day.",
       "linkToInbox": "View in the incident inbox"
+    },
+    "refresh": {
+      "button": "Refresh",
+      "busy": "Refreshing…",
+      "readAt": "Read on {moment}"
+    },
+    "notice": {
+      "refresh": "The inbox could not be refreshed (network or server failure). The data shown is from the last successful read, on {moment}; ages keep running. Press “Refresh” to try again.",
+      "filter": "The chosen filter or page could not be applied, so no rows are shown: the ones that were there belonged to another filter. Press “Refresh” to try again."
     }
   },
   "compliance": {
@@ -2465,7 +2526,8 @@
       "whatToDoHeading": "What to do"
     },
     "whatToDoByCode": {
-      "kioskPinSealFailed": "The tablet cannot encrypt the PIN to send it, so it cannot validate PIN clockings. It is almost always a tablet running an old version of the app (it lacks the security permission for encryption) or a browser where encryption does not start. Check that tablet's version under Kiosks: if it shows \"App out of date\", follow that tablet's \"What to do\". If the version is current, contact support with the trace identifier (trace_id). QR clockings keep working."
+      "kioskPinSealFailed": "The tablet cannot encrypt the PIN to send it, so it cannot validate PIN clockings. It is almost always a tablet running an old version of the app (it lacks the security permission for encryption) or a browser where encryption does not start. Check that tablet's version under Kiosks: if it shows \"App out of date\", follow that tablet's \"What to do\". If the version is current, contact support with the trace identifier (trace_id). QR clockings keep working.",
+      "kioskUpdateUnreachable": "The tablet has spent about 30 minutes unable to find the app version the server asks for, so it cannot complete the urgent update. Clocking keeps working and is saved in the queue. Check in Kiosks that the tablet has a network connection and its queue is at 0; if so, the server is asking for a version it cannot serve: generate the diagnostic package (Support) and open a case with support. Do not unregister its service worker for this: it does not fix it. Guide: operation.md §11.1."
     },
     "whatToDo": {
       "api": {

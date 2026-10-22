@@ -19,13 +19,17 @@ export const WORKDAYS_QUERY_KEY = 'employee-workdays'
 export function useEmployeeWorkDays(
   uuid: MaybeRefOrGetter<string>,
   range: MaybeRefOrGetter<WorkDateRange>,
+  page: MaybeRefOrGetter<number> = 1,
 ) {
   const employeeUuid = computed(() => toValue(uuid))
   const requested = computed(() => toValue(range))
+  const requestedPage = computed(() => toValue(page))
 
   return useQuery({
-    queryKey: computed(() => [WORKDAYS_QUERY_KEY, employeeUuid.value, requested.value] as const),
-    queryFn: () => listEmployeeWorkDays(employeeUuid.value, requested.value),
+    queryKey: computed(
+      () => [WORKDAYS_QUERY_KEY, employeeUuid.value, requested.value, requestedPage.value] as const,
+    ),
+    queryFn: () => listEmployeeWorkDays(employeeUuid.value, requested.value, requestedPage.value),
     placeholderData: keepPreviousData,
   })
 }

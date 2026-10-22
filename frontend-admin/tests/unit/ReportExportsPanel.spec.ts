@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReportExportsPanel from '@/features/reports/ReportExportsPanel.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { ReportExport } from '@/shared/api/types'
-import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { SITE } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubRoutes } from './support/harness'
 
@@ -38,6 +38,8 @@ function reportExport(overrides: Partial<ReportExport> = {}): ReportExport {
     started_at: '2026-07-01T08:00:02.000000Z',
     completed_at: '2026-07-01T08:00:40.000000Z',
     failed_at: null,
+    cancelled_at: null,
+    progress: null,
     failure_reason: null,
     file_name: 'kronoqr-horas-2026-01-01_2026-06-30.csv',
     size_bytes: 1_048_576,
@@ -121,6 +123,23 @@ describe('ReportExportsPanel', () => {
     expect(wrapper.find(`[data-test="download-${UUID}-2"]`).exists()).toBe(false)
   })
 
+  it('al montar no anuncia las exportaciones que ya estaban completadas (R3-PA-08)', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/reports/exports': () =>
+        jsonResponse({
+          data: Array.from({ length: 20 }, (_, index) =>
+            reportExport({ uuid: `${UUID}-${index}`, status: 'completed' }),
+          ),
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(20)
+    expect(announcement.value).toBe('')
+  })
+
   it('los criterios se enseñan tal cual al desplegarlos', async () => {
     stubRoutes({
       '/site': () => jsonResponse(SITE),
@@ -142,7 +161,7 @@ describe('ReportExportsPanel', () => {
     expect(criteria.text()).toContain('Otro criterio de ejemplo.')
   })
 
-  it('sondea cada 10 s SOLO mientras hay algo pendiente o en curso', async () => {
+  it('sondea cada 3 s SOLO mientras hay algo pendiente o en curso', async () => {
     vi.useFakeTimers()
 
     let listCalls = 0
@@ -161,11 +180,92 @@ describe('ReportExportsPanel', () => {
 
     expect(listCalls).toBe(1)
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(3_000)
     expect(listCalls).toBe(2)
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(3_000)
     expect(listCalls).toBe(3)
+  })
+
+  it('una exportacion en curso enseña su fase y su barra, y se puede cancelar; una cancelada se ve como tal (14.4)', async () => {
+    let cancelled = false
+    let cancelCalls = 0
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/cancel': () => {
+        cancelCalls += 1
+        cancelled = true
+
+        return jsonResponse({
+          data: reportExport({
+            uuid: `${UUID}-r`,
+            status: 'cancelled',
+            cancelled_at: '2026-07-01T08:01:00.000000Z',
+          }),
+        })
+      },
+      '/reports/exports': () =>
+        jsonResponse({
+          data: [
+            reportExport({
+              uuid: `${UUID}-r`,
+              status: cancelled ? 'cancelled' : 'running',
+              kind: 'legal',
+              progress: cancelled
+                ? null
+                : { stage: 'writing', percent: 40, updated_at: '2026-07-01T08:00:30.000000Z' },
+            }),
+          ],
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.find(`[data-test="stage-${UUID}-r"]`).text()).toBe(
+      es.reportExports.job.stage.writing,
+    )
+    expect(wrapper.find(`[data-test="progress-${UUID}-r"]`).attributes('aria-valuenow')).toBe('40')
+    expect(wrapper.text()).toContain(es.reportExports.kind.legal)
+
+    await wrapper.find(`[data-test="cancel-${UUID}-r"]`).trigger('click')
+    await settle()
+
+    expect(cancelCalls).toBe(1)
+    expect(wrapper.find(`[data-test="status-${UUID}-r"]`).text()).toBe(
+      es.reportExports.status.cancelled,
+    )
+    expect(wrapper.find(`[data-test="cancel-${UUID}-r"]`).exists()).toBe(false)
+    expect(wrapper.text()).toContain(es.reportExports.job.cancelled)
+  })
+
+  it('cancelar algo que ya habia terminado (409) anuncia lo que ha pasado de verdad, no «cancelada»', async () => {
+    let finished = false
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/cancel': () => {
+        finished = true
+
+        return problemResponse(409, 'urn:kronoqr:problem:report-export-not-cancellable', {
+          export: reportExport({ uuid: `${UUID}-r`, status: 'completed' }),
+        })
+      },
+      '/reports/exports': () =>
+        jsonResponse({
+          data: [reportExport({ uuid: `${UUID}-r`, status: finished ? 'completed' : 'running' })],
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    await wrapper.find(`[data-test="cancel-${UUID}-r"]`).trigger('click')
+    await settle()
+
+    expect(announcement.value.trim()).toBe(es.reportExports.job.announce.completed)
+    expect(wrapper.find(`[data-test="status-${UUID}-r"]`).text()).toBe(
+      es.reportExports.status.completed,
+    )
   })
 
   it('sin nada pendiente ni en curso, no vuelve a sondear', async () => {

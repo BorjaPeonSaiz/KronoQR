@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import PayrollExportView from '@/features/reports/PayrollExportView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { reportExportRow } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubRoutes } from './support/harness'
 
 const DEFAULT_SETTINGS = {
@@ -50,6 +51,16 @@ const DEFAULT_SETTINGS = {
 async function fillDates(wrapper: Awaited<ReturnType<typeof mountView>>): Promise<void> {
   await wrapper.find('#payroll-from').setValue('2026-01-01')
   await wrapper.find('#payroll-to').setValue('2026-06-30')
+}
+
+/**
+ * Una consulta CORTA de una persona: la unica que sigue siendo al momento. Toda la
+ * plantilla, o mas de un mes, se genera en segundo plano por omision (14.4).
+ */
+async function fillSyncQuery(wrapper: Awaited<ReturnType<typeof mountView>>): Promise<void> {
+  await wrapper.find('#payroll-from').setValue('2026-06-01')
+  await wrapper.find('#payroll-to').setValue('2026-06-30')
+  await wrapper.find('#payroll-employee').setValue('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90')
 }
 
 beforeEach(() => {
@@ -152,13 +163,13 @@ describe('PayrollExportView', () => {
 
     const wrapper = await mountView(PayrollExportView)
     await settle()
-    await fillDates(wrapper)
+    await fillSyncQuery(wrapper)
     await wrapper.find('#payroll-granularity').setValue('month')
     await wrapper.find('form').trigger('submit')
     await settle()
 
     expect(downloadUrl).not.toBeNull()
-    expect(String(downloadUrl)).toContain('from=2026-01-01')
+    expect(String(downloadUrl)).toContain('from=2026-06-01')
     expect(String(downloadUrl)).toContain('to=2026-06-30')
     expect(String(downloadUrl)).toContain('granularity=month')
     expect(String(downloadUrl)).toContain('format=csv')
@@ -177,7 +188,7 @@ describe('PayrollExportView', () => {
 
     const wrapper = await mountView(PayrollExportView)
     await settle()
-    await fillDates(wrapper)
+    await fillSyncQuery(wrapper)
     await wrapper.find('form').trigger('submit')
     await settle()
 
@@ -198,42 +209,19 @@ describe('PayrollExportView', () => {
           },
         }),
       '/reports/exports': (_url, init) => {
-        backgroundBody = init?.body === undefined ? null : JSON.parse(String(init.body))
+        if (init?.method !== 'POST') {
+          return jsonResponse({ data: [reportExportRow({ kind: 'payroll' })] })
+        }
 
-        return jsonResponse({
-          data: {
-            uuid: '0199f7b1-0000-7c3d-9e4f-5a6b7c8d9e02',
-            kind: 'payroll',
-            format: 'csv',
-            status: 'pending',
-            parameters: {
-              from: '2026-01-01',
-              to: '2026-06-30',
-              granularity: 'range',
-              group_by: 'employee',
-              include_open_shifts: false,
-              department_id: null,
-              employee_uuid: null,
-            },
-            requested_at: '2026-07-01T08:00:00.000000Z',
-            started_at: null,
-            completed_at: null,
-            failed_at: null,
-            failure_reason: null,
-            file_name: null,
-            size_bytes: null,
-            row_count: null,
-            criteria: [],
-            expires_at: null,
-            download: null,
-          },
-        })
+        backgroundBody = JSON.parse(String(init.body))
+
+        return jsonResponse({ data: reportExportRow({ kind: 'payroll' }) }, 202)
       },
     })
 
     const wrapper = await mountView(PayrollExportView)
     await settle()
-    await fillDates(wrapper)
+    await fillSyncQuery(wrapper)
     await wrapper.find('form').trigger('submit')
     await settle()
 
@@ -243,6 +231,105 @@ describe('PayrollExportView', () => {
     await settle()
 
     expect(backgroundBody).toMatchObject({ kind: 'payroll', format: 'csv' })
-    expect(wrapper.find('[data-test="background-requested"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="export-job"]').exists()).toBe(true)
+  })
+
+  it('toda la plantilla, o mas de un mes, se pide en segundo plano sin pasar por la descarga al momento (14.4)', async () => {
+    const calls: string[] = []
+    let body: unknown = null
+
+    stubRoutes({
+      '/departments': () => jsonResponse({ data: [] }),
+      '/settings': () => jsonResponse(DEFAULT_SETTINGS),
+      '/payroll-export': (url) => {
+        calls.push(url)
+
+        return new Response('x', { status: 200, headers: { 'Content-Type': 'text/csv' } })
+      },
+      '/reports/exports': (_url, init) => {
+        if (init?.method === 'POST') {
+          body = JSON.parse(String(init.body))
+
+          return jsonResponse({ data: reportExportRow({ kind: 'payroll' }) }, 202)
+        }
+
+        return jsonResponse({ data: [reportExportRow({ kind: 'payroll' })] })
+      },
+    })
+
+    const wrapper = await mountView(PayrollExportView)
+    await settle()
+    await fillDates(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(calls).toEqual([])
+    expect(body).toMatchObject({ kind: 'payroll', format: 'csv', from: '2026-01-01' })
+    expect(wrapper.find('[data-test="export-job"]').attributes('data-status')).toBe('pending')
+  })
+
+  it('tras un 422 de una consulta, pedir otra no reutiliza la anterior (oversizedQuery se anula al cambiar un campo)', async () => {
+    const bodies: Record<string, unknown>[] = []
+
+    stubRoutes({
+      '/departments': () => jsonResponse({ data: [] }),
+      '/settings': () => jsonResponse(DEFAULT_SETTINGS),
+      '/payroll-export': () =>
+        problemResponse(422, 'urn:kronoqr:problem:report-too-large', {
+          errors: { to: ['Demasiado grande.'] },
+        }),
+      '/reports/exports': (_url, init) => {
+        if (init?.method !== 'POST') {
+          return jsonResponse({ data: [reportExportRow({ kind: 'payroll' })] })
+        }
+
+        bodies.push(JSON.parse(String(init.body)))
+
+        return jsonResponse({ data: reportExportRow({ kind: 'payroll' }) }, 202)
+      },
+    })
+
+    const wrapper = await mountView(PayrollExportView)
+    await settle()
+
+    // 1) Una persona en un mes: al momento, y el servidor dice que es demasiado grande.
+    await fillSyncQuery(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+    expect(wrapper.find('[data-test="oversized-offer"]').exists()).toBe(true)
+
+    // 2) Se cambia a toda la plantilla en febrero: ya no es la consulta del 422.
+    await wrapper.find('#payroll-from').setValue('2026-02-01')
+    await wrapper.find('#payroll-to').setValue('2026-02-28')
+    await wrapper.find('#payroll-employee').setValue('')
+    await settle()
+    expect(wrapper.find('[data-test="oversized-offer"]').exists()).toBe(false)
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ kind: 'payroll', from: '2026-02-01', to: '2026-02-28' })
+    expect(bodies[0]).not.toHaveProperty('employee_uuid')
+  })
+
+  it('un 402 al pedirla en segundo plano se explica como falta de licencia', async () => {
+    stubRoutes({
+      '/departments': () => jsonResponse({ data: [] }),
+      '/settings': () => jsonResponse(DEFAULT_SETTINGS),
+      '/reports/exports': () =>
+        problemResponse(402, 'urn:kronoqr:problem:feature-not-licensed', {
+          feature: 'payroll_export',
+          restriction: 'not_in_plan',
+        }),
+    })
+
+    const wrapper = await mountView(PayrollExportView)
+    await settle()
+    await fillDates(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[data-test="license-required-background"]').exists()).toBe(true)
   })
 })

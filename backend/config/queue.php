@@ -75,6 +75,43 @@ return [
             'after_commit' => false,
         ],
 
+        /*
+         * LOS INFORMES EN DIFERIDO, EN UNA CONEXION PROPIA (2.3.0, bloque 14).
+         *
+         * Un informe puede tardar hasta `GenerateReportExportJob::TIMEOUT_SECONDS`
+         * (30 min), y con el `retry_after` de 90 s de la conexion normal otro
+         * proceso de Horizon volvia a recoger el trabajo a los 90 s: con
+         * `$tries = 1` lo daba por fallido, marcaba la fila y borraba el fichero
+         * mientras el primero lo seguia escribiendo. Aqui `retry_after` va por
+         * encima del techo del trabajo —lo vigila `ReportExportQueueTest`— y la
+         * cola es otra (`reports`), con su propio supervisor en
+         * `config/horizon.php` y su propio tope de procesos.
+         *
+         * Mismo *driver* que la conexion de serie: `sync` en las pruebas,
+         * `database` o `redis` segun la instalacion.
+         */
+        'reports' => match (env('QUEUE_CONNECTION', 'database')) {
+            'redis' => [
+                'driver' => 'redis',
+                'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+                'queue' => 'reports',
+                'retry_after' => 1900,
+                'block_for' => null,
+                'after_commit' => false,
+            ],
+            'database' => [
+                'driver' => 'database',
+                'connection' => env('DB_QUEUE_CONNECTION'),
+                'table' => env('DB_QUEUE_TABLE', 'jobs'),
+                'queue' => 'reports',
+                'retry_after' => 1900,
+                'after_commit' => false,
+            ],
+            default => [
+                'driver' => 'sync',
+            ],
+        },
+
         'deferred' => [
             'driver' => 'deferred',
         ],

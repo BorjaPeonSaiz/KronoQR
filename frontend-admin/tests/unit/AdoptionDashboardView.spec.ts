@@ -20,6 +20,7 @@ import AdoptionDashboardView from '@/features/reports/AdoptionDashboardView.vue'
 import type { AdoptionIndicator, AdoptionOriginShare, AdoptionReport } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import es from '@/shared/i18n/locales/es.json'
+import { reportExportRow } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 vi.mock('@/shared/ui/ChartWithTable.vue', () => ({
@@ -520,6 +521,64 @@ describe('cuadro de impacto y adopción', () => {
     expect(wrapper.find('[data-test="pdf-busy-use-xlsx"]').exists()).toBe(true)
     expect(announcement.value).toBe(message)
     expect(fetchSpy).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('un periodo de mas de un mes se exporta en segundo plano; uno corto, al momento (14.4)', async () => {
+    const calls: string[] = []
+    let body: unknown = null
+    const days = 90
+
+    stubFetch((input, init) => {
+      const url = String(input)
+
+      calls.push(url)
+
+      if (url.startsWith('/api/v1/reports/exports')) {
+        if (init?.method === 'POST') {
+          body = JSON.parse(String(init.body))
+
+          return jsonResponse({ data: reportExportRow({ kind: 'adoption' }) }, 202)
+        }
+
+        return jsonResponse({ data: [reportExportRow({ kind: 'adoption' })] })
+      }
+
+      if (url.includes('/reports/adoption/export')) {
+        return new Response('x', { status: 200, headers: { 'Content-Type': 'text/csv' } })
+      }
+
+      if (url.includes('/reports/adoption')) {
+        const base = report()
+
+        return jsonResponse({
+          ...base,
+          meta: { ...base.meta, period: { from: '2026-01-01', to: '2026-03-31', days } },
+        })
+      }
+
+      return jsonResponse({}, 404)
+    })
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:kq', revokeObjectURL: () => {} })
+
+    const wrapper = await mountView(AdoptionDashboardView)
+    await settle()
+
+    await wrapper.find('[data-test="export-pdf"]').trigger('click')
+    await settle()
+
+    expect(body).toMatchObject({
+      kind: 'adoption',
+      format: 'pdf',
+      from: '2026-01-01',
+      to: '2026-03-31',
+    })
+    expect(calls.some((url) => url.includes('/reports/adoption/export'))).toBe(false)
+    expect(wrapper.find('[data-test="export-job"]').exists()).toBe(true)
+
+    // Con una exportacion en curso no se pide otra.
+    expect(wrapper.find('[data-test="export-csv"]').attributes('disabled')).toBeDefined()
+
     vi.unstubAllGlobals()
   })
 })

@@ -96,6 +96,13 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         return $rows === [] ? null : Row::of($rows[0])->string('timezone');
     }
 
+    public function workDatesOf(string $employeeUuid, DateRange $range): array
+    {
+        $employeeId = $this->internalIdOf($employeeUuid);
+
+        return $employeeId === null ? [] : $this->workDates($employeeId, $range);
+    }
+
     public function journalFor(
         string $employeeUuid,
         string $timeZone,

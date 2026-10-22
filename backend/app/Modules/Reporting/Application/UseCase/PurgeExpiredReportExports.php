@@ -99,17 +99,25 @@ final readonly class PurgeExpiredReportExports
 
         $released = $this->exports->failStale($now->modify('-'.$staleAfter.' seconds'), $now);
 
+        // RL-11: la fallida o cancelada que supera el plazo de los ficheros se
+        // minimiza como una purgada, aunque nunca tuviera fichero. No toca el
+        // disco, asi que va aunque el disco no este disponible.
+        $minimised = $this->exports->minimiseClosedBefore(
+            $now->modify('-'.max(1, $this->retentionDays).' days'),
+            $now,
+        );
+
         // Sin raiz no se concilia nada: una raiz ausente —un `scheduler` sin el
         // volumen— no dice nada de las filas (ADR-045).
         if (! $this->files->isAvailable($this->area)) {
-            return new ReportExportMaintenance(0, $released);
+            return new ReportExportMaintenance(0, $released, minimised: $minimised);
         }
 
         $purged = $this->purgeExpired($now);
 
         $missing = $this->reconcileRows($now);
 
-        return new ReportExportMaintenance($purged, $released, $this->sweepOrphans($now, $staleAfter), $missing);
+        return new ReportExportMaintenance($purged, $released, $this->sweepOrphans($now, $staleAfter), $missing, $minimised);
     }
 
     /**

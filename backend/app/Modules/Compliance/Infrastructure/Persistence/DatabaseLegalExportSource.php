@@ -222,7 +222,20 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
          ORDER BY employee_code, work_date, sort_kind, sort_instant, entry_number
         SQL;
 
-    public function __construct(private ConnectionInterface $connection) {}
+    public function __construct(
+        private ConnectionInterface $connection,
+        /**
+         * Techo de cada sentencia, en segundos, o 0 para ninguno propio.
+         *
+         * La descarga sincrona no lo lleva —la cortan nginx y PHP-FPM—; la
+         * generacion en diferido si (`REPORTING_EXPORT_TIMEOUT_SECONDS`, 600 de
+         * serie): una consulta que nadie espera no puede ocupar indefinidamente
+         * la base que atiende el fichaje, tampoco despues de que alguien la
+         * cancele (revision de seguridad del bloque 14). `SET LOCAL` lo acota a la
+         * transaccion de la exportacion, que es la que exige el cursor.
+         */
+        private int $statementTimeoutSeconds = 0,
+    ) {}
 
     public function records(LegalExportPeriod $period, LegalExportScope $scope): iterable
     {
@@ -247,6 +260,34 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
     }
 
     /**
+     * El total de filas de {@see self::records()}, con su mismo filtro.
+     *
+     * Tramos **no sustituidos** —los anulados entran, como en el recorrido— mas
+     * las correcciones de **cualquier** version del tramo, que es lo que el
+     * recorrido une a la CTE `scope` sin filtrar por estado. Dos `count(*)` que
+     * usan los mismos indices que la consulta grande y no ordenan nada: el coste
+     * es una fraccion del recorrido.
+     */
+    public function count(LegalExportPeriod $period, LegalExportScope $scope): int
+    {
+        $this->boundStatements();
+
+        $row = $this->connection->selectOne(<<<'SQL'
+            WITH scope AS (
+                SELECT se.id, se.status
+                  FROM shift_entries se
+                  JOIN employees e ON e.id = se.employee_id
+                 WHERE se.work_date BETWEEN CAST(? AS date) AND CAST(? AS date)
+                   AND (CAST(? AS uuid) IS NULL OR e.uuid = CAST(? AS uuid))
+            )
+            SELECT (SELECT count(*) FROM scope WHERE status <> 'superseded')
+                 + (SELECT count(*) FROM shift_corrections c JOIN scope s ON s.id = c.shift_entry_id) AS total
+            SQL, [$period->from, $period->to, $scope->employeeUuid, $scope->employeeUuid]);
+
+        return \is_object($row) ? Row::of($row)->int('total') : 0;
+    }
+
+    /**
      * Abre el cursor y devuelve su nombre.
      *
      * El nombre lleva un sufijo aleatorio porque un cursor es un objeto **de la
@@ -256,6 +297,8 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
      */
     private function declareCursor(LegalExportPeriod $period, LegalExportScope $scope): string
     {
+        $this->boundStatements();
+
         $name = 'kronoqr_legal_export_'.bin2hex(random_bytes(8));
 
         $this->connection->statement(
@@ -339,5 +382,13 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
         return $present
             ? ExportedMarks::of($localIn, $localOut, ExportedDuration::ofNullableMinutes($minutes), $closedBy)
             : ExportedMarks::none();
+    }
+
+    /** El techo de {@see self::$statementTimeoutSeconds}, si lo hay. */
+    private function boundStatements(): void
+    {
+        if ($this->statementTimeoutSeconds > 0) {
+            $this->connection->statement("SET LOCAL statement_timeout = '".$this->statementTimeoutSeconds."s'");
+        }
     }
 }

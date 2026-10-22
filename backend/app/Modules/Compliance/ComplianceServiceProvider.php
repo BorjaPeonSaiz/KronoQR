@@ -33,6 +33,7 @@ use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
+use App\Modules\Compliance\Application\UseCase\WriteLegalExportFile;
 use App\Modules\Compliance\Domain\Model\Incident;
 use App\Modules\Compliance\Http\Policy\IncidentPolicy;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
@@ -42,6 +43,7 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedPersonalDataAccessLog;
+use App\Modules\Compliance\Infrastructure\Adapter\QueuedLegalRecordFiles;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\AuditChainHeadCommand;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
@@ -129,6 +131,7 @@ use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Event\SupportAccessRevoked;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
+use App\Modules\Reporting\Domain\Event\ReportExportCancelled;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportFileMissing;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
@@ -137,6 +140,7 @@ use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -157,6 +161,7 @@ use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -575,6 +580,25 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->bind(LegalExportWriter::class, CsvLegalExportWriter::class);
 
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
+
+        // La misma exportacion, escrita por la cola de informes de `Reporting`
+        // (V5-PA-4). Puerto de `Shared`: ningun modulo importa clases de otro.
+        $this->app->bind(LegalRecordFileWriter::class, QueuedLegalRecordFiles::class);
+
+        // Con el techo de sentencia del diferido (`REPORTING_EXPORT_TIMEOUT_SECONDS`):
+        // la consulta de la cola no puede ocupar la base del fichaje sin limite,
+        // tampoco despues de cancelada. La sincrona no lo lleva: la cortan nginx
+        // y PHP-FPM.
+        $this->app->bind(
+            WriteLegalExportFile::class,
+            static fn (Application $app): WriteLegalExportFile => new WriteLegalExportFile(
+                $app->make(ConnectionInterface::class),
+                new DatabaseLegalExportSource(DB::connection(), Config::integer('reporting.export.statement_timeout_seconds')),
+                $app->make(LegalExportWriter::class),
+                $app->make(LegalExportMetrics::class),
+                $app->make(Clock::class),
+            ),
+        );
 
         // La busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
         // Lee `employees` como la propia exportacion; el asiento lo escribe el
@@ -1055,6 +1079,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportRequested::class, [RecordReportExportLifecycle::class, 'requested']);
         Event::listen(ReportExportGenerated::class, [RecordReportExportLifecycle::class, 'generated']);
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
+        Event::listen(ReportExportCancelled::class, [RecordReportExportLifecycle::class, 'cancelled']);
         Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
         // ADR-045 §d (C5). Actor `system` y no la cuenta que lo pidio: lo detecta
         // la purga diaria. Por eso va en su propio listener y no en el de arriba.

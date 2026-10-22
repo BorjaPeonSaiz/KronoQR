@@ -63,6 +63,7 @@ final class PurgeExpiredReportExportsCommand extends Command
             'released' => $result->released,
             'orphans' => $result->orphans,
             'missing' => $result->missing,
+            'minimised' => $result->minimised,
         ]);
 
         $this->info(self::text('generated-files.report_exports.summary', [

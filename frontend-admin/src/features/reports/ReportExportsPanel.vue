@@ -14,9 +14,14 @@
 //
 // **SONDEO SOLO MIENTRAS HAYA `pending`/`running`** (mismo criterio que
 // `DataExportPanel`, tarea 5.10): una instalacion sin ninguna exportacion en
-// curso no golpea el servidor cada 10 s para nada, y `useQuery` para el
+// curso no golpea el servidor cada 3 s para nada, y `useQuery` para el
 // sondeo en cuanto se desmonta la pantalla -no hace falta un `onUnmounted`
 // propio, es lo que ya hace TanStack Query-.
+//
+// **EL AVISO DE «LISTA PARA DESCARGAR» NO ES DE ESTE PANEL.** Lo da el marco de
+// la aplicacion (`useReportReadyNotices`, en `AppShellView`) en cualquier
+// pantalla y solo de lo que termina; aqui anunciarlo al montar repetia hasta 20
+// avisos de exportaciones de otros dias (R3-PA-08).
 //
 // **EL ENLACE DE DESCARGA NUNCA SE GUARDA.** Cada clic en «Descargar» pide el
 // estado de nuevo (`showReportExport`), que devuelve un enlace de un solo uso
@@ -30,19 +35,20 @@ import { formatInstantWithZone, FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datet
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { formatBytes } from '@kronoqr/web-kit/formatBytes'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getSite } from '@/shared/api/organisation.api'
-import type { ReportExport } from '@/shared/api/types'
+import type { ReportExport, ReportExportCollection } from '@/shared/api/types'
 import {
+  cancelReportExport,
   downloadReportExportFile,
   listReportExports,
   REPORT_EXPORTS_QUERY_KEY,
   showReportExport,
 } from './reportExports.api'
-
-/** Mismo intervalo que fija la decision 8 de la ficha: cada 10 s mientras haya algo pendiente. */
-const POLL_INTERVAL_MS = 10_000
+import ExportProgressBar from './ExportProgressBar.vue'
+import { failureReasonLabel, stageText } from './exportPresentation'
+import { REPORT_EXPORTS_POLL_INTERVAL_MS } from './useReportReadyNotices'
 
 const QUERY_KEY = REPORT_EXPORTS_QUERY_KEY
 
@@ -68,7 +74,7 @@ const {
     const rows = query.state.data?.data ?? []
     const active = rows.some((row) => row.status === 'pending' || row.status === 'running')
 
-    return active ? POLL_INTERVAL_MS : false
+    return active ? REPORT_EXPORTS_POLL_INTERVAL_MS : false
   },
 })
 
@@ -92,46 +98,6 @@ function instantLabel(value: string | null): string {
     : formatInstantWithZone(value, timezone.value, locale.value)
 }
 
-/** «Lista para descargar», anunciada por el lector de pantalla (regin viva global de `AppShellView`) en cuanto una fila TERMINA, no en cada sondeo. */
-const announcedReady = new Set<string>()
-
-watch(
-  exportsList,
-  (rows) => {
-    for (const row of rows) {
-      if (row.status === 'completed' && !announcedReady.has(row.uuid)) {
-        announcedReady.add(row.uuid)
-        announce(t('reportExports.list.readyAnnounce'))
-      }
-    }
-  },
-  { immediate: true },
-)
-
-/**
- * Los codigos ESTABLES de `failure_reason` que el catalogo declara (mismo
- * criterio que `dataExport.list.failureReasons`, tarea 5.10): nunca el
- * mensaje de una excepcion (regla dura 21). Un codigo que esta pantalla
- * todavia no conoce se enseña tal cual llega, en vez de esconderlo.
- */
-const FAILURE_REASON_KEYS: Readonly<Record<string, string>> = {
-  write_failed: 'reportExports.list.failureReasons.write_failed',
-  database_error: 'reportExports.list.failureReasons.database_error',
-  query_timeout: 'reportExports.list.failureReasons.query_timeout',
-  stale: 'reportExports.list.failureReasons.stale',
-  unexpected: 'reportExports.list.failureReasons.unexpected',
-}
-
-function failureReasonLabel(code: string | null): string {
-  if (code === null) {
-    return t('common.empty')
-  }
-
-  const key = FAILURE_REASON_KEYS[code]
-
-  return key === undefined ? code : t(key)
-}
-
 /** Tamaño legible, en unidades BINARIAS (`formatBytes` de `@kronoqr/web-kit`, ADR-036, misma funcion que `DataExportPanel`): no es una cifra del registro legal. */
 function sizeLabel(bytes: number | null): string {
   return bytes === null ? t('common.empty') : formatBytes(bytes, locale.value)
@@ -145,6 +111,41 @@ function rowCountLabel(row: ReportExport): string {
 
 function periodLabel(row: ReportExport): string {
   return t('reportExports.list.period', { from: row.parameters.from, to: row.parameters.to })
+}
+
+// --- Cancelar una exportacion pending/running ----------------------------------
+
+const cancellingUuid = ref<string | null>(null)
+
+const CANCEL_ANNOUNCEMENTS: Readonly<Partial<Record<ReportExport['status'], string>>> = {
+  cancelled: 'reportExports.job.announce.cancelled',
+  completed: 'reportExports.job.announce.completed',
+  failed: 'reportExports.job.announce.failed',
+}
+
+async function cancel(row: ReportExport): Promise<void> {
+  cancellingUuid.value = row.uuid
+  downloadError.value = null
+
+  try {
+    const updated = await cancelReportExport(row.uuid)
+
+    queryClient.setQueryData<ReportExportCollection>(QUERY_KEY, (previous) => ({
+      data: (previous?.data ?? []).map((other) => (other.uuid === updated.uuid ? updated : other)),
+    }))
+    // Se anuncia lo que ha pasado de verdad: si ya habia terminado (409 not-cancellable),
+    // la fila vuelve `completed` o `failed`, no `cancelled`.
+    const outcome = CANCEL_ANNOUNCEMENTS[updated.status]
+
+    if (outcome !== undefined) {
+      announce(t(outcome))
+    }
+  } catch (failure) {
+    downloadError.value = failure
+  } finally {
+    cancellingUuid.value = null
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+  }
 }
 
 // --- Descargar una exportacion completada ------------------------------------
@@ -251,10 +252,22 @@ async function download(row: ReportExport): Promise<void> {
                 >
                   {{ t(`reportExports.status.${row.status}`) }}
                 </span>
+                <div v-if="row.status === 'running'" class="mt-1 text-sm text-kq-text-muted">
+                  <p :data-test="`stage-${row.uuid}`">{{ stageText(t, row) }}</p>
+                  <ExportProgressBar
+                    :percent="row.progress?.percent ?? null"
+                    :stage="stageText(t, row)"
+                    class="mt-1 h-2 w-32"
+                    :data-test="`progress-${row.uuid}`"
+                  />
+                </div>
+                <p v-if="row.status === 'cancelled'" class="mt-1 text-sm text-kq-text-muted">
+                  {{ t('reportExports.job.cancelled') }}
+                </p>
                 <p v-if="row.status === 'failed'" class="mt-1 text-sm text-kq-text-muted">
                   {{
                     t('reportExports.list.failedReason', {
-                      reason: failureReasonLabel(row.failure_reason),
+                      reason: failureReasonLabel(t, row.failure_reason),
                     })
                   }}
                 </p>
@@ -282,6 +295,22 @@ async function download(row: ReportExport): Promise<void> {
                     downloadingUuid === row.uuid
                       ? t('reportExports.list.downloading')
                       : t('reportExports.list.download')
+                  }}
+                </button>
+
+                <button
+                  v-if="row.status === 'pending' || row.status === 'running'"
+                  type="button"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+                  :disabled="cancellingUuid === row.uuid"
+                  :aria-busy="cancellingUuid === row.uuid"
+                  :data-test="`cancel-${row.uuid}`"
+                  @click="cancel(row)"
+                >
+                  {{
+                    cancellingUuid === row.uuid
+                      ? t('reportExports.job.cancelling')
+                      : t('reportExports.job.cancel')
                   }}
                 </button>
 

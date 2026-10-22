@@ -7,10 +7,12 @@ namespace App\Modules\Reporting\Http\Controller;
 use App\Exceptions\ProblemDetails;
 use App\Http\Controllers\Controller;
 use App\Modules\Reporting\Application\Command\RequestReportExportCommand;
+use App\Modules\Reporting\Application\UseCase\CancelReportExport;
 use App\Modules\Reporting\Application\UseCase\ListReportExports;
 use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
+use App\Modules\Reporting\Domain\Exception\ReportExportNotCancellable;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Http\Request\RequestReportExportRequest;
@@ -66,12 +68,12 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class ReportExportController extends Controller
 {
-    /** `GET /api/v1/reports/exports` — las 20 mas recientes de quien pregunta. */
+    /** `GET /api/v1/reports/exports` — las 20 mas recientes de quien pregunta, con su avance. */
     public function index(Request $request, ListReportExports $exports): JsonResponse
     {
         Gate::authorize('view', ReportExport::class);
 
-        return (new ReportExportCollectionResource($exports->handle(self::actorUserId($request))))->response();
+        return (new ReportExportCollectionResource($exports->handle(self::actorUserId($request), self::visibleKinds($request))))->response();
     }
 
     /** `POST /api/v1/reports/exports` — encola la generacion y responde `202`. */
@@ -115,7 +117,7 @@ final class ReportExportController extends Controller
     {
         Gate::authorize('download', ReportExport::class);
 
-        $issued = $exports->handle($uuid, self::actorUserId($request));
+        $issued = $exports->handle($uuid, self::actorUserId($request), self::visibleKinds($request));
 
         if ($issued === null) {
             // No existe, o es de otra persona. Sin detalle y sin distinguir los dos
@@ -127,6 +129,32 @@ final class ReportExportController extends Controller
     }
 
     /**
+     * `POST /api/v1/reports/exports/{uuid}/cancel` — detiene una exportacion en
+     * curso (V5-PA-4).
+     *
+     * `200` con la fila ya `cancelled` —tambien si ya lo estaba: es idempotente—,
+     * `404` si no existe o es de otra persona, y `409` con la fila dentro si ya
+     * termino. El asiento lo escribe el caso de uso dentro de su transaccion.
+     */
+    public function cancel(string $uuid, Request $request, CancelReportExport $exports): JsonResponse
+    {
+        Gate::authorize('cancel', ReportExport::class);
+
+        try {
+            $cancelled = $exports->handle($uuid, self::actorUserId($request), self::visibleKinds($request));
+        } catch (ReportExportNotCancellable $finished) {
+            return ProblemDetails::reportExportNotCancellable(ReportExportResource::payload($finished->current));
+        }
+
+        if ($cancelled === null) {
+            // Sin detalle, como la consulta: una exportacion ajena no existe.
+            throw new NotFoundHttpException;
+        }
+
+        return (new ReportExportResource($cancelled))->response();
+    }
+
+    /**
      * La comprobacion de licencia, una por clase de informe.
      *
      * **Se hace antes de tocar nada**, de modo que un `402` no deja fila creada ni
@@ -135,10 +163,20 @@ final class ReportExportController extends Controller
      */
     private function assertLicensed(FeatureGate $features, ReportExportKind $kind): void
     {
-        $availability = $features->statusOf(match ($kind) {
+        $feature = match ($kind) {
             ReportExportKind::Period => Feature::AdvancedReports,
             ReportExportKind::Payroll => Feature::PayrollExport,
-        });
+            ReportExportKind::Adoption => Feature::ImpactDashboard,
+            // La exportacion para la Inspeccion no se degrada jamas (regla dura
+            // 15, RL-06): ni en sincrono ni en diferido.
+            ReportExportKind::Legal => null,
+        };
+
+        if ($feature === null) {
+            return;
+        }
+
+        $availability = $features->statusOf($feature);
 
         if (! $availability->enabled) {
             throw FeatureNotLicensed::from($availability);
@@ -181,6 +219,30 @@ final class ReportExportController extends Controller
      * exportacion sin dueño no tendria quien la consultara, y **con dueño
      * equivocado seria de otra persona**.
      */
+    /**
+     * Las clases que alcanza quien pregunta: todas con `reports:*`, y solo
+     * `legal` con `reports:legal` —el auditor— (revision de seguridad del
+     * bloque 14). Una fila de otra clase no existe para el: no la lista, y
+     * consultarla o cancelarla responde `404`, como la de otra persona.
+     *
+     * Por el ambito del token y no por el rol, con el mismo patron que
+     * `RequestReportExportRequest`: es lo que este modulo puede preguntar sin
+     * importar `Identity`.
+     *
+     * @return list<ReportExportKind>|null
+     */
+    private static function visibleKinds(Request $request): ?array
+    {
+        /** @var mixed $actor */
+        $actor = $request->user();
+
+        $canAll = \is_object($actor)
+            && method_exists($actor, 'tokenCan')
+            && $actor->tokenCan(RequestReportExportRequest::ALL_REPORTS_ABILITY) === true;
+
+        return $canAll ? null : [ReportExportKind::Legal];
+    }
+
     private static function actorUserId(Request $request): int
     {
         $identifier = $request->user()?->getAuthIdentifier();

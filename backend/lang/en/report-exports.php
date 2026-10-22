@@ -21,6 +21,8 @@ return [
         'subject' => 'Your report is ready to download',
         'greeting' => 'Hello, :name:',
         'intro' => 'The hours report from :from to :to has been generated, in :format format.',
+        'intro_legal' => 'The Labour Inspectorate export from :from to :to has been generated, in :format format.',
+        'intro_adoption' => 'The impact and adoption dashboard from :from to :to has been generated, in :format format.',
         'rows' => 'It contains :rows data rows.',
         'expires' => 'You can download it until :date (UTC). After that it is deleted from the server automatically.',
         'where' => 'Open the panel, section "Reports", and press "Download" in the background exports list.',

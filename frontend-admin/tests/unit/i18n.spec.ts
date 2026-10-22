@@ -3,7 +3,13 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
-import { DEFAULT_LOCALE, isSupportedLocale, resolveAppLocale } from '@/shared/i18n'
+import {
+  createAppI18n,
+  DEFAULT_LOCALE,
+  ensureLocaleLoaded,
+  isSupportedLocale,
+  resolveAppLocale,
+} from '@/shared/i18n'
 
 const ONLY_SPANISH = { default: 'es', available: ['es'] }
 const BOTH = { default: 'es', available: ['es', 'en'] }
@@ -207,5 +213,35 @@ describe('idiomas de la aplicacion', () => {
     expect(isSupportedLocale('pt')).toBe(false)
     expect(isSupportedLocale(42)).toBe(false)
     expect(isSupportedLocale(undefined)).toBe(false)
+  })
+})
+
+describe('carga perezosa de idiomas (V21-5-PA-4, V5-PA-5)', () => {
+  it('el i18n nace sin textos y cada idioma se descarga solo cuando se pide', async () => {
+    const i18n = createAppI18n('es')
+
+    expect(i18n.global.availableLocales).toEqual([])
+
+    await ensureLocaleLoaded(i18n, 'es')
+
+    // Una instalacion solo en español nunca pide el inglés.
+    expect(i18n.global.availableLocales).toEqual(['es'])
+    expect(i18n.global.t('app.signOut')).toBe(es.app.signOut)
+
+    await ensureLocaleLoaded(i18n, 'es')
+    await ensureLocaleLoaded(i18n, 'en')
+
+    expect([...i18n.global.availableLocales].sort()).toEqual(['en', 'es'])
+    expect(i18n.global.t('app.signOut', {}, { locale: 'en' })).toBe(en.app.signOut)
+  })
+
+  it('ningun fichero de src importa los catalogos de forma estatica (entrarian en el chunk de arranque)', () => {
+    const staticImport = /^import\s+(?!type\b)[^\n]*['"][^'"]*locales\/(?:es|en)\.json['"]/m
+
+    const offenders = sourceFiles(SOURCE_ROOT).filter((path) =>
+      staticImport.test(readFileSync(path, 'utf8')),
+    )
+
+    expect(offenders).toEqual([])
   })
 })

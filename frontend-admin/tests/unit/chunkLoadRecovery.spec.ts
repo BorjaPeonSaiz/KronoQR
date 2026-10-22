@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import {
   CHUNK_RELOAD_MARK,
+  chunkLoadFailed,
+  clearChunkLoadFailure,
   installChunkLoadRecovery,
   isChunkLoadError,
   type MarkStorage,
@@ -68,6 +70,28 @@ describe('chunkLoadRecovery', () => {
 
     await router.push('/lazy').catch(() => undefined)
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('si el trozo sigue sin cargar tras la recarga, deja un aviso visible hasta que una navegacion funciona (V21-3-UX-1)', async () => {
+    const failing = { value: true }
+    const router = makeRouter(failing)
+
+    clearChunkLoadFailure()
+    installChunkLoadRecovery(router, { storage: memoryStorage(), reload: vi.fn() })
+    await router.push('/')
+    await router.push('/lazy').catch(() => undefined)
+
+    // La primera vez se recarga y todavia no hay aviso.
+    expect(chunkLoadFailed.value).toBe(false)
+
+    await router.push('/lazy').catch(() => undefined)
+
+    expect(chunkLoadFailed.value).toBe(true)
+
+    failing.value = false
+    await router.push('/lazy')
+
+    expect(chunkLoadFailed.value).toBe(false)
   })
 
   it('limpia la marca tras una navegacion correcta', async () => {

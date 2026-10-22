@@ -709,7 +709,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(e.downloaded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS downloaded_at,
                e.download_count::text AS download_count,
                to_char(e.notified_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS notified_at,
-               e.notification_channel
+               e.notification_channel,
+               to_char(e.cancelled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cancelled_at
           FROM report_exports e
           LEFT JOIN users u ON u.id = e.requested_by_user_id
          ORDER BY e.id

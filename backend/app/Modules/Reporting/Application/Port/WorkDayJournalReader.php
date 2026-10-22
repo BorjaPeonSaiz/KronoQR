@@ -56,6 +56,21 @@ interface WorkDayJournalReader
     public function timeZoneOf(string $employeeUuid): ?string;
 
     /**
+     * Las jornadas **con actividad** del rango, de la mas antigua a la mas
+     * reciente: las mismas que traeria {@see self::journalFor()}, sin leer nada
+     * de ellas (V5-PA-2, 2.3.0).
+     *
+     * Es lo que permite paginar el registro de una persona **por jornadas
+     * enteras**: se cuentan aqui, se elige la pagina y se lee solo el tramo de
+     * fechas que la cubre. Como entre dos jornadas con actividad consecutivas
+     * no hay ninguna otra, ese tramo trae exactamente las de la pagina. Vacio
+     * si el empleado no existe.
+     *
+     * @return list<string> Fechas ISO `AAAA-MM-DD`.
+     */
+    public function workDatesOf(string $employeeUuid, DateRange $range): array;
+
+    /**
      * Las jornadas del rango, con sus tramos vigentes y su historico completo
      * de correcciones.
      *

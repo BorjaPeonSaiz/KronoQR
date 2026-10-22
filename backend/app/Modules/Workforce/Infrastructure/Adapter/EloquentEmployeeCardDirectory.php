@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Infrastructure\Adapter;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Infrastructure\Persistence\PersonNameSearch;
 use App\Modules\Workforce\Infrastructure\Persistence\Employee;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -70,6 +71,30 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
         return $profiles;
     }
 
+    public function activeIdsMatching(string $search): array
+    {
+        // Las mismas cuatro expresiones que `GET /employees?q=`
+        // (`EloquentEmployeeRepository::matchingSearch()`).
+        [$condition, $bindings] = PersonNameSearch::anyOf([
+            'employees.first_name',
+            'employees.last_name',
+            'employees.employee_code::text',
+            "employees.first_name || ' ' || employees.last_name",
+        ], $search);
+
+        /** @var list<int> $ids */
+        $ids = Employee::query()
+            ->where('employees.status', EmploymentStatus::ACTIVE->value)
+            ->whereRaw($condition, $bindings)
+            ->orderBy('employees.id')
+            ->pluck('employees.id')
+            ->map(static fn (mixed $id): int => is_numeric($id) ? (int) $id : 0)
+            ->values()
+            ->all();
+
+        return $ids;
+    }
+
     public function profileFor(int $employeeId): ?EmployeeCardProfile
     {
         $row = $this->baseQuery()->where('employees.id', $employeeId)->first();
@@ -92,6 +117,10 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
                 'employees.site_id',
                 'sites.name as site_name',
                 'departments.name as department_name',
+                // El departamento por su clave (2.3.0, HC1): el tablero de
+                // credenciales filtra por el en el servidor, y el nombre no es
+                // unico ni estable.
+                'employees.department_id',
             ])
             ->join('sites', 'sites.id', '=', 'employees.site_id')
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id');
@@ -116,6 +145,7 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
             siteId: $row->site_id,
             departmentName: \is_string($department) ? $department : null,
             employeeId: $row->id,
+            departmentId: $row->department_id,
         );
     }
 }

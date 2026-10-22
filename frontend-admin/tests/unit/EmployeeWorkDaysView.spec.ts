@@ -124,7 +124,58 @@ describe('EmployeeWorkDaysView', () => {
 
     const workdaysUrl = requestedUrls.find((url) => url.includes('/workdays')) ?? ''
 
-    expect(workdaysUrl).toBe(`/api/v1/employees/${EMPLOYEE_UUID}/workdays`)
+    // Sin periodo (lo resuelve el servidor) y con la primera pagina, de 31 jornadas.
+    expect(workdaysUrl).toBe(`/api/v1/employees/${EMPLOYEE_UUID}/workdays?page=1&per_page=31`)
+  })
+
+  it('pagina en el servidor por jornadas enteras: sin barra con una sola pagina, con ella y la siguiente pagina se pide (V5-PA-2)', async () => {
+    const single = await mountWorkDays()
+
+    expect(single.find('nav[aria-label="' + es.workdays.pagination.label + '"]').exists()).toBe(
+      false,
+    )
+
+    requestedUrls = []
+
+    const paged = await mountWorkDays({
+      workdays: employeeWorkDays([workDay()], {
+        meta: { total: 45, page: 1, per_page: 31, total_pages: 2 },
+      }),
+    })
+    const nav = paged.find('nav[aria-label="' + es.workdays.pagination.label + '"]')
+
+    expect(nav.exists()).toBe(true)
+    expect(paged.text()).toContain('45')
+
+    await nav.findAll('button')[1]?.trigger('click')
+    await settle()
+
+    expect(requestedUrls.some((url) => url.includes('page=2'))).toBe(true)
+  })
+
+  it('al cambiar de persona vuelve a la primera pagina, sin pedir la pagina N de la nueva', async () => {
+    const OTHER = '0199f0c2-9999-7c3e-9b21-4d5e6f7a8b99'
+    const wrapper = await mountWorkDays({
+      workdays: employeeWorkDays([workDay()], {
+        meta: { total: 45, page: 1, per_page: 31, total_pages: 2 },
+      }),
+    })
+
+    await wrapper
+      .find('nav[aria-label="' + es.workdays.pagination.label + '"]')
+      .findAll('button')[1]
+      ?.trigger('click')
+    await settle()
+    expect(requestedUrls.at(-1)).toContain('page=2')
+
+    requestedUrls = []
+    await wrapper.setProps({ uuid: OTHER })
+    await settle()
+
+    const forOther = requestedUrls.filter((url) => url.includes(`/employees/${OTHER}/workdays`))
+
+    expect(forOther.length).toBeGreaterThan(0)
+    expect(forOther.every((url) => url.includes('page=1'))).toBe(true)
   })
 
   it('dice que periodo se esta viendo y en que zona horaria', async () => {
@@ -628,12 +679,12 @@ describe('EmployeeWorkDaysView, accesibilidad (WCAG 2.2 AA)', () => {
       expect(wrapper.find('[data-test="dialog-work-date"]').attributes('max')).toBe('2026-10-02')
     })
 
-    it('para una persona en alta no pone ningun limite', async () => {
+    it('para una persona en alta no pone limite inferior y el superior es hoy: nada en el futuro (F1)', async () => {
       const wrapper = await openAdd(employee())
       const input = wrapper.find('[data-test="dialog-work-date"]')
 
       expect(input.attributes('min')).toBeUndefined()
-      expect(input.attributes('max')).toBeUndefined()
+      expect(input.attributes('max')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     })
 
     it('pinta el 422 de work_date en el campo, accesible', async () => {

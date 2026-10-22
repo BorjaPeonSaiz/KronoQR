@@ -150,6 +150,17 @@ final class ProblemDetails
     public const string TYPE_REPORT_EXPORT_IN_PROGRESS = 'urn:kronoqr:problem:report-export-in-progress';
 
     /**
+     * Se pidio cancelar un informe en diferido que ya termino (**V5-PA-4**).
+     *
+     * `409` y no `422`: la peticion esta bien formada, lo que no admite es el
+     * estado de la fila —`completed`, `failed` o `purged`—. El cuerpo lleva la
+     * fila en `export` para que la pantalla la enseñe tal como esta: si el
+     * trabajo la cerro un instante antes que la cancelacion, el fichero se puede
+     * descargar.
+     */
+    public const string TYPE_REPORT_EXPORT_NOT_CANCELLABLE = 'urn:kronoqr:problem:report-export-not-cancellable';
+
+    /**
      * El informe no cabe en una respuesta sincrona (RNF-P-05, RF-IN-06).
      *
      * **`422` con `type` propio, y no el de validacion generico.** Sigue siendo un
@@ -546,6 +557,26 @@ final class ProblemDetails
             'Ya tienes un informe en curso',
             JsonResponse::HTTP_CONFLICT,
             $detail,
+        );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([...$body, 'export' => $export]);
+    }
+
+    /**
+     * `409` al cancelar un informe en diferido que ya termino (V5-PA-4).
+     *
+     * @param  array<string, mixed>  $export  La fila tal como esta, con la forma de `ReportExport`.
+     */
+    public static function reportExportNotCancellable(array $export): JsonResponse
+    {
+        $response = self::response(
+            self::TYPE_REPORT_EXPORT_NOT_CANCELLABLE,
+            'Ese informe ya ha terminado',
+            JsonResponse::HTTP_CONFLICT,
+            'Ya no hay nada que cancelar: el informe termino antes. Si se genero, puedes descargarlo desde esta misma pantalla.',
         );
 
         /** @var array<string, mixed> $body */

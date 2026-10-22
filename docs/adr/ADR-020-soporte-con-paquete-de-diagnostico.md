@@ -106,3 +106,10 @@ Y el escenario en el que ese acceso se usa mal no es el del atacante externo, si
 - **Lo que no cambia: el asiento `support_grant.granted` conserva su copia del motivo**, que es la prueba de por qué se concedió. Esa copia vive lo que vive la auditoría (4 años, ADR-027) y no se toca. Lo que se acorta es la copia operativa, la que enseña el panel. Por eso no hace falta asiento al vaciarla: no se pierde ningún hecho.
 - **Para que el motivo no lleve datos personales desde el principio**, el formulario y `support:grant` avisan de que se escriba el uuid y no el nombre, y un motivo con forma de correo, DNI/NIE o teléfono se rechaza con `422`.
 - **Contrato.** `SupportGrant.reason` pasa a admitir nulos y aparece `reason_purged_at`.
+
+## Nota del 22-10-2026 (2.3.0, bloque 14): la exportación legal en diferido no es para el soporte
+
+Decisión del propietario: una concesión de soporte **no** puede pedir exportaciones en diferido
+(`POST /reports/exports`, ninguna clase, tampoco `legal`). Tampoco llega a la descarga síncrona: ningún
+alcance de soporte concede `reports:legal` ni `reports:*` (`SupportScope`). Ver la enmienda
+2.3.0 de ADR-041; lo aplica `ReportExportPolicy`.

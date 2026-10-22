@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Application\UseCase;
 
+use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
+use App\Modules\Reporting\Application\Support\ReportExportView;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
@@ -37,27 +41,54 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * Regla dura 5. Una lista que enseñara solo las descargables convertiria «tu
  * informe caduco hace tres dias» en «aqui no ha pasado nada», que es la peor
  * respuesta para quien vuelve a buscar el fichero que pidio la semana pasada.
+ *
+ * ## Con el avance de las que se estan generando (V5-PA-4)
+ *
+ * Solo de las `running`, y leido aparte de la fila
+ * (`ReportExportProgressBoard`): es lo que la pantalla sondea mientras espera,
+ * y por eso esta lista se puede pedir cada pocos segundos sin acuñar enlaces.
+ * Una fila `cancelled` o `failed` nunca trae avance, aunque el trabajador
+ * llegara a anotar uno antes de enterarse.
  */
 final readonly class ListReportExports
 {
     /** Lo que promete el esquema `ReportExportCollection` con su `maxItems`. */
     public const int LIMIT = 20;
 
-    public function __construct(private ReportExportRepository $exports) {}
+    public function __construct(
+        private ReportExportRepository $exports,
+        private ReportExportProgressBoard $progress,
+    ) {}
 
     /**
-     * @return list<ReportExport>
+     * @param  list<ReportExportKind>|null  $kinds  Las clases que alcanza quien pregunta, o todas. Un
+     *                                              token sin `reports:*` —el auditor— solo alcanza
+     *                                              `legal` (revision de seguridad del bloque 14).
+     * @return list<ReportExportView>
      */
-    public function handle(int $requestedByUserId): array
+    public function handle(int $requestedByUserId, ?array $kinds = null): array
     {
-        return UseCaseInstrumentation::run('reporting.list_report_exports', fn () => $this->doHandle($requestedByUserId));
+        return UseCaseInstrumentation::run('reporting.list_report_exports', fn () => $this->doHandle($requestedByUserId, $kinds));
     }
 
     /**
-     * @return list<ReportExport>
+     * @param  list<ReportExportKind>|null  $kinds
+     * @return list<ReportExportView>
      */
-    private function doHandle(int $requestedByUserId): array
+    private function doHandle(int $requestedByUserId, ?array $kinds): array
     {
-        return $this->exports->recentFor($requestedByUserId, self::LIMIT);
+        $exports = $this->exports->recentFor($requestedByUserId, self::LIMIT, $kinds);
+
+        $running = array_values(array_map(
+            static fn (ReportExport $export): string => $export->uuid,
+            array_filter($exports, static fn (ReportExport $export): bool => $export->status === ReportExportStatus::Running),
+        ));
+
+        $progress = $running === [] ? [] : $this->progress->of($running);
+
+        return array_map(
+            static fn (ReportExport $export): ReportExportView => new ReportExportView($export, $progress[$export->uuid] ?? null),
+            $exports,
+        );
     }
 }

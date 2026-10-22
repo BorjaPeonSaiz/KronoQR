@@ -3,6 +3,7 @@
 import { EMPLOYEE_LIST_PER_PAGE } from '@/features/employees/employees.api'
 import type {
   Credential,
+  ReportExport,
   CredentialCoverage,
   CredentialStatusBoard,
   CredentialStatusRow,
@@ -171,6 +172,7 @@ export function board(
 ): CredentialStatusBoard {
   return {
     data: rows,
+    meta: { page: 1, per_page: 50, total: rows.length, total_pages: 1 },
     summary: {
       employees: 60,
       pending_print: rows.filter((row) => row.status === 'pending_print').length,
@@ -573,6 +575,51 @@ export function temporaryPassword(
     password: 'Kd2pQ9vLmN4tZbYc#F1w',
     issued_at: '2026-10-07T08:00:00Z',
     expires_at: '2026-10-10T08:00:00Z',
+    ...overrides,
+  }
+}
+
+// --- Exportaciones en segundo plano (RF-IN-06, 14.4) -------------------------
+
+export const REPORT_EXPORT_UUID = '0199f7b1-0000-7c3d-9e4f-5a6b7c8d9e77'
+
+/** Una fila de `report_exports`: por omision, una exportacion legal `pending`. */
+export function reportExportRow(overrides: Partial<ReportExport> = {}): ReportExport {
+  return {
+    uuid: REPORT_EXPORT_UUID,
+    kind: 'legal',
+    format: 'csv',
+    status: 'pending',
+    parameters: {
+      from: '2026-01-01',
+      to: '2026-01-31',
+      granularity: 'day',
+      group_by: 'employee',
+      include_open_shifts: false,
+      department_id: null,
+      employee_uuid: null,
+    },
+    scope: 'all',
+    requested_by: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Dirección RRHH' },
+    requested_at: '2026-07-01T08:00:00.000000Z',
+    started_at: null,
+    completed_at: null,
+    failed_at: null,
+    cancelled_at: null,
+    failure_reason: null,
+    file_name: null,
+    size_bytes: null,
+    sha256: null,
+    row_count: null,
+    criteria: [],
+    expires_at: null,
+    purged_at: null,
+    downloaded_at: null,
+    download_count: 0,
+    notified_at: null,
+    notification_channel: 'panel',
+    progress: null,
+    download: null,
     ...overrides,
   }
 }

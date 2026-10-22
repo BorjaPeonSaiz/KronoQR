@@ -599,10 +599,22 @@ Route::post('/reports/legal-export/employees/search', LegalExportEmployeeSearchC
  * `REPORTING_EXPORT_RETENTION_DAYS` y su fila queda como `purged` con sus fechas,
  * su huella y su recuento (regla dura 5). Que no exista el verbo es lo que impide
  * que aparezca uno «para hacer sitio».
+ *
+ * `POST /reports/exports/{uuid}/cancel` NO ES UN `DELETE` (V5-PA-4, 2.3.0):
+ * detiene una exportacion `pending` o `running` y la deja `cancelled`, con su
+ * fila y su asiento. Sobre una ya terminada responde `409`: tirar un fichero ya
+ * generado no es cancelar.
+ *
+ * `reports:legal` O `reports:*` DESDE LA 2.3.0, el mismo par que la exportacion
+ * legal sincrona: el `auditor` pide en diferido la exportacion para la
+ * Inspeccion (`kind: legal`) y consulta, cancela y descarga las suyas. Toda otra
+ * clase sigue exigiendo `reports:*`, y lo comprueba `RequestReportExportRequest`
+ * ademas de la policy: el ambito ancho de la ruta no regala ningun informe de
+ * horas a un token estrecho.
  */
 Route::middleware([
     'auth:sanctum',
-    'ability:'.TokenAbility::REPORTS_ALL->value,
+    'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
     'throttle:management',
 ])->group(function (): void {
     Route::get('/reports/exports', [ReportExportController::class, 'index'])
@@ -612,6 +624,9 @@ Route::middleware([
     Route::get('/reports/exports/{uuid}', [ReportExportController::class, 'show'])
         ->whereUuid('uuid')
         ->name('reporting.reports.exports.show');
+    Route::post('/reports/exports/{uuid}/cancel', [ReportExportController::class, 'cancel'])
+        ->whereUuid('uuid')
+        ->name('reporting.reports.exports.cancel');
 });
 
 /*

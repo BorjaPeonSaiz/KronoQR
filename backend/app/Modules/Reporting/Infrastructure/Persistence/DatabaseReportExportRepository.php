@@ -60,7 +60,11 @@ use RuntimeException;
  */
 final readonly class DatabaseReportExportRepository implements ReportExportRepository
 {
-    private const string IN_PROGRESS_INDEX = 'report_exports_single_in_progress_uidx';
+    /** El indice del turno de cada persona (migracion 2026_10_22_100000). */
+    private const string IN_PROGRESS_INDEX = 'report_exports_single_slot_uidx';
+
+    /** Lo que ocupa el turno: el predicado del indice, en un solo sitio de PHP. */
+    private const string OCCUPIES_SLOT = "(e.status IN ('pending', 'running') OR (e.status = 'cancelled' AND e.stopped_at IS NULL))";
 
     private const string SELECT = <<<'SQL'
         SELECT e.id,
@@ -91,7 +95,8 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
                e.downloaded_at,
                e.download_count,
                e.notified_at,
-               e.notification_channel
+               e.notification_channel,
+               e.cancelled_at
           FROM report_exports e
           LEFT JOIN users u ON u.id = e.requested_by_user_id
         SQL;
@@ -191,15 +196,15 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         return $rows === [] ? null : $this->hydrate(Row::of($rows[0]));
     }
 
-    public function lockByUuidFor(string $uuid, int $requestedByUserId): ?ReportExport
+    public function lockByUuidFor(string $uuid, int $requestedByUserId, ?array $kinds = null): ?ReportExport
     {
         // El dueño y el bloqueo en la MISMA consulta: dos dejarian una ventana
         // entre comprobar de quien es la fila y quedarse con ella. `FOR UPDATE OF
         // e` por lo mismo que arriba —PostgreSQL rechaza bloquear el lado nulable
         // de un `LEFT JOIN`—.
         $rows = $this->connection->select(
-            self::SELECT.' WHERE e.uuid = CAST(? AS uuid) AND e.requested_by_user_id = ? FOR UPDATE OF e',
-            [$uuid, $requestedByUserId],
+            self::SELECT.' WHERE e.uuid = CAST(? AS uuid) AND e.requested_by_user_id = ?'.self::kindFilter($kinds).' FOR UPDATE OF e',
+            [$uuid, $requestedByUserId, ...self::kindValues($kinds)],
         );
 
         return $rows === [] ? null : $this->hydrate(Row::of($rows[0]));
@@ -208,7 +213,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
     public function inProgressFor(int $requestedByUserId): ?ReportExport
     {
         $rows = $this->connection->select(
-            self::SELECT." WHERE e.requested_by_user_id = ? AND e.status IN ('pending', 'running')"
+            self::SELECT.' WHERE e.requested_by_user_id = ? AND '.self::OCCUPIES_SLOT
             .' ORDER BY e.id DESC LIMIT 1',
             [$requestedByUserId],
         );
@@ -216,13 +221,31 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         return $rows === [] ? null : $this->hydrate(Row::of($rows[0]));
     }
 
-    public function recentFor(int $requestedByUserId, int $limit): array
+    public function confirmStopped(string $uuid, DateTimeImmutable $stoppedAt): void
+    {
+        $this->connection->table('report_exports')
+            ->whereRaw('uuid = CAST(? AS uuid)', [$uuid])
+            ->where('status', ReportExportStatus::Cancelled->value)
+            ->whereNull('stopped_at')
+            ->update(['stopped_at' => self::utc($stoppedAt), 'updated_at' => self::utc($stoppedAt)]);
+    }
+
+    public function statusOf(string $uuid): ?ReportExportStatus
+    {
+        $status = $this->connection->table('report_exports')
+            ->whereRaw('uuid = CAST(? AS uuid)', [$uuid])
+            ->value('status');
+
+        return \is_string($status) ? ReportExportStatus::tryFrom($status) : null;
+    }
+
+    public function recentFor(int $requestedByUserId, int $limit, ?array $kinds = null): array
     {
         /** @var list<object> $rows */
         $rows = $this->connection->select(
-            self::SELECT.' WHERE e.requested_by_user_id = ?'
+            self::SELECT.' WHERE e.requested_by_user_id = ?'.self::kindFilter($kinds)
             .' ORDER BY e.requested_at DESC, e.id DESC LIMIT '.max(1, $limit),
-            [$requestedByUserId],
+            [$requestedByUserId, ...self::kindValues($kinds)],
         );
 
         return $this->hydrateAll($rows);
@@ -264,6 +287,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
             'download_count' => $export->downloadCount,
             'notified_at' => self::nullableUtc($export->notifiedAt),
             'notification_channel' => $export->notificationChannel?->value,
+            'cancelled_at' => self::nullableUtc($export->cancelledAt),
             'updated_at' => self::utc($this->clock->now()),
         ]);
     }
@@ -321,6 +345,28 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         return $this->hydrateAll($rows);
     }
 
+    public function minimiseClosedBefore(DateTimeImmutable $closedBefore, DateTimeImmutable $now): int
+    {
+        /*
+         * Un `UPDATE` y no fila a fila: no hay fichero que borrar ni hecho que
+         * publicar, solo tres campos que dejan de hacer falta. Las claves de
+         * `parameters` se conservan a `null`, que es como las escribe
+         * `ReportExportParameters::minimised()` en una purgada.
+         */
+        return $this->connection->update(<<<'SQL'
+            UPDATE report_exports
+               SET scope = NULL,
+                   parameters = parameters || '{"employee_uuid": null, "department_id": null}'::jsonb,
+                   minimised_at = ?,
+                   updated_at = ?
+             WHERE minimised_at IS NULL
+               AND (
+                    (status = 'failed' AND failed_at <= ?)
+                 OR (status = 'cancelled' AND stopped_at IS NOT NULL AND cancelled_at <= ?)
+               )
+            SQL, [self::utc($now), self::utc($now), self::utc($closedBefore), self::utc($closedBefore)]);
+    }
+
     public function failStale(DateTimeImmutable $staleBefore, DateTimeImmutable $now): int
     {
         /*
@@ -330,7 +376,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
          * Escribirlos como dos `WHERE` distintos daria dos umbrales que algun dia
          * dejarian de coincidir.
          */
-        return $this->connection->table('report_exports')
+        $failed = $this->connection->table('report_exports')
             ->whereIn('status', [ReportExportStatus::Pending->value, ReportExportStatus::Running->value])
             ->whereRaw('COALESCE(started_at, requested_at) <= ?', [self::utc($staleBefore)])
             ->update([
@@ -339,6 +385,14 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
                 'failure_reason' => ReportExportFailure::Stale->value,
                 'updated_at' => self::utc($now),
             ]);
+
+        // Y la cancelada cuyo trabajador murio sin confirmar que paro: con el
+        // mismo umbral, deja de ocupar el turno de su dueño.
+        return $failed + $this->connection->table('report_exports')
+            ->where('status', ReportExportStatus::Cancelled->value)
+            ->whereNull('stopped_at')
+            ->where('cancelled_at', '<=', self::utc($staleBefore))
+            ->update(['stopped_at' => self::utc($now), 'updated_at' => self::utc($now)]);
     }
 
     public function expired(DateTimeImmutable $now): array
@@ -396,7 +450,31 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
             downloadCount: $row->int('download_count'),
             notifiedAt: $row->nullableInstant('notified_at'),
             notificationChannel: self::channelOf($row->nullableString('notification_channel')),
+            cancelledAt: $row->nullableInstant('cancelled_at'),
         );
+    }
+
+    /**
+     * @param  list<ReportExportKind>|null  $kinds
+     */
+    private static function kindFilter(?array $kinds): string
+    {
+        return $kinds === null ? '' : ' AND e.kind IN ('.implode(', ', array_fill(0, max(1, \count($kinds)), '?')).')';
+    }
+
+    /**
+     * Los valores del filtro; con una lista vacia, uno que ninguna fila tiene.
+     *
+     * @param  list<ReportExportKind>|null  $kinds
+     * @return list<string>
+     */
+    private static function kindValues(?array $kinds): array
+    {
+        if ($kinds === null) {
+            return [];
+        }
+
+        return $kinds === [] ? [''] : array_map(static fn (ReportExportKind $kind): string => $kind->value, $kinds);
     }
 
     /**

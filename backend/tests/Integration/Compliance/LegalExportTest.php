@@ -15,6 +15,7 @@ use App\Modules\Compliance\Application\Command\GenerateLegalExportCommand;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\UseCase\GenerateLegalExport;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
+use App\Modules\Compliance\Application\UseCase\WriteLegalExportFile;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
 use App\Modules\Identity\Infrastructure\Persistence\User;
@@ -522,3 +523,80 @@ it('entrega un fichero con sus criterios aunque el periodo no tenga jornadas', f
     expect($contents)->toContain('Criterios de inclusion')
         ->and($contents)->toContain('del 2026-01-01 al 2026-01-31');
 })->group('RF-IN-05', 'RL-06');
+
+it('cuenta de antemano las mismas filas que recorre, con correcciones y anulados', function (): void {
+    // El total del avance de la exportacion en diferido (V5-PA-4): si el
+    // recuento y el recorrido no aplicaran el mismo filtro, la barra se
+    // quedaria corta o pasaria de largo.
+    $contexto = contextoDeExportacionLegal();
+    $employee = WorkforceFixtures::employee($contexto['site']);
+
+    $abierto = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-10', '2026-03-10 06:00', null);
+    app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+        shiftEntryUuid: $abierto,
+        clockedInAt: null,
+        clockedOutAt: Instants::utc('2026-03-10 14:00'),
+        reason: CorrectionReason::fromCode('OLVIDO_FICHAJE_SALIDA'),
+        performedByUserId: $contexto['author']->id,
+    ));
+    $duplicado = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-11', '2026-03-11 15:00', '2026-03-11 15:10');
+    app(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+        shiftEntryUuid: $duplicado,
+        reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
+        performedByUserId: $contexto['author']->id,
+    ));
+    tramoDeJornadaExportable($contexto['site'], WorkforceFixtures::employee($contexto['site']), '2026-03-11', '2026-03-11 06:00', '2026-03-11 14:00');
+
+    $periodo = LegalExportPeriod::between('2026-03-01', '2026-03-31');
+    $origen = app(LegalExportSource::class);
+
+    $todos = DB::transaction(static fn (): int => $origen->count($periodo, LegalExportScope::everyone()));
+    $una = DB::transaction(static fn (): int => $origen->count($periodo, LegalExportScope::employee($employee)));
+
+    expect($todos)->toBe(exportacionLegal('2026-03-01', '2026-03-31')->tally->rows())
+        ->and($una)->toBe(exportacionLegal('2026-03-01', '2026-03-31', $employee)->tally->rows())
+        // Un tramo corregido (1 + su correccion) y uno anulado (1 + su
+        // anulacion) de esa persona; la sustituida no cuenta.
+        ->and($una)->toBe(4)
+        ->and($todos)->toBe(5);
+})->group('RF-IN-05', 'RL-06');
+
+it('la escritura para la cola avisa del avance y no deja el asiento, que es del cierre', function (): void {
+    // `WriteLegalExportFile` es la exportacion legal sin `legal_export.generated`:
+    // en diferido lo escribe el cierre de `report_exports`, a nombre de quien la
+    // pidio (V5-PA-4). Aqui, en la cola, saldria a nombre de `system`.
+    $contexto = contextoDeExportacionLegal();
+    tramosEnBloqueParaExportacion($contexto['site'], [WorkforceFixtures::employee($contexto['site'])], '2026-03-01', 3);
+    $avisos = [];
+
+    $tally = app(WriteLegalExportFile::class)->handle(
+        LegalExportPeriod::between('2026-03-01', '2026-03-31'),
+        LegalExportScope::everyone(),
+        rutaDeExportacionLegal(),
+        static function (int $hechas, int $esperadas) use (&$avisos): void {
+            $avisos[] = [$hechas, $esperadas];
+        },
+    );
+
+    expect($avisos)->toBe([[0, 3], [3, 3]])
+        ->and($tally->shiftEntries)->toBe(3)
+        ->and(DB::table('audit_log')->where('action', 'legal_export.generated')->count())->toBe(0);
+})->group('RF-IN-05', 'RS-05');
+
+it('si el aviso de avance lanza, la escritura se detiene y la excepcion sale tal cual', function (): void {
+    // Es como la cola cancela una exportacion en curso: el puerto de `Shared`
+    // promete no capturarla ni traducirla.
+    $contexto = contextoDeExportacionLegal();
+    tramosEnBloqueParaExportacion($contexto['site'], [WorkforceFixtures::employee($contexto['site'])], '2026-03-01', 3);
+
+    expect(static fn () => app(WriteLegalExportFile::class)->handle(
+        LegalExportPeriod::between('2026-03-01', '2026-03-31'),
+        LegalExportScope::everyone(),
+        rutaDeExportacionLegal(),
+        static function (int $hechas): void {
+            if ($hechas === 0) {
+                throw new RuntimeException('cancelada');
+            }
+        },
+    ))->toThrow(RuntimeException::class, 'cancelada');
+})->group('RF-IN-05');

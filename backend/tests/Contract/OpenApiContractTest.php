@@ -216,6 +216,9 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // `purged` (regla dura 5).
         '/api/v1/reports/exports',
         '/api/v1/reports/exports/{uuid}',
+        // 2.3.0 (V5-PA-4): detener una exportacion en curso. Tampoco es un
+        // `DELETE`: la fila queda `cancelled`, con su asiento.
+        '/api/v1/reports/exports/{uuid}/cancel',
         '/api/v1/reports/exports/{uuid}/download',
         // Tarea 2.5: bandeja de incidencias y su flujo de resolucion (RF-PA-05).
         // Es la unica ruta del producto cuyo `{id}` es la clave interna: una

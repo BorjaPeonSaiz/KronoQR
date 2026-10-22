@@ -43,4 +43,16 @@ interface LegalExportSource
      * @return iterable<int, LegalExportRecord>
      */
     public function records(LegalExportPeriod $period, LegalExportScope $scope): iterable;
+
+    /**
+     * Cuantas filas va a ceder {@see self::records()} con los mismos criterios:
+     * tramos no sustituidos mas sus correcciones.
+     *
+     * Existe para el **avance** de la generacion en diferido (V5-PA-4): sin un
+     * total previo no hay porcentaje, solo una barra indeterminada. Es un
+     * recuento, no una promesa —entre el recuento y el recorrido alguien puede
+     * corregir una jornada—, y quien lo usa recorta lo que se pase. El numero que
+     * vale para el asiento es el que cuenta el escritor.
+     */
+    public function count(LegalExportPeriod $period, LegalExportScope $scope): int;
 }

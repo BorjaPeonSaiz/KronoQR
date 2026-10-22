@@ -174,3 +174,21 @@ test('por debajo de md el menu se apila y las diecinueve secciones siguen visibl
     blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
   ).toEqual([])
 })
+
+// Una instalacion solo en español no descarga el catalogo en ingles (V21-5-PA-4,
+// V5-PA-5): cada idioma es un trozo aparte y solo se pide el que se pinta.
+test('una instalacion solo en español no descarga el catalogo en ingles', async ({ page }) => {
+  const scripts: string[] = []
+
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') {
+      scripts.push(new URL(request.url()).pathname)
+    }
+  })
+
+  await page.reload()
+  await expect(page.getByRole('navigation', { name: 'Secciones del panel' })).toBeVisible()
+
+  expect(scripts.some((path) => /\/assets\/es-[\w-]+\.js$/.test(path))).toBe(true)
+  expect(scripts.some((path) => /\/assets\/en-[\w-]+\.js$/.test(path))).toBe(false)
+})

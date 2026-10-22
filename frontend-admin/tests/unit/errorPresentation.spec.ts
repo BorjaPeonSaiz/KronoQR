@@ -82,6 +82,17 @@ describe('whatToDoKey por codigo (RF-PA-07, RF-KI-07)', () => {
     )
   })
 
+  it('kiosk.update.unreachable tiene su propio «Que hacer», que contradice el generico de error (V21-3-KI-1)', () => {
+    const key = whatToDoKey('kiosk', 'error', 'kiosk.update.unreachable')
+
+    expect(key).toBe('errorEvents.whatToDoByCode.kioskUpdateUnreachable')
+    expect(es.errorEvents.whatToDoByCode.kioskUpdateUnreachable).toContain('Quioscos')
+    expect(es.errorEvents.whatToDoByCode.kioskUpdateUnreachable).toContain('paquete de diagnóstico')
+    expect(es.errorEvents.whatToDoByCode.kioskUpdateUnreachable).toContain('service worker')
+    expect(es.errorEvents.whatToDo.kiosk.error).toContain('No suele requerir')
+    expect(en.errorEvents.whatToDoByCode.kioskUpdateUnreachable).toContain('service worker')
+  })
+
   it('un codigo sin texto propio, o sin codigo, cae en el generico', () => {
     expect(whatToDoKey('kiosk', 'critical', 'kiosk.camera.unavailable')).toBe(
       'errorEvents.whatToDo.kiosk.critical',

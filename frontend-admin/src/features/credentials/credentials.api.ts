@@ -10,6 +10,7 @@ import type { BinaryDocument } from '@kronoqr/web-kit/http'
 import { requestBlob, requestJson } from '@kronoqr/web-kit/http'
 import type {
   Credential,
+  CredentialLifecycleStatus,
   CredentialStatusBoard,
   CredentialStatusRow,
   IssueCredentialRequest,
@@ -23,7 +24,7 @@ export interface CredentialBoardQuery {
   pendingOnly?: boolean
   /**
    * Acota a una sola persona. La usa la ficha de empleado (RF-PA-03): pide
-   * su fila y nada mas, no el tablero entero filtrado en cliente. Cada
+   * su fila y nada mas, no el tablero entero. Cada
    * lectura del tablero audita como divulgado TODO lo que devuelve
    * (ADR-037), y aqui solo hace falta una fila.
    */
@@ -37,11 +38,30 @@ export interface CredentialBoardQuery {
    * y se ejecuta con `php artisan credentials:rotate-key`; aqui solo se lee.
    */
   keyId?: string
+  /** Busca por nombre o codigo, en el servidor (sin acentos ni mayusculas). */
+  q?: string
+  departmentId?: number
+  /** Solo quien no tiene departamento (excluyente con `departmentId`). */
+  withoutDepartment?: boolean
+  /** Un estado concreto del ciclo de vida de la tarjeta. */
+  status?: CredentialLifecycleStatus
+  page?: number
+  perPage?: number
 }
 
 export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<CredentialStatusBoard> {
   return requestJson<CredentialStatusBoard>('/api/v1/credentials/status', {
-    query: { pending: query.pendingOnly, employee_uuid: query.employeeUuid, key_id: query.keyId },
+    query: {
+      pending: query.pendingOnly,
+      employee_uuid: query.employeeUuid,
+      key_id: query.keyId,
+      q: query.q === undefined || query.q.trim() === '' ? undefined : query.q.trim(),
+      department_id: query.departmentId,
+      without_department: query.withoutDepartment === true ? true : undefined,
+      status: query.status,
+      page: query.page,
+      per_page: query.perPage,
+    },
   })
 }
 

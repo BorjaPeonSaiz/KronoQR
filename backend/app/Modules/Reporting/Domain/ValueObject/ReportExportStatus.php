@@ -25,6 +25,13 @@ namespace App\Modules\Reporting\Domain\ValueObject;
  * fichero llevaba horas de personas identificadas, y «¿salio de aqui un informe
  * nominal en marzo, y quien lo pidio?» hay que poder contestarlo despues.
  *
+ * ## `cancelled`, desde la 2.3.0 (V5-PA-4)
+ *
+ * Lo detuvo quien lo pidio mientras estaba `pending` o `running`, y no dejo
+ * fichero. **No es `failed`**: no fallo nada, y el panel no puede invitar a
+ * «abrir una incidencia» por algo que alguien decidio. Es terminal, como
+ * `failed`: una exportacion cancelada no se reanuda, se pide otra.
+ *
  * ## `pending` y `running` son los dos que ocupan el turno
  *
  * {@see self::inProgress()} es lo que consulta el caso de uso para responder
@@ -41,6 +48,8 @@ enum ReportExportStatus: string
     case Completed = 'completed';
 
     case Failed = 'failed';
+
+    case Cancelled = 'cancelled';
 
     case Purged = 'purged';
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Reporting\Application\Port\QueuedJobFailureMetrics;
+use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
@@ -247,6 +248,8 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
 
     expect($migrator->getSchemaBuilder()->hasTable('report_exports'))->toBeTrue();
 
+    $before = reportExportsSchemaSnapshot($migrator);
+
     try {
         // CUANTOS pasos, y no «uno»: cada migracion nueva que se añada despues
         // desplaza a esta, y un `--step=1` fijo acabaria probando el `down()` de
@@ -262,9 +265,18 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
         // transacciones abiertas, incluida la de `RefreshDatabase` de esta misma
         // prueba, y se rinde por `lock_timeout`. Ese ciclo lo prueba
         // `PinClaimMigrationsTest` sin transaccion envolvente.
+        //
+        // Y TAMBIEN todas las que alteran esta tabla (2.3.0, V5-PA-4), que se
+        // DESCUBREN y no se enumeran: sin ellas, la tabla volveria a crearse sin
+        // sus columnas posteriores mientras su migracion sigue apuntada como
+        // aplicada, y en la CI —que corre en orden sobre la misma base— todo lo
+        // que viniera despues fallaria por una columna que no existe.
         [$exitCode] = Commands::run(
             'migrate:rollback --database='.$name.' --step='.$steps
-            .' --path=database/migrations/2026_09_22_110000_report_exports.php'
+            .implode('', array_map(
+                static fn (string $migration): string => ' --path=database/migrations/'.$migration.'.php',
+                reportExportsTableMigrations(),
+            ))
         );
 
         expect($exitCode)->toBe(0)
@@ -283,7 +295,12 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
     expect($migrator->getSchemaBuilder()->hasTable('report_exports'))->toBeTrue()
         // Y vuelve **vacia**: es una migracion de creacion pura, no arrastra
         // datos de nadie.
-        ->and($migrator->table('report_exports')->count())->toBe(0);
+        ->and($migrator->table('report_exports')->count())->toBe(0)
+        // Y vuelve **igual**: mismas columnas, mismas restricciones validadas y
+        // mismos indices. Si una migracion futura altera la tabla sin que
+        // `reportExportsTableMigrations()` la encuentre, falla AQUI, con el
+        // nombre de lo que falta, y no en la prueba siguiente de la CI.
+        ->and(reportExportsSchemaSnapshot($migrator))->toBe($before);
 })->group('RF-IN-06', 'RNF-D-04');
 
 /**
@@ -375,6 +392,37 @@ it('el trabajo que muere sin poder cerrarse borra su propio fichero a medias', f
         ->and(ReportExports::find($export->uuid)->failureReason?->value)->toBe('unexpected');
 })->group('RF-IN-06');
 
+it('el aviso de fallo no toca una fila que otro proceso sigue generando dentro de su techo', function (): void {
+    /*
+     * Revision de seguridad del bloque 14: si el mismo trabajo se reserva dos
+     * veces, el `failed()` del segundo no puede marcar la fila ni borrar el
+     * fichero que el primero esta escribiendo. Releida con bloqueo, una fila
+     * `running` que no ha agotado su techo se deja; la cerrara quien la escribe,
+     * o la obsolescencia si muere.
+     */
+    $clock = app(Clock::class);
+    $export = ReportExports::pendingFor(cuentaQuePide())->start($clock->now()->modify('-5 minutes'));
+    app(ReportExportRepository::class)->save($export);
+
+    $directorio = Config::string('reporting.export.path').\DIRECTORY_SEPARATOR.$export->uuid;
+    mkdir($directorio, 0700, true);
+    file_put_contents($directorio.\DIRECTORY_SEPARATOR.'kronoqr-horas-2026-03-01_2026-03-31.csv', "escribiendose\n");
+
+    (new GenerateReportExportJob($export->uuid))->failed(new RuntimeException('segunda reserva'));
+
+    expect(is_dir($directorio))->toBeTrue()
+        ->and(ReportExports::find($export->uuid)->status->value)->toBe('running');
+
+    // Pasado su techo, si: quien la escribia murio por su propio `$timeout`.
+    $vencida = ReportExports::pendingFor(ManagementUsers::withRole(UserRole::RRHH)->id)
+        ->start($clock->now()->modify('-'.GenerateReportExportJob::TIMEOUT_SECONDS.' seconds'));
+    app(ReportExportRepository::class)->save($vencida);
+
+    (new GenerateReportExportJob($vencida->uuid))->failed(new RuntimeException('techo agotado'));
+
+    expect(ReportExports::find($vencida->uuid)->status->value)->toBe('failed');
+})->group('RF-IN-06');
+
 it('una generacion fallida mueve la metrica de trabajos fallidos', function (): void {
     /*
      * `queue_jobs_failed_total{job}` solo se mueve sola cuando el trabajo **deja
@@ -460,3 +508,52 @@ it('la purga deja la fila sin alcance y sin los filtros por persona', function (
         ->and($purgada->parameters->to)->toBe('2026-03-31')
         ->and($purgada->sha256)->toHaveLength(64);
 })->group('RL-11', 'RF-IN-06');
+
+/**
+ * Las migraciones que crean o alteran `report_exports`, de la mas antigua a la
+ * mas reciente, sin la extension.
+ *
+ * Por el CONTENIDO del fichero y no por una lista escrita aqui: la siguiente
+ * que toque la tabla entra sola en la vuelta atras.
+ *
+ * @return list<string>
+ */
+function reportExportsTableMigrations(): array
+{
+    $found = [];
+
+    foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
+        $source = (string) file_get_contents($file);
+
+        if (preg_match("/create\('report_exports'|table\('report_exports'|ALTER TABLE report_exports/", $source) === 1) {
+            $found[] = basename($file, '.php');
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Columnas, restricciones (con si estan validadas) e indices de la tabla: lo
+ * que una vuelta atras incompleta dejaria distinto.
+ *
+ * @return array{columns: list<string>, constraints: list<string>, indexes: list<string>}
+ */
+function reportExportsSchemaSnapshot(ConnectionInterface $connection): array
+{
+    $items = static fn (string $sql): array => array_values(array_map(
+        static fn (object $row): string => \is_string($row->item ?? null) ? $row->item : '',
+        $connection->select($sql),
+    ));
+
+    return [
+        'columns' => $items("SELECT column_name || ':' || data_type AS item FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'report_exports' ORDER BY column_name"),
+        'constraints' => $items("SELECT conname || ':' || convalidated::text AS item FROM pg_constraint
+            WHERE conrelid = 'report_exports'::regclass ORDER BY conname"),
+        'indexes' => $items("SELECT indexname::text AS item FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'report_exports' ORDER BY indexname"),
+    ];
+}

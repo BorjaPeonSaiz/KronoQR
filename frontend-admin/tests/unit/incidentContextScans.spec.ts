@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { describeIncidentContext } from '@/features/incidents/incidentContext'
 import type { Translate } from '@/features/incidents/incidentContext'
 import { createAppI18n } from '@/shared/i18n'
+import { testMessages } from './support/i18n'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
 
-const i18n = createAppI18n('es')
+const i18n = createAppI18n('es', testMessages)
 const t: Translate = (key, params) => String(i18n.global.t(key, params ?? {}))
 const ZONE = 'Europe/Madrid'
 const LOCALE = 'es'

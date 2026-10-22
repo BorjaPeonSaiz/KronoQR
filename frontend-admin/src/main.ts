@@ -19,6 +19,7 @@ import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInt
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, resolveAppLocale } from './shared/i18n'
+import { createLocaleController, renderBootFailure } from './shared/i18n/localeController'
 
 const app = createApp(App)
 
@@ -57,7 +58,25 @@ function currentLocale() {
     browser: navigator.languages,
   })
 }
-const i18n = createAppI18n(currentLocale())
+const initialLocale = currentLocale()
+const i18n = createAppI18n(initialLocale)
+
+// El idioma del panel es el de la persona que entra, no el del navegador de la
+// tablet en la que se ha dejado la sesion abierta. Se registra ANTES de esperar al
+// catalogo de arranque: la marca de la instalacion puede llegar mientras se
+// descarga, y un cambio de idioma en ese hueco no puede perderse.
+const locales = createLocaleController(i18n, currentLocale)
+
+watch(
+  () => [branding.current.locales, session.user?.locale] as const,
+  () => {
+    void locales.applyLocale(currentLocale())
+  },
+)
+
+// Sin los textos no hay interfaz: se espera al idioma de arranque antes de montar
+// (con un reintento y el catalogo de reserva; ver `localeController.ts`).
+const startupOutcome = await locales.startup(initialLocale)
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
@@ -97,15 +116,6 @@ setLocaleProvider(() => i18n.global.locale.value)
 // El documento declara el idioma que se esta mostrando (WCAG 3.1.1, PA7-001).
 syncDocumentLang(() => i18n.global.locale.value)
 
-// El idioma del panel es el de la persona que entra, no el del navegador de la
-// tablet en la que se ha dejado la sesion abierta.
-watch(
-  () => [branding.current.locales, session.user?.locale] as const,
-  () => {
-    i18n.global.locale.value = currentLocale()
-  },
-)
-
 // `403 password-change-required` (RF-ID-10): la cuenta entra con una contrasena
 // temporal y todo responde ese 403 hasta que la cambie. Se marca la sesion y se
 // lleva a cambiarla; la guarda del router impide salir de esa pantalla.
@@ -129,4 +139,8 @@ app.use(router)
 app.use(i18n)
 app.use(VueQueryPlugin, { queryClient: createAppQueryClient() })
 
-app.mount('#app')
+if (startupOutcome === 'failed') {
+  renderBootFailure(document.getElementById('app'))
+} else {
+  app.mount('#app')
+}
