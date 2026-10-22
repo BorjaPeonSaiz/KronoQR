@@ -18,13 +18,18 @@
 #                      postgres), tal como las tiene un cliente. Es lo unico que ve un CVE
 #                      aparecido DESPUES de publicar: las imagenes son inmutables, asi que
 #                      la correccion es una version de parche, no reconstruir la etiqueta.
+#   4. terceros        las imagenes de TERCEROS de compose.prod.yaml (Redis y las de observabilidad):
+#                      SOLO INFORMA (no hay version nuestra que parchear; la accion es subir su
+#                      version o su digest, runbook de triaje §1).
 #
 # QUE NO HACE. No abre incidencias, no escribe en el repositorio, no publica nada y no usa
 # secretos: el fallo del workflow (y el correo que GitHub envia a quien mantiene el cron) es
 # la alerta. Los tres jobs son independientes: que falle uno no oculta el resultado de los
 # otros.
 #
-# PERMISOS: `contents: read` y `packages: read` (para bajar las imagenes publicadas).
+# PERMISOS: solo `contents: read`. Las imagenes publicadas se bajan SIN iniciar sesion: los
+# paquetes de GHCR son publicos (09-10-2026). Si un registro propio fuese privado, el `docker pull`
+# fallaria con un 401/403 claro y habria que reponer el login de solo lectura.
 # NADA DE `${{ }}` dentro de `run:`: todo valor de contexto pasa por `env:`.
 
 name: Auditoria semanal
@@ -89,12 +94,9 @@ jobs:
     name: "Trivy sobre las imagenes publicadas de la ultima version"
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: read
     steps:
-      # Solo el Makefile, el .trivyignore y el nombre de la herramienta: nada de la version
-      # publicada se reconstruye aqui. `main` basta como fuente de las ordenes.
+      # Solo el Makefile, el .trivyignore y los scripts: nada de la version publicada se
+      # reconstruye aqui. `main` basta como fuente de las ordenes.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
@@ -108,18 +110,24 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          # Misma resolucion del registro que release.yml (`resolver`).
-          propietario="$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')"
-          registro="${IMAGE_REGISTRY_VAR:-ghcr.io/${propietario}/kronoqr}"
-          registro="${registro%/}"
-          # La ultima release que NO es preversion. Sin ninguna, no hay nada publicado que
-          # auditar y se dice, en vez de pasar en verde sin haber mirado.
-          etiqueta="$(gh release list --repo "${GITHUB_REPOSITORY}" --exclude-pre-releases \
-            --limit 1 --json tagName --jq '.[0].tagName // empty')"
-          if [ -z "${etiqueta}" ]; then
-            echo "::warning title=Sin version publicada::No hay ninguna release que no sea preversion: no hay imagenes publicadas que auditar."
-            echo "hay=false" >>"${GITHUB_OUTPUT}"
-            exit 0
+          registro="$(bash .github/scripts/resolve-registry.sh)"
+          # `releases/latest` ya excluye borradores y preversiones. Sin ninguna release (404) no
+          # hay imagenes publicadas que auditar y se dice; cualquier otro error PARA el job.
+          estado=0
+          respuesta="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>&1)" || estado=$?
+          if [ "${estado}" -ne 0 ]; then
+            if grep -q "Not Found" <<<"${respuesta}"; then
+              echo "::warning title=Sin version publicada::El repositorio no tiene ninguna release: no hay imagenes publicadas que auditar."
+              echo "hay=false" >>"${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "::error title=No se pudo averiguar la ultima version::${respuesta}"
+            exit 1
+          fi
+          etiqueta="${respuesta}"
+          if [[ ! "${etiqueta}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Etiqueta inesperada::La ultima release se llama «${etiqueta}» y no tiene forma vX.Y.Z. No se audita nada a ciegas."
+            exit 1
           fi
           {
             echo "hay=true"
@@ -127,14 +135,6 @@ jobs:
             echo "version=${etiqueta#v}"
           } >>"${GITHUB_OUTPUT}"
           echo "Auditando ${registro}/{php,nginx,postgres}:${etiqueta#v}"
-
-      - name: Autenticarse en GHCR (solo lectura)
-        if: steps.version.outputs.hay == 'true'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
 
       - name: Bajar las tres imagenes publicadas
         if: steps.version.outputs.hay == 'true'
@@ -155,3 +155,41 @@ jobs:
         run: |
           set -euo pipefail
           make trivy-image TRIVY_IMAGES="${REGISTRO}/php:${VERSION} ${REGISTRO}/nginx:${VERSION} ${REGISTRO}/postgres:${VERSION}"
+
+  terceros:
+    name: "Trivy sobre las imagenes de terceros de compose.prod.yaml (informa)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Listar las imagenes de terceros y bajarlas
+        id: lista
+        run: |
+          set -euo pipefail
+          # Valores de relleno SOLO para que Compose interpole: no se arranca nada. Las tres
+          # imagenes del producto cuelgan de `propios.invalid` y se descartan; quedan Redis y
+          # las de observabilidad (ADR-053).
+          export IMAGE_REGISTRY=propios.invalid IMAGE_TAG=0
+          export GRAFANA_ADMIN_PASSWORD=relleno DB_PASSWORD=relleno DB_MIGRATION_PASSWORD=relleno
+          imagenes="$(docker compose -f infra/compose.prod.yaml --profile observability config --images | sort -u)"
+          terceras="$(grep -v '^propios[.]invalid/' <<<"${imagenes}" || true)"
+          if [ -z "${terceras}" ]; then
+            echo "::error title=Sin imagenes de terceros::compose.prod.yaml no lista ninguna imagen de terceros; el filtro o el fichero han cambiado."
+            exit 1
+          fi
+          while IFS= read -r imagen; do
+            docker pull --quiet "${imagen}"
+          done <<<"${terceras}"
+          echo "imagenes=$(tr '[:space:]' ' ' <<<"${terceras}")" >>"${GITHUB_OUTPUT}"
+
+      - name: Trivy sobre las de terceros (solo informa)
+        env:
+          IMAGENES: ${{ steps.lista.outputs.imagenes }}
+        run: |
+          set -euo pipefail
+          # TRIVY_EXIT_CODE=0: el hallazgo se ve en el registro del job, no pone el workflow en rojo.
+          make trivy-image TRIVY_EXIT_CODE=0 TRIVY_IMAGES="${IMAGENES}"
