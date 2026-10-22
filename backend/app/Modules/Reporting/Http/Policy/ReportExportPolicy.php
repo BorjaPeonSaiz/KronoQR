@@ -90,9 +90,11 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *   ninguna otra.
  *
  * **El fabricante sigue sin entrar en ninguna**, tampoco en la legal en
- * diferido: la sincrona sigue a su alcance si una concesion lo justifica, y
- * esta familia de rutas deja ficheros con la plantilla en el disco del
- * cliente durante dias.
+ * diferido (decision del propietario del 22-10-2026, ADR-020): esta familia de
+ * rutas deja ficheros con la plantilla en el disco del cliente durante dias.
+ * Ningun alcance de soporte concede `reports:legal` ni `reports:*`
+ * (`SupportScope`), asi que el middleware ya lo para; este `false` es la segunda
+ * mitad, por si un alcance futuro los concediera.
  *
  * **El ambito del token se comprueba ademas del rol** (doc 02 §7.3): las
  * rutas aceptan `reports:legal` o `reports:*`, y `RequestReportExportRequest`

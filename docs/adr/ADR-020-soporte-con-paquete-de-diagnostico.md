@@ -110,6 +110,6 @@ Y el escenario en el que ese acceso se usa mal no es el del atacante externo, si
 ## Nota del 22-10-2026 (2.3.0, bloque 14): la exportación legal en diferido no es para el soporte
 
 Decisión del propietario: una concesión de soporte **no** puede pedir exportaciones en diferido
-(`POST /reports/exports`, ninguna clase, tampoco `legal`). Si una concesión justifica ver el registro, usa
-la descarga síncrona, que no deja ficheros con la plantilla en el disco del cliente. Ver la enmienda
+(`POST /reports/exports`, ninguna clase, tampoco `legal`). Tampoco llega a la descarga síncrona: ningún
+alcance de soporte concede `reports:legal` ni `reports:*` (`SupportScope`). Ver la enmienda
 2.3.0 de ADR-041; lo aplica `ReportExportPolicy`.
