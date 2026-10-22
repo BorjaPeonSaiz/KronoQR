@@ -884,3 +884,17 @@ test(
     expect(box?.height ?? 99).toBeLessThanOrEqual(24)
   },
 )
+
+test(
+  'el informe con el aviso de PDF ocupado tampoco (V21-1-UX-2)',
+  { tag: ['@RF-IN-04'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { exportOutcome: 'pdfBusy' })
+    await logIn(page)
+    await generatePeriodReport(page)
+    await page.getByTestId('export-pdf').click()
+    await expect(page.getByTestId('pdf-busy')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
