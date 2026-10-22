@@ -18,6 +18,11 @@
 // sondeo en cuanto se desmonta la pantalla -no hace falta un `onUnmounted`
 // propio, es lo que ya hace TanStack Query-.
 //
+// **EL AVISO DE «LISTA PARA DESCARGAR» NO ES DE ESTE PANEL.** Lo da el marco de
+// la aplicacion (`useReportReadyNotices`, en `AppShellView`) en cualquier
+// pantalla y solo de lo que termina; aqui anunciarlo al montar repetia hasta 20
+// avisos de exportaciones de otros dias (R3-PA-08).
+//
 // **EL ENLACE DE DESCARGA NUNCA SE GUARDA.** Cada clic en «Descargar» pide el
 // estado de nuevo (`showReportExport`), que devuelve un enlace de un solo uso
 // recien emitido, y con ese se descarga en el acto (decision 3 de la ficha,
@@ -30,7 +35,7 @@ import { formatInstantWithZone, FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datet
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { formatBytes } from '@kronoqr/web-kit/formatBytes'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getSite } from '@/shared/api/organisation.api'
 import type { ReportExport } from '@/shared/api/types'
@@ -40,9 +45,7 @@ import {
   REPORT_EXPORTS_QUERY_KEY,
   showReportExport,
 } from './reportExports.api'
-
-/** Mismo intervalo que fija la decision 8 de la ficha: cada 10 s mientras haya algo pendiente. */
-const POLL_INTERVAL_MS = 10_000
+import { REPORT_EXPORTS_POLL_INTERVAL_MS } from './useReportReadyNotices'
 
 const QUERY_KEY = REPORT_EXPORTS_QUERY_KEY
 
@@ -68,7 +71,7 @@ const {
     const rows = query.state.data?.data ?? []
     const active = rows.some((row) => row.status === 'pending' || row.status === 'running')
 
-    return active ? POLL_INTERVAL_MS : false
+    return active ? REPORT_EXPORTS_POLL_INTERVAL_MS : false
   },
 })
 
@@ -91,22 +94,6 @@ function instantLabel(value: string | null): string {
     ? t('common.empty')
     : formatInstantWithZone(value, timezone.value, locale.value)
 }
-
-/** «Lista para descargar», anunciada por el lector de pantalla (regin viva global de `AppShellView`) en cuanto una fila TERMINA, no en cada sondeo. */
-const announcedReady = new Set<string>()
-
-watch(
-  exportsList,
-  (rows) => {
-    for (const row of rows) {
-      if (row.status === 'completed' && !announcedReady.has(row.uuid)) {
-        announcedReady.add(row.uuid)
-        announce(t('reportExports.list.readyAnnounce'))
-      }
-    }
-  },
-  { immediate: true },
-)
 
 /**
  * Los codigos ESTABLES de `failure_reason` que el catalogo declara (mismo

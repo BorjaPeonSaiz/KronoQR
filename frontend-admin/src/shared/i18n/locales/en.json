@@ -34,7 +34,13 @@
       "empleado": "Employee",
       "kiosk": "Kiosk"
     },
-    "changePassword": "Change my password"
+    "changePassword": "Change my password",
+    "chunkLoadFailed": {
+      "title": "That screen could not be opened.",
+      "advice": "The application has probably been updated or the connection was lost. Reload the page; if this notice comes back, check the network and tell whoever administers the installation.",
+      "reload": "Reload the page",
+      "dismiss": "Close this notice"
+    }
   },
   "auth": {
     "heading": "Sign in to the management console",
@@ -1143,7 +1149,6 @@
       "downloading": "Downloading…",
       "downloaded": "Download of “{filename}” ready.",
       "criteriaToggle": "See the criteria",
-      "readyAnnounce": "An export is ready to download.",
       "failedReason": "It could not be generated: {reason}",
       "purgedNotice": "The file has already been purged for age. The row stays as a record, but it can no longer be downloaded.",
       "failureReasons": {
@@ -1157,6 +1162,12 @@
         "title": "No background export yet",
         "description": "When a report does not fit in an immediate response, or you request the payroll export in the background, it will show up here."
       }
+    },
+    "ready": {
+      "announce": "One report is ready to download in Reports. | {count} reports are ready to download in Reports.",
+      "message": "You have one report ready to download. | You have {count} reports ready to download.",
+      "open": "Go to Reports",
+      "dismiss": "Dismiss"
     }
   },
   "payrollExport": {
@@ -2475,7 +2486,8 @@
       "whatToDoHeading": "What to do"
     },
     "whatToDoByCode": {
-      "kioskPinSealFailed": "The tablet cannot encrypt the PIN to send it, so it cannot validate PIN clockings. It is almost always a tablet running an old version of the app (it lacks the security permission for encryption) or a browser where encryption does not start. Check that tablet's version under Kiosks: if it shows \"App out of date\", follow that tablet's \"What to do\". If the version is current, contact support with the trace identifier (trace_id). QR clockings keep working."
+      "kioskPinSealFailed": "The tablet cannot encrypt the PIN to send it, so it cannot validate PIN clockings. It is almost always a tablet running an old version of the app (it lacks the security permission for encryption) or a browser where encryption does not start. Check that tablet's version under Kiosks: if it shows \"App out of date\", follow that tablet's \"What to do\". If the version is current, contact support with the trace identifier (trace_id). QR clockings keep working.",
+      "kioskUpdateUnreachable": "The tablet has spent about 30 minutes unable to find the app version the server asks for, so it cannot complete the urgent update. Clocking keeps working and is saved in the queue. Check in Kiosks that the tablet has a network connection and its queue is at 0; if so, the server is asking for a version it cannot serve: generate the diagnostic package (Support) and open a case with support. Do not unregister its service worker for this: it does not fix it. Guide: operation.md §11.1."
     },
     "whatToDo": {
       "api": {

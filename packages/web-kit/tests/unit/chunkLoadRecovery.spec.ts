@@ -82,6 +82,55 @@ describe('installChunkLoadRecovery', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
+  it('avisa (onGiveUp) cuando el trozo sigue sin cargar tras la recarga, no antes (V21-3-UX-1)', async () => {
+    const router = makeRouter({ value: true })
+    const onGiveUp = vi.fn()
+
+    installChunkLoadRecovery(router, { mark: memoryMark(), reload: vi.fn(), onGiveUp })
+    await router.push('/')
+
+    await router.push('/lazy').catch(() => undefined)
+    expect(onGiveUp).not.toHaveBeenCalled()
+
+    await router.push('/lazy').catch(() => undefined)
+    expect(onGiveUp).toHaveBeenCalledTimes(1)
+    expect(isChunkLoadError(onGiveUp.mock.calls[0]?.[0])).toBe(true)
+  })
+
+  it('avisa (onGiveUp) tambien si la marca no se puede garantizar y ante un fallo de precarga repetido', async () => {
+    const router = makeRouter({ value: true })
+    const onGiveUp = vi.fn()
+
+    installChunkLoadRecovery(router, {
+      mark: { claim: () => null, clear: () => {} },
+      reload: vi.fn(),
+      onGiveUp,
+    })
+    await router.push('/')
+    await router.push('/lazy').catch(() => undefined)
+    expect(onGiveUp).toHaveBeenCalledTimes(1)
+
+    window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }))
+    expect(onGiveUp).toHaveBeenCalledTimes(2)
+  })
+
+  it('no avisa ante un error que no es de carga de trozo', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: Stub },
+        { path: '/boom', component: () => Promise.reject(new Error('fallo de la vista')) },
+      ],
+    })
+    const onGiveUp = vi.fn()
+
+    installChunkLoadRecovery(router, { mark: memoryMark(), reload: vi.fn(), onGiveUp })
+    await router.push('/')
+    await router.push('/boom').catch(() => undefined)
+
+    expect(onGiveUp).not.toHaveBeenCalled()
+  })
+
   it('retira la marca tras una navegacion correcta', async () => {
     const router = makeRouter({ value: false })
     const mark = memoryMark()

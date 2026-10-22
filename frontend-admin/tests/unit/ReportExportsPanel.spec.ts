@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReportExportsPanel from '@/features/reports/ReportExportsPanel.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { ReportExport } from '@/shared/api/types'
-import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { SITE } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubRoutes } from './support/harness'
 
@@ -119,6 +119,23 @@ describe('ReportExportsPanel', () => {
       es.reportExports.status.running,
     )
     expect(wrapper.find(`[data-test="download-${UUID}-2"]`).exists()).toBe(false)
+  })
+
+  it('al montar no anuncia las exportaciones que ya estaban completadas (R3-PA-08)', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/reports/exports': () =>
+        jsonResponse({
+          data: Array.from({ length: 20 }, (_, index) =>
+            reportExport({ uuid: `${UUID}-${index}`, status: 'completed' }),
+          ),
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(20)
+    expect(announcement.value).toBe('')
   })
 
   it('los criterios se enseñan tal cual al desplegarlos', async () => {

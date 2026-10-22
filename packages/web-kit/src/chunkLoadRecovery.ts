@@ -61,6 +61,13 @@ export interface ChunkReloadMark {
 export interface ChunkRecoveryOptions {
   readonly mark: ChunkReloadMark
   readonly reload: (target: string) => void
+  /**
+   * Se llama cuando un trozo no carga y NO se puede recargar -ya se recargo una
+   * vez, o no se puede garantizar la marca-: sin esto el clic no hace nada y la
+   * persona no sabe por que. La aplicacion decide como contarlo (un aviso con
+   * «Recargar»); este modulo no pinta nada.
+   */
+  readonly onGiveUp?: (error: unknown) => void
   readonly window?: Window
 }
 
@@ -84,8 +91,8 @@ export function installChunkLoadRecovery(
   }
 
   router.onError((error, to) => {
-    if (isChunkLoadError(error)) {
-      recoverOnce(to.fullPath)
+    if (isChunkLoadError(error) && !recoverOnce(to.fullPath)) {
+      options.onGiveUp?.(error)
     }
   })
 
@@ -93,6 +100,8 @@ export function installChunkLoadRecovery(
   win.addEventListener('vite:preloadError', (event) => {
     if (recoverOnce(router.currentRoute.value.fullPath)) {
       event.preventDefault()
+    } else {
+      options.onGiveUp?.((event as Event & { payload?: unknown }).payload)
     }
   })
 

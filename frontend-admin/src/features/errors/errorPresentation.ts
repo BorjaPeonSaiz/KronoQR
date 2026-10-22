@@ -40,6 +40,9 @@ export function whatToDoKey(source: ErrorSource, level: ErrorLevel, code?: strin
  */
 const WHAT_TO_DO_BY_CODE: Readonly<Record<string, string>> = {
   'kiosk.pin.seal_failed': 'errorEvents.whatToDoByCode.kioskPinSealFailed',
+  // La tablet no encuentra la version que el servidor le pide (operacion.md §11.1):
+  // el generico de «error» diria que no suele requerir accion, y aqui si hay que actuar.
+  'kiosk.update.unreachable': 'errorEvents.whatToDoByCode.kioskUpdateUnreachable',
 }
 
 /**

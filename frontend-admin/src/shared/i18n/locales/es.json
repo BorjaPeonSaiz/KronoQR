@@ -34,7 +34,13 @@
       "empleado": "Empleado",
       "kiosk": "Quiosco"
     },
-    "changePassword": "Cambiar mi contraseña"
+    "changePassword": "Cambiar mi contraseña",
+    "chunkLoadFailed": {
+      "title": "No se ha podido abrir esa pantalla.",
+      "advice": "Es probable que la aplicación se haya actualizado o que se haya perdido la conexión. Recarga la página; si el aviso vuelve, comprueba la red y avisa a quien administra la instalación.",
+      "reload": "Recargar la página",
+      "dismiss": "Cerrar el aviso"
+    }
   },
   "auth": {
     "heading": "Acceso al panel de gestión",
@@ -1143,7 +1149,6 @@
       "downloading": "Descargando…",
       "downloaded": "Descarga de «{filename}» lista.",
       "criteriaToggle": "Ver los criterios",
-      "readyAnnounce": "Una exportación está lista para descargar.",
       "failedReason": "No se pudo generar: {reason}",
       "purgedNotice": "El fichero ya se purgó por antigüedad. La fila queda como constancia, pero no se puede volver a descargar.",
       "failureReasons": {
@@ -1157,6 +1162,12 @@
         "title": "Todavía no hay ninguna exportación en segundo plano",
         "description": "Cuando un informe no quepa en una respuesta al momento, o pidas la salida a nómina en segundo plano, aparecerá aquí."
       }
+    },
+    "ready": {
+      "announce": "Un informe listo para descargar en Informes. | {count} informes listos para descargar en Informes.",
+      "message": "Tienes un informe listo para descargar. | Tienes {count} informes listos para descargar.",
+      "open": "Ir a Informes",
+      "dismiss": "Descartar"
     }
   },
   "payrollExport": {
@@ -2475,7 +2486,8 @@
       "whatToDoHeading": "Qué hacer"
     },
     "whatToDoByCode": {
-      "kioskPinSealFailed": "La tablet no puede cifrar el PIN para enviarlo, así que no puede validar fichajes con PIN. Casi siempre es una tablet con una versión antigua de la aplicación (le falta el permiso de seguridad para el cifrado) o un navegador donde el cifrado no arranca. Mira la versión de esa tablet en Quioscos: si aparece «Aplicación desactualizada», sigue el «Qué hacer» de esa tablet. Si la versión es la actual, contacta con soporte con el identificador de traza (trace_id). Los fichajes con QR siguen funcionando."
+      "kioskPinSealFailed": "La tablet no puede cifrar el PIN para enviarlo, así que no puede validar fichajes con PIN. Casi siempre es una tablet con una versión antigua de la aplicación (le falta el permiso de seguridad para el cifrado) o un navegador donde el cifrado no arranca. Mira la versión de esa tablet en Quioscos: si aparece «Aplicación desactualizada», sigue el «Qué hacer» de esa tablet. Si la versión es la actual, contacta con soporte con el identificador de traza (trace_id). Los fichajes con QR siguen funcionando.",
+      "kioskUpdateUnreachable": "La tablet lleva unos 30 minutos sin encontrar la versión de la aplicación que le pide el servidor, así que no puede completar la actualización urgente. Los fichajes siguen funcionando y se guardan en la cola. Mira en Quioscos que la tablet tiene red y la cola a 0; si es así, el servidor está pidiendo una versión que no puede servirle: genera el paquete de diagnóstico (Soporte) y abre un caso con soporte. No desregistres su service worker por esto: no lo arregla. Guía: operacion.md §11.1."
     },
     "whatToDo": {
       "api": {
