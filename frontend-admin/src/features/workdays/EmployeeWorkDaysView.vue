@@ -53,7 +53,7 @@ import WorkDayCard from './WorkDayCard.vue'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import { useEmployeeWorkDays, WORKDAYS_QUERY_KEY } from './useEmployeeWorkDays'
 import type { WorkDateRange } from './workdays.api'
-import { UNBOUNDED_RANGE } from './workdays.api'
+import { UNBOUNDED_RANGE, WORKDAYS_PER_PAGE } from './workdays.api'
 
 const props = defineProps<{ uuid: string }>()
 
@@ -159,6 +159,17 @@ const rangeErrors = computed<string[]>(() => {
 })
 
 const page = ref(1)
+
+// Otra persona empieza en la primera pagina. `flush: 'sync'`: en el mismo instante en
+// que cambia el uuid, antes de que la consulta recalcule su clave, o se pediria la
+// pagina N de la persona nueva (y quedaria en la cache) sin que nadie la viera.
+watch(
+  () => props.uuid,
+  () => {
+    page.value = 1
+  },
+  { flush: 'sync' },
+)
 
 const { data, error, isPending, isFetching } = useEmployeeWorkDays(() => props.uuid, applied, page)
 
@@ -340,7 +351,7 @@ watch(data, (value) => {
       <PaginationBar
         v-if="data !== undefined && (data.meta.total_pages ?? 1) > 1"
         :page="data.meta.page ?? 1"
-        :per-page="data.meta.per_page ?? 31"
+        :per-page="data.meta.per_page ?? WORKDAYS_PER_PAGE"
         :total="data.meta.total"
         :total-pages="data.meta.total_pages ?? 1"
         :label="t('workdays.pagination.label')"

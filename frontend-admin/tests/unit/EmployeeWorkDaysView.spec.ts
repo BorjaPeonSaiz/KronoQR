@@ -153,6 +153,31 @@ describe('EmployeeWorkDaysView', () => {
     expect(requestedUrls.some((url) => url.includes('page=2'))).toBe(true)
   })
 
+  it('al cambiar de persona vuelve a la primera pagina, sin pedir la pagina N de la nueva', async () => {
+    const OTHER = '0199f0c2-9999-7c3e-9b21-4d5e6f7a8b99'
+    const wrapper = await mountWorkDays({
+      workdays: employeeWorkDays([workDay()], {
+        meta: { total: 45, page: 1, per_page: 31, total_pages: 2 },
+      }),
+    })
+
+    await wrapper
+      .find('nav[aria-label="' + es.workdays.pagination.label + '"]')
+      .findAll('button')[1]
+      ?.trigger('click')
+    await settle()
+    expect(requestedUrls.at(-1)).toContain('page=2')
+
+    requestedUrls = []
+    await wrapper.setProps({ uuid: OTHER })
+    await settle()
+
+    const forOther = requestedUrls.filter((url) => url.includes(`/employees/${OTHER}/workdays`))
+
+    expect(forOther.length).toBeGreaterThan(0)
+    expect(forOther.every((url) => url.includes('page=1'))).toBe(true)
+  })
+
   it('dice que periodo se esta viendo y en que zona horaria', async () => {
     const wrapper = await mountWorkDays()
 

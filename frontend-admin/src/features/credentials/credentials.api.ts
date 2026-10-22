@@ -24,7 +24,7 @@ export interface CredentialBoardQuery {
   pendingOnly?: boolean
   /**
    * Acota a una sola persona. La usa la ficha de empleado (RF-PA-03): pide
-   * su fila y nada mas, no el tablero entero filtrado en cliente. Cada
+   * su fila y nada mas, no el tablero entero. Cada
    * lectura del tablero audita como divulgado TODO lo que devuelve
    * (ADR-037), y aqui solo hace falta una fila.
    */

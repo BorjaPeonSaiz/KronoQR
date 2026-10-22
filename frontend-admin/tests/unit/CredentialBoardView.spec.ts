@@ -405,25 +405,37 @@ describe('CredentialBoardView', () => {
     expect(wrapper.findAll('tbody tr')).toHaveLength(5)
   })
 
-  it('un filtro nuevo vuelve a la primera pagina', async () => {
-    const spy = stubFetch(
-      routes([boardRow()], (url) =>
-        url.includes('/credentials/status')
-          ? jsonResponse({
-              ...board([boardRow()]),
-              meta: { page: 2, per_page: 30, total: 35, total_pages: 2 },
-            })
-          : null,
-      ),
-    )
+  it('un filtro nuevo vuelve a la primera pagina sin llegar a pedir la pagina N del filtro nuevo', async () => {
+    const spy = stubFetch((url) => {
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
+      }
+
+      if (url.startsWith('/api/v1/departments')) {
+        return jsonResponse({ data: [] })
+      }
+
+      const page = Number(new NativeURL(url, 'http://localhost').searchParams.get('page') ?? '1')
+
+      return jsonResponse({
+        ...board([boardRow()]),
+        meta: { page, per_page: 30, total: 90, total_pages: 3 },
+      })
+    })
     const wrapper = await mountView(CredentialBoardView)
 
     await settle()
-    await wrapper.findAll('nav button')[0]?.trigger('click')
+    await wrapper.findAll('nav button')[1]?.trigger('click')
+    await settle()
+    expect(boardUrls(spy).at(-1)?.searchParams.get('page')).toBe('2')
+
     await wrapper.find('#credentials-status-filter').setValue('revoked')
     await settle()
 
-    expect(boardUrls(spy).at(-1)?.searchParams.get('page')).toBe('1')
+    const revoked = boardUrls(spy).filter((url) => url.searchParams.get('status') === 'revoked')
+
+    // Ni una sola peticion del filtro nuevo con la pagina vieja.
+    expect(revoked.map((url) => url.searchParams.get('page'))).toEqual(['1'])
   })
 
   it('«pendiente de tarjeta» es una opcion mas del select de estado, sin control deshabilitado que nadie con teclado o lector de pantalla pueda alcanzar (RF-QR-08)', async () => {

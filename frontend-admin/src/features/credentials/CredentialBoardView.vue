@@ -23,6 +23,7 @@ import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datet
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onUnmounted, ref, watch } from 'vue'
+import type { Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
@@ -58,8 +59,8 @@ const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
  * Valor del `<select>` de estado que significa «solo quien todavia no tiene
  * la tarjeta en la mano». No es un `CredentialLifecycleStatus` de verdad: es
  * un filtro que va al SERVIDOR (acota tambien el lote de impresion y el
- * resumen), a diferencia de un estado concreto, que se filtra en
- * cliente sobre el lote ya cargado. Antes era un checkbox aparte, mutuamente
+ * resumen, parametro `pending`), distinto de un estado concreto (parametro
+ * `status`), que solo acota las filas. Antes era un checkbox aparte, mutuamente
  * excluyente con el select mediante `disabled` — inaccesible por teclado,
  * lector de pantalla o tactil (hallazgo de revision). Ahora es una opcion mas
  * del mismo control, sin exclusion que anunciar.
@@ -77,10 +78,28 @@ const queryClient = useQueryClient()
 // tambien acota el lote de impresion. No hay filtro por centro: hay exactamente uno
 // por instalacion (ADR-040).
 const searchInput = ref('')
-const searchFilter = ref('')
-const departmentFilter = ref('')
-const statusFilter = ref<StatusFilterValue>('')
 const page = ref(1)
+
+/**
+ * Un filtro cuyo cambio vuelve a la primera pagina EN EL MISMO instante: un
+ * `watch` posterior dejaba una pasada en la que se pedia (y se asentaba en la cache)
+ * la pagina N del filtro nuevo, que nadie iba a ver.
+ */
+function pagedFilter<T>(initial: T) {
+  const state = ref(initial) as Ref<T>
+
+  return computed<T>({
+    get: () => state.value,
+    set: (value) => {
+      state.value = value
+      page.value = 1
+    },
+  })
+}
+
+const searchFilter = pagedFilter('')
+const departmentFilter = pagedFilter('')
+const statusFilter = pagedFilter<StatusFilterValue>('')
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
@@ -113,7 +132,7 @@ const { data: site } = useQuery({ queryKey: ['site'], queryFn: getSite })
 // Guarda el `key_id`, no un booleano: si guardara «filtrado si/no» tendria que
 // leer la clave de la respuesta que el propio filtro provoca, y en el hueco en
 // que esa respuesta no ha llegado el filtro se desactivaria solo.
-const reprintKeyFilter = ref<string | null>(null)
+const reprintKeyFilter = pagedFilter<string | null>(null)
 
 const boardQuery = computed(() => ({
   ...(statusFilter.value === PENDING_ONLY_OPTION ? { pendingOnly: true } : {}),
@@ -144,7 +163,6 @@ const {
 })
 
 const rows = computed(() => board.value?.data ?? [])
-const pageRows = rows
 const summary = computed(() => board.value?.summary ?? null)
 const meta = computed(() => board.value?.meta ?? null)
 
@@ -155,11 +173,6 @@ const hasFilters = computed(
     statusFilter.value !== '' ||
     reprintKeyFilter.value !== null,
 )
-
-// Cualquier cambio de filtro vuelve a la primera pagina.
-watch([searchFilter, departmentFilter, statusFilter, reprintKeyFilter], () => {
-  page.value = 1
-})
 
 // Se vigila el TOTAL del filtro, no las filas: refrescar tras emitir, imprimir,
 // entregar o revocar recarga la pagina y pisaria en la region viva el anuncio de
@@ -590,7 +603,7 @@ const selectClass =
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row of pageRows" :key="row.employee_uuid" class="border-b border-kq-border">
+            <tr v-for="row of rows" :key="row.employee_uuid" class="border-b border-kq-border">
               <th scope="row" class="px-3 py-2 font-medium">
                 {{ personFullName(row.full_name) }}
                 <span class="block font-mono text-sm font-normal text-kq-text-muted">

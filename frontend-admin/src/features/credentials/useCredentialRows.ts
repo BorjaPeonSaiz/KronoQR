@@ -24,7 +24,7 @@ export interface ReprintProgress {
  * —que es el estado normal—.
  *
  * Se deriva del `summary` y **no de las filas**: las filas pueden venir
- * filtradas en cliente, y el avance tiene que medirse contra la plantilla
+ * acotadas por los filtros del servidor, y el avance tiene que medirse contra la plantilla
  * entera. Es puro y vive aqui, fuera del componente, para poder probarlo sin
  * montar nada.
  *
