@@ -62,7 +62,13 @@ final readonly class AdoptionReportExportGeneration implements ReportExportGener
             path: $path,
             rowCount: $written->rowCount,
             criteria: $written->criteria,
-            adoptionPeriod: ['from' => $report->range->isoFrom(), 'to' => $report->range->isoTo()],
+            adoptionPeriod: [
+                'from' => $report->range->isoFrom(),
+                'to' => $report->range->isoTo(),
+                // La huella del CONTENIDO, la del pie del PDF: la misma que deja la
+                // descarga sincrona en `adoption_report.exported`.
+                'content_digest' => $written->contentDigest,
+            ],
         );
     }
 }

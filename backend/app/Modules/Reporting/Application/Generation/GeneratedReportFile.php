@@ -23,7 +23,7 @@ final readonly class GeneratedReportFile
      * @param  array<string, scalar>  $disclosureContext
      * @param  array<string, scalar|null>|null  $legalExport  El `legal_export.generated` de la exportacion
      *                                                        para la Inspeccion.
-     * @param  array{from: string, to: string}|null  $adoptionPeriod  El periodo del cuadro de impacto, para su
+     * @param  array{from: string, to: string, content_digest: string}|null  $adoptionPeriod  El periodo del cuadro de impacto, para su
      *                                                                `adoption_report.exported`.
      */
     public function __construct(

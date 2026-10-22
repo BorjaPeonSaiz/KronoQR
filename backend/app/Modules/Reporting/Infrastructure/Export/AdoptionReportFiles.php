@@ -51,6 +51,7 @@ final readonly class AdoptionReportFiles implements AdoptionReportFileWriter
         return new WrittenAdoptionReport(
             rowCount: $report->rowCount(),
             criteria: AdoptionReportLayout::criteria($report),
+            contentDigest: $digest,
         );
     }
 

@@ -305,13 +305,15 @@ final readonly class GenerateReportExportHandler
         ));
 
         if ($generated->adoptionPeriod !== null) {
-            // El mismo asiento que la descarga sincrona del cuadro, con la
-            // huella y el tamaño del fichero que de verdad se genero.
+            // El mismo asiento que la descarga sincrona del cuadro: la huella del
+            // CONTENIDO —la del pie del PDF, igual en los tres formatos— y el
+            // tamaño del fichero que de verdad se genero. La huella del fichero
+            // ya va en `report_export.generated`.
             $this->events->publish(new AdoptionReportExported(
                 from: $generated->adoptionPeriod['from'],
                 to: $generated->adoptionPeriod['to'],
                 format: $completed->format,
-                sha256: $completed->sha256 ?? '',
+                sha256: $generated->adoptionPeriod['content_digest'],
                 sizeBytes: $completed->sizeBytes ?? 0,
                 exportedByUserId: $completed->requestedByUserId,
                 occurredAt: $occurredAt,

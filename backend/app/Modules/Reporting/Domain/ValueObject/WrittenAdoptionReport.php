@@ -17,5 +17,12 @@ final readonly class WrittenAdoptionReport
     public function __construct(
         public int $rowCount,
         public array $criteria,
+        /**
+         * La huella del **contenido** del cuadro —la del pie del PDF, igual en
+         * los tres formatos—, no la del fichero. Es la que lleva
+         * `adoption_report.exported` en la descarga sincrona, y la que permite
+         * comparar el asiento con el papel (revision de seguridad del bloque 14).
+         */
+        public string $contentDigest,
     ) {}
 }

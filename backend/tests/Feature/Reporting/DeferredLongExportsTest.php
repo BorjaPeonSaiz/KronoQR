@@ -322,17 +322,25 @@ it('genera el cuadro de impacto con su asiento de documento y sin lectura de dat
         ->and($generada->fileName)->toBe('kronoqr-adopcion-2026-03-01_2026-03-31.csv')
         ->and($generada->criteria)->not->toBe([]);
 
+    // La misma descarga, sincrona, para comparar asientos.
+    Api::as(ManagementUsers::tokenFor($rrhh))
+        ->get('/api/v1/reports/adoption/export?format=csv&from=2026-03-01&to=2026-03-31')
+        ->assertOk();
+
     $documento = diferidoLargoAsientos('adoption_report.exported');
 
-    expect($documento)->toHaveCount(1)
+    expect($documento)->toHaveCount(2)
         ->and($documento[0]['actor_id'])->toBe($rrhh->id)
         ->and($documento[0]['payload'])->toMatchArray([
             'from' => '2026-03-01',
             'to' => '2026-03-31',
             'format' => 'csv',
-            'sha256' => $generada->sha256,
             'size_bytes' => $generada->sizeBytes,
         ])
+        // La huella del CONTENIDO, la del pie del PDF, y no la del fichero: la
+        // misma que deja la descarga sincrona del mismo periodo.
+        ->and($documento[0]['payload']['sha256'] ?? null)->toBe($documento[1]['payload']['sha256'] ?? 'falta')
+        ->and($documento[0]['payload']['sha256'] ?? null)->not->toBe($generada->sha256)
         // Un agregado sin personas (regla dura 21): ninguna lectura que contar.
         ->and(diferidoLargoAsientos('personal_data.accessed'))->toBe([]);
 })->group('RF-IN-08', 'RS-05');
