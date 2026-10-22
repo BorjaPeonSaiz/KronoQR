@@ -8,6 +8,7 @@ use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
+use PHPUnit\Framework\Assert;
 
 /*
  * La ficha minimizada por retencion como objeto de dominio (ADR-060, tarea
@@ -118,7 +119,7 @@ it('una ficha minimizada no se modifica ni se reincorpora', function (): void {
 it('una ficha minimizada no admite contratos ni ausencias, con un conflicto traducible', function (): void {
     try {
         fichaMinimizadaDe()->assertAcceptsPersonnelRecords();
-        $this->fail('Una ficha minimizada ha admitido un contrato o una ausencia.');
+        Assert::fail('Una ficha minimizada ha admitido un contrato o una ausencia.');
     } catch (EmployeeRecordMinimised $minimised) {
         expect($minimised)->toBeInstanceOf(WorkforceConflict::class)
             ->and($minimised->translationKey)->toBe('employees.errors.record_minimised')
