@@ -413,7 +413,6 @@ it('restore-drill.sh verifica la cadena de audit_log tras restaurar y deja el fa
         ->toContain('NO SE HA PODIDO VERIFICAR')
         // docker rm con -v, tambien en el aviso de --keep.
         ->toContain('docker rm -fv "$CONTENEDOR"')
-        ->not->toContain('docker rm -f "$CONTENEDOR"')
         // Los datos de una fila que falla en COPY no llegan al informe (regla dura 21).
         ->toContain('filtrar_salida_pg')
         // Antes de gastar minutos restaurando, se sabe si hay con que verificar.
@@ -421,9 +420,13 @@ it('restore-drill.sh verifica la cadena de audit_log tras restaurar y deja el fa
         // El unico camino para no verificar es explicito y consta en el informe.
         ->toContain('--skip-audit-chain')
         ->toContain('Cadena de auditoria: OMITIDA');
+    expect($script)->not->toContain('docker rm -f "$CONTENEDOR"');
 
     // La verificacion va despues de las dos comprobaciones de siempre.
-    expect(strpos($script, 'comprobar_conteos || resultado=1'))->toBeLessThan(strpos($script, 'comprobar_cadena_auditoria || resultado=1'));
+    $conteos = strpos($script, 'comprobar_conteos || resultado=1');
+    $cadena = strpos($script, 'comprobar_cadena_auditoria || resultado=1');
+    expect($conteos)->toBeInt()->and($cadena)->toBeInt();
+    expect((int) $conteos)->toBeLessThan((int) $cadena);
 })->group('RNF-D-05', 'RS-07', 'RL-04');
 
 it('el paquete del cliente entrega schedule-drill.sh', function (): void {
