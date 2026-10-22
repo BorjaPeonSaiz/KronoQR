@@ -92,6 +92,10 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
                 'employees.site_id',
                 'sites.name as site_name',
                 'departments.name as department_name',
+                // El departamento por su clave (2.3.0, HC1): el tablero de
+                // credenciales filtra por el en el servidor, y el nombre no es
+                // unico ni estable.
+                'employees.department_id',
             ])
             ->join('sites', 'sites.id', '=', 'employees.site_id')
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id');
@@ -116,6 +120,7 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
             siteId: $row->site_id,
             departmentName: \is_string($department) ? $department : null,
             employeeId: $row->id,
+            departmentId: $row->department_id,
         );
     }
 }

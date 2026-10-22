@@ -54,6 +54,13 @@ final readonly class EmployeeCardProfile
         public ?string $departmentName = null,
         /** Clave interna. No sale nunca por la API; la usa el repositorio para cruzar credenciales. */
         public int $employeeId = 0,
+        /**
+         * Clave interna del departamento, para filtrar el tablero de
+         * credenciales en el servidor (2.3.0, HC1). Nunca se imprime ni sale por
+         * la API: el filtro llega con el `department_id` que ya publica el
+         * catalogo de departamentos. Nulo sin departamento.
+         */
+        public ?int $departmentId = null,
     ) {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('EmployeeCardProfile necesita el UUID del empleado.');

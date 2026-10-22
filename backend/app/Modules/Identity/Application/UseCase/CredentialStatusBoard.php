@@ -19,6 +19,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
+use Normalizer;
 
 /**
  * El panel de estado de credenciales (RF-QR-08): **quien no puede fichar
@@ -122,23 +123,121 @@ final readonly class CredentialStatusBoard
             ));
         }
 
+        $rows = self::narrowed($rows, $query);
+        $total = \count($rows);
+        $rows = self::pageOf($rows, $query);
+
         if (! $query->unattended && $query->employeeUuid === null) {
             // Antes de devolver, no despues: si la escritura de auditoria falla,
             // la divulgacion no ocurre (regla dura 6, ADR-027). Se anota el
-            // alcance —cuantas filas y con que filtro— y nunca un nombre.
-            // El `key_id` solo entra en el alcance cuando se ha filtrado por el:
-            // el contrato del puerto no admite nulos, y un `key_id: ""` en el
-            // asiento diria que se filtro por una clave vacia.
-            $scope = ['pending_only' => $query->pendingOnly];
-
-            if ($query->keyId !== null) {
-                $scope['key_id'] = $query->keyId;
-            }
-
-            $this->disclosures->recordDisclosure(self::DATASET, \count($rows), $scope);
+            // alcance —cuantas filas **servidas** y con que filtro— y nunca un
+            // nombre ni el termino buscado (regla dura 21).
+            $this->disclosures->recordDisclosure(self::DATASET, \count($rows), self::disclosedScope($query));
         }
 
-        return new CredentialStatusReport($rows, $coverage);
+        return new CredentialStatusReport(
+            rows: $rows,
+            coverage: $coverage,
+            total: $total,
+            page: $query->page ?? 1,
+            perPage: $query->page === null ? max(1, $total) : max(1, $query->perPage),
+        );
+    }
+
+    /**
+     * Los filtros del panel (2.3.0, HC1): texto, departamento y estado, con Y
+     * logico. **Ninguno toca la cobertura**, que ya esta calculada sobre la
+     * plantilla: el denominador es la plantilla, no lo que se ve.
+     *
+     * @param  list<CredentialStatusRow>  $rows
+     * @return list<CredentialStatusRow>
+     */
+    private static function narrowed(array $rows, CredentialStatusQuery $query): array
+    {
+        if (! $query->narrowsRows()) {
+            return $rows;
+        }
+
+        $needle = $query->search === null ? '' : self::folded($query->search);
+
+        return array_values(array_filter(
+            $rows,
+            static fn (CredentialStatusRow $row): bool => ($query->status === null || $row->status === $query->status)
+                && (! $query->withoutDepartment || $row->employee->departmentId === null)
+                && ($query->departmentId === null || $row->employee->departmentId === $query->departmentId)
+                && ($needle === '' || str_contains(self::folded($row->employee->fullName.' '.$row->employee->employeeCode), $needle)),
+        ));
+    }
+
+    /**
+     * HC1: lo que sale es la pagina, no la plantilla. El filtro y el recuento se
+     * hacen sobre todas, para que `meta.total` diga cuantas cumplen el filtro y
+     * `summary` siga siendo la plantilla entera. Sin pagina —la consola—, todas.
+     *
+     * @param  list<CredentialStatusRow>  $rows
+     * @return list<CredentialStatusRow>
+     */
+    private static function pageOf(array $rows, CredentialStatusQuery $query): array
+    {
+        if ($query->page === null) {
+            return $rows;
+        }
+
+        $perPage = max(1, $query->perPage);
+
+        return \array_slice($rows, (max(1, $query->page) - 1) * $perPage, $perPage);
+    }
+
+    /**
+     * Minusculas y sin diacriticos, para que «garcia» encuentre a «García».
+     *
+     * Se descompone en NFD y se quitan las marcas combinantes: el mismo criterio
+     * que el panel aplicaba en el navegador, ahora en un solo sitio.
+     */
+    private static function folded(string $text): string
+    {
+        $decomposed = Normalizer::normalize($text, Normalizer::FORM_D);
+
+        return mb_strtolower(trim((string) preg_replace('/\p{Mn}+/u', '', \is_string($decomposed) ? $decomposed : $text)));
+    }
+
+    /**
+     * El alcance del asiento: con que filtros se leyo y que pagina, **nunca el
+     * termino buscado** —puede ser un nombre— ni un valor nulo (el contrato del
+     * puerto no los admite: un `key_id: ""` diria que se filtro por una clave
+     * vacia).
+     *
+     * @return array<string, bool|int|string>
+     */
+    private static function disclosedScope(CredentialStatusQuery $query): array
+    {
+        $scope = ['pending_only' => $query->pendingOnly];
+
+        if ($query->keyId !== null) {
+            $scope['key_id'] = $query->keyId;
+        }
+
+        if ($query->search !== null) {
+            $scope['searched'] = true;
+        }
+
+        if ($query->departmentId !== null) {
+            $scope['department_id'] = $query->departmentId;
+        }
+
+        if ($query->withoutDepartment) {
+            $scope['without_department'] = true;
+        }
+
+        if ($query->status !== null) {
+            $scope['status'] = $query->status->value;
+        }
+
+        if ($query->page !== null) {
+            $scope['page'] = $query->page;
+        }
+
+        return $scope;
     }
 
     /**

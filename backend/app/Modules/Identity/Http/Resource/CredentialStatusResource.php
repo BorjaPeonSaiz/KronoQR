@@ -44,6 +44,14 @@ final class CredentialStatusResource extends JsonResource
         return [
             'data' => array_map(self::row(...), $report->rows),
             'summary' => self::coverage($report->coverage),
+            // La pagina dentro de las filas que pasan el filtro (2.3.0, HC1). El
+            // denominador de la plantilla es `summary.employees`.
+            'meta' => [
+                'page' => $report->page,
+                'per_page' => $report->perPage,
+                'total' => $report->total,
+                'total_pages' => $report->totalPages(),
+            ],
         ];
     }
 

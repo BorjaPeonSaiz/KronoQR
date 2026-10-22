@@ -15,12 +15,22 @@ use App\Modules\Identity\Domain\ValueObject\SiteCredentialCoverage;
 final readonly class CredentialStatusReport
 {
     /**
-     * @param  list<CredentialStatusRow>  $rows
+     * @param  list<CredentialStatusRow>  $rows  Las filas servidas: la pagina, si se pidio una.
      */
     public function __construct(
         public array $rows,
         public SiteCredentialCoverage $coverage,
+        /** Cuantas filas pasan los filtros, en todas las paginas (2.3.0, HC1). */
+        public int $total = 0,
+        public int $page = 1,
+        public int $perPage = 1,
     ) {}
+
+    /** Cero sin filas: no hay ninguna pagina que enseñar. */
+    public function totalPages(): int
+    {
+        return (int) ceil($this->total / max(1, $this->perPage));
+    }
 
     /**
      * @return array<string, int>

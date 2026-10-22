@@ -8,6 +8,7 @@ use App\Http\Requests\NormalisesBooleanQuery;
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Identity\Application\Query\CredentialStatusQuery;
 use App\Modules\Identity\Domain\Model\Credential;
+use App\Modules\Identity\Domain\ValueObject\CredentialLifecycleStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
@@ -51,18 +52,43 @@ final class IndexCredentialStatusRequest extends FormRequest
             // encuentra a nadie. Validarla contra el llavero convertiria el
             // parametro en un oraculo de que claves hay configuradas.
             'key_id' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{2}$/'],
+            // Los filtros y la pagina del tablero, en el servidor (2.3.0, HC1).
+            // `department_id` sin `exists`, por lo mismo que `employee_uuid`:
+            // uno que no existe devuelve `data: []`, no `422`.
+            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'department_id' => ['sometimes', 'integer', 'min:1', 'prohibited_if:without_department,true'],
+            'without_department' => ['sometimes', 'boolean'],
+            'status' => ['sometimes', 'string', 'in:'.implode(',', array_map(
+                static fn (CredentialLifecycleStatus $status): string => $status->value,
+                CredentialLifecycleStatus::cases(),
+            ))],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.CredentialStatusQuery::MAX_PER_PAGE],
         ];
     }
 
+    /**
+     * La consulta del panel, **siempre paginada**: el tablero ya no sirve la
+     * plantilla entera (HC1). El comando de consola construye la suya sin
+     * pagina.
+     */
     public function toQuery(): CredentialStatusQuery
     {
         $employeeUuid = $this->input('employee_uuid');
         $keyId = $this->input('key_id');
+        $search = trim($this->string('q')->value());
+        $status = $this->string('status')->value();
 
         return new CredentialStatusQuery(
             pendingOnly: $this->boolean('pending'),
             employeeUuid: \is_string($employeeUuid) ? $employeeUuid : null,
             keyId: \is_string($keyId) && $keyId !== '' ? $keyId : null,
+            search: $search === '' ? null : $search,
+            departmentId: $this->has('department_id') ? $this->integer('department_id') : null,
+            withoutDepartment: $this->boolean('without_department'),
+            status: $status === '' ? null : CredentialLifecycleStatus::from($status),
+            page: $this->has('page') ? $this->integer('page') : 1,
+            perPage: $this->has('per_page') ? $this->integer('per_page') : CredentialStatusQuery::DEFAULT_PER_PAGE,
         );
     }
 }
