@@ -50,7 +50,8 @@
     "en": "English"
   },
   "common": {
-    "updating": "Actualizando…"
+    "updating": "Actualizando…",
+    "loadingSlow": "Esto tarda más de lo normal. Si no termina, vuelve a intentarlo en unos minutos."
   },
   "errors": {
     "retryAfter": "Puedes volver a intentarlo dentro de {seconds} s.",
@@ -68,7 +69,7 @@
     },
     "forbidden": {
       "title": "No se puede mostrar esta información",
-      "advice": "Vuelve a entrar. Si el problema continúa, avisa a Recursos Humanos."
+      "advice": "Puede que estés fuera de la red del hotel, desde donde el portal no se abre: conéctate a ella y vuelve a intentarlo. Si ya estás dentro, vuelve a entrar; y si el problema continúa, avisa a Recursos Humanos."
     },
     "notFound": {
       "title": "No se ha encontrado",
@@ -93,7 +94,8 @@
     "unexpected": {
       "title": "Ha ocurrido un error inesperado",
       "advice": "Vuelve a intentarlo. Si se repite, avisa a Recursos Humanos indicando la hora y qué estabas haciendo."
-    }
+    },
+    "retry": "Reintentar"
   },
   "notFound": {
     "heading": "Esta página no existe",

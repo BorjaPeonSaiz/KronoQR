@@ -161,7 +161,19 @@ export interface RequestOptions {
    * `pagehide`/`visibilitychange: hidden` sin poder esperar a que termine.
    */
   keepalive?: boolean
+  /**
+   * Tiempo maximo de espera hasta tener la respuesta, en milisegundos; `0` lo
+   * desactiva. Por omision, `DEFAULT_READ_TIMEOUT_MS` en las LECTURAS JSON (`GET`) y
+   * ninguno en lo demas: una escritura que se corta a los 30 s puede haberse
+   * aplicado igualmente, y un documento binario puede tardar legitimamente. Una
+   * lectura que se agota falla como `network` («no se ha podido contactar con el
+   * servidor… reintenta») en vez de dejar «Cargando…» para siempre (V3-UX-02).
+   */
+  timeoutMs?: number
 }
+
+/** Espera maxima por omision de una lectura JSON. */
+export const DEFAULT_READ_TIMEOUT_MS = 30_000
 
 let authTokenProvider: () => string | null = () => null
 let unauthenticatedHandler: () => void = () => {}
@@ -296,7 +308,12 @@ async function toApiError(response: Response): Promise<ApiError> {
   })
 }
 
-async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
+async function send(
+  path: string,
+  options: RequestOptions,
+  accept: string,
+  defaultTimeoutMs = 0,
+): Promise<Response> {
   const headers = new Headers({ Accept: accept, traceparent: createTraceparent() })
   const token = options.token ?? (options.anonymous === true ? null : authTokenProvider())
 
@@ -321,6 +338,22 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   }
 
   let response: Response
+  const timeoutMs = options.timeoutMs ?? defaultTimeoutMs
+  // Un controlador propio, encadenado al del llamante, y no `AbortSignal.any`: que
+  // tambien exista en el navegador de la tablet mas vieja de un cliente.
+  const timeout = timeoutMs > 0 ? new AbortController() : null
+  const timer = timeout === null ? null : setTimeout(() => timeout.abort(), timeoutMs)
+  const callerSignal = options.signal
+
+  if (timeout !== null && callerSignal !== undefined) {
+    if (callerSignal.aborted) {
+      timeout.abort()
+    } else {
+      callerSignal.addEventListener('abort', () => timeout.abort(), { once: true })
+    }
+  }
+
+  const signal = timeout?.signal ?? callerSignal
 
   try {
     response = await fetch(buildUrl(path, options.query), {
@@ -333,11 +366,15 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
       ...(options.body === undefined
         ? {}
         : { body: isMultipart ? (options.body as FormData) : JSON.stringify(options.body) }),
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(signal === undefined ? {} : { signal }),
       ...(options.keepalive === true ? { keepalive: true } : {}),
     })
   } catch {
     throw new ApiError({ kind: 'network', status: 0 })
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer)
+    }
   }
 
   if (!response.ok) {
@@ -353,9 +390,14 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   return response
 }
 
+/** El tiempo maximo por omision de una peticion JSON: solo las lecturas lo llevan. */
+function readTimeout(options: RequestOptions): number {
+  return (options.method ?? 'GET') === 'GET' ? DEFAULT_READ_TIMEOUT_MS : 0
+}
+
 /** Peticion JSON. `204` se representa como `null`. */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
-  const response = await send(path, options, 'application/json')
+  const response = await send(path, options, 'application/json', readTimeout(options))
 
   if (response.status === 204) {
     return null
@@ -373,7 +415,7 @@ export async function requestJsonWithHeaders<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<{ body: T; headers: Headers }> {
-  const response = await send(path, options, 'application/json')
+  const response = await send(path, options, 'application/json', readTimeout(options))
 
   if (response.status === 204) {
     throw new ApiError({ kind: 'unexpected', status: 204 })

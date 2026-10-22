@@ -6,6 +6,7 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/login/session.store'
 import MyRecordsView from '@/features/my-records/MyRecordsView.vue'
+import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
 import { employeeWorkDays, portalEmployee } from './support/fixtures'
 import {
@@ -195,4 +196,21 @@ describe('MyRecordsView, cada causa de error', () => {
       expect(wrapper.find('[data-test="workday"]').exists()).toBe(false)
     })
   }
+})
+
+describe('MyRecordsView, el 403 (R3-UX-02, RF-ID-08)', () => {
+  // Un 403 con la SPA ya cargada llega, sobre todo, al cambiar de red: fuera de la red
+  // del hotel el portal no se abre, y «vuelve a entrar» no lo arregla.
+  it('el consejo nombra la red del hotel y no solo «vuelve a entrar»', async () => {
+    const wrapper = await mountWith(() => problemResponse(403, 'about:blank'))
+    const alert = wrapper.find('[role="alert"]')
+
+    expect(alert.text()).toContain(es.errors.forbidden.title)
+    expect(alert.text()).toContain(es.errors.forbidden.advice)
+    expect(es.errors.forbidden.advice).toMatch(/red del hotel/)
+    expect(en.errors.forbidden.advice).toMatch(/hotel network/)
+    // Y sigue ofreciendo lo que servia antes y la salida humana.
+    expect(es.errors.forbidden.advice).toContain('vuelve a entrar')
+    expect(es.errors.forbidden.advice).toContain('Recursos Humanos')
+  })
 })

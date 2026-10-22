@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
+  DEFAULT_READ_TIMEOUT_MS,
   isApiError,
   isPdfRenderingBusy,
   request,
@@ -167,6 +168,73 @@ describe('cliente HTTP', () => {
     expect((error as ApiError).kind).toBe('network')
     expect((error as ApiError).titleKey).toBe('errors.network.title')
     expect((error as ApiError).adviceKey).toBe('errors.network.advice')
+  })
+
+  describe('tiempo maximo de espera (V3-UX-02)', () => {
+    /** Un fetch que no responde nunca, pero respeta la señal de cancelacion como el real. */
+    function hangingFetch(): ReturnType<typeof stubFetch> {
+      return stubFetch(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('', 'AbortError')),
+            )
+          }),
+      )
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('una lectura que no responde falla como corte de red en vez de colgarse', async () => {
+      vi.useFakeTimers()
+      hangingFetch()
+
+      const pending = request('/api/v1/employees').catch((caught: unknown) => caught)
+
+      await vi.advanceTimersByTimeAsync(DEFAULT_READ_TIMEOUT_MS + 1)
+
+      const error = await pending
+
+      expect(isApiError(error)).toBe(true)
+      expect((error as ApiError).kind).toBe('network')
+    })
+
+    it('una escritura no se corta: pudo aplicarse aunque no se vea la respuesta', async () => {
+      vi.useFakeTimers()
+      const spy = hangingFetch()
+
+      void request('/api/v1/corrections', { method: 'POST', body: {} }).catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(DEFAULT_READ_TIMEOUT_MS * 4)
+
+      expect((spy.mock.calls[0]?.[1] as RequestInit).signal).toBeUndefined()
+    })
+
+    it('timeoutMs: 0 lo desactiva y la cancelacion del llamante sigue funcionando', async () => {
+      vi.useFakeTimers()
+      const spy = hangingFetch()
+      const caller = new AbortController()
+
+      const pending = request('/api/v1/employees', { timeoutMs: 0, signal: caller.signal }).catch(
+        (caught: unknown) => caught,
+      )
+
+      await vi.advanceTimersByTimeAsync(DEFAULT_READ_TIMEOUT_MS * 4)
+      expect((spy.mock.calls[0]?.[1] as RequestInit).signal).toBe(caller.signal)
+      caller.abort()
+
+      expect(((await pending) as ApiError).kind).toBe('network')
+    })
+
+    it('una respuesta a tiempo no deja el temporizador vivo', async () => {
+      vi.useFakeTimers()
+      stubFetch(() => jsonResponse({ ok: true }))
+
+      await request('/api/v1/employees')
+
+      expect(vi.getTimerCount()).toBe(0)
+    })
   })
 
   it('distingue las credenciales no validas de una sesion caducada', async () => {

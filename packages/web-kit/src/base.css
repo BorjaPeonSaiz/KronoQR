@@ -73,3 +73,25 @@ input[type='week']:focus-within {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* REFLUJO A 320 PX (WCAG 1.4.10, V7-PA-9). Tres causas, medidas en un navegador:
+   1. Un `<fieldset>` trae `min-inline-size: min-content` del navegador: si un hijo
+      no se parte, el grupo entero se niega a encoger y desborda la pagina.
+   2. Un hijo directo de un fieldset (el filtro `etiqueta + select`) es un elemento
+      flex con `min-width: auto`: no baja del ancho de su opcion mas larga.
+   3. Un `<select>` mide lo que su opcion mas larga; con `max-width: 100%` encoge
+      hasta el ancho de su contenedor. */
+fieldset {
+  min-width: 0;
+}
+
+fieldset > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+select,
+input:not([type='checkbox']):not([type='radio']),
+textarea {
+  max-width: 100%;
+}
