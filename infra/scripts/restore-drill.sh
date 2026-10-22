@@ -260,8 +260,29 @@ EOF
 # Destino del simulacro
 #------------------------------------------------------------------------------
 
+# Que imagen usa el contenedor limpio: la pedida con --image; si no, la de postgres del producto si
+# esta cargada; si no, la oficial por digest. Deja IMAGEN y DEL_PRODUCTO.
+#
+# OJO CON `die` DENTRO DE UNA SUSTITUCION: `x="$(f 2>/dev/null || true)"` NO atrapa un `exit` de f. El
+# `exit` termina la sustitucion entera con su codigo y el `|| true` de dentro ni se ejecuta; el
+# `set -e` del padre mata entonces el script, y con el stderr tapado, sin un solo mensaje (run
+# 39802426343 de backup-drill.yml: exit 2 mudo en una CI sin images.lock ni IMAGE_TAG). La alternativa
+# se pone FUERA: `x="$(f)" || x=""`.
+elegir_imagen_limpia() {
+  local producto=""
+
+  [ -z "$IMAGEN" ] || return 0
+  producto="$(imagen_del_producto postgres "" 2>/dev/null)" || producto=""
+  if [ -n "$producto" ] && docker image inspect "$producto" >/dev/null 2>&1; then
+    IMAGEN="$producto"
+    DEL_PRODUCTO=1
+  else
+    IMAGEN="$IMAGEN_PREDETERMINADA"
+  fi
+}
+
 levantar_contenedor_limpio() {
-  local esperado=0 clave producto
+  local esperado=0 clave
 
   require_cmd docker docker
   docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
@@ -278,15 +299,7 @@ levantar_contenedor_limpio() {
 
   # Sin imagen pedida, se usa la de postgres DEL PRODUCTO si esta cargada en este servidor
   # (V5-DV-03): el simulacro no depende de internet ni de Docker Hub. Si no, la oficial por digest.
-  if [ -z "$IMAGEN" ]; then
-    producto="$(imagen_del_producto postgres "" 2>/dev/null || true)"
-    if [ -n "$producto" ] && docker image inspect "$producto" >/dev/null 2>&1; then
-      IMAGEN="$producto"
-      DEL_PRODUCTO=1
-    else
-      IMAGEN="$IMAGEN_PREDETERMINADA"
-    fi
-  fi
+  elegir_imagen_limpia
 
   informar "Levantando contenedor limpio ${CONTENEDOR} (${IMAGEN})"
   if [ "$DEL_PRODUCTO" -eq 1 ]; then

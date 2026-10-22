@@ -543,3 +543,56 @@ it('lib/drill-schedule.sh nunca falla: informa del resultado y de un error sin d
         drillRemoveDir($dir);
     }
 })->group('RNF-D-05');
+
+/**
+ * `elegir_imagen_limpia` de restore-drill.sh con un docker falso (que dice si la imagen esta cargada).
+ *
+ * @param  array<string, string>  $env
+ * @return array{codigo: int, salida: string}
+ */
+function drillCleanImageChoice(array $env, bool $imageLoaded): array
+{
+    $dir = drillTempDir();
+    copy(Repo::file('infra/scripts/restore-drill.sh'), $dir.'/restore-drill.sh');
+    (new Process(['cp', '-r', Repo::file('infra/scripts/lib'), $dir.'/lib']))->run();
+    mkdir($dir.'/bin', 0o755, true);
+    file_put_contents($dir.'/bin/docker', '#!/bin/sh'."\n".($imageLoaded ? 'exit 0' : 'exit 1')."\n");
+    chmod($dir.'/bin/docker', 0o755);
+
+    // Mismo `set -euo pipefail` que el script: es lo que convierte un `exit` mudo en un fallo del padre.
+    $process = new Process(
+        ['bash', '-c', 'set -euo pipefail; . '.escapeshellarg($dir.'/restore-drill.sh').'; elegir_imagen_limpia; echo "${IMAGEN}|${DEL_PRODUCTO}"'],
+        env: array_merge(['BACKUP_ENV_FILE' => '/dev/null', 'KRONOQR_LANG' => 'es', 'PATH' => $dir.'/bin:'.getenv('PATH'), 'IMAGE_TAG' => ''], $env),
+        timeout: 30.0,
+    );
+    $process->run();
+    drillRemoveDir($dir);
+
+    return ['codigo' => (int) $process->getExitCode(), 'salida' => trim($process->getOutput())];
+}
+
+it('sin images.lock ni IMAGE_TAG el contenedor limpio usa la imagen oficial por digest y no muere en silencio', function (): void {
+    // Regresion del run 39802426343: `x="$(f 2>/dev/null || true)"` no atrapa el `exit` de un `die`, y el
+    // set -e del padre terminaba el simulacro con exit 2 y sin un mensaje.
+    $official = drillCleanImageChoice([], false);
+    expect($official['codigo'])->toBe(0)
+        ->and($official['salida'])->toStartWith('postgres:17-alpine@sha256:')
+        ->and($official['salida'])->toEndWith('|0');
+
+    // Con IMAGE_TAG pero sin la imagen cargada en el servidor: tambien la oficial.
+    $notLoaded = drillCleanImageChoice(['IMAGE_TAG' => '2.3.0'], false);
+    expect($notLoaded['codigo'])->toBe(0)->and($notLoaded['salida'])->toEndWith('|0');
+
+    // Con la imagen del producto cargada: esa, sin internet.
+    $loaded = drillCleanImageChoice(['IMAGE_TAG' => '2.3.0'], true);
+    expect($loaded['salida'])->toBe('ghcr.io/kronoqr/postgres:2.3.0|1');
+
+    // Un digest mal formado NO se sustituye en silencio por la oficial: el producto manda (ADR-053) ... pero
+    // para el contenedor limpio la oficial es el respaldo previsto, no un fallo.
+    $badDigest = drillCleanImageChoice(['IMAGE_DIGEST_POSTGRES' => '@sha256:abc'], true);
+    expect($badDigest['codigo'])->toBe(0)->and($badDigest['salida'])->toEndWith('|0');
+
+    // --image manda sobre todo.
+    $explicit = drillCleanImageChoice(['DRILL_POSTGRES_IMAGE' => 'kronoqr/postgres:ci', 'IMAGE_TAG' => '2.3.0'], true);
+    expect($explicit['salida'])->toBe('kronoqr/postgres:ci|0');
+})->group('RNF-D-05', 'ADR-053');
