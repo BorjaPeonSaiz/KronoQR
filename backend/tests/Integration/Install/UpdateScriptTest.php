@@ -1551,3 +1551,31 @@ it('deja en el informe el motivo, el paso, la cadena descartada y el identificad
         ->and($tras)->toContain('remember_check "chain-discarded"')
         ->and($tras)->toContain('remember_check "report-id" "update-${STARTED_UTC}"');
 })->group('RF-PD-10', 'RS-07');
+
+it('revoca las tarjetas de las bajas anteriores tras migrar y antes de la punta de la cadena, y un fallo avisa sin deshacer (12.4)', function (): void {
+    $actualizador = Repo::contents('infra/scripts/update.sh');
+    $mensajes = Repo::contents('infra/scripts/lib/messages-update.sh');
+
+    $orden = strpos($actualizador, 'php artisan credentials:revoke-offboarded');
+    $privilegios = strpos($actualizador, 'remember_check "privileges-work-record" "$(kq_text u_report_skipped)"');
+    $punta = strpos($actualizador, 'CHAIN_AFTER="$(json_field');
+    $asiento = strpos($actualizador, 'compliance:record-system-event system.updated');
+
+    // Despues de verificar privilegios, antes de CHAIN_AFTER (sus asientos entran en chain_after).
+    expect($orden)->not->toBeFalse()
+        ->and($privilegios)->toBeLessThan((int) $orden)
+        ->and((int) $orden)->toBeLessThan((int) $punta)
+        ->and((int) $punta)->toBeLessThan((int) $asiento);
+
+    // Un fallo avisa (es/en) y sale con 6, sin rollback_and_die.
+    $tramo = substr($actualizador, (int) $orden, (int) $punta - (int) $orden);
+    expect($tramo)->toContain('REVOKE_OFFBOARDED_FAILED=1')
+        ->and($tramo)->not->toContain('rollback_and_die')
+        ->and($tramo)->toContain('remember_check "revoke-offboarded"')
+        ->and($actualizador)->toContain('[ "${REVOKE_OFFBOARDED_FAILED}" -eq 1 ]');
+
+    foreach (['u_verify_revoke_offboarded_ok', 'u_verify_revoke_offboarded_warn', 'u_verify_revoke_offboarded_warn_fix'] as $clave) {
+        expect($mensajes)->toContain('KQ_MSG_ES['.$clave.']=')
+            ->and($mensajes)->toContain('KQ_MSG_EN['.$clave.']=');
+    }
+})->group('RF-PD-10', 'RS-07');
