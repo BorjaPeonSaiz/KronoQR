@@ -2020,6 +2020,9 @@ camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
 enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
 comando al generarlo:
 `docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
+Desde la 2.3.0 el paquete es de la versión 2 del formato (`schema_version: 2`),
+cuya huella cubre también la cabecera; un paquete de una versión anterior se
+comprueba con la regla de su propia versión, nunca mezclando las dos.
 
 **Qué lleva:** versión y entorno, configuración **solo de una lista de claves
 permitidas** (nunca `LICENSE_KEY`, claves de firma del QR, de cifrado de

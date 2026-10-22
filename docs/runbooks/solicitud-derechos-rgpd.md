@@ -35,8 +35,8 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | --- | --- | --- | --- |
 | Registro de jornada (tramos, totales, correcciones, escaneos, incidencias) | PostgreSQL | **4 años** | `compliance_profiles.retention_years` del centro (RF-PD-07) |
 | Auditoría (`audit_log`) | PostgreSQL, particionada por año | **4 años** | El mismo perfil de cumplimiento |
-| Ficha de la persona (`employees`): nombre, apellidos, correo, huella del DNI, PIN, foto y código | PostgreSQL | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la partición de auditoría del año de su baja. Al vencer se **minimiza**: la fila se queda con `uuid`, centro, departamento, estado y fechas | `compliance_profiles.personnel_record_retention_years`. **Pendiente de validar con la asesoría laboral** |
-| Credenciales (`credentials`) | PostgreSQL | Se conservan: están revocadas desde la baja y no llevan nombre | — |
+| Ficha de la persona (`employees`): nombre, apellidos, correo, huella del DNI, PIN, foto y código | PostgreSQL | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la partición de auditoría del año de su baja. Al vencer se **minimiza**: la fila se queda con `uuid`, centro, departamento, estado, fechas, idioma y la marca de teletrabajo | `compliance_profiles.personnel_record_retention_years`. **Pendiente de validar con la asesoría laboral** |
+| Credenciales (`credentials`) | PostgreSQL | Se conservan: están revocadas desde la baja y no llevan nombre. Al minimizar la ficha, su motivo de revocación (`revoked_reason`, texto libre) se sustituye por un texto fijo del producto | ADR-060 §1 |
 | Contratos (`employment_contracts`: horas pactadas, tipo de jornada, vigencia) | PostgreSQL | **Los de la ficha**: se borran en la misma purga que la minimiza | El mismo campo del perfil. **Pendiente de la asesoría laboral (tarea 5.2)** |
 | Ausencias (`absences`: tipo, fechas, nota, versiones y anulaciones) | PostgreSQL | **Los de la ficha**: se borran en la misma purga que la minimiza | El mismo campo del perfil. **Pendiente de la asesoría laboral (tarea 3.10). Contiene dato de salud** |
 | Cuenta de gestión dada de baja (`users`) | PostgreSQL | **`retention_years` desde la baja**, y nunca mientras un asiento, una corrección o una resolución vivos la citen. Al vencer se minimiza | `compliance_profiles.retention_years` |
@@ -377,11 +377,15 @@ purga.
 
 ### 6 bis. Foto que la purga no pudo borrar
 
-**Alerta que lleva aquí** (`observability/loki/rules/fake/retention.yml`, la única
-que sale de un evento de log): `FotoDeFichaMinimizadaSinBorrar`, severidad media,
-destinatario IT del cliente. Solo existe si la instalación envía sus logs a Loki
-(`LOKI_URL`); sin ella, el aviso queda en el informe de la purga
-(`retencion-purga-*.txt`: «foto(s) de fichas minimizadas no se pudieron borrar»).
+**Cómo te enteras.** No hay alerta: hoy el producto no escribe fotos, y esto solo
+puede pasar en una instalación que las haya cargado por fuera. El aviso aparece en
+tres sitios:
+
+- en la salida de la orden `compliance:apply-retention` que ejecutó la purga, con
+  el evento `retention.personnel_photo_orphaned`;
+- en el informe de la purga (`retencion-purga-*.txt`): «foto(s) de fichas
+  minimizadas no se pudieron borrar»;
+- en Loki, si la instalación le envía sus logs (`LOKI_URL`).
 
 **Qué significa.** La purga minimizó la ficha de una persona (la base de datos ya
 no tiene su foto) pero no pudo borrar el fichero del disco: permisos, disco de
@@ -389,10 +393,11 @@ solo lectura o volumen desmontado. La ficha **ya no apunta** al fichero, así qu
 nadie más lo va a encontrar: es un dato personal que debía desaparecer. **Impacto
 en el fichaje: ninguno.**
 
-1. Busca el evento y el `employee_uuid` (nunca trae la ruta ni el nombre):
+1. Busca el evento y el `employee_uuid` (nunca trae la ruta ni el nombre) en la
+   salida que guardaste de la orden o en el log técnico de la aplicación:
 
    ```bash
-   docker compose logs --since 24h scheduler | grep retention.personnel_photo_orphaned
+   docker compose exec app grep -h retention.personnel_photo_orphaned storage/logs/*.log
    ```
 
 2. Arregla la causa que lo impidió (`docker compose exec app ls -ld storage/app/employee-photos`:
@@ -402,7 +407,7 @@ en el fichaje: ninguno.**
    `app-storage`. Si no puedes identificar cuál es, compara con la copia de
    seguridad previa a la purga; no borres el directorio entero.
 4. Anota en el registro interno de solicitudes la fecha y el `employee_uuid`.
-   La alerta se apaga sola a la hora; el borrado no queda en `audit_log`.
+   El borrado del fichero no queda en `audit_log`.
 
 ---
 

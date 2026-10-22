@@ -132,6 +132,9 @@ periodo más largo, descárgalo año a año eligiendo las dos fechas.
 - **CSV**: para abrirlo en una hoja de cálculo.
 - **PDF**: un documento sellado, con la fecha de generación y una huella que
   acredita que no se ha modificado, pensado para presentarlo ante un tercero.
+  La huella lleva la versión de su formato, que cambió en la 2.3.0: solo se
+  comparan huellas de la misma versión, así que un PDF descargado antes de la
+  2.3.0 no se compara con uno descargado después.
   Si el servidor no puede generarlo en ese momento, el portal te avisa y te
   ofrece el CSV; no es nada que hayas hecho tú.
 

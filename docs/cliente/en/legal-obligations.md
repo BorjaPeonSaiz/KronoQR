@@ -279,7 +279,7 @@ Policy per data type, which is the one the system applies:
 | WAL archive (`BACKUP_PATH/wal`): **all** changes to the database, including clock-ins, people and `audit_log`. **Encrypted and authenticated** since 2.2.0 | **8 days** by default | Your installation (`BACKUP_WAL_RETENTION_DAYS`). It has to be greater than the interval between physical copies (weekly by default) |
 | Technical detail of each update (`/var/log/kronoqr/update-*.detalle.log`): **may contain personal data** | **30 days** by default | Your installation (`KRONOQR_LOG_RETENTION_DAYS`, minimum 7). `update.sh` deletes it on every run, and `doctor.sh` does too when run as root: if months go by without either, the deletion waits for the next run |
 | Summary of each update (`update-*.log`), without personal data | **90 days** | Your installation |
-| File of a person who has left (first name, surnames, email, ID-document fingerprint, PIN, photo and code) | **4 years from leaving** by default, and never before their working-time record and the audit trail of the year they left have been purged | The site's compliance profile (years the personnel file is kept). **Pending confirmation with your employment law advisers.** When it expires, the purge **removes** that data and the file keeps only the start and leaving dates, site and department |
+| File of a person who has left (first name, surnames, email, ID-document fingerprint, PIN, photo and code) | **4 years from leaving** by default, and never before their working-time record and the audit trail of the year they left have been purged | The site's compliance profile (years the personnel file is kept). **Pending confirmation with your employment law advisers.** When it expires, the purge **removes** that data and the file keeps only the start and leaving dates, site, department, language and whether they teleworked |
 | Contract data (agreed hours, type of working day, validity period) | **Those of the file**: deleted with it | The same profile field. **Pending confirmation with your employment law advisers** |
 | Absences (type, dates, note, versions and voidings) | **Those of the file**: deleted with it | The same profile field. **Pending confirmation with your employment law advisers. They contain health data** |
 | Deactivated management account (name, email, password and second factor) | **4 years from deactivation** (the same as the record), and never while any audit entry, correction or resolution cites it | The compliance profile. When it expires, the purge leaves it with no name and no way to sign in |
@@ -313,11 +313,13 @@ profile before the first purge that applies it.
   email, ID-document fingerprint, PIN, photo and code, and **deletes their
   contracts and their absences**.
 - **What remains.** The file keeps its internal identifier, the start and
-  leaving dates, the site and the department.
+  leaving dates, the site, the department, the language and whether they
+  teleworked. The revoked credential stays, but its revocation reason is
+  replaced by a fixed text.
 - **How it is authorised.** Like every purge, it is not automatic: a person
   authorises it and it is recorded, person by person, without names.
-- **What your DPO has to validate.** If in your hotel those dates and that
-  department are enough to recognise someone, the minimised file is still
+- **What your DPO has to validate.** If in your hotel those dates, that
+  department, the language and the teleworking flag are enough to recognise someone, the minimised file is still
   personal data. If they conclude it is, ask us to generalise them.
 
 **Contracts and absences have a single period, the file's.** If your advisers

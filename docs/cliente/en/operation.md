@@ -2040,6 +2040,9 @@ not altered or cut short on the way. Support checks it on receipt; to check it
 yourself before sending it, from the installation directory and with the path
 the command printed when it generated it:
 `docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
+Since 2.3.0 the bundle uses version 2 of the format (`schema_version: 2`),
+whose checksum also covers the header; a bundle from an earlier version is
+checked with the rule of its own version, never mixing the two.
 
 **What it carries:** version and environment, configuration **only from an
 allow-list of keys** (never `LICENSE_KEY`, QR signing keys, backup encryption

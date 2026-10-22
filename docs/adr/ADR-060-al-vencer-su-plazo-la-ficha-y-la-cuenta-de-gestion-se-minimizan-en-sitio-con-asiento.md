@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptado** por el propietario el 21-10-2026 (las ocho decisiones del diseño de las tareas 11.3 y 11.4 de la 2.3.0). Lo implementa `backend-laravel` en la tarea 11.3 con la skill `migracion-segura`; la comprobación de la función, los *triggers* y los privilegios en `update.sh` y `doctor` es de `devops-observabilidad` |
+| **Estado** | **Aceptado** por el propietario el 21-10-2026 (las ocho decisiones del diseño de las tareas 11.3 y 11.4 de la 2.3.0). Ajustado el 22-10-2026 tras las revisiones del bloque: motivo de revocación de la credencial, `locale` y `teleworking`, `DELETE` sobre `employees` y `users`, tope de la ejecución, frase de confirmación y foto huérfana. Lo implementa `backend-laravel` en la tarea 11.3 con la skill `migracion-segura`; la comprobación de la función, los *triggers* y los privilegios en `update.sh` y `doctor` es de `devops-observabilidad` |
 | **Fecha** | 21 de octubre de 2026 |
 | **Decide** | `seguridad-cumplimiento` (diseño del bloque 11 de la 2.3.0) y `arquitecto-dominio` (redacción). Cierra el residuo 4 de [ADR-051](ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md) y el riesgo A-27 de doc 07 §6 |
 | **Afecta a** | Amplía `RetentionScope` (dos ámbitos nuevos, `personnel_records` y `management_accounts`) · Aplica a `employees` y `users` el patrón de [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) §2 y §3 (nota en ese ADR) · Nota en [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) (plazo del motivo de soporte en la tabla) y en [ADR-051](ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md) (la cuenta se conserva como autora mientras quede un asiento suyo) · Respeta [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md), [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md), [ADR-041](ADR-041-descarga-de-ficheros-diferidos-con-enlace-de-un-solo-uso.md) (precedente de `report_exports`), [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md), [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) y [ADR-052](ADR-052-sesiones-con-token-bearer-de-sanctum-sin-cookies.md) · `compliance:apply-retention` (`ApplyRetention`) · `compliance_profiles` · `employees`, `users`, `employment_contracts`, `absences`, `support_grants`, `personal_access_tokens` · `routes/console.php` · `infra/scripts/update.sh`, `product:doctor` · `docs/api/openapi.yaml` (perfil de cumplimiento y `SupportGrant`) |
@@ -60,16 +60,16 @@ Con las condiciones 3 y 4, el plazo efectivo nunca es menor que el del registro 
 | `first_name`, `last_name` | `''` |
 | `email`, `national_id_hash`, `pin_hash`, `photo_path` y las columnas de provisión del PIN | `NULL` |
 | `employee_code` | `replace(uuid::text, '-', '')`: sigue siendo único y ya no es el código impreso |
-| `uuid`, `site_id`, `department_id`, `status`, `hired_at`, `terminated_at` | **Sin cambios** |
+| `uuid`, `site_id`, `department_id`, `status`, `hired_at`, `terminated_at`, `locale`, `teleworking` | **Sin cambios** |
 
 En la misma transacción:
 
 - **se borran sus `personal_access_tokens` del portal**;
 - **se borran sus contratos (`employment_contracts`) y sus ausencias (`absences`)**, por decisión del propietario. Su plazo termina con el de la ficha: son datos de la relación laboral y no registro horario (RL-02). Las ausencias llevan además el dato de salud, que es el que menos se puede conservar de más.
 
-**`credentials` se conserva.** Su clave hacia `employees` es `RESTRICT`, la tarjeta está revocada desde la baja y la fila no lleva nombre. **El fichero de la foto se borra después del `COMMIT`**: un fichero no entra en la transacción, y borrarlo antes dejaría una ficha con foto apuntando a nada si el lote se deshace.
+**`credentials` conserva su fila, pero pierde el motivo libre.** Su clave hacia `employees` es `RESTRICT`, la tarjeta está revocada desde la baja y la fila no lleva nombre; lo único que podía nombrar a alguien es `revoked_reason`, texto libre escrito al revocar, y en la misma transacción se sustituye por una constante del producto (decisión del propietario del 22-10-2026). **El fichero de la foto se borra después del `COMMIT`**: un fichero no entra en la transacción, y borrarlo antes dejaría una ficha con foto apuntando a nada si el lote se deshace.
 
-Se conservan las fechas, el departamento y el centro porque el esquema los exige: `hired_at` no es nulo, y un `CHECK` obliga a que `terminated_at` exista con `status = 'terminated'` y no sea anterior a `hired_at`. Además, sin ellos la fila no diría nada de lo que se conserva. Son **cuasi-identificadores**: en un hotel pequeño, «alguien de cocina que entró en marzo de 2019 y se fue en junio de 2022» se reconoce. Es un riesgo residual aceptado (doc 07 §6) y lo valida el DPO del cliente (§5).
+Se conservan las fechas, el departamento y el centro porque el esquema los exige: `hired_at` no es nulo, y un `CHECK` obliga a que `terminated_at` exista con `status = 'terminated'` y no sea anterior a `hired_at`. Además, sin ellos la fila no diría nada de lo que se conserva. `locale` y `teleworking` también se conservan: no identifican por sí solos y la ficha los necesita para seguir siendo coherente (decisión del propietario del 22-10-2026). Todos ellos son **cuasi-identificadores**: en un hotel pequeño, «alguien de cocina que entró en marzo de 2019 y se fue en junio de 2022» se reconoce. Es un riesgo residual aceptado (doc 07 §6) y lo valida el DPO del cliente (§5).
 
 ### 2. Cuentas de gestión: ámbito `management_accounts`
 
@@ -104,6 +104,8 @@ En la misma transacción se borran sus tokens. Las claves que apuntan a la cuent
 - **La ejecución** usa la misma frase de confirmación y la misma firma que la purga: `--responsible`, una cuenta activa con rol `admin` o `rrhh`. Nunca es automática (RF-PR-03).
 - **El orden** es: después de soltar las particiones (`dropPartitions`), porque la condición 4 depende de ello, y antes del ciclo corto. Va en lotes, con una transacción por lote, bajo `withChainLock` y con la fila bloqueada ([ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)).
 - **Cada lote lleva sus asientos.** Es lo que ADR-057 §3 exige a una purga partida en varias transacciones: si el asiento falla, el lote se deshace y no se minimiza nada.
+- **La ejecución no minimiza más de lo que contó la simulación aprobada** (decisión del propietario del 22-10-2026). Soltar particiones en la misma pasada puede volver elegibles a más personas o cuentas (condición 4 y su equivalente en las cuentas); esas no se minimizan ahora, porque nadie las vio en el informe que se firmó, sino en la pasada siguiente, con su propia simulación. El recuento del plan es el tope de cada ámbito.
+- **La frase de confirmación incluye el plazo de la ficha** (`personnel_record_retention_years` y su corte), además de lo que ya incluía. Si alguien cambia ese campo del perfil entre la simulación y la ejecución, la frase de ayer deja de valer.
 
 ### 4. La barrera está en la base de datos
 
@@ -111,7 +113,8 @@ Es el patrón de ADR-057 §2 y §3, aplicado a dos tablas más:
 
 - **Funciones** `public.personnel_record_anonymize_batch(p_cutoff date, p_batch int) RETURNS TABLE(employee_uuid uuid, terminated_on date, contracts bigint, absences bigint, tokens bigint, photo_path text)` y `public.management_account_anonymize_batch(…)`. Son `SECURITY DEFINER`, propiedad del rol de migración, con `SET search_path = pg_catalog, pg_temp` y `lock_timeout`, y `EXECUTE` solo para `fichaje_app`. **Cada una calcula su corte máximo** a partir del perfil y rechaza uno posterior con `42501`. Aplican las cuatro condiciones de su ámbito: quien la llama no puede pedir que se minimice a una persona activa, a una que conserva tramos o a una cuenta que todavía firma asientos vivos.
 - ***Triggers*** `employees_guard_anonymized` y `users_guard_anonymized`, `BEFORE UPDATE`. Responden `42501` a cualquier cambio en una fila con `anonymized_at`, y a cualquier cambio de `anonymized_at` si `current_user` no es el propietario. La aplicación no puede minimizar por fuera de la función ni deshacer una minimización.
-- **Privilegios.** `fichaje_app` pierde `DELETE` sobre `employment_contracts` y `absences`: solo la función los borra. Antes hay que comprobar con `grep` que la aplicación no borra en esas tablas.
+- **Privilegios.** `fichaje_app` pierde `DELETE` sobre `employment_contracts` y `absences`: solo la función los borra. Antes hay que comprobar con `grep` que la aplicación no borra en esas tablas. **Tampoco tiene `DELETE` sobre `employees` ni `users`** (decisión del propietario del 22-10-2026): sin esa barrera, un `DELETE` seguido de un `INSERT` con el mismo uuid «desminimizaría» una fila sin pasar por el *trigger* de `UPDATE`.
+- **A una ficha minimizada no se le añaden contratos ni ausencias.** Lo rechaza el dominio y lo rechaza un *trigger* `BEFORE INSERT` sobre `employment_contracts` y `absences`: la relación laboral terminó y sus datos ya se borraron con la ficha.
 - **`update.sh` y `product:doctor`** verifican la función, los *triggers* y los privilegios, igual que con `work_record_purge_batch`.
 - **Los `down()`** de las migraciones se niegan a ejecutarse si hay alguna fila con `anonymized_at`: deshacer el esquema no devuelve los datos y dejaría filas minimizadas sin el `CHECK` que lo declara.
 
@@ -159,7 +162,7 @@ Contratos y ausencias tienen **un solo plazo**, el de la ficha. Si la asesoría 
 - **Una ficha minimizada sigue apareciendo** en el directorio y en la exportación íntegra, sin nombre y con el código sustituido. El portal da el rechazo genérico (RS-03) a quien pruebe el código antiguo.
 - **Pueden quedar asientos posteriores al año de la baja que citen el uuid de una persona minimizada.** Por ejemplo, una búsqueda de la exportación legal (ADR-037), que lleva `employee_uuids`. Desde la minimización, ese uuid ya no lleva a ningún nombre. Es lo que se busca: el asiento sigue diciendo cuántas personas y cuáles por uuid, y la persona ha dejado de ser identificable por el producto.
 - **La conciliación no ve todavía una minimización hecha por fuera.** Se recomienda, en otro bloque, que ADR-057 §4 cuente como discrepancia una ficha con `anonymized_at` sin su asiento, o un asiento sin su ficha minimizada. Mientras tanto, el *trigger* y la función impiden la minimización fuera de plazo, pero no una llamada a la función fuera de `compliance:apply-retention`, que no deja asiento. Es el mismo residuo que `work_record_purge_batch` (ADR-057, «Lo que esto no impide»).
-- **Si el borrado del fichero de la foto falla después del `COMMIT`**, queda un fichero que ninguna fila cita. La función devuelve la ruta para que la aplicación borre el fichero; si el borrado falla, la implementación tiene que dejarlo visible (log técnico sin nombre y aviso de `doctor`) para que no quede una foto sin dueño en el volumen.
+- **Si el borrado del fichero de la foto falla después del `COMMIT`**, queda un fichero que ninguna fila cita. La función devuelve la ruta para que la aplicación borre el fichero; si el borrado falla, queda visible en el evento de log técnico `retention.personnel_photo_orphaned`, con el `employee_uuid` y sin la ruta ni el nombre, y en una observación del informe de la purga. No hay alerta propia: hoy el producto no escribe fotos, y la ruta solo existiría en instalaciones que las hubieran cargado por fuera.
 - **Las copias de seguridad conservan lo minimizado** hasta que caducan (`BACKUP_RETENTION_DAYS`). Es la misma doctrina que para la purga del registro (runbook `solicitud-derechos-rgpd.md` §1).
 - **Riesgos de doc 07 §6.** A-27 se cierra con este ADR. Se abre una fila para los cuasi-identificadores residuales, que valida el DPO del cliente.
 
@@ -169,7 +172,8 @@ Pruebas etiquetadas con RL-11, RL-02, RL-04, RS-05, RL-08 y RL-15.
 
 - **Unitarias:**
   - el corte de `personnel_records` con 29 de febrero, con la misma aritmética que `RetentionPolicy::workRecordCutoff`;
-  - la elegibilidad de una cuenta;
+  - el corte de las cuentas es el del registro (la elegibilidad la decide la función SQL y se prueba en integración);
+  - la frase de confirmación cambia si cambia el plazo de la ficha;
   - `RetentionScope` y `AuditActionCatalogTest` (familia `RetentionPurge`).
 - **Integración:**
   - los `CHECK` de minimización;
@@ -178,10 +182,11 @@ Pruebas etiquetadas con RL-11, RL-02, RL-04, RS-05, RL-08 y RL-15.
   - `EXECUTE` solo para `fichaje_app`, y una tabla temporal no desvía la función;
   - la función de cuentas se salta las que tienen asientos vivos;
   - `DELETE` en contratos y ausencias da `42501` con `fichaje_app`;
+  - `DELETE` en `employees` y `users` da `42501` con `fichaje_app`, y un contrato o una ausencia nuevos sobre una ficha minimizada se rechazan;
   - `down()` se niega a ejecutarse con filas minimizadas;
   - el relleno de `deactivated_at`.
 - **Feature:**
-  - `compliance:apply-retention`: la simulación cuenta sin nombres; la ejecución minimiza y escribe un asiento por persona; si el asiento falla, no se minimiza nada; solo firman `admin` o `rrhh`;
+  - `compliance:apply-retention`: la simulación cuenta sin nombres; la ejecución no minimiza más de lo que contó la simulación; la ejecución minimiza y escribe un asiento por persona; si el asiento falla, no se minimiza nada; solo firman `admin` o `rrhh`;
   - el directorio y la exportación íntegra muestran la ficha minimizada, y el portal da el rechazo genérico con el código antiguo;
   - motivo de soporte: se purga solo pasado el plazo, da `422` con los patrones, y tiene contrato y autorización negativa;
   - `sanctum:prune-expired` (`ScheduledTaskOutputTest`) borra lo caducado hace más de 24 h y conserva los tokens en solape y los vivos.

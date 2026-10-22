@@ -134,7 +134,10 @@ longer period, download it one year at a time, choosing both dates.
 
 - **CSV**: to open in a spreadsheet.
 - **PDF**: a sealed document, with the date it was generated and a checksum
-  showing it has not been altered, meant to be shown to a third party. If the
+  showing it has not been altered, meant to be shown to a third party. The
+  checksum carries the version of its format, which changed in 2.3.0: only
+  checksums of the same version are compared, so a PDF downloaded before 2.3.0
+  is not compared with one downloaded after it. If the
   server cannot generate it at that moment, the portal tells you and offers the
   CSV instead; it is nothing you did.
 

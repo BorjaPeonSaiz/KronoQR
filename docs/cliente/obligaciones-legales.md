@@ -272,7 +272,7 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Archivo de WAL (`BACKUP_PATH/wal`): **todos** los cambios de la base, incluidos fichajes, personas y `audit_log`. **Cifrado y autenticado** desde la 2.2.0 | **8 días** de serie | Tu instalación (`BACKUP_WAL_RETENTION_DAYS`). Tiene que ser mayor que el intervalo entre copias físicas (semanal de serie) |
 | Detalle técnico de cada actualización (`/var/log/kronoqr/update-*.detalle.log`): **puede llevar datos personales** | **30 días** de serie | Tu instalación (`KRONOQR_LOG_RETENTION_DAYS`, mínimo 7). Lo borra `update.sh` en cada ejecución, y `doctor.sh` si se ejecuta como root: si pasan meses sin ninguno de los dos, el borrado espera a la siguiente ejecución |
 | Resumen de cada actualización (`update-*.log`), sin datos personales | **90 días** | Tu instalación |
-| Ficha de la persona que se fue (nombre, apellidos, correo, huella del DNI, PIN, foto y código) | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la auditoría del año de su baja | El perfil de cumplimiento del centro (años de conservación de la ficha). **Pendiente de confirmar con tu asesoría laboral.** Al vencer, la purga **retira** esos datos y la ficha se queda solo con fechas de alta y baja, centro y departamento |
+| Ficha de la persona que se fue (nombre, apellidos, correo, huella del DNI, PIN, foto y código) | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la auditoría del año de su baja | El perfil de cumplimiento del centro (años de conservación de la ficha). **Pendiente de confirmar con tu asesoría laboral.** Al vencer, la purga **retira** esos datos y la ficha se queda solo con fechas de alta y baja, centro, departamento, idioma y si teletrabajaba |
 | Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Los de la ficha**: se borran con ella | El mismo campo del perfil. **Pendiente de confirmar con tu asesoría laboral** |
 | Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Los de la ficha**: se borran con ella | El mismo campo del perfil. **Pendiente de confirmar con tu asesoría laboral. Contienen dato de salud** |
 | Cuenta del personal de gestión dada de baja (nombre, correo, contraseña y segundo factor) | **4 años desde la baja** (los mismos que el registro), y nunca mientras alguna anotación del registro de auditoría, corrección o resolución la cite | El perfil de cumplimiento. Al vencer, la purga la deja sin nombre ni forma de entrar |
@@ -303,11 +303,13 @@ ajústalo en el perfil antes de la primera purga que lo aplique.
   purga de retención retira de la ficha nombre, apellidos, correo, huella del
   DNI, PIN, foto y código, y **borra sus contratos y sus ausencias**.
 - **Qué queda.** La ficha conserva su identificador interno, las fechas de alta
-  y de baja, el centro y el departamento.
+  y de baja, el centro, el departamento, el idioma y si teletrabajaba. La
+  credencial revocada se queda, pero su motivo de revocación se sustituye por un
+  texto fijo.
 - **Cómo se autoriza.** Como toda purga, no es automática: la autoriza una
   persona y queda anotada, persona a persona, sin nombres.
-- **Lo que tiene que validar tu DPO.** Si en tu hotel esas fechas y ese
-  departamento bastan para reconocer a alguien, la ficha minimizada sigue
+- **Lo que tiene que validar tu DPO.** Si en tu hotel esas fechas, ese
+  departamento, el idioma y el teletrabajo bastan para reconocer a alguien, la ficha minimizada sigue
   siendo dato personal. Si concluye que sí, pídenos que las generalicemos.
 
 **Contratos y ausencias tienen un solo plazo, el de la ficha.** Si tu asesoría

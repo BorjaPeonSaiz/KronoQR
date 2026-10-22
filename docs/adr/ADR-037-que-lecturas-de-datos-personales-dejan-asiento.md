@@ -174,7 +174,6 @@ es justo lo que el trail tiene que poder enseñar.
 - **Cómo viaja.** El evento `ReportExportGenerated` lleva `disclosureDataset`, `disclosureRecordCount` y `disclosureContext`.
 - **Dónde se escribe.** `RecordReportExportLifecycle::generated` escribe dos asientos en la transacción de `completeAndPublish`: `report_export.generated` y `personal_data.accessed`, este con actor `user(requestedByUserId)` y contexto `{...disclosure, report_export_uuid, deferred: true}`.
 - **Si la generación falla**, no hay asiento de lectura, porque no se ha divulgado nada.
-- **Si no consta quién lo pidió**, el actor es `system` y el contexto lleva `report_export_uuid`, que remite a la petición.
 - **El resumen semanal no cambia.**
 
 **Lo que sigue sin asiento, y por qué.**
