@@ -220,6 +220,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
                     maximumWeeklyMinutes: 2400,
                     weekStartsOn: 1,
                     holidayCalendar: [],
+                    personnelRecordRetentionYears: 4,
                 );
             }
         },

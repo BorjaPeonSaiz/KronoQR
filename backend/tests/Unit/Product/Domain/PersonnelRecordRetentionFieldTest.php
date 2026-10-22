@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\Policy\RetentionPolicy;
+use App\Modules\Compliance\Domain\ValueObject\RetentionPolicySnapshot;
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
@@ -12,8 +14,9 @@ use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 
 /*
  * `personnel_record_retention_years` como campo del perfil y como dato de la
- * politica (ADR-060, tarea 11.3 A; RL-11, regla dura 14): entre 1 y 30, 4 de
- * serie, y cuenta como cambio que afecta a la retencion.
+ * politica (ADR-060, tarea 11.3 A; RL-11, regla dura 14): entre 1 y 30, sin
+ * valor de serie en el dominio (el 4 es el `DEFAULT` de la columna), y cuenta
+ * como cambio que afecta a la retencion.
  */
 
 function fichaPerfil(int $personnelYears = 4): ComplianceProfileSnapshot
@@ -74,7 +77,7 @@ it('rechaza un plazo fuera de 1 a 30', function (int $years): void {
         ->toThrow(InvalidComplianceProfileValue::class);
 })->with([0, 31])->group('RL-11', 'RF-PD-07');
 
-it('la politica lo lleva con 4 de serie y no admite cero', function (): void {
+it('la politica lo lleva y no admite cero', function (): void {
     $policy = static fn (int $years): CompliancePolicy => new CompliancePolicy(
         minimumRestMinutes: 720,
         maximumDailyMinutes: 540,
@@ -87,6 +90,14 @@ it('la politica lo lleva con 4 de serie y no admite cero', function (): void {
     );
 
     expect($policy(6)->personnelRecordRetentionYears)->toBe(6)
-        ->and(new CompliancePolicy(720, 540, 360, 4, 2400, 1, [])->personnelRecordRetentionYears)->toBe(4)
         ->and(fn (): CompliancePolicy => $policy(0))->toThrow(InvalidArgumentException::class, 'ficha de personal');
 })->group('RL-11');
+
+it('ningun objeto del dominio trae los años de la ficha de serie (regla dura 14)', function (string $class, string $method, string $parameter): void {
+    expect((new ReflectionParameter([$class, $method], $parameter))->isOptional())->toBeFalse();
+})->with([
+    'la politica de cumplimiento' => [CompliancePolicy::class, '__construct', 'personnelRecordRetentionYears'],
+    'el perfil' => [ComplianceProfileSnapshot::class, '__construct', 'personnelRecordRetentionYears'],
+    'la politica de retencion' => [RetentionPolicy::class, 'of', 'personnelRecordYears'],
+    'la foto de la politica en el informe' => [RetentionPolicySnapshot::class, '__construct', 'personnelRecordYears'],
+])->group('RL-11');

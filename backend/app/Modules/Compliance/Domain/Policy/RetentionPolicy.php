@@ -69,9 +69,9 @@ final readonly class RetentionPolicy
         /**
          * Anos que se conserva la ficha de una persona dada de baja antes de
          * minimizarla (ADR-060, tarea 11.3 A). Del perfil de cumplimiento
-         * (`personnel_record_retention_years`, 4 de serie).
+         * (`personnel_record_retention_years`); sin valor de serie aqui.
          */
-        public int $personnelRecordYears = 4,
+        public int $personnelRecordYears,
     ) {
         self::positive($legalRecordYears, 'los anos del registro de jornada (RL-02)');
         self::positive($technicalLogDays, 'los dias del log tecnico (RL-11)');
@@ -93,7 +93,7 @@ final readonly class RetentionPolicy
         int $technicalLogDays,
         int $errorHistoryDays,
         LegalRetentionFloor $legalRecordFloor,
-        int $personnelRecordYears = 4,
+        int $personnelRecordYears,
     ): self {
         $policy = new self($legalRecordYears, $technicalLogDays, $errorHistoryDays, $personnelRecordYears);
 

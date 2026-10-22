@@ -58,6 +58,8 @@ final readonly class ComplianceProfileSnapshot
         public int $retentionYears,
         public bool $isDefault,
         public ComplianceProfileSource $source,
+        /** Años de la ficha de personal tras el cese (ADR-060, tarea 11.3 A). Sin valor de serie: lo da el perfil (regla dura 14). */
+        public int $personnelRecordRetentionYears,
         /**
          * Cuando se cambio por ultima vez, o `null` si **nadie lo ha tocado
          * desde la instalacion**.
@@ -69,8 +71,6 @@ final readonly class ComplianceProfileSnapshot
          * su convenio. El «quien» con valor probatorio esta en `audit_log`.
          */
         public ?DateTimeImmutable $updatedAt = null,
-        /** Años de la ficha de personal tras el cese (ADR-060, tarea 11.3 A). */
-        public int $personnelRecordRetentionYears = 4,
     ) {}
 
     /**

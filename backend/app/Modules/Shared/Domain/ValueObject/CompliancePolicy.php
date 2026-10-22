@@ -101,10 +101,10 @@ final readonly class CompliancePolicy
         array $holidayCalendar,
         /**
          * RL-11, ADR-060: años que se conserva la ficha de una persona dada de
-         * baja antes de minimizarla. Con valor de serie porque solo lo leen la
-         * retencion y el perfil.
+         * baja antes de minimizarla. Del perfil y sin valor de serie (regla dura
+         * 14): el 4 solo esta en el `DEFAULT` de la columna.
          */
-        public int $personnelRecordRetentionYears = 4,
+        public int $personnelRecordRetentionYears,
     ) {
         $this->positive($minimumRestMinutes, 'el descanso minimo entre jornadas (RN-10)');
         $this->positive($maximumDailyMinutes, 'la jornada diaria ordinaria (RN-11)');

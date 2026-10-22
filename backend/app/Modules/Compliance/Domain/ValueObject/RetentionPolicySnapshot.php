@@ -36,6 +36,6 @@ final readonly class RetentionPolicySnapshot
         /** La jurisdiccion del perfil (`ES`, `ES-CN`), por el mismo motivo. */
         public string $jurisdiction,
         /** Anos de la ficha de personal (ADR-060). */
-        public int $personnelRecordYears = 4,
+        public int $personnelRecordYears,
     ) {}
 }
