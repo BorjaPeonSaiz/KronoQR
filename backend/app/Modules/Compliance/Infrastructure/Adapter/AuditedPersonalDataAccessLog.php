@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Adapter;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
@@ -45,8 +46,35 @@ final readonly class AuditedPersonalDataAccessLog implements PersonalDataAccessL
 
     public function recordDisclosure(string $dataset, int $recordCount, array $context = []): void
     {
+        $this->recordDisclosureAs(
+            $this->context->actor(),
+            $dataset,
+            $recordCount,
+            $context,
+            $this->context->ip(),
+            $this->context->userAgent(),
+        );
+    }
+
+    /**
+     * El mismo asiento a nombre de un actor que **no** es el de la peticion en
+     * curso: la lectura diferida de un informe, que escribe el trabajo de la
+     * cola pero pidio una cuenta (tarea 11.4, V4-BE-5). Un solo sitio construye
+     * el `payload` de `personal_data.accessed`, con las claves canonicas al
+     * final.
+     *
+     * @param  array<string, scalar>  $context
+     */
+    public function recordDisclosureAs(
+        AuditActor $actor,
+        string $dataset,
+        int $recordCount,
+        array $context = [],
+        ?string $ip = null,
+        ?string $userAgent = null,
+    ): void {
         $this->audit->handle(new RecordAuditEntryCommand(
-            actor: $this->context->actor(),
+            actor: $actor,
             action: AuditAction::PersonalDataAccessed,
             // Sin identificador: lo divulgado es un conjunto, no una fila. Poner
             // aqui el centro seria confundir el sujeto del acceso con su alcance,
@@ -63,8 +91,8 @@ final readonly class AuditedPersonalDataAccessLog implements PersonalDataAccessL
                 'dataset' => $dataset,
                 'record_count' => $recordCount,
             ]),
-            ip: $this->context->ip(),
-            userAgent: $this->context->userAgent(),
+            ip: $ip,
+            userAgent: $userAgent,
         ));
     }
 }

@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
@@ -63,7 +64,10 @@ use App\Modules\Reporting\Domain\Event\ReportExportRequested;
  */
 final readonly class RecordReportExportLifecycle
 {
-    public function __construct(private RecordAuditEntry $audit) {}
+    public function __construct(
+        private RecordAuditEntry $audit,
+        private AuditedPersonalDataAccessLog $disclosures,
+    ) {}
 
     public function requested(ReportExportRequested $event): void
     {
@@ -115,20 +119,18 @@ final readonly class RecordReportExportLifecycle
         // resuelve `GeneratePeriodReport::compose()`—, mas el informe del que
         // sale y la marca de diferido. En la misma transaccion que el asiento de
         // arriba: o constan los dos o ninguno.
-        $this->audit->handle(new RecordAuditEntryCommand(
-            actor: AuditActor::user($event->requestedByUserId),
-            action: AuditAction::PersonalDataAccessed,
-            subject: AuditSubject::of('personal_data'),
-            payload: AuditPayload::of([
+        // El `payload` lo construye el mismo adaptador que el de la lectura
+        // sincrona: un solo sitio para la forma de `personal_data.accessed`.
+        $this->disclosures->recordDisclosureAs(
+            AuditActor::user($event->requestedByUserId),
+            $event->disclosureDataset,
+            $event->disclosureRecordCount,
+            [
                 ...$event->disclosureContext,
                 'report_export_uuid' => $event->uuid,
                 'deferred' => true,
-                // Las dos claves canonicas al final, como en
-                // `AuditedPersonalDataAccessLog`: el contexto no las pisa.
-                'dataset' => $event->disclosureDataset,
-                'record_count' => $event->disclosureRecordCount,
-            ]),
-        ));
+            ],
+        );
     }
 
     /**
