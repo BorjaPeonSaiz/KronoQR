@@ -29,6 +29,20 @@ export interface ResolutionConflict {
 
 export const DEFAULT_PER_PAGE = 25
 
+/**
+ * Que peticion fallo, para decir que datos se estan viendo:
+ *  - `refresh`: releer lo mismo (boton, tras un conflicto); las filas siguen
+ *    siendo las de la ultima lectura buena y se enseñan con su hora.
+ *  - `filter`: cambio de filtro o de pagina; las filas que hubiera eran de OTRO
+ *    conjunto y se retiran: enseñarlas bajo el filtro nuevo seria mentir.
+ */
+export type IncidentsFailureKind = 'refresh' | 'filter'
+
+export interface IncidentsFailure {
+  kind: IncidentsFailureKind
+  error: unknown
+}
+
 function defaultFilters(): IncidentsQuery {
   return { status: 'open', page: 1, perPage: DEFAULT_PER_PAGE }
 }
@@ -40,6 +54,12 @@ export const useIncidentsStore = defineStore('incidents', () => {
   const loading = ref(false)
   const error = ref<unknown>(null)
   const conflict = ref<ResolutionConflict | null>(null)
+  /** Ultima lectura fallida con la bandeja ya pintada; se limpia al leer bien. */
+  const refreshFailure = ref<IncidentsFailure | null>(null)
+  /** Hay una lectura en vuelo con datos ya en pantalla (para el estado del boton). */
+  const refreshing = ref(false)
+  /** Numero de la ultima peticion: una respuesta tardia de una anterior no pisa a la nueva. */
+  let loadSequence = 0
   /** `Date.now()` del navegador en el momento en que llego `meta.generated_at`. */
   const receivedAt = ref(0)
 
@@ -53,32 +73,58 @@ export const useIncidentsStore = defineStore('incidents', () => {
     return Date.parse(meta.value.generated_at) + Math.max(now - receivedAt.value, 0)
   }
 
-  async function load(): Promise<void> {
-    loading.value = entries.value.length === 0 && meta.value === null
+  async function load(kind: IncidentsFailureKind = 'refresh'): Promise<void> {
+    const firstLoad = entries.value.length === 0 && meta.value === null
+
+    loading.value = firstLoad
+    refreshing.value = !firstLoad
     error.value = null
+    loadSequence += 1
+    const sequence = loadSequence
 
     try {
       const page = await listIncidents(filters.value)
 
+      if (sequence !== loadSequence) {
+        return
+      }
+
       entries.value = page.data
       meta.value = page.meta
       receivedAt.value = Date.now()
+      refreshFailure.value = null
     } catch (caught) {
+      if (sequence !== loadSequence) {
+        return
+      }
+
       error.value = caught
+      // Un fallo de filtro sigue siendo de filtro hasta que una lectura buena lo
+      // limpie: pulsar «Actualizar» y fallar otra vez no devuelve las filas viejas.
+      const failureKind = refreshFailure.value?.kind === 'filter' ? 'filter' : kind
+
+      refreshFailure.value = { kind: failureKind, error: caught }
+
+      if (failureKind === 'filter') {
+        entries.value = []
+      }
     } finally {
-      loading.value = false
+      if (sequence === loadSequence) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 
   /** Cambia filtros y vuelve a la primera pagina: un filtro nuevo invalida la pagina actual. */
   async function applyFilters(patch: Partial<IncidentsQuery>): Promise<void> {
     filters.value = { ...filters.value, ...patch, page: 1 }
-    await load()
+    await load('filter')
   }
 
   async function goToPage(page: number): Promise<void> {
     filters.value = { ...filters.value, page }
-    await load()
+    await load('filter')
   }
 
   /** Quita la fila cerrada de la bandeja y ajusta el recuento, sin volver a pedir la pagina. */
@@ -162,6 +208,8 @@ export const useIncidentsStore = defineStore('incidents', () => {
     loading,
     error,
     conflict,
+    refreshFailure,
+    refreshing,
     serverNowMs,
     load,
     applyFilters,

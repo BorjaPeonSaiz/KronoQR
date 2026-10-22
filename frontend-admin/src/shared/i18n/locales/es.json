@@ -1332,7 +1332,8 @@
       "present": "Dentro ahora",
       "absent": "Fuera ahora",
       "lastUpdate": "Última actualización",
-      "snapshotAt": "{moment} ({zone})"
+      "snapshotAt": "{moment} ({zone})",
+      "contact": "Canal en directo comprobado a las {moment} ({zone}). Si no hay cambios, es que nadie ha fichado desde la última actualización."
     },
     "status": {
       "present": "Dentro ahora",
@@ -1366,7 +1367,7 @@
     },
     "notice": {
       "poll": "No se ha podido actualizar la lista (fallo de red o del servidor). Se muestran los datos de la última actualización correcta, el {moment} ({zone}); se reintentará solo.",
-      "filter": "No se ha podido aplicar el filtro elegido. La lista sigue siendo la de la última actualización correcta, el {moment} ({zone}), y puede no corresponder al filtro.",
+      "filter": "No se ha podido aplicar el filtro elegido, así que no se muestra ninguna lista: la que había era de otro filtro. Se reintentará solo.",
       "realtime": "La conexión en tiempo real se ha cortado y se está reintentando. Mientras tanto la lista se actualiza por sondeo; última actualización correcta el {moment} ({zone})."
     },
     "transport": {
@@ -1557,6 +1558,15 @@
       "heading": "Incidencias de la jornada",
       "none": "Sin incidencias en esta jornada.",
       "linkToInbox": "Ver en la bandeja de incidencias"
+    },
+    "refresh": {
+      "button": "Actualizar",
+      "busy": "Actualizando…",
+      "readAt": "Leída el {moment}"
+    },
+    "notice": {
+      "refresh": "No se ha podido actualizar la bandeja (fallo de red o del servidor). Se muestran los datos de la última lectura correcta, el {moment}; las antigüedades siguen corriendo. Pulsa «Actualizar» para reintentarlo.",
+      "filter": "No se ha podido aplicar el filtro o la página elegidos, así que no se muestra ninguna fila: las que había eran de otro filtro. Pulsa «Actualizar» para reintentarlo."
     }
   },
   "compliance": {

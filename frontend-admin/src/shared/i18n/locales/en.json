@@ -1332,7 +1332,8 @@
       "present": "In now",
       "absent": "Out now",
       "lastUpdate": "Last update",
-      "snapshotAt": "{moment} ({zone})"
+      "snapshotAt": "{moment} ({zone})",
+      "contact": "Live channel checked at {moment} ({zone}). If nothing changed, nobody has clocked since the last update."
     },
     "status": {
       "present": "In now",
@@ -1366,7 +1367,7 @@
     },
     "notice": {
       "poll": "The list could not be refreshed (network or server failure). The data shown is from the last successful update, on {moment} ({zone}); it will retry by itself.",
-      "filter": "The chosen filter could not be applied. The list is still the one from the last successful update, on {moment} ({zone}), and may not match the filter.",
+      "filter": "The chosen filter could not be applied, so no list is shown: the previous one belonged to another filter. It will retry by itself.",
       "realtime": "The real-time connection dropped and is being retried. Meanwhile the list refreshes by polling; last successful update on {moment} ({zone})."
     },
     "transport": {
@@ -1557,6 +1558,15 @@
       "heading": "Incidents in this work day",
       "none": "No incidents in this work day.",
       "linkToInbox": "View in the incident inbox"
+    },
+    "refresh": {
+      "button": "Refresh",
+      "busy": "Refreshing…",
+      "readAt": "Read on {moment}"
+    },
+    "notice": {
+      "refresh": "The inbox could not be refreshed (network or server failure). The data shown is from the last successful read, on {moment}; ages keep running. Press “Refresh” to try again.",
+      "filter": "The chosen filter or page could not be applied, so no rows are shown: the ones that were there belonged to another filter. Press “Refresh” to try again."
     }
   },
   "compliance": {

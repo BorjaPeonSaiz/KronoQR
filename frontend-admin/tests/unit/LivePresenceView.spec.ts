@@ -1,7 +1,9 @@
 // Pantalla de presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
-import { useLivePresenceStore } from '@/features/live/presence.store'
+import { overrideSocketFactory, useLivePresenceStore } from '@/features/live/presence.store'
+import type { SocketLike } from '@/features/live/realtime/pusherClient'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { useSessionStore } from '@/features/auth/session.store'
 import { registerAuthGuard } from '@/router/guards'
 import es from '@/shared/i18n/locales/es.json'
@@ -259,7 +261,7 @@ describe('LivePresenceView', () => {
       wrapper.unmount()
     })
 
-    it('un cambio de filtro que falla avisa de que la lista puede no corresponder al filtro', async () => {
+    it('un cambio de filtro que falla no deja las filas del filtro anterior y no pinta un vacio falso (V2-PA-05)', async () => {
       const wrapper = await mountView(LivePresenceView)
       await settle()
 
@@ -269,11 +271,26 @@ describe('LivePresenceView', () => {
 
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('filter')
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('role')).toBe('status')
-      expect(wrapper.find('[data-test="refresh-notice"]').text()).toBe(
-        es.live.notice.filter
-          .replace('{moment}', '14/3/26, 10:12')
-          .replace('{zone}', 'Europe/Madrid'),
-      )
+      expect(wrapper.find('[data-test="refresh-notice"]').text()).toBe(es.live.notice.filter)
+      // Ni filas de los presentes bajo «Fuera ahora», ni el «Nadie fuera» del filtro nuevo.
+      expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain(es.live.empty.absent.title)
+      expect(wrapper.find('[data-test="counts"]').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+
+      // Un sondeo posterior que tambien falla no devuelve las filas viejas ni rebaja el aviso.
+      await useLivePresenceStore().load()
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('filter')
+      expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(false)
+
+      // Al recuperarse llega la lista del filtro nuevo.
+      failing = false
+      await useLivePresenceStore().load()
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').exists()).toBe(false)
       expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
 
       wrapper.unmount()
@@ -333,6 +350,126 @@ describe('LivePresenceView', () => {
       store.disconnect()
 
       expect(store.realtimeFailed).toBe(false)
+    })
+  })
+
+  describe('estados de degradacion del tiempo real (R2-PA-05, V21-3-PA-4)', () => {
+    class SilentSocket implements SocketLike {
+      public onopen = null
+
+      public onmessage: ((event: { data: unknown }) => void) | null = null
+
+      public onclose: ((event: unknown) => void) | null = null
+
+      public onerror = null
+
+      public send(): void {}
+
+      public close(): void {
+        this.onclose?.({})
+      }
+
+      public receive(event: string, data: unknown, channel?: string): void {
+        this.onmessage?.({
+          data: JSON.stringify({
+            event,
+            ...(channel === undefined ? {} : { channel }),
+            data: JSON.stringify(data),
+          }),
+        })
+      }
+    }
+
+    const REALTIME_BOARD: LivePresenceBoard = {
+      ...BOARD,
+      meta: {
+        ...BOARD.meta,
+        realtime: { ...BOARD.meta.realtime, enabled: true, key: 'kronoqr' },
+      },
+    }
+    let sockets: SilentSocket[]
+
+    beforeEach(() => {
+      sockets = []
+      clearAnnouncement()
+      overrideSocketFactory(() => {
+        const socket = new SilentSocket()
+        sockets.push(socket)
+
+        return socket
+      })
+      stubFetch((url) => {
+        if (url.includes('/api/v1/attendance/live')) {
+          return jsonResponse(REALTIME_BOARD)
+        }
+
+        if (url.includes('/broadcasting/auth')) {
+          return jsonResponse({ auth: 'kronoqr:firma' })
+        }
+
+        return jsonResponse({ data: [{ id: 3, name: 'Cocina' }] })
+      })
+    })
+
+    afterEach(() => {
+      overrideSocketFactory(undefined)
+    })
+
+    async function goLive(): Promise<void> {
+      sockets[0]?.receive('pusher:connection_established', {
+        socket_id: '1.1',
+        activity_timeout: 120,
+      })
+      await settle()
+      sockets[0]?.receive('pusher_internal:subscription_succeeded', {}, 'private-presence.all')
+      await settle()
+    }
+
+    it('mientras el canal no llega a estar en vivo dice que se sondea, con el intervalo', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+
+      const transport = wrapper.find('[data-test="transport"]')
+
+      expect(transport.attributes('data-degraded')).toBe('true')
+      expect(transport.text()).toBe(es.live.transport.polling.replace('{seconds}', '15'))
+      expect(wrapper.find('[data-test="channel-contact"]').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('con el canal en vivo lo dice y enseña el ultimo contacto aparte de la ultima actualizacion', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+      await goLive()
+
+      const transport = wrapper.find('[data-test="transport"]')
+
+      expect(transport.attributes('data-degraded')).toBe('false')
+      expect(transport.text()).toBe(es.live.transport.live)
+      expect(wrapper.find('[data-test="channel-contact"]').text()).toBe(
+        es.live.counts.contact
+          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{zone}', 'Europe/Madrid'),
+      )
+
+      wrapper.unmount()
+    })
+
+    it('al caer el canal pasa a sondeo y lo anuncia a los lectores de pantalla', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+      await goLive()
+      clearAnnouncement()
+
+      sockets[0]?.close()
+      await settle()
+
+      expect(wrapper.find('[data-test="transport"]').attributes('data-degraded')).toBe('true')
+      expect(announcement.value.trim()).toBe(es.live.transport.polling.replace('{seconds}', '15'))
+      expect(wrapper.find('[data-test="channel-contact"]').exists()).toBe(false)
+
+      wrapper.unmount()
     })
   })
 })

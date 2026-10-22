@@ -13,6 +13,7 @@ import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -50,7 +51,7 @@ const TYPES: readonly IncidentType[] = [
 ]
 const SEVERITIES: readonly IncidentSeverity[] = ['high', 'medium', 'low']
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useIncidentsStore()
@@ -139,6 +140,26 @@ watch(
     }
   },
 )
+
+/** La hora de la ultima lectura buena, en la zona del centro y con la zona escrita. */
+const readAtMoment = computed(() =>
+  store.meta === null
+    ? ''
+    : `${formatInstant(store.meta.generated_at, store.meta.time_zone, locale.value)} (${store.meta.time_zone})`,
+)
+
+const refreshNotice = computed<'refresh' | 'filter' | null>(() =>
+  store.meta === null ? null : (store.refreshFailure?.kind ?? null),
+)
+
+/** Con el filtro fallido no hay filas que enseñar: se cuenta el error en lugar de la lista. */
+const showError = computed(
+  () => store.error !== null && (store.meta === null || store.refreshFailure?.kind === 'filter'),
+)
+
+function refresh(): void {
+  void store.load()
+}
 
 function goToPage(page: number): void {
   void store.goToPage(page)
@@ -262,13 +283,46 @@ const selectClass =
       </fieldset>
     </form>
 
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+      <p v-if="store.meta !== null" class="text-sm text-kq-text-muted" data-test="read-at">
+        {{ t('incidents.refresh.readAt', { moment: readAtMoment }) }}
+      </p>
+      <button
+        type="button"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-sm hover:bg-kq-surface-alt disabled:opacity-60"
+        :disabled="store.refreshing || store.loading"
+        :aria-busy="store.refreshing"
+        data-test="refresh"
+        @click="refresh"
+      >
+        {{ store.refreshing ? t('incidents.refresh.busy') : t('incidents.refresh.button') }}
+      </button>
+    </div>
+
+    <p
+      v-if="refreshNotice === 'refresh'"
+      role="status"
+      aria-live="polite"
+      class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft px-3 py-2 text-kq-warning"
+      data-test="refresh-notice"
+      data-kind="refresh"
+    >
+      {{ t('incidents.notice.refresh', { moment: readAtMoment }) }}
+    </p>
+
     <LoadingPanel v-if="store.loading" :label="t('incidents.loading')" class="mt-4" />
 
-    <ErrorNotice
-      v-else-if="store.error !== null && store.meta === null"
-      :error="store.error"
-      class="mt-4"
-    />
+    <template v-else-if="showError">
+      <p
+        v-if="refreshNotice === 'filter'"
+        class="mt-4 text-kq-text-muted"
+        data-test="refresh-notice"
+        data-kind="filter"
+      >
+        {{ t('incidents.notice.filter') }}
+      </p>
+      <ErrorNotice :error="store.error" class="mt-4" />
+    </template>
 
     <template v-else-if="store.meta !== null">
       <EmptyState

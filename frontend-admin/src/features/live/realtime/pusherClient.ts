@@ -48,6 +48,8 @@ export interface RealtimeClientOptions {
   authorize: (socketId: string, channelName: string) => Promise<string>
   onEvent: (channel: string, payload: unknown) => void
   onStateChange: (state: RealtimeState) => void
+  /** Cualquier mensaje del servidor (negocio, latido o `pong`): el canal sigue vivo aunque nadie ficha. */
+  onActivity?: () => void
   /** Origen `protocolo://host[:puerto]`. Por omision, el del documento. */
   origin?: string
   createSocket?: SocketFactory
@@ -285,6 +287,7 @@ export class RealtimeClient {
 
   /** Cualquier mensaje del servidor rearma el latido. */
   private touch(): void {
+    this.options.onActivity?.()
     clearTimeout(this.activityTimer)
     clearTimeout(this.pongTimer)
     this.pongTimer = undefined

@@ -98,12 +98,25 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   const refreshFailure = ref<PresenceFailure | null>(null)
   /** El canal se ha caido (y se reintenta): se limpia al volver a estar vivo. */
   const realtimeFailed = ref(false)
+  /**
+   * Ultimo instante (ISO, hora del servidor extrapolada) en que el canal dio
+   * señal de vida -un mensaje de negocio, un latido o un `pong`-. Distingue
+   * «nadie ha fichado» de «el canal esta congelado»: con el canal vivo y sin
+   * fichajes, `lastUpdatedAt` envejece, pero esta marca no (el cliente cierra
+   * el socket si un `ping` queda sin respuesta, asi que `live` implica contacto
+   * reciente).
+   */
+  const lastContactAt = ref<string | null>(null)
 
   let client: RealtimeClient | null = null
   let pollTimer: ReturnType<typeof setTimeout> | undefined
   /** Reintento de la foto tras un fallo con el canal vivo: en tiempo real nadie sondea, y sin esto el aviso se quedaria pegado. */
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let retryAttempts = 0
+  /** La primera foto fallo: en cuanto una posterior llegue hay que intentar el canal (R3-PA-03). */
+  let realtimePending = false
+  /** Numero de la ultima peticion lanzada: una respuesta tardia de una anterior no pisa a la nueva. */
+  let loadSequence = 0
   /** La instancia del canal cuyos cambios de estado cuentan; un cierre intencionado la anula. */
   let activeChannel: symbol | null = null
   /** Ultimo `occurred_at` aplicado por persona, para descartar mensajes reordenados. */
@@ -154,20 +167,44 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   async function load(kind: PresenceFailureKind = 'poll'): Promise<void> {
     loading.value = entries.value.length === 0 && meta.value === null
     error.value = null
+    loadSequence += 1
+    const sequence = loadSequence
 
     try {
       const board = await listLivePresence(filters.value)
 
+      if (sequence !== loadSequence) {
+        return
+      }
+
       applyBoard(board.data, board.meta)
       clearRetry()
     } catch (caught) {
+      if (sequence !== loadSequence) {
+        return
+      }
+
       error.value = caught
-      refreshFailure.value = { kind, error: caught }
+      // Un fallo de filtro sigue siendo de filtro hasta que una foto buena lo
+      // limpie: un sondeo posterior que tambien falle no debe «rebajarlo».
+      const failureKind = refreshFailure.value?.kind === 'filter' ? 'filter' : kind
+
+      refreshFailure.value = { kind: failureKind, error: caught }
+
+      if (failureKind === 'filter') {
+        // Las filas que hay son las del filtro anterior: enseñarlas bajo el
+        // filtro nuevo seria mentir sobre quien esta presente o ausente.
+        entries.value = []
+        latestByEmployee.clear()
+      }
+
       if (transport.value === 'realtime') {
         scheduleRetry()
       }
     } finally {
-      loading.value = false
+      if (sequence === loadSequence) {
+        loading.value = false
+      }
     }
   }
 
@@ -177,6 +214,13 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
    */
   function applyMessage(message: PresenceUpdatedMessage): void {
     const { entry, occurred_at: occurredAt } = message
+
+    // Con el filtro nuevo sin cargar, aplicar mensajes mezclaria dos conjuntos:
+    // la foto siguiente trae el estado completo.
+    if (refreshFailure.value?.kind === 'filter') {
+      return
+    }
+
     const previous = latestByEmployee.get(entry.employee_uuid)
 
     if (previous !== undefined && previous >= occurredAt) {
@@ -234,9 +278,20 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     stopPolling()
     pollTimer = setTimeout(() => {
       void load().finally(() => {
-        if (transport.value === 'polling') {
-          schedulePoll()
+        if (transport.value !== 'polling') {
+          return
         }
+
+        // La primera foto fallo y esta si llego: ahora ya se sabe si hay canal.
+        if (realtimePending && meta.value !== null) {
+          realtimePending = false
+
+          if (realtimeAvailable.value) {
+            startRealtime()
+          }
+        }
+
+        schedulePoll()
       })
     }, pollIntervalMs.value)
   }
@@ -282,6 +337,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
           applyMessage(payload)
         }
       },
+      onActivity: () => {
+        lastContactAt.value = new Date(serverNowMs()).toISOString()
+      },
       onStateChange: (state) => {
         if (activeChannel !== channel) {
           return
@@ -314,7 +372,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     await load()
 
     if (meta.value === null) {
-      // Sin foto (error de red): se sigue intentando por sondeo con el intervalo por omision.
+      // Sin foto (error de red): se sigue intentando por sondeo con el intervalo
+      // por omision, y en cuanto llegue una se intenta el canal (R3-PA-03).
+      realtimePending = true
       startPolling()
 
       return
@@ -335,6 +395,8 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
 
   /** Cierra canal y sondeo. Al salir de la pantalla. */
   function disconnect(): void {
+    realtimePending = false
+    lastContactAt.value = null
     stopPolling()
     clearRetry()
     stopRealtime()
@@ -352,6 +414,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     lastUpdatedAt,
     refreshFailure,
     realtimeFailed,
+    lastContactAt,
     realtimeState,
     realtimeAvailable,
     timeZone,
