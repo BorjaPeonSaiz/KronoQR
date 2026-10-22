@@ -269,6 +269,22 @@ describe('pantalla de soporte', () => {
     expect(cell.text()).toContain('20/12/26')
   })
 
+  it('un autor minimizado (granted_by.name vacio) se rotula en vez de dejar el hueco', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () =>
+        jsonResponse(
+          supportGrantCollection([
+            supportGrant({ granted_by: { uuid: SUPPORT_GRANT_UUID, name: '' } }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountSupportView()
+
+    expect(wrapper.text()).toContain(es.people.minimised)
+  })
+
   it('no deja conceder con el motivo vacio', async () => {
     stubRoutes({
       '/site': () => jsonResponse(SITE),

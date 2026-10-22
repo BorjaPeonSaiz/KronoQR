@@ -25,6 +25,7 @@ import { ApiError } from '@kronoqr/web-kit/http'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { getSite } from '@/shared/api/organisation.api'
 import type { SupportGrant, SupportScope } from '@/shared/api/types'
 import { DIAGNOSTICS_MANAGE, SUPPORT_MANAGE } from '@/features/auth/abilities'
@@ -42,6 +43,7 @@ import { elapsedSinceAccess } from './useSupportGrantRows'
 const CLOCK_TICK_MS = 30_000
 
 const { t, locale } = useI18n()
+const { personName } = usePersonName()
 const session = useSessionStore()
 
 /**
@@ -539,7 +541,7 @@ const buttonClass =
                 {{ reasonLabel(entry) }}
               </td>
               <td class="px-3 py-2">{{ t(`support.grant.scope.${entry.scope}.label`) }}</td>
-              <td class="px-3 py-2">{{ entry.granted_by.name }}</td>
+              <td class="px-3 py-2">{{ personName(entry.granted_by.name, '') }}</td>
               <td class="px-3 py-2">{{ instantLabel(entry.granted_at) }}</td>
               <td class="px-3 py-2">{{ instantLabel(entry.expires_at) }}</td>
               <td class="px-3 py-2">

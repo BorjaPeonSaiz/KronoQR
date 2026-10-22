@@ -129,6 +129,29 @@ describe('AccountsView', () => {
     expect(wrapper.text()).toContain(es.accounts.table.noActions)
   })
 
+  it('una cuenta minimizada se rotula, no enseña el correo sintetico y no ofrece acciones', async () => {
+    const minimised = managementAccount({
+      uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b77',
+      name: '',
+      email: 'anonymized+0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b77@invalid',
+      status: 'deactivated',
+      anonymized_at: '2026-10-01T08:30:00.000000Z',
+    })
+
+    stubFetch(routes(managementAccountCollection([minimised])))
+
+    const wrapper = await mountAsAdmin()
+
+    await settle()
+
+    expect(wrapper.find(`[data-test="account-${minimised.uuid}"] th`).text()).toBe(
+      es.people.minimised,
+    )
+    expect(wrapper.text()).not.toContain('@invalid')
+    expect(wrapper.find('[data-test="account-minimised"]').text()).toContain('Minimizada el')
+    expect(wrapper.find(`[data-test="deactivate-${minimised.uuid}"]`).exists()).toBe(false)
+  })
+
   it('sobre la propia cuenta las acciones llevan explicacion y no abren el dialogo', async () => {
     stubFetch(routes(managementAccountCollection([OWN])))
 

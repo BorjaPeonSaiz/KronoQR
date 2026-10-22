@@ -123,7 +123,8 @@
       "neverLoggedIn": "Never signed in",
       "noActions": "No actions: account deactivated",
       "reachesNobody": "Reaches nobody: not the manager of any department.",
-      "assignDepartment": "Assign a department"
+      "assignDepartment": "Assign a department",
+      "minimisedAt": "Minimised on {date}. No actions."
     },
     "empty": {
       "title": "No accounts",
