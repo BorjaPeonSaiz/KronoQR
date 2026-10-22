@@ -251,6 +251,38 @@ it('despues el directorio y la exportacion integra enseñan la ficha minimizada'
         ->and($fila['anonymized_at'] ?? null)->not->toBeNull();
 })->group('RL-11', 'RL-08', 'RL-20');
 
+it('una ficha minimizada no admite ausencias ni contratos: 409 con el motivo traducido', function (string $locale, string $texto): void {
+    Spectator::using('openapi.yaml');
+    $ficha = fichaVencida();
+    retencionDeFichas(false);
+    $minimizada = DB::table('employees')->where('id', $ficha['id'])->value('anonymized_at');
+    $fecha = substr(\is_string($minimizada) ? $minimizada : '', 0, 10);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    $ausencia = Api::as($token)->withHeaders(['Accept-Language' => $locale])->post('/api/v1/absences', [
+        'employee_uuid' => $ficha['uuid'],
+        'type' => 'vacation',
+        'starts_on' => '2015-05-04',
+        'ends_on' => '2015-05-08',
+    ]);
+    $contrato = Api::as($token)->withHeaders(['Accept-Language' => $locale])->post('/api/v1/employees/'.$ficha['uuid'].'/contracts', [
+        'weekly_hours' => 40,
+        'schedule_type' => 'turnos',
+        'valid_from' => '2015-01-01',
+    ]);
+
+    foreach ([$ausencia, $contrato] as $respuesta) {
+        $respuesta->assertValidResponse(409);
+
+        expect($respuesta->json('detail'))->toBe(str_replace(':anonymized_on', $fecha, $texto));
+    }
+
+    expect(DB::table('absences')->where('employee_id', $ficha['id'])->count())->toBe(0)
+        ->and(DB::table('employment_contracts')->where('employee_id', $ficha['id'])->count())->toBe(0);
+})->with([
+    'en español' => ['es', 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de conservación: ya no admite contratos ni ausencias.'],
+])->group('RL-11', 'RF-GP-02', 'RF-GP-04');
+
 it('el portal da el rechazo generico con el codigo antiguo', function (): void {
     $ficha = fichaVencida();
     retencionDeFichas(false);

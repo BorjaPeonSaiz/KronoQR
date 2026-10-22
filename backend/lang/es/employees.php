@@ -24,6 +24,9 @@ return [
 
         'not_started_termination_must_be_hire_date' => 'Esta persona aún no ha empezado a trabajar (alta el '
             .':hired_on). La única fecha de cese posible es la de alta, :hired_on.',
+
+        'record_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de '
+            .'conservación: ya no admite contratos ni ausencias.',
     ],
 
 ];

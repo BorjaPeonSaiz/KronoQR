@@ -217,6 +217,10 @@ final readonly class ApplyAbsenceImport
     {
         $employee = $this->employees->findByUuid($absence->employeeUuid);
 
+        // ADR-060: una ficha minimizada no recibe ausencias; la importacion
+        // entera se deshace con el 409, como con una baja que llega a medias.
+        $employee?->assertAcceptsPersonnelRecords();
+
         return $employee === null
             || $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt);
     }

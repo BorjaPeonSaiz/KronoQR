@@ -73,6 +73,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
 use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
@@ -608,6 +609,16 @@ return Application::configure(basePath: dirname(__DIR__))
          * nombre ya usado, y el panel tiene que distinguirlos.
          */
         $exceptions->render(static fn (SiteTimezoneLocked $exception): mixed => ProblemDetails::siteTimezoneLocked(
+            ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
+        ));
+
+        /*
+         * La ficha esta minimizada por retencion y no admite contratos ni
+         * ausencias nuevos (ADR-060): `409` con el `detail` en el idioma
+         * negociado. Antes que `WorkforceConflict`, su clase madre, cuyo
+         * mensaje es el tecnico del log.
+         */
+        $exceptions->render(static fn (EmployeeRecordMinimised $exception): mixed => ProblemDetails::conflict(
             ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
         ));
 

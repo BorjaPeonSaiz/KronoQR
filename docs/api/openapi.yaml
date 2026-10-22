@@ -4216,6 +4216,11 @@ paths:
             Ya hay un contrato vigente en esa fecha. El cuerpo es correcto; lo que
             no encaja es el estado, asi que la accion siguiente es releer los
             contratos de esa persona, no reescribir el formulario.
+
+            Tambien `409` si la ficha esta **minimizada por retencion**
+            (`anonymized_at` no nulo, ADR-060): ya no admite contratos. El
+            `detail` lo dice en el idioma negociado, con la fecha de la
+            minimizacion.
           content:
             application/problem+json:
               schema:
@@ -10775,6 +10780,11 @@ paths:
             `409` y no `422`: el cuerpo es valido, lo que no encaja es el estado,
             y la accion siguiente es releer las ausencias de esa persona en lugar
             de reescribir el formulario.
+
+            Tambien `409` si la ficha esta **minimizada por retencion**
+            (`anonymized_at` no nulo, ADR-060): ya no admite ausencias. El
+            `detail` lo dice en el idioma negociado, con la fecha de la
+            minimizacion.
           content:
             application/problem+json:
               schema:
