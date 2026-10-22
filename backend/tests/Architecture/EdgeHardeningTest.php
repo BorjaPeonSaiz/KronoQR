@@ -30,9 +30,10 @@ it('ancla con **/ los patrones de secretos del .dockerignore', function (): void
 
 it('corre blackbox-exporter sin root y solo en la red de observabilidad', function (): void {
     $compose = Yaml::parse(Repo::contents('infra/compose.prod.yaml'));
-    $blackbox = $compose['services']['blackbox-exporter'] ?? null;
+    $servicios = is_array($compose) && is_array($compose['services'] ?? null) ? $compose['services'] : [];
+    $blackbox = is_array($servicios['blackbox-exporter'] ?? null) ? $servicios['blackbox-exporter'] : [];
 
-    expect($blackbox)->toBeArray()
+    expect($blackbox)->not->toBe([])
         ->and($blackbox['user'] ?? null)->toBe('65534:65534')
         // Fuera de `app`: un exportador comprometido no ve postgres, redis ni reverb (R4-SC-09).
         ->and($blackbox['networks'] ?? null)->toBe(['observability']);
@@ -120,4 +121,32 @@ it('programa una auditoria semanal sobre main de dependencias, repositorio e ima
     $runbook = Repo::contents('docs/runbooks/triaje-hallazgos-seguridad.md');
     expect($runbook)->toContain('## 4. Qué bloquea y dónde')
         ->and($runbook)->toContain('auditoria-semanal.yml');
+})->group('RS-10');
+
+it('hace bloquear los controles de dependencias e imagenes en las ramas solo si el cambio toca lo que auditan', function (): void {
+    // R6-DV-04, politica del runbook de triaje §4.2. main y etiquetas bloquean siempre.
+    $ci = Repo::contents('.github/workflows/ci.yml');
+
+    expect(preg_match('/\n  security:\n(.*?)\n  frontend-unit:/s', $ci, $job))->toBe(1);
+    $security = $job[1] ?? '';
+
+    expect($security)->toContain('id: gate')
+        ->and($security)->toContain('fetch-depth: 0')
+        ->and($security)->toContain('git merge-base origin/main HEAD')
+        ->and($security)->toContain('refs/heads/main')
+        ->and($security)->toContain('refs/tags/*')
+        ->and($security)->toContain('composer\.lock|package-lock\.json|images\.lock')
+        ->and($security)->toContain('Dockerfile')
+        ->and($security)->toContain('@sha256:');
+
+    // Sin `| grep -q` bajo pipefail en el paso de decision.
+    expect(preg_match('/id: gate\n(.*?)\n      - uses:/s', $security, $gate))->toBe(1);
+    expect($gate[1] ?? '')->not->toMatch('/\|\s*grep -q/');
+
+    foreach (['audit_php', 'audit_js', 'trivy_fs', 'trivy_image'] as $paso) {
+        expect($security)->toContain("id: {$paso}\n        continue-on-error: \${{ steps.gate.outputs.bloquea != 'true' }}");
+    }
+
+    // El resultado queda visible aunque no bloquee.
+    expect($security)->toContain('Avisar de los controles que han fallado sin bloquear');
 })->group('RS-10');

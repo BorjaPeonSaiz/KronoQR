@@ -223,38 +223,32 @@ jobs independientes:
 El fallo del workflow es la alerta: GitHub envía el correo de ejecución fallida
 a quien mantiene el cron. Sin runbook asociado una alerta es ruido: este es.
 
-### 4.2 Qué bloquea hoy en cada sitio
+### 4.2 Qué bloquea en cada sitio (política vigente, aprobada por el propietario)
 
-| Control | Rama (push) | `main` | Etiqueta `v*` / `release.yml` | Semanal |
+| Control | Rama que no es `main` (push o `workflow_dispatch`) | `main` | Etiqueta `v*` / `release.yml` | Semanal |
 | --- | --- | --- | --- | --- |
-| `composer audit` | bloquea | bloquea | bloquea | bloquea |
-| `npm audit --omit=dev` (producción) | bloquea | bloquea | bloquea | bloquea |
+| `composer audit` | bloquea **si el cambio toca lo que audita**; si no, informa | bloquea | bloquea | bloquea |
+| `npm audit --omit=dev` (producción) | ídem | bloquea | bloquea | bloquea |
 | `npm audit` (desarrollo) | informa | informa | informa | informa |
-| `trivy fs` (HIGH/CRITICAL con parche) | bloquea | bloquea | — | bloquea |
-| `trivy image` postgres, app **y nginx** (desde la 2.3.0) | bloquea | bloquea | bloquea | las tres **publicadas** |
-| gitleaks (`SCOPE=head`) | bloquea | bloquea | — | histórico completo, nocturno (`secrets-history`) |
+| `trivy fs` (HIGH/CRITICAL con parche) | ídem | bloquea | bloquea (CI de la etiqueta) | bloquea |
+| `trivy image` postgres, app **y nginx** | ídem | bloquea | bloquea | las tres **publicadas** |
+| gitleaks (`SCOPE=head`) | bloquea | bloquea | bloquea | histórico completo, nocturno (`secrets-history`) |
 | El commit etiquetado es ancestro de `main` | — | — | bloquea (`resolver`, V6-DV-6) | — |
+
+**«Toca lo que audita»** lo decide el paso `gate` del job `security` de `ci.yml`
+con `git diff` contra `git merge-base origin/main HEAD`: cualquier
+`composer.lock`, `package-lock.json` o `images.lock`, cualquier `Dockerfile*`,
+o una línea añadida con `:` (un digest). Con eso, quien introduce una
+dependencia o una base vulnerable no puede fusionar, y quien cambia un literal
+de la interfaz no se entera de un aviso ajeno. **Si no bloquea, el paso corre
+igual**: queda con `continue-on-error`, y un paso final emite un `::warning`
+por cada control que ha fallado, además del `::notice` del `gate` con el motivo.
+`main`, la etiqueta y `release.yml` bloquean siempre: una versión publicada
+nunca sale con un HIGH/CRITICAL corregible. El aviso nuevo lo da la auditoría
+semanal, no el `push`.
 
 Todas usan `--ignore-unfixed`: un CVE sin parche publicado no bloquea a nadie.
 
-### 4.3 Propuesta pendiente de decisión del propietario
-
-Con la tabla anterior, **el problema de R6-DV-04 sigue en pie en las ramas**: la
-auditoría semanal lo ve primero (el lunes), pero si el aviso aparece el
-miércoles, los `push` de ese día seguirán rojos hasta que se corrija. Lo que se
-recomienda, y **no está aplicado** porque cambia qué garantiza RS-10 en una
-rama:
-
-- **Ramas (push que no es `main`):** `composer audit`, `npm audit --omit=dev`,
-  `trivy fs` y `trivy image` **bloquean solo si el cambio toca lo que auditan**
-  (`composer.lock`, `package-lock.json`, un `Dockerfile` o el digest de una
-  base) y **informan** (resumen de la ejecución, sin fallar) en el resto. Quien
-  introduce una dependencia vulnerable sigue sin poder fusionar; quien cambia
-  un literal de la interfaz no se entera de un aviso ajeno.
-- **`main`, etiqueta y `release.yml`:** siguen bloqueando todo, como hoy. Una
-  versión publicada nunca sale con un HIGH/CRITICAL corregible.
-- **La alerta de un aviso nuevo** la da la auditoría semanal, no el `push`.
-
-Hasta que se decida, el comportamiento es el de la tabla 4.2. Si se aprueba, el
-cambio es de `ci.yml` (condicionar el código de salida de esos pasos a
-`git diff --name-only` contra `origin/main`) y de esta sección.
+Si una rama sale en amarillo con el aviso, no es una excusa para ignorarlo: el
+PR que la integra en `main` fallará en `main` (o, antes, lo habrá visto la
+auditoría semanal). Tria el hallazgo con el árbol de decisión del §1.

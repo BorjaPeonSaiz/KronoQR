@@ -958,12 +958,44 @@ jobs:
           # nada anterior al ultimo commit.
           fetch-depth: 0
 
+      - name: Decidir si los controles de dependencias e imagenes bloquean (R6-DV-04)
+        id: gate
+        # Politica del bloque 12 (docs/runbooks/triaje-hallazgos-seguridad.md, §4). `main` y las
+        # etiquetas bloquean siempre. En cualquier otra rama (push o workflow_dispatch) bloquean
+        # solo si el cambio toca lo que auditan: un lock de composer o de npm, un Dockerfile, un
+        # digest o `images.lock`. Si no, un aviso externo ajeno al cambio no pone la rama en rojo:
+        # el paso corre igual y su resultado queda visible como aviso. Sin tuberias hacia grep -q (pipefail): se usan cadenas aqui (here-strings).
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          bloquea=true
+          motivo="main o etiqueta: bloquea siempre"
+          if [ "${REF}" != "refs/heads/main" ] && [[ "${REF}" != refs/tags/* ]]; then
+            base="$(git merge-base origin/main HEAD)"
+            ficheros="$(git diff --name-only "${base}" HEAD)"
+            digests="$(git diff -U0 "${base}" HEAD)"
+            if grep -Eq '(^|/)(composer\.lock|package-lock\.json|images\.lock)$|(^|/)Dockerfile[^/]*$' <<<"${ficheros}"; then
+              motivo="el cambio toca un lock, un Dockerfile o images.lock"
+            elif grep -Eq '^\+[^+].*@sha256:' <<<"${digests}"; then
+              motivo="el cambio toca un digest"
+            else
+              bloquea=false
+              motivo="el cambio no toca locks, Dockerfiles ni digests: los avisos informan y no bloquean"
+            fi
+          fi
+          echo "bloquea=${bloquea}" >>"${GITHUB_OUTPUT}"
+          echo "Controles de dependencias e imagenes: bloquea=${bloquea} (${motivo})."
+          echo "::notice title=Controles de dependencias e imagenes::bloquea=${bloquea}; ${motivo}."
+
       - uses: ./.github/actions/php-toolchain
         with:
           php-version: ${{ env.PHP_VERSION }}
           coverage: none
 
       - name: composer audit (0 vulnerabilidades)
+        id: audit_php
+        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
         run: make deps-audit-php
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -971,6 +1003,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: npm audit del workspace (0 criticas ni altas en produccion; desarrollo informa)
+        id: audit_js
+        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
         run: make deps-audit-js
 
       - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)
@@ -1080,6 +1114,7 @@ jobs:
 
       - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
         id: trivy_fs
+        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
         # BLOQUEANTE desde el 29 de agosto de 2026: el unico hallazgo que
         # tenia (DS-0002, el Dockerfile de PostgreSQL sin `USER`) se corrigio
         # en la propia imagen, no con una excepcion. El TRIVY_EXIT_CODE por
@@ -1113,6 +1148,7 @@ jobs:
 
       - name: Trivy image — postgres:ci, app:ci y nginx:ci (bloqueante)
         id: trivy_image
+        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
         # BLOQUEANTE desde el 29 de agosto de 2026. Los 21 HIGH que tenia
         # kronoqr/postgres:ci estaban todos en usr/local/bin/gosu (Go stdlib
         # de la imagen oficial), y la imagen ya no lleva ese binario: arranca
@@ -1141,6 +1177,21 @@ jobs:
             fi
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
+
+      - name: Avisar de los controles que han fallado sin bloquear
+        if: always() && steps.gate.outputs.bloquea != 'true'
+        env:
+          AUDIT_PHP: ${{ steps.audit_php.outcome }}
+          AUDIT_JS: ${{ steps.audit_js.outcome }}
+          TRIVY_FS: ${{ steps.trivy_fs.outcome }}
+          TRIVY_IMAGE: ${{ steps.trivy_image.outcome }}
+        run: |
+          set -euo pipefail
+          for par in "composer audit:${AUDIT_PHP}" "npm audit:${AUDIT_JS}" "trivy fs:${TRIVY_FS}" "trivy image:${TRIVY_IMAGE}"; do
+            if [ "${par##*:}" = "failure" ]; then
+              echo "::warning title=${par%%:*} con hallazgos (no bloquea)::Este cambio no toca locks, Dockerfiles ni digests, asi que el aviso informa y no bloquea. main y la etiqueta si bloquearan: docs/runbooks/triaje-hallazgos-seguridad.md, §4."
+            fi
+          done
 
       - name: SBOM CycloneDX
         run: make sbom
