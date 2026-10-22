@@ -91,7 +91,8 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
                e.downloaded_at,
                e.download_count,
                e.notified_at,
-               e.notification_channel
+               e.notification_channel,
+               e.cancelled_at
           FROM report_exports e
           LEFT JOIN users u ON u.id = e.requested_by_user_id
         SQL;
@@ -216,6 +217,15 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         return $rows === [] ? null : $this->hydrate(Row::of($rows[0]));
     }
 
+    public function statusOf(string $uuid): ?ReportExportStatus
+    {
+        $status = $this->connection->table('report_exports')
+            ->whereRaw('uuid = CAST(? AS uuid)', [$uuid])
+            ->value('status');
+
+        return \is_string($status) ? ReportExportStatus::tryFrom($status) : null;
+    }
+
     public function recentFor(int $requestedByUserId, int $limit): array
     {
         /** @var list<object> $rows */
@@ -264,6 +274,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
             'download_count' => $export->downloadCount,
             'notified_at' => self::nullableUtc($export->notifiedAt),
             'notification_channel' => $export->notificationChannel?->value,
+            'cancelled_at' => self::nullableUtc($export->cancelledAt),
             'updated_at' => self::utc($this->clock->now()),
         ]);
     }
@@ -396,6 +407,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
             downloadCount: $row->int('download_count'),
             notifiedAt: $row->nullableInstant('notified_at'),
             notificationChannel: self::channelOf($row->nullableString('notification_channel')),
+            cancelledAt: $row->nullableInstant('cancelled_at'),
         );
     }
 

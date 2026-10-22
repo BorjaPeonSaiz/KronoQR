@@ -523,9 +523,9 @@ return [
             'summary' => 'Los informes que pediste **en segundo plano** y que se descargaron con un enlace temporal: quien los pidio, que periodo cubrian, cuando se generaron y cuantas veces se los llevo alguien. **No estan los ficheros**: lo que contenian ya esta en este mismo paquete, en `shift_entries.csv`, `daily_totals.csv` y `employment_contracts.csv`. Lo que responde este fichero es que informes con horas de tu plantilla salieron de aqui y a peticion de quien.',
             'columns' => [
                 'uuid' => 'Identificador del informe. Es el que aparecia en la pantalla y en el enlace de descarga.',
-                'kind' => '`period` si era el informe de horas y `payroll` si era la salida a nomina.',
+                'kind' => '`period` si era el informe de horas, `payroll` si era la salida a nomina, `legal` si era la exportacion para la Inspeccion de Trabajo y `adoption` si era el cuadro de impacto.',
                 'format' => 'En que formato se genero: `csv`, `xlsx` o `pdf`.',
-                'status' => '`completed` si se genero y sigue descargable, `purged` si ya caduco y se borro el fichero, `failed` si no se pudo generar, y `pending` o `running` si se quedo a medias.',
+                'status' => '`completed` si se genero y sigue descargable, `purged` si ya caduco y se borro el fichero, `failed` si no se pudo generar, `cancelled` si quien lo pidio lo detuvo antes de terminar, y `pending` o `running` si se quedo a medias.',
                 'parameters' => 'Que se pidio, en formato JSON: fechas, granularidad, agrupacion y filtros. **En los informes ya caducados no lleva los filtros por persona ni por departamento**: se borran junto con el fichero, porque ya no hacen falta para nada.',
                 'scope' => 'A que parte de la plantilla alcanzaba quien lo pidio, en formato JSON. **Vacio en los informes ya caducados**, por lo mismo que el anterior. El dato completo sigue en el registro de auditoria.',
                 'requested_by_user_uuid' => 'Quien lo pidio. Es tambien la unica persona que podia verlo y descargarlo.',
@@ -545,6 +545,7 @@ return [
                 'download_count' => 'Cuantas veces se descargo en total. Cada descarga queda ademas en el registro de auditoria.',
                 'notified_at' => 'Cuando se aviso de que estaba listo.',
                 'notification_channel' => '`mail` si ademas salio un correo y `panel` si el aviso fue solo la pantalla, que es lo que ocurre cuando la instalacion no tiene servidor de correo configurado.',
+                'cancelled_at' => 'Cuando lo detuvo quien lo pidio, si lo cancelo. Un informe cancelado no dejo fichero.',
             ],
         ],
 

@@ -674,6 +674,22 @@ enum AuditAction: string
     case ReportExportFileMissing = 'report_export.file_missing';
 
     /**
+     * Quien pidio un informe en diferido lo detuvo antes de que terminara
+     * (**V5-PA-4**, RS-05, 2.3.0).
+     *
+     * Familia `PersonalDataAccess`, con el resto de `report_export.*`: una
+     * exportacion de la plantilla que se pidio y se paro sigue siendo una
+     * intencion que una revision de accesos tiene que poder ver, y sin este
+     * asiento la fila `cancelled` no tendria quien la explicara en el trail.
+     *
+     * Actor: **quien la pidio**, que es el unico que puede cancelarla. Payload:
+     * el `uuid`, la clase, el formato y el estado en que estaba (`pending` o
+     * `running`). Sin parametros —ya estan en `report_export.requested`, con el
+     * mismo `uuid`— y sin nombres (regla dura 21).
+     */
+    case ReportExportCancelled = 'report_export.cancelled';
+
+    /**
      * El cuadro de impacto y adopcion ha salido como fichero (**RF-IN-08**, regla
      * dura 6, tarea 3.13).
      *

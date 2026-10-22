@@ -37,13 +37,22 @@ final readonly class ReportExportGenerated implements DomainEvent
     /**
      * @param  list<string>  $employeeUuids  Vacio cuando el informe no es por empleado o cuando
      *                                       el conjunto supera el tope de enumeracion.
-     * @param  string  $disclosureDataset  El conjunto que se divulga (`period_report` o
-     *                                     `payroll_export`), para el asiento de lectura que
-     *                                     acompaña a este (tarea 11.4, V4-BE-5).
+     * @param  string|null  $disclosureDataset  El conjunto que se divulga (`period_report` o
+     *                                          `payroll_export`), para el asiento de lectura que
+     *                                          acompaña a este (tarea 11.4, V4-BE-5). **Nulo**
+     *                                          cuando no sale ningun dato personal que contar
+     *                                          como lectura: el cuadro de impacto (un agregado)
+     *                                          y la exportacion para la Inspeccion, que tiene
+     *                                          su propio asiento en `$legalExport`.
      * @param  int  $disclosureRecordCount  Filas del informe, como en la descarga sincrona.
      * @param  array<string, scalar>  $disclosureContext  El alcance del acceso, ya resuelto
      *                                                    por `GeneratePeriodReport::compose()`.
      *                                                    Sin nombres (regla dura 21).
+     * @param  array<string, scalar|null>|null  $legalExport  Solo con `kind: legal`: el asiento
+     *                                                        `legal_export.generated` que la descarga
+     *                                                        sincrona escribe —periodo, alcance y
+     *                                                        recuentos—, para que la diferida deje el
+     *                                                        mismo a nombre de quien la pidio.
      */
     public function __construct(
         public string $uuid,
@@ -56,10 +65,11 @@ final readonly class ReportExportGenerated implements DomainEvent
         public string $expiresAt,
         public array $employeeUuids,
         public int $requestedByUserId,
-        public string $disclosureDataset,
+        public ?string $disclosureDataset,
         public int $disclosureRecordCount,
         public array $disclosureContext,
         private DateTimeImmutable $occurredAt,
+        public ?array $legalExport = null,
     ) {}
 
     public function eventName(): string

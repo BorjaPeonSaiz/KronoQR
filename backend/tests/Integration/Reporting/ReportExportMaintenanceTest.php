@@ -262,9 +262,15 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
         // transacciones abiertas, incluida la de `RefreshDatabase` de esta misma
         // prueba, y se rinde por `lock_timeout`. Ese ciclo lo prueba
         // `PinClaimMigrationsTest` sin transaccion envolvente.
+        //
+        // Y TAMBIEN las que alteran esta tabla (2.3.0, V5-PA-4): sin ellas, la
+        // tabla volveria a crearse sin sus columnas posteriores mientras su
+        // migracion sigue apuntada como aplicada, y todo lo que viniera despues
+        // en la base compartida fallaria por una columna que no existe.
         [$exitCode] = Commands::run(
             'migrate:rollback --database='.$name.' --step='.$steps
             .' --path=database/migrations/2026_09_22_110000_report_exports.php'
+            .' --path=database/migrations/2026_10_22_100000_report_exports_legal_adoption_and_cancellation.php'
         );
 
         expect($exitCode)->toBe(0)

@@ -498,9 +498,9 @@ return [
             'summary' => 'The reports you requested **in the background** and that were downloaded with a temporary link: who asked for them, what period they covered, when they were generated and how many times someone took a copy. **The files are not here**: what they contained is already in this same package, in `shift_entries.csv`, `daily_totals.csv` and `employment_contracts.csv`. What this file answers is which reports with your staff hours left this installation, and at whose request.',
             'columns' => [
                 'uuid' => 'Report identifier. The same one that appeared on screen and in the download link.',
-                'kind' => '`period` for the hours report, `payroll` for the payroll output.',
+                'kind' => '`period` for the hours report, `payroll` for the payroll output, `legal` for the Labour Inspectorate export and `adoption` for the impact dashboard.',
                 'format' => 'Which format it was generated in: `csv`, `xlsx` or `pdf`.',
-                'status' => '`completed` if it was generated and is still downloadable, `purged` if it expired and the file was deleted, `failed` if it could not be generated, `pending` or `running` if it never finished.',
+                'status' => '`completed` if it was generated and is still downloadable, `purged` if it expired and the file was deleted, `failed` if it could not be generated, `cancelled` if the requester stopped it before it finished, `pending` or `running` if it never finished.',
                 'parameters' => 'What was requested, in JSON: dates, granularity, grouping and filters. **Expired reports no longer carry the per-person or per-department filters**: they are removed along with the file, because they are no longer needed for anything.',
                 'scope' => 'Which part of the staff the requester could reach, in JSON. **Empty for expired reports**, for the same reason as above. The full record remains in the audit trail.',
                 'requested_by_user_uuid' => 'Who requested it. Also the only person who could see and download it.',
@@ -520,6 +520,7 @@ return [
                 'download_count' => 'How many times it was downloaded in total. Every download is also in the audit trail.',
                 'notified_at' => 'When the ready notice was sent.',
                 'notification_channel' => '`mail` if an email also went out, `panel` if the notice was only on screen, which is what happens when the installation has no mail server configured.',
+                'cancelled_at' => 'When the requester stopped it, if it was cancelled. A cancelled report left no file behind.',
             ],
         ],
 

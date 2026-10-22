@@ -9,6 +9,7 @@ use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportNotificationChannel;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportParameters;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use DateTimeImmutable;
 
@@ -103,6 +104,18 @@ interface ReportExportRepository
 
     /** La que ocupa el turno de esa cuenta, para componer el cuerpo del `409`. */
     public function inProgressFor(int $requestedByUserId): ?ReportExport;
+
+    /**
+     * El estado de la fila **tal como esta confirmado ahora**, sin bloquearla y
+     * sin hidratar nada mas (V5-PA-4).
+     *
+     * Lo pregunta el trabajo de cola entre fases y cada pocos cientos de filas
+     * para saber si alguien cancelo la exportacion. Es una lectura de una
+     * columna por clave unica: barata aunque corra dentro de la transaccion
+     * larga de la exportacion legal, que con `READ COMMITTED` ve la cancelacion
+     * confirmada por otra peticion. Nulo si la fila no existe.
+     */
+    public function statusOf(string $uuid): ?ReportExportStatus;
 
     /**
      * Las mas recientes **de esa cuenta**, de la mas nueva a la mas antigua.

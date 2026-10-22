@@ -128,8 +128,12 @@ final class DataExportCatalog
      * `discarded_scan_reports.csv`, los avisos de fichajes que un quiosco saco
      * de su cola porque el servidor declaro invalida la peticion. Un fichero
      * nuevo es un cambio de forma.
+     *
+     * **`6` desde la 2.3.0** (V5-PA-4): `report_exports.csv` gana
+     * `cancelled_at`, cuando quien pidio un informe en diferido lo detuvo. Una
+     * columna mas es un cambio de forma.
      */
-    public const string SCHEMA_VERSION = '5';
+    public const string SCHEMA_VERSION = '6';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -500,6 +504,7 @@ final class DataExportCatalog
                 'download_count',
                 'notified_at',
                 'notification_channel',
+                'cancelled_at',
             ]),
 
             /*

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Domain\ValueObject;
 
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use LogicException;
 
 /**
  * Lo que se pidio al informe en diferido, **tal cual se pidio** (**RF-IN-06**,
@@ -33,6 +34,16 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
  * serializa a `jsonb` en el repositorio y se reconstruye desde ahi; las claves
  * del array son **las del contrato**, para que la fila de la base de datos y el
  * cuerpo del `POST` se lean igual.
+ *
+ * ## Las clases que no son el informe por periodo (V5-PA-4)
+ *
+ * `legal` y `adoption` solo piden un periodo —y `legal`, a lo sumo, una
+ * persona—. Para ellas la granularidad y la agrupacion son **nulas** y no un
+ * valor por omision: un `granularity: day` en la fila de una exportacion para
+ * la Inspeccion afirmaria un criterio que nadie eligio y que el fichero no
+ * aplica. {@see self::span()} es la forma de construirlas, y
+ * {@see self::toQuery()} se niega a convertirlas en una consulta del informe
+ * por periodo.
  */
 final readonly class ReportExportParameters
 {
@@ -41,13 +52,33 @@ final readonly class ReportExportParameters
         public string $from,
         /** Fecha civil ISO `AAAA-MM-DD` del ultimo dia, inclusive. */
         public string $to,
-        public ReportGranularity $granularity,
-        public ReportGrouping $grouping,
+        /** Nula en las clases que no son el informe por periodo: `legal` y `adoption`. */
+        public ?ReportGranularity $granularity,
+        /** Nula en las mismas que la granularidad. */
+        public ?ReportGrouping $grouping,
         public bool $includeOpenShifts,
         public ?int $departmentId,
         /** Identificador **publico** de una persona, para el informe de una sola. */
         public ?string $employeeUuid,
     ) {}
+
+    /**
+     * Solo un periodo y, si acaso, una persona: lo que piden `legal` y
+     * `adoption`. Sin granularidad, sin agrupacion, sin departamento y sin
+     * turnos abiertos.
+     */
+    public static function span(string $from, string $to, ?string $employeeUuid = null): self
+    {
+        return new self(
+            from: $from,
+            to: $to,
+            granularity: null,
+            grouping: null,
+            includeOpenShifts: false,
+            departmentId: null,
+            employeeUuid: $employeeUuid,
+        );
+    }
 
     /**
      * La consulta que ejecuta el trabajo, con el alcance guardado.
@@ -59,6 +90,10 @@ final readonly class ReportExportParameters
      */
     public function toQuery(AccessScope $scope): PeriodReportQuery
     {
+        if (! $this->granularity instanceof ReportGranularity || ! $this->grouping instanceof ReportGrouping) {
+            throw new LogicException('Solo el informe por periodo y la nomina se consultan con granularidad y agrupacion.');
+        }
+
         return new PeriodReportQuery(
             scope: $scope,
             range: DateRange::between($this->from, $this->to),
@@ -122,8 +157,8 @@ final readonly class ReportExportParameters
         return [
             'from' => $this->from,
             'to' => $this->to,
-            'granularity' => $this->granularity->value,
-            'group_by' => $this->grouping->value,
+            'granularity' => $this->granularity?->value,
+            'group_by' => $this->grouping?->value,
             'include_open_shifts' => $this->includeOpenShifts,
             'department_id' => $this->departmentId,
             'employee_uuid' => $this->employeeUuid,
@@ -138,17 +173,21 @@ final readonly class ReportExportParameters
      * respuesta correcta es el valor por omision del informe —no incluirlos— y
      * no romper el listado entero. Un valor de granularidad o agrupacion
      * desconocido si rompe: significaria generar un fichero distinto del que se
-     * pidio, y eso no se hace en silencio.
+     * pidio, y eso no se hace en silencio. Una granularidad o una agrupacion
+     * **ausentes** son las de `legal` y `adoption`, que no las tienen.
      *
      * @param  array<array-key, mixed>  $stored
      */
     public static function fromArray(array $stored): self
     {
+        $granularity = self::optionalText($stored, 'granularity');
+        $grouping = self::optionalText($stored, 'group_by');
+
         return new self(
             from: self::text($stored, 'from'),
             to: self::text($stored, 'to'),
-            granularity: ReportGranularity::from(self::text($stored, 'granularity')),
-            grouping: ReportGrouping::from(self::text($stored, 'group_by')),
+            granularity: $granularity === null ? null : ReportGranularity::from($granularity),
+            grouping: $grouping === null ? null : ReportGrouping::from($grouping),
             includeOpenShifts: ($stored['include_open_shifts'] ?? false) === true,
             departmentId: isset($stored['department_id']) && is_numeric($stored['department_id'])
                 ? (int) $stored['department_id']
