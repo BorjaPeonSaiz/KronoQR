@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Application\UseCase;
 use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Support\IssuedReportExportLink;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
@@ -80,12 +81,19 @@ final readonly class ShowReportExport
         private int $linkTtlMinutes,
     ) {}
 
-    public function handle(string $uuid, int $requestedByUserId): ?IssuedReportExportLink
+    /**
+     * @param  list<ReportExportKind>|null  $kinds  Las clases que alcanza quien pregunta, o todas. Una de
+     *                                              otra clase no existe para el, como la de otra persona.
+     */
+    public function handle(string $uuid, int $requestedByUserId, ?array $kinds = null): ?IssuedReportExportLink
     {
-        return UseCaseInstrumentation::run('reporting.show_report_export', fn (): ?IssuedReportExportLink => $this->doHandle($uuid, $requestedByUserId));
+        return UseCaseInstrumentation::run('reporting.show_report_export', fn (): ?IssuedReportExportLink => $this->doHandle($uuid, $requestedByUserId, $kinds));
     }
 
-    private function doHandle(string $uuid, int $requestedByUserId): ?IssuedReportExportLink
+    /**
+     * @param  list<ReportExportKind>|null  $kinds
+     */
+    private function doHandle(string $uuid, int $requestedByUserId, ?array $kinds): ?IssuedReportExportLink
     {
         /*
          * **TODO DENTRO DE UNA TRANSACCION, CON LA FILA BLOQUEADA.**
@@ -106,8 +114,8 @@ final readonly class ShowReportExport
          */
         /** @var IssuedReportExportLink|null $issued */
         $issued = $this->connection->transaction(
-            function () use ($uuid, $requestedByUserId): ?IssuedReportExportLink {
-                $export = $this->exports->lockByUuidFor($uuid, $requestedByUserId);
+            function () use ($uuid, $requestedByUserId, $kinds): ?IssuedReportExportLink {
+                $export = $this->exports->lockByUuidFor($uuid, $requestedByUserId, $kinds);
 
                 if ($export === null) {
                     return null;

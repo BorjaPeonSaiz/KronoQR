@@ -222,7 +222,20 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
          ORDER BY employee_code, work_date, sort_kind, sort_instant, entry_number
         SQL;
 
-    public function __construct(private ConnectionInterface $connection) {}
+    public function __construct(
+        private ConnectionInterface $connection,
+        /**
+         * Techo de cada sentencia, en segundos, o 0 para ninguno propio.
+         *
+         * La descarga sincrona no lo lleva —la cortan nginx y PHP-FPM—; la
+         * generacion en diferido si (`REPORTING_EXPORT_TIMEOUT_SECONDS`, 600 de
+         * serie): una consulta que nadie espera no puede ocupar indefinidamente
+         * la base que atiende el fichaje, tampoco despues de que alguien la
+         * cancele (revision de seguridad del bloque 14). `SET LOCAL` lo acota a la
+         * transaccion de la exportacion, que es la que exige el cursor.
+         */
+        private int $statementTimeoutSeconds = 0,
+    ) {}
 
     public function records(LegalExportPeriod $period, LegalExportScope $scope): iterable
     {
@@ -257,6 +270,8 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
      */
     public function count(LegalExportPeriod $period, LegalExportScope $scope): int
     {
+        $this->boundStatements();
+
         $row = $this->connection->selectOne(<<<'SQL'
             WITH scope AS (
                 SELECT se.id, se.status
@@ -282,6 +297,8 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
      */
     private function declareCursor(LegalExportPeriod $period, LegalExportScope $scope): string
     {
+        $this->boundStatements();
+
         $name = 'kronoqr_legal_export_'.bin2hex(random_bytes(8));
 
         $this->connection->statement(
@@ -365,5 +382,13 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
         return $present
             ? ExportedMarks::of($localIn, $localOut, ExportedDuration::ofNullableMinutes($minutes), $closedBy)
             : ExportedMarks::none();
+    }
+
+    /** El techo de {@see self::$statementTimeoutSeconds}, si lo hay. */
+    private function boundStatements(): void
+    {
+        if ($this->statementTimeoutSeconds > 0) {
+            $this->connection->statement("SET LOCAL statement_timeout = '".$this->statementTimeoutSeconds."s'");
+        }
     }
 }

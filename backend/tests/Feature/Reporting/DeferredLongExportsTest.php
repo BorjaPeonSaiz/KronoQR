@@ -6,16 +6,24 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Compliance\Application\UseCase\WriteLegalExportFile;
+use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
+use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
 use App\Modules\Identity\Infrastructure\Persistence\User;
+use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\UseCase\CancelReportExport;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
+use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportParameters;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportProgress;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
+use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
+use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Infrastructure\Job\GenerateReportExportJob;
 use App\Modules\Reporting\Infrastructure\Notification\ReportExportReadyNotification;
 use App\Modules\Shared\Application\Port\Clock;
@@ -28,15 +36,21 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\Support\Compliance\AuditPayloads;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
+use Tests\Support\Product\SupportGrants;
 use Tests\Support\Reporting\RecordingReportExportProgressBoard;
 use Tests\Support\Reporting\ReportExports;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -428,8 +442,10 @@ it('una exportacion cancelada antes de arrancar no genera nada', function (): vo
         ->and(diferidoLargoAsientos('report_export.generated'))->toBe([]);
 })->group('RF-IN-06');
 
-it('cancelada mientras se escribe, borra el fichero a medias y no publica la generacion', function (): void {
+it('cancelada mientras se escribe, borra el fichero a medias, no publica la generacion y no suelta el turno hasta parar', function (): void {
+    WorkforceFixtures::site();
     $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    $token = ManagementUsers::tokenFor($rrhh);
     $export = ReportExports::pendingFor(
         $rrhh->id,
         kind: ReportExportKind::Legal,
@@ -440,10 +456,10 @@ it('cancelada mientras se escribe, borra el fichero a medias y no publica la gen
 
     // Escribe media exportacion y, a mitad, alguien pulsa «Cancelar». El aviso
     // de avance siguiente es el punto de cancelacion.
-    app()->instance(LegalRecordFileWriter::class, new class($export->uuid, $rrhh->id, $escrito) implements LegalRecordFileWriter
+    app()->instance(LegalRecordFileWriter::class, new class($export->uuid, $rrhh->id, $token, $escrito) implements LegalRecordFileWriter
     {
         /** @param ArrayObject<int, string> $escrito */
-        public function __construct(private string $uuid, private int $userId, private ArrayObject $escrito) {}
+        public function __construct(private string $uuid, private int $userId, private string $token, private ArrayObject $escrito) {}
 
         public function write(string $from, string $to, ?string $employeeUuid, string $destinationPath, Closure $onProgress): LegalRecordFile
         {
@@ -452,6 +468,13 @@ it('cancelada mientras se escribe, borra el fichero a medias y no publica la gen
 
             $onProgress(0, 1000);
             app(CancelReportExport::class)->handle($this->uuid, $this->userId);
+
+            // Cancelada, pero todavia escribiendo: pedir otra es `409`, o
+            // pedir-cancelar-pedir pondria a trabajar tantas consultas como clics.
+            $this->escrito->append((string) Api::as($this->token)
+                ->post('/api/v1/reports/exports', diferidoLargoCuerpoLegal())
+                ->getStatusCode());
+
             $onProgress(500, 1000);
 
             return new LegalRecordFile('registro-horario-x.csv', $from, $to, null, 1000, 0, 10);
@@ -466,12 +489,36 @@ it('cancelada mientras se escribe, borra el fichero a medias y no publica la gen
     $resultado = app(GenerateReportExportHandler::class)->handle($export->uuid);
 
     expect($resultado->status)->toBe(ReportExportStatus::Cancelled)
-        ->and($escrito->count())->toBe(1)
+        ->and($escrito->count())->toBe(2)
+        ->and($escrito[1])->toBe('409')
         ->and(file_exists((string) $escrito[0]))->toBeFalse('El fichero a medias se quedo en el disco.')
         ->and(diferidoLargoAsientos('report_export.generated'))->toBe([])
         ->and(diferidoLargoAsientos('legal_export.generated'))->toBe([])
         ->and(diferidoLargoAsientos('report_export.cancelled')[0]['payload']['previous_status'] ?? null)->toBe('running');
+
+    // El trabajador confirmo que paro: ahora si se puede pedir otra.
+    Queue::fake();
+    Api::as($token)->post('/api/v1/reports/exports', diferidoLargoCuerpoLegal())->assertStatus(202);
 })->group('RF-IN-06', 'RS-05');
+
+it('la exportacion legal en cola lleva el techo de sentencia del diferido', function (): void {
+    // Una consulta que nadie espera no ocupa sin limite la base del fichaje,
+    // tampoco despues de cancelada (revision de seguridad del bloque 14).
+    Config::set('reporting.export.statement_timeout_seconds', 321);
+    $visto = new ArrayObject;
+
+    app(WriteLegalExportFile::class)->handle(
+        LegalExportPeriod::between('2026-03-01', '2026-03-31'),
+        LegalExportScope::everyone(),
+        ReportExports::useTemporaryPath().'/techo.csv',
+        static function () use ($visto): void {
+            $fila = DB::selectOne('SHOW statement_timeout');
+            $visto->append(is_object($fila) ? ($fila->statement_timeout ?? null) : null);
+        },
+    );
+
+    expect($visto->getArrayCopy())->each->toBe('321s');
+})->group('RF-IN-05', 'RNF-P-02');
 
 it('la lista enseña el avance de las que se estan generando y de ninguna otra', function (): void {
     $board = diferidoLargoTablero();
@@ -545,3 +592,129 @@ it('el aviso por correo dice que se genero la exportacion para la Inspeccion, no
         },
     );
 })->group('RF-IN-05', 'RF-IN-06');
+
+/**
+ * El cuerpo de una descarga servida como fichero.
+ *
+ * @param  TestResponse<Response>  $response
+ */
+function diferidoLargoCuerpo(TestResponse $response): string
+{
+    $base = $response->baseResponse;
+
+    if ($base instanceof StreamedResponse || $base instanceof BinaryFileResponse) {
+        ob_start();
+        $base->sendContent();
+
+        return (string) ob_get_clean();
+    }
+
+    return (string) $base->getContent();
+}
+
+it('la exportacion legal en diferido es byte a byte la de la descarga sincrona', function (?string $persona): void {
+    // Mismo reloj, mismo periodo y mismo alcance: el documento que se entrega a
+    // la Inspeccion no puede depender de por donde se pidio (RL-06).
+    FrozenTime::at('2026-04-02 08:30:00');
+    $contexto = diferidoLargoConUnaJornada();
+    $empleado = $persona === null ? null : $contexto['employee'];
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $sincrona = diferidoLargoCuerpo(Api::as(ManagementUsers::tokenFor($rrhh))
+        ->get('/api/v1/reports/legal-export', array_filter([
+            'from' => '2026-03-01',
+            'to' => '2026-03-31',
+            'employee_uuid' => $empleado,
+        ]))
+        ->assertOk());
+
+    $export = ReportExports::pendingFor(
+        $rrhh->id,
+        kind: ReportExportKind::Legal,
+        parameters: ReportExportParameters::span('2026-03-01', '2026-03-31', $empleado),
+    );
+    $generada = app(GenerateReportExportHandler::class)->handle($export->uuid);
+
+    expect((string) file_get_contents((string) $generada->filePath))->toBe($sincrona)
+        ->and($sincrona)->toContain('TRAMO;');
+})->with([
+    'la plantilla' => [null],
+    'una persona' => ['una'],
+])->group('RF-IN-05', 'RL-06');
+
+/**
+ * @param  list<string>  $abilities
+ */
+it('un token de soporte no pide ni cancela exportaciones en diferido', function (array $abilities): void {
+    // Decision del propietario (ADR-020): ni con un alcance de soporte real ni
+    // con uno que algun dia concediera los ambitos de informes. La primera la
+    // para el middleware; la segunda, la policy.
+    WorkforceFixtures::site();
+    $token = $abilities === []
+        ? SupportGrants::tokenFor(SupportScope::ReadOnly)
+        : SupportGrants::tokenWithAbilities(array_values(array_filter($abilities, is_string(...))), SupportScope::ReadOnly);
+
+    Api::as($token)->post('/api/v1/reports/exports', diferidoLargoCuerpoLegal())->assertStatus(403);
+    Api::as($token)->post('/api/v1/reports/exports/019a12b4-5c6d-7e8f-9012-3456789abcde/cancel')->assertStatus(403);
+})->with([
+    'alcance real' => [[]],
+    'con los ambitos de informes' => [['reports:legal', 'reports:*']],
+])->group('RS-05', 'RQ-07');
+
+it('el auditor solo alcanza las exportaciones legal, aunque tenga otras a su nombre', function (): void {
+    // Revision de seguridad del bloque 14: por el ambito del token y no solo
+    // por lo que pudo pedir. Una fila de otra clase no existe para el.
+    $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
+    $legal = ReportExports::pendingFor(
+        $auditor->id,
+        kind: ReportExportKind::Legal,
+        parameters: ReportExportParameters::span('2026-03-01', '2026-03-31'),
+    );
+    $app = app(CancelReportExport::class);
+    $app->handle($legal->uuid, $auditor->id);
+    $horas = ReportExports::completedFor($auditor->id);
+    $token = ManagementUsers::tokenFor($auditor);
+
+    $lista = Api::as($token)->get('/api/v1/reports/exports')->assertValidResponse(200);
+
+    expect(array_column((array) $lista->json('data'), 'uuid'))->toBe([$legal->uuid]);
+
+    Api::as($token)->get('/api/v1/reports/exports/'.$horas->uuid)->assertStatus(404);
+    Api::as($token)->post('/api/v1/reports/exports/'.$horas->uuid.'/cancel')->assertStatus(404);
+})->group('RF-ID-02', 'RQ-07', 'RS-05');
+
+it('el mantenimiento minimiza las fallidas y las canceladas que superan su plazo, y la fila se queda', function (): void {
+    // RL-11: como una purgada, sin el alcance ni los filtros que señalan a
+    // alguien. El hecho completo sigue en `audit_log`.
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    $exports = app(ReportExportRepository::class);
+    $now = app(Clock::class)->now();
+    $parametros = new ReportExportParameters('2026-03-01', '2026-03-31', ReportGranularity::Day, ReportGrouping::Employee, false, 7, '019a0000-0000-7000-8000-000000000002');
+
+    $fallida = ReportExports::pendingFor($rrhh->id, parameters: $parametros);
+    $exports->save($fallida->fail($now->modify('-30 days'), ReportExportFailure::Unexpected));
+
+    $cancelada = ReportExports::pendingFor(ManagementUsers::withRole(UserRole::RRHH)->id, parameters: $parametros);
+    app(CancelReportExport::class)->handle($cancelada->uuid, $cancelada->requestedByUserId);
+    DB::table('report_exports')->where('uuid', $cancelada->uuid)->update(['cancelled_at' => $now->modify('-30 days')->format(DATE_ATOM)]);
+
+    $reciente = ReportExports::pendingFor(ManagementUsers::withRole(UserRole::RRHH)->id, parameters: $parametros);
+    $exports->save($reciente->fail($now->modify('-1 day'), ReportExportFailure::Unexpected));
+
+    $resultado = app(PurgeExpiredReportExports::class)->handle();
+
+    expect($resultado->minimised)->toBe(2);
+
+    foreach ([$fallida, $cancelada] as $vieja) {
+        $fila = ReportExports::find($vieja->uuid);
+
+        expect($fila->scope)->toBeNull()
+            ->and($fila->parameters->employeeUuid)->toBeNull()
+            ->and($fila->parameters->departmentId)->toBeNull()
+            ->and($fila->parameters->from)->toBe('2026-03-01')
+            ->and($fila->status)->not->toBe(ReportExportStatus::Purged);
+    }
+
+    expect(ReportExports::find($reciente->uuid)->scope)->not->toBeNull()
+        ->and(ReportExports::find($reciente->uuid)->parameters->employeeUuid)->toBe('019a0000-0000-7000-8000-000000000002');
+})->group('RL-11', 'RF-IN-06');

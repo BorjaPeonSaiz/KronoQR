@@ -38,5 +38,7 @@ final readonly class ReportExportMaintenance
         public int $orphans = 0,
         /** Filas `completed` cuyo fichero desaparecio antes de su `expires_at`. */
         public int $missing = 0,
+        /** Filas `failed` o `cancelled` minimizadas al superar su plazo (RL-11, 2.3.0). */
+        public int $minimised = 0,
     ) {}
 }

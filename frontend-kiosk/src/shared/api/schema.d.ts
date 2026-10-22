@@ -3839,7 +3839,11 @@ export interface paths {
          *     por persona, sea de la clase que sea. Lo que se pide desde la pantalla de
          *     la Inspeccion, desde la de nomina o desde la de informes ocupa el mismo
          *     turno; para pedir otra hay que esperar o cancelar la que corre
-         *     (`POST /api/v1/reports/exports/{uuid}/cancel`).
+         *     (`POST /api/v1/reports/exports/{uuid}/cancel`). Una cancelada que estaba
+         *     `running` **sigue ocupando el turno hasta que el trabajador confirma que
+         *     paro** (segundos, como mucho lo que tarde la consulta en curso, con su
+         *     `statement_timeout`): si no, pedir-cancelar-pedir pondria a trabajar
+         *     tantas consultas como clics contra la base del fichaje.
          *
          *     **Idempotencia razonable sin cabecera**: el `409` con la fila en curso es
          *     lo que convierte un doble clic o un reintento tras un corte en «esta es
@@ -3947,8 +3951,10 @@ export interface paths {
         /**
          * Cancelar un informe en diferido que sigue en curso
          * @description Detiene una exportacion `pending` o `running` y la deja `cancelled`
-         *     (V5-PA-4, RF-IN-06). **Libera en el acto el turno de esa persona**: la
-         *     siguiente peticion ya no recibe `409`.
+         *     (V5-PA-4, RF-IN-06). Una `pending` **libera en el acto el turno de esa
+         *     persona**; una `running` lo libera cuando el trabajador confirma que paro
+         *     —en su siguiente comprobacion—, y hasta entonces la siguiente peticion
+         *     recibe `409` con esta fila.
          *
          *     ## Que pasa con el trabajo que estaba corriendo
          *
@@ -18329,7 +18335,8 @@ export interface operations {
             402: components["responses"]["FeatureNotLicensed"];
             403: components["responses"]["Forbidden"];
             /**
-             * @description Quien pide ya tiene un informe `pending` o `running`. El cuerpo lleva
+             * @description Quien pide ya tiene un informe `pending` o `running`, o uno `cancelled`
+             *     cuyo trabajador aun no ha confirmado que paro. El cuerpo lleva
              *     esa fila en `export` para que la pantalla la enseñe en lugar de pedir
              *     otro.
              */

@@ -33,6 +33,7 @@ use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
+use App\Modules\Compliance\Application\UseCase\WriteLegalExportFile;
 use App\Modules\Compliance\Domain\Model\Incident;
 use App\Modules\Compliance\Http\Policy\IncidentPolicy;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
@@ -160,6 +161,7 @@ use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -582,6 +584,21 @@ final class ComplianceServiceProvider extends ServiceProvider
         // La misma exportacion, escrita por la cola de informes de `Reporting`
         // (V5-PA-4). Puerto de `Shared`: ningun modulo importa clases de otro.
         $this->app->bind(LegalRecordFileWriter::class, QueuedLegalRecordFiles::class);
+
+        // Con el techo de sentencia del diferido (`REPORTING_EXPORT_TIMEOUT_SECONDS`):
+        // la consulta de la cola no puede ocupar la base del fichaje sin limite,
+        // tampoco despues de cancelada. La sincrona no lo lleva: la cortan nginx
+        // y PHP-FPM.
+        $this->app->bind(
+            WriteLegalExportFile::class,
+            static fn (Application $app): WriteLegalExportFile => new WriteLegalExportFile(
+                $app->make(ConnectionInterface::class),
+                new DatabaseLegalExportSource(DB::connection(), Config::integer('reporting.export.statement_timeout_seconds')),
+                $app->make(LegalExportWriter::class),
+                $app->make(LegalExportMetrics::class),
+                $app->make(Clock::class),
+            ),
+        );
 
         // La busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
         // Lee `employees` como la propia exportacion; el asiento lo escribe el

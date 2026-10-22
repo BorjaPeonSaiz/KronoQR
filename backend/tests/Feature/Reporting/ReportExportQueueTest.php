@@ -64,6 +64,7 @@ it('el supervisor de Horizon de los informes corta entre el techo del trabajo y 
     /** @var array<string, mixed> $supervisor */
     $supervisor = config('horizon.defaults.supervisor-reports');
     $retryAfter = colaDeInformesCon('redis')['retry_after'];
+    $retryAfter = \is_int($retryAfter) ? $retryAfter : 0;
 
     expect($supervisor['connection'])->toBe(GenerateReportExportJob::QUEUE_CONNECTION)
         ->and($supervisor['queue'])->toBe([GenerateReportExportJob::QUEUE])

@@ -100,7 +100,13 @@ interface ReportExportRepository
      * El dueño entra en la MISMA consulta que el bloqueo y no en una previa: dos
      * consultas dejarian una ventana entre comprobar de quien es y bloquearla.
      */
-    public function lockByUuidFor(string $uuid, int $requestedByUserId): ?ReportExport;
+    /**
+     * @param  list<ReportExportKind>|null  $kinds  Solo esas clases, o todas. El auditor solo
+     *                                              alcanza las `legal` (revision de seguridad
+     *                                              del bloque 14): una fila de otra clase no
+     *                                              existe para el, como la de otra persona.
+     */
+    public function lockByUuidFor(string $uuid, int $requestedByUserId, ?array $kinds = null): ?ReportExport;
 
     /** La que ocupa el turno de esa cuenta, para componer el cuerpo del `409`. */
     public function inProgressFor(int $requestedByUserId): ?ReportExport;
@@ -118,11 +124,20 @@ interface ReportExportRepository
     public function statusOf(string $uuid): ?ReportExportStatus;
 
     /**
+     * Una `cancelled` deja de ocupar el turno de su dueño (V5-PA-4, revision de
+     * seguridad del bloque 14): el trabajador confirmo que dejo de escribir, o
+     * se cancelo antes de arrancar y no habia nadie escribiendo. Sin efecto sobre
+     * cualquier otra fila.
+     */
+    public function confirmStopped(string $uuid, DateTimeImmutable $stoppedAt): void;
+
+    /**
      * Las mas recientes **de esa cuenta**, de la mas nueva a la mas antigua.
      *
+     * @param  list<ReportExportKind>|null  $kinds  Ver {@see self::lockByUuidFor()}.
      * @return list<ReportExport>
      */
-    public function recentFor(int $requestedByUserId, int $limit): array;
+    public function recentFor(int $requestedByUserId, int $limit, ?array $kinds = null): array;
 
     /**
      * Persiste el resultado de una transicion del modelo.
@@ -188,6 +203,16 @@ interface ReportExportRepository
      * el caso de uso no consulta la configuracion.
      */
     public function failStale(DateTimeImmutable $staleBefore, DateTimeImmutable $now): int;
+
+    /**
+     * Minimiza las `failed` y las `cancelled` ya paradas que se cerraron antes
+     * de `$closedBefore` (RL-11, revision de seguridad del bloque 14): pierden el
+     * alcance y los filtros por persona y por departamento, como una purgada. La
+     * fila se queda (regla dura 5) y el hecho completo sigue en `audit_log`.
+     *
+     * Devuelve cuantas ha minimizado.
+     */
+    public function minimiseClosedBefore(DateTimeImmutable $closedBefore, DateTimeImmutable $now): int;
 
     /**
      * Las `completed` cuyo `expires_at` ya paso y cuyo fichero sigue sin purgar.

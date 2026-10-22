@@ -10,6 +10,8 @@ use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Domain\Event\ReportExportCancelled;
 use App\Modules\Reporting\Domain\Exception\ReportExportNotCancellable;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
@@ -21,9 +23,10 @@ use Illuminate\Database\ConnectionInterface;
  * ## La fila cambia ya; el trabajo se entera despues
  *
  * Una transaccion: bloquear la fila **del solicitante**, pasarla a
- * `cancelled`, dejar el asiento. Libera en el acto el turno de esa persona —el
- * indice unico parcial solo cuenta `pending` y `running`—. El trabajador de
- * cola lo descubre en su siguiente comprobacion, borra el fichero a medias y
+ * `cancelled`, dejar el asiento. Una `pending` libera en el acto el turno de
+ * esa persona; una `running` lo sigue ocupando —el indice unico parcial cuenta
+ * las canceladas sin `stopped_at`— hasta que el trabajador de cola lo descubre
+ * en su siguiente comprobacion, borra el fichero a medias, confirma que paro y
  * termina sin publicar nada (`GenerateReportExportHandler`). No se borra nada
  * desde aqui: el fichero lo esta escribiendo otro proceso, y quien lo escribe
  * es quien sabe cuando ha dejado de hacerlo.
@@ -56,21 +59,27 @@ final readonly class CancelReportExport
     ) {}
 
     /**
+     * @param  list<ReportExportKind>|null  $kinds  Las clases que alcanza quien pregunta, o todas. Una de
+     *                                              otra clase no existe para el, como la de otra persona.
+     *
      * @throws ReportExportNotCancellable si ya termino
      */
-    public function handle(string $uuid, int $requestedByUserId): ?ReportExport
+    public function handle(string $uuid, int $requestedByUserId, ?array $kinds = null): ?ReportExport
     {
         return UseCaseInstrumentation::run(
             'reporting.cancel_report_export',
-            fn (): ?ReportExport => $this->doHandle($uuid, $requestedByUserId),
+            fn (): ?ReportExport => $this->doHandle($uuid, $requestedByUserId, $kinds),
         );
     }
 
-    private function doHandle(string $uuid, int $requestedByUserId): ?ReportExport
+    /**
+     * @param  list<ReportExportKind>|null  $kinds
+     */
+    private function doHandle(string $uuid, int $requestedByUserId, ?array $kinds): ?ReportExport
     {
         /** @var ReportExport|null $cancelled */
-        $cancelled = $this->connection->transaction(function () use ($uuid, $requestedByUserId): ?ReportExport {
-            $locked = $this->exports->lockByUuidFor($uuid, $requestedByUserId);
+        $cancelled = $this->connection->transaction(function () use ($uuid, $requestedByUserId, $kinds): ?ReportExport {
+            $locked = $this->exports->lockByUuidFor($uuid, $requestedByUserId, $kinds);
 
             if ($locked === null || $locked->wasCancelled()) {
                 return $locked;
@@ -84,6 +93,15 @@ final readonly class CancelReportExport
             $cancelled = $locked->cancel($now);
 
             $this->exports->save($cancelled);
+
+            if ($locked->status === ReportExportStatus::Pending) {
+                // Nadie la estaba escribiendo: el trabajo, al recogerla, la vera
+                // cancelada y no arrancara (lo decide bajo este mismo bloqueo).
+                // Una `running`, en cambio, sigue ocupando el turno hasta que el
+                // trabajador confirme que paro: si no, pedir-cancelar-pedir ponia
+                // a trabajar tantas consultas como clics.
+                $this->exports->confirmStopped($cancelled->uuid, $now);
+            }
 
             // Releida: lo que se devuelve es lo que quedo guardado —con la
             // precision de la columna—, igual que lo que devolvera la siguiente

@@ -73,7 +73,7 @@ final class ReportExportController extends Controller
     {
         Gate::authorize('view', ReportExport::class);
 
-        return (new ReportExportCollectionResource($exports->handle(self::actorUserId($request))))->response();
+        return (new ReportExportCollectionResource($exports->handle(self::actorUserId($request), self::visibleKinds($request))))->response();
     }
 
     /** `POST /api/v1/reports/exports` — encola la generacion y responde `202`. */
@@ -117,7 +117,7 @@ final class ReportExportController extends Controller
     {
         Gate::authorize('download', ReportExport::class);
 
-        $issued = $exports->handle($uuid, self::actorUserId($request));
+        $issued = $exports->handle($uuid, self::actorUserId($request), self::visibleKinds($request));
 
         if ($issued === null) {
             // No existe, o es de otra persona. Sin detalle y sin distinguir los dos
@@ -141,7 +141,7 @@ final class ReportExportController extends Controller
         Gate::authorize('cancel', ReportExport::class);
 
         try {
-            $cancelled = $exports->handle($uuid, self::actorUserId($request));
+            $cancelled = $exports->handle($uuid, self::actorUserId($request), self::visibleKinds($request));
         } catch (ReportExportNotCancellable $finished) {
             return ProblemDetails::reportExportNotCancellable(ReportExportResource::payload($finished->current));
         }
@@ -219,6 +219,30 @@ final class ReportExportController extends Controller
      * exportacion sin dueño no tendria quien la consultara, y **con dueño
      * equivocado seria de otra persona**.
      */
+    /**
+     * Las clases que alcanza quien pregunta: todas con `reports:*`, y solo
+     * `legal` con `reports:legal` —el auditor— (revision de seguridad del
+     * bloque 14). Una fila de otra clase no existe para el: no la lista, y
+     * consultarla o cancelarla responde `404`, como la de otra persona.
+     *
+     * Por el ambito del token y no por el rol, con el mismo patron que
+     * `RequestReportExportRequest`: es lo que este modulo puede preguntar sin
+     * importar `Identity`.
+     *
+     * @return list<ReportExportKind>|null
+     */
+    private static function visibleKinds(Request $request): ?array
+    {
+        /** @var mixed $actor */
+        $actor = $request->user();
+
+        $canAll = \is_object($actor)
+            && method_exists($actor, 'tokenCan')
+            && $actor->tokenCan(RequestReportExportRequest::ALL_REPORTS_ABILITY) === true;
+
+        return $canAll ? null : [ReportExportKind::Legal];
+    }
+
     private static function actorUserId(Request $request): int
     {
         $identifier = $request->user()?->getAuthIdentifier();

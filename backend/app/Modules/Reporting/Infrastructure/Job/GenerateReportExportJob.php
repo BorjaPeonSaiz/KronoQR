@@ -251,15 +251,30 @@ final class GenerateReportExportJob implements ShouldQueue
             $closed = $connection->transaction(function () use ($exports, $clock): bool {
                 $export = $exports->lockByUuid($this->exportUuid);
 
-                if ($export === null || ! $export->isInProgress()) {
+                if ($export === null) {
                     return true;
                 }
 
                 $now = $clock->now();
                 $startedAt = $export->startedAt;
+                $writerMayBeAlive = $startedAt !== null
+                    && $now->getTimestamp() - $startedAt->getTimestamp() < self::TIMEOUT_SECONDS - self::STILL_RUNNING_MARGIN_SECONDS;
 
-                if ($startedAt !== null
-                    && $now->getTimestamp() - $startedAt->getTimestamp() < self::TIMEOUT_SECONDS - self::STILL_RUNNING_MARGIN_SECONDS) {
+                if ($export->wasCancelled()) {
+                    // Cancelada y su trabajador muerto: deja de ocupar el turno.
+                    // Si puede seguir vivo, lo confirmara el al parar.
+                    if (! $writerMayBeAlive) {
+                        $exports->confirmStopped($this->exportUuid, $now);
+                    }
+
+                    return ! $writerMayBeAlive;
+                }
+
+                if (! $export->isInProgress()) {
+                    return true;
+                }
+
+                if ($writerMayBeAlive) {
                     return false;
                 }
 

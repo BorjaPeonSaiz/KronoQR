@@ -90,6 +90,9 @@ use Throwable;
  */
 final readonly class GenerateReportExportHandler
 {
+    /** El `SQLSTATE` con el que PostgreSQL corta por `statement_timeout`. */
+    private const string QUERY_CANCELED = '57014';
+
     public function __construct(
         private ReportExportRepository $exports,
         private PeriodReportExportGeneration $periodReports,
@@ -132,6 +135,10 @@ final readonly class GenerateReportExportHandler
             $completed = $this->completeAndPublish($uuid, $generated);
         } catch (ReportExportWasCancelled) {
             $this->discard($run);
+
+            // Hasta aqui la cancelada seguia ocupando el turno de su dueño: ya no
+            // queda nadie escribiendo, y puede pedir otra.
+            $this->exports->confirmStopped($uuid, $this->clock->now());
 
             return $this->exports->findByUuid($uuid) ?? $started;
         } catch (Throwable $failure) {
@@ -354,6 +361,10 @@ final readonly class GenerateReportExportHandler
     {
         return match (true) {
             $failure instanceof ReportTooLargeForSynchronousDelivery => ReportExportFailure::QueryTimeout,
+            // `query_canceled` por `statement_timeout`: la exportacion legal en cola
+            // lleva el techo del diferido y su origen no lo traduce (V5-PA-4).
+            $failure instanceof QueryException
+                && ($failure->errorInfo[0] ?? null) === self::QUERY_CANCELED => ReportExportFailure::QueryTimeout,
             $failure instanceof ReportExportWriteFailed => ReportExportFailure::WriteFailed,
             $failure instanceof QueryException,
             $failure instanceof PDOException => ReportExportFailure::DatabaseError,

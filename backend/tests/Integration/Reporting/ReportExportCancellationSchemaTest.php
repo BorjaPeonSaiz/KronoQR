@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -58,9 +59,27 @@ it('admite las clases legal y adoption y el estado cancelled con su fecha', func
 
     reportExportCancellationRow($user);
     reportExportCancellationRow($user, ['kind' => 'adoption', 'format' => 'pdf', 'status' => 'failed', 'failed_at' => '2026-03-08 09:01:00+00', 'failure_reason' => 'unexpected']);
-    reportExportCancellationRow($user, ['status' => 'cancelled', 'cancelled_at' => '2026-03-08 09:00:30+00']);
+    reportExportCancellationRow($user, ['status' => 'cancelled', 'cancelled_at' => '2026-03-08 09:00:30+00', 'stopped_at' => '2026-03-08 09:00:31+00']);
 
     expect(DB::table('report_exports')->count())->toBe(3);
+})->group('RF-IN-06', 'RF-IN-05', 'RF-IN-08');
+
+it('una cancelada que su trabajador no ha confirmado sigue ocupando el turno de su dueño', function (): void {
+    // Revision de seguridad del bloque 14: sin esto, pedir-cancelar-pedir ponia
+    // a trabajar tantas consultas como clics contra la base del fichaje.
+    $user = ManagementUsers::withRole(UserRole::RRHH)->id;
+
+    reportExportCancellationRow($user, ['status' => 'cancelled', 'cancelled_at' => '2026-03-08 09:00:30+00']);
+
+    expect(static fn () => reportExportCancellationRow($user))
+        ->toThrow(QueryException::class, 'report_exports_single_slot_uidx');
+
+    DB::table('report_exports')->where('status', 'cancelled')->update(['stopped_at' => '2026-03-08 09:00:31+00']);
+    reportExportCancellationRow($user);
+
+    expect(DB::table('report_exports')->count())->toBe(2)
+        ->and(static fn () => reportExportCancellationRow($user, ['status' => 'running', 'stopped_at' => '2026-03-08 09:00:31+00']))
+        ->toThrow(QueryException::class, 'report_exports_chk_stopped_only_cancelled');
 })->group('RF-IN-06', 'RF-IN-05', 'RF-IN-08');
 
 it('rechaza desde el esquema lo que PHP tampoco construiria', function (array $overrides, string $constraint): void {
@@ -122,3 +141,28 @@ function reportExportCancellationStepsBack(ConnectionInterface $connection): int
 
     return $position === false ? 0 : $position + 1;
 }
+
+it('su down() se niega a volver si hay filas que el catalogo anterior no admite, y no borra nada', function (string $kind, string $status, ?string $cancelledAt): void {
+    // Regla dura 5: la unica forma de volver seria borrar o reescribir la fila.
+    // Se llama a `down()` sobre la conexion de la prueba, que ve la fila: lanza
+    // antes del primer `ALTER`, asi que el esquema no se toca.
+    $user = ManagementUsers::withRole(UserRole::RRHH)->id;
+    reportExportCancellationRow($user, [
+        'kind' => $kind,
+        'format' => 'csv',
+        'status' => $status,
+        'cancelled_at' => $cancelledAt,
+        'stopped_at' => $cancelledAt,
+    ]);
+
+    $migration = require database_path('migrations/'.REPORT_EXPORT_CANCELLATION_MIGRATION.'.php');
+    assert($migration instanceof Migration && method_exists($migration, 'down'));
+
+    expect(static fn () => $migration->down())->toThrow(RuntimeException::class, 'No se puede deshacer')
+        ->and(DB::table('report_exports')->count())->toBe(1)
+        ->and(DB::getSchemaBuilder()->hasColumn('report_exports', 'cancelled_at'))->toBeTrue();
+})->with([
+    'legal' => ['legal', 'pending', null],
+    'adoption' => ['adoption', 'pending', null],
+    'cancelada' => ['period', 'cancelled', '2026-03-08 09:00:30+00'],
+])->group('RF-IN-06', 'RNF-D-04');

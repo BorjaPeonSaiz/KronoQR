@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\ReportExportProgressBoard;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Support\ReportExportView;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
@@ -60,19 +61,23 @@ final readonly class ListReportExports
     ) {}
 
     /**
+     * @param  list<ReportExportKind>|null  $kinds  Las clases que alcanza quien pregunta, o todas. Un
+     *                                              token sin `reports:*` —el auditor— solo alcanza
+     *                                              `legal` (revision de seguridad del bloque 14).
      * @return list<ReportExportView>
      */
-    public function handle(int $requestedByUserId): array
+    public function handle(int $requestedByUserId, ?array $kinds = null): array
     {
-        return UseCaseInstrumentation::run('reporting.list_report_exports', fn () => $this->doHandle($requestedByUserId));
+        return UseCaseInstrumentation::run('reporting.list_report_exports', fn () => $this->doHandle($requestedByUserId, $kinds));
     }
 
     /**
+     * @param  list<ReportExportKind>|null  $kinds
      * @return list<ReportExportView>
      */
-    private function doHandle(int $requestedByUserId): array
+    private function doHandle(int $requestedByUserId, ?array $kinds): array
     {
-        $exports = $this->exports->recentFor($requestedByUserId, self::LIMIT);
+        $exports = $this->exports->recentFor($requestedByUserId, self::LIMIT, $kinds);
 
         $running = array_values(array_map(
             static fn (ReportExport $export): string => $export->uuid,
