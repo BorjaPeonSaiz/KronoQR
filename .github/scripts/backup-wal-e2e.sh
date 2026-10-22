@@ -184,7 +184,7 @@ leaks_wal_key() {
 # --- ⑧ · instalacion limpia ---------------------------------------------------
 
 mode_clean() {
-  local seg first newest copia nombre kid_envhash
+  local seg first newest copia nombre kid_envhash last
 
   step "1 · El archivo de WAL esta CIFRADO (R5-DV-02, RL-12)"
   sql "CREATE TABLE IF NOT EXISTS ci_wal_probe(id serial primary key, scan_id text, employee text, kiosk text)"
@@ -218,6 +218,30 @@ mode_clean() {
   fi
   as_root test ! -e "${WAL_DIR}/0000000100000000000000FE.gz.enc" || fail "quedo un segmento escrito sin clave"
   ok "sin clave y con la clave de desarrollo, el archivado sale con 1"
+
+  step "2b · El renombrado del segmento se sincroniza DESPUES del mv (V7-RV-3)"
+  # `sync` falso delante en el PATH: anota si el segmento definitivo ya existia cuando
+  # se le llamo y con que ruta. El ultimo `sync` tiene que ver ya el `.gz.enc` y llevar
+  # el directorio de destino; con la implementacion anterior (un solo `sync` antes del
+  # `mv`) el ultimo no lo veia.
+  # shellcheck disable=SC2016
+  dc exec -T postgres sh -c '
+    set -eu
+    rm -rf /tmp/wal-sync-test /tmp/sync-shim
+    mkdir -p /tmp/wal-sync-test /tmp/sync-shim
+    cat >/tmp/sync-shim/sync <<SHIM
+#!/bin/sh
+if [ -e /tmp/wal-sync-test/0000000100000000000000FD.gz.enc ]; then v=con; else v=sin; fi
+printf "%s %s\n" "\$v" "\$*" >>/tmp/sync-shim/calls
+exec /bin/busybox sync "\$@"
+SHIM
+    chmod +x /tmp/sync-shim/sync
+    PATH=/tmp/sync-shim:$PATH KRONOQR_WAL_ARCHIVE_DIR=/tmp/wal-sync-test kronoqr-archive-wal /tmp/seg-e2e 0000000100000000000000FD
+  ' || fail "kronoqr-archive-wal no archivo con el sync falso (¿la clave del contenedor es valida?)"
+  last="$(dc exec -T postgres tail -n 1 /tmp/sync-shim/calls | tr -d '\r')"
+  [ "${last}" = "con /tmp/wal-sync-test" ] || fail "el ultimo sync no fue del directorio tras el mv (fue: '${last}')"
+  dc exec -T postgres rm -rf /tmp/wal-sync-test /tmp/sync-shim
+  ok "el ultimo sync ocurre con el segmento ya publicado y sobre el directorio de destino"
 
   step "3 · Matriz de montajes de BACKUP_PATH (A3-R2, C18)"
   expect_readonly horizon "${BACKUP_PATH}/.e2e-probe"
