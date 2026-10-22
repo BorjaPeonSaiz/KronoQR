@@ -1085,7 +1085,7 @@ audit_json_object() {
     [ -n "${value}" ] || continue
     [ "${first}" -eq 1 ] || out+=","
     first=0
-    if [[ "${key}" =~ ^(migrations_applied|revoked_credentials|employees)$ ]] && [[ "${value}" =~ ^[0-9]+$ ]]; then
+    if [[ "${key}" =~ ^(migrations_applied|revoked_credentials|employees|failed)$ ]] && [[ "${value}" =~ ^[0-9]+$ ]]; then
       out+="\"${key}\":${value}"
     elif [ "${key}" = "portal_exposed" ] && [ "${value}" = "true" ]; then
       out+="\"${key}\":true"
@@ -3127,20 +3127,28 @@ phase_start_and_verify() {
   # La linea de recuento se toma POR PATRON (stdout y stderr van mezclados: la ultima linea
   # puede ser un aviso de PHP). Aunque la orden falle a medias, el recuento de lo ya revocado
   # es el que consta en el asiento. Sin tuberias hacia grep -q (pipefail).
-  revoke_line="$(grep -E '^revoked_credentials=[0-9]+ employees=[0-9]+( failed=[0-9]+)?$' <<<"${revoke_output}" | tail -n 1 || true)"
+  revoke_line="$(grep -E '^revoked_credentials=[0-9]+ employees=[0-9]+ failed=[0-9]+$' <<<"${revoke_output}" | tail -n 1 || true)"
   REVOKED_CREDENTIALS=""
   REVOKED_EMPLOYEES=""
+  REVOKED_FAILED=""
   if [ -n "${revoke_line}" ]; then
     REVOKED_CREDENTIALS="${revoke_line#revoked_credentials=}"
     REVOKED_CREDENTIALS="${REVOKED_CREDENTIALS%% *}"
     REVOKED_EMPLOYEES="${revoke_line#*employees=}"
     REVOKED_EMPLOYEES="${REVOKED_EMPLOYEES%% *}"
+    REVOKED_FAILED="${revoke_line#*failed=}"
   fi
 
-  if [ "${revoke_status}" -eq 0 ]; then
-    kq_msg check_ok "$(kq_format u_verify_revoke_offboarded_ok "${revoke_line:-?}")"
+  # Correcto = salida 0, linea de recuento presente y failed=0. Sin la linea (falla la seleccion
+  # inicial, o la salida cambio de forma) se trata como fallo: no se da por hecho lo que no consta.
+  if [ "${revoke_status}" -eq 0 ] && [ "${REVOKED_FAILED}" = "0" ]; then
+    kq_msg check_ok "$(kq_format u_verify_revoke_offboarded_ok "${revoke_line}")"
     remember_check "revoke-offboarded" "$(kq_text u_report_ok)"
   else
+    if [ "${revoke_status}" -eq 0 ]; then
+      revoke_status="${REVOKED_FAILED:+failed=${REVOKED_FAILED}}"
+      revoke_status="${revoke_status:-sin recuento}"
+    fi
     kq_msg check_warn "$(kq_format u_verify_revoke_offboarded_warn "${revoke_status}")"
     kq_msg fix "$(kq_text u_verify_revoke_offboarded_warn_fix)"
     remember_check "revoke-offboarded" "$(kq_text u_report_failed) (${revoke_status})"
@@ -3158,6 +3166,7 @@ phase_start_and_verify() {
     "migrations_applied=${MIGRATIONS_APPLIED}" \
     "revoked_credentials=${REVOKED_CREDENTIALS}" \
     "employees=${REVOKED_EMPLOYEES}" \
+    "failed=${REVOKED_FAILED}" \
     "chain_before=${CHAIN_BEFORE}" \
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
