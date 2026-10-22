@@ -1867,6 +1867,27 @@ script te dice a cuál ir primero.
 **Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
 en la versión», y no toca nada.
 
+**Al actualizar a la 2.3.0: el panel avisa mejor de lo que no se ha podido
+leer.** Nada de esto cambia datos ni impide fichar:
+
+- **Incidencias** gana un botón «Actualizar» y la hora de la última lectura
+  (en la zona del centro). Si una lectura falla, el panel lo dice y conserva la
+  lista anterior con su hora; si falla un cambio de filtro o de página, **retira
+  las filas** en vez de dejar las del filtro anterior bajo el nuevo.
+- **Presencia** distingue «nadie ha fichado» de «el canal está parado»: con el
+  tiempo real en directo enseña también a qué hora se comprobó el canal. Si la
+  primera lectura falla, vuelve sola al tiempo real en cuanto llega una buena.
+- **«Informe listo para descargar»** se avisa en la cabecera desde cualquier
+  pantalla (no solo en Informes), y solo de los informes que terminan mientras
+  estás en el panel, no de los ya descargables.
+- **Si una pantalla no se abre** tras una actualización del servidor, el panel
+  muestra un aviso con «Recargar la página» en lugar de quedarse sin hacer nada.
+- **Las cuentas de auditoría** ya no ven un menú lateral con un único enlace.
+- **Al corregir un tramo**, los campos de hora no admiten una hora posterior a
+  la actual en la zona del centro y explican por qué.
+- El histórico de errores explica qué hacer con `kiosk.update.unreachable`
+  (§11.1, a continuación).
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

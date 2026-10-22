@@ -628,12 +628,12 @@ describe('EmployeeWorkDaysView, accesibilidad (WCAG 2.2 AA)', () => {
       expect(wrapper.find('[data-test="dialog-work-date"]').attributes('max')).toBe('2026-10-02')
     })
 
-    it('para una persona en alta no pone ningun limite', async () => {
+    it('para una persona en alta no pone limite inferior y el superior es hoy: nada en el futuro (F1)', async () => {
       const wrapper = await openAdd(employee())
       const input = wrapper.find('[data-test="dialog-work-date"]')
 
       expect(input.attributes('min')).toBeUndefined()
-      expect(input.attributes('max')).toBeUndefined()
+      expect(input.attributes('max')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     })
 
     it('pinta el 422 de work_date en el campo, accesible', async () => {

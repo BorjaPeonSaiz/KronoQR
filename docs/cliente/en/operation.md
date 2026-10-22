@@ -1889,6 +1889,28 @@ the script tells you which one to go to first.
 **A second run** on an already updated installation: exits `3`, "already on the
 version", and touches nothing.
 
+**When updating to 2.3.0: the panel says more clearly what it could not
+read.** None of this changes data or prevents clocking:
+
+- **Incidents** gains a "Refresh" button and the time of the last read (in the
+  centre's zone). If a read fails, the panel says so and keeps the previous list
+  with its time; if a filter or page change fails, it **removes the rows**
+  instead of leaving the previous filter's rows under the new one.
+- **Presence** tells "nobody has clocked" apart from "the channel is stalled":
+  with live updates on it also shows when the channel was last checked. If the
+  first read fails, it goes back to live updates by itself as soon as a good one
+  arrives.
+- **"Report ready to download"** is announced in the header from any screen
+  (not only in Reports), and only for reports that finish while you are in the
+  panel, not for those already downloadable.
+- **If a screen does not open** after a server update, the panel shows a notice
+  with "Reload the page" instead of doing nothing.
+- **Audit accounts** no longer see a side menu with a single link.
+- **When correcting a shift**, the time fields do not accept a time later than
+  the current one in the centre's zone, and explain why.
+- The error history explains what to do about `kiosk.update.unreachable`
+  (§11.1, below).
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet
