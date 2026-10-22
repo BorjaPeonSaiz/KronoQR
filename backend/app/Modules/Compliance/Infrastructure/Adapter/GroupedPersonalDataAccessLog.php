@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Adapter;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Throwable;
 
 /**
  * Agrupa en una ventana las divulgaciones repetidas del **mismo actor sobre el
@@ -120,12 +121,20 @@ final readonly class GroupedPersonalDataAccessLog implements PersonalDataAccessL
 
         $this->cache->forget(self::COUNT_PREFIX.$key);
 
-        $this->disclosures->recordDisclosure($dataset, $recordCount, [
-            ...$context,
-            // Cuantas lecturas representa este asiento, esta incluida. `1` es el
-            // caso normal de quien abre la pantalla y la cierra.
-            'repeated_since_last_entry' => $pending,
-        ]);
+        try {
+            $this->disclosures->recordDisclosure($dataset, $recordCount, [
+                ...$context,
+                // Cuantas lecturas representa este asiento, esta incluida. `1` es el
+                // caso normal de quien abre la pantalla y la cierra.
+                'repeated_since_last_entry' => $pending,
+            ]);
+        } catch (Throwable $exception) {
+            // Sin asiento no hay plaza: si se quedara, las lecturas del resto de
+            // la ventana pasarian sin ninguno. La siguiente vuelve a intentarlo.
+            $this->cache->forget(self::SEAT_PREFIX.$key);
+
+            throw $exception;
+        }
     }
 
     /**

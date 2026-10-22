@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Port\AuditTrail;
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
+use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
@@ -155,6 +160,39 @@ it('si el asiento no se puede escribir, no hay suscripcion', function (): void {
 
     expect($respuesta->status())->not->toBe(200)
         ->and($respuesta->json('auth'))->toBeNull();
+})->group('RS-05', 'RL-15');
+
+it('si el asiento agrupado falla, la plaza se libera y la siguiente suscripcion si lo deja', function (): void {
+    $escenario = presenciaAuditada();
+
+    // El fallo va en la cadena de verdad, debajo del decorador que agrupa: es
+    // ahi donde la plaza de la ventana se habia quedado tomada sin asiento.
+    app()->instance(AuditTrail::class, new class(new DatabaseAuditTrail(DB::connection())) implements AuditTrail
+    {
+        private int $failures = 1;
+
+        public function __construct(private readonly AuditTrail $trail) {}
+
+        public function append(AuditEntryDraft $draft): AuditEntry
+        {
+            if ($draft->action->value === AuditAction::PersonalDataAccessed->value && $this->failures > 0) {
+                $this->failures--;
+
+                throw new RuntimeException('audit_log no responde');
+            }
+
+            return $this->trail->append($draft);
+        }
+    });
+
+    expect(suscribirPresencia($escenario['rrhh'], 'presence.all')->status())->toBe(500)
+        ->and(asientosDeSuscripcion())->toBe([]);
+
+    Auth::forgetGuards();
+
+    suscribirPresencia($escenario['rrhh'], 'presence.all')->assertOk();
+
+    expect(asientosDeSuscripcion())->toHaveCount(1);
 })->group('RS-05', 'RL-15');
 
 it('niega el canal por rol sin dejar asiento de lectura', function (UserRole $rol): void {
