@@ -182,17 +182,58 @@ final readonly class DiagnosticsBundle
      */
     public static function digestMatches(array $document): bool
     {
+        return self::checkDigest($document)->matches();
+    }
+
+    /**
+     * La huella segun la version del paquete (PR16). La `2` cubre el
+     * documento entero salvo la huella; la `1`, anterior a la 2.3.0, solo las
+     * secciones, y se sigue comprobando asi para no denunciar como alterado
+     * un paquete viejo intacto.
+     *
+     * @param  array<string, mixed>  $document  El JSON decodificado tal cual.
+     */
+    public static function checkDigest(array $document): DiagnosticsDigestCheck
+    {
         $manifest = $document['manifest'] ?? null;
 
         if (! is_array($manifest) || ! is_string($manifest['sha256'] ?? null)) {
-            return false;
+            return DiagnosticsDigestCheck::Mismatch;
         }
 
         $sealed = $manifest['sha256'];
+
+        return match ($manifest['schema_version'] ?? null) {
+            DiagnosticsManifest::SCHEMA_VERSION => self::withoutDigest($document, $manifest, $sealed),
+            DiagnosticsManifest::SECTIONS_ONLY_SCHEMA_VERSION => self::sectionsOnly($document, $sealed),
+            default => DiagnosticsDigestCheck::Mismatch,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $document
+     * @param  array<array-key, mixed>  $manifest
+     */
+    private static function withoutDigest(array $document, array $manifest, string $sealed): DiagnosticsDigestCheck
+    {
         unset($manifest['sha256']);
         $document['manifest'] = $manifest;
 
-        return hash_equals($sealed, CanonicalJson::digest($document));
+        return hash_equals($sealed, CanonicalJson::digest($document))
+            ? DiagnosticsDigestCheck::Intact
+            : DiagnosticsDigestCheck::Mismatch;
+    }
+
+    /**
+     * @param  array<string, mixed>  $document
+     */
+    private static function sectionsOnly(array $document, string $sealed): DiagnosticsDigestCheck
+    {
+        unset($document['manifest']);
+
+        return hash_equals($sealed, CanonicalJson::digest($document))
+            ? DiagnosticsDigestCheck::IntactWithoutManifest
+            : DiagnosticsDigestCheck::Mismatch;
     }
 
     /**

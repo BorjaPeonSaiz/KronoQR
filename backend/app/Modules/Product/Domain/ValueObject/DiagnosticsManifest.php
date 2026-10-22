@@ -14,14 +14,25 @@ use DateTimeImmutable;
  * el resto: **que version lo genero, cuando, si va anonimizado y la huella del
  * resto del documento**.
  *
- * `schema_version` es `1` y cambia solo si cambia lo que **significa** una
- * seccion, no cada vez que se añade una: un runbook escrito contra la version 1
- * tiene que seguir siendo valido cuando el paquete crezca.
+ * `schema_version` cambia solo si cambia lo que **significa** una seccion o la
+ * huella, no cada vez que se añade una seccion: un runbook escrito contra una
+ * version tiene que seguir siendo valido cuando el paquete crezca.
+ *
+ * - `1`, hasta la 2.2.x: `sha256` cubre solo las secciones.
+ * - `2`, desde la 2.3.0 (PR16): `sha256` cubre el documento entero con el
+ *   manifiesto sin ese campo, de modo que cambiar `anonymized`, la version, el
+ *   instante, el actor o la lista de secciones hace fallar `--verify`.
+ *
+ * `--verify` acepta las dos y dice cual ha comprobado
+ * ({@see DiagnosticsDigestCheck}).
  */
 final readonly class DiagnosticsManifest
 {
-    /** Version de la forma del paquete (contrato, `const: 1`). */
-    public const int SCHEMA_VERSION = 1;
+    /** Version de la forma del paquete que se genera (contrato, `const: 2`). */
+    public const int SCHEMA_VERSION = 2;
+
+    /** La version anterior, cuya huella cubria solo las secciones. */
+    public const int SECTIONS_ONLY_SCHEMA_VERSION = 1;
 
     /**
      * @param  list<string>  $sections

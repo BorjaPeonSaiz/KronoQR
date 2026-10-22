@@ -21317,8 +21317,13 @@ components:
       properties:
         schema_version:
           type: integer
-          const: 1
-          description: Version de la forma del paquete. Cambia solo si cambia lo que significa una seccion.
+          const: 2
+          description: |
+            Version de la forma del paquete. Cambia solo si cambia lo que
+            significa una seccion o la huella. La `2` (2.3.0) es la de la
+            huella que cubre tambien el manifiesto sin su `sha256`; en la `1`
+            cubria solo las secciones, y `product:diagnostics --verify` la
+            sigue comprobando asi y la presenta como huella sin manifiesto.
         product_version:
           type: string
           examples: ['2.2.0']
@@ -21346,9 +21351,11 @@ components:
             serializado en JSON canonico (claves ordenadas, sin espacios). Cubre
             tambien el manifiesto (PR16, desde la 2.3.0): cambiar `anonymized`,
             la version o la lista de secciones hace fallar la verificacion. Un
-            paquete generado con una version anterior, cuya huella cubria solo
-            las secciones, no verifica con esta. Soporte la recalcula al
-            recibirlo para detectar una copia alterada o truncada.
+            paquete de `schema_version: 1`, de una version anterior, se sigue
+            verificando con su algoritmo —solo las secciones— y se presenta
+            como huella sin manifiesto: su `anonymized` no esta cubierto. Soporte
+            la recalcula al recibirlo para detectar una copia alterada o
+            truncada.
 
     DoctorCheck:
       type: object

@@ -15,6 +15,7 @@ use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsDigestCheck;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
@@ -405,7 +406,9 @@ final class ProductDiagnosticsCommand extends Command
             return 2;
         }
 
-        if (! DiagnosticsBundle::digestMatches($document)) {
+        $check = DiagnosticsBundle::checkDigest($document);
+
+        if (! $check->matches()) {
             $this->line('LA HUELLA NO COINCIDE: '.$path);
             $this->line('');
             $this->line('El fichero no es el que se genero, o le falta parte. La causa mas frecuente es');
@@ -423,6 +426,12 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('  Generado:  '.self::text($manifest, 'generated_at').' por '.self::text($manifest, 'generated_by'));
         $this->line('  Anonimo:   '.(($manifest['anonymized'] ?? null) === true ? 'si' : 'NO — lleva datos personales'));
         $this->line('  Huella:    '.self::text($manifest, 'sha256'));
+
+        if ($check === DiagnosticsDigestCheck::IntactWithoutManifest) {
+            // Paquete de `schema_version: 1`, anterior a la 2.3.0 (PR16).
+            $this->line('             huella sin manifiesto: cubre las secciones, no la cabecera. Que diga');
+            $this->line('             «anonimo» no esta comprobado; mira las secciones antes de darlo por anonimo.');
+        }
 
         $this->line('  Asiento:   '.self::generationEntry($document));
 

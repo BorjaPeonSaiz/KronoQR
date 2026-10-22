@@ -11969,10 +11969,14 @@ export interface components {
          */
         DiagnosticsManifest: {
             /**
-             * @description Version de la forma del paquete. Cambia solo si cambia lo que significa una seccion.
+             * @description Version de la forma del paquete. Cambia solo si cambia lo que
+             *     significa una seccion o la huella. La `2` (2.3.0) es la de la
+             *     huella que cubre tambien el manifiesto sin su `sha256`; en la `1`
+             *     cubria solo las secciones, y `product:diagnostics --verify` la
+             *     sigue comprobando asi y la presenta como huella sin manifiesto.
              * @constant
              */
-            schema_version: 1;
+            schema_version: 2;
             /** @example 2.2.0 */
             product_version: string;
             generated_at: components["schemas"]["UtcTimestamp"];
@@ -11991,9 +11995,11 @@ export interface components {
              *     serializado en JSON canonico (claves ordenadas, sin espacios). Cubre
              *     tambien el manifiesto (PR16, desde la 2.3.0): cambiar `anonymized`,
              *     la version o la lista de secciones hace fallar la verificacion. Un
-             *     paquete generado con una version anterior, cuya huella cubria solo
-             *     las secciones, no verifica con esta. Soporte la recalcula al
-             *     recibirlo para detectar una copia alterada o truncada.
+             *     paquete de `schema_version: 1`, de una version anterior, se sigue
+             *     verificando con su algoritmo —solo las secciones— y se presenta
+             *     como huella sin manifiesto: su `anonymized` no esta cubierto. Soporte
+             *     la recalcula al recibirlo para detectar una copia alterada o
+             *     truncada.
              */
             sha256: string;
         };

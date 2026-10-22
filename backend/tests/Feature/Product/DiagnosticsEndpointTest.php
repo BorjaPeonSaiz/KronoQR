@@ -77,7 +77,7 @@ it('devuelve el paquete anonimizado sin cuerpo, que es el caso normal', function
         ->assertValidResponse(200);
 
     expect($response->json('manifest.anonymized'))->toBeTrue()
-        ->and($response->json('manifest.schema_version'))->toBe(1)
+        ->and($response->json('manifest.schema_version'))->toBe(2)
         ->and($response->json('manifest.generated_by'))->toBe('user')
         ->and($response->json('manifest.sha256'))->toMatch('/^[0-9a-f]{64}$/')
         // Las diez secciones obligatorias del contrato, y `personal_data` no.

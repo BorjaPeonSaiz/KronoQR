@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\ValueObject\CanonicalJson;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
@@ -287,6 +288,34 @@ it('--verify devuelve 0 con un paquete intacto', function (): void {
     expect($result['code'])->toBe(0)
         ->and($result['output'])->toContain('Paquete integro')
         ->and($result['output'])->toContain('Anonimo:   si');
+})->group('RF-PD-09');
+
+it('--verify acepta un paquete de la version 1 y dice que su huella no cubre el manifiesto (PR16)', function (): void {
+    runDiagnostics();
+    $path = paqueteEscrito();
+
+    /** @var array<string, mixed> $document */
+    $document = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    /** @var array<string, mixed> $manifest */
+    $manifest = $document['manifest'];
+    unset($document['manifest']);
+
+    // Como lo sellaba la 2.2.x: version 1 y huella de las secciones solas.
+    $manifest['schema_version'] = 1;
+    $manifest['sha256'] = CanonicalJson::digest($document);
+    file_put_contents($path, json_encode(['manifest' => $manifest, ...$document], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR));
+
+    $result = runDiagnostics(['--verify' => $path]);
+
+    expect($result['code'])->toBe(0, $result['output'])
+        ->and($result['output'])->toContain('Paquete integro')
+        ->and($result['output'])->toContain('huella sin manifiesto');
+})->group('RF-PD-09');
+
+it('--verify no añade el aviso de la version 1 a un paquete de la version 2', function (): void {
+    runDiagnostics();
+
+    expect(runDiagnostics(['--verify' => paqueteEscrito()])['output'])->not->toContain('huella sin manifiesto');
 })->group('RF-PD-09');
 
 it('--verify devuelve 2 con un solo byte cambiado', function (): void {
