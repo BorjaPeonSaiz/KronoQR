@@ -48,6 +48,7 @@ const ABSENCE_EXAMPLE: Absence = {
   created_at: '2026-02-20T09:14:02.118000Z',
 }
 import { expectNoBlockingViolations } from './support/axe'
+import { focusTrail, ringTrail } from './support/focus'
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
 
@@ -794,40 +795,49 @@ test(
   },
 )
 
+// Las dos pruebas de foco siguientes recorren el dialogo de corregir un tramo con
+// un numero FIJO de pulsaciones (`support/focus.ts`, V21-7-QA-3) y comparan la
+// traza entera con la esperada. Chromium da SEIS paradas de Tab a un
+// `datetime-local` en español: dia, mes, año, hora, minuto y el selector.
+
 test(
   'el dialogo atrapa el foco en un ciclo de Tab y lo devuelve al boton que lo abrio (PA7-002)',
   { tag: ['@RF-PA-04'] },
   async ({ page }) => {
     await logIn(page)
     await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
-
     const opener = page.getByTestId('entry-correct')
-
+    const dialog = page.getByRole('dialog')
     await opener.focus()
     await page.keyboard.press('Enter')
+    await expect(page.getByTestId('dialog-clock-in')).toBeFocused()
 
-    // `document.activeElement` se retargetea al input aunque el foco este en un
-    // segmento interno de un campo de fecha, donde `:focus` no coincide.
-    const focusIsInsideDialog = (): Promise<boolean> =>
-      page.evaluate(
-        () => document.querySelector('[role="dialog"]')?.contains(document.activeElement) === true,
-      )
-    const dialog = page.getByRole('dialog')
-
-    await expect(dialog).toBeVisible()
-
-    // Quince Tab hacia delante y cinco hacia atras: el foco nunca sale del dialogo.
-    for (let step = 0; step < 15; step += 1) {
-      await page.keyboard.press('Tab')
-      await expect.poll(focusIsInsideDialog).toBe(true)
-    }
-
-    for (let step = 0; step < 5; step += 1) {
-      await page.keyboard.press('Shift+Tab')
-      await expect.poll(focusIsInsideDialog).toBe(true)
-    }
-
+    const forwards = await focusTrail(page, dialog, 'Tab', 15)
+    const backwards = await focusTrail(page, dialog, 'Shift+Tab', 3)
     await page.keyboard.press('Escape')
+
+    expect(forwards).toEqual([
+      { inside: true, element: 'dialog-clock-in' },
+      { inside: true, element: 'dialog-clock-in' },
+      { inside: true, element: 'dialog-clock-in' },
+      { inside: true, element: 'dialog-clock-in' },
+      { inside: true, element: 'dialog-clock-in' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-clock-out' },
+      { inside: true, element: 'dialog-ends-in-break' },
+      { inside: true, element: 'dialog-reason' },
+      { inside: true, element: 'dialog-cancel' },
+      { inside: true, element: 'dialog-clock-in' },
+    ])
+    expect(backwards).toEqual([
+      { inside: true, element: 'dialog-cancel' },
+      { inside: true, element: 'dialog-reason' },
+      { inside: true, element: 'dialog-ends-in-break' },
+    ])
     await expect(dialog).toBeHidden()
     await expect(opener).toBeFocused()
   },
@@ -840,29 +850,22 @@ test(
     await logIn(page)
     await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
     await page.getByTestId('entry-correct').click()
-
-    const dialog = page.getByRole('dialog')
-    const input = dialog.locator('input[type="datetime-local"]').first()
-
+    const input = page.getByRole('dialog').locator('input[type="datetime-local"]').first()
     await input.focus()
 
-    // Se recorren los segmentos internos (dia, mes, año, hora, minuto) y en
-    // ninguno desaparece el anillo, que era lo que fallaba en el ultimo.
-    for (let segment = 0; segment < 6; segment += 1) {
-      const outline = await input.evaluate((element) => {
-        const style = getComputedStyle(element)
+    const trail = await ringTrail(page, input, 'Tab', 6)
 
-        return { style: style.outlineStyle, width: style.outlineWidth }
-      })
-
-      expect(outline.style, `segmento ${segment}`).not.toBe('none')
-      expect(outline.width, `segmento ${segment}`).not.toBe('0px')
-      await page.keyboard.press('Tab')
-
-      if (!(await input.evaluate((element) => element.matches(':focus-within')))) {
-        break
-      }
-    }
+    // Anillo en las seis paradas, tambien en la ultima, que era la que lo perdia;
+    // la septima ya esta fuera del campo y sin anillo.
+    expect(trail).toEqual([
+      { inside: true, ring: true },
+      { inside: true, ring: true },
+      { inside: true, ring: true },
+      { inside: true, ring: true },
+      { inside: true, ring: true },
+      { inside: true, ring: true },
+      { inside: false, ring: false },
+    ])
   },
 )
 
