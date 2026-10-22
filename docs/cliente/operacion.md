@@ -1771,6 +1771,14 @@ de esto impide fichar ni exige tocar la configuración:
   disponibilidad se recrea al actualizar, sin permisos de administrador y sin
   acceso a la red de la aplicación. No hay nada que hacer.
 
+**Al actualizar a la 2.3.0: se revocan solas las tarjetas que seguían activas
+de personas ya dadas de baja.** Desde la 2.2.0 la baja retira la tarjeta en el
+acto; las bajas registradas antes conservaban la suya «activa» en el panel,
+aunque no dejaba fichar. `update.sh` las revoca al terminar de migrar, con el
+mismo motivo que una baja de hoy (`Baja del empleado (RN-14)`), la fecha de la
+actualización y su asiento en el registro de auditoría por cada tarjeta. No hay
+que hacer nada; si las cuentas en el panel, verás menos tarjetas activas.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,

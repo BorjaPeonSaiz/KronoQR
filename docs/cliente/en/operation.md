@@ -1791,6 +1791,15 @@ this stops clock-in or requires touching the configuration:
   recreated on update, without administrator rights and without access to the
   application network. There is nothing to do.
 
+**When updating to 2.3.0: cards that were still active for people already
+offboarded are revoked automatically.** Since 2.2.0, offboarding withdraws the
+card at once; people offboarded before that kept theirs "active" in the panel,
+although it did not let them clock in. `update.sh` revokes them once the
+migrations finish, with the same reason as an offboarding today
+(`Baja del empleado (RN-14)`), the date of the update and an audit-log entry
+for each card. There is nothing to do; if you count them in the panel, you
+will see fewer active cards.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or
