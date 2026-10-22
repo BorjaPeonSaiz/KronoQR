@@ -268,6 +268,51 @@ describe('PayrollExportView', () => {
     expect(wrapper.find('[data-test="export-job"]').attributes('data-status')).toBe('pending')
   })
 
+  it('tras un 422 de una consulta, pedir otra no reutiliza la anterior (oversizedQuery se anula al cambiar un campo)', async () => {
+    const bodies: Record<string, unknown>[] = []
+
+    stubRoutes({
+      '/departments': () => jsonResponse({ data: [] }),
+      '/settings': () => jsonResponse(DEFAULT_SETTINGS),
+      '/payroll-export': () =>
+        problemResponse(422, 'urn:kronoqr:problem:report-too-large', {
+          errors: { to: ['Demasiado grande.'] },
+        }),
+      '/reports/exports': (_url, init) => {
+        if (init?.method !== 'POST') {
+          return jsonResponse({ data: [reportExportRow({ kind: 'payroll' })] })
+        }
+
+        bodies.push(JSON.parse(String(init.body)))
+
+        return jsonResponse({ data: reportExportRow({ kind: 'payroll' }) }, 202)
+      },
+    })
+
+    const wrapper = await mountView(PayrollExportView)
+    await settle()
+
+    // 1) Una persona en un mes: al momento, y el servidor dice que es demasiado grande.
+    await fillSyncQuery(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+    expect(wrapper.find('[data-test="oversized-offer"]').exists()).toBe(true)
+
+    // 2) Se cambia a toda la plantilla en febrero: ya no es la consulta del 422.
+    await wrapper.find('#payroll-from').setValue('2026-02-01')
+    await wrapper.find('#payroll-to').setValue('2026-02-28')
+    await wrapper.find('#payroll-employee').setValue('')
+    await settle()
+    expect(wrapper.find('[data-test="oversized-offer"]').exists()).toBe(false)
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ kind: 'payroll', from: '2026-02-01', to: '2026-02-28' })
+    expect(bodies[0]).not.toHaveProperty('employee_uuid')
+  })
+
   it('un 402 al pedirla en segundo plano se explica como falta de licencia', async () => {
     stubRoutes({
       '/departments': () => jsonResponse({ data: [] }),

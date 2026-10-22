@@ -28,7 +28,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { useQuery } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { listDepartments } from '@/shared/api/organisation.api'
@@ -40,9 +40,10 @@ import type {
 import { fetchInstallationSettings, settingValue } from '@/features/settings/settings.api'
 import { downloadPayrollExport, type PayrollExportQuery } from './payrollExport.api'
 import { shouldDeferExport } from './deferral'
+import { isActiveExport } from './exportPresentation'
 import ReportExportJobStatus from './ReportExportJobStatus.vue'
 import { reportExceedsSynchronousBudget } from './reportExports.api'
-import { isActiveExport, useReportExportJob } from './useReportExportJob'
+import { useReportExportJob } from './useReportExportJob'
 
 const GRANULARITIES: readonly PayrollExportGranularity[] = ['range', 'month', 'day']
 const FORMATS: readonly PayrollExportFormat[] = ['csv', 'xlsx']
@@ -216,6 +217,12 @@ const oversizedQuery = ref<PayrollExportQuery | null>(null)
 /** Los criterios de la ULTIMA descarga (contrato, `X-Kronoqr-Export-Criteria`), tal cual llegan: no se reordenan ni se resumen. */
 const lastDownloadCriteria = ref<readonly string[]>([])
 
+// El 422 de «demasiado grande» habla de UNA consulta: en cuanto se toca cualquier
+// campo ya no es la del formulario, y ofrecerla (o pedirla) seria pedir otra nomina.
+watch([from, to, granularity, departmentFilter, employeeUuid, format], () => {
+  oversizedQuery.value = null
+})
+
 /**
  * Toda la plantilla, o mas de un mes, se genera en segundo plano por omision
  * (decision del propietario, 14.4); una persona o un departamento en un periodo
@@ -233,7 +240,8 @@ async function submit(): Promise<void> {
       wholeWorkforce: departmentFilter.value === '' && employeeUuid.value.trim() === '',
     })
   ) {
-    await requestBackgroundGeneration()
+    // La consulta que hay AHORA en el formulario, nunca la que dio un 422 antes.
+    await requestBackgroundGeneration(currentQuery())
 
     return
   }
@@ -273,11 +281,14 @@ async function download(): Promise<void> {
 
 // --- Generacion en segundo plano (RF-IN-06 aplicado a la nomina) -------------
 
-async function requestBackgroundGeneration(): Promise<void> {
-  const query = oversizedQuery.value ?? (canSubmit.value ? currentQuery() : null)
+/** El boton «Generar en segundo plano»: la consulta que dio el 422, si sigue siendo la del formulario. */
+function requestFromButton(): Promise<void> {
+  return requestBackgroundGeneration(oversizedQuery.value ?? currentQuery())
+}
 
+async function requestBackgroundGeneration(query: PayrollExportQuery): Promise<void> {
   if (
-    query === null ||
+    !canSubmit.value ||
     backgroundRequesting.value ||
     (job.value !== null && isActiveExport(job.value))
   ) {
@@ -407,7 +418,7 @@ const fieldClass =
           class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
           :disabled="!canSubmit || backgroundRequesting || (job !== null && isActiveExport(job))"
           data-test="payroll-background"
-          @click="requestBackgroundGeneration"
+          @click="requestFromButton"
         >
           {{
             backgroundRequesting
