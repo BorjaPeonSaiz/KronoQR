@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -304,13 +306,16 @@ it('firma tambien el formulario que envia el cliente de Pusher', function (): vo
     escenarioDeCanales();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
 
-    // Parametros de formulario, como los envia `pusher-js` con su autorizador
-    // de serie; `Api` siempre envia JSON.
-    $respuesta = test()->withHeaders([
-        'Authorization' => 'Bearer '.$token,
-        'Accept' => 'application/json',
-        'Content-Type' => 'application/x-www-form-urlencoded',
-    ])->post('/api/v1/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => 'private-presence.all']);
+    // Un formulario, como lo envia `pusher-js` con su autorizador de serie;
+    // `Api` siempre envia JSON. Por el kernel HTTP, como `call()` de la prueba.
+    $peticion = Request::create('/api/v1/broadcasting/auth', 'POST', ['socket_id' => '1234.5678', 'channel_name' => 'private-presence.all'], server: [
+        'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+        'HTTP_ACCEPT' => 'application/json',
+        'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+    ]);
+    $kernel = app(HttpKernel::class);
+    $respuesta = TestResponse::fromBaseResponse($kernel->handle($peticion), $peticion);
+    $kernel->terminate($peticion, $respuesta->baseResponse);
 
     $respuesta->assertOk();
     expect($respuesta->json('auth'))->toStartWith('kronoqr-test-key:');

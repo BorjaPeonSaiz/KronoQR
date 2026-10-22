@@ -6,7 +6,7 @@ namespace App\Modules\Reporting\Http\Controller;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Reporting\Http\Request\AuthorizeChannelRequest;
-use Illuminate\Broadcasting\BroadcastManager;
+use Illuminate\Contracts\Broadcasting\Factory as Broadcasting;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -21,7 +21,7 @@ use Illuminate\Http\JsonResponse;
  */
 final class ChannelAuthorizationController extends Controller
 {
-    public function __invoke(AuthorizeChannelRequest $request, BroadcastManager $broadcasting): JsonResponse
+    public function __invoke(AuthorizeChannelRequest $request, Broadcasting $broadcasting): JsonResponse
     {
         // El difusor ACTIVO en esta peticion, no uno resuelto al arrancar: es el
         // que tiene registrados los canales de `routes/channels.php`.
