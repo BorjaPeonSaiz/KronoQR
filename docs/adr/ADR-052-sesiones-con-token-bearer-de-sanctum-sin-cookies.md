@@ -20,7 +20,7 @@ Este ADR recoge lo que hay. No propone ningún cambio de comportamiento.
 
 ### 1. Sanctum solo en modo token
 
-`backend/config/sanctum.php` deja `stateful => []` y `guard => []`. Ningún origen recibe autenticación por cookie, y Sanctum no cae al guard `web`. El producto no tiene rutas `web` (`bootstrap/app.php`, comentario de `withBroadcasting`): la autorización de los canales de Reverb también va bajo `/api/v1`, con `auth:sanctum` y `ability:attendance:read`. Sanctum guarda cada token como SHA-256 en `personal_access_tokens`, así que el token en claro solo existe en la respuesta que lo emite y en el cliente que lo guarda. `SANCTUM_TOKEN_PREFIX` permite que un escáner de secretos lo reconozca. `expiration` es `null` de forma global porque **cada emisor fija su `expires_at`**.
+`backend/config/sanctum.php` deja `stateful => []` y `guard => []`. Ningún origen recibe autenticación por cookie, y Sanctum no cae al guard `web`. El producto no tiene rutas `web` (`bootstrap/app.php`, `then:` de `withRouting`): la autorización de los canales de Reverb también va bajo `/api/v1`, solo `POST`, con `auth:sanctum` y `ability:attendance:read`. Desde la 2.3.0 tampoco se registra `/sanctum/csrf-cookie` (`sanctum.routes => false`). Sanctum guarda cada token como SHA-256 en `personal_access_tokens`, así que el token en claro solo existe en la respuesta que lo emite y en el cliente que lo guarda. `SANCTUM_TOKEN_PREFIX` permite que un escáner de secretos lo reconozca. `expiration` es `null` de forma global porque **cada emisor fija su `expires_at`**.
 
 ### 2. Cuatro titulares, cuatro emisores y una sola comprobación
 
