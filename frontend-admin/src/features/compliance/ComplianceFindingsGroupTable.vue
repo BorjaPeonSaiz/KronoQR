@@ -145,7 +145,7 @@ const GRID_TEMPLATE =
     tabindex="0"
     role="region"
     :aria-label="caption"
-    class="mt-2 max-h-[70vh] overflow-auto"
+    class="mt-2 max-h-[70vh] relative overflow-auto"
     data-test="compliance-table"
   >
     <div

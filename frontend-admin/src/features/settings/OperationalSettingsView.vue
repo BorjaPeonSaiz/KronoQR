@@ -1492,7 +1492,7 @@ async function save(): Promise<void> {
           {{ t('operationalSettings.save') }}
         </button>
         <p v-if="saving" class="text-kq-text-muted">{{ t('operationalSettings.saving') }}</p>
-        <p v-else-if="saved && !hasChanges" class="text-kq-success" role="status" data-test="saved">
+        <p v-else-if="saved && !hasChanges" class="text-kq-success" data-test="saved">
           {{ t('operationalSettings.saved') }}
         </p>
       </div>

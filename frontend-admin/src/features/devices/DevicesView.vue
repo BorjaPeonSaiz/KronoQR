@@ -69,6 +69,7 @@ const {
   error,
   isPending,
   dataUpdatedAt,
+  refetch,
 } = useQuery({
   queryKey: ['devices'] as const,
   queryFn: fetchDevices,
@@ -305,7 +306,7 @@ const buttonClass =
     </p>
 
     <LoadingPanel v-if="isPending" :label="t('devices.loading')" class="mt-4" />
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
     <EmptyState
       v-else-if="devices.length === 0"
       class="mt-4"
@@ -315,7 +316,10 @@ const buttonClass =
 
     <div
       v-else
-      class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+      tabindex="0"
+      role="region"
+      :aria-label="t('devices.table.caption', { zone: timezone })"
+      class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     >
       <table class="w-full border-collapse text-left">
         <caption class="px-3 py-2 text-left text-sm text-kq-text-muted">

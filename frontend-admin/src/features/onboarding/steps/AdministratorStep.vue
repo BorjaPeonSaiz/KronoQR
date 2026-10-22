@@ -25,9 +25,6 @@ import type { Session } from '@/shared/api/types'
 import { createFirstAdministrator } from '../setup.api'
 import { useSetupStore } from '../setup.store'
 
-/** Nombre con el que queda registrada la sesion. Sin PII, como exige el contrato. */
-const DEVICE_NAME = 'Panel de gestion'
-
 const { t, locale } = useI18n()
 const { multilingual } = useOfferedLocales()
 const session = useSessionStore()
@@ -60,7 +57,7 @@ async function submit(): Promise<void> {
       // esta cuenta al entrar por primera vez. Con uno solo no se envia y el
       // servidor aplica el de la instalacion.
       ...(multilingual.value ? { locale: locale.value } : {}),
-      device_name: DEVICE_NAME,
+      device_name: t('app.title'),
     })
 
     challengeToken.value = challenge.challenge_token

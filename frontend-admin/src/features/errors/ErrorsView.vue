@@ -266,6 +266,7 @@ const selectClass =
       v-else-if="store.error !== null && store.meta === null"
       :error="store.error"
       class="mt-4"
+      @retry="submitFilters()"
     />
 
     <template v-else-if="store.meta !== null">

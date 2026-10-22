@@ -17,6 +17,7 @@ import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { Incident, IncidentSeverity, IncidentStatus, IncidentType } from '@/shared/api/types'
@@ -203,6 +204,7 @@ const selectClass =
     <div>
       <h1 class="text-2xl font-bold">{{ t('incidents.title') }}</h1>
       <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('incidents.subtitle') }}</p>
+      <AuditNotice />
     </div>
 
     <p
@@ -321,7 +323,7 @@ const selectClass =
       >
         {{ t('incidents.notice.filter') }}
       </p>
-      <ErrorNotice :error="store.error" class="mt-4" />
+      <ErrorNotice :error="store.error" class="mt-4" @retry="refresh()" />
     </template>
 
     <template v-else-if="store.meta !== null">

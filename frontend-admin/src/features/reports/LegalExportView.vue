@@ -126,8 +126,12 @@ async function submit(): Promise<void> {
     lastTally.value = exported.tally
     announce(
       t('reports.legalExport.done', {
-        shiftEntries: exported.tally.shiftEntries ?? 0,
-        corrections: exported.tally.corrections ?? 0,
+        shiftEntries: t('reports.legalExport.doneShiftEntries', {
+          count: exported.tally.shiftEntries ?? 0,
+        }),
+        corrections: t('reports.legalExport.doneCorrections', {
+          count: exported.tally.corrections ?? 0,
+        }),
       }),
     )
   } catch (failure) {
@@ -251,8 +255,12 @@ async function submit(): Promise<void> {
     >
       {{
         t('reports.legalExport.done', {
-          shiftEntries: lastTally.shiftEntries ?? 0,
-          corrections: lastTally.corrections ?? 0,
+          shiftEntries: t('reports.legalExport.doneShiftEntries', {
+            count: lastTally.shiftEntries ?? 0,
+          }),
+          corrections: t('reports.legalExport.doneCorrections', {
+            count: lastTally.corrections ?? 0,
+          }),
         })
       }}
     </p>

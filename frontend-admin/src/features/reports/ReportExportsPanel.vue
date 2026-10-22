@@ -64,6 +64,7 @@ const {
   error: listError,
   isPending: listPending,
   dataUpdatedAt,
+  refetch: refetchList,
 } = useQuery({
   queryKey: QUERY_KEY,
   queryFn: listReportExports,
@@ -200,7 +201,12 @@ async function download(row: ReportExport): Promise<void> {
     <ErrorNotice v-if="downloadError !== null" :error="downloadError" data-test="download-error" />
 
     <LoadingPanel v-if="listPending" :label="t('reportExports.list.loading')" />
-    <ErrorNotice v-else-if="listError !== null" :error="listError" data-test="list-error" />
+    <ErrorNotice
+      v-else-if="listError !== null"
+      :error="listError"
+      data-test="list-error"
+      @retry="refetchList()"
+    />
     <EmptyState
       v-else-if="exportsList.length === 0"
       :title="t('reportExports.list.empty.title')"
@@ -213,7 +219,10 @@ async function download(row: ReportExport): Promise<void> {
       </p>
 
       <div
-        class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('reportExports.list.caption')"
+        class="relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="px-3 py-2 text-left text-sm text-kq-text-muted">

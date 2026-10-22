@@ -96,6 +96,10 @@ onMounted(() => {
               from: formatDay(data.valid_from),
               days: data.days_until_expiry ?? 0,
               elapsed: data.days_since_expiry ?? 0,
+              count:
+                data.state === 'expired'
+                  ? (data.days_since_expiry ?? 0)
+                  : (data.days_until_expiry ?? 0),
             })
           }}
         </span>

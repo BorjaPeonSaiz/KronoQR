@@ -212,7 +212,12 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
         }}
       </p>
 
-      <div class="overflow-x-auto">
+      <div
+        tabindex="0"
+        role="region"
+        :aria-label="t('onboarding.steps.employees.tableCaption')"
+        class="relative overflow-x-auto"
+      >
         <table class="w-full border-collapse text-left text-sm">
           <caption class="sr-only">
             {{

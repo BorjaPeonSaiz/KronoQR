@@ -105,8 +105,7 @@ describe('OnboardingView', () => {
     await settle()
 
     expect(wrapper.text()).toContain(es.onboarding.completion.heading)
-    expect(wrapper.text()).toContain(
-      es.onboarding.completion.credentialsPending.replace('{count}', '42'),
-    )
+    // La forma plural (V7-PA-6): «Aún faltan 42 tarjetas».
+    expect(wrapper.text()).toContain('Aún faltan 42 tarjetas por emitir e imprimir.')
   })
 })

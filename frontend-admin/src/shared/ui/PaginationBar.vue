@@ -48,7 +48,11 @@ function goToPage(next: number): void {
   <nav :aria-label="label" class="mt-4 flex flex-wrap items-center justify-between gap-3">
     <p>
       {{ t('common.pagination.summary', { from: rangeStart, to: rangeEnd, total }) }}
-      <span v-if="fetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
+      <!-- Region viva SIEMPRE presente (V3-UX-05): una region que aparece ya con su texto
+           no se anuncia de forma fiable; esta existe vacia y se rellena. -->
+      <span role="status" class="text-kq-text-muted" data-test="pagination-updating">{{
+        fetching ? t('common.updating') : ''
+      }}</span>
     </p>
     <div class="flex gap-2">
       <button
@@ -59,7 +63,8 @@ function goToPage(next: number): void {
       >
         {{ t('common.pagination.previous') }}
       </button>
-      <p aria-current="page">
+      <!-- Sin `aria-current`: es un texto, no un enlace de un conjunto (V7-PA-10). -->
+      <p>
         {{ t('common.pagination.page', { page, pages: totalPages }) }}
       </p>
       <button

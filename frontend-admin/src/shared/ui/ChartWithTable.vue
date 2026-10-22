@@ -2,11 +2,16 @@
 // Primer uso de ECharts del proyecto (tarea 3.13, RF-IN-08).
 //
 // **TABLA DE DATOS ALTERNATIVA, CONMUTABLE.** Es lo que hace el grafico
-// accesible (doc 02 §3.3): un boton con `aria-pressed` cambia entre el lienzo
+// accesible (doc 02 §3.3): un boton cambia entre el lienzo
 // y una tabla `<table>` real con cabeceras, con LOS MISMOS DATOS que la serie
 // -nunca un resumen aparte que pueda desincronizarse-. Por omision se enseña
 // el grafico; quien navega con lector de pantalla o quien simplemente
 // necesita el numero exacto pulsa el boton y lee la tabla.
+//
+// El boton dice SIEMPRE la accion que hara («Ver como tabla» ⇄ «Ver como gráfico»)
+// y por eso NO lleva `aria-pressed`: con las dos señales a la vez se leia «Ver como
+// gráfico, botón de alternancia, pulsado», que se contradice (V7-PA-7). Apunta con
+// `aria-controls` a la vista que gobierna y el cambio se anuncia en la region viva.
 //
 // **ECHARTS SE CARGA EN DIFERIDO** (import dinamico de solo los modulos que
 // hacen falta: `echarts/core` + `BarChart`/`PieChart` + `CanvasRenderer` +
@@ -22,7 +27,8 @@
 //
 // **`prefers-reduced-motion`** apaga la animacion de entrada del grafico
 // (doc 06 §6, regla 10): la tabla nunca depende de movimiento.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { announce } from '@kronoqr/web-kit/announcer'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 /**
@@ -67,6 +73,7 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+const viewId = useId()
 
 /** `chart` (por omision) o `table`. Conmutable con el boton, nunca con dos vistas simultaneas. */
 const viewMode = ref<'chart' | 'table'>('chart')
@@ -85,6 +92,11 @@ async function toggleView(): Promise<void> {
   }
 
   viewMode.value = viewMode.value === 'chart' ? 'table' : 'chart'
+  announce(
+    t(viewMode.value === 'chart' ? 'chartWithTable.nowChart' : 'chartWithTable.nowTable', {
+      title: props.title,
+    }),
+  )
 
   if (viewMode.value === 'chart') {
     await nextTick()
@@ -286,7 +298,7 @@ const tableRows = computed(() =>
       <button
         type="button"
         class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-sm text-kq-text hover:bg-kq-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
-        :aria-pressed="!isChartView()"
+        :aria-controls="viewId"
         :disabled="chartFailed"
         data-test="toggle-view"
         @click="toggleView"
@@ -299,48 +311,50 @@ const tableRows = computed(() =>
       {{ t('chartWithTable.unavailable') }}
     </p>
 
-    <div
-      v-show="isChartView()"
-      ref="container"
-      :style="{ height: `${height}px` }"
-      role="img"
-      :aria-label="title"
-      data-test="chart-canvas"
-    ></div>
+    <div :id="viewId" class="flex flex-col gap-3">
+      <div
+        v-show="isChartView()"
+        ref="container"
+        :style="{ height: `${height}px` }"
+        role="img"
+        :aria-label="title"
+        data-test="chart-canvas"
+      ></div>
 
-    <table v-if="!isChartView()" class="w-full border-collapse text-left" data-test="chart-table">
-      <caption class="sr-only">
-        {{
-          title
-        }}
-      </caption>
-      <thead>
-        <tr class="border-b border-kq-border-strong">
-          <th scope="col" class="py-2 pr-3 font-semibold">
-            {{ t('chartWithTable.category') }}
-          </th>
-          <th
-            v-for="entry of series"
-            :key="entry.name"
-            scope="col"
-            class="py-2 pr-3 text-right font-semibold"
-          >
-            {{ entry.name }}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row of tableRows" :key="row.category" class="border-b border-kq-border">
-          <th scope="row" class="py-2 pr-3 font-normal">{{ row.category }}</th>
-          <td
-            v-for="(value, index) of row.values"
-            :key="index"
-            class="py-2 pr-3 text-right tabular-nums"
-          >
-            {{ value === null ? t('chartWithTable.noData') : formatValue(value) }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+      <table v-if="!isChartView()" class="w-full border-collapse text-left" data-test="chart-table">
+        <caption class="sr-only">
+          {{
+            title
+          }}
+        </caption>
+        <thead>
+          <tr class="border-b border-kq-border-strong">
+            <th scope="col" class="py-2 pr-3 font-semibold">
+              {{ t('chartWithTable.category') }}
+            </th>
+            <th
+              v-for="entry of series"
+              :key="entry.name"
+              scope="col"
+              class="py-2 pr-3 text-right font-semibold"
+            >
+              {{ entry.name }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row of tableRows" :key="row.category" class="border-b border-kq-border">
+            <th scope="row" class="py-2 pr-3 font-normal">{{ row.category }}</th>
+            <td
+              v-for="(value, index) of row.values"
+              :key="index"
+              class="py-2 pr-3 text-right tabular-nums"
+            >
+              {{ value === null ? t('chartWithTable.noData') : formatValue(value) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 </template>

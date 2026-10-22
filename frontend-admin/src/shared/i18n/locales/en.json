@@ -40,6 +40,9 @@
       "advice": "The application has probably been updated or the connection was lost. Reload the page; if this notice comes back, check the network and tell whoever administers the installation.",
       "reload": "Reload the page",
       "dismiss": "Close this notice"
+    },
+    "titles": {
+      "employee": "Employee record"
     }
   },
   "auth": {
@@ -141,7 +144,7 @@
       "label": "Accounts pagination"
     },
     "announce": {
-      "results": "{count} accounts",
+      "results": "{count} account | {count} accounts",
       "created": "Account for {name} created. Write down the temporary password: it is shown only once.",
       "deactivated": "Account of {name} deactivated.",
       "twoFactorReset": "Second factor of {name} removed.",
@@ -244,7 +247,8 @@
     "filters": {
       "clear": "Clear filters",
       "clearSearch": "Clear search"
-    }
+    },
+    "loadingSlow": "This is taking longer than usual. If it does not finish, try again in a few minutes."
   },
   "errors": {
     "retryAfter": "You can try again in {seconds} s.",
@@ -287,7 +291,8 @@
     "unexpected": {
       "title": "Something went wrong",
       "advice": "Try again. If it happens again, tell whoever administers this installation, with the exact time and what you were doing."
-    }
+    },
+    "retry": "Try again"
   },
   "forbidden": {
     "heading": "No access to this section",
@@ -697,7 +702,7 @@
     },
     "unknownKey": {
       "heading": "Some cards no longer work for clocking in",
-      "explanation": "{count} card(s) in circulation are signed with a key the server no longer recognises. Anyone carrying one of them cannot clock in with their card: they will have to use their PIN until it is fixed.",
+      "explanation": "{count} card in circulation is signed with a key the server no longer recognises. Whoever carries it cannot clock in with their card: they will have to use their PIN until it is fixed. | {count} cards in circulation are signed with a key the server no longer recognises. Anyone carrying one of them cannot clock in with their card: they will have to use their PIN until it is fixed.",
       "action": "This is fixed by whoever administers the server: run «php artisan credentials:status» to find out which key it is and follow docs/runbooks/rotacion-clave-qr.md §6."
     },
     "empty": {
@@ -779,7 +784,7 @@
     "batch": {
       "action": "Print the pending cards",
       "heading": "Print the batch of pending cards",
-      "explanation": "All credentials waiting to be printed in this installation will be laid out on a single A4 sheet. There are {count} right now.",
+      "explanation": "All credentials waiting to be printed in this installation will be laid out on a single A4 sheet. There is {count} right now. | All credentials waiting to be printed in this installation will be laid out on a single A4 sheet. There are {count} right now.",
       "confirmAction": "Generate the A4 sheet",
       "warning": "Their QR codes are all minted now and there is no reprinting. If the PDF is lost, every card has to be revoked and issued again.",
       "bearerNotice": "The PDF is a bearer document: whoever holds it can make somebody else's card. It is not stored on the server and it is never emailed."
@@ -880,7 +885,9 @@
     "viewAsChart": "View as chart",
     "unavailable": "The chart is not available in this browser. The same data is still in the table.",
     "category": "Category",
-    "noData": "No data"
+    "noData": "No data",
+    "nowTable": "Showing the data table for “{title}”.",
+    "nowChart": "Showing the chart for “{title}”."
   },
   "reports": {
     "pdfBusy": {
@@ -931,7 +938,7 @@
       },
       "submit": "Generate and download",
       "running": "Generating the export…",
-      "done": "Export downloaded: {shiftEntries} shift entries and {corrections} corrections.",
+      "done": "Export downloaded: {shiftEntries} and {corrections}.",
       "failed": "The export could not be generated.",
       "audited": "Every generation is recorded in the audit trail with who exported, which period and which scope. The audit trail never stores worker names.",
       "noSiteFilter": "The export is not filtered by site or department: every row states its site, and the scope can only be the whole workforce or one person.",
@@ -942,7 +949,9 @@
         "voided": "Voided entries are included, with their status, and do not add hours to the daily total. Nothing is hidden.",
         "times": "Times are given in the time zone of the site and also in UTC, which is how they are stored.",
         "format": "CSV in UTF-8 with byte order mark, semicolon separated. Durations are written HH:MM, never as a decimal."
-      }
+      },
+      "doneShiftEntries": "{count} shift entry | {count} shift entries",
+      "doneCorrections": "{count} correction | {count} corrections"
     },
     "period": {
       "title": "Hours by period",
@@ -992,7 +1001,7 @@
         "failed": "The report could not be downloaded."
       },
       "announce": {
-        "results": "The report has {count} rows."
+        "results": "The report has {count} row. | The report has {count} rows."
       },
       "background": {
         "offer": "This period does not fit in an immediate response. You can ask for it to be generated in the background: you will be notified in the panel as soon as it is ready, with a download link that expires.",
@@ -1149,7 +1158,7 @@
         "actions": "Actions"
       },
       "period": "{from} — {to}",
-      "rows": "{count} row(s)",
+      "rows": "{count} row | {count} rows",
       "download": "Download",
       "downloading": "Downloading…",
       "downloaded": "Download of “{filename}” ready.",
@@ -1294,7 +1303,7 @@
       "description": "This is not a failed query: on those days this person has no clockings at all. Try another period or check whether they were employed."
     },
     "announce": {
-      "results": "{count} work days between {from} and {to}."
+      "results": "{count} work day between {from} and {to}. | {count} work days between {from} and {to}."
     },
     "day": {
       "total": "Daily total",
@@ -1438,7 +1447,8 @@
       }
     },
     "announce": {
-      "counts": "{present} people in and {absent} out."
+      "counts": "{present} and {absent} out.",
+      "countsPresent": "{count} person in | {count} people in"
     }
   },
   "incidents": {
@@ -1515,7 +1525,7 @@
       }
     },
     "announce": {
-      "results": "{count} incidents in the inbox.",
+      "results": "{count} incident in the inbox. | {count} incidents in the inbox.",
       "resolved": "Incident for {name} marked as {outcome}."
     },
     "context": {
@@ -1707,7 +1717,7 @@
       "apply": "Apply filters"
     },
     "announce": {
-      "results": "{count} breaches in the compliance view."
+      "results": "{count} breach in the compliance view. | {count} breaches in the compliance view."
     },
     "rules": {
       "insufficient_rest": {
@@ -2000,8 +2010,8 @@
     },
     "detail": {
       "valid": "Expires on {until}. We will warn you {warningDays} days in advance.",
-      "expiring_soon": "Expires on {until}: {days} days left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives.",
-      "expired": "Expired on {until}, {elapsed} days ago. Since then, the accessory features below are unavailable. The time record keeps working in full.",
+      "expiring_soon": "Expires on {until}: {days} day left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives. | Expires on {until}: {days} days left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives.",
+      "expired": "Expired on {until}, {elapsed} day ago. Since then, the accessory features below are unavailable. The time record keeps working in full. | Expired on {until}, {elapsed} days ago. Since then, the accessory features below are unavailable. The time record keeps working in full.",
       "absent": "No key has been activated yet. Activate it below; your provider gives it to you. In the meantime clocking and record lookups work normally.",
       "not_yet_valid": "The activated key starts on {from}. Nothing to do: the accessory features switch on by themselves that day.",
       "unverifiable": "The stored key cannot be verified. The time record keeps working in full; what is unavailable are the accessory features."
@@ -2036,13 +2046,14 @@
     "notice": {
       "action": "View the licence",
       "valid": "The licence is valid. This notice is shown for another reason, stated below.",
-      "expiring_soon": "The licence expires on {until}, in {days} days. Nothing has been degraded yet: renew it so that period reports and real-time presence stay available.",
-      "expired": "The licence expired on {until}, {elapsed} days ago. Period reports and real-time presence have been degraded since then. Clocking and record access keep working normally.",
+      "expiring_soon": "The licence expires on {until}, in {days} day. Nothing has been degraded yet: renew it so that period reports and real-time presence stay available. | The licence expires on {until}, in {days} days. Nothing has been degraded yet: renew it so that period reports and real-time presence stay available.",
+      "expired": "The licence expired on {until}, {elapsed} day ago. Period reports and real-time presence have been degraded since then. Clocking and record access keep working normally. | The licence expired on {until}, {elapsed} days ago. Period reports and real-time presence have been degraded since then. Clocking and record access keep working normally.",
       "absent": "This installation has no activated licence. Clocking and record access work normally; accessory features do not. Activate the key your provider gave you.",
       "not_yet_valid": "The activated licence starts on {from}. Until then the accessory features are unavailable. Nothing else to do.",
       "unverifiable": "The stored licence cannot be verified. Clocking and record access work normally; accessory features do not.",
       "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
-    }
+    },
+    "usageCaption": "What is contracted against what is used for each limit"
   },
   "dataExport": {
     "heading": "Your data is yours",
@@ -2075,7 +2086,7 @@
         "expiresAt": "Expires",
         "actions": "Actions"
       },
-      "rows": "{count} rows",
+      "rows": "{count} row | {count} rows",
       "download": "Download",
       "downloading": "Downloading…",
       "failedReason": "Could not be generated: {reason}",
@@ -2199,15 +2210,15 @@
       "action": "Unlink",
       "heading": "Unlink kiosk",
       "explanation": "Kiosk \"{name}\" will no longer be able to clock in immediately. Its clocking history is not deleted.",
-      "pendingQueueWarning": "This kiosk has {count} unsynced clockings. If you unlink it now, they will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1).",
+      "pendingQueueWarning": "This kiosk has {count} unsynced clocking. If you unlink it now, it will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1). | This kiosk has {count} unsynced clockings. If you unlink it now, they will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1).",
       "notice": "You will be able to link a new tablet with the same name later: it will reactivate this same kiosk.",
       "announce": "Kiosk {name} has been unlinked.",
       "pendingQueueUnknownWarning": "The tablet does not know how many clockings it has unsynced (its queue dropped to memory). Unlinking it now may leave out of the timekeeping record clockings that exist only on it (art. 34.9 of the Spanish Workers' Statute). Before unlinking, open its diagnostics screen.",
-      "unreportedDiscardsWarning": "This tablet has {count} discarded clockings it has not yet reported to the server; if you unlink it now they will be lost and will not open an incident. Wait for it to sync."
+      "unreportedDiscardsWarning": "This tablet has {count} discarded clocking it has not yet reported to the server; if you unlink it now it will be lost and will not open an incident. Wait for it to sync. | This tablet has {count} discarded clockings it has not yet reported to the server; if you unlink it now they will be lost and will not open an incident. Wait for it to sync."
     },
     "queue": {
       "unknown": "Unknown",
-      "unreportedDiscards": "{count} discards not yet reported to the server",
+      "unreportedDiscards": "{count} discard not yet reported to the server | {count} discards not yet reported to the server",
       "storage": {
         "memory": "Queue in memory only: it would be lost on restart",
         "unavailable": "No queue storage on the tablet"
@@ -2249,7 +2260,7 @@
     "completion": {
       "heading": "Setup completed",
       "intro": "The system already has an organisation, a site, a first administrator and a compliance profile. This is what is left before the first day.",
-      "credentialsPending": "There are still {count} cards to issue and print.",
+      "credentialsPending": "There is still {count} card to issue and print. | There are still {count} cards to issue and print.",
       "credentialsNone": "No cards are pending issue.",
       "credentialsAdvice": "Without a printed, handed-over card, nobody can clock in on the first day. Issuing and printing takes days of logistics: do it in advance.",
       "withoutPin": "{count} person without a PIN | {count} people without a PIN",
@@ -2459,8 +2470,8 @@
     "loading": "Loading the error history…",
     "duration": "{hours} h {minutes} min",
     "summary": {
-      "openErrors": "{count} open at «Error» level",
-      "openCritical": "{count} open critical"
+      "openErrors": "{count} «Error»-level event open | {count} «Error»-level events open",
+      "openCritical": "{count} critical event open | {count} critical events open"
     },
     "levels": {
       "error": "Error",
@@ -2580,7 +2591,7 @@
       }
     },
     "announce": {
-      "results": "{count} errors in the history."
+      "results": "{count} error in the history. | {count} errors in the history."
     },
     "pagination": {
       "label": "Error history pagination"
@@ -2648,5 +2659,8 @@
     "errors": {
       "timezoneLocked": "The first clocking was recorded while you were changing the time zone, so it can no longer be changed. Nothing was saved."
     }
+  },
+  "audit": {
+    "readNotice": "This lookup is recorded in the audit log: who made it, when and with what scope. The data you see is not copied into it."
   }
 }

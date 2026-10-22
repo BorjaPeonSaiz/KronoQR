@@ -112,6 +112,17 @@ describe('AdministratorStep', () => {
     expect(administratorBody(spy)).not.toHaveProperty('locale')
   })
 
+  it('registra la sesion con el nombre del panel de i18n (R7-PA-03)', async () => {
+    const spy = stubRoutes({
+      '/setup/administrator': () => jsonResponse(twoFactorChallenge(), 201),
+    })
+    const wrapper = await mountView(AdministratorStep, { pinia: createTestPinia() })
+
+    await fillForm(wrapper)
+
+    expect(administratorBody(spy)).toMatchObject({ device_name: es.app.title })
+  })
+
   it('con dos idiomas envia el idioma del asistente', async () => {
     const pinia = createTestPinia()
 

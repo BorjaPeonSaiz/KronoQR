@@ -19,6 +19,7 @@ import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { LivePresenceStatus } from '@/shared/api/types'
 import PresenceTable from './PresenceTable.vue'
@@ -120,7 +121,12 @@ watch(
   () => store.meta?.present_count,
   (count) => {
     if (count !== undefined) {
-      announce(t('live.announce.counts', { present: count, absent: store.meta?.absent_count ?? 0 }))
+      announce(
+        t('live.announce.counts', {
+          present: t('live.announce.countsPresent', { count }),
+          absent: store.meta?.absent_count ?? 0,
+        }),
+      )
     }
   },
 )
@@ -154,6 +160,7 @@ const selectClass =
       <div>
         <h1 class="text-2xl font-bold">{{ t('live.title') }}</h1>
         <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('live.subtitle') }}</p>
+        <AuditNotice />
       </div>
 
       <p
@@ -262,6 +269,7 @@ const selectClass =
       v-else-if="store.error !== null && (store.meta === null || filterFailed)"
       :error="store.error"
       class="mt-4"
+      @retry="submitFilters()"
     />
 
     <template v-else-if="store.meta !== null">

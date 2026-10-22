@@ -534,9 +534,10 @@ describe('CredentialBoardView', () => {
     await settle()
 
     expect(urls.some((url) => url.includes('key_id=a2'))).toBe(true)
-    expect(buttonWith(wrapper, es.credentials.rotation.showAll).attributes('aria-pressed')).toBe(
-      'true',
-    )
+    // Una sola señal (V7-PA-7): la etiqueta cambia a «Ver toda la plantilla»; sin `aria-pressed`.
+    expect(
+      buttonWith(wrapper, es.credentials.rotation.showAll).attributes('aria-pressed'),
+    ).toBeUndefined()
   })
 
   it('avisa de las tarjetas firmadas con una clave que el servidor ya no reconoce', async () => {

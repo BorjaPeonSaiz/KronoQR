@@ -164,7 +164,13 @@ function duration(minutes: number): string {
       {{ t('workdays.entries.empty') }}
     </p>
 
-    <div v-else class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised">
+    <div
+      v-else
+      tabindex="0"
+      role="region"
+      :aria-label="t('workdays.entries.caption', { date: workDate, zone: timeZone })"
+      class="relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised"
+    >
       <table class="w-full border-collapse text-left">
         <caption class="sr-only">
           {{

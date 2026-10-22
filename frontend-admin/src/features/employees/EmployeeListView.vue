@@ -20,6 +20,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
@@ -282,6 +283,7 @@ const selectClass =
       <div>
         <h1 class="text-2xl font-bold">{{ t('employees.title') }}</h1>
         <p class="mt-1 text-kq-text-muted">{{ t('employees.subtitle') }}</p>
+        <AuditNotice />
       </div>
       <button
         type="button"
@@ -406,7 +408,7 @@ const selectClass =
 
     <LoadingPanel v-if="isPending" :label="t('employees.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <template v-else>
       <EmptyState
@@ -418,7 +420,10 @@ const selectClass =
 
       <div
         v-else
-        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('employees.table.caption')"
+        class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="sr-only">

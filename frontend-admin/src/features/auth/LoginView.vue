@@ -27,9 +27,6 @@ import { isTwoFactorChallenge, verifyTwoFactor } from './auth.api'
 import { useSessionStore } from './session.store'
 import TwoFactorEnrolPanel from './TwoFactorEnrolPanel.vue'
 
-/** Nombre con el que queda registrada la sesion. Sin PII, como exige el contrato. */
-const DEVICE_NAME = 'Panel de gestion'
-
 type Step = 'credentials' | 'code' | 'enrol'
 
 const { t } = useI18n()
@@ -110,7 +107,9 @@ async function submitCredentials(): Promise<void> {
     const outcome = await session.logIn({
       email: email.value,
       password: password.value,
-      device_name: DEVICE_NAME,
+      // Nombre con el que queda registrada la sesion: el del panel, en el idioma activo
+      // (R7-PA-03). Sin PII, como exige el contrato.
+      device_name: t('app.title'),
     })
 
     if (isTwoFactorChallenge(outcome)) {

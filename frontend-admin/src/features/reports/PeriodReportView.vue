@@ -28,6 +28,7 @@ import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { RouterLink } from 'vue-router'
 import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -304,6 +305,7 @@ const fieldClass =
     <div>
       <h1 class="text-2xl font-bold">{{ t('reports.period.title') }}</h1>
       <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('reports.period.subtitle') }}</p>
+      <AuditNotice />
     </div>
 
     <form class="mt-4 flex flex-wrap items-end gap-4" @submit.prevent="submit">
@@ -430,7 +432,7 @@ const fieldClass =
 
         <ErrorNotice v-if="backgroundError !== null" :error="backgroundError" />
 
-        <p v-if="backgroundRequested !== null" role="status" data-test="background-requested">
+        <p v-if="backgroundRequested !== null" data-test="background-requested">
           {{ t('reports.period.background.requested') }}
           <a href="#report-exports" class="font-medium underline">
             {{ t('reports.period.background.seeExports') }}
@@ -529,7 +531,7 @@ const fieldClass =
 
         <ErrorNotice v-if="backgroundError !== null" :error="backgroundError" />
 
-        <p v-if="backgroundRequested !== null" role="status" data-test="background-requested">
+        <p v-if="backgroundRequested !== null" data-test="background-requested">
           {{ t('reports.period.background.requested') }}
           <a href="#report-exports" class="font-medium underline">
             {{ t('reports.period.background.seeExports') }}

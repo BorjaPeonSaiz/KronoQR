@@ -60,6 +60,7 @@ const {
   data: employee,
   error,
   isPending,
+  refetch,
 } = useQuery({
   queryKey: computed(() => ['employee', props.uuid] as const),
   queryFn: () => getEmployee(props.uuid),
@@ -588,7 +589,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
     </p>
 
     <LoadingPanel v-if="isPending" :label="t('employees.detail.loading')" class="mt-4" />
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <template v-else-if="employee !== undefined">
       <header class="mt-4 flex flex-wrap items-center justify-between gap-4">

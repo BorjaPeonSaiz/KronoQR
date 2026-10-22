@@ -40,6 +40,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { ApiError } from '@kronoqr/web-kit/http'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -543,11 +544,9 @@ async function save(): Promise<void> {
       {{ t('compliance.detectionWarning') }}
     </p>
 
-    <p v-if="loading" class="text-kq-text-muted" data-test="loading">
-      {{ t('compliance.loading') }}
-    </p>
+    <LoadingPanel v-if="loading" :label="t('compliance.loading')" data-test="loading" />
 
-    <ErrorNotice v-if="error !== null" :error="error" :field-labels="fieldLabels" />
+    <ErrorNotice v-if="error !== null" :error="error" :field-labels="fieldLabels" @retry="load()" />
 
     <form
       v-if="profile !== null"
@@ -794,7 +793,7 @@ async function save(): Promise<void> {
           {{ t('compliance.save') }}
         </button>
         <p v-if="saving" class="text-kq-text-muted">{{ t('compliance.saving') }}</p>
-        <p v-else-if="saved && !hasChanges" class="text-kq-success" role="status" data-test="saved">
+        <p v-else-if="saved && !hasChanges" class="text-kq-success" data-test="saved">
           {{ t('compliance.saved') }}
         </p>
       </div>

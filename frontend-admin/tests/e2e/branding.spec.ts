@@ -115,7 +115,8 @@ test(
 
     // Antes de guardar, la cabecera y la pestaña siguen con el producto.
     await expect(page.getByRole('banner')).toContainText('KronoQR')
-    await expect(page).toHaveTitle('KronoQR')
+    // Titulo por pantalla (V7-PA-2): "<pantalla> · <instalacion>".
+    await expect(page).toHaveTitle(/ · KronoQR$/)
 
     await page.getByRole('link', { name: 'Marca' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'Marca' })).toBeVisible()
@@ -129,7 +130,7 @@ test(
     // `branding.store.load()` vuelve a pedir `GET /api/v1/branding` tras
     // guardar: la cabecera y el titulo cambian sin recargar la pagina.
     await expect(page.getByRole('banner')).toContainText('Hotel Marina')
-    await expect(page).toHaveTitle('Hotel Marina')
+    await expect(page).toHaveTitle('Marca · Hotel Marina')
   },
 )
 

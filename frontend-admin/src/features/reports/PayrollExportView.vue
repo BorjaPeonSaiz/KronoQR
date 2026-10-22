@@ -30,6 +30,7 @@ import { isApiError } from '@kronoqr/web-kit/http'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { RouterLink } from 'vue-router'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
@@ -320,6 +321,7 @@ const fieldClass =
     <header class="flex flex-col gap-2">
       <h1 class="text-2xl font-semibold">{{ t('payrollExport.title') }}</h1>
       <p class="max-w-3xl text-kq-text-muted">{{ t('payrollExport.subtitle') }}</p>
+      <AuditNotice />
     </header>
 
     <p

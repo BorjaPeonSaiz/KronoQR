@@ -80,7 +80,7 @@ function detectedAtLabel(incident: Incident): string {
     tabindex="0"
     role="region"
     :aria-label="t('incidents.table.caption', { zone: zoneLabel })"
-    class="max-h-[70vh] overflow-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+    class="max-h-[70vh] relative overflow-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     data-test="incident-table"
   >
     <div

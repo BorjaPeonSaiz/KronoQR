@@ -14,12 +14,15 @@ import './assets/main.css'
 import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
 import { installChunkLoadRecovery } from './router/chunkLoadRecovery'
+import { bindDocumentTitle } from './router/documentTitle'
 import { registerAuthGuard } from './router/guards'
+import { bindScreenChange } from './router/screenChange'
 import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, resolveAppLocale } from './shared/i18n'
 import { createLocaleController, renderBootFailure } from './shared/i18n/localeController'
+import { installFocusRecovery } from './shared/ui/focusRecovery'
 
 const app = createApp(App)
 
@@ -45,7 +48,7 @@ const session = useSessionStore(pinia)
 // silencio dentro del propio store: el panel arranca con el producto.
 const branding = useBrandingStore(pinia)
 branding.apply()
-void branding.load()
+const brandingLoaded = branding.load()
 
 // Idioma de la interfaz (bloque 26): con un solo idioma ofrecido, ese; con varios,
 // el de la persona, el del navegador o el por defecto de la instalacion. Se
@@ -134,6 +137,24 @@ registerAuthGuard(router)
 installChunkLoadRecovery(router, {
   reload: (target) => window.location.assign(router.resolve(target).href),
 })
+
+// Titulo de la pestaña por pantalla (WCAG 2.4.2): la marca escribe el nombre de la
+// instalacion, esto le antepone la pantalla; se recompone tras aplicar la marca.
+const documentTitle = bindDocumentTitle({
+  router,
+  i18n,
+  applicationName: () => branding.current.applicationName,
+})
+
+void brandingLoaded.then(documentTitle.refresh)
+// Cada vez que se aplica una marca nueva (al guardar «Marca» tambien) ella reescribe el
+// titulo con el nombre a secas: se recompone despues, con la pantalla delante.
+watch(() => branding.current, documentTitle.refresh, { flush: 'post' })
+
+// El cambio de pantalla se anuncia llevando el foco al `<h1>`, y el foco que se
+// pierde porque lo retirado era su sitio vuelve al contenedor mas cercano.
+bindScreenChange(router)
+installFocusRecovery({ fallback: () => document.getElementById('main') })
 
 app.use(router)
 app.use(i18n)

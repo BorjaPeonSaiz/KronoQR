@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginView from '@/features/auth/LoginView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
+import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import type { FetchHandler } from './support/harness'
@@ -76,6 +77,22 @@ describe('LoginView', () => {
     // El destino se carga por import() dinamico (carga diferida de vistas): se
     // espera a que la navegacion termine en vez de contar microtareas.
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/credentials'))
+  })
+
+  it('registra la sesion con el nombre del panel en el idioma activo, sin literales (R7-PA-03)', async () => {
+    const spanish = stubFetch(() => jsonResponse(sessionFixture()))
+
+    await fillAndSubmit(await mountView(LoginView))
+    expect(JSON.parse(String(spanish.mock.calls[0]?.[1]?.body))).toMatchObject({
+      device_name: es.app.title,
+    })
+
+    const english = stubFetch(() => jsonResponse(sessionFixture()))
+
+    await fillAndSubmit(await mountView(LoginView, { locale: 'en' }))
+    expect(JSON.parse(String(english.mock.calls[0]?.[1]?.body))).toMatchObject({
+      device_name: en.app.title,
+    })
   })
 
   it('no distingue una contrasena incorrecta de una cuenta que no existe', async () => {

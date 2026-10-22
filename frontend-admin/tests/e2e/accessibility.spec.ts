@@ -279,7 +279,7 @@ test(
     // Con logotipo, la cabecera lo enseña con el nombre como alternativa
     // textual: no hay un segundo texto suelto que lo repita.
     await expect(page.getByRole('banner').locator('img')).toHaveAttribute('alt', 'Hotel Marina')
-    await expect(page).toHaveTitle('Hotel Marina')
+    await expect(page).toHaveTitle(/ · Hotel Marina$/)
 
     await expectNoBlockingViolations(page)
   },

@@ -124,7 +124,7 @@ async function onConflict(): Promise<void> {
       tabindex="0"
       role="region"
       :aria-label="t('contracts.table.caption')"
-      class="mt-4 overflow-x-auto"
+      class="mt-4 relative overflow-x-auto"
     >
       <table class="w-full border-collapse text-left" data-test="contracts-table">
         <caption class="sr-only">

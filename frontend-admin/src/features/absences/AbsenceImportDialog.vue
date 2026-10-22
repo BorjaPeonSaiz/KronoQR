@@ -166,7 +166,12 @@ async function apply(): Promise<void> {
         }}
       </p>
 
-      <div class="mt-2 overflow-x-auto">
+      <div
+        tabindex="0"
+        role="region"
+        :aria-label="t('absences.import.tableCaption')"
+        class="mt-2 relative overflow-x-auto"
+      >
         <table class="w-full border-collapse text-left text-sm">
           <caption class="sr-only">
             {{
