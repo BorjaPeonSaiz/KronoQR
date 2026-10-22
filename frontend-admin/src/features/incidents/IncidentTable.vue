@@ -15,7 +15,6 @@ import { formatInstant, formatZoneLabel, minutesBetween } from '@kronoqr/web-kit
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { usePersonName } from '@/shared/people/personName'
 import { RouterLink } from 'vue-router'
 import { ATTENDANCE_READ } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -35,7 +34,6 @@ const emit = defineEmits<{ resolve: [incident: Incident] }>()
 const ROW_HEIGHT_PX = 84
 
 const { t, locale } = useI18n()
-const { personFullName } = usePersonName()
 const session = useSessionStore()
 
 // El registro horario exige `attendance:read`: sin el, el enlace a la jornada
@@ -136,7 +134,7 @@ function detectedAtLabel(incident: Incident): string {
 
           <span role="cell" class="truncate" data-test="incident-employee">
             <span class="block font-medium">
-              {{ personFullName(row.item.employee.full_name) }}
+              {{ row.item.employee.full_name }}
               <span class="font-mono text-sm text-kq-text-muted">
                 {{ row.item.employee.employee_code }}
               </span>

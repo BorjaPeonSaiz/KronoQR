@@ -19,7 +19,6 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { usePersonName } from '@/shared/people/personName'
 import { listEmployees } from '@/features/employees/employees.api'
 import type { Absence, AbsenceType, CreateAbsenceRequest, Employee } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
@@ -28,7 +27,6 @@ import { createAbsence } from './absences.api'
 const emit = defineEmits<{ close: []; created: [Absence] }>()
 
 const { t } = useI18n()
-const { personName } = usePersonName()
 
 const SEARCH_DEBOUNCE_MS = 300
 const SEARCH_PER_PAGE = 8
@@ -43,7 +41,7 @@ const selectedEmployee = ref<Employee | null>(null)
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
 function fullName(employee: Employee): string {
-  return personName(employee.first_name, employee.last_name, employee.anonymized_at)
+  return `${employee.first_name} ${employee.last_name}`
 }
 
 async function runSearch(term: string): Promise<void> {

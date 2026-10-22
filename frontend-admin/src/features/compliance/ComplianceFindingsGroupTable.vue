@@ -30,7 +30,6 @@ import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { usePersonName } from '@/shared/people/personName'
 import { RouterLink } from 'vue-router'
 import { INCIDENTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -57,7 +56,6 @@ const props = defineProps<{
 const ROW_HEIGHT_PX = 72
 
 const { t, locale } = useI18n()
-const { personFullName } = usePersonName()
 const session = useSessionStore()
 
 // La bandeja exige `incidents:*`: sin el, el enlace llevaria a un 403 que la
@@ -204,7 +202,7 @@ const GRID_TEMPLATE =
               :to="workdaysLinkFor(entry.row.finding)"
               class="block truncate text-kq-primary-strong underline"
             >
-              {{ personFullName(entry.row.finding.employee.full_name) }}
+              {{ entry.row.finding.employee.full_name }}
               <span class="sr-only">{{ t('complianceSummary.table.viewWorkdays') }}</span>
             </RouterLink>
             <span class="block truncate font-mono text-sm text-kq-text-muted">

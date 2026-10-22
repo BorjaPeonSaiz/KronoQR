@@ -13,7 +13,6 @@ import { formatZoneLabel, minutesBetween, todayInZone } from '@kronoqr/web-kit/d
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { usePersonName } from '@/shared/people/personName'
 import { RouterLink } from 'vue-router'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { LivePresenceEntry } from '@/shared/api/types'
@@ -29,7 +28,6 @@ const props = defineProps<{
 const ROW_HEIGHT_PX = 52
 
 const { t, locale } = useI18n()
-const { personFullName } = usePersonName()
 const session = useSessionStore()
 
 /**
@@ -193,9 +191,9 @@ function originLabel(entry: LivePresenceEntry): string {
               data-test="entry-workdays-link"
               :aria-label="t('live.table.openWorkDay', { name: row.item.full_name })"
             >
-              {{ personFullName(row.item.full_name) }}
+              {{ row.item.full_name }}
             </RouterLink>
-            <template v-else>{{ personFullName(row.item.full_name) }}</template>
+            <template v-else>{{ row.item.full_name }}</template>
           </span>
           <span role="cell" class="truncate text-kq-text-muted">
             {{ row.item.department?.name ?? t('live.table.noDepartment') }}

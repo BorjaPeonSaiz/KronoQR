@@ -56,8 +56,12 @@ readonly KQ_MINIMISE_DEFINER_FUNCTIONS_PERSONNEL="personnel_record_anonymize_bat
 readonly KQ_MINIMISE_CANDIDATES_ACCOUNTS="management_account_retention_candidates"
 readonly KQ_MINIMISE_CANDIDATES_PERSONNEL="personnel_record_retention_candidates"
 # Funciones de trigger: nadie tiene EXECUTE (las invoca el trigger, no un usuario).
-readonly KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS="users_guard_anonymized users_stamp_deactivation"
-readonly KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL="employees_guard_anonymized"
+# `effective_compliance_profile_ids` no es de trigger: solo la llaman las funciones DEFINER de lote.
+readonly KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS="users_guard_anonymized users_stamp_deactivation effective_compliance_profile_ids"
+readonly KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL="employees_guard_anonymized employees_guard_anonymized_dependents"
+# Triggers (tabla:nombre) de esas funciones; los dos de dependientes comparten funcion.
+readonly KQ_MINIMISE_TRIGGERS_ACCOUNTS="users:users_guard_anonymized users:users_stamp_deactivation"
+readonly KQ_MINIMISE_TRIGGERS_PERSONNEL="employees:employees_guard_anonymized employment_contracts:employment_contracts_guard_anonymized_employee absences:absences_guard_anonymized_employee"
 # Tablas que pierden DELETE para el rol: se minimizan en sitio (RN-13: no se borra la ficha).
 readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences employees users"
 
@@ -233,11 +237,15 @@ minimise_retention_sql() {
   work_record_definer_function_sql "${role}" "${KQ_MINIMISE_CANDIDATES_PERSONNEL}" "${personnel}" plain
   for fn in ${KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS}; do
     minimise_guard_function_sql "${role}" "${fn}" "${accounts}"
-    minimise_trigger_sql users "${fn}" "${accounts}"
   done
   for fn in ${KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL}; do
     minimise_guard_function_sql "${role}" "${fn}" "${personnel}"
-    minimise_trigger_sql employees "${fn}" "${personnel}"
+  done
+  for fn in ${KQ_MINIMISE_TRIGGERS_ACCOUNTS}; do
+    minimise_trigger_sql "${fn%%:*}" "${fn#*:}" "${accounts}"
+  done
+  for fn in ${KQ_MINIMISE_TRIGGERS_PERSONNEL}; do
+    minimise_trigger_sql "${fn%%:*}" "${fn#*:}" "${personnel}"
   done
   minimise_check_sql users users_chk_deactivated_has_date "${accounts}"
   minimise_check_sql users users_chk_anonymized_is_minimised "${accounts}"

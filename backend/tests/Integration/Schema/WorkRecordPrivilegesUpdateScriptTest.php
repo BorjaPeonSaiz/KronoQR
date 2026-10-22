@@ -220,6 +220,8 @@ it('vigila la minimizacion en sitio: trigger desactivado, DELETE devuelto y func
 
     try {
         $migrator->statement('ALTER TABLE employees DISABLE TRIGGER employees_guard_anonymized');
+        $migrator->statement('ALTER TABLE absences DISABLE TRIGGER absences_guard_anonymized_employee');
+        $migrator->statement('GRANT EXECUTE ON FUNCTION public.effective_compliance_profile_ids() TO "'.$application.'"');
         $migrator->statement('GRANT DELETE ON TABLE absences TO "'.$application.'"');
         $migrator->statement('GRANT DELETE ON TABLE employees TO "'.$application.'"');
         $migrator->statement('GRANT DELETE ON TABLE users TO "'.$application.'"');
@@ -234,6 +236,8 @@ it('vigila la minimizacion en sitio: trigger desactivado, DELETE devuelto y func
 
     expect($drift)->toContain('trigger:employees_guard_anonymized:DESACTIVADO')
         ->toContain('absences:DELETE')
+        ->toContain('trigger:absences_guard_anonymized_employee:DESACTIVADO')
+        ->toContain('effective_compliance_profile_ids:EJECUTABLE')
         ->toContain('employees:DELETE')
         ->toContain('users:DELETE')
         ->toContain('users_guard_anonymized:EJECUTABLE')
