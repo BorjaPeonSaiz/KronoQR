@@ -89,9 +89,20 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 12 integrados (#182 a #187, #189 a #191 y #193 a #196). **Bloque 13** (`fix/copias-y-wal`): 13.1–13.4 ✅, revisiones de código y seguridad aplicadas; CI manual, `backup-drill.yml` y PR en curso.
+**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 13 integrados (#182 a #187, #189 a #191 y #193 a #197). **Bloque 14** (`fix/panel-datos-y-operaciones`): 14.1–14.8 ✅, revisiones de seguridad (servidor) y de código aplicadas; CI manual y PR en curso.
 
-Lo que conviene saber del bloque 13 (decisiones en Engram `2.3.0/b13-decisiones`):
+Lo que conviene saber del bloque 14 (decisiones en Engram `2.3.0/b14-decisiones`):
+
+- **Exportaciones en diferido (ADR-041 enmendado):** `report_exports` admite `kind` `legal` y `adoption`, avance (`progress` en caché) y cancelación (`cancelled_at`, `stopped_at`: una cancelada en marcha ocupa el turno hasta que el trabajador para). La legal nunca pide licencia, solo CSV, idéntica byte a byte a la síncrona. Las síncronas se mantienen (decisión del propietario); el panel difiere la plantilla entera o más de un mes (`deferral.ts`, ≥ 32 días). El soporte del fabricante no pide en diferido; el auditor solo ve y cancela `kind = legal`. Exportación íntegra en formato 6.
+- **Cola `reports`:** conexión propia con `retry_after` 1900 s > `TIMEOUT_SECONDS` (antes 90 s: otro proceso recogía el trabajo y `failed()` borraba el fichero) y `config/horizon.php` con `supervisor-reports` (2 procesos). Prueba `ReportExportQueueTest`.
+- **Paginación:** registro de una persona por jornadas (31, máx. 100) y tablero de credenciales en el servidor (30); `q` con `PersonNameSearch`.
+- **Panel:** avisos de «informe listo» en la cabecera; idiomas en trozos (`localeController.ts`, reintento y caída a `es`); `chunkLoadRecovery` con `onGiveUp`; `docs/api/role-abilities.json` atado a la base (`RoleCatalogTest`) y al menú (`roleCatalog.spec`); `large-tables` con CPU ×4 (300 ms solo al abrir el informe de 20 000 filas, decisión del propietario).
+- **Pendiente:**
+  - idiomas en trozos del portal (misma técnica que 14.6);
+  - sin E2E de cancelar (el doble del servidor termina antes); cubierto en unitarias;
+  - la verificación de la exportación legal con 1,46 M de filas es una extrapolación (~56 s), no una pasada real.
+
+Lo que conviene saber del bloque 13 (#197; decisiones en Engram `2.3.0/b13-decisiones`):
 
 - **WAL:** `archive-wal.sh` hace `sync` del directorio tras el `mv` (también en el reintento idéntico); un fsync fallido da exit 1. Solo cae al `sync` global si la orden no acepta argumentos.
 - **Simulacro (`restore-drill.sh`):** verifica la cadena de `audit_log` sobre la base restaurada con la imagen de la app del paquete (sin red, sin métricas de producción: `METRICS_TEXTFILE_ENABLED=false`). Distingue «ROTURA» (runbook `rotura-cadena-auditoria.md`) de «NO VERIFICADA»; ambos salen con 6. `--skip-audit-chain` se rechaza si `audit_log` tiene `hash`/`prev_hash` y, como pitr, no mueve `last_success_timestamp` (gauge `…_audit_chain_verified`). Comprueba espacio libre, `docker rm -fv`, filtra `CONTEXT: COPY` del informe. Usa la imagen de postgres del producto si está cargada (V5-DV-03: sin internet).
@@ -189,7 +200,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 13 no está integrado, PR y merge con la CI y `backup-drill.yml` en verde. Después, sin preguntar, el bloque 14 (panel: datos al día y operaciones largas, rama `fix/panel-datos-y-operaciones`), marcando ✅ el título del bloque 13 en su primer commit.
+**Siguiente acción:** si el bloque 14 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 15 (accesibilidad del panel, rama `fix/accesibilidad-panel`), marcando ✅ el título del bloque 14 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
