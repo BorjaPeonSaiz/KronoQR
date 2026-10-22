@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 /**
- * Los cuatro tipos de dato con plazo propio (RL-11, doc 02 §8.2.1).
+ * Los tipos de dato con plazo propio (RL-11, doc 02 §8.2.1). Desde la 2.3.0
+ * (ADR-060) tambien la ficha de quien ya no esta y la cuenta de gestion dada de
+ * baja, que no se borran: se minimizan en sitio.
  *
  * **La lista es cerrada y es la decision de la tarea 2.10**: si manana aparece
  * un almacen nuevo con datos que caducan, tiene que entrar aqui —y en el informe
@@ -44,6 +46,21 @@ enum RetentionScope: string
     /** Historico de errores agrupado por huella, tabla `error_events` (RF-PD-15). */
     case ErrorHistory = 'error_history';
 
+    /**
+     * La ficha de una persona dada de baja (ADR-060, tarea 11.3 A): pasado
+     * `personnel_record_retention_years` desde su cese, y cuando ya no queda
+     * nada suyo en el registro ni en la cadena viva, se minimiza en sitio. Sus
+     * contratos y ausencias se borran con ella.
+     */
+    case PersonnelRecords = 'personnel_records';
+
+    /**
+     * La cuenta de gestion dada de baja (ADR-060, tarea 11.3 B): pasado
+     * `retention_years` desde la baja, y cuando ya no queda ningun asiento ni
+     * nada que la nombre como autora, se minimiza en sitio.
+     */
+    case ManagementAccounts = 'management_accounts';
+
     /** Etiqueta para el informe y la consola. Sin i18n: el informe es del servidor. */
     public function label(): string
     {
@@ -52,13 +69,9 @@ enum RetentionScope: string
             self::AuditLog => 'Cadena de auditoria',
             self::TechnicalLog => 'Log tecnico',
             self::ErrorHistory => 'Historico de errores',
+            self::PersonnelRecords => 'Fichas de personal',
+            self::ManagementAccounts => 'Cuentas de gestion',
         };
-    }
-
-    /** Si su plazo lo fija el perfil de cumplimiento (anos) o la instalacion (dias). */
-    public function isLegalRecord(): bool
-    {
-        return $this === self::WorkRecords || $this === self::AuditLog;
     }
 
     /**
@@ -68,6 +81,11 @@ enum RetentionScope: string
      */
     public function unit(): string
     {
-        return $this === self::TechnicalLog ? 'ficheros' : 'filas';
+        return match ($this) {
+            self::TechnicalLog => 'ficheros',
+            self::PersonnelRecords => 'personas',
+            self::ManagementAccounts => 'cuentas',
+            default => 'filas',
+        };
     }
 }

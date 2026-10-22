@@ -356,6 +356,7 @@ it('calcula el corte con la misma aritmetica que RetentionPolicy', function (str
         technicalLogDays: 90,
         errorHistoryDays: 90,
         legalRecordFloor: LegalRetentionFloor::byDefault(Jurisdiction::fromCode('PT'), 1),
+        personnelRecordYears: 4,
     );
     $php = $policy->workRecordCutoff(new DateTimeImmutable($today.' 13:00:00', new DateTimeZone('UTC')));
 

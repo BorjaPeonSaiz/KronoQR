@@ -9,9 +9,13 @@ use App\Modules\Compliance\Application\Command\RetentionRunCommand;
 use App\Modules\Compliance\Application\Exception\AuditPartitionNotPurgeable;
 use App\Modules\Compliance\Application\Exception\RetentionNotConfirmed;
 use App\Modules\Compliance\Application\Exception\RetentionResponsibleNotActive;
+use App\Modules\Compliance\Application\Port\AnonymizedManagementAccount;
+use App\Modules\Compliance\Application\Port\AnonymizedPersonnelRecord;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditPartitionArchive;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
+use App\Modules\Compliance\Application\Port\ManagementAccountArchive;
+use App\Modules\Compliance\Application\Port\PersonnelRecordArchive;
 use App\Modules\Compliance\Application\Port\RetentionMetrics;
 use App\Modules\Compliance\Application\Port\RetentionReportStore;
 use App\Modules\Compliance\Application\Port\TechnicalLogArchive;
@@ -99,6 +103,8 @@ final readonly class ApplyRetention
         private Clock $clock,
         private ResponsibleAccounts $accounts,
         private SerializedLedgerWrite $ledgerWrite,
+        private ManagementAccountArchive $managementAccounts,
+        private PersonnelRecordArchive $personnelRecords,
     ) {}
 
     public function handle(RetentionRunCommand $command): RetentionOutcome
@@ -136,17 +142,142 @@ final readonly class ApplyRetention
     ): RetentionOutcome {
         $this->assertConfirmed($command, $plan);
 
+        // Las fichas y cuentas que se minimizaran, contadas ANTES de purgar,
+        // como las conto la simulacion aprobada. Purgar el registro y soltar
+        // particiones libera otras: esas esperan a la pasada siguiente, que
+        // las contara en su simulacion (decision del propietario del 22-10-2026).
+        $personnelCandidates = $plan->personnelRecordCutoff === null
+            ? []
+            : $this->personnelRecords->candidates($plan->personnelRecordCutoff);
+        $accountCandidates = $plan->managementAccountCutoff === null
+            ? []
+            : $this->managementAccounts->candidates($plan->managementAccountCutoff);
+
         // Paso 3, antes de borrar nada. Si algo no cuadra sale por excepcion y la
         // instalacion se queda exactamente como estaba.
         $verified = $this->verifyPartitions($plan, $now);
 
+        $notes = $verified['notes'];
+
         $tallies = [
             ...$this->purgeWorkRecords($command, $plan),
             ...$this->dropPartitions($verified['anchors'], $command),
+            ...$this->anonymizePersonnelRecords($command, $plan, $personnelCandidates, $notes),
+            ...$this->anonymizeManagementAccounts($command, $plan, $accountCandidates),
             ...$this->purgeShortCycles($command, $plan),
         ];
 
-        return $this->finish($plan->executed($tallies, $verified['notes']), $now);
+        return $this->finish($plan->executed($tallies, $notes), $now);
+    }
+
+    /**
+     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060, tarea
+     * 11.3 A).
+     *
+     * **Despues de purgar el registro y soltar particiones**, pero **solo las
+     * fichas que ya eran candidatas antes** (`$candidates`): las que esa purga
+     * acaba de liberar no las conto la simulacion aprobada y esperan a la
+     * pasada siguiente. La funcion vuelve a comprobar cada una con la fila
+     * tomada. **Antes de las cuentas de gestion**: minimizar una ficha libera
+     * `pin_delivered_by_user_id`, que no impide nada hoy pero puede hacerlo.
+     *
+     * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
+     * (ADR-046): la funcion toma las fichas `FOR UPDATE` ya dentro y el asiento
+     * de cada persona va en la misma transaccion. Si un asiento falla, el lote
+     * entero se deshace. **La foto se borra despues del `COMMIT`**: un fichero
+     * no se puede deshacer, y borrarla antes dejaria una ficha sin minimizar y
+     * sin foto si el lote fallara. Si no se puede borrar, queda en el log y en
+     * las observaciones del informe, con el `employee_uuid` y sin la ruta.
+     *
+     * @param  list<int>  $candidates
+     * @param  list<string>  $notes
+     * @return list<RetentionTally>
+     */
+    private function anonymizePersonnelRecords(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        array $candidates,
+        array &$notes,
+    ): array {
+        $cutoff = $plan->personnelRecordCutoff;
+
+        if ($cutoff === null) {
+            return [];
+        }
+
+        $total = 0;
+        $orphaned = 0;
+        // El lote no pasa del que admite la funcion: con uno mayor, la funcion
+        // cortaria en su tope y el resto de la lista quedaria sin minimizar.
+        $size = min(PersonnelRecordArchive::MAX_BATCH, max(1, $command->batchSize));
+
+        // Nada que minimizar, nada que pedir a la funcion: `array_chunk` de una
+        // lista vacia no da ningun lote.
+        foreach (array_chunk($candidates, $size) as $only) {
+            $this->assertResponsible($command);
+
+            /** @var list<AnonymizedPersonnelRecord> $batch */
+            $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
+                function () use ($command, $plan, $cutoff, $size, $only): array {
+                    $records = $this->personnelRecords->anonymize($cutoff, $size, $only);
+
+                    foreach ($records as $record) {
+                        $this->recordPersonnelRecordAnonymized($command, $plan, $cutoff, $record);
+                    }
+
+                    return $records;
+                },
+            ));
+
+            foreach ($batch as $record) {
+                if ($record->photoPath !== null && ! $this->personnelRecords->forgetPhoto($record->photoPath)) {
+                    $this->telemetry->photoOrphaned($record->employeeUuid);
+                    $orphaned++;
+                }
+            }
+
+            $total += \count($batch);
+        }
+
+        if ($orphaned > 0) {
+            $notes[] = $orphaned.' foto(s) de fichas minimizadas no se pudieron borrar del disco: la ficha ya no las '
+                .'apunta. El evento retention.personnel_photo_orphaned del log dice de que employee_uuid.';
+        }
+
+        return [new RetentionTally(
+            scope: RetentionScope::PersonnelRecords,
+            dataset: 'employees',
+            rows: $total,
+        )];
+    }
+
+    private function recordPersonnelRecordAnonymized(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        DateTimeImmutable $cutoff,
+        AnonymizedPersonnelRecord $record,
+    ): void {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actorFor($command),
+            action: AuditAction::RetentionPersonnelRecordAnonymized,
+            // Sin id, como el resto de asientos de la ficha: el uuid va en el payload.
+            subject: AuditSubject::of('employee'),
+            payload: AuditPayload::of([
+                'employee_uuid' => $record->employeeUuid,
+                'terminated_on' => $record->terminatedOn,
+                'cutoff_date' => $cutoff->format('Y-m-d'),
+                'personnel_record_retention_years' => $plan->policy->personnelRecordYears,
+                'retention_years' => $plan->policy->legalRecordYears,
+                'retention_floor_years' => $plan->policy->legalRecordFloorYears,
+                'jurisdiction' => $plan->policy->jurisdiction,
+                'site_id' => $plan->policy->siteId,
+                'fields' => AnonymizedPersonnelRecord::FIELDS,
+                'contracts_deleted' => $record->contractsDeleted,
+                'absences_deleted' => $record->absencesDeleted,
+                'tokens_deleted' => $record->tokensDeleted,
+                'confirmation' => $plan->confirmationToken(),
+            ]),
+        ));
     }
 
     private function assertConfirmed(RetentionRunCommand $command, RetentionReport $plan): void
@@ -412,6 +543,84 @@ final readonly class ApplyRetention
                 ]),
             ));
         });
+    }
+
+    /**
+     * Minimiza las cuentas de gestion vencidas (ADR-060, tarea 11.3 B).
+     *
+     * **Despues de soltar particiones**, pero **solo las cuentas que ya eran
+     * candidatas antes** (`$candidates`): las que libera la suelta de los
+     * asientos de los años vencidos no las conto la simulacion aprobada y
+     * esperan a la pasada siguiente.
+     *
+     * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
+     * (ADR-046): la funcion toma las filas `FOR UPDATE` ya dentro, y el asiento
+     * de cada cuenta va en la misma transaccion que su minimizacion. Si un
+     * asiento falla, el lote entero se deshace: no queda una cuenta minimizada
+     * sin su constancia.
+     *
+     * @param  list<int>  $candidates
+     * @return list<RetentionTally>
+     */
+    private function anonymizeManagementAccounts(RetentionRunCommand $command, RetentionReport $plan, array $candidates): array
+    {
+        $cutoff = $plan->managementAccountCutoff;
+
+        if ($cutoff === null) {
+            return [];
+        }
+
+        $total = 0;
+        $size = min(ManagementAccountArchive::MAX_BATCH, max(1, $command->batchSize));
+
+        // Sin candidatas no se le pide nada a la funcion, que calcula su corte
+        // con el reloj de la base de datos.
+        foreach (array_chunk($candidates, $size) as $only) {
+            $this->assertResponsible($command);
+
+            /** @var list<AnonymizedManagementAccount> $batch */
+            $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
+                function () use ($command, $plan, $cutoff, $size, $only): array {
+                    $accounts = $this->managementAccounts->anonymize($cutoff, $size, $only);
+
+                    foreach ($accounts as $account) {
+                        $this->recordManagementAccountAnonymized($command, $plan, $cutoff, $account);
+                    }
+
+                    return $accounts;
+                },
+            ));
+
+            $total += \count($batch);
+        }
+
+        return [new RetentionTally(
+            scope: RetentionScope::ManagementAccounts,
+            dataset: 'users',
+            rows: $total,
+        )];
+    }
+
+    private function recordManagementAccountAnonymized(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        DateTimeImmutable $cutoff,
+        AnonymizedManagementAccount $account,
+    ): void {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actorFor($command),
+            action: AuditAction::RetentionManagementAccountAnonymized,
+            subject: AuditSubject::of('user', $account->userId),
+            payload: AuditPayload::of([
+                'user_uuid' => $account->userUuid,
+                'deactivated_on' => $account->deactivatedOn,
+                'cutoff_date' => $cutoff->format('Y-m-d'),
+                'retention_years' => $plan->policy->legalRecordYears,
+                'fields' => AnonymizedManagementAccount::FIELDS,
+                'tokens_deleted' => $account->tokensDeleted,
+                'confirmation' => $plan->confirmationToken(),
+            ]),
+        ));
     }
 
     /**

@@ -110,23 +110,18 @@ final class WeeklySummaryCommand extends Command
     /**
      * Por que no se envio nada, en una linea que dice **donde se arregla**.
      *
-     * «¿Por que no me llega el resumen?» tiene cuatro respuestas y las cuatro se
+     * «¿Por que no me llega el resumen?» tiene cinco respuestas y las cinco se
      * tocan en sitios distintos. Un «no se envio nada» a secas obligaria a
-     * revisarlos todos.
+     * revisarlos todos. «El plan no lo incluye» y «la licencia no esta en vigor»
+     * son dos (V4-PL-4): la primera se arregla ampliando el plan y la segunda
+     * renovando. Los textos, en `lang/{es,en}/reports.php`.
      */
     private function explain(WeeklySummaryReason $reason): string
     {
-        return match ($reason) {
-            WeeklySummaryReason::Disabled => 'El resumen semanal esta desactivado en esta instalacion. '
-                .'Se enciende en el panel, en Ajustes: WEEKLY_SUMMARY_EMAIL.',
-            WeeklySummaryReason::MailerSilent => 'Esta instalacion no tiene un transporte de correo real (MAIL_MAILER). '
-                .'No es un fallo: el resumen es opcional y el resto del producto funciona igual.',
-            WeeklySummaryReason::NotInPlan => 'La licencia de esta instalacion no incluye el resumen semanal por correo. '
-                .'El registro horario y la exportacion para la Inspeccion no dependen de ella.',
-            WeeklySummaryReason::NoRecipients => 'No hay ningun responsable de departamento activo y con correo al que escribir. '
-                .'Se asignan en el panel, en Departamentos.',
-            WeeklySummaryReason::Sent => '',
-        };
+        $key = 'reports.weekly_summary.not_sent.'.$reason->value;
+        $text = __($key);
+
+        return \is_string($text) && $text !== $key ? $text : '';
     }
 
     /**

@@ -151,6 +151,11 @@ script, `-T`), add `--responsible-confirm=<the same e-mail>`.
    the same transaction.
 4. Each expired partition is **sealed** in `audit_chain_anchors` and **dropped
    whole**. The audit trail is never deleted row by row.
+   Then, in batches and each with its audit entry, the files of people who have
+   left and the deactivated management accounts whose period has expired are
+   **minimised**, and those people's contracts and absences are deleted
+   ([`legal-obligations.md`](legal-obligations.md) §4). The proposal counts
+   them without names.
 5. The technical log and the error history older than 90 days are cleaned up.
 6. The report of what was purged is left at
    `BACKUP_PATH/reports/retention/retencion-purga-AAAAMMDD-HHMMSS.txt`, on the
@@ -1736,6 +1741,42 @@ rollback half-way.
   `docker compose logs --since 1h app`. What the command has to tell you shows
   up as before.
 
+**When updating to 2.3.0: the first purge may remove data of people who have
+left, and it cannot be undone.** The compliance profile gains "years of the
+personnel file" (`personnel_record_retention_years`, 4 by default). The first
+time you run `compliance:apply-retention` after updating, the purge may
+**minimise** the files of people who left long ago and the deactivated
+management accounts whose period has expired: it removes their name, email,
+PIN, photo and ID document, and **deletes their contracts and absences**.
+Before running it:
+
+- **read that week's simulation**: it says how many files and accounts would
+  be minimised;
+- **if your advisers have not confirmed the period**, raise it in the profile
+  before running it ([`legal-obligations.md`](legal-obligations.md) §4; to
+  answer a person who asks for their data,
+  [`../../runbooks/solicitud-derechos-rgpd.md`](../../runbooks/solicitud-derechos-rgpd.md)).
+
+**When updating to 2.3.0: less data kept too long, and more reads recorded.**
+None of this stops clock-in:
+
+- **The reason of a support grant** is emptied 90 days after the grant closes
+  (`PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS`) and no longer accepts
+  emails, ID numbers or phone numbers: to point to a person, use their uuid.
+- **Expired sessions are deleted every night.** `./doctor.sh` warns about
+  management accounts that have not signed in for a while
+  (`IDENTITY_DORMANT_ACCOUNT_DAYS`, 90 by default) and about old sessions with
+  no expiry. An unused account is not touched: you decide whether to
+  deactivate it.
+- **Department managers no longer see** the email, language or PIN status of
+  their staff.
+- **Opening live presence and the list of management accounts leaves an
+  entry** in the audit trail, as the presence view already did.
+- **The diagnostics bundle moves to version 2 of the format** (§12.2): an
+  earlier bundle is checked with the rule of its own version. **The checksum of
+  the portal's own-record PDF also changes version**: do not compare a
+  checksum from before 2.3.0 with one from after it.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or
@@ -2030,11 +2071,14 @@ through your contract's channel. **Support does not go into your server**
 It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 unencrypted on purpose: **open it before sending it** and check that it carries
 nothing you do not want to send. Its header (`manifest`) carries the
-fingerprint of the rest of the document, and with it you can check that it was
+fingerprint of the whole document, header included, and with it you can check that it was
 not altered or cut short on the way. Support checks it on receipt; to check it
 yourself before sending it, from the installation directory and with the path
 the command printed when it generated it:
 `docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
+Since 2.3.0 the bundle uses version 2 of the format (`schema_version: 2`),
+whose checksum also covers the header; a bundle from an earlier version is
+checked with the rule of its own version, never mixing the two.
 
 **What it carries:** version and environment, configuration **only from an
 allow-list of keys** (never `LICENSE_KEY`, QR signing keys, backup encryption

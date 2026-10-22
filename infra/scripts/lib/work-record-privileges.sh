@@ -42,6 +42,29 @@ readonly KQ_SITE_TIMEZONE_TRIGGER="zz_sites_guard_timezone"
 readonly KQ_SITE_TIMEZONE_TRACE="site_timezone_changes"
 # La linea base de la conciliacion (una fila, el ultimo asiento al migrar): mismo trato.
 readonly KQ_SITE_TIMEZONE_BASELINE="site_timezone_audit_baseline"
+# La minimizacion en sitio al vencer el plazo (ADR-060, bloque 11 de la 2.3.0): las
+# funciones de lote `SECURITY DEFINER` y de candidatas, los triggers y los CHECK que
+# congelan lo minimizado, y el motivo purgable de la concesion de soporte. Se exigen
+# SOLO si su migracion esta aplicada, como la zona del centro.
+readonly KQ_MINIMISE_MIGRATION_SUPPORT="'2026_10_21_100000_purgeable_support_grant_reason'"
+readonly KQ_MINIMISE_MIGRATION_ACCOUNTS="'2026_10_21_100100_minimise_management_accounts_after_retention'"
+readonly KQ_MINIMISE_MIGRATION_PROFILE="'2026_10_21_100200_add_personnel_record_retention_to_compliance_profiles'"
+readonly KQ_MINIMISE_MIGRATION_PERSONNEL="'2026_10_21_100300_minimise_personnel_records_after_retention'"
+# Con EXECUTE solo para el rol: de lote (DEFINER, search_path fijado) y de candidatas.
+readonly KQ_MINIMISE_DEFINER_FUNCTIONS_ACCOUNTS="management_account_anonymize_batch"
+readonly KQ_MINIMISE_DEFINER_FUNCTIONS_PERSONNEL="personnel_record_anonymize_batch"
+readonly KQ_MINIMISE_CANDIDATES_ACCOUNTS="management_account_retention_candidates"
+readonly KQ_MINIMISE_CANDIDATES_PERSONNEL="personnel_record_retention_candidates"
+# Funciones de trigger: nadie tiene EXECUTE (las invoca el trigger, no un usuario).
+# `effective_compliance_profile_ids` no es de trigger: solo la llaman las funciones DEFINER de lote.
+readonly KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS="users_guard_anonymized users_stamp_deactivation effective_compliance_profile_ids"
+readonly KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL="employees_guard_anonymized employees_guard_anonymized_dependents"
+# Triggers (tabla:nombre) de esas funciones; los dos de dependientes comparten funcion.
+readonly KQ_MINIMISE_TRIGGERS_ACCOUNTS="users:users_guard_anonymized users:users_stamp_deactivation"
+readonly KQ_MINIMISE_TRIGGERS_PERSONNEL="employees:employees_guard_anonymized employment_contracts:employment_contracts_guard_anonymized_employee absences:absences_guard_anonymized_employee"
+# Tablas que pierden DELETE para el rol: se minimizan en sitio (RN-13: no se borra la ficha).
+readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences employees users"
+
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
 # los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
@@ -61,7 +84,7 @@ readonly KQ_WORK_RECORD_TABLES_B7="shift_entries:t:f:f shift_corrections:t:f:f s
 
 # Privilegios de COLUMNA con tabla sin ellos: tabla:PRIVILEGIO:col1,col2,...
 # shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
-readonly KQ_WORK_RECORD_COLUMNS="shift_entries:UPDATE:clocked_out_at,duration_minutes,status,clock_out_source,closed_by,superseded_by_id,updated_at incidents:UPDATE:status,notified_at,resolved_at,resolved_by_user_id,resolution_note,updated_at compliance_profiles:UPDATE:name,retention_years,min_rest_hours,max_daily_hours,max_weekly_hours,break_required_after_hours,week_starts_on,holiday_calendar,updated_at,updated_by_user_id sites:INSERT:name,timezone sites:UPDATE:name,timezone"
+readonly KQ_WORK_RECORD_COLUMNS="shift_entries:UPDATE:clocked_out_at,duration_minutes,status,clock_out_source,closed_by,superseded_by_id,updated_at incidents:UPDATE:status,notified_at,resolved_at,resolved_by_user_id,resolution_note,updated_at compliance_profiles:UPDATE:name,retention_years,personnel_record_retention_years,min_rest_hours,max_daily_hours,max_weekly_hours,break_required_after_hours,week_starts_on,holiday_calendar,updated_at,updated_by_user_id sites:INSERT:name,timezone sites:UPDATE:name,timezone"
 
 # Cuenta las migraciones del registro horario aplicadas: `<bloque6>,<bloque7>` (2,0 =
 # solo el bloque 6; 2,1 = tambien el 7). Lo ejecutan update.sh y doctor.sh.
@@ -95,10 +118,9 @@ work_record_privileges_stage() {
 # justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
 work_record_privileges_tampered() {
   case "$1" in
-  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:DEFINER"* | \
-    *"${KQ_WORK_RECORD_PURGE_FUNCTION}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_FUNCTION}:AUSENTE"* | \
-    *"${KQ_SITE_TIMEZONE_TRACE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO"* | \
-    *"${KQ_SITE_TIMEZONE_BASELINE}:AUSENTE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:PROPIETARIO"* | \
+  *trigger:* | *check:* | *":DEFINER"* | *":AUSENTE"* | \
+    *"${KQ_SITE_TIMEZONE_TRACE}:PROPIETARIO"* | \
+    *"${KQ_SITE_TIMEZONE_BASELINE}:PROPIETARIO"* | \
     *"${KQ_SITE_TIMEZONE_TRACE}:DELETE"* | *"${KQ_SITE_TIMEZONE_TRACE}:UPDATE"* | *"${KQ_SITE_TIMEZONE_TRACE}:TRUNCATE"* | \
     *"${KQ_SITE_TIMEZONE_BASELINE}:DELETE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:UPDATE"* | *"${KQ_SITE_TIMEZONE_BASELINE}:TRUNCATE"*) return 0 ;;
   esac
@@ -110,7 +132,7 @@ work_record_privileges_tampered() {
 # `funcion:DEFINER` (perdio SECURITY DEFINER o su search_path). `$3` es una condicion SQL
 # que tiene que cumplirse para exigirla (`TRUE` si siempre).
 work_record_definer_function_sql() {
-  local role="$1" fn="$2" when="$3"
+  local role="$1" fn="$2" when="$3" definer="${4:-definer}"
   cat <<SQL
   UNION ALL
   SELECT '${fn}:' || CASE
@@ -125,12 +147,16 @@ work_record_definer_function_sql() {
       OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
                   WHERE p.proname = '${fn}' AND p.pronamespace = 'public'::regnamespace
                     AND a.grantee = 0 AND a.privilege_type = 'EXECUTE'))
+SQL
+  if [ "${definer}" = "definer" ]; then
+    cat <<SQL
   UNION ALL
   SELECT '${fn}:DEFINER'
    WHERE (${when})
      AND EXISTS (SELECT 1 FROM pg_proc p WHERE p.proname = '${fn}' AND p.pronamespace = 'public'::regnamespace
                    AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) AS c WHERE c LIKE 'search_path=%')))
 SQL
+  fi
 }
 
 # SQL de una tabla de la zona que la aplicacion solo lee (la traza y la linea base):
@@ -155,6 +181,86 @@ site_timezone_readonly_table_sql() {
    WHERE (${when}) AND to_regclass('public.${tbl}') IS NOT NULL
      AND has_table_privilege('${role}', to_regclass('public.${tbl}'), p.priv) IS DISTINCT FROM p.want
 SQL
+}
+
+# SQL de una funcion de trigger: nadie (ni el rol, ni PUBLIC) la puede ejecutar. Ausente es
+# manipulacion; ejecutable es deriva que se repara. `$3`: condicion de migracion aplicada.
+minimise_guard_function_sql() {
+  local role="$1" fn="$2" when="$3"
+  cat <<SQL
+  UNION ALL
+  SELECT '${fn}:AUSENTE'
+   WHERE (${when}) AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace)
+  UNION ALL
+  SELECT '${fn}:EJECUTABLE'
+   WHERE (${when}) AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = '${fn}' AND pronamespace = 'public'::regnamespace
+                                 AND has_function_privilege('${role}', oid, 'EXECUTE'))
+SQL
+}
+
+# SQL de un trigger concreto: ausente o desactivado (`trigger:<nombre>:AUSENTE|DESACTIVADO`).
+# Nunca se repara solo, como los del registro. `$1` tabla, `$2` nombre, `$3` condicion.
+minimise_trigger_sql() {
+  local tbl="$1" name="$2" when="$3"
+  cat <<SQL
+  UNION ALL
+  SELECT 'trigger:${name}:' || CASE WHEN g.tgname IS NULL THEN 'AUSENTE' ELSE 'DESACTIVADO' END
+    FROM (SELECT 1) AS one LEFT JOIN pg_trigger g
+      ON g.tgrelid = '${tbl}'::regclass AND g.tgname = '${name}' AND NOT g.tgisinternal
+   WHERE (${when}) AND (g.tgname IS NULL OR g.tgenabled <> 'O')
+SQL
+}
+
+# SQL de un CHECK concreto: ausente o sin validar (`check:<nombre>:AUSENTE|SIN_VALIDAR`).
+# `$1` tabla, `$2` nombre, `$3` condicion. Tampoco se repara solo.
+minimise_check_sql() {
+  local tbl="$1" name="$2" when="$3"
+  cat <<SQL
+  UNION ALL
+  SELECT 'check:${name}:' || CASE WHEN c.conname IS NULL THEN 'AUSENTE' ELSE 'SIN_VALIDAR' END
+    FROM (SELECT 1) AS one LEFT JOIN pg_constraint c ON c.conrelid = '${tbl}'::regclass AND c.conname = '${name}'
+   WHERE (${when}) AND (c.conname IS NULL OR NOT c.convalidated)
+SQL
+}
+
+# Todo lo de la minimizacion en sitio (ADR-060), cada grupo con su migracion como condicion.
+minimise_retention_sql() {
+  local role="$1" fn tbl
+  local accounts="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_ACCOUNTS})"
+  local personnel="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_PERSONNEL})"
+  local profile="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_PROFILE})"
+  local support="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_SUPPORT})"
+
+  work_record_definer_function_sql "${role}" "${KQ_MINIMISE_DEFINER_FUNCTIONS_ACCOUNTS}" "${accounts}"
+  work_record_definer_function_sql "${role}" "${KQ_MINIMISE_DEFINER_FUNCTIONS_PERSONNEL}" "${personnel}"
+  work_record_definer_function_sql "${role}" "${KQ_MINIMISE_CANDIDATES_ACCOUNTS}" "${accounts}" plain
+  work_record_definer_function_sql "${role}" "${KQ_MINIMISE_CANDIDATES_PERSONNEL}" "${personnel}" plain
+  for fn in ${KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS}; do
+    minimise_guard_function_sql "${role}" "${fn}" "${accounts}"
+  done
+  for fn in ${KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL}; do
+    minimise_guard_function_sql "${role}" "${fn}" "${personnel}"
+  done
+  for fn in ${KQ_MINIMISE_TRIGGERS_ACCOUNTS}; do
+    minimise_trigger_sql "${fn%%:*}" "${fn#*:}" "${accounts}"
+  done
+  for fn in ${KQ_MINIMISE_TRIGGERS_PERSONNEL}; do
+    minimise_trigger_sql "${fn%%:*}" "${fn#*:}" "${personnel}"
+  done
+  minimise_check_sql users users_chk_deactivated_has_date "${accounts}"
+  minimise_check_sql users users_chk_anonymized_is_minimised "${accounts}"
+  minimise_check_sql employees employees_chk_anonymized_is_minimised "${personnel}"
+  minimise_check_sql compliance_profiles compliance_profiles_chk_personnel_record_retention_years "${profile}"
+  minimise_check_sql support_grants support_grants_chk_reason_purged "${support}"
+  minimise_check_sql support_grants support_grants_chk_reason_purged_after_close "${support}"
+  for tbl in ${KQ_MINIMISE_NO_DELETE_TABLES}; do
+    cat <<SQL
+  UNION ALL
+  SELECT '${tbl}:DELETE'
+   WHERE (${personnel}) AND to_regclass('public.${tbl}') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.${tbl}'), 'DELETE')
+SQL
+  done
 }
 
 # Tabla:INSERT:UPDATE:DELETE del estado exigible (b7 si aun no se ha decidido: es el
@@ -238,6 +344,8 @@ $(site_timezone_readonly_table_sql "${role}" "${KQ_SITE_TIMEZONE_BASELINE}" "${s
   SELECT '${KQ_SITE_TIMEZONE_TRACE}:SECUENCIA'
    WHERE ${site_applied} AND to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq') IS NOT NULL
      AND has_sequence_privilege('${role}', to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq'), 'USAGE')"
+    purge_sql="${purge_sql}
+$(minimise_retention_sql "${role}")"
 
   fi
 
@@ -289,9 +397,22 @@ work_record_privileges_repair_sql() {
   done
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
     # Por nombre, sin firma. Si la funcion no existe no hace nada y la deriva persiste.
-    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN ('${KQ_WORK_RECORD_PURGE_FUNCTION}', '${KQ_SITE_TIMEZONE_FUNCTION}') AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
+    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN ('${KQ_WORK_RECORD_PURGE_FUNCTION}', '${KQ_SITE_TIMEZONE_FUNCTION}', '${KQ_MINIMISE_DEFINER_FUNCTIONS_ACCOUNTS}', '${KQ_MINIMISE_DEFINER_FUNCTIONS_PERSONNEL}', '${KQ_MINIMISE_CANDIDATES_ACCOUNTS}', '${KQ_MINIMISE_CANDIDATES_PERSONNEL}') AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
     # La traza y la linea base de la zona: solo SELECT, y nada sobre la secuencia de la
     # traza. Si no existen (o no son del migrador, que es manipulacion) no se tocan.
     printf '%s\n' "DO \$kq\$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['${KQ_SITE_TIMEZONE_TRACE}', '${KQ_SITE_TIMEZONE_BASELINE}'] LOOP IF to_regclass('public.' || t) IS NOT NULL THEN EXECUTE format('REVOKE ALL ON TABLE public.%I FROM %I', t, '${CFG_DB_USERNAME}'); EXECUTE format('GRANT SELECT ON TABLE public.%I TO %I', t, '${CFG_DB_USERNAME}'); END IF; END LOOP; IF to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq') IS NOT NULL THEN EXECUTE format('REVOKE ALL ON SEQUENCE public.%I FROM %I', '${KQ_SITE_TIMEZONE_TRACE}_id_seq', '${CFG_DB_USERNAME}'); END IF; END \$kq\$;"
+    # La minimizacion en sitio: las funciones de trigger sin EXECUTE para nadie, y sin
+    # DELETE sobre las dos tablas que se minimizan en vez de borrarse. Solo con su
+    # migracion aplicada.
+    local guards="" guard
+    for guard in ${KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS} ${KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL}; do
+      guards="${guards:+${guards}, }'${guard}'"
+    done
+    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN (${guards}) AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
+    local no_delete="" tbl
+    for tbl in ${KQ_MINIMISE_NO_DELETE_TABLES}; do
+      no_delete="${no_delete:+${no_delete}, }'${tbl}'"
+    done
+    printf '%s\n' "DO \$kq\$ DECLARE t text; BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_PERSONNEL}) THEN FOREACH t IN ARRAY ARRAY[${no_delete}] LOOP EXECUTE format('REVOKE DELETE ON TABLE public.%I FROM %I', t, '${CFG_DB_USERNAME}'); END LOOP; END IF; END \$kq\$;"
   fi
 }

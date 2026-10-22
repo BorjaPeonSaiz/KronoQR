@@ -12,7 +12,14 @@ import {
   supportGrant,
   supportGrantCollection,
 } from './support/fixtures'
-import { createTestPinia, jsonResponse, mountView, settle, stubRoutes } from './support/harness'
+import {
+  createTestPinia,
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubRoutes,
+} from './support/harness'
 
 function bundleResponse(filename: string): Response {
   return new Response(JSON.stringify({ manifest: { schema_version: 1 } }), {
@@ -198,6 +205,84 @@ describe('pantalla de soporte', () => {
     // de la coleccion no tiene ese campo; solo `IssuedSupportGrant`, la
     // respuesta de conceder, lo lleva).
     expect(wrapper.text()).toContain(es.support.grant.status.active)
+  })
+
+  it('avisa junto al motivo de no incluir datos personales', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () => jsonResponse(supportGrantCollection([])),
+    })
+
+    const wrapper = await mountSupportView()
+
+    expect(wrapper.text()).toContain(es.support.grant.fields.reasonPersonalHint)
+  })
+
+  it('pinta junto al campo el 422 de motivo con datos personales', async () => {
+    const message = 'El motivo parece contener un correo electronico.'
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': (_url, init) =>
+        (init?.method ?? 'GET') === 'POST'
+          ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+              errors: { reason: [message] },
+            })
+          : jsonResponse(supportGrantCollection([])),
+    })
+
+    const wrapper = await mountSupportView()
+
+    await wrapper.find('[data-test="reason"]').setValue('Incidencia de ana@example.com')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const input = wrapper.find('[data-test="reason"]')
+    const describedBy = (input.attributes('aria-describedby') ?? '').split(' ')
+
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(describedBy.some((id) => wrapper.find(`[id="${id}"]`).text().includes(message))).toBe(
+      true,
+    )
+  })
+
+  it('una concesion con el motivo retirado dice cuando, en vez de dejar la celda vacia', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () =>
+        jsonResponse(
+          supportGrantCollection([
+            supportGrant({
+              status: 'expired',
+              reason: null,
+              reason_purged_at: '2026-12-20T03:00:00.000000Z',
+            }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountSupportView()
+    const cell = wrapper.find('[data-test="reason-purged"]')
+
+    expect(cell.exists()).toBe(true)
+    expect(cell.text()).toContain('Motivo retirado el')
+    expect(cell.text()).toContain('20/12/26')
+  })
+
+  it('un autor minimizado (granted_by.name vacio) se rotula en vez de dejar el hueco', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () =>
+        jsonResponse(
+          supportGrantCollection([
+            supportGrant({ granted_by: { uuid: SUPPORT_GRANT_UUID, name: '' } }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountSupportView()
+
+    expect(wrapper.text()).toContain(es.people.minimised)
   })
 
   it('no deja conceder con el motivo vacio', async () => {

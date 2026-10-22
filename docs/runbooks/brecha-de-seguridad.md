@@ -268,7 +268,7 @@ docker compose --env-file .env exec -T postgres \
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
                                  'incident_board','period_report','live_presence',
                                  'compliance_summary','absence_register','weekly_summary',
-                                 'payroll_export')
+                                 'payroll_export','live_presence_stream','management_accounts')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -296,6 +296,8 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `employee_workdays` | Registro horario de una persona | **Sí**: `employee_uuid` |
 | `period_report` | Informe de periodo, en pantalla o descargado | No (recuento, `format`, alcance) |
 | `live_presence` | Presencia en vivo del panel | No. **Agrupado por ventana de 15 min** |
+| `live_presence_stream` | Suscripción a la presencia en vivo por Reverb (desde la 2.3.0): lo que se entrega después llega por el canal y no pasa por aquí | No (canal, `department_id` si es de un departamento y alcance). **Agrupado por cuenta y canal en ventana de 15 min** |
+| `management_accounts` | Listado de las cuentas de gestión: nombre, correo y rol de quien entra al panel (desde la 2.3.0) | No (recuento, filtros y si hubo búsqueda; nunca el término) |
 | `compliance_summary` | Vista de cumplimiento: quién incumplió y en qué | No (recuento, rango, filtros y alcance) |
 | `absence_register` | Listado de ausencias: quién falta y **por qué categoría** | Solo si se filtró por una persona: `employee_uuid` |
 | `incident` | Una incidencia concreta al resolverla | Según el asiento |

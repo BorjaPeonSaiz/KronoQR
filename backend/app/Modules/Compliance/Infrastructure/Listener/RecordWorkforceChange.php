@@ -42,6 +42,13 @@ use DateTimeImmutable;
  * campos», que es lo que hace falta para reconstruir el hecho sin copiar datos
  * personales a otra tabla.
  *
+ * **Dos excepciones, con sus dos valores** (R4-SC-05, R7-RV-02): el traslado de
+ * departamento lleva `previous_department_id` y `department_id`, y el
+ * renombrado de un departamento, `previous_name` y `name`. Las dos son datos de
+ * la organizacion, no de la persona, y sin ellos el asiento no dice de cual a
+ * cual. Los asientos anteriores a la 2.3.0 no se tocan (solo-append): siguen
+ * llevando solo la lista.
+ *
  * ## Punto de extension
  *
  * Un campo editable nuevo de la ficha (el teletrabajo, por ejemplo) entra en
@@ -88,10 +95,19 @@ final readonly class RecordWorkforceChange
             return;
         }
 
-        $this->record(AuditAction::EmployeeUpdated, AuditSubject::of('employee'), [
+        $payload = [
             'employee_uuid' => $event->employeeUuid,
             'changed_fields' => $event->changedFields,
-        ], $event->occurredAt());
+        ];
+
+        // De cual a cual (R4-SC-05): solo si cambio, para que la ausencia de las
+        // dos claves diga «no se movio» sin tener que mirar la lista.
+        if ($event->changedDepartment()) {
+            $payload['previous_department_id'] = $event->previousDepartmentId;
+            $payload['department_id'] = $event->departmentId;
+        }
+
+        $this->record(AuditAction::EmployeeUpdated, AuditSubject::of('employee'), $payload, $event->occurredAt());
     }
 
     public function offboarded(EmployeeOffboarded $event): void
@@ -116,6 +132,10 @@ final readonly class RecordWorkforceChange
     {
         $this->record(AuditAction::DepartmentRenamed, AuditSubject::of('department', $event->departmentId), [
             'changed_fields' => $event->changedFields,
+            // De cual a cual (R7-RV-02). El nombre de un departamento es de la
+            // organizacion, no de una persona: no le alcanza la regla dura 21.
+            'previous_name' => $event->previousName,
+            'name' => $event->name,
         ], $event->occurredAt());
     }
 

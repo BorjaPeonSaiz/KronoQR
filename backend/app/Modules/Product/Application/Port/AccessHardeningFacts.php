@@ -8,7 +8,7 @@ use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
- * Dos recuentos que `product:doctor` necesita para decir cuanto falta de la
+ * Los recuentos que `product:doctor` necesita para decir cuanto falta de la
  * transicion de ADR-050 (RF-ID-09, RS-06).
  *
  * ## Solo numeros, y por diseño del puerto
@@ -40,4 +40,11 @@ interface AccessHardeningFacts
      * @param  list<UserRole>  $roles
      */
     public function activeAccountsWithoutSecondFactor(array $roles): int;
+
+    /**
+     * Tokens de acceso sin `expires_at` (tarea 11.3 D). Sanctum no los da por
+     * caducados, asi que `sanctum:prune-expired` no los borra nunca. Hoy ningun
+     * emisor los crea: son de versiones antiguas.
+     */
+    public function accessTokensWithoutExpiry(): int;
 }

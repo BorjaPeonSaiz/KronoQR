@@ -48,9 +48,12 @@ final readonly class DoctorFinding
      * @param  array<string, mixed>  $details
      * @param  array<string, string|int|float|bool|null>  $params
      */
-    public static function ok(string $id, array $details = [], array $params = []): self
+    public static function ok(string $id, array $details = [], array $params = [], ?string $variant = null): self
     {
-        return new self($id, DoctorStatus::Ok, $params, $details);
+        // La variante tambien en verde (R4-PL-03): «el ultimo cierre cuadra» y
+        // «todavia no hay ningun cierre que comprobar» son dos `ok` distintos, y
+        // una sola frase para los dos acababa afirmando lo que no se comprobo.
+        return new self($id, DoctorStatus::Ok, $params, $details, $variant);
     }
 
     /**

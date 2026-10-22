@@ -126,6 +126,7 @@ export const COMPLIANCE_PROFILE: ComplianceProfile = {
     holiday_calendar: [],
     retention_years: 4,
     retention_years_floor: 4,
+    personnel_record_retention_years: 4,
     is_default: true,
     source: 'installation_default',
     updated_at: null,
@@ -458,6 +459,7 @@ export const EMPLOYEE: Employee = {
   locale: 'es',
   teleworking: false,
   pin_status: 'issued',
+  anonymized_at: null,
 }
 
 export const EMPLOYEES: EmployeeCollection = {
@@ -1341,6 +1343,7 @@ export const SUPPORT_GRANT_ACTIVE: SupportGrant = {
   expires_at: '2026-09-09T09:00:00.000000Z',
   revoked_at: null,
   accessed_at: null,
+  reason_purged_at: null,
 }
 
 /** La misma concesion, ya revocada: no desaparece de la lista (regla dura 5). */
@@ -1432,6 +1435,7 @@ export const ACCOUNT_OWN: ManagementAccount = {
   password_status: 'own',
   last_login_at: '2026-10-06T07:42:10Z',
   created_at: '2026-09-02T09:05:00Z',
+  anonymized_at: null,
 }
 
 export const ACCOUNT_COOK: ManagementAccount = {
@@ -1446,6 +1450,7 @@ export const ACCOUNT_COOK: ManagementAccount = {
   password_status: 'own',
   last_login_at: '2026-10-06T07:42:10Z',
   created_at: '2026-09-02T09:05:00Z',
+  anonymized_at: null,
 }
 
 export const ACCOUNT_DEACTIVATED: ManagementAccount = {
@@ -1460,6 +1465,7 @@ export const ACCOUNT_DEACTIVATED: ManagementAccount = {
   password_status: 'own',
   last_login_at: null,
   created_at: '2026-08-01T09:00:00Z',
+  anonymized_at: null,
 }
 
 export interface RecordedRequest {
@@ -3403,6 +3409,7 @@ export async function stubManagementApi(
             password_status: 'temporary',
             last_login_at: null,
             created_at: '2026-10-07T08:00:00Z',
+            anonymized_at: null,
           }
 
           accountsState.push(account)
@@ -4138,6 +4145,7 @@ export async function stubManagementApi(
             locale: payload.locale ?? 'es',
             teleworking: payload.teleworking ?? false,
             pin_status: 'issued',
+            anonymized_at: null,
           }
 
           employeesState.push(created)
@@ -4957,7 +4965,7 @@ export async function stubManagementApi(
             },
             body: JSON.stringify({
               manifest: {
-                schema_version: 1,
+                schema_version: 2,
                 product_version: '2.2.0',
                 generated_at: '2026-09-08T10:15:00.000000Z',
                 anonymized: !(payload?.include_personal_data ?? false),
@@ -4992,6 +5000,7 @@ export async function stubManagementApi(
             expires_at: '2026-09-09T09:30:00.000000Z',
             revoked_at: null,
             accessed_at: null,
+            reason_purged_at: null,
           }
 
           supportGrants.unshift(created)

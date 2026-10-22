@@ -225,6 +225,7 @@ return [
                 'pin_delivered_by_user_uuid' => 'Who handed it over.',
                 'created_at' => 'When the record was created.',
                 'updated_at' => 'Last change to the record.',
+                'anonymized_at' => 'When the record was minimised for retention (ADR-060): since then it has no name, email, ID or PIN, and its code is its uuid. Empty while it is kept whole.',
             ],
         ],
 
@@ -447,6 +448,8 @@ return [
                 'last_login_at' => 'Last sign-in.',
                 'created_at' => 'When it was created.',
                 'updated_at' => 'Last change.',
+                'deactivated_at' => 'When the account was deactivated. Empty while it is active.',
+                'anonymized_at' => 'When the account was minimised for retention (ADR-060): since then it has no name or email and is kept only as the author of what it did. Empty while it is kept whole.',
             ],
         ],
 
@@ -455,13 +458,14 @@ return [
             'columns' => [
                 'support_grant_uuid' => 'Grant identifier.',
                 'granted_by_user_uuid' => 'Who authorised it.',
-                'reason' => 'Which incident it was granted for.',
+                'reason' => 'Which incident it was granted for. Empty once cleared after its retention period (see reason_purged_at); the original reason is still in audit_log, entry support_grant.granted.',
                 'scope' => 'How far it reached: `diagnostics` (generate the diagnostics bundle only), `read_only` (read) or `configuration` (read and change settings).',
                 'granted_at' => 'When it was granted.',
                 'expires_at' => 'When it stopped being valid, with nobody doing anything.',
                 'revoked_at' => 'When it was revoked early, if it was.',
                 'revoked_by_user_uuid' => 'Who revoked it. Empty if it was revoked from the server console.',
                 'accessed_at' => 'Last time it was used. Empty if it was granted and never needed.',
+                'reason_purged_at' => 'When the reason was cleared, PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS after the grant closed. Empty while it is kept.',
             ],
         ],
 
@@ -551,6 +555,7 @@ return [
                 'name' => 'Profile name.',
                 'jurisdiction' => 'Jurisdiction it corresponds to.',
                 'retention_years' => 'Years the time record is kept.',
+                'personnel_record_retention_years' => 'Years the record of a person who has left is kept, from their termination date, before it is minimised (ADR-060).',
                 'min_rest_hours' => 'Minimum rest between working days, in hours.',
                 'max_daily_hours' => 'Maximum daily working time, in hours.',
                 'max_weekly_hours' => 'Maximum weekly working time, in hours.',

@@ -120,10 +120,46 @@ it('deja employee.updated con los campos tocados y sin sus valores', function ()
         ->and($asientos[0]['actor_id'])->toBe($contexto['user'])
         ->and($asientos[0]['payload'])->toEqual([
             'changed_fields' => ['first_name', 'department_id'],
+            // De cual a cual (R4-SC-05): ids de la organizacion, no de la persona.
+            'department_id' => $otro,
             'employee_uuid' => $uuid,
+            'previous_department_id' => $contexto['department'],
         ])
-        ->and(str_contains($asientos[0]['raw'], 'Nombre Nuevo'))->toBeFalse();
+        ->and(str_contains($asientos[0]['raw'], 'Nombre Nuevo'))->toBeFalse()
+        // El nombre del departamento no hace falta: el id basta y no cambia.
+        ->and(str_contains($asientos[0]['raw'], 'Cocina'))->toBeFalse();
+})->group('RF-GP-01', 'RF-ID-03', 'RL-04', 'RS-05');
+
+it('deja employee.updated sin departamentos cuando la persona no cambia de departamento', function (): void {
+    $contexto = contextoDeAuditoriaDePlantilla();
+    $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
+
+    // Repetir el mismo departamento no es un traslado.
+    Api::as($contexto['token'])->patch('/api/v1/employees/'.$uuid, [
+        'first_name' => 'Nombre Nuevo',
+        'department_id' => $contexto['department'],
+    ])->assertValidResponse(200);
+
+    expect(asientosDePlantilla('employee.updated')[0]['payload'] ?? null)->toEqual([
+        'changed_fields' => ['first_name'],
+        'employee_uuid' => $uuid,
+    ]);
 })->group('RF-GP-01', 'RF-ID-03', 'RL-04');
+
+it('deja employee.updated con el departamento nuevo a null cuando se quita la adscripcion', function (): void {
+    $contexto = contextoDeAuditoriaDePlantilla();
+    $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
+
+    Api::as($contexto['token'])->patch('/api/v1/employees/'.$uuid, ['department_id' => null])
+        ->assertValidResponse(200);
+
+    expect(asientosDePlantilla('employee.updated')[0]['payload'] ?? null)->toEqual([
+        'changed_fields' => ['department_id'],
+        'department_id' => null,
+        'employee_uuid' => $uuid,
+        'previous_department_id' => $contexto['department'],
+    ]);
+})->group('RF-GP-01', 'RF-ID-03', 'RL-04', 'RS-05');
 
 it('no deja asiento de un PATCH que no cambia nada', function (): void {
     $contexto = contextoDeAuditoriaDePlantilla();
@@ -157,7 +193,7 @@ it('deja employee.offboarded con la fecha de cese y sin el motivo libre', functi
         ->and(str_contains($asientos[0]['raw'], 'Lucia'))->toBeFalse();
 })->group('RF-GP-03', 'RN-14', 'RL-04');
 
-it('deja department.created y department.renamed sobre el departamento, sin el nombre', function (): void {
+it('deja department.created sin el nombre y department.renamed con el anterior y el nuevo', function (): void {
     $contexto = contextoDeAuditoriaDePlantilla();
 
     $id = Api::as($contexto['token'])->post('/api/v1/departments', ['name' => 'Lavanderia'])
@@ -181,9 +217,13 @@ it('deja department.created y department.renamed sobre el departamento, sin el n
         ->and($creado[0]['payload'])->toEqual(['site_id' => $contexto['site']])
         ->and($renombrado)->toHaveCount(1)
         ->and($renombrado[0]['subject_id'])->toBe($id)
-        ->and($renombrado[0]['payload'])->toEqual(['changed_fields' => ['name']])
-        ->and(str_contains($renombrado[0]['raw'], 'costura'))->toBeFalse();
-})->group('RF-GP-02', 'RF-ID-03', 'RL-04');
+        // De cual a cual (R7-RV-02): el nombre es de la organizacion.
+        ->and($renombrado[0]['payload'])->toEqual([
+            'changed_fields' => ['name'],
+            'name' => 'Lavanderia y costura',
+            'previous_name' => 'Lavanderia',
+        ]);
+})->group('RF-GP-02', 'RF-ID-03', 'RL-04', 'RS-05');
 
 it('un departamento duplicado no deja asiento', function (): void {
     $contexto = contextoDeAuditoriaDePlantilla();

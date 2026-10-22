@@ -66,10 +66,17 @@ final readonly class RetentionPolicy
         public int $technicalLogDays,
         /** RF-PD-15: dias de conservacion del historico de errores. */
         public int $errorHistoryDays,
+        /**
+         * Anos que se conserva la ficha de una persona dada de baja antes de
+         * minimizarla (ADR-060, tarea 11.3 A). Del perfil de cumplimiento
+         * (`personnel_record_retention_years`); sin valor de serie aqui.
+         */
+        public int $personnelRecordYears,
     ) {
         self::positive($legalRecordYears, 'los anos del registro de jornada (RL-02)');
         self::positive($technicalLogDays, 'los dias del log tecnico (RL-11)');
         self::positive($errorHistoryDays, 'los dias del historico de errores (RF-PD-15)');
+        self::positive($personnelRecordYears, 'los anos de la ficha de personal (RL-11)');
     }
 
     /**
@@ -86,8 +93,9 @@ final readonly class RetentionPolicy
         int $technicalLogDays,
         int $errorHistoryDays,
         LegalRetentionFloor $legalRecordFloor,
+        int $personnelRecordYears,
     ): self {
-        $policy = new self($legalRecordYears, $technicalLogDays, $errorHistoryDays);
+        $policy = new self($legalRecordYears, $technicalLogDays, $errorHistoryDays, $personnelRecordYears);
 
         if (! $legalRecordFloor->admits($legalRecordYears)) {
             throw InvalidRetentionPolicy::belowLegalFloor($legalRecordYears, $legalRecordFloor);
@@ -104,6 +112,28 @@ final readonly class RetentionPolicy
     public function workRecordCutoff(DateTimeImmutable $now): DateTimeImmutable
     {
         return $this->utcMidnight($now)->sub(new DateInterval('P'.$this->legalRecordYears.'Y'));
+    }
+
+    /**
+     * Ultima fecha de cese cuya ficha ya se puede minimizar, a medianoche UTC
+     * (ADR-060, tarea 11.3 A). Misma aritmetica que {@see self::workRecordCutoff()}
+     * —el 29 de febrero menos un año no bisiesto da el 1 de marzo, como en
+     * `work_record_purge_max_cutoff()`—, con los años de la ficha. La ficha de
+     * quien ceso ese mismo dia **si** se minimiza: `terminated_at <= corte`.
+     */
+    public function personnelRecordCutoff(DateTimeImmutable $now): DateTimeImmutable
+    {
+        return $this->utcMidnight($now)->sub(new DateInterval('P'.$this->personnelRecordYears.'Y'));
+    }
+
+    /**
+     * Ultima fecha de baja cuya cuenta de gestion ya se puede minimizar (ADR-060,
+     * tarea 11.3 B): los años del registro, porque la cuenta es autora de
+     * asientos que se conservan ese tiempo. `deactivated_at <= corte`.
+     */
+    public function managementAccountCutoff(DateTimeImmutable $now): DateTimeImmutable
+    {
+        return $this->workRecordCutoff($now);
     }
 
     public function purgesWorkDate(DateTimeImmutable $workDate, DateTimeImmutable $now): bool
@@ -140,7 +170,8 @@ final readonly class RetentionPolicy
             RetentionScope::ErrorHistory => $this->errorHistoryDays,
             // Los dos ambitos legales se miden en anos y tienen su propio corte:
             // pedirles dias seria preguntar por una unidad que no usan.
-            RetentionScope::WorkRecords, RetentionScope::AuditLog => throw InvalidRetentionPolicy::hasNoShortCycle($scope),
+            RetentionScope::WorkRecords, RetentionScope::AuditLog,
+            RetentionScope::PersonnelRecords, RetentionScope::ManagementAccounts => throw InvalidRetentionPolicy::hasNoShortCycle($scope),
         };
     }
 

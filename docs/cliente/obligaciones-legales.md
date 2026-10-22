@@ -272,8 +272,12 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Archivo de WAL (`BACKUP_PATH/wal`): **todos** los cambios de la base, incluidos fichajes, personas y `audit_log`. **Cifrado y autenticado** desde la 2.2.0 | **8 días** de serie | Tu instalación (`BACKUP_WAL_RETENTION_DAYS`). Tiene que ser mayor que el intervalo entre copias físicas (semanal de serie) |
 | Detalle técnico de cada actualización (`/var/log/kronoqr/update-*.detalle.log`): **puede llevar datos personales** | **30 días** de serie | Tu instalación (`KRONOQR_LOG_RETENTION_DAYS`, mínimo 7). Lo borra `update.sh` en cada ejecución, y `doctor.sh` si se ejecuta como root: si pasan meses sin ninguno de los dos, el borrado espera a la siguiente ejecución |
 | Resumen de cada actualización (`update-*.log`), sin datos personales | **90 días** | Tu instalación |
-| Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
-| Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no las purga. **Contienen dato de salud** |
+| Ficha de la persona que se fue (nombre, apellidos, correo, huella del DNI, PIN, foto y código) | **4 años desde la baja** de serie, y nunca antes de que se haya purgado su registro de jornada y la auditoría del año de su baja | El perfil de cumplimiento del centro (años de conservación de la ficha). **Pendiente de confirmar con tu asesoría laboral.** Al vencer, la purga **retira** esos datos y la ficha se queda solo con fechas de alta y baja, centro, departamento, idioma y si teletrabajaba |
+| Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Los de la ficha**: se borran con ella | El mismo campo del perfil. **Pendiente de confirmar con tu asesoría laboral** |
+| Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Los de la ficha**: se borran con ella | El mismo campo del perfil. **Pendiente de confirmar con tu asesoría laboral. Contienen dato de salud** |
+| Cuenta del personal de gestión dada de baja (nombre, correo, contraseña y segundo factor) | **4 años desde la baja** (los mismos que el registro), y nunca mientras alguna anotación del registro de auditoría, corrección o resolución la cite | El perfil de cumplimiento. Al vencer, la purga la deja sin nombre ni forma de entrar |
+| Motivo escrito al conceder un acceso de soporte | **90 días** desde que terminó la concesión, de serie (mínimo 30) | Tu instalación (`PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS`). Se vacía solo, cada día. La copia del registro de auditoría se queda los 4 años |
+| Sesiones caducadas del panel, del portal y de las tablets | **24 horas** después de caducar | El producto. Se borran solas, cada día |
 | Registro de envíos del resumen semanal (`weekly_summary_deliveries`) | **Sin purga automática** | Guarda recuentos y la cuenta destinataria; **ningún dato de la plantilla** |
 | Ficheros de informes generados en segundo plano (`report_exports`): horas nominales de la plantilla, listos para descargar | **7 días** de serie | Tu instalación (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuracion.md`](configuracion.md) §6.25). Se descargan con un enlace de un solo uso; al vencer, el fichero se borra y la anotación de que existió se queda sin identificadores de personas ni alcance |
 | ZIP de la exportación íntegra (§7 quater) | **7 días** de serie | Tu instalación (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). Contiene todos los datos personales de la instalación; mientras exista, su custodia es tuya. La anotación de que existió se conserva |
@@ -288,22 +292,42 @@ ninguna purga del producto llega hasta allí. Si activas el resumen, decide con
 tu asesoría qué hace el responsable con esos correos y cuándo los borra, y
 díselo.
 
-**Los datos de contrato todavía no tienen purga automática, y es deliberado.** El
-plazo orientativo —la duración de la relación laboral más cuatro años, por
-referencia al art. 21 de la LISOS— **no está validado**, y borrar por un plazo
-que luego resulte corto es peor que conservar de más un tiempo acotado.
-Confírmalo con tu asesoría laboral; hasta entonces esos datos permanecen y
-aparecen en cualquier respuesta a un derecho de acceso.
+**La ficha de quien se fue, sus contratos y sus ausencias tienen plazo desde
+la 2.3.0.** El perfil de cumplimiento lleva un campo con los años que se
+conserva la ficha desde la baja: 4 de serie, por referencia al art. 21 de la
+LISOS. Ese plazo **no está validado**: confírmalo con tu asesoría laboral y
+ajústalo en el perfil antes de la primera purga que lo aplique.
 
-**Las ausencias van por el mismo camino, y con un motivo más para no improvisar
-el plazo.** Tampoco tienen purga automática ni plazo validado, y además el tipo
-«Baja médica» es **dato de salud** —categoría especial del art. 9 del RGPD—, lo
-que obliga a justificar el plazo mejor, no peor. Hasta que tu asesoría lo fije,
-las ausencias se conservan y aparecen en cualquier respuesta a un derecho de
-acceso, **incluida la nota, que se entrega tal como esté escrita**. Por eso la
-guía de RRHH pide no escribir el diagnóstico ni el motivo médico en esa nota
+- **Cuándo se aplica.** Al vencer, y nunca antes de que se haya purgado el
+  registro de jornada de esa persona y la auditoría del año de su baja, la
+  purga de retención retira de la ficha nombre, apellidos, correo, huella del
+  DNI, PIN, foto y código, y **borra sus contratos y sus ausencias**.
+- **Qué queda.** La ficha conserva su identificador interno, las fechas de alta
+  y de baja, el centro, el departamento, el idioma y si teletrabajaba. La
+  credencial revocada se queda, pero su motivo de revocación se sustituye por un
+  texto fijo.
+- **Cómo se autoriza.** Como toda purga, no es automática: la autoriza una
+  persona y queda anotada, persona a persona, sin nombres.
+- **Lo que tiene que validar tu DPO.** Si en tu hotel esas fechas, ese
+  departamento, el idioma y el teletrabajo bastan para reconocer a alguien, la ficha minimizada sigue
+  siendo dato personal. Si concluye que sí, pídenos que las generalicemos.
+
+**Contratos y ausencias tienen un solo plazo, el de la ficha.** Si tu asesoría
+fija uno distinto —por ejemplo, más corto para la baja médica, que es **dato de
+salud** (art. 9 del RGPD) y obliga a justificar el plazo mejor, no peor—, el
+producto todavía no lo distingue: pídenoslo. Hasta que se purguen, las ausencias
+aparecen en cualquier respuesta a un derecho de acceso, **incluida la nota, que
+se entrega tal como esté escrita**. Por eso la guía de RRHH pide no escribir el
+diagnóstico ni el motivo médico en esa nota
 ([`guia-rrhh.md`](guia-rrhh.md) §5 bis.5): lo que no se escribe no hay que
 conservarlo, ni entregarlo, ni explicarlo.
+
+**El motivo de un acceso de soporte no debe nombrar a nadie.** Escribe el
+identificador de la persona, no su nombre; el sistema rechaza un motivo con
+forma de correo, documento o teléfono. A los 90 días de terminar la concesión,
+el motivo se vacía en la tabla, y la anotación del registro de auditoría lo
+conserva lo que dura la auditoría.
+
 
 **La purga nunca es automática** (RF-PR-03). El sistema **propone** cada semana y
 deja un informe; borrar exige una confirmación explícita del responsable y una

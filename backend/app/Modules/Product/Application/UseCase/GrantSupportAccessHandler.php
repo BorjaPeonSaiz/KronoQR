@@ -15,6 +15,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
+use LogicException;
 use RuntimeException;
 
 /**
@@ -107,7 +108,8 @@ final readonly class GrantSupportAccessHandler
                 scope: $stored->scope->value,
                 hours: $command->hours,
                 expiresAt: $stored->expiresAt,
-                reason: $stored->reason,
+                // Recien concedida: el motivo existe; solo se vacia al cerrar (11.3 C).
+                reason: $stored->reason ?? throw new LogicException('Una concesion recien creada no puede tener el motivo vaciado.'),
                 grantedByUserId: $command->grantedByUserId,
                 occurredAt: $now,
             ));

@@ -50,6 +50,7 @@ function spanishProfile(int $restHours = 12, int $dailyHours = 9, int $breakAfte
         maximumWeeklyMinutes: 40 * 60,
         weekStartsOn: 1,
         holidayCalendar: [],
+        personnelRecordRetentionYears: 4,
     );
 }
 

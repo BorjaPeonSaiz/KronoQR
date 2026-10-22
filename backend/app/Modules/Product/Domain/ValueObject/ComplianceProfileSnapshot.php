@@ -58,6 +58,8 @@ final readonly class ComplianceProfileSnapshot
         public int $retentionYears,
         public bool $isDefault,
         public ComplianceProfileSource $source,
+        /** Años de la ficha de personal tras el cese (ADR-060, tarea 11.3 A). Sin valor de serie: lo da el perfil (regla dura 14). */
+        public int $personnelRecordRetentionYears,
         /**
          * Cuando se cambio por ultima vez, o `null` si **nadie lo ha tocado
          * desde la instalacion**.
@@ -88,6 +90,7 @@ final readonly class ComplianceProfileSnapshot
             ComplianceProfileField::WeekStartsOn => $this->weekStartsOn,
             ComplianceProfileField::HolidayCalendar => $this->holidayCalendar,
             ComplianceProfileField::RetentionYears => $this->retentionYears,
+            ComplianceProfileField::PersonnelRecordRetentionYears => $this->personnelRecordRetentionYears,
         };
     }
 
@@ -162,6 +165,7 @@ final readonly class ComplianceProfileSnapshot
             // con el reloj inyectado, y este objeto solo describe el resultado de
             // aplicar unos cambios.
             updatedAt: $this->updatedAt,
+            personnelRecordRetentionYears: self::integer($values, ComplianceProfileField::PersonnelRecordRetentionYears),
         );
 
         if ($updated->maxWeeklyHours < $updated->maxDailyHours) {

@@ -194,7 +194,9 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
     private function term(RetentionReport $report, RetentionScope $scope): string
     {
         return match ($scope) {
-            RetentionScope::WorkRecords, RetentionScope::AuditLog => $report->policy->legalRecordYears.' anos',
+            RetentionScope::WorkRecords, RetentionScope::AuditLog,
+            RetentionScope::ManagementAccounts => $report->policy->legalRecordYears.' anos',
+            RetentionScope::PersonnelRecords => $report->policy->personnelRecordYears.' anos desde el cese',
             RetentionScope::TechnicalLog => $report->policy->technicalLogDays.' dias',
             RetentionScope::ErrorHistory => $report->policy->errorHistoryDays.' dias',
         };

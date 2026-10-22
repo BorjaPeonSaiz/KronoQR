@@ -96,3 +96,13 @@ Y el escenario en el que ese acceso se usa mal no es el del atacante externo, si
 **Ventana residual de un asiento sin paquete.** Si el proceso muere entre guardar el pendiente y renombrar el temporal, el asiento se escribirá al volver la base y el paquete se quedará con su nombre temporal (`kronoqr-diagnostics-staging-*.json`), entero, sin que nadie lo haya recibido. El asiento dice entonces que se generó un paquete que existe en el disco pero no se entregó: no afirma una salida que no ocurrió, porque generar no es enviar. La purga por antigüedad barre el temporal como a cualquier paquete.
 
 **Lo que no cambia.** Con la base arriba, el asiento sigue siendo condición previa de la entrega. Ningún dato personal, ningún secreto y ningún log en bruto (ni de PostgreSQL ni de nginx) entra en el paquete por este camino: las secciones que dependen de la base dicen `{"status": "unavailable", "reason": "<clase>"}` con la clase de la excepción, nunca su mensaje.
+
+## Nota del 21-10-2026 (2.3.0, bloque 11): el motivo de la concesión tiene plazo en la tabla, y la copia de auditoría se queda
+
+[ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) §6 da plazo al motivo de la concesión **en la tabla `support_grants`**. Es texto libre, y a veces nombra a una persona («revisar el fichaje de …»).
+
+- **Cuándo se vacía.** `reason` pasa a `NULL` y `reason_purged_at` toma el instante cuando han pasado `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` desde `COALESCE(revoked_at, expires_at)`. Vale 90 de serie, con un mínimo de 30.
+- **Cómo.** Lo hace una tarea diaria, sin asiento. Dos `CHECK` atan las dos columnas e impiden vaciar el motivo antes de que la concesión termine.
+- **Lo que no cambia: el asiento `support_grant.granted` conserva su copia del motivo**, que es la prueba de por qué se concedió. Esa copia vive lo que vive la auditoría (4 años, ADR-027) y no se toca. Lo que se acorta es la copia operativa, la que enseña el panel. Por eso no hace falta asiento al vaciarla: no se pierde ningún hecho.
+- **Para que el motivo no lleve datos personales desde el principio**, el formulario y `support:grant` avisan de que se escriba el uuid y no el nombre, y un motivo con forma de correo, DNI/NIE o teléfono se rechaza con `422`.
+- **Contrato.** `SupportGrant.reason` pasa a admitir nulos y aparece `reason_purged_at`.

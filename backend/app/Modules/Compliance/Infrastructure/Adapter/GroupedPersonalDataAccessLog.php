@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Adapter;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Throwable;
 
 /**
  * Agrupa en una ventana las divulgaciones repetidas del **mismo actor sobre el
@@ -100,7 +101,7 @@ final readonly class GroupedPersonalDataAccessLog implements PersonalDataAccessL
             return;
         }
 
-        $key = $this->keyFor($dataset);
+        $key = $this->keyFor($dataset, $context);
 
         // El contador vive mas que la ventana a proposito: tiene que sobrevivir
         // al hueco entre que caduca el asiento y llega la lectura que abre la
@@ -120,12 +121,20 @@ final readonly class GroupedPersonalDataAccessLog implements PersonalDataAccessL
 
         $this->cache->forget(self::COUNT_PREFIX.$key);
 
-        $this->disclosures->recordDisclosure($dataset, $recordCount, [
-            ...$context,
-            // Cuantas lecturas representa este asiento, esta incluida. `1` es el
-            // caso normal de quien abre la pantalla y la cierra.
-            'repeated_since_last_entry' => $pending,
-        ]);
+        try {
+            $this->disclosures->recordDisclosure($dataset, $recordCount, [
+                ...$context,
+                // Cuantas lecturas representa este asiento, esta incluida. `1` es el
+                // caso normal de quien abre la pantalla y la cierra.
+                'repeated_since_last_entry' => $pending,
+            ]);
+        } catch (Throwable $exception) {
+            // Sin asiento no hay plaza: si se quedara, las lecturas del resto de
+            // la ventana pasarian sin ninguno. La siguiente vuelve a intentarlo.
+            $this->cache->forget(self::SEAT_PREFIX.$key);
+
+            throw $exception;
+        }
     }
 
     /**
@@ -137,9 +146,19 @@ final readonly class GroupedPersonalDataAccessLog implements PersonalDataAccessL
      * Redis en produccion: no hace falta que un identificador de cuenta figure en
      * el espacio de claves de la cache, y el hash no tiene que resistir un ataque
      * —solo evitar colisiones entre dos pares—.
+     *
+     * **Con el canal, si lo hay** (tarea 11.4): la suscripcion a la presencia de
+     * toda la instalacion y la de un departamento son dos accesos distintos, y
+     * agruparlas en una ventana dejaria una de las dos sin asiento.
+     *
+     * @param  array<string, scalar>  $context
      */
-    private function keyFor(string $dataset): string
+    private function keyFor(string $dataset, array $context): string
     {
-        return sha1($this->context->actor()->canonical().'|'.$dataset);
+        $channel = isset($context['channel'])
+            ? '|'.(string) $context['channel'].'|'.(string) ($context['department_id'] ?? '')
+            : '';
+
+        return sha1($this->context->actor()->canonical().'|'.$dataset.$channel);
     }
 }

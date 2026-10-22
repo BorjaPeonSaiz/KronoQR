@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Domain\Model;
 
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
@@ -55,6 +56,12 @@ final readonly class Employee
          * de serie para que las fichas anteriores al campo nazcan sin el.
          */
         public bool $teleworking = false,
+        /**
+         * Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), o
+         * `null` si se conserva entera. Una ficha minimizada es siempre de baja
+         * y es la unica que puede no tener nombre ni apellidos.
+         */
+        public ?DateTimeImmutable $anonymizedAt = null,
     ) {
         $this->assertIdentityIsComplete();
         $this->assertAssignmentIsValid();
@@ -70,7 +77,19 @@ final readonly class Employee
             throw new InvalidArgumentException('Un empleado necesita su UUID publico.');
         }
 
-        if (trim($this->firstName) === '' || trim($this->lastName) === '') {
+        if ($this->anonymizedAt !== null) {
+            // ADR-060: una ficha minimizada no tiene nombre, y solo puede
+            // estarlo la de alguien dado de baja.
+            if ($this->status !== EmploymentStatus::TERMINATED) {
+                throw new InvalidArgumentException('Solo se minimiza la ficha de una persona dada de baja.');
+            }
+
+            // Lo mismo que el CHECK employees_chk_anonymized_is_minimised: sin
+            // nombre, sin apellidos y sin correo.
+            if ($this->firstName !== '' || $this->lastName !== '' || $this->email !== null) {
+                throw new InvalidArgumentException('Una ficha minimizada no conserva nombre, apellidos ni correo (ADR-060).');
+            }
+        } elseif (trim($this->firstName) === '' || trim($this->lastName) === '') {
             throw new InvalidArgumentException('Un empleado necesita nombre y apellidos.');
         }
 
@@ -116,6 +135,12 @@ final readonly class Employee
                 self::civilDate($this->terminatedAt),
                 self::civilDate($this->hiredAt),
             );
+        }
+
+        // Se minimiza al vencer el plazo contado desde el cese: nunca antes.
+        if ($this->anonymizedAt !== null && $this->terminatedAt !== null
+            && self::civilDate($this->anonymizedAt) < self::civilDate($this->terminatedAt)) {
+            throw new InvalidArgumentException('Una ficha no se minimiza antes de su fecha de cese (ADR-060).');
         }
     }
 
@@ -253,7 +278,22 @@ final readonly class Employee
             terminatedAt: $this->terminatedAt,
             locale: $locale ?? $this->locale,
             teleworking: $teleworking ?? $this->teleworking,
+            anonymizedAt: $this->anonymizedAt,
         );
+    }
+
+    /**
+     * Una ficha minimizada no admite contratos ni ausencias nuevos (ADR-060):
+     * la minimizacion borro los suyos y lo que se registrara seria un dato
+     * personal nuevo de alguien cuyo plazo ya vencio.
+     *
+     * @throws EmployeeRecordMinimised
+     */
+    public function assertAcceptsPersonnelRecords(): void
+    {
+        if ($this->anonymizedAt !== null) {
+            throw EmployeeRecordMinimised::withUuid($this->uuid, self::civilDate($this->anonymizedAt));
+        }
     }
 
     /**
@@ -306,6 +346,7 @@ final readonly class Employee
             terminatedAt: $terminatedAtGiven ? $terminatedAt : $this->terminatedAt,
             locale: $this->locale,
             teleworking: $this->teleworking,
+            anonymizedAt: $this->anonymizedAt,
         );
     }
 

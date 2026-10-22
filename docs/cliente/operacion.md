@@ -149,6 +149,11 @@ Sin terminal (un script, `-T`), añade `--responsible-confirm=<el mismo correo>`
    misma transacción.
 4. Se **sella** cada partición vencida en `audit_chain_anchors` y se **suelta
    entera**. La auditoría nunca se borra fila a fila.
+   Después, y por lotes con su asiento cada uno, se **minimizan** las fichas de
+   quien se fue y las cuentas de gestión dadas de baja cuyo plazo ha vencido, y
+   se borran los contratos y las ausencias de esas personas
+   ([`obligaciones-legales.md`](obligaciones-legales.md) §4). La propuesta las
+   cuenta sin nombres.
 5. Se limpian el log técnico y el histórico de errores de más de 90 días.
 6. Queda el informe de lo purgado en
    `BACKUP_PATH/reports/retention/retencion-purga-AAAAMMDD-HHMMSS.txt`, en el
@@ -1718,6 +1723,40 @@ atrás a medias.
   `docker compose logs --since 1h app`. Lo que la orden tiene que decirte sale
   igual que antes.
 
+**Al actualizar a la 2.3.0: la primera purga puede retirar datos de quien ya
+no está, y no tiene vuelta atrás.** El perfil de cumplimiento gana «años de la
+ficha» (`personnel_record_retention_years`, 4 de serie). La primera vez que
+ejecutes `compliance:apply-retention` tras actualizar, la purga puede
+**minimizar** las fichas de bajas antiguas y las cuentas de gestión dadas de
+baja cuyo plazo ya venció: les quita nombre, correo, PIN, foto y documento, y
+**borra sus contratos y sus ausencias**. Antes de ejecutarla:
+
+- **lee la simulación** de esa semana: dice cuántas fichas y cuántas cuentas
+  se minimizarían;
+- **si tu asesoría no ha confirmado el plazo**, súbelo en el perfil antes de
+  ejecutar ([`obligaciones-legales.md`](obligaciones-legales.md) §4; para
+  contestar a una persona que pide sus datos,
+  [`../runbooks/solicitud-derechos-rgpd.md`](../runbooks/solicitud-derechos-rgpd.md)).
+
+**Al actualizar a la 2.3.0: menos datos guardados de más, y más lecturas
+anotadas.** Nada de esto impide fichar:
+
+- **El motivo de una concesión de soporte** se vacía a los 90 días de cerrarse
+  (`PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS`) y ya no admite correos, DNI
+  ni teléfonos: para señalar a una persona, usa su uuid.
+- **Las sesiones caducadas se borran cada noche.** `./doctor.sh` avisa de las
+  cuentas de gestión que llevan tiempo sin entrar
+  (`IDENTITY_DORMANT_ACCOUNT_DAYS`, 90 de serie) y de las sesiones antiguas
+  sin caducidad. Una cuenta sin uso no se toca: decides tú si darla de baja.
+- **El responsable de departamento ya no ve** el correo, el idioma ni el
+  estado del PIN de su plantilla.
+- **Abrir la presencia en directo y la lista de cuentas de gestión deja
+  asiento** en la auditoría, como ya lo dejaba la vista de presencia.
+- **El paquete de diagnóstico pasa a la versión 2 del formato** (§12.2): un
+  paquete anterior se comprueba con la regla de su versión. **La huella del PDF
+  del registro propio del portal también cambia de versión**: no compares una
+  huella de antes de la 2.3.0 con una de después.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,
@@ -2009,12 +2048,15 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
 
 Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
-nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del resto
-del documento, y con ella se comprueba que no se alteró ni se cortó por el
+nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del documento
+entero, cabecera incluida, y con ella se comprueba que no se alteró ni se cortó por el
 camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
 enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
 comando al generarlo:
 `docker compose exec app php artisan product:diagnostics --verify=<ruta>`.
+Desde la 2.3.0 el paquete es de la versión 2 del formato (`schema_version: 2`),
+cuya huella cubre también la cabecera; un paquete de una versión anterior se
+comprueba con la regla de su propia versión, nunca mezclando las dos.
 
 **Qué lleva:** versión y entorno, configuración **solo de una lista de claves
 permitidas** (nunca `LICENSE_KEY`, claves de firma del QR, de cifrado de

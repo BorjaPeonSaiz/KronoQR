@@ -128,7 +128,12 @@ return [
                 'warning_unknown' => 'No se han podido consultar los permisos sobre el registro horario.',
             ],
             'audit_chain' => [
-                'ok' => 'El registro de auditoria esta encadenado correctamente.',
+                'ok' => 'El ultimo cierre anual del registro de auditoria (:year) cuadra: estan todas sus filas '
+                    .'y su ultimo eslabon. Esta comprobacion no recorre la cadena entera; eso lo hace '
+                    .'`php artisan compliance:verify-audit-chain`.',
+                'ok_no_anchor' => 'Todavia no hay ningun cierre anual del registro de auditoria que comprobar, '
+                    .'que es lo normal durante el primer año. Esta comprobacion no recorre la cadena; para '
+                    .'verificarla entera, `php artisan compliance:verify-audit-chain`.',
                 'failure' => 'El ultimo cierre anual del registro de auditoria no cuadra: faltan filas o el '
                     .'encadenado esta roto. Puede significar que alguien ha modificado el registro por fuera '
                     .'de la aplicacion, o que una restauracion quedo incompleta.',
@@ -313,6 +318,18 @@ return [
                 'warning' => ':count cuenta(s) activa(s) de roles obligados a llevar segundo factor todavia no lo '
                     .'han dado de alta. Lo haran en su proximo acceso al panel, pero hasta entonces quien tenga '
                     .'solo su contraseña podria darlo de alta en su lugar. Este informe da solo el numero.',
+            ],
+            'tokens_without_expiry' => [
+                'ok' => 'Todos los tokens de acceso tienen fecha de caducidad, asi que los caducados se borran cada noche.',
+                'warning' => ':count token(s) de acceso no tienen fecha de caducidad. Siguen funcionando, pero no '
+                    .'caducan nunca y la limpieza nocturna de tokens caducados no los borra. Vienen de versiones '
+                    .'anteriores a la 2.2.0. Este informe da solo el numero, nunca de quien son.',
+            ],
+            'dormant_accounts' => [
+                'ok' => 'Ninguna cuenta de gestion activa lleva mas de :days dias sin entrar al panel.',
+                'warning' => ':count cuenta(s) de gestion activa(s) (:roles) llevan mas de :days dias sin entrar al '
+                    .'panel. Siguen pudiendo entrar: una cuenta que nadie usa es una puerta abierta que nadie vigila. '
+                    .'Este informe da solo el numero, nunca cuales.',
             ],
         ],
 
@@ -644,10 +661,15 @@ return [
                 'warning_unknown' => 'No se ha podido leer la licencia porque la base de datos no responde. '
                     .'No significa que no haya licencia, y mientras tanto no se recorta ninguna funcion.',
             ],
-            'white_label_without_plan' => [
-                'ok' => 'La marca configurada y el plan contratado son coherentes.',
-                'warning' => 'Hay una marca propia configurada (nombre, color o logotipo) pero el plan '
-                    .'contratado no la incluye, asi que las aplicaciones estan enseñando la marca del producto.',
+            'branding_not_applied' => [
+                'ok' => 'El color y el logotipo configurados se aplican, o no hay ninguno configurado.',
+                'warning' => 'Hay un color o un logotipo propios configurados, pero el plan contratado no '
+                    .'incluye la marca propia: las pantallas y los documentos usan el color y el logotipo del '
+                    .'producto. El nombre de la instalacion se sigue mostrando, con cualquier plan.',
+                'warning_license_inactive' => 'Hay un color o un logotipo propios configurados, pero la '
+                    .'licencia no esta en vigor: las pantallas y los documentos usan el color y el logotipo del '
+                    .'producto hasta que se renueve. El nombre de la instalacion se sigue mostrando, y la '
+                    .'configuracion se conserva.',
             ],
         ],
     ],
@@ -891,6 +913,22 @@ return [
                     ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
                     ."Una cuenta que ya no usa nadie, desactivala:\n"
                     .'  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>',
+            ],
+            'tokens_without_expiry' => [
+                'warning' => "No hay nada roto. Los de un quiosco se recortan solos la proxima vez que renueve\n"
+                    ."su token. Los de una cuenta de gestion desaparecen al cambiarle la contraseña o al\n"
+                    ."desactivarla:\n"
+                    ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
+                    ."Si el numero no baja en unas semanas, genera el paquete de diagnostico y\n"
+                    ."enviaselo a soporte:\n"
+                    .'  docker compose exec app php artisan product:diagnostics',
+            ],
+            'dormant_accounts' => [
+                'warning' => "Revisa en el panel, en Cuentas, el ultimo acceso de cada cuenta. Si alguna ya no\n"
+                    ."la usa nadie, desactivala:\n"
+                    ."  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>\n"
+                    ."Si la persona sigue y solo estaba fuera, no hay que hacer nada. El plazo lo fija\n"
+                    .'IDENTITY_DORMANT_ACCOUNT_DAYS en el fichero .env.',
             ],
         ],
 
@@ -1268,10 +1306,14 @@ return [
                 'warning_unknown' => 'No reactives la licencia. Arregla primero la base de datos (mira la '
                     .'comprobacion `database` de este mismo informe) y vuelve a ejecutar esta comprobacion.',
             ],
-            'white_label_without_plan' => [
-                'warning' => 'Si quieres tu marca en las pantallas, habla con tu proveedor para incluirla en el '
-                    .'plan. Si no, borra el nombre, el color y el logotipo en el panel, en Configuracion, para '
-                    .'que este aviso deje de salir.',
+            'branding_not_applied' => [
+                'warning' => 'Si quieres tu color y tu logotipo en las pantallas, habla con tu proveedor para '
+                    .'incluir la marca propia en el plan. Si no, puedes quitar el color y el logotipo en el panel, '
+                    .'en Configuracion, para que este aviso deje de salir. El nombre no lo toques: se sigue '
+                    .'mostrando y encabeza la exportacion para la Inspeccion.',
+                'warning_license_inactive' => 'Renueva o activa la licencia (mira la comprobacion `license.state` '
+                    .'de este mismo informe). El color y el logotipo vuelven solos, sin configurar nada: no '
+                    .'borres ni el nombre ni la marca.',
             ],
         ],
     ],

@@ -277,3 +277,15 @@ Cubren lo que el *trigger* no impide: llamar a la función fuera de la orden de 
 Dos precisiones de la revisión del bloque: lo anterior a la línea base que fija la migración (`site_timezone_audit_baseline`, el último asiento al aplicarla) se escribió con las reglas de antes y cuenta como no verificable. Y una discrepancia de la traza o de un asiento sin firma se puede dar por revisada con `--acknowledge-site-change` (asiento `site.timezone_discrepancy_reviewed`), con el mismo patrón que §6: sale de las pendientes, pasa a una métrica de revisadas y dispara `DiscrepanciaDeZonaRevisada`.
 
 La traza y su asiento se emparejan **por identidad**: la función devuelve el `id` de la fila y la orden lo guarda en el asiento (`site_timezone_change_id`). Una revisión de una fila solo cuenta si es posterior al último asiento que había al escribirla. Las revisiones se publican por tipo: la de una fila dispara `CambioDeZonaRevisado`, crítica y de integridad, como `PurgaRevisadaQueExplicaBorrados`; la de un asiento sin firma, `DiscrepanciaDeZonaRevisada`.
+
+## Nota del 21-10-2026 (2.3.0, bloque 11): §2 y §3 se aplican también a `employees` y `users`
+
+**No cambia ninguna decisión de este ADR: aplica su patrón a dos tablas más.** [ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) minimiza en sitio la ficha de la persona y la cuenta de gestión cuando vence su plazo, y lo hace con las mismas dos piezas:
+
+- **Como §3:** dos funciones `SECURITY DEFINER` (`personnel_record_anonymize_batch` y `management_account_anonymize_batch`). Son propiedad del rol de migración, llevan `search_path = pg_catalog, pg_temp` y `lock_timeout`, solo `fichaje_app` tiene `EXECUTE` y **calculan ellas mismas su corte máximo** desde el perfil de cumplimiento, rechazando uno posterior con `42501`. Además comprueban que ya no queda registro horario de la persona ni la partición de auditoría del año de su baja, y que ningún asiento vivo cita a la cuenta.
+- **Como §2:** dos *triggers* `BEFORE UPDATE` (`employees_guard_anonymized` y `users_guard_anonymized`) que congelan la fila minimizada y solo dejan escribir `anonymized_at` al propietario.
+- **Como §1:** `fichaje_app` pierde `DELETE` sobre `employment_contracts` y `absences`, que solo borra la función de la ficha.
+
+Cada lote de la minimización va en su propia transacción **con sus propios asientos** (`retention.personnel_record_anonymized`, `retention.management_account_anonymized`). Es la condición que §3 («tal y como se ha implementado») pone a cualquier purga partida en varias transacciones.
+
+El residuo es el mismo que el de `work_record_purge_batch`. Con la credencial del runtime se puede llamar a la función fuera de `compliance:apply-retention`: minimiza solo lo elegible, pero sin asiento. La conciliación de §4 todavía no lo detecta. Que cuente como discrepancia una ficha minimizada sin su asiento, o un asiento sin su ficha, queda recomendado para otro bloque (ADR-060, Consecuencias).

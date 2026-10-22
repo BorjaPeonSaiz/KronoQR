@@ -72,8 +72,11 @@ interface ManagementAccountLifecycle
      * No borra nada (regla dura 5): la cuenta sigue existiendo, con su historial
      * y con sus asientos, y sigue contando para la guarda del alta publica del
      * primer administrador. Lo unico que pierde es la capacidad de entrar.
+     *
+     * Anota el instante de la baja en `users.deactivated_at`: es desde donde se
+     * cuenta el plazo tras el que la cuenta se minimiza (tarea 11.3 B, ADR-060).
      */
-    public function deactivate(string $uuid): void;
+    public function deactivate(string $uuid, DateTimeImmutable $at): void;
 
     /**
      * El hash de la contrasena vigente de la cuenta **activa**, o `null`.

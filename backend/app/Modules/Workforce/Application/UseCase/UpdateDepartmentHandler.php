@@ -30,8 +30,9 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Asientos (regla dura 6)
  *
- * - **Nombre**: `DepartmentRenamed` con la lista de campos tocados —sin
- *   valores— y `Compliance` escribe `department.renamed`.
+ * - **Nombre**: `DepartmentRenamed` con la lista de campos tocados y el
+ *   nombre anterior y el nuevo (R7-RV-02), y `Compliance` escribe
+ *   `department.renamed`.
  * - **Responsable**: `DepartmentManagerChanged` y `Compliance` escribe un
  *   `role_assignment.changed` por cada cuenta afectada, la que sale y la que
  *   entra. Es un cambio de permisos de dos personas.
@@ -142,6 +143,8 @@ final readonly class UpdateDepartmentHandler
         $this->events->publish(new DepartmentRenamed(
             departmentId: $id,
             changedFields: ['name'],
+            previousName: $current->name,
+            name: $renamed->name,
             occurredAt: $this->clock->now(),
         ));
 

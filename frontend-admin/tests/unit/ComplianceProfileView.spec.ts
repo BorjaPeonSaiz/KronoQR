@@ -36,6 +36,7 @@ const profile = {
     holiday_calendar: [],
     retention_years: 4,
     retention_years_floor: 4,
+    personnel_record_retention_years: 4,
     is_default: true,
     source: 'installation_default',
     updated_at: null,
@@ -525,6 +526,68 @@ describe('perfil de cumplimiento: suelo legal de la retencion (RF-PD-07, RL-02)'
       false,
     )
   })
+
+  it('muestra el plazo de la ficha de personal y avisa de que minimiza y borra', async () => {
+    stubProfileApi(() => jsonResponse(profile))
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    const input = wrapper.find('[data-test="personnel-record-retention-years"]')
+
+    expect(input.element).toHaveProperty('value', '4')
+    expect(input.attributes('min')).toBe('1')
+    expect(input.attributes('max')).toBe('30')
+    expect(wrapper.text()).toContain(es.compliance.hints.personnelRecordRetentionYears)
+    expect(wrapper.find('[data-test="personnel-retention-warning"]').exists()).toBe(false)
+
+    await input.setValue('6')
+
+    expect(wrapper.find('[data-test="personnel-retention-warning"]').text()).toBe(
+      es.compliance.personnelRetentionWarning,
+    )
+  })
+
+  it('manda solo personnel_record_retention_years cuando es lo unico que cambia', async () => {
+    const fetchSpy = stubProfileApi((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse({ data: { ...profile.data, personnel_record_retention_years: 7 } })
+        : jsonResponse(profile),
+    )
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    await wrapper.find('[data-test="personnel-record-retention-years"]').setValue('7')
+    await wrapper.find('form').trigger('submit')
+    await confirmSave(wrapper)
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PATCH')
+
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      personnel_record_retention_years: 7,
+    })
+  })
+
+  it.each(['0', '31'])(
+    'bloquea %s años antes de enviar: el contrato admite de 1 a 30',
+    async (years) => {
+      const fetchSpy = stubProfileApi(() => jsonResponse(profile))
+
+      const wrapper = await mountView(ComplianceProfileView)
+      await settle()
+
+      await wrapper.find('[data-test="personnel-record-retention-years"]').setValue(years)
+      await wrapper.find('form').trigger('submit')
+      await settle()
+
+      expect(wrapper.text()).toContain('Escribe un número de años entre 1 y 30.')
+      expect(
+        fetchSpy.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PATCH'),
+      ).toBe(false)
+    },
+  )
 
   it('pinta el 422 del servidor junto al campo, asociado con aria-describedby', async () => {
     const message = 'retention_years no puede ser inferior a 4 años (España).'

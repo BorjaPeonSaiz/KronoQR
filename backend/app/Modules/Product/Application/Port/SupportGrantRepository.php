@@ -136,4 +136,17 @@ interface SupportGrantRepository
 
     /** Anota un uso efectivo del token. Un `UPDATE` de una columna, sin candado. */
     public function markAccessed(int $grantId, DateTimeImmutable $accessedAt): void;
+
+    /**
+     * Vacia el `reason` de las concesiones cerradas —`revoked_at` o, si no se
+     * revocaron, `expires_at`— en o antes de `$closedBy`, y anota `$now` en
+     * `reason_purged_at` (tarea 11.3 C). Idempotente: las ya vaciadas no se
+     * vuelven a tocar.
+     *
+     * @return int Concesiones vaciadas en esta llamada.
+     */
+    public function purgeReasonsClosedBy(DateTimeImmutable $closedBy, DateTimeImmutable $now): int;
+
+    /** Cuantas vaciaria {@see self::purgeReasonsClosedBy()} con ese corte. */
+    public function countReasonsClosedBy(DateTimeImmutable $closedBy): int;
 }

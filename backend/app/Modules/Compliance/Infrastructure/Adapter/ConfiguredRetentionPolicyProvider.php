@@ -83,12 +83,14 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
 
         $this->siteId = $site->id;
         $this->floor = $this->retentionFloors->forSite($site->id);
+        $compliance = $this->compliance->forSite($site->id);
 
         return $this->policy = RetentionPolicy::of(
-            legalRecordYears: $this->compliance->forSite($site->id)->retentionYears,
+            legalRecordYears: $compliance->retentionYears,
             technicalLogDays: Config::integer('compliance.retention.technical_log_days'),
             errorHistoryDays: Config::integer('compliance.retention.error_history_days'),
             legalRecordFloor: $this->floor,
+            personnelRecordYears: $compliance->personnelRecordRetentionYears,
         );
     }
 
@@ -104,6 +106,7 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
             siteId: $this->siteId ?? 0,
             legalRecordFloorYears: $this->floor->years ?? $policy->legalRecordYears,
             jurisdiction: $this->floor->jurisdiction->code ?? '',
+            personnelRecordYears: $policy->personnelRecordYears,
         );
     }
 }

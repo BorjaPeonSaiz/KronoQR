@@ -44,7 +44,7 @@ function retentionLegalFloor(int $years = 1, string $code = 'ZZ'): LegalRetentio
 it('conserva la jornada de cuatro anos menos un dia y purga la de cuatro anos y un dia', function (): void {
     // El limite explicito que exige la tarea. Con cuatro anos de retencion y el
     // reloj en el 30 de agosto de 2030:
-    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor());
+    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor(), personnelRecordYears: 4);
     $now = retentionNow();
 
     expect($policy->workRecordCutoff($now)->format('Y-m-d'))->toBe('2026-08-30')
@@ -63,8 +63,8 @@ it('mueve el corte cuando el perfil de cumplimiento fija otro plazo, sin tocar e
     // La misma jornada se conserva o se purga segun el perfil que sirva el
     // centro, y aqui no hay ni un `4` escrito en el dominio.
     $now = retentionNow();
-    $spanish = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor());
-    $longer = RetentionPolicy::of(legalRecordYears: 6, technicalLogDays: 30, errorHistoryDays: 30, legalRecordFloor: retentionLegalFloor());
+    $spanish = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor(), personnelRecordYears: 4);
+    $longer = RetentionPolicy::of(legalRecordYears: 6, technicalLogDays: 30, errorHistoryDays: 30, legalRecordFloor: retentionLegalFloor(), personnelRecordYears: 4);
 
     $vencida = workDate('2026-08-29');
 
@@ -80,7 +80,7 @@ it('no suelta una particion de audit_log hasta que vence entera', function (): v
     // ADR-027: `DROP PARTITION` es todo o nada, asi que el redondeo va hacia
     // conservar de mas. En agosto de 2030 la particion de 2026 tiene asientos de
     // septiembre a diciembre que aun no han cumplido cuatro anos.
-    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor());
+    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 90, legalRecordFloor: retentionLegalFloor(), personnelRecordYears: 4);
 
     expect($policy->purgesAuditPartition(2026, retentionNow()))->toBeFalse()
         // El 1 de enero de 2031, el ultimo instante de 2026 ya esta fuera.
@@ -89,7 +89,7 @@ it('no suelta una particion de audit_log hasta que vence entera', function (): v
 })->group('RL-02', 'RS-07');
 
 it('cuenta el ciclo corto en dias sobre el instante, no sobre la fecha de jornada', function (): void {
-    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 45, legalRecordFloor: retentionLegalFloor());
+    $policy = RetentionPolicy::of(legalRecordYears: 4, technicalLogDays: 90, errorHistoryDays: 45, legalRecordFloor: retentionLegalFloor(), personnelRecordYears: 4);
     $now = retentionNow('2030-08-30 11:30:00');
 
     expect($policy->shortCycleCutoff(RetentionScope::TechnicalLog, $now)->format('Y-m-d H:i'))
@@ -103,18 +103,18 @@ it('se niega a nacer con un plazo que significaria purgarlo todo', function (): 
     // Un cero en el perfil de cumplimiento no es «sin limite»: es «bórralo todo».
     // Tiene que detenerse en el constructor y no cuando ya hay una fecha de corte
     // calculada con el.
-    expect(fn (): RetentionPolicy => RetentionPolicy::of(0, 90, 90, retentionLegalFloor()))
+    expect(fn (): RetentionPolicy => RetentionPolicy::of(0, 90, 90, retentionLegalFloor(), personnelRecordYears: 4))
         ->toThrow(InvalidRetentionPolicy::class)
-        ->and(fn (): RetentionPolicy => RetentionPolicy::of(4, 0, 90, retentionLegalFloor()))
+        ->and(fn (): RetentionPolicy => RetentionPolicy::of(4, 0, 90, retentionLegalFloor(), personnelRecordYears: 4))
         ->toThrow(InvalidRetentionPolicy::class)
-        ->and(fn (): RetentionPolicy => RetentionPolicy::of(4, 90, -1, retentionLegalFloor()))
+        ->and(fn (): RetentionPolicy => RetentionPolicy::of(4, 90, -1, retentionLegalFloor(), personnelRecordYears: 4))
         ->toThrow(InvalidRetentionPolicy::class);
 })->group('RL-11');
 
 it('no responde en dias por un ambito que se mide en anos', function (): void {
     // El `match` sin `default` de la politica: un ambito nuevo obliga a decidir su
     // plazo, y pedir dias a uno legal es un error de programacion, no un caso.
-    $policy = RetentionPolicy::of(4, 90, 90, retentionLegalFloor());
+    $policy = RetentionPolicy::of(4, 90, 90, retentionLegalFloor(), personnelRecordYears: 4);
 
     expect(fn (): int => $policy->daysFor(RetentionScope::WorkRecords))
         ->toThrow(InvalidRetentionPolicy::class);
@@ -126,8 +126,56 @@ it('se niega a nacer por debajo del suelo legal de la jurisdiccion', function ()
     // Tambien la simulacion: proponer una purga ilegal es igual de incorrecto.
     $espana = retentionLegalFloor(4, 'ES');
 
-    expect(fn (): RetentionPolicy => RetentionPolicy::of(3, 90, 90, $espana))
+    expect(fn (): RetentionPolicy => RetentionPolicy::of(3, 90, 90, $espana, 4))
         ->toThrow(InvalidRetentionPolicy::class, 'al menos 4')
-        ->and(RetentionPolicy::of(4, 90, 90, $espana)->legalRecordYears)->toBe(4)
-        ->and(RetentionPolicy::of(5, 90, 90, $espana)->legalRecordYears)->toBe(5);
+        ->and(RetentionPolicy::of(4, 90, 90, $espana, 4)->legalRecordYears)->toBe(4)
+        ->and(RetentionPolicy::of(5, 90, 90, $espana, 4)->legalRecordYears)->toBe(5);
 })->group('RL-02', 'RF-PD-07');
+
+it('corta la ficha de personal con sus propios años y la misma aritmetica que la jornada', function (string $today, int $years, string $cutoff): void {
+    // ADR-060, tarea 11.3 A: el 29 de febrero menos un año no bisiesto da el 1
+    // de marzo, como `work_record_purge_max_cutoff()` en la base de datos.
+    $policy = RetentionPolicy::of(4, 90, 90, retentionLegalFloor(), personnelRecordYears: $years);
+
+    expect($policy->personnelRecordCutoff(retentionNow($today.' 03:00:00'))->format('Y-m-d'))->toBe($cutoff)
+        ->and($policy->personnelRecordYears)->toBe($years);
+})->with([
+    'cuatro años' => ['2030-08-30', 4, '2026-08-30'],
+    'bisiesto a no bisiesto' => ['2028-02-29', 1, '2027-03-01'],
+    'bisiesto a bisiesto' => ['2028-02-29', 4, '2024-02-29'],
+    'seis años' => ['2030-01-01', 6, '2024-01-01'],
+])->group('RL-11', 'RF-PR-03');
+
+it('corta las cuentas de gestion con los años del registro', function (): void {
+    // ADR-060, tarea 11.3 B: la cuenta es autora de asientos que se conservan
+    // los años del registro, y no se minimiza antes.
+    $policy = RetentionPolicy::of(5, 90, 90, retentionLegalFloor(), personnelRecordYears: 2);
+    $now = retentionNow();
+
+    expect($policy->managementAccountCutoff($now)->format('Y-m-d'))->toBe('2025-08-30')
+        ->and($policy->managementAccountCutoff($now))->toEqual($policy->workRecordCutoff($now));
+})->group('RL-11');
+
+it('se niega a nacer sin años de ficha de personal', function (): void {
+    expect(fn (): RetentionPolicy => RetentionPolicy::of(4, 90, 90, retentionLegalFloor(), personnelRecordYears: 0))
+        ->toThrow(InvalidRetentionPolicy::class, 'ficha de personal');
+})->group('RL-11');
+
+it('tampoco responde en dias por la ficha de personal ni por las cuentas', function (RetentionScope $scope): void {
+    expect(fn (): int => RetentionPolicy::of(4, 90, 90, retentionLegalFloor(), personnelRecordYears: 4)->daysFor($scope))
+        ->toThrow(InvalidRetentionPolicy::class);
+})->with([
+    'fichas' => [RetentionScope::PersonnelRecords],
+    'cuentas' => [RetentionScope::ManagementAccounts],
+])->group('RL-11');
+
+it('describe los dos ambitos nuevos con su nombre y su unidad', function (): void {
+    expect(RetentionScope::PersonnelRecords->label())->toBe('Fichas de personal')
+        ->and(RetentionScope::PersonnelRecords->unit())->toBe('personas')
+        ->and(RetentionScope::ManagementAccounts->label())->toBe('Cuentas de gestion')
+        ->and(RetentionScope::ManagementAccounts->unit())->toBe('cuentas')
+        ->and(RetentionScope::TechnicalLog->unit())->toBe('ficheros')
+        ->and(RetentionScope::WorkRecords->unit())->toBe('filas')
+        ->and(array_map(static fn (RetentionScope $scope): string => $scope->value, RetentionScope::cases()))
+        ->toBe(['work_records', 'audit_log', 'technical_log', 'error_history', 'personnel_records', 'management_accounts']);
+})->group('RL-11');

@@ -22,7 +22,8 @@ use DateTimeImmutable;
  * ## La frase de confirmacion
  *
  * La calcula el informe y no la consola, porque depende de **lo que se ha
- * calculado**: el corte y los anos de particion candidatos. Si el corte cambia
+ * calculado**: los cortes —del registro, de la ficha y de la cuenta—, los anos
+ * de particion candidatos y los plazos del perfil. Si el corte cambia
  * —porque paso un dia, porque alguien edito el perfil de cumplimiento— la frase
  * cambia, y la del informe de ayer deja de valer. Es la propiedad que se
  * buscaba: se ejecuta lo que se aprobo, no lo que hoy toque.
@@ -44,6 +45,13 @@ final readonly class RetentionReport
         public array $shortCycleCutoffs,
         public array $tallies,
         public array $notes = [],
+        /**
+         * Ultima fecha de cese cuya ficha se minimiza (ADR-060, tarea 11.3 A).
+         * Nula en un informe anterior a la 2.3.0.
+         */
+        public ?DateTimeImmutable $personnelRecordCutoff = null,
+        /** Ultima fecha de baja cuya cuenta de gestion se minimiza (tarea 11.3 B). */
+        public ?DateTimeImmutable $managementAccountCutoff = null,
     ) {}
 
     /**
@@ -62,6 +70,11 @@ final readonly class RetentionReport
             $this->policy->legalRecordYears,
             $this->policy->technicalLogDays,
             $this->policy->errorHistoryDays,
+            // Lo que decide que fichas y cuentas se minimizan (ADR-060): con
+            // otros años de ficha, la frase aprobada ya no vale.
+            $this->policy->personnelRecordYears,
+            $this->personnelRecordCutoff?->format('Y-m-d') ?? '-',
+            $this->managementAccountCutoff?->format('Y-m-d') ?? '-',
         ]);
 
         return 'PURGAR-'.$this->workRecordCutoff->format('Y-m-d').'-'.substr(hash('sha256', $material), 0, 6);
@@ -132,6 +145,8 @@ final readonly class RetentionReport
             shortCycleCutoffs: $this->shortCycleCutoffs,
             tallies: $tallies,
             notes: $notes,
+            personnelRecordCutoff: $this->personnelRecordCutoff,
+            managementAccountCutoff: $this->managementAccountCutoff,
         );
     }
 }

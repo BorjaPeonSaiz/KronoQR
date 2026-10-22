@@ -99,11 +99,13 @@ it('el maximo del catalogo de campos y el del esquema son el mismo numero', func
     // `psql`— y por eso hay que atarlas: si divergieran, un valor aceptado por el
     // dominio saldria como `500` de PostgreSQL, que es un error del cliente
     // presentado como una averia.
+    // Los umbrales en un CHECK y, desde la 2.3.0, los años de la ficha en el
+    // suyo (ADR-060): se leen los dos.
     /** @var object{def: string}|null $definition */
     $definition = DB::selectOne(
-        "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        "SELECT string_agg(pg_get_constraintdef(oid), ' ') AS def FROM pg_constraint
          WHERE conrelid = 'compliance_profiles'::regclass
-           AND conname = 'compliance_profiles_chk_threshold_bounds'"
+           AND conname IN ('compliance_profiles_chk_threshold_bounds', 'compliance_profiles_chk_personnel_record_retention_years')"
     );
 
     expect($definition)->not->toBeNull();

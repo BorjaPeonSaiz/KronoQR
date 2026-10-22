@@ -259,7 +259,7 @@ Llevan los `uuid` de la cuenta y del actor; nunca nombre, correo ni nada derivad
 
 4. **Las cuentas dadas de baja conservan nombre, correo y los motivos libres** mientras sigan siendo actores de asientos
    y correcciones, porque los necesita la prueba legal. Seudonimizarlas cuando ningún registro vivo las cite es una
-   tarea de retención pendiente (M6), no de este bloque.
+   tarea de retención pendiente (M6), no de este bloque. *(Cerrado por ADR-060 en la 2.3.0: ver la nota del 21-10-2026 al final.)*
 
 5. **Las sesiones abiertas antes de actualizar no ven «Cuentas»** hasta que el `admin` vuelve a entrar. Se avisa en las
    notas de la versión.
@@ -326,3 +326,13 @@ Llevan los `uuid` de la cuenta y del actor; nunca nombre, correo ni nada derivad
 | 6 | Doble de `SerializedLedgerWrite` que registra el orden de los candados. `ConfirmTwoFactorHandler` y `two-factor/reset` concurrentes sin `deadlock_detected` |
 | 7 | Las tres rutas sin código, con un código erróneo y con un código ya usado en su franja responden `422`; tras el umbral, `429`; con contraseña en lugar de código desde una cuenta con 2FA, `422` |
 | Alerta | `promtool test rules`: dispara en cada `two_factor_reset` y en cada alta `admin`. La métrica no lleva etiqueta de `uuid` |
+
+## Nota del 21-10-2026 (2.3.0, bloque 11): la cuenta se conserva como autora mientras quede algún asiento suyo, y después se minimiza
+
+El residuo 4 («seudonimizarlas cuando ningún registro vivo las cite es una tarea de retención pendiente») lo cierra [ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) §2. **«Nada se borra» se precisa así:**
+
+- **Mientras la cuenta sea autora** de algún asiento de `audit_log`, como actor o como sujeto, o de alguna corrección o resolución de incidencia, conserva nombre, correo y todo lo demás.
+- **Cuando deja de serlo** y han pasado `retention_years` desde su baja, la purga de retención la **minimiza en sitio**, con firma y asiento (`retention.management_account_anonymized`). La fila y su `uuid` se quedan, porque las claves `RESTRICT` la siguen citando. El nombre se vacía, el correo pasa a una dirección no entregable, la contraseña a un valor que ningún hash acepta, y se retiran el segundo factor y los tokens.
+- **La baja escribe `users.deactivated_at`**, que es el inicio del plazo. Hasta ahora solo constaba en el asiento `user.deactivated`.
+
+**Las cuentas activas sin uso no se tocan.** `product:doctor` avisa cuando llevan más de `IDENTITY_DORMANT_ACCOUNT_DAYS` sin entrar, y es el `admin` quien decide darlas de baja. La guarda de §4 sigue intacta.

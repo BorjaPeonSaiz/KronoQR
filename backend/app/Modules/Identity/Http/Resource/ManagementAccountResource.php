@@ -45,6 +45,8 @@ final class ManagementAccountResource extends JsonResource
             // cosa del panel.
             'last_login_at' => $account->lastLoginAt === null ? null : $this->utc($account->lastLoginAt),
             'created_at' => $this->utc($account->createdAt),
+            // ADR-060: lo que dice al panel que la cuenta esta minimizada.
+            'anonymized_at' => $account->anonymizedAt === null ? null : $this->utc($account->anonymizedAt),
         ];
     }
 

@@ -227,6 +227,19 @@ return [
     'support_grant_max_hours' => (int) env('PRODUCT_SUPPORT_GRANT_MAX_HOURS', 72),
 
     /*
+     * Dias que la fila de una concesion conserva su `reason` desde que se
+     * cerro —`revoked_at` o, si no se revoco, `expires_at`— (bloque 11 de la
+     * 2.3.0, tarea 11.3 C; RGPD art. 5.1.e).
+     *
+     * El motivo es texto libre y puede nombrar a alguien. El asiento
+     * `support_grant.granted` lo conserva tal cual (ADR-020); la copia de la
+     * fila solo hace falta mientras alguien pueda preguntar por esa concesion
+     * en el panel. 90 de serie, y nunca menos de 30: lo aplica
+     * `PruneSupportGrantReasons`.
+     */
+    'support_grant_reason_retention_days' => (int) env('PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS', 90),
+
+    /*
      * Cada cuantos segundos se vuelve a auditar el USO de una misma concesion.
      *
      * `accessed_at` se actualiza en CADA peticion —es un `UPDATE` de una columna,

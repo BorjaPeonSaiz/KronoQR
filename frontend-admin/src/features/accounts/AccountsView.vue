@@ -24,6 +24,7 @@ import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datet
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/auth/session.store'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
@@ -51,6 +52,7 @@ interface Revealed {
 }
 
 const { t, locale } = useI18n()
+const { personName } = usePersonName()
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
@@ -442,12 +444,14 @@ const actionClass =
               :data-test="`account-${account.uuid}`"
             >
               <th scope="row" class="px-3 py-2 font-medium">
-                {{ account.name }}
+                {{ personName(account.name, '', account.anonymized_at) }}
                 <span v-if="isOwn(account)" class="block text-xs font-normal text-kq-text-muted">
                   {{ t('accounts.table.you') }}
                 </span>
               </th>
-              <td class="px-3 py-2">{{ account.email }}</td>
+              <td class="px-3 py-2">
+                {{ account.anonymized_at === null ? account.email : t('common.empty') }}
+              </td>
               <td class="px-3 py-2">
                 {{ account.roles.map((role) => t(`app.roles.${role}`)).join(', ') }}
                 <span
@@ -474,7 +478,18 @@ const actionClass =
                 }}
               </td>
               <td class="px-3 py-2">
-                <p v-if="account.status === 'deactivated'" class="text-kq-text-muted">
+                <p
+                  v-if="account.anonymized_at !== null"
+                  class="text-kq-text-muted"
+                  data-test="account-minimised"
+                >
+                  {{
+                    t('accounts.table.minimisedAt', {
+                      date: formatInstantWithZone(account.anonymized_at, timezone, locale),
+                    })
+                  }}
+                </p>
+                <p v-else-if="account.status === 'deactivated'" class="text-kq-text-muted">
                   {{ t('accounts.table.noActions') }}
                 </p>
                 <ul v-else class="flex flex-col items-start gap-1.5">

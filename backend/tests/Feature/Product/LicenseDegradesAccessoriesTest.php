@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Support\WeeklySummaryReason;
 use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -497,11 +498,43 @@ it('CON LA LICENCIA CADUCADA el resumen semanal se omite, sin error y sin correo
 
     $pass = app(SendWeeklySummaries::class)->handle();
 
-    expect($pass->reason)->toBe(WeeklySummaryReason::NotInPlan)
+    expect($pass->reason)->toBe(WeeklySummaryReason::LicenseInactive)
         ->and($pass->sent)->toBe(0);
 
     Notification::assertNothingSent();
 })->group('RF-PD-05', 'RF-PR-05');
+
+it('con la licencia caducada el comando manda renovar, no ampliar el plan (V4-PL-4)', function (string $locale, string $renovar, string $plan): void {
+    // ADR-023: el aviso dice que se recupera al renovar. «La licencia no
+    // incluye» mandaba a cambiar de plan a quien solo tenia que renovar.
+    conLicenciaCaducada();
+    conResumenSemanalEncendido();
+    app()->setLocale($locale);
+
+    expect(Artisan::call('reporting:weekly-summary'))->toBe(0);
+
+    $salida = Artisan::output();
+
+    expect($salida)->toContain($renovar)
+        ->and($salida)->not->toContain($plan);
+
+    Notification::assertNothingSent();
+})->with([
+    'es' => ['es', 'no está en vigor', 'no incluye'],
+    'en' => ['en', 'is not in force', 'does not include'],
+])->group('RF-PD-05', 'RF-PR-05');
+
+it('sin la funcionalidad en un plan vigente el comando dice que el plan no la incluye', function (string $locale, string $plan): void {
+    conFuncionalidades(['advanced_reports']);
+    conResumenSemanalEncendido();
+    app()->setLocale($locale);
+
+    expect(Artisan::call('reporting:weekly-summary'))->toBe(0)
+        ->and(Artisan::output())->toContain($plan);
+})->with([
+    'es' => ['es', 'no incluye el resumen semanal'],
+    'en' => ['en', 'does not include the weekly email summary'],
+])->group('RF-PD-05', 'RF-PR-05');
 
 it('el resumen semanal no se enciende con los informes avanzados contratados', function (): void {
     // Dos funcionalidades distintas del catalogo de ADR-023: un plan puede

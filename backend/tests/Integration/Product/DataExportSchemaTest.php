@@ -5,10 +5,12 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\DataExportFailure;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Domain\ValueObject\DataExportStatus;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\SchemaOwner;
 
 /*
  * El esquema de `data_exports` dice lo mismo que el codigo, y sus invariantes
@@ -220,7 +222,24 @@ it('conserva la exportacion cuando se borra la cuenta que la pidio', function ()
     // `nullOnDelete` y no `restrict`: lo que no puede pasar es que la lista deje
     // de poder leerse porque se borro una cuenta. Quien la pidio sigue en
     // `audit_log`.
-    $usuario = DB::table('users')->insertGetId([
+    //
+    // Con el propietario del esquema y en su propia transaccion, que se deshace
+    // al final: desde la 2.3.0 la aplicacion no tiene `DELETE` sobre `users`
+    // (ADR-060), y lo que se prueba aqui es la clave ajena, no el privilegio.
+    $owner = SchemaOwner::connection();
+    $owner->beginTransaction();
+
+    try {
+        $owner->statement("SET LOCAL lock_timeout = '5s'");
+        dataExportSchemaSinCuenta($owner);
+    } finally {
+        $owner->rollBack();
+    }
+})->group('RF-PD-14', 'RN-13');
+
+function dataExportSchemaSinCuenta(ConnectionInterface $owner): void
+{
+    $usuario = $owner->table('users')->insertGetId([
         'uuid' => '0199f6a2-1000-7000-8000-0000000000f0',
         'name' => 'Cuenta de prueba',
         'email' => 'esquema-export@kronoqr.test',
@@ -231,7 +250,7 @@ it('conserva la exportacion cuando se borra la cuenta que la pidio', function ()
         'updated_at' => '2026-09-08 10:00:00+00',
     ]);
 
-    DB::table('data_exports')->insert([
+    $owner->table('data_exports')->insert([
         'uuid' => '0199f6a2-1000-7000-8000-000000000040',
         'requested_by_user_id' => $usuario,
         'requested_via' => 'panel',
@@ -243,9 +262,9 @@ it('conserva la exportacion cuando se borra la cuenta que la pidio', function ()
         'updated_at' => '2026-09-08 10:00:00+00',
     ]);
 
-    DB::table('users')->where('id', $usuario)->delete();
+    $owner->table('users')->where('id', $usuario)->delete();
 
-    $fila = DB::table('data_exports')->where('uuid', '0199f6a2-1000-7000-8000-000000000040')->first();
+    $fila = $owner->table('data_exports')->where('uuid', '0199f6a2-1000-7000-8000-000000000040')->first();
 
     expect($fila)->not->toBeNull()
         ->and($fila?->requested_by_user_id)->toBeNull()
@@ -253,7 +272,7 @@ it('conserva la exportacion cuando se borra la cuenta que la pidio', function ()
         // aunque ya no se sepa quien. Por eso es un dato y no se deduce del
         // usuario nulo.
         ->and($fila?->requested_via)->toBe('panel');
-})->group('RF-PD-14', 'RN-13');
+}
 
 it('el CHECK de failure_reason admite exactamente los codigos del enum', function (): void {
     // La tercera copia del mismo catalogo —enum, esquema y contrato— y la que

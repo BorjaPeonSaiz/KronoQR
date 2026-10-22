@@ -23,6 +23,7 @@ import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datet
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getSite } from '@/shared/api/organisation.api'
 import type { CredentialLifecycleStatus } from '@/shared/api/types'
@@ -67,6 +68,7 @@ const PENDING_ONLY_OPTION = '__pending_only__'
 type StatusFilterValue = CredentialLifecycleStatus | typeof PENDING_ONLY_OPTION | ''
 
 const { t, locale } = useI18n()
+const { personFullName } = usePersonName()
 const queryClient = useQueryClient()
 
 // Filtros EN CLIENTE (RF-QR-08): el contrato no pagina ni filtra por
@@ -555,7 +557,7 @@ const selectClass =
           <tbody>
             <tr v-for="row of pageRows" :key="row.employee_uuid" class="border-b border-kq-border">
               <th scope="row" class="px-3 py-2 font-medium">
-                {{ row.full_name }}
+                {{ personFullName(row.full_name) }}
                 <span class="block font-mono text-sm font-normal text-kq-text-muted">
                   {{ row.employee_code }}
                 </span>

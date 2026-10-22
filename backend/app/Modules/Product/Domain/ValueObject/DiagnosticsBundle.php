@@ -103,19 +103,7 @@ final readonly class DiagnosticsBundle
         array $sections,
         int $maxBytes,
     ): self {
-        $sections = self::fit($sections, $maxBytes);
-
-        return new self(
-            new DiagnosticsManifest(
-                productVersion: $productVersion,
-                generatedAt: $generatedAt,
-                anonymized: $anonymized,
-                generatedBy: $generatedBy,
-                sections: array_keys($sections),
-                sha256: CanonicalJson::digest($sections),
-            ),
-            $sections,
-        );
+        return self::seal($productVersion, $generatedAt, $anonymized, $generatedBy, self::fit($sections, $maxBytes));
     }
 
     /**
@@ -139,15 +127,11 @@ final readonly class DiagnosticsBundle
         $audit[self::GENERATION_ENTRY] = ['status' => 'pending', 'reason' => $reason];
         $sections['audit'] = $audit;
 
-        return new self(
-            new DiagnosticsManifest(
-                productVersion: $this->manifest->productVersion,
-                generatedAt: $this->manifest->generatedAt,
-                anonymized: $this->manifest->anonymized,
-                generatedBy: $this->manifest->generatedBy,
-                sections: array_keys($sections),
-                sha256: CanonicalJson::digest($sections),
-            ),
+        return self::seal(
+            $this->manifest->productVersion,
+            $this->manifest->generatedAt,
+            $this->manifest->anonymized,
+            $this->manifest->generatedBy,
             $sections,
         );
     }
@@ -198,16 +182,100 @@ final readonly class DiagnosticsBundle
      */
     public static function digestMatches(array $document): bool
     {
+        return self::checkDigest($document)->matches();
+    }
+
+    /**
+     * La huella segun la version del paquete (PR16). La `2` cubre el
+     * documento entero salvo la huella; la `1`, anterior a la 2.3.0, solo las
+     * secciones, y se sigue comprobando asi para no denunciar como alterado
+     * un paquete viejo intacto.
+     *
+     * @param  array<string, mixed>  $document  El JSON decodificado tal cual.
+     */
+    public static function checkDigest(array $document): DiagnosticsDigestCheck
+    {
         $manifest = $document['manifest'] ?? null;
 
         if (! is_array($manifest) || ! is_string($manifest['sha256'] ?? null)) {
-            return false;
+            return DiagnosticsDigestCheck::Mismatch;
         }
 
-        $sections = $document;
-        unset($sections['manifest']);
+        $sealed = $manifest['sha256'];
 
-        return hash_equals($manifest['sha256'], CanonicalJson::digest($sections));
+        return match ($manifest['schema_version'] ?? null) {
+            DiagnosticsManifest::SCHEMA_VERSION => self::withoutDigest($document, $manifest, $sealed),
+            DiagnosticsManifest::SECTIONS_ONLY_SCHEMA_VERSION => self::sectionsOnly($document, $sealed),
+            default => DiagnosticsDigestCheck::Mismatch,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $document
+     * @param  array<array-key, mixed>  $manifest
+     */
+    private static function withoutDigest(array $document, array $manifest, string $sealed): DiagnosticsDigestCheck
+    {
+        unset($manifest['sha256']);
+        $document['manifest'] = $manifest;
+
+        return hash_equals($sealed, CanonicalJson::digest($document))
+            ? DiagnosticsDigestCheck::Intact
+            : DiagnosticsDigestCheck::Mismatch;
+    }
+
+    /**
+     * @param  array<string, mixed>  $document
+     */
+    private static function sectionsOnly(array $document, string $sealed): DiagnosticsDigestCheck
+    {
+        unset($document['manifest']);
+
+        return hash_equals($sealed, CanonicalJson::digest($document))
+            ? DiagnosticsDigestCheck::IntactWithoutManifest
+            : DiagnosticsDigestCheck::Mismatch;
+    }
+
+    /**
+     * Pone la huella en el manifiesto.
+     *
+     * **La huella cubre el documento entero salvo ella misma** (PR16): las
+     * secciones y el manifiesto sin su `sha256`. Antes cubria solo las
+     * secciones, y cambiar `"anonymized": false` por `true` en un paquete con
+     * datos personales seguia verificando como integro: quien lo recibia lo
+     * trataba como anonimo. Ahora cualquier cambio en la version, el instante,
+     * el actor, la lista de secciones o la marca de anonimizado hace fallar
+     * `--verify`.
+     *
+     * @param  array<string, array<array-key, mixed>>  $sections
+     */
+    private static function seal(
+        string $productVersion,
+        DateTimeImmutable $generatedAt,
+        bool $anonymized,
+        DiagnosticsActor $generatedBy,
+        array $sections,
+    ): self {
+        $unsealed = new DiagnosticsManifest(
+            productVersion: $productVersion,
+            generatedAt: $generatedAt,
+            anonymized: $anonymized,
+            generatedBy: $generatedBy,
+            sections: array_keys($sections),
+            sha256: '',
+        );
+
+        return new self(
+            new DiagnosticsManifest(
+                productVersion: $productVersion,
+                generatedAt: $generatedAt,
+                anonymized: $anonymized,
+                generatedBy: $generatedBy,
+                sections: array_keys($sections),
+                sha256: CanonicalJson::digest(['manifest' => $unsealed->toUnsealedArray(), ...$sections]),
+            ),
+            $sections,
+        );
     }
 
     /**

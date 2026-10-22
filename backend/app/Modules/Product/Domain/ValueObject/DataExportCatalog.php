@@ -177,6 +177,8 @@ final class DataExportCatalog
                 'pin_delivered_by_user_uuid',
                 'created_at',
                 'updated_at',
+                // ADR-060: cuando se minimizo la ficha; vacio mientras se conserva.
+                'anonymized_at',
             ]),
 
             ExportedDataset::csv('employment_contracts', [
@@ -383,6 +385,9 @@ final class DataExportCatalog
                 'last_login_at',
                 'created_at',
                 'updated_at',
+                // ADR-060: fecha de baja y, si ya se minimizo, cuando.
+                'deactivated_at',
+                'anonymized_at',
             ]),
 
             ExportedDataset::csv('support_grants', [
@@ -395,6 +400,9 @@ final class DataExportCatalog
                 'revoked_at',
                 'revoked_by_user_uuid',
                 'accessed_at',
+                // Tarea 11.3 C: el motivo vacio no es un dato perdido; esta
+                // columna dice cuando se vacio.
+                'reason_purged_at',
             ]),
 
             // --- El diagnostico tecnico ---------------------------------------
@@ -567,6 +575,7 @@ final class DataExportCatalog
                     'name',
                     'jurisdiction',
                     'retention_years',
+                    'personnel_record_retention_years',
                     'min_rest_hours',
                     'max_daily_hours',
                     'max_weekly_hours',

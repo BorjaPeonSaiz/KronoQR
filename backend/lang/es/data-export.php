@@ -250,6 +250,7 @@ return [
                 'pin_delivered_by_user_uuid' => 'Quien se lo entrego.',
                 'created_at' => 'Cuando se creo la ficha.',
                 'updated_at' => 'Ultima modificacion de la ficha.',
+                'anonymized_at' => 'Cuando se minimizo la ficha por retencion (ADR-060): desde entonces no tiene nombre, correo, documento ni PIN, y el codigo es su uuid. Vacio mientras se conserva entera.',
             ],
         ],
 
@@ -472,6 +473,8 @@ return [
                 'last_login_at' => 'Ultimo acceso.',
                 'created_at' => 'Cuando se creo.',
                 'updated_at' => 'Ultima modificacion.',
+                'deactivated_at' => 'Cuando se dio de baja la cuenta. Vacio si sigue activa.',
+                'anonymized_at' => 'Cuando se minimizo la cuenta por retencion (ADR-060): desde entonces no tiene nombre ni correo, y se conserva solo como autora de lo que hizo. Vacio mientras se conserva entera.',
             ],
         ],
 
@@ -480,13 +483,14 @@ return [
             'columns' => [
                 'support_grant_uuid' => 'Identificador de la concesion.',
                 'granted_by_user_uuid' => 'Quien la autorizo.',
-                'reason' => 'Para que incidencia se concedio.',
+                'reason' => 'Para que incidencia se concedio. Vacio si ya se vacio por plazo (ver reason_purged_at); el motivo original sigue en audit_log, asiento support_grant.granted.',
                 'scope' => 'Hasta donde llegaba: `diagnostics` (solo generar el paquete de diagnostico), `read_only` (leer) o `configuration` (leer y cambiar ajustes).',
                 'granted_at' => 'Cuando se concedio.',
                 'expires_at' => 'Cuando dejaba de valer, sin que nadie hiciera nada.',
                 'revoked_at' => 'Cuando se revoco antes de tiempo, si se revoco.',
                 'revoked_by_user_uuid' => 'Quien la revoco. Vacio si la revoco la consola del servidor.',
                 'accessed_at' => 'Ultima vez que se uso. Vacio si se concedio y nunca hizo falta.',
+                'reason_purged_at' => 'Cuando se vacio el motivo, pasado PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS desde el cierre de la concesion. Vacio mientras se conserva.',
             ],
         ],
 
@@ -576,6 +580,7 @@ return [
                 'name' => 'Nombre del perfil.',
                 'jurisdiction' => 'Ambito al que corresponde.',
                 'retention_years' => 'Años que se conserva el registro de jornada.',
+                'personnel_record_retention_years' => 'Años que se conserva la ficha de una persona dada de baja, desde su cese, antes de minimizarla (ADR-060).',
                 'min_rest_hours' => 'Descanso minimo entre jornadas, en horas.',
                 'max_daily_hours' => 'Jornada maxima diaria, en horas.',
                 'max_weekly_hours' => 'Jornada maxima semanal, en horas.',

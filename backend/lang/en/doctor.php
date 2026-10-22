@@ -100,7 +100,12 @@ return [
                 'warning_unknown' => 'The privileges on the work record could not be read.',
             ],
             'audit_chain' => [
-                'ok' => 'The audit log is correctly chained.',
+                'ok' => 'The last yearly seal of the audit log (:year) adds up: all its rows and its last link '
+                    .'are there. This check does not walk the whole chain; '
+                    .'`php artisan compliance:verify-audit-chain` does.',
+                'ok_no_anchor' => 'There is no yearly seal of the audit log to check yet, which is normal during '
+                    .'the first year. This check does not walk the chain; to verify all of it, '
+                    .'`php artisan compliance:verify-audit-chain`.',
                 'failure' => 'The last yearly seal of the audit log does not add up: rows are missing or the '
                     .'chain is broken. It may mean someone modified the log outside the application, or that a '
                     .'restore was left incomplete.',
@@ -278,6 +283,18 @@ return [
                 'warning' => ':count active account(s) of roles that must use a second factor have not enrolled '
                     .'it yet. They will on their next panel sign-in, but until then someone holding only their '
                     .'password could enrol it in their place. This report only gives the number.',
+            ],
+            'tokens_without_expiry' => [
+                'ok' => 'Every access token has an expiry date, so expired ones are deleted every night.',
+                'warning' => ':count access token(s) have no expiry date. They still work, but they never expire '
+                    .'and the nightly clean-up of expired tokens never deletes them. They come from versions '
+                    .'before 2.2.0. This report only gives the number, never whose they are.',
+            ],
+            'dormant_accounts' => [
+                'ok' => 'No active management account has gone more than :days days without signing in to the panel.',
+                'warning' => ':count active management account(s) (:roles) have gone more than :days days without '
+                    .'signing in to the panel. They can still sign in: an account nobody uses is an open door nobody '
+                    .'watches. This report only gives the number, never which ones.',
             ],
         ],
 
@@ -584,10 +601,14 @@ return [
                 'warning_unknown' => 'The licence could not be read because the database is not responding. '
                     .'It does not mean there is no licence, and meanwhile no feature is cut back.',
             ],
-            'white_label_without_plan' => [
-                'ok' => 'The configured branding and the contracted plan are consistent.',
-                'warning' => 'Custom branding is configured (name, colour or logo) but the contracted plan does '
-                    .'not include it, so the applications are showing the product branding.',
+            'branding_not_applied' => [
+                'ok' => 'The configured colour and logo are applied, or none is configured.',
+                'warning' => 'A custom colour or logo is configured, but the contracted plan does not include '
+                    .'custom branding: screens and documents use the product colour and logo. The installation '
+                    .'name is still shown, on any plan.',
+                'warning_license_inactive' => 'A custom colour or logo is configured, but the licence is not in '
+                    .'force: screens and documents use the product colour and logo until it is renewed. The '
+                    .'installation name is still shown, and the configuration is kept.',
             ],
         ],
     ],
@@ -830,6 +851,22 @@ return [
                     ."  docker compose exec app php artisan identity:reset-password <account-email>\n"
                     ."An account nobody uses any more, deactivate it:\n"
                     .'  docker compose exec app php artisan identity:deactivate-user <account-email>',
+            ],
+            'tokens_without_expiry' => [
+                'warning' => "Nothing is broken. A kiosk's are cut short on their own the next time it renews\n"
+                    ."its token. A management account's disappear when its password is changed or the\n"
+                    ."account is deactivated:\n"
+                    ."  docker compose exec app php artisan identity:reset-password <account-email>\n"
+                    ."If the number does not go down within a few weeks, generate the diagnostic bundle\n"
+                    ."and send it to support:\n"
+                    .'  docker compose exec app php artisan product:diagnostics',
+            ],
+            'dormant_accounts' => [
+                'warning' => "Check the last sign-in of each account in the panel, under Accounts. If nobody\n"
+                    ."uses one any more, deactivate it:\n"
+                    ."  docker compose exec app php artisan identity:deactivate-user <account-email>\n"
+                    ."If the person is still there and was just away, nothing needs doing. The period\n"
+                    .'is set by IDENTITY_DORMANT_ACCOUNT_DAYS in the .env file.',
             ],
         ],
 
@@ -1204,10 +1241,14 @@ return [
                 'warning_unknown' => 'Do not activate the licence again. Fix the database first (see the '
                     .'`database` check in this same report) and run this check again.',
             ],
-            'white_label_without_plan' => [
-                'warning' => 'If you want your branding on the screens, talk to your provider about including '
-                    .'it in the plan. If not, clear the name, colour and logo in the panel under Settings so '
-                    .'this warning stops showing.',
+            'branding_not_applied' => [
+                'warning' => 'If you want your colour and logo on the screens, talk to your provider about '
+                    .'including custom branding in the plan. If not, you can clear the colour and logo in the '
+                    .'panel under Settings so this warning stops showing. Leave the name alone: it is still shown '
+                    .'and heads the export for the Labour Inspectorate.',
+                'warning_license_inactive' => 'Renew or activate the licence (see the `license.state` check in this '
+                    .'same report). The colour and logo come back on their own, with nothing to configure: do not '
+                    .'clear the name or the branding.',
             ],
         ],
     ],

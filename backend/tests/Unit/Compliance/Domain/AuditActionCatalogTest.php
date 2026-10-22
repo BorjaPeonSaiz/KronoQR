@@ -106,7 +106,17 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     // Da por revisada una purga no admisible (ADR-057 enmienda del 10-10-2026
     // §6): la conciliacion deja de contarla como pendiente sin que desaparezca.
     'retention.purge_reviewed',
+    // Minimiza en sitio una ficha o una cuenta de gestion vencidas (ADR-060).
+    'retention.personnel_record_anonymized',
+    'retention.management_account_anonymized',
 ])->group('RS-07');
+
+it('mete las minimizaciones por retencion en la familia de la purga', function (): void {
+    // ADR-060: minimizar una ficha o una cuenta vencida es la misma clase de
+    // hecho que purgar el registro, y se consulta con `retention.%`.
+    expect(AuditAction::RetentionPersonnelRecordAnonymized->event())->toBe(AuditableEvent::RetentionPurge)
+        ->and(AuditAction::RetentionManagementAccountAnonymized->event())->toBe(AuditableEvent::RetentionPurge);
+})->group('RS-07', 'RL-11');
 
 it('no abre familia nueva del bloque D al anadir la autenticacion', function (): void {
     // Una sesion es otra credencial de acceso —se emite al entrar, se revoca al

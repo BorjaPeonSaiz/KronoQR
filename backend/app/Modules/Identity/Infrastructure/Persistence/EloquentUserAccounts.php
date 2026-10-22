@@ -50,6 +50,20 @@ final readonly class EloquentUserAccounts implements UserAccounts
         );
     }
 
+    /**
+     * El hash contra el que se compara: el de la cuenta si es un bcrypt de una
+     * cuenta sin minimizar, y si no el señuelo, que cuesta lo mismo y no
+     * coincide con nada que se pueda teclear.
+     */
+    private function comparableHashOf(?User $user): string
+    {
+        if (! $user instanceof User || $user->anonymized_at !== null) {
+            return self::DUMMY_HASH;
+        }
+
+        return Hash::info($user->password)['algoName'] === 'bcrypt' ? $user->password : self::DUMMY_HASH;
+    }
+
     public function verifyCredentials(string $email, string $password): ?AuthenticatedUser
     {
         $user = User::query()
@@ -59,7 +73,11 @@ final readonly class EloquentUserAccounts implements UserAccounts
 
         // Se comprueba SIEMPRE un hash, exista la cuenta o no: es lo que iguala
         // el tiempo de respuesta de los dos casos.
-        $matches = Hash::check($password, $user instanceof User ? $user->password : self::DUMMY_HASH);
+        //
+        // Una cuenta minimizada por retencion tiene `password = '!'` (ADR-060),
+        // que no es un hash y con el que `Hash::check()` lanza: se compara con
+        // el señuelo, y la respuesta es la de una cuenta que no existe.
+        $matches = Hash::check($password, $this->comparableHashOf($user));
 
         // RF-ID-10, RS-03: una temporal caducada responde lo mismo que una
         // contrasena incorrecta, y despues de comparar el hash, para que el

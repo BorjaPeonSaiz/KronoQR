@@ -76,11 +76,11 @@ final readonly class EloquentManagementAccountLifecycle implements ManagementAcc
             ->count();
     }
 
-    public function deactivate(string $uuid): void
+    public function deactivate(string $uuid, DateTimeImmutable $at): void
     {
         User::query()
             ->where('uuid', $uuid)
-            ->update(['is_active' => false]);
+            ->update(['is_active' => false, 'deactivated_at' => $at]);
     }
 
     public function currentPasswordHash(string $uuid): ?string

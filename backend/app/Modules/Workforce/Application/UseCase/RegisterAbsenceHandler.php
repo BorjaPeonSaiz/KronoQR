@@ -11,6 +11,7 @@ use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\OverlappingAbsence;
 use App\Modules\Workforce\Domain\Model\Absence;
@@ -71,6 +72,7 @@ final readonly class RegisterAbsenceHandler
      *
      * @throws InvalidAbsencePeriod si el periodo no toca la relacion laboral
      * @throws OverlappingAbsence si pisa otra ausencia activa de esa persona
+     * @throws EmployeeRecordMinimised si la ficha se minimizo por retencion (ADR-060)
      */
     public function handle(RegisterAbsenceCommand $command): ?Absence
     {
@@ -84,6 +86,9 @@ final readonly class RegisterAbsenceHandler
         if ($employee === null) {
             return null;
         }
+
+        // ADR-060: una ficha minimizada no recibe filas nuevas (409).
+        $employee->assertAcceptsPersonnelRecords();
 
         $absence = new Absence(
             uuid: Str::uuid7()->toString(),

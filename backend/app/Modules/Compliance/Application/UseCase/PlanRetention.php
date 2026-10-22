@@ -6,6 +6,8 @@ namespace App\Modules\Compliance\Application\UseCase;
 
 use App\Modules\Compliance\Application\Port\AuditPartitionInventory;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
+use App\Modules\Compliance\Application\Port\ManagementAccountArchive;
+use App\Modules\Compliance\Application\Port\PersonnelRecordArchive;
 use App\Modules\Compliance\Application\Port\RetentionPolicyProvider;
 use App\Modules\Compliance\Application\Port\TechnicalLogArchive;
 use App\Modules\Compliance\Application\Port\WorkRecordArchive;
@@ -35,6 +37,8 @@ final readonly class PlanRetention
         private AuditPartitionInventory $partitions,
         private TechnicalLogArchive $technicalLog,
         private ErrorHistoryArchive $errorHistory,
+        private ManagementAccountArchive $managementAccounts,
+        private PersonnelRecordArchive $personnelRecords,
     ) {}
 
     public function handle(DateTimeImmutable $now): RetentionReport
@@ -57,6 +61,12 @@ final readonly class PlanRetention
             $shortCycleTallies[] = $archive->inspect($scopeCutoff);
         }
 
+        // Las cuentas de gestion dadas de baja (ADR-060, tarea 11.3 B). Solo el
+        // recuento: el informe no dice de quien.
+        $accountCutoff = $policy->managementAccountCutoff($now);
+        // Las fichas de personas dadas de baja (ADR-060, tarea 11.3 A).
+        $personnelCutoff = $policy->personnelRecordCutoff($now);
+
         return new RetentionReport(
             mode: RetentionMode::Simulation,
             generatedAt: $now,
@@ -68,7 +78,11 @@ final readonly class PlanRetention
                 ...$this->workRecords->inspect($cutoff),
                 ...$this->auditPartitionTallies($years),
                 ...$shortCycleTallies,
+                $this->personnelRecords->inspect($personnelCutoff),
+                $this->managementAccounts->inspect($accountCutoff),
             ],
+            personnelRecordCutoff: $personnelCutoff,
+            managementAccountCutoff: $accountCutoff,
         );
     }
 

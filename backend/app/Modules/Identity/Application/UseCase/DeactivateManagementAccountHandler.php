@@ -122,7 +122,7 @@ final readonly class DeactivateManagementAccountHandler
                 return [AccountDeactivationOutcome::LastActiveAdmin, []];
             }
 
-            $this->accounts->deactivate($account->uuid);
+            $this->accounts->deactivate($account->uuid, $now);
             $this->tokens->revokeAllFor($account->uuid);
             $this->events->publish(new ManagementAccountDeactivated(
                 $account->uuid,

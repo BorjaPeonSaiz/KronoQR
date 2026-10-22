@@ -11,6 +11,7 @@ use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\OverlappingEmploymentContract;
 use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use DateTimeImmutable;
@@ -59,6 +60,7 @@ final readonly class RegisterEmploymentContractHandler
      * `null` si la persona no existe: es un `404` y lo traduce el controlador.
      *
      * @throws OverlappingEmploymentContract cuando el contrato nuevo pisa a otro ya registrado
+     * @throws EmployeeRecordMinimised si la ficha se minimizo por retencion (ADR-060)
      */
     public function handle(RegisterEmploymentContractCommand $command): ?EmploymentContract
     {
@@ -72,6 +74,9 @@ final readonly class RegisterEmploymentContractHandler
         if ($employee === null) {
             return null;
         }
+
+        // ADR-060: una ficha minimizada no recibe filas nuevas (409).
+        $employee->assertAcceptsPersonnelRecords();
 
         $validFrom = $this->asDate($command->validFrom);
 

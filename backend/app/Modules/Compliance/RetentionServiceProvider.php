@@ -7,6 +7,8 @@ namespace App\Modules\Compliance;
 use App\Modules\Compliance\Application\Port\AuditPartitionArchive;
 use App\Modules\Compliance\Application\Port\AuditPartitionInventory;
 use App\Modules\Compliance\Application\Port\ErrorHistoryArchive;
+use App\Modules\Compliance\Application\Port\ManagementAccountArchive;
+use App\Modules\Compliance\Application\Port\PersonnelRecordArchive;
 use App\Modules\Compliance\Application\Port\RetentionMetrics;
 use App\Modules\Compliance\Application\Port\RetentionPolicyProvider;
 use App\Modules\Compliance\Application\Port\RetentionReportStore;
@@ -17,6 +19,8 @@ use App\Modules\Compliance\Infrastructure\Console\ApplyRetentionCommand;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileRetentionMetrics;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditPartitionArchive;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseErrorHistoryArchive;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseManagementAccountArchive;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabasePersonnelRecordArchive;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
@@ -110,6 +114,30 @@ final class RetentionServiceProvider extends ServiceProvider
             AuditPartitionArchive::class,
             static fn (): DatabaseAuditPartitionArchive => new DatabaseAuditPartitionArchive(
                 DB::connection(Config::string('compliance.retention.maintenance_connection', 'pgsql_maintenance')),
+            ),
+        );
+
+        /*
+         * Las cuentas de gestion dadas de baja (ADR-060, tarea 11.3 B), con el
+         * rol de la aplicacion y por la funcion `SECURITY DEFINER`: igual que
+         * el registro de jornada, el asiento de cada cuenta va en la misma
+         * transaccion que su minimizacion.
+         */
+        $this->app->bind(
+            ManagementAccountArchive::class,
+            static fn (): DatabaseManagementAccountArchive => new DatabaseManagementAccountArchive(DB::connection()),
+        );
+
+        /*
+         * Las fichas de personas dadas de baja (ADR-060, tarea 11.3 A), por la
+         * funcion `SECURITY DEFINER` y con el rol de la aplicacion; la foto, del
+         * directorio configurado (`compliance.retention.personnel_photo_root`).
+         */
+        $this->app->bind(
+            PersonnelRecordArchive::class,
+            static fn (): DatabasePersonnelRecordArchive => new DatabasePersonnelRecordArchive(
+                DB::connection(),
+                Config::string('compliance.retention.personnel_photo_root'),
             ),
         );
 

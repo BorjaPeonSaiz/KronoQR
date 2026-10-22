@@ -25,9 +25,11 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * sin fecha.
  *
  * Publica que campos cambiaron, **no sus valores**: la lista basta para que la
- * auditoria diga que se toco (`employee.updated`, AUD-2) sin que el nombre, el
- * correo o la adscripcion de una persona acaben copiados en ningun sitio mas
- * (regla dura 21).
+ * auditoria diga que se toco (`employee.updated`, AUD-2) sin que el nombre o el
+ * correo de una persona acaben copiados en ningun sitio mas (regla dura 21). La
+ * adscripcion si va con sus dos valores, el departamento de antes y el de
+ * despues (R4-SC-05): son identificadores de la organizacion y dicen quien
+ * tuvo autoridad sobre su jornada y desde cuando (RF-ID-03).
  *
  * **En una transaccion con el evento dentro** (AUD-2): el listener sincrono de
  * `Compliance` escribe el asiento, y si falla la modificacion no se confirma
@@ -99,6 +101,8 @@ final readonly class UpdateEmployeeHandler
         $this->events->publish(new EmployeeProfileUpdated(
             employeeUuid: $updated->uuid,
             changedFields: $this->changedFields($current, $updated),
+            previousDepartmentId: $current->departmentId,
+            departmentId: $updated->departmentId,
             occurredAt: $this->clock->now(),
         ));
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\CanonicalJson;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsDigestCheck;
 
 /*
  * El paquete de diagnostico como valor (RF-PD-09, ADR-020): sellado, recorte por
@@ -44,13 +45,50 @@ function diagnosticsBundleUnitSections(): array
     ];
 }
 
-it('sella el manifiesto con la huella canonica de las secciones', function (): void {
+/**
+ * La huella esperada: el documento entero con el manifiesto sin su `sha256`
+ * (PR16), escrita aparte de la implementacion para que no se compruebe a si
+ * misma.
+ */
+function diagnosticsBundleUnitDigest(DiagnosticsBundle $bundle): string
+{
+    $manifest = $bundle->manifest->toArray();
+    unset($manifest['sha256']);
+
+    return CanonicalJson::digest(['manifest' => $manifest, ...$bundle->sections]);
+}
+
+/**
+ * Un paquete sellado al que se le cambia a mano algo del manifiesto (PR16),
+ * sin recalcular la huella.
+ *
+ * @param  array<string, mixed>  $changes
+ * @return array<string, mixed>
+ */
+function diagnosticsBundleUnitTampered(array $changes, bool $anonymized = true): array
+{
+    $bundle = DiagnosticsBundle::of(
+        productVersion: '2.2.1',
+        generatedAt: new DateTimeImmutable('2026-06-15T09:00:00+02:00'),
+        anonymized: $anonymized,
+        generatedBy: DiagnosticsActor::User,
+        sections: diagnosticsBundleUnitSections(),
+        maxBytes: DIAGNOSTICS_BUNDLE_UNIT_MAX,
+    );
+
+    return ['manifest' => [...$bundle->manifest->toArray(), ...$changes], ...$bundle->sections];
+}
+
+it('sella el manifiesto con la huella canonica del documento, manifiesto incluido', function (): void {
     $bundle = diagnosticsBundleUnit(diagnosticsBundleUnitSections());
 
-    expect($bundle->manifest->sha256)->toBe(CanonicalJson::digest(diagnosticsBundleUnitSections()))
+    expect($bundle->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($bundle))
+        // Ya no es la de las secciones solas (PR16).
+        ->and($bundle->manifest->sha256)->not->toBe(CanonicalJson::digest(diagnosticsBundleUnitSections()))
+        ->and($bundle->manifest->toUnsealedArray())->not->toHaveKey('sha256')
         ->and($bundle->manifest->sections)->toBe(['installation', 'kiosks', 'metrics', 'audit'])
         ->and($bundle->manifest->toArray())->toMatchArray([
-            'schema_version' => 1,
+            'schema_version' => 2,
             'product_version' => '2.2.1',
             'generated_at' => '2026-06-15T07:00:00.000000Z',
             'anonymized' => true,
@@ -81,10 +119,71 @@ it('la huella denuncia un documento alterado, sin manifiesto o sin huella', func
 
         return $document;
     })()],
+    // PR16: el manifiesto tambien esta dentro de la huella. El primero es el
+    // caso reproducido: un paquete con datos personales que se hace pasar por
+    // anonimo.
+    'anonymized cambiado a mano' => [diagnosticsBundleUnitTampered(['anonymized' => true], anonymized: false)],
+    'version cambiada' => [diagnosticsBundleUnitTampered(['product_version' => '9.9.9'])],
+    'instante cambiado' => [diagnosticsBundleUnitTampered(['generated_at' => '2026-06-16T07:00:00.000000Z'])],
+    'actor cambiado' => [diagnosticsBundleUnitTampered(['generated_by' => 'support_grant'])],
+    'lista de secciones recortada' => [diagnosticsBundleUnitTampered(['sections' => ['installation']])],
+    'version del esquema desconocida' => [diagnosticsBundleUnitTampered(['schema_version' => 3])],
+    'rebajado a la version 1 para eludir el manifiesto' => [diagnosticsBundleUnitTampered(['schema_version' => 1])],
     'sin manifiesto' => [['installation' => []]],
     'manifiesto que no es objeto' => [['manifest' => 'x', 'installation' => []]],
     'huella que no es texto' => [['manifest' => ['sha256' => 7], 'installation' => []]],
 ])->group('RF-PD-09');
+
+/**
+ * Un paquete de `schema_version: 1`, como los de la 2.2.x: la huella cubre
+ * solo las secciones. Escrito a mano, con el algoritmo de entonces.
+ *
+ * @param  array<string, mixed>  $manifestChanges
+ * @param  array<string, array<array-key, mixed>>  $sectionChanges
+ * @return array<string, mixed>
+ */
+function diagnosticsBundleUnitVersionOne(array $manifestChanges = [], array $sectionChanges = []): array
+{
+    $sections = diagnosticsBundleUnitSections();
+
+    return [
+        'manifest' => [
+            'schema_version' => 1,
+            'product_version' => '2.2.1',
+            'generated_at' => '2026-06-15T07:00:00.000000Z',
+            'anonymized' => true,
+            'generated_by' => 'console',
+            'sections' => array_keys($sections),
+            'sha256' => CanonicalJson::digest($sections),
+            ...$manifestChanges,
+        ],
+        ...$sections,
+        ...$sectionChanges,
+    ];
+}
+
+it('dice si la huella cubre el manifiesto: la version 2 si, la 1 solo las secciones (PR16)', function (): void {
+    expect(DiagnosticsBundle::checkDigest(diagnosticsBundleUnit(diagnosticsBundleUnitSections())->toArray()))
+        ->toBe(DiagnosticsDigestCheck::Intact)
+        ->and(DiagnosticsBundle::checkDigest(diagnosticsBundleUnitVersionOne()))
+        ->toBe(DiagnosticsDigestCheck::IntactWithoutManifest)
+        ->and(DiagnosticsBundle::digestMatches(diagnosticsBundleUnitVersionOne()))->toBeTrue()
+        ->and(DiagnosticsDigestCheck::Intact->matches())->toBeTrue()
+        ->and(DiagnosticsDigestCheck::IntactWithoutManifest->matches())->toBeTrue()
+        ->and(DiagnosticsDigestCheck::Mismatch->matches())->toBeFalse();
+})->group('RF-PD-09');
+
+it('un paquete de la version 1 con una seccion cambiada no verifica', function (): void {
+    expect(DiagnosticsBundle::checkDigest(diagnosticsBundleUnitVersionOne(sectionChanges: ['installation' => ['product_version' => '9.9.9']])))
+        ->toBe(DiagnosticsDigestCheck::Mismatch);
+})->group('RF-PD-09');
+
+it('en la version 1 la cabecera no esta cubierta, y por eso se presenta aparte (PR16)', function (): void {
+    // Es la limitacion que la version 2 cierra: un `anonymized` cambiado a mano
+    // en un paquete viejo sigue verificando, y `--verify` lo dice.
+    expect(DiagnosticsBundle::checkDigest(diagnosticsBundleUnitVersionOne(['anonymized' => false])))
+        ->toBe(DiagnosticsDigestCheck::IntactWithoutManifest);
+})->group('RF-PD-09');
 
 it('si no cabe, sacrifica en su orden y deja constancia del tamaño, sin tocar las seis de siempre', function (): void {
     $big = str_repeat('x', 4000);
@@ -106,7 +205,7 @@ it('si no cabe, sacrifica en su orden y deja constancia del tamaño, sin tocar l
         ->and($bundle->sections['metrics'])->toBe(['v' => $big])
         ->and($bundle->sections['kiosks'])->toBe([['v' => $big]])
         ->and($bundle->sections['installation'])->toBe(['v' => $big])
-        ->and($bundle->manifest->sha256)->toBe(CanonicalJson::digest($bundle->sections));
+        ->and($bundle->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($bundle));
 
     // Con un tope minimo se van todas las sacrificables y `installation` queda.
     $tiny = diagnosticsBundleUnit($sections, 10);
@@ -134,7 +233,7 @@ it('con el asiento pendiente vuelve a sellar: la constancia va en audit y dentro
             'generation_entry' => ['status' => 'pending', 'reason' => 'database_unavailable'],
         ])
         ->and($pending->manifest->sha256)->not->toBe($bundle->manifest->sha256)
-        ->and($pending->manifest->sha256)->toBe(CanonicalJson::digest($pending->sections))
+        ->and($pending->manifest->sha256)->toBe(diagnosticsBundleUnitDigest($pending))
         ->and(DiagnosticsBundle::digestMatches($pending->toArray()))->toBeTrue()
         ->and($pending->manifest->sections)->toBe($bundle->manifest->sections)
         ->and($pending->manifest->generatedAt)->toBe($bundle->manifest->generatedAt)

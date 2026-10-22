@@ -13,7 +13,7 @@ import { jsonResponse, stubFetch } from './support/harness'
 // que trae `Content-Disposition` -nunca uno inventado en el cliente.
 
 function bundleResponse(filename: string): Response {
-  return new Response(JSON.stringify({ manifest: { schema_version: 1 } }), {
+  return new Response(JSON.stringify({ manifest: { schema_version: 2 } }), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',

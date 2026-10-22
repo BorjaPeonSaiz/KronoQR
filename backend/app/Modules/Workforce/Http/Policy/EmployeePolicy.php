@@ -68,6 +68,27 @@ final class EmployeePolicy
         return $actor->actsAs(...self::readers());
     }
 
+    /**
+     * Si el correo, el idioma y la situacion del PIN de una ficha le
+     * corresponden a quien la lee (**DIV-1**, RGPD art. 5.1.c), y si puede
+     * filtrar el listado por `pin_status`.
+     *
+     * Solo `rrhh+`, que es quien los gestiona. El responsable de departamento
+     * lee la plantilla para ver la presencia y las jornadas de su gente, y para
+     * eso no necesita como contactar con nadie ni si alguien recibio su PIN,
+     * que es un dato de seguridad de la credencial. Para el, los tres campos
+     * **no viajan** —ni `null`, que diria «no tiene correo»— y el contrato le
+     * sirve `ScopedEmployee`.
+     *
+     * Es autorizacion y no presentacion, como `AbsencePolicy::viewNote`: escrita
+     * como un `if` sobre roles en el `Resource` seria invisible desde la matriz
+     * de autorizacion y nadie la probaria en negativo (regla dura 18).
+     */
+    public function viewContactAndPin(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::writers());
+    }
+
     public function create(ManagementActor $actor): bool
     {
         return $actor->actsAs(...self::writers());

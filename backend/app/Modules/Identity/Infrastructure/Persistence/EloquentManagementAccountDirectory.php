@@ -137,6 +137,7 @@ final readonly class EloquentManagementAccountDirectory implements ManagementAcc
                 'u.temporary_password_expires_at',
                 'u.last_login_at',
                 'u.created_at',
+                'u.anonymized_at',
             ])
             ->selectRaw('(u.two_factor_confirmed_at IS NOT NULL) AS two_factor_enabled')
             ->selectRaw(
@@ -190,6 +191,7 @@ final readonly class EloquentManagementAccountDirectory implements ManagementAcc
             lastLoginAt: $this->instant($field('last_login_at')),
             // `created_at` es `NOT NULL` en `users`: el respaldo no se alcanza.
             createdAt: $this->instant($field('created_at')) ?? new DateTimeImmutable('@0'),
+            anonymizedAt: $this->instant($field('anonymized_at')),
         );
     }
 

@@ -279,8 +279,12 @@ Policy per data type, which is the one the system applies:
 | WAL archive (`BACKUP_PATH/wal`): **all** changes to the database, including clock-ins, people and `audit_log`. **Encrypted and authenticated** since 2.2.0 | **8 days** by default | Your installation (`BACKUP_WAL_RETENTION_DAYS`). It has to be greater than the interval between physical copies (weekly by default) |
 | Technical detail of each update (`/var/log/kronoqr/update-*.detalle.log`): **may contain personal data** | **30 days** by default | Your installation (`KRONOQR_LOG_RETENTION_DAYS`, minimum 7). `update.sh` deletes it on every run, and `doctor.sh` does too when run as root: if months go by without either, the deletion waits for the next run |
 | Summary of each update (`update-*.log`), without personal data | **90 days** | Your installation |
-| Contract data (agreed hours, type of working day, validity period) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **it is kept**: the system does not purge it |
-| Absences (type, dates, note, versions and voidings) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **they are kept**: the system does not purge them. **They contain health data** |
+| File of a person who has left (first name, surnames, email, ID-document fingerprint, PIN, photo and code) | **4 years from leaving** by default, and never before their working-time record and the audit trail of the year they left have been purged | The site's compliance profile (years the personnel file is kept). **Pending confirmation with your employment law advisers.** When it expires, the purge **removes** that data and the file keeps only the start and leaving dates, site, department, language and whether they teleworked |
+| Contract data (agreed hours, type of working day, validity period) | **Those of the file**: deleted with it | The same profile field. **Pending confirmation with your employment law advisers** |
+| Absences (type, dates, note, versions and voidings) | **Those of the file**: deleted with it | The same profile field. **Pending confirmation with your employment law advisers. They contain health data** |
+| Deactivated management account (name, email, password and second factor) | **4 years from deactivation** (the same as the record), and never while any audit entry, correction or resolution cites it | The compliance profile. When it expires, the purge leaves it with no name and no way to sign in |
+| Reason written when granting support access | **90 days** after the grant ended, by default (minimum 30) | Your installation (`PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS`). It is emptied automatically every day. The copy in the audit log is kept for the 4 years |
+| Expired sessions of the panel, the portal and the tablets | **24 hours** after they expire | The product. They are deleted automatically every day |
 | Record of weekly summary sends (`weekly_summary_deliveries`) | **No automatic purge** | It keeps counts and the recipient account; **no data about the staff** |
 | Report files generated in the background (`report_exports`): named hours of the staff, ready to download | **7 days** by default | Your installation (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuration.md`](configuration.md) §6.25). They are downloaded with a single-use link; when they expire, the file is deleted and the note that it existed is left without any person identifiers or scope |
 | ZIP of the full export (§7 quater) | **7 days** by default | Your installation (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). It contains all the personal data of the installation; while it exists, its custody is yours. The note that it existed is kept |
@@ -295,24 +299,45 @@ retention policy**: no purge of the product reaches there. If you enable the
 summary, decide with your advisers what the manager does with those emails and
 when they delete them, and tell them.
 
-**Contract data still has no automatic purge, and that is deliberate.** The
-indicative period — the duration of the employment relationship plus four
-years, by reference to art. 21 of the LISOS (Ley sobre Infracciones y Sanciones
-en el Orden Social, the Act on Infringements and Penalties in the Social
-Order) — **is not validated**, and deleting on the basis of a period that later
-turns out to be too short is worse than keeping for a bounded time too long.
-Confirm it with your employment law advisers; until then that data remains and
-appears in any response to an access request.
+**The file of a person who has left, their contracts and their absences have a
+period since 2.3.0.** The compliance profile has a field with the years the
+file is kept after the person leaves: 4 by default, by reference to art. 21 of
+the LISOS (Ley sobre Infracciones y Sanciones en el Orden Social, the Act on
+Infringements and Penalties in the Social Order). That period **is not
+validated**: confirm it with your employment law advisers and adjust it in the
+profile before the first purge that applies it.
 
-**Absences go the same way, and with one more reason not to improvise the
-period.** They have no automatic purge and no validated period either, and on
-top of that the **Sick leave** type is **health data** —a special category under
-art. 9 of the GDPR—, which means the period has to be justified better, not
-worse. Until your advisers set it, absences are kept and appear in any response
-to an access request, **including the note, which is handed over exactly as it
-is written**. That is why the HR guide asks that no diagnosis and no medical
-reason be written in that note ([`hr-guide.md`](hr-guide.md) §5 bis.5): what is
-not written does not have to be kept, handed over or explained.
+- **When it applies.** When it expires, and never before that person's
+  working-time record and the audit trail of the year they left have been
+  purged, the retention purge removes from the file the first name, surnames,
+  email, ID-document fingerprint, PIN, photo and code, and **deletes their
+  contracts and their absences**.
+- **What remains.** The file keeps its internal identifier, the start and
+  leaving dates, the site, the department, the language and whether they
+  teleworked. The revoked credential stays, but its revocation reason is
+  replaced by a fixed text.
+- **How it is authorised.** Like every purge, it is not automatic: a person
+  authorises it and it is recorded, person by person, without names.
+- **What your DPO has to validate.** If in your hotel those dates, that
+  department, the language and the teleworking flag are enough to recognise someone, the minimised file is still
+  personal data. If they conclude it is, ask us to generalise them.
+
+**Contracts and absences have a single period, the file's.** If your advisers
+set a different one —for example, a shorter one for sick leave, which is
+**health data** (art. 9 of the GDPR) and means the period has to be justified
+better, not worse—, the product does not yet tell them apart: ask us for it.
+Until they are purged, absences appear in any response to an access request,
+**including the note, which is handed over exactly as it is written**. That is
+why the HR guide asks that no diagnosis and no medical reason be written in
+that note ([`hr-guide.md`](hr-guide.md) §5 bis.5): what is not written does not
+have to be kept, handed over or explained.
+
+**The reason for a support access must not name anyone.** Write the person's
+identifier, not their name; the system rejects a reason shaped like an email,
+an ID document or a phone number. 90 days after the grant ends, the reason is
+emptied in the table, and the audit-log entry keeps it for as long as the audit
+trail lasts.
+
 
 **Purging is never automatic** (RF-PR-03). Every week the system **proposes**
 and leaves a report; deleting requires explicit confirmation from the person

@@ -71,6 +71,8 @@ const GENERATED_FILES_INVENTORY = [
     'config/compliance.php' => [
         'storage_path:app/tmp/legal-exports' => 'shared',
         'storage_path:app/legal-exports' => 'shared',
+        // ADR-060: las fotos de la ficha, que se borran al minimizarla.
+        'storage_path:app/employee-photos' => 'shared',
         'storage_path:logs' => 'disposable',
     ],
     'config/filesystems.php' => [

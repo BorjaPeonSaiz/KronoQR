@@ -330,7 +330,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(e.pin_delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS pin_delivered_at,
                pu.uuid::text         AS pin_delivered_by_user_uuid,
                to_char(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-               to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+               to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
+               to_char(e.anonymized_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS anonymized_at
           FROM employees e
           LEFT JOIN departments d ON d.id = e.department_id
           LEFT JOIN users pu      ON pu.id = e.pin_delivered_by_user_id
@@ -612,7 +613,9 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                (u.two_factor_confirmed_at IS NOT NULL)::text AS two_factor_enabled,
                to_char(u.last_login_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_login_at,
                to_char(u.created_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-               to_char(u.updated_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+               to_char(u.updated_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
+               to_char(u.deactivated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS deactivated_at,
+               to_char(u.anonymized_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS anonymized_at
           FROM users u
          ORDER BY u.id
         SQL;
@@ -626,7 +629,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(g.expires_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at,
                to_char(g.revoked_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS revoked_at,
                ru.uuid::text AS revoked_by_user_uuid,
-               to_char(g.accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS accessed_at
+               to_char(g.accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS accessed_at,
+               to_char(g.reason_purged_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS reason_purged_at
           FROM support_grants g
           JOIN users gu      ON gu.id = g.granted_by_user_id
           LEFT JOIN users ru ON ru.id = g.revoked_by_user_id
@@ -743,6 +747,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         SELECT p.name,
                p.jurisdiction,
                p.retention_years::text            AS retention_years,
+               p.personnel_record_retention_years::text AS personnel_record_retention_years,
                p.min_rest_hours::text             AS min_rest_hours,
                p.max_daily_hours::text            AS max_daily_hours,
                p.max_weekly_hours::text           AS max_weekly_hours,

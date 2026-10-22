@@ -31,6 +31,7 @@ use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Shared\Domain\ValueObject\FeatureRestriction;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -337,9 +338,18 @@ final readonly class SendWeeklySummaries
 
         // La licencia se comprueba AL ENVIAR y nunca al registrar (regla dura
         // 15, ADR-019): lo que se degrada es un correo de gestion.
-        return $this->features->statusOf(Feature::WeeklyEmailSummary)->enabled
-            ? null
-            : WeeklySummaryReason::NotInPlan;
+        $license = $this->features->statusOf(Feature::WeeklyEmailSummary);
+
+        if ($license->enabled) {
+            return null;
+        }
+
+        // V4-PL-4: «el plan no lo incluye» y «la licencia no esta en vigor» se
+        // arreglan en sitios distintos —ampliar el plan o renovar—, y con un
+        // booleano la caducada decia lo primero.
+        return $license->restriction === FeatureRestriction::NotInPlan
+            ? WeeklySummaryReason::NotInPlan
+            : WeeklySummaryReason::LicenseInactive;
     }
 
     /**

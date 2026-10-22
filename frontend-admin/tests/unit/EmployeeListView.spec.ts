@@ -54,6 +54,32 @@ describe('EmployeeListView', () => {
     expect(wrapper.text()).toContain('Recepcion')
   })
 
+  it('pinta un texto de sustitucion, no un hueco, para una ficha minimizada', async () => {
+    stubFetch(
+      routes(
+        employeeCollection([
+          employee({
+            first_name: '',
+            last_name: '',
+            email: null,
+            pin_status: 'pending',
+            status: 'terminated',
+            terminated_at: '2020-01-31',
+            anonymized_at: '2026-10-01T08:30:00.000000Z',
+            employee_code: '0199F0C21F4A7C3E9B214D5E6F7A8B90',
+          }),
+        ]),
+      ),
+    )
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+
+    expect(wrapper.find('tbody th[scope="row"]').text()).toBe(es.people.minimised)
+    expect(wrapper.text()).toContain('0199F0C21F4A7C3E9B214D5E6F7A8B90')
+  })
+
   it('enseña el estado del PIN, nunca el PIN', async () => {
     stubFetch(routes(employeeCollection([employee({ pin_status: 'delivered' })])))
 

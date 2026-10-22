@@ -44,6 +44,28 @@ final class InvalidSupportGrant extends ProductDomainException implements Busine
         );
     }
 
+    /**
+     * El motivo parece llevar un dato personal (tarea 11.3 C): va tal cual al
+     * asiento de auditoria y no se puede corregir despues. Solo la CLASE de
+     * dato, nunca el texto: el mensaje tecnico acaba en el log.
+     *
+     * @param  'email'|'national_id'|'phone'  $kind
+     */
+    public static function personalData(string $kind): self
+    {
+        $what = match ($kind) {
+            'email' => 'an email address',
+            'national_id' => 'a national ID',
+            'phone' => 'a phone number',
+        };
+
+        return new self(
+            \sprintf('A support grant reason must not carry personal data, and this one looks like it carries %s.', $what),
+            'support.errors.reason_personal_data',
+            [],
+        );
+    }
+
     public static function duration(int $hours, int $maximum): self
     {
         return new self(

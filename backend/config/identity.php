@@ -314,6 +314,18 @@ return [
     ],
 
     /*
+     * CUENTAS ACTIVAS SIN USO — ADR-060, tarea 11.3 B.
+     *
+     * Dias sin entrar al panel (`last_login_at`, o `created_at` si nunca entro)
+     * a partir de los que una cuenta de gestion activa se considera sin uso.
+     * **No se purga ni se desactiva nada**: una cuenta activa puede ser la de
+     * alguien de vacaciones. `product:doctor` avisa (`access.dormant_accounts`)
+     * y `identity:dormant-accounts` publica `management_accounts_dormant{role}`.
+     * La decision de darla de baja es de una persona.
+     */
+    'dormant_account_days' => (int) env('IDENTITY_DORMANT_ACCOUNT_DAYS', 90),
+
+    /*
      * PIN del empleado — RF-ID-09, y con el RF-AT-11 (fichaje de respaldo) y
      * RL-05 (acceso al registro propio en el portal).
      *

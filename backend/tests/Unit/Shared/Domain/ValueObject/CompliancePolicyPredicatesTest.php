@@ -55,6 +55,7 @@ function policyWithHours(
         maximumWeeklyMinutes: $weeklyHours * 60,
         weekStartsOn: $weekStartsOn,
         holidayCalendar: [],
+        personnelRecordRetentionYears: 4,
     );
 }
 

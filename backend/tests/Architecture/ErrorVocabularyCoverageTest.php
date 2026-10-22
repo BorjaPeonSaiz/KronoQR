@@ -410,19 +410,13 @@ it('cubre los identificadores de evento del log tecnico', function (): void {
     // `…_…` en Loki (V21-4-BE-5). El evento se nombra con otra palabra.
     $faltan = array_values(array_filter(
         errorVocabularyCoverageMissing(errorVocabularyCoverageLogEvents(), allowNameClashes: false),
-        // Unica excepcion, y no es un evento de log: el identificador de la
-        // comprobacion `license.white_label_without_plan` de `doctor`, que leen
-        // los textos traducidos y la documentacion. Su nombre lo revisa la
-        // tarea 11.5 junto con el aviso.
-        //
-        // Y `grant` de `support_grant.granted|used|revoked` (AuditAction.php):
+        // Unica excepcion: `grant` de `support_grant.granted|used|revoked` (AuditAction.php):
         // son acciones de `audit_log`, no eventos del log tecnico —ningun
         // envoltorio las escribe en el log; solo `AuditedAuthenticationJournal`
         // lo hace, y con las de `auth.*`—, y no se pueden renombrar: el nombre
         // esta guardado en asientos encadenados por hash (regla dura 5). `grant`
         // sigue excluida por ser un apellido (`NAME_CLASHES`).
-        static fn (string $faltante): bool => ! str_starts_with($faltante, 'white (LicenseProbe.php)')
-            && $faltante !== 'grant (AuditAction.php)',
+        static fn (string $faltante): bool => $faltante !== 'grant (AuditAction.php)',
     ));
 
     expect($faltan)->toBe([], 'Partes de eventos de log fuera de ErrorVocabulary: '.implode(', ', $faltan));

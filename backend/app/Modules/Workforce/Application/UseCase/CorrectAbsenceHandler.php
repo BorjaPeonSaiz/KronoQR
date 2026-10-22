@@ -169,6 +169,8 @@ final readonly class CorrectAbsenceHandler
             return;
         }
 
+        $employee->assertAcceptsPersonnelRecords();
+
         if (! $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt)) {
             throw InvalidAbsencePeriod::isOutsideEmployment($absence->isoStartsOn(), $absence->isoEndsOn());
         }

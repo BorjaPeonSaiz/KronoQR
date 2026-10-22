@@ -1719,6 +1719,16 @@ export interface paths {
          *     regla con la que se calcula el campo `pin_status` de cada ficha—. Un
          *     filtro que se resolviera en el navegador daria un `meta.total` que
          *     describe otra cosa y una paginacion que no cuadra.
+         *
+         *     **El responsable de departamento recibe la ficha reducida**
+         *     (`ScopedEmployeeCollection`, DIV-1, RGPD art. 5.1.c): sin `email`, sin
+         *     `locale` y sin `pin_status`. Le basta con saber quien es su gente para
+         *     ver su presencia y sus jornadas; el correo, el idioma y la situacion de
+         *     su PIN son de RRHH, que es quien los gestiona. Los campos **no
+         *     aparecen**, no llegan a `null`: `null` en `email` significa «no tiene
+         *     correo», y lo cierto es «no te corresponde». Por lo mismo **no puede
+         *     filtrar por `pin_status`**: el filtro diria lo que la ficha calla, y
+         *     enviarlo responde `403`.
          */
         get: operations["listEmployees"];
         put?: never;
@@ -1785,6 +1795,10 @@ export interface paths {
          *     `404`: la persona existe y el problema es de autorizacion— y el intento
          *     queda en `audit_log` con el `employee_uuid` del recurso y nunca con su
          *     nombre (RS-05, regla dura 21).
+         *
+         *     **El responsable de departamento recibe la ficha reducida**
+         *     (`ScopedEmployee`, DIV-1): sin `email`, sin `locale` y sin
+         *     `pin_status`, omitidos y no a `null`. Ver `GET /api/v1/employees`.
          */
         get: operations["getEmployee"];
         put?: never;
@@ -1799,7 +1813,10 @@ export interface paths {
          *     centro no cambia: es el de la instalacion (ADR-040).
          *
          *     **Cada cambio efectivo deja asiento `employee.updated`** con la lista
-         *     de campos tocados y ningun valor (AUD-2, regla dura 21). Un `PATCH` que
+         *     de campos tocados y ningun valor (AUD-2, regla dura 21), salvo el
+         *     departamento: si cambia, el asiento lleva el anterior y el nuevo
+         *     (`previous_department_id` y `department_id`, R4-SC-05), porque decide
+         *     que responsable ve y corrige la jornada de la persona. Un `PATCH` que
          *     no cambia nada no deja asiento.
          *
          *     **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
@@ -7498,11 +7515,21 @@ export interface components {
              * @description Identificador publico de la cuenta. La clave interna no sale nunca.
              */
             uuid: string;
+            /**
+             * @description **Vacio solo en una cuenta minimizada por retencion** (ADR-060,
+             *     tarea 11.3 B; `anonymized_at` no nulo): la de una cuenta dada de
+             *     baja hace mas que los años del registro y de la que ya no queda
+             *     ningun asiento. El panel enseña un texto de sustitucion; el alta y
+             *     la modificacion siguen exigiendo un nombre.
+             */
             name: string;
             /**
-             * Format: email
              * @description Identificador de acceso al panel. **No es un canal**: el producto no
-             *     envia por el ninguna credencial (regla dura 12).
+             *     envia por el ninguna credencial (regla dura 12). En una cuenta
+             *     minimizada es `anonymized+<uuid>@invalid` (ADR-060): unico, no
+             *     entregable —`invalid` es un dominio reservado— y sin sesion posible.
+             *     No es un correo bien formado, y por eso es la segunda rama del
+             *     `anyOf`.
              */
             email: string;
             /** @example es */
@@ -7530,6 +7557,18 @@ export interface components {
             last_login_at: components["schemas"]["UtcTimestamp"] | null;
             /** @description Alta de la cuenta, en UTC. */
             created_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la cuenta por retencion (ADR-060, tarea 11.3 B),
+             *     en UTC; `null` mientras se conserva entera. Es **la** forma de
+             *     reconocer una cuenta minimizada: desde ese instante `name` es `''`,
+             *     `email` es `anonymized+<uuid>@invalid`, `status` es `deactivated`, sin
+             *     segundo factor ni ultimo acceso. La cuenta conserva su `uuid` y sus
+             *     roles porque sigue siendo la autora de lo que hizo, y ya no se puede
+             *     modificar ni reactivar.
+             * @example null
+             */
+            anonymized_at: string | null;
         };
         /**
          * ManagementAccountCollection
@@ -7800,7 +7839,17 @@ export interface components {
              * @example E7QK2MXPR
              */
             employee_code: string;
+            /**
+             * @description **Vacio solo en una ficha minimizada por retencion** (ADR-060,
+             *     tarea 11.3 A): la de una persona dada de baja hace mas de
+             *     `personnel_record_retention_years` de la que ya no queda registro.
+             *     Entonces nombre y apellidos son `''`, `email` es `null`,
+             *     `pin_status` es `pending` y `employee_code` es su `uuid` sin guiones.
+             *     El panel enseña un texto de sustitucion; el alta y la modificacion
+             *     siguen exigiendo un nombre.
+             */
             first_name: string;
+            /** @description Vacio solo en una ficha minimizada por retencion. Ver `first_name`. */
             last_name: string;
             /**
              * Format: email
@@ -7836,6 +7885,16 @@ export interface components {
             locale: string;
             teleworking: components["schemas"]["Teleworking"];
             pin_status: components["schemas"]["PinStatus"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+             *     UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+             *     una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+             *     `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+             *     ya no se puede modificar.
+             * @example null
+             */
+            anonymized_at: string | null;
         };
         /**
          * Teleworking
@@ -7943,6 +8002,53 @@ export interface components {
          */
         EmployeeCollection: {
             data: components["schemas"]["Employee"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
+         * ScopedEmployee
+         * @description La ficha que recibe el **responsable de departamento** de su gente
+         *     (RF-ID-03, DIV-1, RGPD art. 5.1.c): la de `Employee` **sin `email`, sin
+         *     `locale` y sin `pin_status`**. El correo y el idioma son datos de
+         *     contacto que gestiona RRHH, y la situacion del PIN es un dato de
+         *     seguridad de la credencial: ninguno hace falta para ver la presencia y
+         *     las jornadas de un equipo. Los tres campos se omiten, no llegan a
+         *     `null`.
+         *
+         *     Lo decide la policy (`EmployeePolicy::viewContactAndPin`), no la
+         *     presentacion, para que la autorizacion negativa lo pruebe por rol
+         *     (regla dura 18).
+         */
+        ScopedEmployee: {
+            /** Format: uuid */
+            uuid: string;
+            employee_code: string;
+            first_name: string;
+            last_name: string;
+            /** Format: int64 */
+            department_id: number | null;
+            status: components["schemas"]["EmploymentStatus"];
+            /** Format: date */
+            hired_at: string;
+            /** Format: date */
+            terminated_at: string | null;
+            teleworking: components["schemas"]["Teleworking"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la ficha por retencion (ADR-060, tarea 11.3 A), en
+             *     UTC; `null` mientras se conserva entera. Es **la** forma de reconocer
+             *     una ficha minimizada: desde ese instante nombre y apellidos son `''`,
+             *     `email` es `null` y `employee_code` es el `uuid` sin guiones. La ficha
+             *     ya no se puede modificar.
+             * @example null
+             */
+            anonymized_at: string | null;
+        };
+        /**
+         * ScopedEmployeeCollection
+         * @description Pagina de la plantilla de un responsable de departamento, con la ficha reducida.
+         */
+        ScopedEmployeeCollection: {
+            data: components["schemas"]["ScopedEmployee"][];
             meta: components["schemas"]["PageMeta"];
         };
         /**
@@ -8888,6 +8994,18 @@ export interface components {
              */
             readonly retention_years_floor: number;
             /**
+             * @description RL-11, ADR-060: años que se conserva la **ficha** de una persona dada
+             *     de baja, contados desde su cese, antes de minimizarla en sitio
+             *     (nombre, correo, documento y PIN fuera; uuid, centro, departamento y
+             *     fechas dentro). **4 de serie.** No basta con que venza: la ficha solo
+             *     se minimiza cuando ya no queda nada suyo en el registro horario ni en
+             *     la cadena de auditoria viva, asi que nunca antes que el registro que
+             *     la nombra. Lo aplica `compliance:apply-retention`, con confirmacion;
+             *     nunca de forma automatica.
+             * @example 4
+             */
+            personnel_record_retention_years: number;
+            /**
              * @description Si es el perfil por defecto de la instalacion, que es el que rige en
              *     un centro sin perfil asignado. **Solo lectura.**
              */
@@ -8933,6 +9051,11 @@ export interface components {
              *     jurisdiccion del perfil (`retention_years_floor`; 4 en España).
              */
             retention_years?: number;
+            /**
+             * @description Años que se conserva la ficha de una persona dada de baja antes de
+             *     minimizarla (ADR-060). Ver `ComplianceProfileBody`.
+             */
+            personnel_record_retention_years?: number;
         };
         /**
          * InstallationSettings
@@ -11846,10 +11969,14 @@ export interface components {
          */
         DiagnosticsManifest: {
             /**
-             * @description Version de la forma del paquete. Cambia solo si cambia lo que significa una seccion.
+             * @description Version de la forma del paquete. Cambia solo si cambia lo que
+             *     significa una seccion o la huella. La `2` (2.3.0) es la de la
+             *     huella que cubre tambien el manifiesto sin su `sha256`; en la `1`
+             *     cubria solo las secciones, y `product:diagnostics --verify` la
+             *     sigue comprobando asi y la presenta como huella sin manifiesto.
              * @constant
              */
-            schema_version: 1;
+            schema_version: 2;
             /** @example 2.2.0 */
             product_version: string;
             generated_at: components["schemas"]["UtcTimestamp"];
@@ -11864,9 +11991,15 @@ export interface components {
             /** @description Nombres de las secciones presentes, en el orden en que aparecen. */
             sections: string[];
             /**
-             * @description SHA-256 del documento sin este `manifest`, serializado en JSON
-             *     canonico (claves ordenadas, sin espacios). Soporte lo recalcula al
-             *     recibirlo para detectar una copia alterada o truncada.
+             * @description SHA-256 del documento entero **con el `manifest` sin este campo**,
+             *     serializado en JSON canonico (claves ordenadas, sin espacios). Cubre
+             *     tambien el manifiesto (PR16, desde la 2.3.0): cambiar `anonymized`,
+             *     la version o la lista de secciones hace fallar la verificacion. Un
+             *     paquete de `schema_version: 1`, de una version anterior, se sigue
+             *     verificando con su algoritmo —solo las secciones— y se presenta
+             *     como huella sin manifiesto: su `anonymized` no esta cubierto. Soporte
+             *     la recalcula al recibirlo para detectar una copia alterada o
+             *     truncada.
              */
             sha256: string;
         };
@@ -12145,12 +12278,32 @@ export interface components {
              */
             status: "active" | "expired" | "revoked";
             scope: components["schemas"]["SupportScope"];
-            /** @description Para que incidente se concedio. Va tal cual al asiento de auditoria. */
-            reason: string;
+            /**
+             * @description Para que incidente se concedio. Va tal cual al asiento de auditoria
+             *     `support_grant.granted`, que lo conserva.
+             *
+             *     **`null` cuando ya se ha vaciado** (bloque 11 de la 2.3.0, tarea
+             *     11.3 C; RGPD art. 5.1.e): la fila lo guarda
+             *     `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` dias (90 de serie,
+             *     minimo 30) desde que la concesion se cerro —su `revoked_at` o, si no
+             *     se revoco, su `expires_at`— y despues una tarea diaria lo vacia. La
+             *     concesion se sigue listando con todo lo demas; el motivo original
+             *     sigue en `audit_log`.
+             */
+            reason: string | null;
+            /**
+             * @description Cuando se vacio `reason`. Nulo mientras el motivo se conserva; no
+             *     nulo exactamente cuando `reason` es `null`.
+             */
+            reason_purged_at: components["schemas"]["UtcTimestamp"] | null;
             /** @description La cuenta de gestion que la concedio. */
             granted_by: {
                 /** Format: uuid */
                 uuid: string;
+                /**
+                 * @description `''` si esa cuenta ya se minimizo por retencion (ADR-060, tarea
+                 *     11.3 B); el `uuid` sigue diciendo cual fue.
+                 */
                 name: string;
             };
             granted_at: components["schemas"]["UtcTimestamp"];
@@ -12351,6 +12504,13 @@ export interface components {
         GrantSupportAccessRequest: {
             /**
              * @description Obligatorio. El incidente que motiva el acceso.
+             *
+             *     **Sin datos personales.** Si hay que señalar a una persona, se usa
+             *     su `employee_uuid`, nunca su nombre. Un motivo que parece llevar
+             *     una direccion de correo, un DNI o NIE o un numero de telefono se
+             *     rechaza con `422` en `errors.reason`, tambien por consola
+             *     (`support:grant`). El motivo va tal cual al asiento de auditoria,
+             *     que no se puede corregir despues.
              * @example Incidencia #123: la cola del quiosco de recepcion no vacia
              */
             reason: string;
@@ -13644,6 +13804,10 @@ export interface components {
          *
          *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
          *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+         *
+         *     **Solo `admin` y `rrhh`.** Un `responsable_departamento` no recibe
+         *     `pin_status` en la ficha (DIV-1) y por eso tampoco puede filtrar por
+         *     el: enviarlo responde `403`.
          * @example issued
          */
         PinStatusFilter: components["schemas"]["PinStatus"];
@@ -15425,6 +15589,10 @@ export interface operations {
                  *
                  *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
                  *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+                 *
+                 *     **Solo `admin` y `rrhh`.** Un `responsable_departamento` no recibe
+                 *     `pin_status` en la ficha (DIV-1) y por eso tampoco puede filtrar por
+                 *     el: enviarlo responde `403`.
                  * @example issued
                  */
                 pin_status?: components["parameters"]["PinStatusFilter"];
@@ -15455,13 +15623,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pagina de la plantilla. */
+            /**
+             * @description Pagina de la plantilla. `EmployeeCollection` para `admin` y `rrhh`;
+             *     `ScopedEmployeeCollection` para `responsable_departamento`. Es
+             *     `anyOf` y no `oneOf` porque una pagina vacia vale para las dos.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmployeeCollection"];
+                    "application/json": components["schemas"]["EmployeeCollection"] | components["schemas"]["ScopedEmployeeCollection"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -15522,13 +15694,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ficha del empleado. */
+            /**
+             * @description Ficha del empleado. `Employee` para `admin` y `rrhh`;
+             *     `ScopedEmployee` para `responsable_departamento`.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Employee"];
+                    "application/json": components["schemas"]["Employee"] | components["schemas"]["ScopedEmployee"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
@@ -15781,6 +15956,11 @@ export interface operations {
              * @description Ya hay un contrato vigente en esa fecha. El cuerpo es correcto; lo que
              *     no encaja es el estado, asi que la accion siguiente es releer los
              *     contratos de esa persona, no reescribir el formulario.
+             *
+             *     Tambien `409` si la ficha esta **minimizada por retencion**
+             *     (`anonymized_at` no nulo, ADR-060): ya no admite contratos. El
+             *     `detail` lo dice en el idioma negociado, con la fecha de la
+             *     minimizacion.
              */
             409: {
                 headers: {
@@ -19094,6 +19274,11 @@ export interface operations {
              *     `409` y no `422`: el cuerpo es valido, lo que no encaja es el estado,
              *     y la accion siguiente es releer las ausencias de esa persona en lugar
              *     de reescribir el formulario.
+             *
+             *     Tambien `409` si la ficha esta **minimizada por retencion**
+             *     (`anonymized_at` no nulo, ADR-060): ya no admite ausencias. El
+             *     `detail` lo dice en el idioma negociado, con la fecha de la
+             *     minimizacion.
              */
             409: {
                 headers: {

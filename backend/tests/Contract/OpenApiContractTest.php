@@ -437,6 +437,40 @@ it('declara el alcance por departamento en la sesion de gestion', function (): v
         ->toBe(['kind', 'department_ids']);
 })->group('RF-ID-03', 'RQ-06');
 
+it('declara la ficha reducida del responsable sin correo, idioma ni estado del PIN', function (): void {
+    // DIV-1 (RGPD art. 5.1.c): el responsable de departamento recibe su
+    // plantilla sin `email`, `locale` ni `pin_status`. Que el esquema reducido
+    // no pueda alojarlos (`additionalProperties: false` y sin la propiedad) es
+    // lo que impide que vuelvan «solo para el panel».
+    $scoped = Contract::keys('components', 'schemas', 'ScopedEmployee', 'properties');
+    $full = Contract::keys('components', 'schemas', 'Employee', 'properties');
+
+    expect(Contract::value('components', 'schemas', 'ScopedEmployee', 'additionalProperties'))->toBeFalse()
+        ->and($scoped)->not->toContain('email', 'locale', 'pin_status')
+        // Todo lo demas de la ficha, y nada que no este en ella.
+        ->and($scoped)->toEqualCanonicalizing(array_values(array_diff($full, ['email', 'locale', 'pin_status'])))
+        ->and(Contract::value('paths', '/api/v1/employees', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'anyOf'))
+        ->toBe([
+            ['$ref' => '#/components/schemas/EmployeeCollection'],
+            ['$ref' => '#/components/schemas/ScopedEmployeeCollection'],
+        ])
+        ->and(Contract::value('paths', '/api/v1/employees/{uuid}', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'oneOf'))
+        ->toBe([
+            ['$ref' => '#/components/schemas/Employee'],
+            ['$ref' => '#/components/schemas/ScopedEmployee'],
+        ]);
+})->group('RF-ID-03', 'RS-05', 'RQ-06');
+
+it('declara en la ficha y en la ficha reducida cuando se minimizo por retencion', function (): void {
+    // ADR-060, tarea 11.3 A: el panel reconoce una ficha minimizada por este
+    // campo, no por los nombres vacios, y lo ve tambien el responsable.
+    foreach (['Employee', 'ScopedEmployee'] as $schema) {
+        expect(Contract::value('components', 'schemas', $schema, 'required'))->toContain('anonymized_at')
+            ->and(Contract::value('components', 'schemas', $schema, 'properties', 'anonymized_at', 'type'))->toBe(['string', 'null'])
+            ->and(Contract::value('components', 'schemas', $schema, 'properties', 'anonymized_at', 'format'))->toBe('date-time');
+    }
+})->group('RL-11', 'RQ-06');
+
 it('no ofrece ningun verbo de borrado en toda la API salvo el declarado', function (): void {
     // Regla dura 5: nada se borra. La baja de un empleado es un cambio de estado
     // con fecha (RF-GP-03) y los centros y departamentos no se eliminan porque

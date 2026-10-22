@@ -356,6 +356,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
                 : new DateTimeImmutable($row->terminated_at->format('Y-m-d')),
             locale: $row->locale,
             teleworking: $row->teleworking,
+            anonymizedAt: $row->anonymized_at?->toDateTimeImmutable(),
         );
     }
 

@@ -118,7 +118,7 @@ final class InMemoryManagementAccounts implements ManagementAccountLifecycle
         ));
     }
 
-    public function deactivate(string $uuid): void
+    public function deactivate(string $uuid, DateTimeImmutable $at): void
     {
         $this->deactivated[] = $uuid;
 

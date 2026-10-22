@@ -20,6 +20,9 @@ return [
 
         'not_started_termination_must_be_hire_date' => 'This person has not started working yet (start date '
             .':hired_on). The only possible termination date is the start date, :hired_on.',
+
+        'record_minimised' => 'This person\'s record was minimised on :anonymized_on when its retention period '
+            .'ended: it no longer accepts contracts or absences.',
     ],
 
 ];

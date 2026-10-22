@@ -65,6 +65,8 @@ final class ComplianceProfileResource extends JsonResource
                 'holiday_calendar' => $profile->holidayCalendar,
                 'retention_years' => $profile->retentionYears,
                 'retention_years_floor' => $view->retentionFloor->years,
+                // ADR-060: años de la ficha de personal tras el cese.
+                'personnel_record_retention_years' => $profile->personnelRecordRetentionYears,
                 'is_default' => $profile->isDefault,
                 'source' => $profile->source->value,
                 // `null` significa «tal como se instalo»: nadie lo ha tocado.

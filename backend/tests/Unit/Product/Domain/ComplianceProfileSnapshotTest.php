@@ -39,6 +39,7 @@ function spanishProfileSnapshot(): ComplianceProfileSnapshot
         retentionYears: 4,
         isDefault: true,
         source: ComplianceProfileSource::InstallationDefault,
+        personnelRecordRetentionYears: 4,
     );
 }
 
@@ -387,6 +388,7 @@ function uncataloguedProfileSnapshot(): ComplianceProfileSnapshot
         retentionYears: 4,
         isDefault: true,
         source: ComplianceProfileSource::InstallationDefault,
+        personnelRecordRetentionYears: 4,
     );
 }
 
@@ -423,6 +425,7 @@ it('comprueba el suelo en todo cambio, aunque no toque la retencion', function (
         retentionYears: 2,
         isDefault: true,
         source: ComplianceProfileSource::InstallationDefault,
+        personnelRecordRetentionYears: 4,
     );
 
     expect(fn (): ComplianceProfileSnapshot => $porDebajo->with(['min_rest_hours' => 10], spanishRetentionFloor()))

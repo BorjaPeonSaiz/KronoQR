@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
@@ -63,7 +64,10 @@ use App\Modules\Reporting\Domain\Event\ReportExportRequested;
  */
 final readonly class RecordReportExportLifecycle
 {
-    public function __construct(private RecordAuditEntry $audit) {}
+    public function __construct(
+        private RecordAuditEntry $audit,
+        private AuditedPersonalDataAccessLog $disclosures,
+    ) {}
 
     public function requested(ReportExportRequested $event): void
     {
@@ -107,6 +111,26 @@ final readonly class RecordReportExportLifecycle
                 ...self::affectedSubjects($event->employeeUuids),
             ]),
         ));
+
+        // La LECTURA, con su propio asiento y a nombre de quien la pidio (tarea
+        // 11.4, V4-BE-5; RS-05, RL-15). Antes la escribia el trabajo en la cola
+        // a nombre de `system`, y «quien se llevo estas horas» se respondia con
+        // la maquina. Mismo contenido que la descarga sincrona —el contexto lo
+        // resuelve `GeneratePeriodReport::compose()`—, mas el informe del que
+        // sale y la marca de diferido. En la misma transaccion que el asiento de
+        // arriba: o constan los dos o ninguno.
+        // El `payload` lo construye el mismo adaptador que el de la lectura
+        // sincrona: un solo sitio para la forma de `personal_data.accessed`.
+        $this->disclosures->recordDisclosureAs(
+            AuditActor::user($event->requestedByUserId),
+            $event->disclosureDataset,
+            $event->disclosureRecordCount,
+            [
+                ...$event->disclosureContext,
+                'report_export_uuid' => $event->uuid,
+                'deferred' => true,
+            ],
+        );
     }
 
     /**

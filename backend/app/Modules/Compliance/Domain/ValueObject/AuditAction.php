@@ -235,7 +235,9 @@ enum AuditAction: string
      * sus valores** (regla dura 21): ni nombre, ni correo, ni documento, ni el
      * motivo libre de la baja. `employee.hired` añade `site_id`,
      * `department_id` —identificadores de la organizacion, no de la persona— y
-     * `via_import`; `employee.offboarded`, la fecha de cese.
+     * `via_import`; `employee.offboarded`, la fecha de cese; `employee.updated`,
+     * si la persona cambio de departamento, `previous_department_id` y
+     * `department_id` (R4-SC-05).
      */
     case EmployeeHired = 'employee.hired';
     case EmployeeUpdated = 'employee.updated';
@@ -247,8 +249,9 @@ enum AuditAction: string
      * Familia «cambia roles, permisos o parametros del calculo»: un departamento
      * es un ambito de autoridad —decide que responsable ve y corrige la jornada
      * de quien—, asi que crearlo o cambiarlo es un cambio de potestades, no un
-     * alta de plantilla. Solo identificadores y la lista de campos tocados, sin
-     * valores.
+     * alta de plantilla. Identificadores y la lista de campos tocados;
+     * `department.renamed` añade `previous_name` y `name` (R7-RV-02), que son de
+     * la organizacion y no de una persona.
      */
     case DepartmentCreated = 'department.created';
     case DepartmentRenamed = 'department.renamed';
@@ -780,6 +783,26 @@ enum AuditAction: string
      * ni corrige nada: la purga sigue en `audit_log` (regla dura 6).
      */
     case RetentionPurgeReviewed = 'retention.purge_reviewed';
+
+    /**
+     * La ficha de una persona dada de baja, minimizada en sitio al vencer su
+     * plazo (ADR-060, tarea 11.3 A; RL-11, RGPD art. 5.1.e). Un asiento por
+     * persona, en la misma transaccion que su minimizacion, a nombre de quien
+     * firmo la ejecucion. Sujeto `employee` sin id, como el resto de asientos
+     * de la ficha. El payload lleva el `employee_uuid`, la fecha de cese, el
+     * corte, los años aplicados, los campos vaciados y lo que se borro con ella
+     * (contratos, ausencias, sesiones del portal). **Ni el nombre ni el codigo**:
+     * es justo lo que se acaba de borrar.
+     */
+    case RetentionPersonnelRecordAnonymized = 'retention.personnel_record_anonymized';
+
+    /**
+     * La cuenta de gestion dada de baja, minimizada en sitio al vencer su plazo
+     * (ADR-060, tarea 11.3 B). Un asiento por cuenta, sujeto `user` por su id.
+     * El payload lleva el `user_uuid`, la fecha de baja, el corte, los años,
+     * los campos vaciados y los tokens borrados. Sin nombre ni correo.
+     */
+    case RetentionManagementAccountAnonymized = 'retention.management_account_anonymized';
 
     /**
      * Sujeto de la accion —la parte anterior al punto— y familia del bloque D a

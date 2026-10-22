@@ -485,3 +485,13 @@ it('no describe en el README ninguna columna que ya no exista', function (string
         .implode(', ', $sobran),
     );
 })->with(['es', 'en'])->group('RF-PD-14', 'RL-20');
+
+it('saca las columnas de la minimizacion y de los plazos de la 2.3.0', function (): void {
+    // ADR-060 y tarea 11.3: quien recibe la exportacion integra tiene que poder
+    // ver que se minimizo, cuando, y con que plazo.
+    expect(DataExportCatalog::dataset('employees')?->columns())->toContain('anonymized_at')
+        ->and(DataExportCatalog::dataset('users')?->columns())->toContain('deactivated_at')
+        ->and(DataExportCatalog::dataset('users')?->columns())->toContain('anonymized_at')
+        ->and(DataExportCatalog::dataset('support_grants')?->columns())->toContain('reason_purged_at')
+        ->and(DataExportCatalog::dataset('compliance_profiles')?->columns())->toContain('personnel_record_retention_years');
+})->group('RL-20', 'RL-11', 'RF-PD-14');

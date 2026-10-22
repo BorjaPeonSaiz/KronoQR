@@ -24,6 +24,7 @@ import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, ref, useId, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePersonName } from '@/shared/people/personName'
 import type { LegalExportEmployeeMatch, LegalExportEmployeeSearch } from '@/shared/api/types'
 import { searchLegalExportEmployees } from './legalExport.api'
 
@@ -33,6 +34,7 @@ type SearchMode = 'text' | 'nationalId'
 const uuid = defineModel<string>({ default: '' })
 
 const { t, locale } = useI18n()
+const { personName, isMinimised } = usePersonName()
 
 const modeName = useId()
 const resultsName = useId()
@@ -75,7 +77,9 @@ const canSearch = computed(() => term.value.trim() !== '' && !searching.value)
 
 function describe(match: LegalExportEmployeeMatch): string {
   const parts = [
-    `${match.last_name}, ${match.first_name}`,
+    isMinimised(match.first_name, match.last_name)
+      ? personName('', '')
+      : `${match.last_name}, ${match.first_name}`,
     match.department?.name ?? t('reports.legalExport.picker.noDepartment'),
   ]
 

@@ -123,7 +123,8 @@
       "neverLoggedIn": "Never signed in",
       "noActions": "No actions: account deactivated",
       "reachesNobody": "Reaches nobody: not the manager of any department.",
-      "assignDepartment": "Assign a department"
+      "assignDepartment": "Assign a department",
+      "minimisedAt": "Minimised on {date}. No actions."
     },
     "empty": {
       "title": "No accounts",
@@ -291,6 +292,9 @@
     "description": "The address does not match any section of the console.",
     "backToEmployees": "Go to the workforce list"
   },
+  "people": {
+    "minimised": "Minimised person"
+  },
   "employees": {
     "title": "Workforce",
     "subtitle": "Hiring, records and offboarding. Nothing is deleted: offboarding keeps the record and its time entries.",
@@ -381,7 +385,9 @@
         "title": "The card is not managed from this record",
         "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the credentials board.",
         "link": "Go to the credentials board"
-      }
+      },
+      "minimised": "This record is minimised: the retention period after leaving expired and the name, email, PIN, photo and document were removed. The identifier, site, department and dates are kept. There is nothing left to edit and no credential to manage.",
+      "minimisedAt": "Minimised on {date}."
     },
     "offboard": {
       "heading": "Offboarding",
@@ -1585,7 +1591,8 @@
       "breakRequiredAfterHours": "Maximum continuous stretch without a break (h)",
       "weekStartsOn": "The week starts on",
       "holidayCalendar": "Public holiday calendar",
-      "retentionYears": "Years records are kept"
+      "retentionYears": "Years records are kept",
+      "personnelRecordRetentionYears": "Years the record is kept after leaving"
     },
     "hints": {
       "name": "The name of the agreement this profile describes. It appears in the retention report.",
@@ -1596,7 +1603,8 @@
       "weekStartsOn": "Used to group by week. Monday in the Spanish profile (ISO 8601).",
       "holidayCalendar": "One date per line, in YYYY-MM-DD format. Ships empty: holidays depend on the town and the year, so each installation loads its own.",
       "retentionFloor": "Legal minimum: {years} year ({region}). | Legal minimum: {years} years ({region}).",
-      "retentionYears": "Nothing can be purged before that. The minimum is set by each country's law; in Spain, article 34.9 of the Workers' Statute."
+      "retentionYears": "Nothing can be purged before that. The minimum is set by each country's law; in Spain, article 34.9 of the Workers' Statute.",
+      "personnelRecordRetentionYears": "Period, counted from the leaving date, after which the person's record is minimised (name, email, PIN, photo and document) and their contracts and absences are deleted. Between 1 and 30 years; 4 by default. It never expires before the time record that names them."
     },
     "weekDays": {
       "1": "Monday",
@@ -1613,8 +1621,10 @@
     "errors": {
       "belowFloor": "It cannot be lower than the legal minimum: {years} year. | It cannot be lower than the legal minimum: {years} years.",
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
-      "required": "This field cannot be left empty."
-    }
+      "required": "This field cannot be left empty.",
+      "personnelOutOfRange": "Enter a number of years between {min} and {max}."
+    },
+    "personnelRetentionWarning": "You are about to change the personnel record retention period. When it expires after leaving, the record is minimised (name, email, PIN, photo and document) and its contracts and absences are deleted; this cannot be undone. No minimisation runs on its own: the retention command proposes in simulation first and requires an explicit confirmation."
   },
   "complianceSummary": {
     "title": "Compliance",
@@ -2323,7 +2333,8 @@
         "reasonHint": "The ticket number or reference, between 3 and 200 characters. It goes as written into the audit log: no people's names, no health data.",
         "scope": "Scope",
         "hours": "Hours",
-        "hoursHint": "How long the access will stay active: between 1 and 72 hours."
+        "hoursHint": "How long the access will stay active: between 1 and 72 hours.",
+        "reasonPersonalHint": "Do not write names, emails, ID numbers or phone numbers: if you need to point to a person, use their uuid. The reason goes as is into the audit trail and cannot be corrected later."
       },
       "scope": {
         "diagnostics": {
@@ -2371,7 +2382,8 @@
           "actions": "Actions"
         },
         "usedAgo": "{hours} h {minutes} min ago",
-        "neverUsed": "Never"
+        "neverUsed": "Never",
+        "reasonPurged": "Reason removed on {date}"
       },
       "revoke": {
         "action": "Revoke",

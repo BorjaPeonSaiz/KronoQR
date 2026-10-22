@@ -63,6 +63,7 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     locale: 'es',
     teleworking: false,
     pin_status: 'issued',
+    anonymized_at: null,
     ...overrides,
   }
 }
@@ -468,6 +469,7 @@ export function supportGrant(overrides: Partial<SupportGrant> = {}): SupportGran
     expires_at: '2026-09-09T09:00:00.000000Z',
     revoked_at: null,
     accessed_at: null,
+    reason_purged_at: null,
     ...overrides,
   }
 }
@@ -551,6 +553,7 @@ export function managementAccount(overrides: Partial<ManagementAccount> = {}): M
     password_status: 'own',
     last_login_at: '2026-10-06T07:42:10Z',
     created_at: '2026-09-02T09:05:00Z',
+    anonymized_at: null,
     ...overrides,
   }
 }

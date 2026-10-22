@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\AccessHardeningFacts;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -66,8 +67,12 @@ final readonly class AccessHardeningProbe implements DoctorProbe
     public function __construct(
         private PinLengthProvider $pinLengthProvider,
         private AccessHardeningFacts $facts,
+        /** Las cuentas sin uso, con la misma consulta que la metrica de Identity (ADR-060). */
+        private DormantManagementAccounts $dormant,
         private string $portalInternal,
         private array $secondFactorRoles = [],
+        /** Dias sin entrar a partir de los que una cuenta activa esta sin uso (ADR-060). */
+        private int $dormantDays = 90,
     ) {}
 
     public function family(): string
@@ -89,7 +94,49 @@ final readonly class AccessHardeningProbe implements DoctorProbe
             $this->shortPins($length),
             $this->missingSecondFactorRoles($required),
             $this->accountsPendingSecondFactor($required),
+            $this->tokensWithoutExpiry(),
+            $this->dormantAccounts(),
         ];
+    }
+
+    /**
+     * Cuentas de gestion activas sin uso (ADR-060, tarea 11.3 B). Aviso y no
+     * fallo: una cuenta activa no se purga nunca, pero una que nadie usa es una
+     * puerta abierta que nadie vigila. El numero por rol, nunca quienes.
+     */
+    private function dormantAccounts(): DoctorFinding
+    {
+        $id = 'access.dormant_accounts';
+        $byRole = $this->dormant->byRole($this->dormantDays);
+        $count = array_sum($byRole);
+        $details = ['dormant_accounts' => $count, 'by_role' => $byRole, 'days' => $this->dormantDays];
+
+        if ($count === 0) {
+            return DoctorFinding::ok($id, $details, ['days' => $this->dormantDays]);
+        }
+
+        return DoctorFinding::warning(
+            $id,
+            params: ['count' => $count, 'days' => $this->dormantDays, 'roles' => implode(', ', array_keys($byRole))],
+            details: $details,
+        );
+    }
+
+    /**
+     * Tokens que `sanctum:prune-expired` no borrara nunca (tarea 11.3 D, RGPD
+     * art. 5.1.e). Aviso y no fallo: siguen funcionando como siempre; lo que
+     * no hacen es caducar.
+     */
+    private function tokensWithoutExpiry(): DoctorFinding
+    {
+        $id = 'access.tokens_without_expiry';
+        $count = $this->facts->accessTokensWithoutExpiry();
+
+        if ($count === 0) {
+            return DoctorFinding::ok($id, ['tokens_without_expiry' => 0]);
+        }
+
+        return DoctorFinding::warning($id, params: ['count' => $count], details: ['tokens_without_expiry' => $count]);
     }
 
     /**

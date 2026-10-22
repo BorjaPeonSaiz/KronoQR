@@ -6,11 +6,12 @@ namespace App\Modules\Workforce\Http\Resource;
 
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
+use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Serializacion del esquema `Employee` del contrato.
+ * Serializacion de los esquemas `Employee` y `ScopedEmployee` del contrato.
  *
  * **Envuelve el modelo de dominio y nunca el modelo Eloquent.** Es lo que hace
  * imposible que `national_id_hash` o `pin_hash` acaben en una respuesta el dia
@@ -22,14 +23,24 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * ficha porque el modelo de dominio no lo tiene: el PIN no es un atributo de la
  * persona, es una credencial con su propio ciclo.
  *
+ * ## `email`, `locale` y `pin_status` se OMITEN para el responsable (DIV-1)
+ *
+ * Con `$includesContactAndPin` a `false` el objeto es un `ScopedEmployee`: las
+ * tres claves **no existen**. `null` en `email` diria «no tiene correo», y lo
+ * cierto es «no te corresponde». La decision llega ya resuelta por
+ * `EmployeePolicy::viewContactAndPin`, como la nota de `AbsenceResource`.
+ *
  * @property-read Employee $resource
  */
 final class EmployeeResource extends JsonResource
 {
     public static $wrap = null;
 
-    public function __construct(Employee $employee, private readonly PinStatus $pinStatus)
-    {
+    public function __construct(
+        Employee $employee,
+        private readonly PinStatus $pinStatus,
+        private readonly bool $includesContactAndPin = true,
+    ) {
         parent::__construct($employee);
     }
 
@@ -41,21 +52,30 @@ final class EmployeeResource extends JsonResource
         /** @var Employee $employee */
         $employee = $this->resource;
 
+        $full = $this->includesContactAndPin;
+
+        // Mismo orden de claves que el contrato. Las tres omitidas para el
+        // responsable NO EXISTEN en su objeto (ver el docblock).
         return [
             'uuid' => $employee->uuid,
             'employee_code' => $employee->code->value,
             'first_name' => $employee->firstName,
             'last_name' => $employee->lastName,
-            // Siempre presente, aunque sea `null`: el contrato lo exige y un
-            // campo que aparece y desaparece obliga al cliente a adivinar.
-            'email' => $employee->email,
+            // Siempre presente para `rrhh+`, aunque sea `null`: el contrato lo
+            // exige y un campo que aparece y desaparece en el mismo esquema
+            // obliga al cliente a adivinar.
+            ...($full ? ['email' => $employee->email] : []),
             'department_id' => $employee->departmentId,
             'status' => $employee->status->value,
             'hired_at' => $employee->hiredAt->format('Y-m-d'),
             'terminated_at' => $employee->terminatedAt?->format('Y-m-d'),
-            'locale' => $employee->locale,
+            ...($full ? ['locale' => $employee->locale] : []),
             'teleworking' => $employee->teleworking,
-            'pin_status' => $this->pinStatus->value,
+            ...($full ? ['pin_status' => $this->pinStatus->value] : []),
+            // ADR-060: cuando se minimizo la ficha, en UTC; `null` si se conserva
+            // entera. Es lo que dice que la ficha esta minimizada, no los nombres
+            // vacios. Lo reciben los dos esquemas, tambien el del responsable.
+            'anonymized_at' => $employee->anonymizedAt?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z'),
         ];
     }
 }

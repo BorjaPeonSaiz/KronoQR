@@ -48,6 +48,7 @@ use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\ListDataExportsHandler;
 use App\Modules\Product\Application\UseCase\PruneErrorEvents;
+use App\Modules\Product\Application\UseCase\PruneSupportGrantReasons;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
@@ -106,6 +107,7 @@ use App\Modules\Product\Infrastructure\Console\ProductErrorsPruneCommand;
 use App\Modules\Product\Infrastructure\Console\ProductExportAllCommand;
 use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
+use App\Modules\Product\Infrastructure\Console\SupportGrantsPruneReasonsCommand;
 use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ConfigurationCollector;
@@ -177,6 +179,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
@@ -627,6 +630,16 @@ final class ProductServiceProvider extends ServiceProvider
                  * corren las tareas nocturnas que mas errores producen.
                  */
                 batchSize: Config::integer('compliance.retention.batch_size', 1000),
+            ),
+        );
+
+        // Tarea 11.3 C: el motivo de una concesion de soporte tiene plazo.
+        $this->app->bind(
+            PruneSupportGrantReasons::class,
+            static fn (Application $app): PruneSupportGrantReasons => new PruneSupportGrantReasons(
+                grants: $app->make(SupportGrantRepository::class),
+                clock: $app->make(Clock::class),
+                retentionDays: Config::integer('product.support_grant_reason_retention_days', 90),
             ),
         );
     }
@@ -1690,6 +1703,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductErrorsCommand::class,
                 ProductErrorsPruneCommand::class,
+                SupportGrantsPruneReasonsCommand::class,
             ]);
         }
     }
@@ -2181,11 +2195,13 @@ final class ProductServiceProvider extends ServiceProvider
         return new AccessHardeningProbe(
             pinLengthProvider: $app->make(PinLengthProvider::class),
             facts: new DatabaseAccessHardeningFacts(DB::connection()),
+            dormant: $app->make(DormantManagementAccounts::class),
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
             secondFactorRoles: array_values(array_filter(
                 Config::array('identity.two_factor.required_roles', []),
                 static fn (mixed $role): bool => \is_string($role),
             )),
+            dormantDays: Config::integer('identity.dormant_account_days', 90),
         );
     }
 }

@@ -42,8 +42,12 @@ El cliente te ha enviado `kronoqr-diagnostics-<version>-<UTC>.json`. Es un
 1. **`manifest`**: mira `product_version`, `generated_at`, `anonymized` y
    `generated_by`. Si `anonymized` es `false`, el cliente **eligió** incluir
    datos personales: trátalo como tal (paso 7) y no lo reenvíes a nadie.
-2. **Huella.** `manifest.sha256` es el SHA-256 del documento **sin** el
-   `manifest`, serializado en JSON canónico (claves ordenadas, sin espacios).
+2. **Huella.** `manifest.sha256` es el SHA-256 del documento entero con el
+   `manifest` **sin su campo `sha256`**, serializado en JSON canónico (claves
+   ordenadas, sin espacios). Desde la 2.3.0 cubre también el manifiesto: un
+   `anonymized` cambiado a mano no verifica (PR16). Un paquete de una versión
+   anterior, cuya huella cubría solo las secciones, no verifica con la 2.3.0:
+   compruébalo con la versión que lo generó o pídelo de nuevo.
    Si no coincide, el fichero está truncado o se ha editado por el camino:
    pídelo de nuevo antes de diagnosticar nada.
 

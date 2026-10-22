@@ -25,6 +25,8 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditChainReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditPartitionArchive;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseErrorHistoryArchive;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseManagementAccountArchive;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabasePersonnelRecordArchive;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
@@ -291,9 +293,11 @@ function retentionUsing(ConnectionInterface $connection, string $now, ?Responsib
     $technicalLog = new FilesystemTechnicalLogArchive;
     $errorHistory = new DatabaseErrorHistoryArchive($connection);
     $policies = app(RetentionPolicyProvider::class);
+    $accountArchive = new DatabaseManagementAccountArchive($connection);
+    $personnelArchive = new DatabasePersonnelRecordArchive($connection, sys_get_temp_dir());
 
     return new ApplyRetention(
-        new PlanRetention($policies, $work, $partitions, $technicalLog, $errorHistory),
+        new PlanRetention($policies, $work, $partitions, $technicalLog, $errorHistory, $accountArchive, $personnelArchive),
         $work,
         $partitions,
         new DatabaseAuditChainReader($connection),
@@ -307,6 +311,8 @@ function retentionUsing(ConnectionInterface $connection, string $now, ?Responsib
         $clock,
         $accounts ?? new DatabaseResponsibleAccounts($connection),
         new ChainLockedWrite($connection),
+        $accountArchive,
+        $personnelArchive,
     );
 }
 

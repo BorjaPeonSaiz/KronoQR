@@ -105,10 +105,16 @@ return [
      * de escrituras diarias bajo el candado global de ADR-010, el mismo por el
      * que pasa cada fichaje.
      *
-     * Hoy hay uno: `live_presence`, la vista del panel que se pide cada 15 s
+     * El primero: `live_presence`, la vista del panel que se pide cada 15 s
      * cuando el WebSocket no llega (RNF-D-03, ADR-011). Añadir un conjunto aqui
      * es una decision sobre el valor probatorio del trail, no un ajuste de
      * rendimiento.
+     *
+     * Desde la 2.3.0 (tarea 11.4) hay un segundo: `live_presence_stream`, la
+     * autorizacion de la suscripcion al canal de Reverb. El cliente se reconecta
+     * a cada caida de red, y cada reconexion es una autorizacion nueva; la
+     * ventana se cuenta por actor **y canal**, asi que el canal de toda la
+     * instalacion y el de un departamento dejan cada uno su asiento.
      *
      * EL HECHO NO SE PIERDE: el primer asiento de cada ventana se escribe siempre
      * y las repeticiones se cuentan en `repeated_since_last_entry` del siguiente.
@@ -119,7 +125,7 @@ return [
      * agrupacion y devuelve un asiento por lectura.
      */
     'disclosure_grouping' => [
-        'datasets' => ['live_presence'],
+        'datasets' => ['live_presence', 'live_presence_stream'],
         'window_seconds' => (int) env('COMPLIANCE_DISCLOSURE_WINDOW_SECONDS', 900),
     ],
 
@@ -295,6 +301,14 @@ return [
          * el planificador de PostgreSQL deja de optimizar.
          */
         'batch_size' => (int) env('COMPLIANCE_RETENTION_BATCH_SIZE', 1000),
+
+        /*
+         * Directorio del que cuelga `employees.photo_path`. Al minimizar una
+         * ficha vencida (ADR-060, tarea 11.3 A) su foto se borra de aqui despues
+         * del COMMIT. Hoy el producto no escribe fotos; el directorio existe para
+         * que una instalacion que las tenga no las conserve para siempre.
+         */
+        'personnel_photo_root' => storage_path('app/employee-photos'),
 
         /*
          * Conexion con la que se sueltan las particiones de `audit_log`

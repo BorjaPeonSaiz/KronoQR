@@ -54,6 +54,7 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property CarbonImmutable|null $pin_issued_at
  * @property CarbonImmutable|null $pin_delivered_at
  * @property int|null $pin_delivered_by_user_id
+ * @property CarbonImmutable|null $anonymized_at
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
@@ -105,6 +106,8 @@ final class Employee extends Model
             // una hora concreta y se guardan en UTC (regla dura 3).
             'pin_issued_at' => 'immutable_datetime',
             'pin_delivered_at' => 'immutable_datetime',
+            // ADR-060: cuando se minimizo la ficha por retencion.
+            'anonymized_at' => 'immutable_datetime',
         ];
     }
 }
