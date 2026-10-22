@@ -13,7 +13,6 @@
 // La impresion y el «buscar en la pagina» NO funcionan sobre las filas que no
 // estan pintadas: es el coste asumido de virtualizar, y la guia de RRHH remite a
 // la exportacion (RF-IN-04).
-import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { ComplianceFinding, PeriodReport, PeriodReportRow } from '@/shared/api/types'
@@ -25,6 +24,7 @@ import {
   PERIOD_REPORT,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 const REPORT_ROWS = 20_000
 const FINDINGS = 3_000
@@ -47,8 +47,6 @@ const PAINTED_CEILING = 80
  * valen CON esta ralentizacion.
  */
 const CPU_THROTTLE_RATE = 4
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
 declare global {
   interface Window {
     __longTasks: number[]
@@ -196,18 +194,6 @@ async function longestTask(page: Page): Promise<number> {
 
     return Math.max(0, ...window.__longTasks)
   })
-}
-
-async function expectNoBlockingViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
 }
 
 async function requestReport(page: Page): Promise<number> {

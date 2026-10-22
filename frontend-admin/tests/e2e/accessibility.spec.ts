@@ -7,7 +7,6 @@
 // Hasta ahora el panel solo tenia una comprobacion estructural en Vitest; esto
 // es el analisis de verdad, sobre el DOM real del build.
 
-import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { Absence } from '@/shared/api/types'
@@ -48,30 +47,9 @@ const ABSENCE_EXAMPLE: Absence = {
   void_reason: null,
   created_at: '2026-02-20T09:14:02.118000Z',
 }
+import { expectNoBlockingViolations } from './support/axe'
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
-
-/** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoBlockingViolations(page: Page, exclude: string[] = []): Promise<void> {
-  const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS)
-
-  for (const selector of exclude) {
-    builder.exclude(selector)
-  }
-
-  const results = await builder.analyze()
-
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
-}
 
 test.beforeEach(async ({ page }) => {
   await stubManagementApi(page)

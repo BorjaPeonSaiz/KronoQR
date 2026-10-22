@@ -6,7 +6,6 @@
 // vigente el dia anterior al inicio del nuevo, como el servidor. La restriccion
 // de no solapar vigencias y la autorizacion real se prueban en el backend.
 import type { Page } from '@playwright/test'
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import type { Employee, EmploymentContract } from '@/shared/api/types'
 import {
@@ -17,6 +16,7 @@ import {
   logInAsManager,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 const CURRENT_CONTRACT: EmploymentContract = {
   id: 58,
@@ -392,18 +392,7 @@ test(
     await expect(dialog.getByText(/no puede ser posterior a hoy/).first()).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Confirmar la baja' })).toBeDisabled()
 
-    const results = await new AxeBuilder({ page })
-      .include('[role="dialog"]')
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-      .analyze()
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page, { include: '[role="dialog"]' })
 
     // Con la fecha de hoy (la del centro, que es el `max` del campo) la baja se confirma.
     const today = await date.getAttribute('max')
