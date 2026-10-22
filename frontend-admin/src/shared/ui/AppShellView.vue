@@ -72,6 +72,15 @@ function reloadPage(): void {
   window.location.reload()
 }
 
+// Un menu de UN solo enlace a la pantalla en la que ya se esta no ayuda a nadie
+// (el auditor, cuya unica pantalla es la Inspeccion; V21-3-UX-3): se retira. Si la
+// persona esta en otra pantalla -cambiar la contrasena-, el enlace sigue ahi para volver.
+const showNavigation = computed(
+  () =>
+    navigation.value.length > 1 ||
+    (navigation.value.length === 1 && !isActive(navigation.value[0]?.name ?? '')),
+)
+
 const roleLabels = computed(() => session.roles.map((role) => t(`app.roles.${role}`)).join(', '))
 
 async function signOut(): Promise<void> {
@@ -115,7 +124,7 @@ async function signOut(): Promise<void> {
           <p class="text-xs text-kq-text-muted">{{ t('app.title') }}</p>
         </div>
 
-        <nav v-if="navigation.length > 0" :aria-label="t('app.nav.label')" class="md:flex-1">
+        <nav v-if="showNavigation" :aria-label="t('app.nav.label')" class="md:flex-1">
           <!-- Hueco de 6 px entre secciones: el anillo de foco (3 px, a 2 px
                de la caja) tiene que caber sin tocar a la vecina, porque
                `--kq-color-focus` es el mismo tono que el fondo de la activa
@@ -173,7 +182,7 @@ async function signOut(): Promise<void> {
         </div>
 
         <div
-          class="flex flex-wrap items-center gap-3 md:flex-col md:items-stretch md:gap-2 md:border-t md:border-kq-border md:pt-3"
+          class="flex flex-wrap items-center gap-3 md:mt-auto md:flex-col md:items-stretch md:gap-2 md:border-t md:border-kq-border md:pt-3"
         >
           <p class="min-w-0 text-xs text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.displayName, roles: roleLabels }) }}

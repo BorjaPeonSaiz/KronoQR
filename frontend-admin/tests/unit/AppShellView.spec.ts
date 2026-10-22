@@ -78,11 +78,48 @@ describe('AppShellView', () => {
     hr.unmount()
   })
 
-  it('el auditor (solo reports:legal) ve una unica entrada, «Inspeccion» (bloque 25)', async () => {
+  it('el auditor (solo reports:legal) solo alcanza «Inspeccion»; estando en otra pantalla, el enlace sigue para volver (bloque 25)', async () => {
     const wrapper = await mountShell(['reports:legal'])
     const links = wrapper.find('nav').findAll('a')
 
     expect(links.map((link) => link.text())).toEqual([es.app.nav.legalExport])
+  })
+
+  it('con un unico enlace y ya en esa pantalla, no hay menu lateral (V21-3-UX-3)', async () => {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.user = managementUser({ roles: ['auditor'], abilities: ['reports:legal'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    await router.push('/reports/legal-export')
+
+    const wrapper = await mountView(AppShellView, { pinia, router })
+
+    expect(wrapper.find('nav').exists()).toBe(false)
+    // Lo demas del marco sigue: quien ha entrado, cambiar la contrasena y salir.
+    expect(wrapper.text()).toContain(es.app.changePassword)
+    expect(wrapper.text()).toContain(es.app.signOut)
+  })
+
+  it('con varias secciones el menu sigue, tambien estando en una de ellas', async () => {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.user = managementUser({ abilities: ['attendance:read', 'employees:read'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    await router.push('/live')
+
+    const wrapper = await mountView(AppShellView, { pinia, router })
+
+    expect(wrapper.find('nav').exists()).toBe(true)
   })
 
   it('no ofrece ninguna seccion a quien no tiene ambitos de gestion', async () => {

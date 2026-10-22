@@ -1,8 +1,8 @@
 // El auditor solo ve la Inspeccion (bloque 25 de la 2.2.1, RF-ID-02).
 //
 // Su sesion lleva unicamente `reports:legal`: ni presencia, ni cumplimiento, ni
-// plantilla, ni departamentos. La interfaz lo refleja (menu de una entrada y
-// guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
+// plantilla, ni departamentos. La interfaz lo refleja (sin menu lateral, porque su
+// unico enlace llevaria a la pantalla en la que ya esta, y guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
@@ -20,15 +20,13 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
   })
 
   test(
-    'aterriza en Inspeccion con un menu de una sola entrada',
+    'aterriza en Inspeccion sin menu lateral de un solo enlace (V21-3-UX-3)',
     { tag: ['@RF-ID-02', '@regla-dura-18'] },
     async ({ page }) => {
       await expect(page).toHaveURL(/\/reports\/legal-export$/)
 
-      const links = page.getByRole('navigation').getByRole('link')
-
-      await expect(links).toHaveCount(1)
-      await expect(links.first()).toHaveText('Inspección')
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expect(page.getByRole('banner').getByRole('navigation')).toHaveCount(0)
     },
   )
 
@@ -45,7 +43,7 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
         await page.goto(path)
 
         await expect(page).toHaveURL(/\/reports\/legal-export$/)
-        await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(1)
+        await expect(page.getByRole('banner').getByRole('navigation')).toHaveCount(0)
       },
     )
   }
