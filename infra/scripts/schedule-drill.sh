@@ -43,12 +43,18 @@
 #
 # Uso:
 #   schedule-drill.sh install [--schedule "M H D MES DS"]   lo programa (idempotente)
-#   schedule-drill.sh remove                                 lo retira
+#   schedule-drill.sh remove                                 lo retira (y recuerda que no se quiere)
+#   schedule-drill.sh ensure                                 lo programa salvo que se haya desactivado
+#   schedule-drill.sh optout                                 recuerda que no se quiere programar
 #   schedule-drill.sh status                                 dice si esta programado
 #
 # Necesita root para escribir en /etc/cron.d y /usr/local/sbin: `sudo ./schedule-drill.sh install`.
 #
-# Variables (solo para pruebas): KQ_DRILL_CRON_FILE, KQ_DRILL_LAUNCHER, KQ_DRILL_LOG.
+# install.sh y update.sh llaman a `ensure` (o a `optout` con --no-drill-schedule). La decision de no
+# programarlo se recuerda en /etc/kronoqr/no-drill-schedule para que las actualizaciones no la
+# deshagan; `install` la borra.
+#
+# Variables (solo para pruebas): KQ_DRILL_CRON_FILE, KQ_DRILL_LAUNCHER, KQ_DRILL_LOG, KQ_DRILL_OPTOUT.
 #
 # CODIGOS DE SALIDA (lib/exit-codes.sh):
 #   0  Hecho (o ya estaba como se pedia).
@@ -67,6 +73,7 @@ readonly SCRIPT_DIR
 readonly CRON_FILE="${KQ_DRILL_CRON_FILE:-/etc/cron.d/kronoqr-restore-drill}"
 readonly LAUNCHER="${KQ_DRILL_LAUNCHER:-/usr/local/sbin/kronoqr-restore-drill}"
 readonly LOG_FILE="${KQ_DRILL_LOG:-/var/log/kronoqr-drill.log}"
+readonly OPTOUT_FILE="${KQ_DRILL_OPTOUT:-/etc/kronoqr/no-drill-schedule}"
 readonly DEFAULT_SCHEDULE="40 4 1 1,4,7,10 *"
 readonly MARK="# Gestionado por schedule-drill.sh (KronoQR, RNF-D-05). No lo edites a mano: schedule-drill.sh install | remove."
 
@@ -194,6 +201,8 @@ cmd_install() {
     changed=1
   fi
 
+  rm -f -- "$OPTOUT_FILE" 2>/dev/null || true
+
   if [ "$changed" -eq 1 ]; then
     printf 'Simulacro de restauracion programado: "%s" (hora del servidor).\n  Entrada de cron: %s\n  Lanzador:        %s\n  Salida:          %s\n' \
       "$schedule" "$CRON_FILE" "$LAUNCHER" "$LOG_FILE"
@@ -201,6 +210,27 @@ cmd_install() {
     printf 'Ya estaba programado como se pide ("%s"). No se ha cambiado nada.\n' "$schedule"
   fi
   printf 'Para probarlo ahora, sin esperar al trimestre: sudo %s\nPara retirarlo: sudo ./schedule-drill.sh remove\n' "$LAUNCHER"
+
+}
+
+write_optout() {
+  mkdir -p -- "$(dirname -- "$OPTOUT_FILE")" 2>/dev/null || true
+  printf 'El operador ha decidido no programar el simulacro de restauracion (schedule-drill.sh remove u optout). Borra este fichero o ejecuta schedule-drill.sh install para volver a programarlo.\n' >"$OPTOUT_FILE" 2>/dev/null ||
+    err "AVISO: no se ha podido recordar la decision en '${OPTOUT_FILE}': una actualizacion podria volver a programarlo."
+}
+
+cmd_optout() {
+  write_optout
+  printf 'El simulacro de restauracion NO se programara al instalar ni al actualizar (decision recordada en %s). ./doctor.sh seguira avisando. Para programarlo: sudo ./schedule-drill.sh install\n' "$OPTOUT_FILE"
+}
+
+# Lo que usan install.sh y update.sh: programa salvo que el operador haya dicho que no.
+cmd_ensure() {
+  if [ -e "$OPTOUT_FILE" ]; then
+    printf 'El simulacro de restauracion NO se programa: el operador lo desactivo (%s). Para volver a programarlo: sudo ./schedule-drill.sh install\n' "$OPTOUT_FILE"
+    return 0
+  fi
+  cmd_install
 }
 
 cmd_remove() {
@@ -216,6 +246,7 @@ cmd_remove() {
     removed=1
   fi
   if [ "$removed" -eq 1 ]; then
+    write_optout
     printf 'Simulacro de restauracion RETIRADO del cron. Recuerda que RNF-D-05 lo exige cada trimestre: lanzalo a mano o programalo de otra forma.\n'
   else
     printf 'No estaba programado. No se ha cambiado nada.\n'
@@ -239,6 +270,14 @@ main() {
   install)
     shift
     cmd_install "$@"
+    ;;
+  ensure)
+    shift
+    cmd_ensure
+    ;;
+  optout)
+    shift
+    cmd_optout
     ;;
   remove)
     shift

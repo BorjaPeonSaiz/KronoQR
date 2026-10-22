@@ -47,6 +47,10 @@ Opciones:
                       el digest). Para un registro propio que no firma. Queda
                       anotado en el aviso y en el informe. Con las imagenes del
                       fabricante, NO la uses.
+  --no-drill-schedule
+                      No programa el simulacro de restauracion trimestral (por
+                      defecto se programa). La decision se recuerda; ./doctor.sh
+                      seguira avisando de que no hay simulacro.
   --lang es|en        Idioma de los mensajes. Por defecto, el del sistema.
   --help              Esta ayuda.
   --version           Version del producto que instalaria este paquete.
@@ -418,6 +422,10 @@ Options:
                       alone is trusted). For a private registry that does not
                       sign. Recorded in the warning and in the report. With the
                       manufacturer's images, do NOT use it.
+  --no-drill-schedule
+                      Does not schedule the quarterly restore drill (it is
+                      scheduled by default). The choice is remembered;
+                      ./doctor.sh keeps warning that there is no drill.
   --lang es|en        Message language. Defaults to the system's.
   --help              This help.
   --version           Product version this package would install.

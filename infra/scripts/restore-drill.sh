@@ -36,8 +36,13 @@
 #
 # CADENCIA: trimestral (RNF-D-05). Se automatiza de dos maneras y las dos
 # valen: `.github/workflows/backup-drill.yml` en el repositorio del fabricante,
-# y una entrada de cron trimestral en el servidor del cliente, que es la que
-# demuestra que SUS copias se restauran. El runbook explica las dos.
+# y el cron del servidor del cliente, que es la que demuestra que SUS copias se
+# restauran: lo programa install.sh y lo deja puesto update.sh (schedule-drill.sh).
+#
+# SIN INTERNET (V5-DV-03). Sin `--image`, el contenedor limpio usa la imagen de postgres DEL
+# PRODUCTO si esta cargada en el servidor (digest del paquete o IMAGE_TAG, como --mode pitr); solo
+# si no esta cae a postgres:17-alpine por digest. La de la aplicacion (cadena de audit_log) es la
+# del paquete, ya descargada.
 #
 # Uso:
 #   restore-drill.sh                        simulacro sobre la ultima copia
@@ -52,7 +57,8 @@
 #   --base RUTA     (pitr) copia fisica. Por defecto la ultima de base/
 #   --wal-source X  (pitr) donde esta el archivo de WAL: una ruta o un volumen de
 #                   Docker, que se monta en solo lectura. Por defecto BACKUP_PATH/wal
-#   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine fijada
+#   --image IMAGEN  imagen del contenedor limpio. Por defecto la de postgres del producto si esta
+#                   cargada y, si no, postgres:17-alpine fijada
 #                   por digest (ADR-053)
 #                   (en pitr, la imagen de postgres DEL PRODUCTO, la fijada por
 #                   digest en el paquete —images.lock o IMAGE_DIGEST_POSTGRES,
@@ -125,6 +131,7 @@ IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
 IMAGEN_PHP="${DRILL_PHP_IMAGE:-}"
 SALTAR_CADENA=0
+DEL_PRODUCTO=0
 CLAVE_SIMULACRO=""
 ESPERA=90
 CONSERVAR=0
@@ -228,7 +235,7 @@ EOF
 #------------------------------------------------------------------------------
 
 levantar_contenedor_limpio() {
-  local esperado=0 clave
+  local esperado=0 clave producto
 
   require_cmd docker docker
   docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
@@ -241,15 +248,38 @@ levantar_contenedor_limpio() {
   CONTENEDOR="kronoqr-drill-$(timestamp_utc)"
   BASE_SIMULACRO="drill"
 
+  # Sin imagen pedida, se usa la de postgres DEL PRODUCTO si esta cargada en este servidor
+  # (V5-DV-03): el simulacro no depende de internet ni de Docker Hub. Si no, la oficial por digest.
+  if [ -z "$IMAGEN" ]; then
+    producto="$(imagen_pitr 2>/dev/null || true)"
+    if [ -n "$producto" ] && docker image inspect "$producto" >/dev/null 2>&1; then
+      IMAGEN="$producto"
+      DEL_PRODUCTO=1
+    else
+      IMAGEN="$IMAGEN_PREDETERMINADA"
+    fi
+  fi
+
   informar "Levantando contenedor limpio ${CONTENEDOR} (${IMAGEN})"
-  docker run --detach --name "$CONTENEDOR" \
-    --env POSTGRES_PASSWORD="$clave" \
-    --env POSTGRES_DB="$BASE_SIMULACRO" \
-    --env POSTGRES_INITDB_ARGS=--encoding=UTF8 \
-    --env TZ=UTC --env PGTZ=UTC \
-    --network none \
-    "$IMAGEN" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
-    "no se ha podido crear el contenedor del simulacro con la imagen '${IMAGEN}'. Descargala antes ('docker pull ${IMAGEN}') si el servidor no tiene salida a internet."
+  if [ "$DEL_PRODUCTO" -eq 1 ]; then
+    # Su initdb.d espera el entorno de la instalacion (roles de la aplicacion): no se usa su punto
+    # de entrada. initdb propio, con confianza local, sin red y solo por loopback.
+    docker run --detach --name "$CONTENEDOR" --network none --env TZ=UTC --env PGTZ=UTC \
+      --entrypoint sleep "$IMAGEN" infinity >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
+      "no se ha podido crear el contenedor del simulacro con la imagen '${IMAGEN}'."
+    # shellcheck disable=SC2016 # el script entre comillas simples lo expande el sh del contenedor
+    docker exec --user postgres "$CONTENEDOR" sh -c 'initdb -D /tmp/pgdata --encoding=UTF8 --auth=trust >/dev/null && pg_ctl -D /tmp/pgdata -w -l /tmp/pg.log -o "-c listen_addresses=127.0.0.1" start >/dev/null && createdb -h /var/run/postgresql "$1"' sh "$BASE_SIMULACRO" ||
+      die "${KQ_EXIT_REQUIREMENTS}" "no se ha podido inicializar PostgreSQL en el contenedor del simulacro (imagen '${IMAGEN}'). Mira 'docker logs ${CONTENEDOR}'. No se ha tocado la instalacion."
+  else
+    docker run --detach --name "$CONTENEDOR" \
+      --env POSTGRES_PASSWORD="$clave" \
+      --env POSTGRES_DB="$BASE_SIMULACRO" \
+      --env POSTGRES_INITDB_ARGS=--encoding=UTF8 \
+      --env TZ=UTC --env PGTZ=UTC \
+      --network none \
+      "$IMAGEN" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
+      "no se ha podido crear el contenedor del simulacro con la imagen '${IMAGEN}'. Descargala antes ('docker pull ${IMAGEN}') o carga la imagen de postgres del producto: el simulacro la usa si esta en este servidor."
+  fi
 
   # `--network none`: el contenedor del simulacro no habla con nadie. Todo
   # entra y sale por `docker exec`.
@@ -784,7 +814,6 @@ main() {
   require_cmd openssl openssl
   require_encryption_key
   ensure_backup_tree reports metrics
-  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="$IMAGEN_PREDETERMINADA"
 
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-drill.XXXXXX")"
   chmod 0700 "$TRABAJO"

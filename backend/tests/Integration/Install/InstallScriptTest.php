@@ -700,3 +700,15 @@ it('backup.sh barre lo empezado tambien con un corte de SSH: sale con 129 por su
     expect(Repo::contents('infra/scripts/backup.sh'))->toContain("trap 'exit 129' HUP")
         ->and(Repo::contents('infra/scripts/lib/exit-codes.sh'))->toContain('sale con 129 (corte de SSH), 130 o 143');
 })->group('RF-PD-02');
+
+it('install.sh documenta --no-drill-schedule, lo programa por omision tras instalar y no deshace nada si falla (V5-DV-04)', function (): void {
+    $ayuda = ejecutarInstalador(['--help'])->getOutput();
+    $ingles = ejecutarInstalador(['--lang', 'en', '--help'])->getOutput();
+    $script = Repo::contents('infra/scripts/install.sh');
+
+    expect($ayuda)->toContain('--no-drill-schedule')
+        ->and($ingles)->toContain('--no-drill-schedule')
+        // Se programa DESPUES de desarmar la vuelta atras: un fallo no deshace una instalacion hecha.
+        ->and(strpos($script, 'kq_drill_schedule_step'))->toBeGreaterThan((int) strpos($script, 'disarm_rollback_traps\n'))
+        ->and($script)->toContain('OPT_NO_DRILL=1');
+})->group('RNF-D-05', 'RQ-11');

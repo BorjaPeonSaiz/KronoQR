@@ -52,6 +52,10 @@ Opciones:
                       el digest). Para un registro propio que no firma. Queda
                       anotado con un aviso. Con las imagenes del fabricante,
                       NO la uses.
+  --no-drill-schedule
+                      No programa el simulacro de restauracion trimestral (por
+                      defecto se programa). La decision se recuerda; ./doctor.sh
+                      seguira avisando de que no hay simulacro.
   --lang es|en        Idioma de los mensajes. Por defecto, el del sistema.
   --help              Esta ayuda.
   --version           Version del producto que instalaria.
@@ -147,6 +151,10 @@ KQ_MSG_ES[w_sig_unverifiable]="Esto NO significa que la firma sea invalida: cosi
 KQ_MSG_ES[f_sig_failed]="la firma de la imagen %s no es valida segun cosign: no existe, o no la firmo el proceso de publicacion del fabricante. Detalle de cosign: %s. No se ha continuado. Avisa al fabricante con ese detalle."
 KQ_MSG_ES[f_sig_denied]="el registro ha NEGADO EL ACCESO a %s, asi que cosign no ha podido leer su firma; eso cuenta como firma no valida y no se ha continuado. Casi siempre es IMAGE_REGISTRY: ahora vale '%s' y ahi no estan las imagenes de KronoQR, o esta mal escrito. Pon en IMAGE_REGISTRY, en el .env, el registro que te dio el fabricante, comprueba que el 'docker pull' de docs/cliente/instalacion.md §1.2 descarga la imagen y vuelve a ejecutar. Si con el registro correcto la imagen se descarga y esto sigue saliendo, no sigas y avisa al fabricante con el detalle de cosign: %s. No uses --skip-signature-check para salir del paso."
 KQ_MSG_ES[c_sig_skipped]="Verificacion de la firma de las imagenes OMITIDA (--skip-signature-check)"
+KQ_MSG_ES[drill_scheduled]="Simulacro trimestral de restauracion programado en el cron del servidor (RNF-D-05). Estado: sudo ./schedule-drill.sh status. Para quitarlo: sudo ./schedule-drill.sh remove"
+KQ_MSG_ES[drill_optout]="Simulacro trimestral de restauracion NO programado (--no-drill-schedule). La decision queda recordada; ./doctor.sh seguira avisando. Para programarlo: sudo ./schedule-drill.sh install"
+KQ_MSG_ES[drill_remembered_optout]="Simulacro trimestral de restauracion NO programado: el operador lo desactivo antes. Para programarlo: sudo ./schedule-drill.sh install"
+KQ_MSG_ES[drill_failed]="AVISO: no se ha podido programar el simulacro trimestral de restauracion (no afecta a la instalacion): %s. Repitelo con: sudo ./schedule-drill.sh install"
 KQ_MSG_ES[w_sig_skipped]="Solo se confia en el digest, y esta omision queda anotada. Usala unicamente con un registro propio que no firma sus imagenes; con las del fabricante, quita la opcion."
 KQ_MSG_ES[services_up]="Levantando los servicios."
 KQ_MSG_ES[f_services_up]="los servicios no han arrancado. El detalle esta justo arriba: el estado y las ultimas lineas del registro de cada contenedor, que se muestran antes de deshacer porque al deshacer se retiran los contenedores con su registro."
@@ -346,6 +354,10 @@ Options:
                       alone is trusted). For a private registry that does not
                       sign. It is recorded with a warning. With the
                       manufacturer's images, do NOT use it.
+  --no-drill-schedule
+                      Does not schedule the quarterly restore drill (it is
+                      scheduled by default). The choice is remembered;
+                      ./doctor.sh keeps warning that there is no drill.
   --lang es|en        Message language. Defaults to the system locale.
   --help              This help.
   --version           Product version that would be installed.
@@ -441,6 +453,10 @@ KQ_MSG_EN[w_sig_unverifiable]="This does NOT mean the signature is invalid: cosi
 KQ_MSG_EN[f_sig_failed]="the signature of image %s is not valid according to cosign: it does not exist, or it was not made by the manufacturer's release process. cosign detail: %s. It did not carry on. Tell the manufacturer with that detail."
 KQ_MSG_EN[f_sig_denied]="the registry DENIED ACCESS to %s, so cosign could not read its signature; that counts as an invalid signature and it did not carry on. It is almost always IMAGE_REGISTRY: it is now '%s' and the KronoQR images are not there, or it is mistyped. Set in IMAGE_REGISTRY, in the .env, the registry the manufacturer gave you, check that the 'docker pull' of docs/cliente/en/installation.md §1.2 downloads the image and run again. If with the right registry the image downloads and this still shows up, stop and tell the manufacturer with the cosign detail: %s. Do not use --skip-signature-check to get past this step."
 KQ_MSG_EN[c_sig_skipped]="Image signature verification SKIPPED (--skip-signature-check)"
+KQ_MSG_EN[drill_scheduled]="Quarterly restore drill scheduled in the server cron (RNF-D-05). Status: sudo ./schedule-drill.sh status. To remove it: sudo ./schedule-drill.sh remove"
+KQ_MSG_EN[drill_optout]="Quarterly restore drill NOT scheduled (--no-drill-schedule). The choice is remembered; ./doctor.sh keeps warning. To schedule it: sudo ./schedule-drill.sh install"
+KQ_MSG_EN[drill_remembered_optout]="Quarterly restore drill NOT scheduled: the operator turned it off earlier. To schedule it: sudo ./schedule-drill.sh install"
+KQ_MSG_EN[drill_failed]="WARNING: the quarterly restore drill could not be scheduled (the installation is not affected): %s. Repeat with: sudo ./schedule-drill.sh install"
 KQ_MSG_EN[w_sig_skipped]="Only the digest is trusted, and this omission is recorded. Use it only with a private registry that does not sign its images; with the manufacturer's, drop the option."
 KQ_MSG_EN[services_up]="Starting the services."
 KQ_MSG_EN[f_services_up]="the services did not start. The detail is just above: the state and the last log lines of each container, shown before rolling back because rolling back removes the containers together with their log."

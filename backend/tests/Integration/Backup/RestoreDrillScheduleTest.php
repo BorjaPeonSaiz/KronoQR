@@ -317,3 +317,62 @@ it('flip-bit.sh cambia exactamente un bit, siempre, y es reproducible con la mis
         drillRemoveDir($dir);
     }
 })->group('RNF-D-05', 'RL-12');
+
+it('ensure programa salvo que se haya desactivado; remove y optout recuerdan la decision; install la borra', function (): void {
+    $dir = drillTempDir();
+    $env = ['KQ_DRILL_OPTOUT' => $dir.'/optout'];
+
+    try {
+        expect(drillSchedule(['ensure'], $dir, $env)->getExitCode())->toBe(0)
+            ->and(file_exists($dir.'/cron'))->toBeTrue();
+
+        // Idempotente: una actualizacion posterior no cambia nada.
+        expect(drillSchedule(['ensure'], $dir, $env)->getOutput())->toContain('Ya estaba programado');
+
+        drillSchedule(['remove'], $dir, $env);
+        expect(file_exists($dir.'/optout'))->toBeTrue();
+        $again = drillSchedule(['ensure'], $dir, $env);
+        expect($again->getOutput())->toContain('NO se programa')
+            ->and(file_exists($dir.'/cron'))->toBeFalse();
+
+        drillSchedule(['install'], $dir, $env);
+        expect(file_exists($dir.'/optout'))->toBeFalse()
+            ->and(file_exists($dir.'/cron'))->toBeTrue();
+
+        // --no-drill-schedule de install.sh/update.sh = optout: no toca lo que haya y lo recuerda.
+        drillSchedule(['optout'], $dir, $env);
+        expect(file_exists($dir.'/optout'))->toBeTrue();
+    } finally {
+        drillRemoveDir($dir);
+    }
+})->group('RNF-D-05', 'RQ-09');
+
+it('lib/drill-schedule.sh nunca falla: informa del resultado y de un error sin deshacer nada', function (): void {
+    $dir = drillTempDir();
+    $scripts = Repo::file('infra/scripts');
+
+    try {
+        // Un paquete con un schedule-drill.sh que siempre falla, y otro sin el script.
+        file_put_contents($dir.'/schedule-drill.sh', "#!/bin/sh\necho 'sin permiso'\nexit 2\n");
+        $run = static fn (string $step, string $paquete): Process => Process::fromShellCommandline(
+            'bash -c '.escapeshellarg(
+                'set -euo pipefail; . '.escapeshellarg($scripts.'/lib/exit-codes.sh').'; . '.escapeshellarg($scripts.'/lib/messages.sh')
+                .'; . '.escapeshellarg($scripts.'/lib/drill-schedule.sh').'; kq_msg_init es; '.$step.'; echo "rc=$?"'
+            ),
+            env: ['PAQUETE' => $paquete],
+            timeout: 30.0,
+        );
+
+        $failing = $run('kq_drill_schedule_step "$PAQUETE" 0', $dir);
+        $failing->run();
+        expect($failing->getOutput())->toContain('rc=0')
+            ->and($failing->getErrorOutput())->toContain('no se ha podido programar')
+            ->and($failing->getErrorOutput())->toContain('sin permiso');
+
+        $missing = $run('kq_drill_schedule_step "$PAQUETE" 0', $dir.'/no-existe');
+        $missing->run();
+        expect($missing->getOutput())->toContain('rc=0');
+    } finally {
+        drillRemoveDir($dir);
+    }
+})->group('RNF-D-05');

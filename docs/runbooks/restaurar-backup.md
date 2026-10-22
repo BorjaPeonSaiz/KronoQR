@@ -369,6 +369,10 @@ falla si se pasa de estos umbrales, escritos en el propio workflow
 | Restauración en contenedor limpio | **600 s** | Mitad de lo alto de la franja «Restauración e intercambio de bases» de la tabla de arriba (5–20 min): deja margen para un servidor más lento que el runner. Referencia: 61 s con la misma cantidad de filas en la 2.2.0 |
 | Copia lógica (`backup.sh run --mode dump`) | **120 s** | Es una parte de la ventana de 503 de `update.sh`, cuyo tope en la CI es de 180 s |
 
+**Umbrales aceptados por el propietario (22-10-2026):** 600 s y 120 s, ejecución semanal
+(lunes 02:30 UTC) y a mano; se revisan tras las 3–4 primeras ejecuciones con las medidas
+reales del resumen del run.
+
 Si el trabajo se pone en rojo, **el RTO de 4 h (RNF-D-02) se está estrechando**:
 el resumen del run trae las dos medidas y el tamaño de la base. No subas el
 umbral para que pase: averigua qué ha cambiado (índices nuevos, una versión de
@@ -720,7 +724,9 @@ simulacro se niega **antes** de restaurar y dice cuál bajar, o indica otra con
 `--php-image`); `--skip-audit-chain` existe solo para datos sintéticos sin el
 esquema de la aplicación (la CI) y deja «OMITIDA» en el informe; en `--mode pitr`
 no se verifica (la base recuperada solo escucha en su socket) y el informe lo
-dice: la verifica el simulacro por defecto.
+dice: la verifica el simulacro por defecto. **Verificarla también en pitr es una mejora
+pendiente** (decisión del propietario, 22-10-2026): exige abrir esa base a la red del
+contenedor del simulacro y probarlo con una copia física real.
 
 ```bash
 # En el servidor del cliente (necesita Docker, que ya está), desde el directorio
@@ -744,14 +750,19 @@ No toca la instalación: ni la base de producción, ni los contenedores del
 producto, ni las copias, que se abren en lectura. El volcado descifrado vive y
 muere dentro del contenedor del simulacro; nunca toca el disco del servidor.
 
-**Automatizarlo, que es lo que exige RNF-D-05 (V5-DV-04).** Una orden, en el
-directorio de la instalación:
+**Automatizarlo, que es lo que exige RNF-D-05 (V5-DV-04).** `install.sh` lo programa
+solo y `update.sh` lo deja puesto (o lo actualiza) en las instalaciones que vienen de antes,
+de forma idempotente. A mano, en el directorio de la instalación:
 
 ```bash
 sudo ./schedule-drill.sh install      # lo programa (idempotente)
 sudo ./schedule-drill.sh status       # ¿está puesto?
-sudo ./schedule-drill.sh remove       # lo retira
+sudo ./schedule-drill.sh remove       # lo retira y recuerda que no se quiere
 ```
+
+**Para no programarlo**: `--no-drill-schedule` en `install.sh` o `update.sh`, o
+`schedule-drill.sh remove`. La decisión queda en `/etc/kronoqr/no-drill-schedule` y las
+actualizaciones no la deshacen; `install` la borra. `doctor.sh` sigue avisando.
 
 Escribe `/etc/cron.d/kronoqr-restore-drill` (`40 4 1 1,4,7,10 *`: día 1 de enero,
 abril, julio y octubre a las 04:40 hora del servidor, después de la copia de las 03:15 y de las
@@ -768,10 +779,12 @@ Sale en `/var/log/kronoqr-drill.log`. Se puede probar sin esperar al trimestre:
 **Qué consume y qué no.** No para ningún servicio ni toca la base de producción
 ni las copias (las abre en lectura). Levanta un contenedor aparte, sin red, y lo
 destruye: unos minutos de CPU y de disco de Docker del orden del tamaño de la
-base de datos (61 s con 3,65 M de filas). Necesita descargadas la imagen del
-simulacro (`postgres:17-alpine`, por digest) y la de la aplicación: en un
-servidor sin salida a internet, cárgalas antes con `docker load`; si falta
-alguna, el simulacro se niega sin tocar nada y el log lo dice.
+base de datos (61 s con 3,65 M de filas). **No necesita internet** (V5-DV-03): usa la imagen de PostgreSQL del producto y la de la
+aplicación, que son las que ya corren en el servidor (se localizan igual que `restore-drill
+--mode pitr`: digest del paquete o `IMAGE_TAG`). Solo si la de PostgreSQL del producto no
+está cargada cae a `postgres:17-alpine` por digest, que sí hay que tener descargada. Si falta
+la de la aplicación, el simulacro se niega antes de restaurar nada y el log dice cuál
+cargar (`docker load`).
 
 **Quién avisa si no corre.** `./doctor.sh` (sin Prometheus) avisa en amarillo si
 nunca ha habido un simulacro, si el último falló o si el último correcto tiene
