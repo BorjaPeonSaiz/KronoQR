@@ -214,3 +214,29 @@ describe('MyRecordsView, el 403 (R3-UX-02, RF-ID-08)', () => {
     expect(es.errors.forbidden.advice).toContain('Recursos Humanos')
   })
 })
+
+describe('MyRecordsView: Reintentar y Actualizando (V3-UX-01, V3-UX-05)', () => {
+  it('un error ofrece Reintentar y, al pulsarlo, vuelve a pedir el periodo', async () => {
+    let failing = true
+    const wrapper = await mountWith(() =>
+      failing ? problemResponse(500, 'about:blank') : jsonResponse(employeeWorkDays()),
+    )
+    const retry = wrapper.find('[role="alert"] [data-test="error-retry"]')
+
+    expect(retry.text()).toBe(es.errors.retry)
+
+    failing = false
+    await retry.trigger('click')
+    await settle()
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
+  it('«Actualizando…» vive en una region viva que existe tambien en reposo', async () => {
+    const wrapper = await mountWith(() => jsonResponse(employeeWorkDays()))
+    const region = wrapper.find('[data-test="resolved-range"] [role="status"]')
+
+    expect(region.exists()).toBe(true)
+    expect(region.text()).toBe('')
+  })
+})
