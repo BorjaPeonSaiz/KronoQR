@@ -195,3 +195,66 @@ fecha, no se deja un TODO.
 Lo que enseña el caso de `gosu` para el próximo triaje: antes de excepcionar
 un binario de la imagen base, comprobar si hace falta en absoluto. Un
 componente que no se ejecuta en nuestro uso se elimina, no se justifica.
+
+---
+
+## 4. Qué bloquea y dónde (bloque 12 de la 2.3.0)
+
+**El problema que resuelve (R6-DV-04, V2-DV-01).** Un aviso externo —un CVE nuevo
+en la base de nginx, un `npm audit` sobre una dependencia que nadie ha tocado—
+aparece sin que nadie haya cambiado nada, y si el control bloquea en toda rama
+pone en rojo **a la vez** todas las que haya abiertas, sin relación con lo que
+cada una cambia (ocurrió con `basic-ftp`, el 01-10-2026). El remedio no es
+dejar de mirar, es **mirar antes y en un sitio donde el rojo tenga un
+destinatario**: el workflow semanal.
+
+### 4.1 La auditoría semanal
+
+`.github/workflows/auditoria-semanal.yml` corre los lunes a las 05:23 UTC (y a
+mano: `gh workflow run auditoria-semanal.yml`) **siempre sobre `main`**, con tres
+jobs independientes:
+
+| Job | Qué mira | Si falla |
+| --- | --- | --- |
+| `dependencias` | `composer audit` y `npm audit` (bloquea producción, desarrollo informa) | Aviso en una dependencia: PR de actualización (§1, punto 1) |
+| `repositorio` | `trivy fs`: dependencias, Dockerfiles y secretos del árbol | Igual que en la CI (§1) |
+| `imagenes-publicadas` | `trivy image` sobre `php`, `nginx` y `postgres` **de la última versión publicada**, tal como las tiene un cliente | Las imágenes son inmutables (ADR-053): **no se reconstruye la etiqueta**. Se corrige en `main` y se publica un parche (`actualizacion-cliente.md`). Mientras tanto, el CVE se anota en `HANDOFF.md` con su alcance |
+
+El fallo del workflow es la alerta: GitHub envía el correo de ejecución fallida
+a quien mantiene el cron. Sin runbook asociado una alerta es ruido: este es.
+
+### 4.2 Qué bloquea hoy en cada sitio
+
+| Control | Rama (push) | `main` | Etiqueta `v*` / `release.yml` | Semanal |
+| --- | --- | --- | --- | --- |
+| `composer audit` | bloquea | bloquea | bloquea | bloquea |
+| `npm audit --omit=dev` (producción) | bloquea | bloquea | bloquea | bloquea |
+| `npm audit` (desarrollo) | informa | informa | informa | informa |
+| `trivy fs` (HIGH/CRITICAL con parche) | bloquea | bloquea | — | bloquea |
+| `trivy image` postgres, app **y nginx** (desde la 2.3.0) | bloquea | bloquea | bloquea | las tres **publicadas** |
+| gitleaks (`SCOPE=head`) | bloquea | bloquea | — | histórico completo, nocturno (`secrets-history`) |
+| El commit etiquetado es ancestro de `main` | — | — | bloquea (`resolver`, V6-DV-6) | — |
+
+Todas usan `--ignore-unfixed`: un CVE sin parche publicado no bloquea a nadie.
+
+### 4.3 Propuesta pendiente de decisión del propietario
+
+Con la tabla anterior, **el problema de R6-DV-04 sigue en pie en las ramas**: la
+auditoría semanal lo ve primero (el lunes), pero si el aviso aparece el
+miércoles, los `push` de ese día seguirán rojos hasta que se corrija. Lo que se
+recomienda, y **no está aplicado** porque cambia qué garantiza RS-10 en una
+rama:
+
+- **Ramas (push que no es `main`):** `composer audit`, `npm audit --omit=dev`,
+  `trivy fs` y `trivy image` **bloquean solo si el cambio toca lo que auditan**
+  (`composer.lock`, `package-lock.json`, un `Dockerfile` o el digest de una
+  base) y **informan** (resumen de la ejecución, sin fallar) en el resto. Quien
+  introduce una dependencia vulnerable sigue sin poder fusionar; quien cambia
+  un literal de la interfaz no se entera de un aviso ajeno.
+- **`main`, etiqueta y `release.yml`:** siguen bloqueando todo, como hoy. Una
+  versión publicada nunca sale con un HIGH/CRITICAL corregible.
+- **La alerta de un aviso nuevo** la da la auditoría semanal, no el `push`.
+
+Hasta que se decida, el comportamiento es el de la tabla 4.2. Si se aprueba, el
+cambio es de `ci.yml` (condicionar el código de salida de esos pasos a
+`git diff --name-only` contra `origin/main`) y de esta sección.

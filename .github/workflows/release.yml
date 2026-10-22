@@ -182,7 +182,7 @@ jobs:
   resolver:
     name: "Resolver la etiqueta a publicar"
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       tag: ${{ steps.resolver.outputs.tag }}
       version: ${{ steps.resolver.outputs.version }}
@@ -212,6 +212,33 @@ jobs:
             echo "prerelease=${prerelease}"
           } >>"${GITHUB_OUTPUT}"
           echo "Publicando ${tag} (version ${version}, prerelease=${prerelease})."
+
+      # V6-DV-6. Una etiqueta `v*` puede apuntar a cualquier commit, tambien a uno que nunca paso
+      # por `main` (una rama sin revisar, un fork). Ni la CI de la etiqueta ni este workflow lo
+      # miraban. Se comprueba aqui, en la raiz de todos los jobs: si falla, no se espera a la CI
+      # ni se construye nada.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          # Historia completa: `merge-base --is-ancestor` necesita llegar a `main`.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: El commit etiquetado es ancestro de main
+        env:
+          TAG: ${{ steps.resolver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+            echo "::error title=No se encuentra main::No hay rama origin/main en el checkout, asi que no se puede comprobar que ${TAG} viene de ella. No se publica nada."
+            exit 1
+          fi
+          commit="$(git rev-parse HEAD)"
+          if ! git merge-base --is-ancestor "${commit}" refs/remotes/origin/main; then
+            echo "::error title=La etiqueta no esta en main::El commit ${commit:0:12} de ${TAG} no es ancestro de main: nunca se integro en ella. Integra el cambio en main (PR) y vuelve a etiquetar un commit de main. No se publica nada."
+            exit 1
+          fi
+          echo "${TAG} -> ${commit:0:12}, ancestro de main."
 
       - name: Resolver el registro de destino
         id: registro

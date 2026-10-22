@@ -1064,15 +1064,19 @@ jobs:
         # existe para evitar; instalar esta accion, fijada por SHA, es mas
         # barato que pagar esa reconstruccion en cada ejecucion.
 
-      - name: Construir kronoqr/postgres:ci y kronoqr/app:ci (con cache de Actions)
+      - name: Construir kronoqr/postgres:ci, kronoqr/app:ci y kronoqr/nginx:ci (con cache de Actions)
         # `make build-ci-images` (IMPORTANTE 10 de la auditoria: la misma
         # orden que usan el job `unit` y backup-drill.yml, en un solo
         # objetivo). Aqui, y solo aqui, con BUILDX_CACHE=gha: es el unico job
         # que construye las DOS imagenes en cada push y el unico que tiene
         # justo encima el paso de `ghaction-github-runtime`.
+        #
+        # Las TRES desde el bloque 12 de la 2.3.0 (V6-DV-7): la de nginx solo se escaneaba en
+        # la etapa ⑧ de `main` y de la etiqueta, asi que un CVE de la base de nginx aparecia
+        # justo al publicar. Su build (las tres SPA) entra en cache de Actions como las otras.
         env:
           APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
-        run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
 
       - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
         id: trivy_fs
@@ -1107,7 +1111,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
 
-      - name: Trivy image — postgres:ci y app:ci (bloqueante)
+      - name: Trivy image — postgres:ci, app:ci y nginx:ci (bloqueante)
         id: trivy_image
         # BLOQUEANTE desde el 29 de agosto de 2026. Los 21 HIGH que tenia
         # kronoqr/postgres:ci estaban todos en usr/local/bin/gosu (Go stdlib
@@ -1118,7 +1122,7 @@ jobs:
         # salida que en el paso anterior.
         run: |
           set +e
-          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci" TRIVY_FORMAT=json >trivy-image.json
+          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
           set -e
           jq -s -r '

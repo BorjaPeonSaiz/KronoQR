@@ -78,3 +78,46 @@ it('declara application/manifest+json para el manifiesto estatico sin sustituir 
     expect(preg_match_all('/^\s+types \{/m', $plantilla))->toBe(0);
     expect(Repo::contents('infra/docker/nginx/extra/spa.conf'))->not->toMatch('/^\s*types \{/m');
 })->group('RS-09');
+
+it('exige en release.yml que el commit etiquetado sea ancestro de main, antes de esperar a la CI', function (): void {
+    // V6-DV-6. Vive en `resolver`, la raiz de todos los jobs: si falla, no se espera ni se construye nada.
+    $workflow = Repo::contents('.github/workflows/release.yml');
+
+    expect(preg_match('/\n  resolver:\n(.*?)\n  etiquetas-libres:/s', $workflow, $resolver))->toBe(1);
+    $job = $resolver[1] ?? '';
+
+    expect($job)->toContain('fetch-depth: 0')
+        ->and($job)->toContain('git merge-base --is-ancestor "${commit}" refs/remotes/origin/main')
+        // Falla cerrado: sin `origin/main` no se publica.
+        ->and($job)->toContain('git rev-parse --verify --quiet refs/remotes/origin/main');
+})->group('RS-10');
+
+it('escanea con Trivy las tres imagenes de entrega tambien en la CI de rama', function (): void {
+    // V6-DV-7. La de nginx solo se escaneaba en ⑧ de main y de la etiqueta.
+    $ci = Repo::contents('.github/workflows/ci.yml');
+
+    expect($ci)->toContain('make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha')
+        ->and($ci)->toContain('make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json');
+})->group('RS-10');
+
+it('programa una auditoria semanal sobre main de dependencias, repositorio e imagenes publicadas', function (): void {
+    // V2-DV-01, R6-DV-04. Un aviso externo se ve el lunes y con destinatario, no al publicar.
+    $workflow = Repo::contents('.github/workflows/auditoria-semanal.yml');
+
+    expect($workflow)->toMatch('/schedule:\s+# [^\n]*\n\s+- cron: "[0-9*\/, ]+ 1"/')
+        ->and($workflow)->toContain('workflow_dispatch:')
+        ->and($workflow)->toContain('make deps-audit-php')
+        ->and($workflow)->toContain('make deps-audit-js')
+        ->and($workflow)->toContain('make trivy-fs')
+        ->and($workflow)->toContain('make trivy-image TRIVY_IMAGES="${REGISTRO}/php:${VERSION} ${REGISTRO}/nginx:${VERSION} ${REGISTRO}/postgres:${VERSION}"')
+        // Solo lectura, sobre main, sin secretos propios.
+        ->and($workflow)->toContain("permissions:\n  contents: read")
+        ->and(substr_count($workflow, 'ref: main'))->toBeGreaterThanOrEqual(3)
+        ->and($workflow)->not->toContain('secrets.')
+        ->and($workflow)->not->toContain('contents: write');
+
+    // Y la politica de que bloquea en las ramas esta escrita donde el aviso lleva.
+    $runbook = Repo::contents('docs/runbooks/triaje-hallazgos-seguridad.md');
+    expect($runbook)->toContain('## 4. Qué bloquea y dónde')
+        ->and($runbook)->toContain('auditoria-semanal.yml');
+})->group('RS-10');

@@ -277,8 +277,8 @@ help: ## Muestra esta ayuda
 	@echo "  make observability-check  Reglas de Prometheus y Alertmanager (etapa 2 de la CI)"
 	@echo "  make sast             Semgrep: reglas propias de .semgrep (bloqueante)"
 	@echo "  make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)"
-	@echo "  make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)"
-	@echo "  make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)"
+	@echo "  make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (bloqueante)"
+	@echo "  make trivy-image      Trivy: postgres:ci, app:ci y nginx:ci ya construidas (bloqueante)"
 	@echo "  make secrets-scan     gitleaks sobre el historico completo (bloqueante)"
 	@echo "  make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json"
 	@echo "  make dast             ZAP baseline manual contra 'make up' (informe, fuera de ci.yml)"
@@ -942,8 +942,9 @@ endif
 # unico que se rompio.
 #
 # Por defecto, las TRES de entrega. Cada job pasa las que ha construido:
-#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci"
-#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"
+#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"  (desde la 2.3.0)
+#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"   (la del paquete, en main y en la etiqueta)
+#   auditoria semanal  las tres imagenes PUBLICADAS (.github/workflows/auditoria-semanal.yml)
 # En local, `make build-ci-images IMAGES="postgres app nginx" && make trivy-image`
 # las cubre las tres sin argumentos.
 TRIVY_IMAGES ?= kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci
