@@ -108,6 +108,7 @@ test.describe('administracion de cuentas', () => {
       const reveal = page.getByRole('dialog', { name: 'Contraseña temporal' })
 
       await expect(reveal.getByTestId('password-value')).toHaveText(TEMPORARY_PASSWORD)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await expect(reveal).toContainText('una sola vez')
       await expectNoBlockingViolations(page, { failOn: 'any' })
 
@@ -149,6 +150,7 @@ test.describe('administracion de cuentas', () => {
       await dialog.getByRole('button', { name: 'Crear cuenta' }).click()
 
       await expect(dialog.getByText(/Ya hay una cuenta con este correo/)).toBeVisible()
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 
@@ -214,6 +216,8 @@ test.describe('administracion de cuentas', () => {
 
       const dialog = page.getByRole('dialog', { name: 'Restablecer el segundo factor' })
 
+      await expect(dialog).toBeVisible()
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await dialog.getByLabel('Motivo').fill('Teléfono extraviado')
       await dialog.getByLabel(/Tu código del segundo factor/).fill(TOTP_CODE)
       await dialog.getByRole('button', { name: 'Retirar segundo factor' }).click()

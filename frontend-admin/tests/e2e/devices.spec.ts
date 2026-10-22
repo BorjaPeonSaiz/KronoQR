@@ -13,6 +13,7 @@ import {
   logInAsManager,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 test(
   'vincula un quiosco desde «Quioscos» y lo enseña en la lista',
@@ -119,6 +120,7 @@ test(
     await expect(warning).toBeVisible()
     await expect(warning).toContainText('37')
     await expect(warning).toContainText('art. 34.9 ET')
+    await expectNoBlockingViolations(page)
   },
 )
 

@@ -10,6 +10,7 @@
 // vea la entrada ni pueda llegar a la pantalla escribiendo la URL a mano.
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, logInAsAuditor, stubManagementApi } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 import { confirmChanges } from './support/confirm'
 
 test(
@@ -99,6 +100,7 @@ test(
 
     await page.getByTestId('pin-length').selectOption('8')
     await expect(page.getByTestId('access-control-warning')).toBeVisible()
+    await expectNoBlockingViolations(page)
     await page.getByTestId('save').click()
     await confirmChanges(page)
 

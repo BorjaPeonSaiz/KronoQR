@@ -17,6 +17,7 @@ import {
   logInAsManager,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 interface FakeReverb {
   readonly sockets: WebSocketRoute[]
@@ -196,6 +197,7 @@ test(
 
     // R3-PA-01: el canal que no se establece se avisa aparte del indicador, y la lista sigue.
     await expect(page.getByTestId('refresh-notice')).toHaveAttribute('data-kind', 'realtime')
+    await expectNoBlockingViolations(page)
     await expect(page.getByTestId('presence-entry').first()).toBeVisible()
 
     await expect

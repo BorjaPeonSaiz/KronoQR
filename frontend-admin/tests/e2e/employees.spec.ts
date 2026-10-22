@@ -130,6 +130,7 @@ test(
 
     // La serie de debajo se ha releido: ya trae el contrato que registro otra persona.
     await expect(page.getByTestId('contract-row')).toHaveCount(2)
+    await expectNoBlockingViolations(page)
 
     // Con la fecha corregida, el alta sale adelante.
     await dialog.getByLabel(/Vigente desde/).fill('2026-10-01')

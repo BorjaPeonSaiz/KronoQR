@@ -53,6 +53,7 @@ test.describe('departamentos y centro: administracion', () => {
         'aria-invalid',
         'true',
       )
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await expect(page.locator('[data-test="department-4"]')).toHaveCount(1)
     },
   )
@@ -95,6 +96,7 @@ test.describe('departamentos y centro: administracion', () => {
       const dialog = page.getByRole('dialog')
 
       await dialog.locator('[data-test="rename-input"]').fill('Hotel Marina Playa')
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await dialog.getByRole('button', { name: 'Guardar nombre' }).click()
 
       await expect(dialog).toHaveCount(0)
