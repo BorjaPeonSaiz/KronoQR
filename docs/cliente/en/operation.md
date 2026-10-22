@@ -1911,6 +1911,28 @@ read.** None of this changes data or prevents clocking:
 - The error history explains what to do about `kiosk.update.unreachable`
   (§11.1, below).
 
+**When updating to 2.3.0: long reports in the background, and two changes for
+API users.** None of this changes the record or prevents clocking:
+
+- **The Labour Inspectorate export, the payroll output and the impact dashboard
+  can be requested in the background**, as the period report already could: you
+  see how far it has got, you can **cancel** it while it is being generated and,
+  when it finishes, you download it with its single-use link. The usual direct
+  download still exists. The Inspectorate export in the background **does not
+  depend on the licence** and leaves the same `legal_export.generated` entry as
+  the direct one, in the name of whoever requested it. A vendor support access
+  cannot request it in the background.
+- **Audit accounts** see in Reports the list of **their own** background exports
+  and can cancel them. Only their own, and only Inspectorate ones.
+- **If you use the API** (your own integrations, not the panel):
+  `GET /api/v1/credentials/status` **now paginates**: it returns 30 people by
+  default (`page`, `per_page` up to 100, and `meta.total`); the `summary` count is
+  still the whole workforce. And `GET /api/v1/employees/{uuid}/workdays` returns
+  31 work days per page.
+- **The full data export moves to format version 6**: `report_exports.csv`
+  gains the `cancelled_at` column. If you compare exports from before and after,
+  that column is the difference (`manifest.json` says so).
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet

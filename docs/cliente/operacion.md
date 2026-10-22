@@ -1888,6 +1888,28 @@ leer.** Nada de esto cambia datos ni impide fichar:
 - El histórico de errores explica qué hacer con `kiosk.update.unreachable`
   (§11.1, a continuación).
 
+**Al actualizar a la 2.3.0: informes largos en segundo plano, y dos cambios para
+quien use la API.** Nada de esto cambia el registro ni impide fichar:
+
+- **La exportación para la Inspección, la nómina y el cuadro de impacto se
+  pueden pedir en segundo plano**, como ya ocurría con el informe por periodo:
+  se ve por dónde va, se puede **cancelar** mientras se genera y, al terminar, se
+  descarga con su enlace de un solo uso. La descarga directa de siempre sigue
+  existiendo. La exportación para la Inspección en segundo plano **no depende de
+  la licencia** y deja el mismo asiento `legal_export.generated` que la directa,
+  a nombre de quien la pidió. Un acceso de soporte del fabricante no puede
+  pedirla en segundo plano.
+- **Las cuentas de auditoría** ven en Informes la lista de **sus** exportaciones
+  en segundo plano y pueden cancelarlas. Solo las suyas, y solo de la Inspección.
+- **Si usas la API** (integraciones propias, no el panel):
+  `GET /api/v1/credentials/status` **ahora pagina**: devuelve 30 personas por
+  omisión (`page`, `per_page` hasta 100, y `meta.total`); el recuento de
+  `summary` sigue siendo el de toda la plantilla. Y
+  `GET /api/v1/employees/{uuid}/workdays` devuelve 31 jornadas por página.
+- **La exportación íntegra pasa a la versión 6 del formato**:
+  `report_exports.csv` gana la columna `cancelled_at`. Si comparas exportaciones
+  de antes y de después, esa columna es la diferencia (`manifest.json` lo dice).
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la
