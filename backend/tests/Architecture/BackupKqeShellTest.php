@@ -99,3 +99,14 @@ it('mantienen el contrato de salida del restore_command: 200 ante MAC malo, 1 so
     // trunca la recuperacion en silencio.
     expect(preg_match_all('/^\s*exit 1$/m', $restore))->toBe(2);
 })->group('RL-12', 'RNF-D-02');
+
+it('archive-wal.sh sincroniza el directorio de destino despues del mv', function (): void {
+    $text = Repo::contents('infra/docker/postgres/bin/archive-wal.sh');
+    $mv = strpos($text, 'mv -f "$temporal" "$final"');
+
+    expect($mv)->not->toBeFalse();
+    expect(strpos($text, 'sync_destino', (int) $mv))->not->toBeFalse(
+        'V7-RV-3: tras el `mv` hace falta fsync del directorio (sync_destino) antes de devolver 0.',
+    );
+    expect($text)->toContain('sync "$DESTINO"');
+})->group('RL-12', 'RNF-D-02');

@@ -128,6 +128,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/exit-codes.sh"
 # shellcheck source=lib/messages.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/messages.sh"
+# shellcheck source=lib/drill-schedule.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/drill-schedule.sh"
 # shellcheck source=lib/messages-update.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/messages-update.sh"
 # shellcheck source=lib/checks.sh disable=SC1091
@@ -207,6 +209,8 @@ readonly KQ_RN02_CONSTRAINT="shift_entries_no_overlap"
 # Estado
 #------------------------------------------------------------------------------
 OPT_CHECK_ONLY=0
+# 1 con --no-drill-schedule: no se programa el simulacro trimestral (lib/drill-schedule.sh).
+OPT_NO_DRILL=0
 OPT_LANG=""
 OPT_CURRENT=""
 OPT_COMPOSE_FILE=""
@@ -829,6 +833,9 @@ parse_arguments() {
       ;;
     --compose-file=*)
       OPT_COMPOSE_FILE="${1#--compose-file=}"
+      ;;
+    --no-drill-schedule)
+      OPT_NO_DRILL=1
       ;;
     --skip-signature-check)
       # shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
@@ -4069,6 +4076,12 @@ main() {
   phase_migrations
   mark_lap migrations
   phase_start_and_verify
+
+  # El simulacro trimestral de restauracion queda programado (o actualizado) tambien en las
+  # instalaciones que vienen de antes; idempotente, y respeta --no-drill-schedule y la decision
+  # recordada. Un fallo aqui avisa y no deshace una actualizacion terminada.
+  say ""
+  kq_drill_schedule_step "${SCRIPT_DIR}" "${OPT_NO_DRILL}"
 
   # Solo el ERR: desde el 401 del paso 5 las senales se ignoran (ROLLBACK_ARMED=3) y
   # asi siguen hasta el final; un Ctrl+C aqui dejaria a medias la retirada del

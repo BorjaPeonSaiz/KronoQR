@@ -35,7 +35,20 @@ on:
   schedule:
     # 04:00 UTC del dia 1 de cada trimestre.
     - cron: "0 4 1 1,4,7,10 *"
+    # Lunes 02:30 UTC: la medida del RTO CON VOLUMEN (job `volumen`, V21-5-DV-3, V21-6-DV-2).
+    # Fuera de las ramas a proposito: genera 3,65 M de filas y tarda; en cada push no aporta nada.
+    - cron: "30 2 * * 1"
   workflow_dispatch:
+    inputs:
+      volumen:
+        description: "Ejecuta tambien la medida del RTO con volumen (3,65 M de filas; el job `volumen`). Por omision solo corre el lunes por la noche."
+        type: boolean
+        required: false
+        default: false
+      bitflip_seed:
+        description: "Semilla de las pruebas de «un bit cambiado» (V5-DV-01), para repetir un fallo: la imprime el paso «Semilla de los bits cambiados». Vacio = aleatoria."
+        required: false
+        default: ""
   push:
     paths:
       - "infra/scripts/**"
@@ -53,7 +66,10 @@ jobs:
   simulacro:
     name: "Copia cifrada, verificada y restaurada en contenedor limpio"
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
+    # El lunes por la noche solo corre `volumen`; el simulacro completo, en cada cambio de los
+    # scripts, el trimestre y a mano.
+    if: github.event_name != 'schedule' || github.event.schedule == '0 4 1 1,4,7,10 *'
 
     env:
       # Claves de usar y tirar para un servidor que vive tres minutos en un
@@ -87,6 +103,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Semilla de los bits cambiados (V5-DV-01)
+        # Las pruebas de «un bit cambiado» sortean la posicion del bit (.github/scripts/flip-bit.sh)
+        # en lugar de escribir una constante en un sitio fijo. La semilla se imprime aqui y en
+        # cada alteracion para poder repetir un fallo: `gh workflow run backup-drill.yml -f
+        # bitflip_seed=<semilla>`.
+        env:
+          SEMILLA_PEDIDA: ${{ inputs.bitflip_seed }}
+        run: |
+          semilla="${SEMILLA_PEDIDA:-$(( RANDOM * 32768 + RANDOM ))}"
+          [[ "$semilla" =~ ^[0-9]+$ ]] || { echo "::error::bitflip_seed debe ser un entero."; exit 1; }
+          echo "KQ_BITFLIP_SEED=${semilla}" >>"$GITHUB_ENV"
+          echo "Semilla de los bits cambiados: ${semilla}"
+          echo "Semilla de los bits cambiados: \`${semilla}\`" >>"$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+        # Exporta ACTIONS_RUNTIME_TOKEN y ACTIONS_CACHE_URL para `--cache-to type=gha` (ver ci.yml).
+
       - name: Cliente de PostgreSQL 17
         # La version mayor tiene que coincidir con la del servidor: un pg_dump
         # 16 se niega a volcar un servidor 17, y ese fallo hay que verlo aqui y
@@ -109,7 +144,9 @@ jobs:
         # en un solo objetivo (IMPORTANTE 10 de la auditoria) para que las tres
         # invocaciones no puedan divergir sin que nadie lo note.
         run: |
-          make build-ci-images
+          # La de la APLICACION tambien (V5-DV-02): con ella se verifica la cadena de `audit_log` de la base
+          # restaurada, con el mismo comando que la verificacion diaria. Misma cache que ci.yml (scope app-ci).
+          make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha
           # ADR-049: PostgreSQL recibe la SUBCLAVE del WAL, derivada de la maestra con la
           # misma funcion que usan install.sh y update.sh. Es una clave de usar y tirar; se
           # enmascara igualmente en el log. El archivo de WAL va al anfitrion (propiedad del
@@ -424,13 +461,13 @@ jobs:
 
           # El simulacro en modo `database` corre pg_restore contra un cluster real: lo mismo.
           codigo=0
-          bash infra/scripts/restore-drill.sh --mode database --file "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc" || codigo=$?
+          bash infra/scripts/restore-drill.sh --skip-audit-chain --mode database --file "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc" || codigo=$?
           [ "$codigo" -eq 7 ] || { echo "::error::El simulacro modo database con una copia manipulada debia salir con 7 y salio con $codigo."; exit 1; }
           test "$(es_super)" = "f"
 
           rm -f "$BACKUP_PATH"/daily/kronoqr-29990101T000000Z.*
           # Sin falso positivo: una copia buena, en modo database, pasa.
-          bash infra/scripts/restore-drill.sh --mode database
+          bash infra/scripts/restore-drill.sh --skip-audit-chain --mode database
           q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
 
       - name: V6-PL-03 — un SIGTERM a restore.sh deja SIEMPRE una base de produccion
@@ -549,7 +586,7 @@ jobs:
           limpiar
 
       - name: SIMULACRO — restaurar en contenedor limpio y validar (RNF-D-05)
-        run: bash infra/scripts/restore-drill.sh --timeout 120
+        run: bash infra/scripts/restore-drill.sh --skip-audit-chain --timeout 120
 
       - name: El simulacro detecta una copia que NO restaura
         # Una comprobacion que nunca ha fallado no demuestra nada: aqui se le
@@ -558,11 +595,118 @@ jobs:
           cp "$(cat "$BACKUP_PATH"/daily/LATEST | sed "s|^|$BACKUP_PATH/daily/|")" /tmp/copia-buena.enc
           copia="$BACKUP_PATH/daily/$(cat "$BACKUP_PATH"/daily/LATEST)"
           printf 'basura' | dd of="$copia" bs=1 seek=200 conv=notrunc status=none
-          if bash infra/scripts/restore-drill.sh --timeout 120 >/dev/null 2>&1; then
+          if bash infra/scripts/restore-drill.sh --skip-audit-chain --timeout 120 >/dev/null 2>&1; then
             echo "::error::El simulacro ha dado por buena una copia corrupta."; exit 1
           fi
           cp /tmp/copia-buena.enc "$copia"
           echo "El simulacro rechaza una copia corrupta."
+
+      - name: V5-DV-02 — la cadena de audit_log se verifica sobre la base restaurada; una fila alterada hace fallar el simulacro
+        # El simulacro comprobaba claves ajenas y conteos, pero «cero es cero» pide que lo primero tras
+        # restaurar sea la cadena de hash. Aqui la base es REAL (migraciones de la aplicacion y asientos
+        # escritos por ella, no una tabla de mentira), la copia se restaura en el contenedor limpio de
+        # siempre y el comando que verifica es el de la comprobacion diaria. Y el caso negativo: una fila
+        # de audit_log alterada por SQL directo ANTES de la copia —la posicion del cambio la elige la
+        # semilla de los bits— tiene que hacer fallar el simulacro con 6 y decir que fila.
+        env:
+          PGHOST: ${{ env.DB_HOST }}
+          PGPORT: ${{ env.DB_PORT }}
+          PGUSER: ${{ env.DB_USERNAME }}
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -d postgres -Atqc "$1"; }
+          en_cadena() { psql -d fichaje_chain -Atqc "$1"; }
+          APP_KEY="base64:$(openssl rand -base64 32)"
+          export APP_KEY
+          export DB_MIGRATION_USERNAME="$DB_USERNAME" DB_MIGRATION_PASSWORD="$DB_PASSWORD"
+          aplicacion() {
+            docker run --rm --network host --entrypoint "$1" \
+              -e APP_ENV=production -e APP_KEY -e LOG_CHANNEL=stderr -e CACHE_STORE=array -e SESSION_DRIVER=array \
+              -e QUEUE_CONNECTION=sync -e DB_CONNECTION=pgsql_migrator -e DB_HOST -e DB_PORT \
+              -e DB_DATABASE=fichaje_chain -e DB_MIGRATION_USERNAME -e DB_MIGRATION_PASSWORD \
+              kronoqr/app:ci "${@:2}"
+          }
+          q "DROP DATABASE IF EXISTS fichaje_chain" >/dev/null
+          q "CREATE DATABASE fichaje_chain" >/dev/null
+          aplicacion php artisan migrate --force >/dev/null
+          # Doce asientos de verdad, escritos por la aplicacion (cadena encadenada por ella).
+          aplicacion sh -c 'for i in $(seq 1 12); do php artisan compliance:record-system-event system.restored_from_backup --data="{\"backup_file\":\"kronoqr-20260101T000000Z.dump.enc\",\"backup_taken_at\":\"2026-01-01T00:00:00Z\",\"failed_step\":\"manual_restore\",\"reason\":\"manual_restore\",\"from_version\":\"2.3.0\",\"to_version\":\"2.3.0\",\"report_id\":\"drill-ci-$i\"}" >/dev/null || exit 1; done'
+          filas="$(en_cadena "SELECT count(*) FROM audit_log")"
+          [ "$filas" -ge 12 ] || { echo "::error::La aplicacion solo ha escrito $filas asientos."; exit 1; }
+          aplicacion php artisan compliance:verify-audit-chain | grep -q 'Cadena integra' ||
+            { echo "::error::La cadena de origen ya no es integra: el montaje de la prueba es invalido."; exit 1; }
+          copia_con_cadena() {
+            DB_DATABASE=fichaje_chain PGUSER="$BACKUP_DB_USERNAME" PGPASSWORD="$BACKUP_DB_PASSWORD" bash infra/scripts/backup.sh run --mode dump >/dev/null
+            cat "$BACKUP_PATH"/daily/LATEST
+          }
+          ultimo_informe() { ls -t "$BACKUP_PATH"/reports/drill-*.log | head -n 1; }
+
+          # a) cadena integra -> el simulacro pasa y lo dice
+          buena="$(copia_con_cadena)"
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/app:ci --timeout 120
+          grep -q 'Cadena de auditoria: correcta' "$(ultimo_informe)" ||
+            { echo "::error::El informe del simulacro no dice que la cadena se haya verificado."; exit 1; }
+
+          # a2) --mode database con la imagen, SIN --skip-audit-chain (la misma verificacion en la rama
+          #     database: el usuario del cluster es el migrador del job y el verificador usa --network host)
+          bash infra/scripts/restore-drill.sh --mode database --php-image kronoqr/app:ci --file "$BACKUP_PATH/daily/$buena"
+          grep -q 'Cadena de auditoria: correcta' "$(ultimo_informe)" ||
+            { echo "::error::El simulacro en modo database no verifico la cadena."; exit 1; }
+          grep -q '^kronoqr_backup_restore_drill_audit_chain_verified 1$' "$BACKUP_PATH"/metrics/kronoqr_backup_drill.prom ||
+            { echo "::error::Un simulacro con la cadena verificada no publica audit_chain_verified 1."; exit 1; }
+
+          # a3) «no se ha podido verificar» NO es «rotura»: una imagen sin artisan hace fallar el simulacro
+          #     con 6, pero el informe no habla de rotura de la cadena ni manda al runbook de integridad
+          codigo=0
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/postgres:ci --file "$BACKUP_PATH/daily/$buena" --timeout 120 || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::Con una imagen sin artisan el simulacro debia fallar (6) y salio con $codigo."; exit 1; }
+          grep -q 'Cadena de auditoria: NO VERIFICADA' "$(ultimo_informe)" ||
+            { echo "::error::El informe no distingue «no se ha podido verificar» de una rotura."; exit 1; }
+          if grep -q 'ROTURA' "$(ultimo_informe)"; then
+            echo "::error::Una cadena que no se ha podido verificar se ha informado como ROTURA."; exit 1
+          fi
+
+          # a4) --skip-audit-chain se RECHAZA sobre una base con la cadena de verdad (hash y prev_hash)
+          codigo=0
+          bash infra/scripts/restore-drill.sh --skip-audit-chain --file "$BACKUP_PATH/daily/$buena" --timeout 120 || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::--skip-audit-chain sobre una base con cadena debia rechazarse (6) y salio con $codigo."; exit 1; }
+          grep -q 'rechazada porque audit_log tiene cadena' "$(ultimo_informe)" ||
+            { echo "::error::El informe no dice que --skip-audit-chain se rechazo."; exit 1; }
+
+          # b) una fila alterada por SQL directo, elegida por la semilla -> el simulacro falla con 6
+          objetivo=$(( KQ_BITFLIP_SEED % filas + 1 ))
+          id="$(en_cadena "SELECT id FROM audit_log ORDER BY id OFFSET $((objetivo - 1)) LIMIT 1")"
+          echo "Fila alterada: audit_log #${id} (semilla ${KQ_BITFLIP_SEED})"
+          en_cadena "UPDATE audit_log SET payload = payload || '{\"alterado\":1}'::jsonb WHERE id = ${id}" >/dev/null
+          sleep 1
+          copia_con_cadena >/dev/null
+          codigo=0
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/app:ci --timeout 120 || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::Con audit_log #${id} alterada el simulacro debia fallar (6) y salio con $codigo."; exit 1; }
+          grep -q "audit_log #${id} · content_altered" "$(ultimo_informe)" ||
+            { echo "::error::El informe no nombra la fila alterada (#${id})."; exit 1; }
+          grep -q '^kronoqr_backup_restore_drill_last_result 0$' "$BACKUP_PATH"/metrics/kronoqr_backup_drill.prom ||
+            { echo "::error::El fallo de la cadena no se ha publicado como simulacro fallido: la alerta no sonaria."; exit 1; }
+
+          # b2) ademas una fila BORRADA a mitad de la cadena: la siguiente ya no encadena con la anterior
+          del_off=$(( (objetivo - 1 + 3) % (filas - 2) ))
+          del_id="$(en_cadena "SELECT id FROM audit_log ORDER BY id OFFSET ${del_off} LIMIT 1")"
+          sig_id="$(en_cadena "SELECT id FROM audit_log ORDER BY id OFFSET $((del_off + 1)) LIMIT 1")"
+          echo "Fila borrada: audit_log #${del_id}; la que ya no encadena es #${sig_id}"
+          en_cadena "DELETE FROM audit_log WHERE id = ${del_id}" >/dev/null
+          sleep 1
+          copia_con_cadena >/dev/null
+          codigo=0
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/app:ci --timeout 120 || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::Con audit_log #${del_id} borrada el simulacro debia fallar (6) y salio con $codigo."; exit 1; }
+          grep -q "audit_log #${sig_id} · broken_link" "$(ultimo_informe)" ||
+            { echo "::error::El informe no nombra el eslabon roto (#${sig_id}, broken_link)."; exit 1; }
+
+          # c) la copia buena anterior sigue pasando (el simulacro vuelve a verde y deja la metrica en 1)
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/app:ci --file "$BACKUP_PATH/daily/$buena" --timeout 120
+          q "DROP DATABASE IF EXISTS fichaje_chain" >/dev/null
+          echo "La cadena de audit_log se verifica tras restaurar y una fila alterada (#${id}) falla el simulacro."
 
       - name: R5-DV-04 — un bit cambiado, un .sha256 borrado, una copia renombrada o un manifiesto alterado NO restauran
         # Antes: AES-CBC no autentica y un bit cambiado daba exit=0; el .sha256 era OPCIONAL, asi que
@@ -590,21 +734,19 @@ jobs:
             [ "$codigo" -eq 6 ] || { echo "::error::$DESC debia salir con 6 y salio con $codigo."; exit 1; }
           }
           dry --file "$copia" || { echo "::error::La copia buena no pasa el dry-run."; exit 1; }
-          # a) un bit cambiado en la cabecera, el cuerpo y el trailer
-          for desplazamiento in 10 300 -3; do
+          # a) un bit cambiado en la cabecera, el cuerpo y la cola, en una posicion SORTEADA con la semilla
+          #    (V5-DV-01): el byte se lee y se cambia su bit, asi que el fichero CAMBIA siempre (antes se
+          #    escribia una `Z` fija y, si el byte ya era `Z`, la prueba esperaba 6 y recibia 0).
+          for region in header body trailer; do
             cp -p /tmp/buena.enc "$copia"
-            if [ "$desplazamiento" -lt 0 ]; then
-              tam="$(stat -c %s "$copia")"; pos=$((tam + desplazamiento))
-            else
-              pos="$desplazamiento"
-            fi
-            printf 'Z' | dd of="$copia" bs=1 seek="$pos" conv=notrunc status=none
-            DESC="Un bit cambiado en la posicion $pos"; esperar6 --file "$copia"
+            bash .github/scripts/flip-bit.sh "$copia" "$region" "$KQ_BITFLIP_SEED"
+            cmp -s /tmp/buena.enc "$copia" && { echo "::error::flip-bit no ha cambiado el fichero (region $region, semilla $KQ_BITFLIP_SEED)."; exit 1; }
+            DESC="Un bit cambiado en la region $region (semilla $KQ_BITFLIP_SEED)"; esperar6 --file "$copia"
           done
           cp -p /tmp/buena.enc "$copia"
           # b) el .sha256 borrado y el .enc modificado (el ataque del hallazgo)
           mv "$copia.sha256" /tmp/buena.sha256
-          printf 'Z' | dd of="$copia" bs=1 seek=300 conv=notrunc status=none
+          bash .github/scripts/flip-bit.sh "$copia" body "$KQ_BITFLIP_SEED"
           DESC=".sha256 borrado + .enc modificado"; esperar6 --file "$copia"
           cp -p /tmp/buena.enc "$copia"
           DESC="Sin .sha256"; esperar6 --file "$copia"
@@ -629,11 +771,12 @@ jobs:
           #    verificada: si leyera otra vez del origen, pg_restore se encontraria un volcado alterado.
           cat >/tmp/gancho.sh <<'HOOK'
           #!/bin/sh
-          printf 'Z' | dd of="$1" bs=1 seek=300 conv=notrunc status=none
+          # El mismo flip-bit.sh que el resto de pruebas (GITHUB_WORKSPACE y KQ_BITFLIP_SEED vienen del entorno del job).
+          exec bash "${GITHUB_WORKSPACE}/.github/scripts/flip-bit.sh" "$1" body "${KQ_BITFLIP_SEED}"
           HOOK
           chmod +x /tmp/gancho.sh
           codigo=0
-          KQE_TEST_HOOK_AFTER_VERIFY=/tmp/gancho.sh bash infra/scripts/restore-drill.sh --mode database --file "$copia" >/dev/null 2>&1 || codigo=$?
+          KQE_TEST_HOOK_AFTER_VERIFY=/tmp/gancho.sh bash infra/scripts/restore-drill.sh --skip-audit-chain --mode database --file "$copia" >/dev/null 2>&1 || codigo=$?
           [ "$codigo" -eq 0 ] || { echo "::error::Con el origen alterado DESPUES de verificar, el simulacro debia usar la copia ya verificada (0) y salio con $codigo."; exit 1; }
           # El origen SI quedo alterado por el gancho: ya no verifica.
           codigo=0; dry --file "$copia" || codigo=$?
@@ -676,7 +819,8 @@ jobs:
           grep -q "aborted_at:$(basename "$medio" .gz.enc)" "$BACKUP_PATH"/reports/drill-*.log ||
             { echo "::error::El informe no dice en que segmento se aborto."; exit 1; }
           # c) un bit cambiado en un segmento
-          wal "cp -p '$medio' /tmp/segmento-medio.keep && printf Z | dd of='$medio' bs=1 seek=150 conv=notrunc status=none"
+          wal "cp -p '$medio' /tmp/segmento-medio.keep"
+          sudo -E bash .github/scripts/flip-bit.sh "$medio" body "$KQ_BITFLIP_SEED"
           codigo=0; drill >/dev/null 2>&1 || codigo=$?
           wal "cp -p /tmp/segmento-medio.keep '$medio'"
           [ "$codigo" -eq 6 ] || { echo "::error::Con un bit cambiado en un segmento el simulacro debia fallar (6) y salio con $codigo."; exit 1; }
@@ -718,4 +862,233 @@ jobs:
 
       - name: Apagar el servidor de pruebas
         if: always()
-        run: docker rm -f kronoqr-pg >/dev/null 2>&1 || true
+        run: docker rm -fv kronoqr-pg >/dev/null 2>&1 || true
+
+  #-----------------------------------------------------------------------------
+  # RTO CON VOLUMEN (V21-5-DV-3, V21-6-DV-2). Semanal y a mano; nunca en una rama.
+  #
+  # El simulacro de arriba restaura 8 704 filas: demuestra que el PROCEDIMIENTO funciona, no que
+  # el RTO de 4 h (RNF-D-02) quepa con los datos de un hotel de cuatro anos. Este job fabrica ese
+  # volumen y MIDE tres cosas, cada una contra un umbral escrito:
+  #
+  #   · la COPIA logica (`backup.sh run --mode dump`), que es lo que tarda la ventana de 503 de una
+  #     actualizacion (V21-6-DV-2: se media con la base casi vacia, 3 s);
+  #   · la RESTAURACION en contenedor limpio (el simulacro menos la cadena), el grueso del RTO;
+  #   · la VERIFICACION DE LA CADENA de audit_log sobre 1 M de asientos, que desde la 2.3.0 forma
+  #     parte del simulacro y de la que depende que el registro restaurado sea fiable.
+  #
+  # LA BASE. El esquema es el REAL, migrado con `kronoqr/app:ci` (particiones de audit_log, indices,
+  # disparadores, claves ajenas de la aplicacion), y `audit_log` lleva 1 M de asientos con la cadena
+  # de hash valida (`.github/scripts/seed-audit-chain.php`, que usa la misma clase `AuditChain` que
+  # escribe y verifica). Hasta ~3,9 M de filas se completan con cuatro tablas sinteticas (`vol_*`:
+  # 500 empleados x 4 anos) que dan volumen y claves ajenas propias. La copia sale de esa base, asi
+  # que los tiempos incluyen el esquema real y no solo tablas con una clave primaria.
+  #
+  # OJO, LA DURACION DEL SIMULACRO CAMBIA EN LA 2.3.0: `restore_drill_duration_seconds` incluye ahora
+  # la verificacion de la cadena. «61 s con 3,65 M de filas» (2.2.0) era solo restaurar; el RTO se
+  # mide como duration - audit_chain_seconds.
+  #
+  # UMBRALES (aceptados por el propietario el 22-10-2026, a revisar tras 3-4 ejecuciones; razon en
+  # docs/runbooks/restaurar-backup.md §6.1):
+  #   · restauracion <= RESTORE_VOLUME_MAX_SECONDS (600 s);
+  #   · copia <= BACKUP_VOLUME_MAX_SECONDS (120 s);
+  #   · cadena sobre 1 M de asientos <= CHAIN_VOLUME_MAX_SECONDS (600 s): la comprobacion diaria
+  #     corre a las 04:05 y tiene que acabar con holgura antes del cambio de turno de las 06:00.
+  # Ajustarlos es una decision del propietario del producto (RNF-D-02), no de quien los lee en rojo.
+  #-----------------------------------------------------------------------------
+  volumen:
+    name: "RTO con volumen: copia, restauracion y cadena de 1 M de asientos"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    if: (github.event_name == 'schedule' && github.event.schedule == '30 2 * * 1') || (github.event_name == 'workflow_dispatch' && inputs.volumen)
+
+    env:
+      BACKUP_ENCRYPTION_KEY: volumen_local_ci_clave_de_cifrado
+      BACKUP_PATH: /tmp/kronoqr-backups
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_migrator
+      DB_PASSWORD: volumen_local_ci
+      BACKUP_DB_USERNAME: fichaje_backup
+      BACKUP_DB_PASSWORD: volumen_backup_ci
+      # Las imagenes del producto que el simulacro resuelve como en un servidor (V5-DV-03): la de
+      # postgres de la instalacion para el contenedor limpio, sin Docker Hub.
+      IMAGE_REGISTRY: kronoqr
+      IMAGE_TAG: ci
+      RESTORE_VOLUME_MAX_SECONDS: "600"
+      BACKUP_VOLUME_MAX_SECONDS: "120"
+      CHAIN_VOLUME_MAX_SECONDS: "600"
+      AUDIT_ROWS: "1000000"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cliente de PostgreSQL 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: PostgreSQL 17 del producto, con el rol de copias, y la imagen de la aplicacion
+        run: |
+          make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha
+          mkdir -p "$BACKUP_PATH"
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e DB_BACKUP_USERNAME="$BACKUP_DB_USERNAME" \
+            -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          for i in $(seq 1 45); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "Servidor listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready por TCP sigue fallando tras 90 s."
+          docker logs kronoqr-pg | tail -80
+          exit 1
+
+      - name: Esquema REAL de la aplicacion, 1 M de asientos con cadena valida y cuatro anos de datos de volumen
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP_KEY="base64:$(openssl rand -base64 32)"
+          export APP_KEY DB_MIGRATION_USERNAME="$DB_USERNAME" DB_MIGRATION_PASSWORD="$DB_PASSWORD"
+          aplicacion() {
+            docker run --rm --network host -v "$PWD/.github/scripts:/ci:ro" --entrypoint "$1" \
+              -e APP_ENV=production -e APP_KEY -e LOG_CHANNEL=stderr -e CACHE_STORE=array -e SESSION_DRIVER=array \
+              -e QUEUE_CONNECTION=sync -e METRICS_TEXTFILE_ENABLED=false -e DB_CONNECTION=pgsql_migrator \
+              -e DB_HOST -e DB_PORT -e DB_DATABASE -e DB_MIGRATION_USERNAME -e DB_MIGRATION_PASSWORD \
+              kronoqr/app:ci "${@:2}"
+          }
+          aplicacion php artisan migrate --force >/dev/null
+          aplicacion php /ci/seed-audit-chain.php "$AUDIT_ROWS"
+          psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE vol_employees (id int PRIMARY KEY, employee_code text NOT NULL UNIQUE);
+          INSERT INTO vol_employees SELECT g, 'EMP-' || g FROM generate_series(1, 500) g;
+          -- 500 personas x 1 460 dias = 730 000 jornadas, un tramo cada una.
+          CREATE TABLE vol_shift_entries (
+            id bigint PRIMARY KEY,
+            employee_id int NOT NULL REFERENCES vol_employees(id),
+            started_at timestamptz NOT NULL,
+            ended_at timestamptz,
+            source text NOT NULL
+          );
+          INSERT INTO vol_shift_entries
+            SELECT g, 1 + (g % 500),
+                   timestamptz '2022-10-01 06:00+00' + ((g / 500) || ' days')::interval,
+                   timestamptz '2022-10-01 14:00+00' + ((g / 500) || ' days')::interval,
+                   'kiosk'
+            FROM generate_series(1, 730000) g;
+          CREATE INDEX vol_shift_entries_employee_started ON vol_shift_entries (employee_id, started_at);
+          -- Dos fichajes por tramo.
+          CREATE TABLE vol_scan_events (
+            id bigint PRIMARY KEY,
+            scan_id uuid NOT NULL UNIQUE,
+            employee_id int NOT NULL REFERENCES vol_employees(id),
+            occurred_at timestamptz NOT NULL,
+            recorded_at timestamptz NOT NULL,
+            payload jsonb NOT NULL
+          );
+          INSERT INTO vol_scan_events
+            SELECT g, gen_random_uuid(), 1 + (g % 500),
+                   timestamptz '2022-10-01 06:00+00' + ((g / 1000) || ' days')::interval,
+                   timestamptz '2022-10-01 06:00:02+00' + ((g / 1000) || ' days')::interval,
+                   jsonb_build_object('kiosk', 1 + (g % 3), 'direction', CASE WHEN g % 2 = 0 THEN 'in' ELSE 'out' END)
+            FROM generate_series(1, 1460000) g;
+          CREATE INDEX vol_scan_events_employee_occurred ON vol_scan_events (employee_id, occurred_at);
+          CREATE TABLE vol_daily_totals (
+            employee_id int NOT NULL REFERENCES vol_employees(id),
+            day date NOT NULL,
+            minutes int NOT NULL,
+            PRIMARY KEY (employee_id, day)
+          );
+          INSERT INTO vol_daily_totals
+            SELECT e, date '2022-10-01' + d, 480 FROM generate_series(1, 500) e, generate_series(0, 1459) d;
+          ANALYZE;
+          SQL
+          total="$(psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "SELECT (SELECT count(*) FROM vol_employees) + (SELECT count(*) FROM vol_shift_entries) + (SELECT count(*) FROM vol_scan_events) + (SELECT count(*) FROM vol_daily_totals) + (SELECT count(*) FROM audit_log)")"
+          tamano="$(psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "SELECT pg_size_pretty(pg_database_size('$DB_DATABASE'))")"
+          echo "FILAS_TOTAL=${total}" >>"$GITHUB_ENV"
+          echo "BASE_TAMANO=${tamano}" >>"$GITHUB_ENV"
+          echo "Filas: ${total}. Tamano de la base: ${tamano}."
+          [ "$total" -ge 3600000 ] || { echo "::error::El volumen sembrado (${total} filas) no llega a los 3,6 M que dice el job."; exit 1; }
+
+      - name: Medir la copia logica (la ventana de 503 de una actualizacion)
+        run: |
+          set -euo pipefail
+          inicio="$(date +%s)"
+          bash infra/scripts/backup.sh run --mode dump
+          segundos=$(( $(date +%s) - inicio ))
+          copia="$BACKUP_PATH/daily/$(cat "$BACKUP_PATH"/daily/LATEST)"
+          echo "COPIA_SEGUNDOS=${segundos}" >>"$GITHUB_ENV"
+          echo "COPIA_MB=$(( $(stat -c %s "$copia") / 1048576 ))" >>"$GITHUB_ENV"
+          echo "Copia de ${FILAS_TOTAL} filas en ${segundos} s (umbral ${BACKUP_VOLUME_MAX_SECONDS} s)."
+          [ "$segundos" -le "$BACKUP_VOLUME_MAX_SECONDS" ] ||
+            { echo "::error::La copia con volumen tarda ${segundos} s y el umbral es ${BACKUP_VOLUME_MAX_SECONDS} s: la ventana de 503 de update.sh se alarga. Ver docs/runbooks/restaurar-backup.md §6.1."; exit 1; }
+
+      - name: Medir la restauracion en contenedor limpio y la cadena de 1 M de asientos
+        run: |
+          set -euo pipefail
+          # Sin --skip-audit-chain: la base lleva la cadena de verdad y el simulacro la verifica. Las
+          # imagenes salen de IMAGE_REGISTRY/IMAGE_TAG (kronoqr/postgres:ci para el contenedor limpio).
+          bash infra/scripts/restore-drill.sh --php-image kronoqr/app:ci --timeout 180
+          m="$BACKUP_PATH/metrics/kronoqr_backup_drill.prom"
+          total="$(sed -n 's/^kronoqr_backup_restore_drill_duration_seconds //p' "$m")"
+          cadena="$(sed -n 's/^kronoqr_backup_restore_drill_audit_chain_seconds //p' "$m")"
+          filas="$(sed -n 's/^kronoqr_backup_restore_drill_rows //p' "$m")"
+          [[ "$total" =~ ^[0-9]+$ && "$cadena" =~ ^[0-9]+$ ]] || { echo "::error::No se han podido leer las duraciones del simulacro."; exit 1; }
+          restauracion=$(( total - cadena ))
+          echo "SIMULACRO_SEGUNDOS=${total}" >>"$GITHUB_ENV"
+          echo "RESTAURACION_SEGUNDOS=${restauracion}" >>"$GITHUB_ENV"
+          echo "CADENA_SEGUNDOS=${cadena}" >>"$GITHUB_ENV"
+          echo "Simulacro de ${filas} filas: ${total} s en total = ${restauracion} s de restauracion + ${cadena} s de cadena."
+          fallo=0
+          if [ "$restauracion" -gt "$RESTORE_VOLUME_MAX_SECONDS" ]; then
+            echo "::error::La restauracion con volumen tarda ${restauracion} s y el umbral es ${RESTORE_VOLUME_MAX_SECONDS} s: el RTO de 4 h (RNF-D-02) se estrecha. Ver docs/runbooks/restaurar-backup.md §6.1."
+            fallo=1
+          fi
+          if [ "$cadena" -gt "$CHAIN_VOLUME_MAX_SECONDS" ]; then
+            echo "::error::Verificar la cadena de ${AUDIT_ROWS} asientos tarda ${cadena} s y el umbral es ${CHAIN_VOLUME_MAX_SECONDS} s: la comprobacion diaria de las 04:05 se acerca al cambio de turno. Ver docs/runbooks/restaurar-backup.md §6.1."
+            fallo=1
+          fi
+          [ "$fallo" -eq 0 ]
+
+      - name: Resumen del RTO medido
+        if: always()
+        run: |
+          {
+            echo "### RTO con volumen"
+            echo ""
+            echo "| Medida | Valor | Umbral |"
+            echo "| --- | --- | --- |"
+            echo "| Filas | ${FILAS_TOTAL:-?} (${AUDIT_ROWS} de audit_log con cadena) | 3,6 M |"
+            echo "| Tamano de la base | ${BASE_TAMANO:-?} | |"
+            echo "| Copia logica | ${COPIA_SEGUNDOS:-?} s (${COPIA_MB:-?} MB) | ${BACKUP_VOLUME_MAX_SECONDS} s |"
+            echo "| Restauracion en contenedor limpio | ${RESTAURACION_SEGUNDOS:-?} s | ${RESTORE_VOLUME_MAX_SECONDS} s |"
+            echo "| Verificacion de la cadena | ${CADENA_SEGUNDOS:-?} s | ${CHAIN_VOLUME_MAX_SECONDS} s |"
+            echo "| Simulacro completo | ${SIMULACRO_SEGUNDOS:-?} s | |"
+            echo ""
+            echo "RTO de RNF-D-02: 4 h. Umbrales y razon: docs/runbooks/restaurar-backup.md §6.1."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Apagar el servidor de pruebas
+        if: always()
+        run: docker rm -fv kronoqr-pg >/dev/null 2>&1 || true

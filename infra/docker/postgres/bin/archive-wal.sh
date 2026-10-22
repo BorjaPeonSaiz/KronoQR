@@ -69,6 +69,28 @@ err() {
 temporal=""
 trabajo=""
 
+# Durabilidad del NOMBRE, no solo del contenido (V7-RV-3): el `sync` de antes del `mv`
+# deja duro el contenido del temporal, pero el renombrado es una escritura del
+# DIRECTORIO. Sin fsync del directorio, un corte de luz despues de decir «archivado»
+# puede dejar el segmento sin su nombre definitivo cuando PostgreSQL ya ha reciclado
+# el original. `sync <ruta>` hace fsync de esa ruta (coreutils y BusyBox, que es lo
+# que trae postgres:alpine). SOLO si la implementacion no admite argumentos (error de
+# uso) se cae al `sync` global; un fsync que FALLA (EIO, disco o recurso de red que
+# miente) no se tapa con un sync global que quiza no devuelva el error: es un fallo.
+sync_destino() {
+  local salida
+  if salida="$(sync "$DESTINO" 2>&1)"; then
+    return 0
+  fi
+  case "$salida" in
+  *"nvalid option"* | *"nrecognized"* | *"sage"* | *"extra operand"*) sync ;;
+  *)
+    err "fsync de '${DESTINO}' fallo: ${salida}"
+    return 1
+    ;;
+  esac
+}
+
 # Cualquier salida distinta de 0 y de 1 pasa a 1 (ver cabecera); el temporal y el
 # directorio de trabajo no sobreviven a este proceso pase lo que pase.
 # shellcheck disable=SC2329 # la invoca el trap EXIT.
@@ -138,6 +160,11 @@ chmod 0700 "$trabajo"
 # Reintento tras un corte: si el segmento ya esta y es el mismo, se acepta.
 if [ -f "$final" ]; then
   if kqe_open "$final" "$trabajo" wal "$nombre" && kqe_decrypt_copy | gzip -dc | cmp -s - "$origen"; then
+    # Reintento tras un corte: el renombrado pudo no llegar a disco. Se asegura aqui.
+    sync_destino || {
+      err "no se ha podido sincronizar '${DESTINO}'. PostgreSQL lo reintentara."
+      exit 1
+    }
     exit 0
   fi
   err "'${nombre}' ya esta archivado con un contenido DISTINTO, o no se puede verificar (${KQE_REASON:-contenido distinto}). No se sobrescribe. Casi siempre significa que dos servidores archivan en el mismo destino, o que el segmento archivado esta danado: separa los destinos antes de seguir. Ver docs/runbooks/restaurar-backup.md §4."
@@ -145,6 +172,11 @@ if [ -f "$final" ]; then
 fi
 if [ -f "$heredado" ]; then
   if gzip -dc "$heredado" 2>/dev/null | cmp -s - "$origen"; then
+    # Igual que con el cifrado: el renombrado del reintento pudo no llegar a disco.
+    sync_destino || {
+      err "no se ha podido sincronizar '${DESTINO}'. PostgreSQL lo reintentara."
+      exit 1
+    }
     exit 0
   fi
   err "'${nombre}' ya esta archivado (formato heredado .gz) con un contenido DISTINTO. No se sobrescribe. Casi siempre significa que dos servidores archivan en el mismo destino: separa los destinos antes de seguir. Ver docs/runbooks/restaurar-backup.md §4."
@@ -172,6 +204,12 @@ if ! mv -f "$temporal" "$final"; then
   exit 1
 fi
 temporal=""
+
+# El renombrado tambien tiene que ser durable ANTES de decir «a salvo» (V7-RV-3).
+if ! sync_destino; then
+  err "el segmento '${nombre}' esta publicado pero no se ha podido sincronizar '${DESTINO}'. PostgreSQL lo reintentara; el reintento lo acepta por ser identico."
+  exit 1
+fi
 
 # A partir de aqui el segmento esta a salvo: nada de lo que sigue puede cambiar el
 # resultado (de ahi los `|| true`).

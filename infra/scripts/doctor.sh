@@ -402,6 +402,8 @@ run_delegated_doctor() {
   check_backup_wal
   check_backup_mounts
   check_backup_offsite
+  check_restore_drill
+  check_orphan_drill_containers
   check_update_logs
   check_edge_networks
   check_log_retention_setting
@@ -483,6 +485,8 @@ run_external_checks() {
   check_backup_wal
   check_backup_mounts
   check_backup_offsite
+  check_restore_drill
+  check_orphan_drill_containers
   check_update_logs
   check_edge_networks
   check_log_retention_setting
@@ -655,6 +659,79 @@ check_backup_offsite() {
     check_warn "$(kq_text d_c_offsite_unknown)" "$(kq_text d_w_offsite_unknown)"
   else
     check_pass "$(kq_text d_c_offsite_ok)"
+  fi
+  return 0
+}
+
+# V5-DV-04. ¿Se ha ensayado la restauracion este trimestre? RNF-D-05 pide un simulacro cada trimestre
+# y, hasta la 2.3.0, nadie lo programaba: la unica senal eran alertas que solo existen con el perfil de
+# observabilidad. Esto lo mira cualquiera que ejecute doctor.sh, sin Prometheus. Lee la metrica que
+# deja restore-drill.sh en BACKUP_PATH/metrics (resultado y momento del ultimo simulacro CORRECTO) y
+# avisa si el ultimo fallo, si el ultimo correcto tiene mas de 95 dias (trimestre y margen; la alerta
+# del perfil de observabilidad espera a los 100) o si nunca ha habido uno. SIEMPRE un aviso: una
+# restauracion que no se ha ensayado no es una averia, es un pendiente.
+readonly KQ_DRILL_MAX_AGE_DAYS=95
+check_restore_drill() {
+  local backup_path file result stamp chain now age_days
+
+  backup_path="$(env_value "${CURRENT_ENV}" "BACKUP_PATH")"
+  [ -n "${backup_path}" ] || backup_path="/var/backups/fichaje"
+  file="${backup_path}/metrics/kronoqr_backup_drill.prom"
+
+  if [ -d "${backup_path}/metrics" ] && [ ! -x "${backup_path}/metrics" ]; then
+    check_warn "$(kq_text d_c_drill_unknown)" "$(kq_format d_w_drill_unknown "${backup_path}/metrics")"
+    return 0
+  fi
+  if [ ! -e "${file}" ]; then
+    check_warn "$(kq_text d_c_drill_none)" "$(kq_text d_w_drill_none)"
+    return 0
+  fi
+  if [ ! -r "${file}" ]; then
+    check_warn "$(kq_text d_c_drill_unknown)" "$(kq_format d_w_drill_unknown "${file}")"
+    return 0
+  fi
+
+  result="$(sed -n 's/^kronoqr_backup_restore_drill_last_result \([01]\)$/\1/p' "${file}" | head -n 1)"
+  stamp="$(sed -n 's/^kronoqr_backup_restore_drill_last_success_timestamp_seconds \([0-9][0-9]*\)$/\1/p' "${file}" | head -n 1)"
+
+  if [ "${result}" = "0" ]; then
+    check_warn "$(kq_text d_c_drill_failed)" "$(kq_format d_w_drill_failed "${backup_path}")"
+    return 0
+  fi
+  if [ "${result}" != "1" ]; then
+    check_warn "$(kq_text d_c_drill_none)" "$(kq_text d_w_drill_none)"
+    return 0
+  fi
+  # Un simulacro que no verifico la cadena de audit_log (--skip-audit-chain, --mode pitr, o uno de la
+  # 2.2.x, que no publicaba este valor) no cuenta como simulacro bueno.
+  chain="$(sed -n 's/^kronoqr_backup_restore_drill_audit_chain_verified \([01]\)$/\1/p' "${file}" | head -n 1)"
+  if [ "${chain}" != "1" ]; then
+    check_warn "$(kq_text d_c_drill_unverified)" "$(kq_text d_w_drill_unverified)"
+    return 0
+  fi
+  if [ -z "${stamp}" ] || [ "${stamp}" = "0" ]; then
+    check_warn "$(kq_text d_c_drill_none)" "$(kq_text d_w_drill_none)"
+    return 0
+  fi
+
+  now="$(date +%s)"
+  age_days=$(((now - stamp) / 86400))
+  if [ "${age_days}" -gt "${KQ_DRILL_MAX_AGE_DAYS}" ]; then
+    check_warn "$(kq_format d_c_drill_old "${age_days}" "${KQ_DRILL_MAX_AGE_DAYS}")" "$(kq_text d_w_drill_old)"
+  else
+    check_pass "$(kq_format d_c_drill_ok "${age_days}")"
+  fi
+  return 0
+}
+
+# Un corte (SIGKILL, apagon) a mitad del simulacro deja el contenedor `kronoqr-drill-*` vivo, con una
+# copia de la base restaurada en el disco de Docker. El lanzador del cron los retira antes de cada
+# simulacro; aqui se avisa de los que haya ahora.
+check_orphan_drill_containers() {
+  local orphans
+  orphans="$(docker ps -a --filter "name=kronoqr-drill-" --format '{{.Names}}' 2>/dev/null | tr '\n' ' ' || true)"
+  if [ -n "${orphans// /}" ]; then
+    check_warn "$(kq_format d_c_drill_orphans "${orphans}")" "$(kq_text d_w_drill_orphans)"
   fi
   return 0
 }

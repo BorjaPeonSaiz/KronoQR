@@ -1812,6 +1812,37 @@ migrations finish, with the same reason as an offboarding today
 for each card. There is nothing to do; if you count them in the panel, you
 will see fewer active cards.
 
+**When updating to 2.3.0: the restore drill also checks the audit chain and is
+scheduled by itself.** None of this stops clocking or changes what
+already works:
+
+- **`restore-drill.sh` now verifies the `audit_log` hash chain on the restored
+  database**, with the same check that runs every night. If a single row does
+  not fit, the drill exits with `6` and the report names the row (identifiers
+  and hashes, never names): that copy cannot be trusted for the legal record,
+  and you follow `rotura-cadena-auditoria.md`. To verify it, it uses the
+  application image you already have downloaded; if it is missing, the drill
+  refuses before restoring anything and says which one to pull.
+- **The quarterly drill is scheduled by itself.** `install.sh` and `update.sh`
+  put it in `/etc/cron.d` (the 1st of January, April, July and October at 04:40
+  server time), also on an installation that comes from an earlier version, and
+  **there is nothing to change when updating**: the launcher finds the current
+  installation by itself. It stops nothing and does not touch the production
+  database: it starts a separate container with no network for a few minutes,
+  using **the images you already have loaded** (the product's PostgreSQL and
+  the application image), so it needs no internet; it needs room on the Docker
+  disk of about the size of the database. **To not schedule it**, pass
+  `--no-drill-schedule` to `install.sh` or `update.sh`, or run
+  `sudo ./schedule-drill.sh remove`: the choice is remembered and updates do
+  not undo it (`sudo ./schedule-drill.sh install` schedules it again; `status`
+  says how it stands). `./doctor.sh` warns (yellow, never red) if there has
+  never been a drill, if the last one failed, or if the last successful one is
+  more than 95 days old, or if the last one did not verify the audit chain
+  (`--skip-audit-chain`, `--mode pitr`): also when you have turned it off.
+  Before restoring it checks there is free space on Docker (4 times the copy
+  plus 512 MiB) and, if not, exits without touching anything; the launcher
+  removes by itself any `kronoqr-drill-*` containers a cut left behind.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or

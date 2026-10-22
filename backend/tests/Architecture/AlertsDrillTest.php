@@ -238,7 +238,7 @@ it('no viaja en el paquete de entrega ni en el contexto de ninguna imagen', func
 
     $encontrados = [];
     if ($proceso->isSuccessful()) {
-        $buscar = new Process(['find', $destino, '-mindepth', '1', '(', '-iname', '*drill*', '-not', '-iname', 'restore-drill*', ')']);
+        $buscar = new Process(['find', $destino, '-mindepth', '1', '(', '-iname', '*drill*', '-not', '-iname', 'restore-drill*', '-not', '-iname', 'schedule-drill*', '-not', '-iname', 'drill-schedule*', ')']);
         $buscar->run();
         $encontrados = array_values(array_filter(explode("\n", $buscar->getOutput())));
     }

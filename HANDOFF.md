@@ -89,9 +89,22 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 11 integrados (#182 a #187, #189 a #191 y #193 a #195). **Bloque 12** (`fix/endurecimiento-borde`): 12.1–12.4 ✅, revisiones de código y seguridad aplicadas; CI manual y PR en curso.
+**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 12 integrados (#182 a #187, #189 a #191 y #193 a #196). **Bloque 13** (`fix/copias-y-wal`): 13.1–13.4 ✅, revisiones de código y seguridad aplicadas; CI manual, `backup-drill.yml` y PR en curso.
 
-Lo que conviene saber del bloque 12 (decisiones en Engram `2.3.0/b12-decisiones`):
+Lo que conviene saber del bloque 13 (decisiones en Engram `2.3.0/b13-decisiones`):
+
+- **WAL:** `archive-wal.sh` hace `sync` del directorio tras el `mv` (también en el reintento idéntico); un fsync fallido da exit 1. Solo cae al `sync` global si la orden no acepta argumentos.
+- **Simulacro (`restore-drill.sh`):** verifica la cadena de `audit_log` sobre la base restaurada con la imagen de la app del paquete (sin red, sin métricas de producción: `METRICS_TEXTFILE_ENABLED=false`). Distingue «ROTURA» (runbook `rotura-cadena-auditoria.md`) de «NO VERIFICADA»; ambos salen con 6. `--skip-audit-chain` se rechaza si `audit_log` tiene `hash`/`prev_hash` y, como pitr, no mueve `last_success_timestamp` (gauge `…_audit_chain_verified`). Comprueba espacio libre, `docker rm -fv`, filtra `CONTEXT: COPY` del informe. Usa la imagen de postgres del producto si está cargada (V5-DV-03: sin internet).
+- **`flip-bit.sh`:** XOR de un bit en header/body/trailer (trailer de 65 bytes de `lib/kqe.sh`) con semilla impresa y reproducible.
+- **Simulacro en el cliente (decisión del propietario):** `install.sh` y `update.sh` lo programan por cron de root (`schedule-drill.sh ensure`, `40 4 1 1,4,7,10 *`), desactivable con `--no-drill-schedule` (recordado en `/etc/kronoqr/no-drill-schedule`). El lanzador exige árbol de root sin escritura de grupo/otros y retira restos `kronoqr-drill-*`. `doctor` avisa a los 95 días, si falló o si no verificó la cadena. Fila nueva en doc 07 §6 (T1053.003).
+- **RTO con volumen:** job `volumen` de `backup-drill.yml`, semanal (lunes 02:30) o `-f volumen=true`: esquema real + 1 M de asientos con cadena válida + tablas sintéticas (~3,9 M filas). Umbrales: restauración ≤ 600 s, copia ≤ 120 s, cadena ≤ 600 s; revisar tras 3–4 ejecuciones.
+- **Quiosco:** roster y heartbeat en zonas `kiosk_vlan`/`kiosk_other` de nginx, sin gastar el cupo de `/scan`.
+- **Pendiente:**
+  - `--mode pitr` no verifica la cadena (mejora anotada en el runbook);
+  - subir `limit_conn` para la VLAN del quiosco, diferido (R3-DV-05);
+  - la auditoría semanal sale en rojo hasta publicar la 2.3.0: la imagen php 2.2.1 tiene 4 HIGH con parche (libexpat y X11); no habrá 2.2.2.
+
+Lo que conviene saber del bloque 12 (#196; decisiones en Engram `2.3.0/b12-decisiones`):
 
 - **Borde:** COEP `credentialless`; CSP `connect-src 'self'` sin `wss:` (decisión del propietario; si un navegador no lo aplica, la presencia cae al sondeo); `/apps/` de Reverb da 404 en nginx; `types {}` del manifiesto a nivel `http` (dentro de una `location` sustituye el mapa y el JS sale sin tipo); blackbox sin root y solo en `observability`; todo `FROM` y `COPY --from` externo por digest (prueba en `EdgeHardeningTest`).
 - **Rutas:** fuera `sanctum/csrf-cookie` y `storage/{path}`; `broadcasting/auth` en el contrato, solo `POST`, canal validado (otro nombre = 403 sin asiento); `x-route-exclusions` del contrato (`/metrics`, `/horizon/*`) y `OpenApiContractTest` compara router y contrato en los dos sentidos.
@@ -176,7 +189,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 12 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 13 (copias y recuperación, rama `fix/copias-y-wal`), marcando ✅ el título del bloque 12 en su primer commit.
+**Siguiente acción:** si el bloque 13 no está integrado, PR y merge con la CI y `backup-drill.yml` en verde. Después, sin preguntar, el bloque 14 (panel: datos al día y operaciones largas, rama `fix/panel-datos-y-operaciones`), marcando ✅ el título del bloque 13 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

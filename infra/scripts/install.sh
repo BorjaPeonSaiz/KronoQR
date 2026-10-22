@@ -84,6 +84,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/exit-codes.sh"
 # shellcheck source=lib/messages.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/messages.sh"
+# shellcheck source=lib/drill-schedule.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/drill-schedule.sh"
 # shellcheck source=lib/checks.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/checks.sh"
 # shellcheck source=lib/env-file.sh disable=SC1091
@@ -132,6 +134,8 @@ readonly KQ_COMPOSE_PROJECT="kronoqr"
 # Estado
 #------------------------------------------------------------------------------
 OPT_CHECK_ONLY=0
+# 1 con --no-drill-schedule: no se programa el simulacro trimestral (lib/drill-schedule.sh).
+OPT_NO_DRILL=0
 OPT_LANG=""
 OPT_ENV_FILE=""
 OPT_COMPOSE_FILE=""
@@ -365,6 +369,9 @@ parse_arguments() {
     case "$1" in
     --check-only)
       OPT_CHECK_ONLY=1
+      ;;
+    --no-drill-schedule)
+      OPT_NO_DRILL=1
       ;;
     --skip-signature-check)
       # shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
@@ -1775,6 +1782,11 @@ main() {
   # un fallo posterior intentaria restaurar un fichero que ya no esta.
   discard_undo "$(kq_format undo_env "${ENV_FILE}")"
   rm -f "${ENV_FILE}.kronoqr-pre-install"
+
+  # El simulacro trimestral de restauracion (RNF-D-05): se programa solo salvo --no-drill-schedule.
+  # Un fallo aqui avisa y no deshace nada: la instalacion ya esta hecha.
+  say ""
+  kq_drill_schedule_step "${SCRIPT_DIR}" "${OPT_NO_DRILL}"
 
   final_report
 }

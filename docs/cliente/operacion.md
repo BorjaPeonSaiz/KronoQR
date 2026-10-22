@@ -1791,6 +1791,37 @@ mismo motivo que una baja de hoy (`Baja del empleado (RN-14)`), la fecha de la
 actualización y su asiento en el registro de auditoría por cada tarjeta. No hay
 que hacer nada; si las cuentas en el panel, verás menos tarjetas activas.
 
+**Al actualizar a la 2.3.0: el simulacro de restauración también comprueba la
+cadena de auditoría y se programa sola.** Nada de esto impide fichar
+ni cambia lo que ya funciona:
+
+- **`restore-drill.sh` verifica ahora la cadena de hash de `audit_log` sobre la
+  base restaurada**, con la misma comprobación que se hace cada noche. Si una
+  sola fila no encaja, el simulacro sale con `6` y el informe dice qué fila
+  (identificadores y huellas, nunca nombres): esa copia no es de fiar para el
+  registro legal, y se sigue `rotura-cadena-auditoria.md`. Para verificarla
+  usa la imagen de la aplicación que ya tienes descargada; si no está, el
+  simulacro se niega antes de restaurar nada y dice cuál bajar.
+- **El simulacro trimestral se programa solo.** `install.sh` y `update.sh` lo
+  dejan puesto en `/etc/cron.d` (día 1 de enero, abril, julio y octubre, a las
+  04:40 hora del servidor), también en una instalación que viene de antes, y
+  **no hay que cambiar nada al actualizar**: el lanzador localiza la instalación
+  vigente por sí mismo. No para nada ni toca la base de producción: levanta un
+  contenedor aparte, sin red, durante unos minutos, con **las imágenes que ya
+  tienes cargadas** (la de PostgreSQL del producto y la de la aplicación), así
+  que no necesita internet; pide sitio en el disco de Docker del orden del
+  tamaño de la base de datos. **Para no programarlo**, pasa
+  `--no-drill-schedule` a `install.sh` o a `update.sh`, o ejecuta
+  `sudo ./schedule-drill.sh remove`: la decisión se recuerda y las
+  actualizaciones no la deshacen (`sudo ./schedule-drill.sh install` lo vuelve
+  a programar; `status` dice cómo está). `./doctor.sh` avisa (amarillo, nunca
+  rojo) si nunca ha habido un simulacro, si el último falló o si el último
+  correcto tiene más de 95 días, o si el último no verificó la cadena de
+  auditoría (`--skip-audit-chain`, `--mode pitr`): también cuando lo has
+  desactivado. Antes de restaurar comprueba que hay espacio libre en Docker
+  (4 veces la copia más 512 MiB) y, si no lo hay, sale sin tocar nada; el
+  lanzador retira solo los contenedores `kronoqr-drill-*` que un corte dejara.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,

@@ -1365,6 +1365,10 @@ backup-verify: ## Verifica la ultima copia: huella, descifrado y lectura del ind
 # un contenedor de PostgreSQL limpio, y para eso necesita hablar con Docker.
 # Necesita ver el destino de copias, que en desarrollo es un volumen: se copia
 # a un directorio temporal, se ensaya alli y no se toca nada del entorno.
+# El simulacro verifica ademas la cadena de audit_log con la imagen de la APLICACION (V5-DV-02). La
+# imagen de desarrollo no lleva el codigo (va montado): aqui se omite por omision. Para verificarla:
+#   make restore-drill DRILL_CHAIN="--php-image kronoqr/app:ci"   (tras `make build-ci-images IMAGES=app`)
+DRILL_CHAIN ?= --skip-audit-chain
 restore-drill: ## Simulacro de restauracion en contenedor limpio (RNF-D-05, RQ-09)
 	@destino=$${TMPDIR:-/tmp}/kronoqr-drill; \
 	rm -rf "$$destino"; mkdir -p "$$destino"; \
@@ -1372,7 +1376,7 @@ restore-drill: ## Simulacro de restauracion en contenedor limpio (RNF-D-05, RQ-0
 	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/from -v "$$destino_docker:/to" alpine \
 	  sh -c 'cp -r /from/. /to/' >/dev/null; \
 	clave="$$($(COMPOSE_DEV) exec -T app printenv BACKUP_ENCRYPTION_KEY | tr -d '\r')"; \
-	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh $(DRILL_ARGS); \
+	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh $(DRILL_CHAIN) $(DRILL_ARGS); \
 	resultado=$$?; \
 	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/to -v "$$destino_docker:/from:ro" alpine \
 	  sh -c 'cp -f /from/metrics/kronoqr_backup_drill.prom /to/metrics/ 2>/dev/null || true' >/dev/null; \

@@ -1603,3 +1603,15 @@ it('toma el recuento de la revocacion por patron y lo lleva al asiento system.up
         ->and($proceso->getOutput())->toContain('"failed":0')
         ->and($proceso->getOutput())->toContain('"migrations_applied":3');
 })->group('RF-PD-10', 'RS-07');
+
+it('update.sh deja programado el simulacro trimestral y respeta --no-drill-schedule (V5-DV-04)', function (): void {
+    $es = ejecutarActualizador(['--help'])->getOutput();
+    $en = ejecutarActualizador(['--lang', 'en', '--help'])->getOutput();
+    $script = Repo::contents('infra/scripts/update.sh');
+
+    expect($es)->toContain('--no-drill-schedule')
+        ->and($en)->toContain('--no-drill-schedule')
+        // Al final, con la actualizacion ya hecha y la vuelta atras desarmada.
+        ->and(strpos($script, 'kq_drill_schedule_step'))->toBeLessThan((int) strrpos($script, '  final_report'))
+        ->and(strpos($script, 'kq_drill_schedule_step'))->toBeGreaterThan((int) strrpos($script, '  phase_start_and_verify'));
+})->group('RNF-D-05', 'RF-PD-10');
