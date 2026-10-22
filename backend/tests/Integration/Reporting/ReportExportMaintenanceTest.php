@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Reporting\Application\Port\QueuedJobFailureMetrics;
+use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
@@ -389,6 +390,37 @@ it('el trabajo que muere sin poder cerrarse borra su propio fichero a medias', f
     expect(is_dir($directorio))->toBeFalse()
         ->and(ReportExports::find($export->uuid)->status->value)->toBe('failed')
         ->and(ReportExports::find($export->uuid)->failureReason?->value)->toBe('unexpected');
+})->group('RF-IN-06');
+
+it('el aviso de fallo no toca una fila que otro proceso sigue generando dentro de su techo', function (): void {
+    /*
+     * Revision de seguridad del bloque 14: si el mismo trabajo se reserva dos
+     * veces, el `failed()` del segundo no puede marcar la fila ni borrar el
+     * fichero que el primero esta escribiendo. Releida con bloqueo, una fila
+     * `running` que no ha agotado su techo se deja; la cerrara quien la escribe,
+     * o la obsolescencia si muere.
+     */
+    $clock = app(Clock::class);
+    $export = ReportExports::pendingFor(cuentaQuePide())->start($clock->now()->modify('-5 minutes'));
+    app(ReportExportRepository::class)->save($export);
+
+    $directorio = Config::string('reporting.export.path').\DIRECTORY_SEPARATOR.$export->uuid;
+    mkdir($directorio, 0700, true);
+    file_put_contents($directorio.\DIRECTORY_SEPARATOR.'kronoqr-horas-2026-03-01_2026-03-31.csv', "escribiendose\n");
+
+    (new GenerateReportExportJob($export->uuid))->failed(new RuntimeException('segunda reserva'));
+
+    expect(is_dir($directorio))->toBeTrue()
+        ->and(ReportExports::find($export->uuid)->status->value)->toBe('running');
+
+    // Pasado su techo, si: quien la escribia murio por su propio `$timeout`.
+    $vencida = ReportExports::pendingFor(ManagementUsers::withRole(UserRole::RRHH)->id)
+        ->start($clock->now()->modify('-'.GenerateReportExportJob::TIMEOUT_SECONDS.' seconds'));
+    app(ReportExportRepository::class)->save($vencida);
+
+    (new GenerateReportExportJob($vencida->uuid))->failed(new RuntimeException('techo agotado'));
+
+    expect(ReportExports::find($vencida->uuid)->status->value)->toBe('failed');
 })->group('RF-IN-06');
 
 it('una generacion fallida mueve la metrica de trabajos fallidos', function (): void {
