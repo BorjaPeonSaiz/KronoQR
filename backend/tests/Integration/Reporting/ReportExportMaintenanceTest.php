@@ -247,6 +247,8 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
 
     expect($migrator->getSchemaBuilder()->hasTable('report_exports'))->toBeTrue();
 
+    $before = reportExportsSchemaSnapshot($migrator);
+
     try {
         // CUANTOS pasos, y no «uno»: cada migracion nueva que se añada despues
         // desplaza a esta, y un `--step=1` fijo acabaria probando el `down()` de
@@ -263,14 +265,17 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
         // prueba, y se rinde por `lock_timeout`. Ese ciclo lo prueba
         // `PinClaimMigrationsTest` sin transaccion envolvente.
         //
-        // Y TAMBIEN las que alteran esta tabla (2.3.0, V5-PA-4): sin ellas, la
-        // tabla volveria a crearse sin sus columnas posteriores mientras su
-        // migracion sigue apuntada como aplicada, y todo lo que viniera despues
-        // en la base compartida fallaria por una columna que no existe.
+        // Y TAMBIEN todas las que alteran esta tabla (2.3.0, V5-PA-4), que se
+        // DESCUBREN y no se enumeran: sin ellas, la tabla volveria a crearse sin
+        // sus columnas posteriores mientras su migracion sigue apuntada como
+        // aplicada, y en la CI —que corre en orden sobre la misma base— todo lo
+        // que viniera despues fallaria por una columna que no existe.
         [$exitCode] = Commands::run(
             'migrate:rollback --database='.$name.' --step='.$steps
-            .' --path=database/migrations/2026_09_22_110000_report_exports.php'
-            .' --path=database/migrations/2026_10_22_100000_report_exports_legal_adoption_and_cancellation.php'
+            .implode('', array_map(
+                static fn (string $migration): string => ' --path=database/migrations/'.$migration.'.php',
+                reportExportsTableMigrations(),
+            ))
         );
 
         expect($exitCode)->toBe(0)
@@ -289,7 +294,12 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
     expect($migrator->getSchemaBuilder()->hasTable('report_exports'))->toBeTrue()
         // Y vuelve **vacia**: es una migracion de creacion pura, no arrastra
         // datos de nadie.
-        ->and($migrator->table('report_exports')->count())->toBe(0);
+        ->and($migrator->table('report_exports')->count())->toBe(0)
+        // Y vuelve **igual**: mismas columnas, mismas restricciones validadas y
+        // mismos indices. Si una migracion futura altera la tabla sin que
+        // `reportExportsTableMigrations()` la encuentre, falla AQUI, con el
+        // nombre de lo que falta, y no en la prueba siguiente de la CI.
+        ->and(reportExportsSchemaSnapshot($migrator))->toBe($before);
 })->group('RF-IN-06', 'RNF-D-04');
 
 /**
@@ -466,3 +476,52 @@ it('la purga deja la fila sin alcance y sin los filtros por persona', function (
         ->and($purgada->parameters->to)->toBe('2026-03-31')
         ->and($purgada->sha256)->toHaveLength(64);
 })->group('RL-11', 'RF-IN-06');
+
+/**
+ * Las migraciones que crean o alteran `report_exports`, de la mas antigua a la
+ * mas reciente, sin la extension.
+ *
+ * Por el CONTENIDO del fichero y no por una lista escrita aqui: la siguiente
+ * que toque la tabla entra sola en la vuelta atras.
+ *
+ * @return list<string>
+ */
+function reportExportsTableMigrations(): array
+{
+    $found = [];
+
+    foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
+        $source = (string) file_get_contents($file);
+
+        if (preg_match("/create\('report_exports'|table\('report_exports'|ALTER TABLE report_exports/", $source) === 1) {
+            $found[] = basename($file, '.php');
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Columnas, restricciones (con si estan validadas) e indices de la tabla: lo
+ * que una vuelta atras incompleta dejaria distinto.
+ *
+ * @return array{columns: list<string>, constraints: list<string>, indexes: list<string>}
+ */
+function reportExportsSchemaSnapshot(ConnectionInterface $connection): array
+{
+    $items = static fn (string $sql): array => array_values(array_map(
+        static fn (object $row): string => \is_string($row->item ?? null) ? $row->item : '',
+        $connection->select($sql),
+    ));
+
+    return [
+        'columns' => $items("SELECT column_name || ':' || data_type AS item FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'report_exports' ORDER BY column_name"),
+        'constraints' => $items("SELECT conname || ':' || convalidated::text AS item FROM pg_constraint
+            WHERE conrelid = 'report_exports'::regclass ORDER BY conname"),
+        'indexes' => $items("SELECT indexname::text AS item FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'report_exports' ORDER BY indexname"),
+    ];
+}
