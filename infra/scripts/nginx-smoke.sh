@@ -224,6 +224,7 @@ proxy_de_confianza() {
 
   con_xff "${puerto}" /portal/ 10.90.0.9 200 "proxy de confianza: origen declarado dentro del portal"
   con_xff "${puerto}" /portal/ 203.0.113.9 403 "proxy de confianza: origen declarado fuera del portal"
+
 }
 
 # PP-10. Tercer borde, con ADMIN_INTERNAL_CIDR definida a un rango que no incluye
@@ -459,6 +460,33 @@ main() {
     fi
   done
   problema /api/v1/scan/pin/ 502 bad-gateway -X POST -H "${json}" -d '{}'
+
+  # R5-DV-05: el padron y el latido del quiosco tienen zonas propias con la distincion de origen del
+  # fichaje (VLAN 600 r/m, resto 120 r/m), y SOLO ellos: `pair/confirm` lo hace el administrador
+  # desde el panel, fuera de la VLAN, y sigue en `api`.
+  if ! grep -qE 'limit_req_zone .*zone=kiosk_vlan:10m +rate=600r/m;' <<<"${configuracion}" ||
+    ! grep -qE 'limit_req_zone .*zone=kiosk_other:10m +rate=120r/m;' <<<"${configuracion}"; then
+    printf '  [FALLA] faltan las zonas kiosk_vlan (600 r/m) y kiosk_other (120 r/m) del padron y el latido\n' >&2
+    fallo=1
+  else
+    printf '  [ok]    padron y latido           zonas kiosk_vlan 600 r/m y kiosk_other 120 r/m\n'
+  fi
+  for variante in /api/v1/kiosk/roster /api/v1/kiosk/heartbeat; do
+    if ! awk -v loc="  location ^~ ${variante} {" '$0 == loc {dentro = 1} dentro && /limit_req zone=kiosk_vlan / {a = 1} dentro && /limit_req zone=kiosk_other / {b = 1} dentro && /^  }$/ {exit} END {exit !(a && b)}' <<<"${configuracion}"; then
+      printf '  [FALLA] %s no lleva las zonas kiosk_vlan y kiosk_other\n' "${variante}" >&2
+      fallo=1
+    else
+      printf '  [ok]    %-24s limit_req kiosk_vlan + kiosk_other\n' "${variante}"
+    fi
+  done
+  if grep -qE 'location .*/api/v1/kiosk/pair' <<<"${configuracion}"; then
+    printf '  [FALLA] /api/v1/kiosk/pair* tiene location propia: el alta desde el panel (pair/confirm) entraria en la zona de la VLAN\n' >&2
+    fallo=1
+  else
+    printf '  [ok]    /api/v1/kiosk/pair*       sigue en la zona api (el panel no es la VLAN)\n'
+  fi
+  problema /api/v1/kiosk/heartbeat 502 bad-gateway -X POST -H "${json}" -d '{}'
+  problema /api/v1/kiosk/roster 502 bad-gateway
 
   # En paralelo: cada peticion que llega a la aplicacion espera el resolvedor.
   local _rafaga

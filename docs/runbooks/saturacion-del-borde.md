@@ -99,6 +99,16 @@ doc 02 §7.1 y la cabecera de `kronoqr.conf.template` explican por qué las
 dos zonas existen y por qué los 30 r/m de la zona externa **no** se aplican
 sin distinguir el origen (RNF-P-06).
 
+El **padrón y el latido** del quiosco (`/api/v1/kiosk/roster` y
+`/api/v1/kiosk/heartbeat`) tienen desde la 2.3.0 sus **propias** zonas con la
+misma distinción de origen (`kiosk_vlan`, 600 r/m con ráfaga de 100 dentro de
+la VLAN; `kiosk_other`, 120 r/m con ráfaga de 60 fuera), para que un hotel con
+muchos quioscos tras una IP no vea `429` en el latido —que dispararía
+`QuioscoSinLatido` sin que el quiosco esté mal— ni gaste el cupo de `/scan`.
+Un `429` en esas dos rutas con `from_kiosk_vlan` en `false` es un quiosco que
+sale por una IP fuera de `KIOSK_VLAN_CIDR`: corrige el CIDR
+([`instalacion.md`](../cliente/instalacion.md)), no el límite.
+
 ---
 
 ## 4. Descartar el falso positivo antes de escalar

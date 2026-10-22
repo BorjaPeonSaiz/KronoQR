@@ -46,6 +46,15 @@ map $kronoqr_kiosk_vlan $kronoqr_scan_key_other {
 
 limit_req_zone $kronoqr_scan_key_vlan  zone=scan_kiosk_vlan:10m rate=600r/m;
 limit_req_zone $kronoqr_scan_key_other zone=scan_other:10m      rate=30r/m;
+# Padron y latido del quiosco (`GET /api/v1/kiosk/roster`, `POST /api/v1/kiosk/heartbeat`; R5-DV-05):
+# MISMA distincion de origen que el fichaje, con zonas propias para no gastar el cupo de `/scan`.
+# Antes caian en `api` (120 r/m por IP), compartida con el panel del hotel y con TODOS los
+# quioscos, que salen por una sola IP: con muchos quioscos el primer 429 era el del latido, y un
+# latido que no llega dispara `QuioscoSinLatido` (critica) sin que el quiosco este mal. Desde la
+# VLAN, 600 r/m (el techo por IP que ya aplica Laravel, zona `kiosk`); desde fuera, lo que ya
+# valia (120 r/m): el token del dispositivo sigue siendo obligatorio, asi que no se estrecha.
+limit_req_zone $kronoqr_scan_key_vlan  zone=kiosk_vlan:10m  rate=600r/m;
+limit_req_zone $kronoqr_scan_key_other zone=kiosk_other:10m rate=120r/m;
 # `/api/v1/scan/pin` (ADR-059 §3): zona PROPIA por IP, ademas de las dos de arriba.
 # Si Redis cae, el limite de Laravel del PIN falla abierto y este es el unico que
 # queda en el borde. La tasa sale de NGINX_SCAN_PIN_RATE_PER_MINUTE (60 de serie).
@@ -386,6 +395,26 @@ server {
     limit_req zone=scan_kiosk_vlan burst=50 nodelay;
     limit_req zone=scan_other burst=10 nodelay;
     limit_req zone=scan_pin burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- Padron y latido del quiosco: zona de la VLAN (R5-DV-05) ---------------
+  # Solo estas dos rutas del token del dispositivo. `/api/v1/kiosk/pair*` (emparejamiento, publico
+  # y raro) y `/api/v1/kiosk/pair/confirm` (lo hace el administrador desde el panel, FUERA de la
+  # VLAN) siguen en `api`. Prefijo y no `=`: la barra final llega a la misma accion en Laravel.
+  # Rafaga 100 en la VLAN: tras un corte de red, todos los quioscos del hotel reenvian el latido
+  # y piden el padron a la vez; es una rafaga legitima y no debe verse como 429.
+  location ^~ /api/v1/kiosk/roster {
+    limit_req zone=kiosk_vlan burst=100 nodelay;
+    limit_req zone=kiosk_other burst=60 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  location ^~ /api/v1/kiosk/heartbeat {
+    limit_req zone=kiosk_vlan burst=100 nodelay;
+    limit_req zone=kiosk_other burst=60 nodelay;
     include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }

@@ -218,3 +218,24 @@ it('hace bloquear los controles de dependencias e imagenes en las ramas solo si 
     expect($security)->toContain('Avisar de los controles que han fallado sin bloquear')
         ->and($security)->toContain("if: always() && steps.gate.outputs.bloquea == 'false'");
 })->group('RS-10');
+
+it('lleva el padron y el latido del quiosco a zonas propias con la distincion de la VLAN, y solo ellos (R5-DV-05)', function (): void {
+    $plantilla = Repo::contents('infra/docker/nginx/templates/kronoqr.conf.template');
+
+    // Las zonas reutilizan la clave de origen de /scan (geo + map) sin gastar su cupo.
+    expect($plantilla)->toContain('limit_req_zone $kronoqr_scan_key_vlan  zone=kiosk_vlan:10m  rate=600r/m;')
+        ->and($plantilla)->toContain('limit_req_zone $kronoqr_scan_key_other zone=kiosk_other:10m rate=120r/m;');
+
+    foreach (['roster', 'heartbeat'] as $ruta) {
+        expect(preg_match('/location \^~ \/api\/v1\/kiosk\/'.$ruta.' \{(.*?)\n  \}/s', $plantilla, $bloque))->toBe(1);
+        $cuerpo = $bloque[1] ?? '';
+        expect($cuerpo)->toContain('limit_req zone=kiosk_vlan burst=100 nodelay;')
+            ->and($cuerpo)->toContain('limit_req zone=kiosk_other burst=60 nodelay;')
+            // No comparten cubo con el fichaje ni con el resto de la API.
+            ->and($cuerpo)->not->toContain('zone=scan_')
+            ->and($cuerpo)->not->toContain('zone=api');
+    }
+
+    // `pair/confirm` lo hace el administrador desde el panel, fuera de la VLAN: sigue en `api`.
+    expect($plantilla)->not->toMatch('/location [^\n]*\/api\/v1\/kiosk\/pair/');
+})->group('RS-02', 'RNF-P-06');
