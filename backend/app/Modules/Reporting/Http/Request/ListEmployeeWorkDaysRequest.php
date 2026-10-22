@@ -33,6 +33,17 @@ final class ListEmployeeWorkDaysRequest extends FormRequest
 {
     use ValidatesWorkDateRange;
 
+    /**
+     * Jornadas por pagina si no se pide otra cosa: **el mismo mes** que el
+     * panel abre de serie ({@see ReadEmployeeWorkDays::DEFAULT_DAYS}), de modo
+     * que la pantalla por omision cabe en una pagina y no cambia para quien no
+     * pagina.
+     */
+    public const int DEFAULT_PER_PAGE = ReadEmployeeWorkDays::DEFAULT_DAYS;
+
+    /** El techo del contrato (`WorkDayPerPage`). */
+    public const int MAX_PER_PAGE = 100;
+
     public function authorize(): bool
     {
         return Gate::allows('view', WorkDayJournal::class);
@@ -43,7 +54,23 @@ final class ListEmployeeWorkDaysRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->workDateRangeRules();
+        return [
+            ...$this->workDateRangeRules(),
+            // Por jornadas enteras (V5-PA-2). Mismo techo que el resto de listas
+            // paginadas del contrato; el valor por omision es el mes del panel.
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
+        ];
+    }
+
+    public function page(): int
+    {
+        return $this->has('page') ? $this->integer('page') : 1;
+    }
+
+    public function perPage(): int
+    {
+        return $this->has('per_page') ? $this->integer('per_page') : self::DEFAULT_PER_PAGE;
     }
 
     public function toQuery(string $employeeUuid): EmployeeWorkDayRange

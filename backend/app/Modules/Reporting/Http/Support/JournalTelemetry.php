@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Http\Support;
 
 use App\Http\Middleware\RecordHttpMetrics;
+use App\Modules\Reporting\Application\Support\WorkDayJournalPage;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Application\Support\SpanScope;
 use Psr\Log\LoggerInterface;
@@ -66,6 +67,28 @@ final readonly class JournalTelemetry
         $this->log($employeeUuid, $journal);
 
         return $journal;
+    }
+
+    /**
+     * Lo mismo para una pagina del registro (V5-PA-2): el span y el log cuentan
+     * las jornadas **servidas**, y el span lleva ademas cuantas habia en el
+     * rango, que es lo que dice si la paginacion esta haciendo su trabajo.
+     *
+     * @param  callable(): WorkDayJournalPage  $read
+     */
+    public function measurePage(string $employeeUuid, callable $read): WorkDayJournalPage
+    {
+        $page = $read();
+
+        SpanScope::annotateCurrent([
+            'reporting.range_days' => $page->journal->range->days(),
+            'reporting.work_days' => $page->journal->dayCount(),
+            'reporting.work_days_in_range' => $page->total,
+            'reporting.page' => $page->page,
+        ]);
+        $this->log($employeeUuid, $page->journal);
+
+        return $page;
     }
 
     private function log(string $employeeUuid, WorkDayJournal $journal): void

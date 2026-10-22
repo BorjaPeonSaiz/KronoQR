@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Application\Query;
 
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
+use App\Modules\Reporting\Application\Support\WorkDayJournalPage;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -139,6 +140,67 @@ final readonly class ReadEmployeeWorkDays
         }
 
         return $journal;
+    }
+
+    /**
+     * Una pagina del registro, **por jornadas enteras** (V5-PA-2, V21-5-PA-3).
+     *
+     * Un año de una persona con dos tramos al dia eran 38 000 nodos en la
+     * pantalla del panel y quince segundos de bloqueo con un equipo lento. Se
+     * cuentan las jornadas con actividad del rango, se elige la pagina y se lee
+     * **solo el tramo de fechas que la cubre**: como entre dos jornadas con
+     * actividad consecutivas no hay ninguna otra, ese tramo trae exactamente
+     * las de la pagina, con todos sus tramos, correcciones e incidencias. Una
+     * jornada nunca se parte entre dos paginas.
+     *
+     * ## El asiento cuenta lo que salio
+     *
+     * Las jornadas **de la pagina**, con las fechas que cubren y el numero de
+     * pagina: es lo que de verdad se divulgo (RS-05). Una pagina vacia —mas
+     * alla de la ultima, o un rango sin actividad— deja su asiento con cero,
+     * como la consulta sin paginar: preguntar por alguien tambien es un acceso.
+     */
+    public function page(EmployeeWorkDayRange $query, int $page, int $perPage): WorkDayJournalPage
+    {
+        return UseCaseInstrumentation::run(
+            'reporting.read_employee_work_days_page',
+            fn (): WorkDayJournalPage => $this->doPage($query, max(1, $page), max(1, $perPage)),
+        );
+    }
+
+    private function doPage(EmployeeWorkDayRange $query, int $page, int $perPage): WorkDayJournalPage
+    {
+        $timeZone = $this->journal->timeZoneOf($query->employeeUuid)
+            ?? throw EmployeeNotFound::withUuid($query->employeeUuid);
+
+        $range = $this->resolve($query, $timeZone);
+        $dates = $this->journal->workDatesOf($query->employeeUuid, $range);
+        $slice = \array_slice($dates, ($page - 1) * $perPage, $perPage);
+
+        $days = $slice === []
+            ? []
+            : $this->journal->journalFor(
+                $query->employeeUuid,
+                $timeZone,
+                DateRange::between($slice[0], $slice[\count($slice) - 1]),
+                withIncidents: ! $query->selfService,
+            )->days;
+
+        if (! $query->selfService) {
+            $this->disclosures->recordDisclosure(self::DATASET, \count($days), [
+                'employee_uuid' => $query->employeeUuid,
+                'from' => $slice[0] ?? $range->isoFrom(),
+                'to' => $slice === [] ? $range->isoTo() : $slice[\count($slice) - 1],
+                'page' => $page,
+            ]);
+        }
+
+        return new WorkDayJournalPage(
+            new WorkDayJournal($query->employeeUuid, $timeZone, $range, $days),
+            $page,
+            $perPage,
+            \count($dates),
+        );
     }
 
     private function resolve(EmployeeWorkDayRange $query, string $timeZone): DateRange
