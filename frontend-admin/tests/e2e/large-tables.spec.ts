@@ -30,8 +30,23 @@ const REPORT_ROWS = 20_000
 const FINDINGS = 3_000
 const INTERACTIVE_BUDGET_MS = 1_500
 const LONG_TASK_BUDGET_MS = 200
+/**
+ * Solo al GENERAR el informe de 20 000 filas, con CPU ×4: leer y `JSON.parse` de un
+ * cuerpo de ~12 MB son ~100 ms medidos con ×4 en una sola tarea que el navegador
+ * no puede partir. El resto (desplazar, la tabla de cumplimiento) sigue en 200 ms.
+ * Bajarlo exige paginar o transmitir el informe en el servidor, no tocar la tabla.
+ */
+const REPORT_LOAD_LONG_TASK_BUDGET_MS = 300
 /** Cuanto cabe en pantalla mas el sobrepintado: el techo de filas en el DOM con cualquier volumen. */
 const PAINTED_CEILING = 80
+/**
+ * Ralentizacion de CPU con la que se mide (CDP `Emulation.setCPUThrottlingRate`):
+ * un portatil de recepcion es varias veces mas lento que la maquina de desarrollo
+ * o del runner. Con ×1 los tiempos de abajo se cumplian de sobra y no decian nada
+ * del equipo real (V5-PA-1, tanda 5 «se pasó por alto»). Los topes de abajo
+ * valen CON esta ralentizacion.
+ */
+const CPU_THROTTLE_RATE = 4
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
 declare global {
@@ -146,6 +161,12 @@ async function serveBigData(
   )
 }
 
+test.beforeEach(async ({ page }) => {
+  const session = await page.context().newCDPSession(page)
+
+  await session.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE_RATE })
+})
+
 /** Registra las tareas largas desde el primer momento de cada documento. */
 async function observeLongTasks(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -231,7 +252,7 @@ test(
     )
 
     // Lo medido al generar se comprueba ANTES de reiniciar el contador para el scroll.
-    expect(await longestTask(page)).toBeLessThan(LONG_TASK_BUDGET_MS)
+    expect(await longestTask(page)).toBeLessThan(REPORT_LOAD_LONG_TASK_BUDGET_MS)
 
     await region.focus()
     await resetLongTasks(page)
