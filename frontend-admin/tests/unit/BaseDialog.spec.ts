@@ -119,3 +119,140 @@ describe('BaseDialog: foco (PA7-002)', () => {
     wrapper.unmount()
   })
 })
+
+describe('BaseDialog: el foco en el propio panel y fuera (V7-PA-1, V21-7-PA-1)', () => {
+  /** El panel recibe el foco como al hacer clic en su texto (`tabindex="-1"`). */
+  function focusPanel(): HTMLElement {
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+
+    dialog.focus()
+    expect(document.activeElement).toBe(dialog)
+
+    return dialog
+  }
+
+  it('Shift+Tab con el foco en el panel va al ultimo control, no a la pagina de detras', async () => {
+    const wrapper = await openDialog()
+
+    focusPanel()
+    tab(true)
+
+    expect(document.activeElement?.id).toBe('last')
+
+    wrapper.unmount()
+  })
+
+  it('Tab con el foco en el panel va al primer control', async () => {
+    const wrapper = await openDialog()
+
+    focusPanel()
+    tab()
+
+    expect(document.activeElement?.id).toBe('first')
+
+    wrapper.unmount()
+  })
+
+  it('Escape cierra tambien con el foco en el panel', async () => {
+    const wrapper = await openDialog()
+    const dialog = focusPanel()
+
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.activeElement?.id).toBe('opener')
+
+    wrapper.unmount()
+  })
+
+  it('si algo manda el foco a la pagina de detras, vuelve al dialogo', async () => {
+    const wrapper = await openDialog()
+    const opener = document.getElementById('opener') as HTMLElement
+
+    opener.focus()
+
+    expect(document.querySelector('[role="dialog"]')?.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement?.id).toBe('first')
+
+    wrapper.unmount()
+  })
+
+  it('dejar de montar el dialogo retira la escucha del documento', async () => {
+    const wrapper = await openDialog()
+
+    wrapper.unmount()
+    const outside = document.createElement('button')
+
+    document.body.append(outside)
+    outside.focus()
+
+    expect(document.activeElement).toBe(outside)
+  })
+})
+
+describe('BaseDialog: controles de fecha y hora (segmentos internos)', () => {
+  const DateHost = () =>
+    h('div', [
+      h('button', { id: 'before', type: 'button' }, 'Antes'),
+      h(
+        BaseDialog,
+        { title: 'Fecha', onClose: () => undefined },
+        {
+          default: () => h('input', { id: 'when', type: 'datetime-local' }),
+          actions: () => h('button', { id: 'cancel', type: 'button' }, 'Cancelar'),
+        },
+      ),
+    ])
+
+  it('Shift+Tab desde un segmento del primer campo NO salta a «Cancelar»: lo mueve el navegador', () => {
+    const wrapper = mount(DateHost, { attachTo: document.body })
+    const field = document.getElementById('when') as HTMLInputElement
+
+    field.focus()
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+
+    field.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(document.activeElement?.id).toBe('when')
+
+    wrapper.unmount()
+  })
+
+  it('si el navegador saca el foco hacia atras, vuelve por el ultimo control', () => {
+    const wrapper = mount(DateHost, { attachTo: document.body })
+    const field = document.getElementById('when') as HTMLInputElement
+
+    field.focus()
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }),
+    )
+    ;(document.getElementById('before') as HTMLElement).focus()
+
+    expect(document.activeElement?.id).toBe('cancel')
+
+    wrapper.unmount()
+  })
+
+  it('hacia delante, un foco que se escapa vuelve por el primero', () => {
+    const wrapper = mount(DateHost, { attachTo: document.body })
+    const field = document.getElementById('when') as HTMLInputElement
+
+    field.focus()
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    )
+    ;(document.getElementById('before') as HTMLElement).focus()
+
+    expect(document.activeElement?.id).toBe('when')
+
+    wrapper.unmount()
+  })
+})

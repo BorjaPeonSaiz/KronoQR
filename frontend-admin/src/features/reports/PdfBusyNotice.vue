@@ -3,7 +3,6 @@
 // que no pasan por el motor (CSV, XLSX). No es un fallo del informe: hay un tope de
 // PDF simultaneos y basta esperar `Retry-After` o llevarse el mismo informe en otro
 // formato. Con el motor ausente (`service-unavailable`) NO se usa este aviso.
-import { announce } from '@kronoqr/web-kit/announcer'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -25,13 +24,11 @@ const message = computed(() =>
     ? t('reports.pdfBusy.messageNoWait')
     : t('reports.pdfBusy.message', { seconds: props.retryAfterSeconds }),
 )
-// Se anuncia al aparecer: el aviso llega tras una peticion y no hay foco que lo lea.
-// Y recoge el foco si se ha perdido (V21-1-UX-2): el boton «PDF» se deshabilita
+// Se anuncia UNA vez, por su propio `role="alert"` al aparecer: llamar ademas a
+// `announce()` lo hacia sonar dos veces (V21-3-PA-7, V7-PA-5). Y recoge el foco si se ha perdido (V21-1-UX-2): el boton «PDF» se deshabilita
 // mientras se pide, el navegador lo suelta en `<body>` y el siguiente Tab volveria
 // a empezar por el enlace de salto. Si el foco sigue en otro sitio, no se toca.
 onMounted(() => {
-  announce(message.value)
-
   if (document.activeElement === null || document.activeElement === document.body) {
     root.value?.focus()
   }

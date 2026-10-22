@@ -12,14 +12,16 @@ beforeEach(() => {
 })
 
 describe('PdfBusyNotice', () => {
-  it('dice cuanto esperar cuando el servidor da Retry-After y lo anuncia una vez', async () => {
+  it('dice cuanto esperar cuando el servidor da Retry-After y lo anuncia una sola vez, por su role=alert', async () => {
     const wrapper = await mountView(PdfBusyNotice, {
       props: { retryAfterSeconds: 30, formats: ['csv', 'xlsx'], disabled: false },
     })
     const expected = es.reports.pdfBusy.message.replace('{seconds}', '30')
 
     expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(expected)
-    expect(announcement.value).toBe(expected)
+    // Una sola voz: el role=alert. La region viva global no repite el texto.
+    expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('alert')
+    expect(announcement.value).toBe('')
 
     wrapper.unmount()
   })
