@@ -63,5 +63,5 @@ it('cada docker run de PostgreSQL de los workflows lleva -c jit=off', function (
     }
 })->with([
     'CI' => ['.github/workflows/ci.yml', 4],
-    'simulacro de copias' => ['.github/workflows/backup-drill.yml', 1],
+    'simulacro de copias' => ['.github/workflows/backup-drill.yml', 2],
 ])->group('RNF-P-02');

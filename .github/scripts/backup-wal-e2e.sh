@@ -310,7 +310,7 @@ SHIM
   local rc
   # Un bit cambiado en el cuerpo.
   as_root cp -p "${copia}" "${copia}.bak"
-  as_root sh -c "printf 'Z' | dd of='${copia}' bs=1 seek=300 conv=notrunc 2>/dev/null"
+  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body
   rc=0
   restore_dry --file "${copia}" >/dev/null 2>&1 || rc=$?
   as_root mv -f "${copia}.bak" "${copia}"
@@ -319,7 +319,7 @@ SHIM
   # .sha256 borrado y .enc modificado (el ataque del hallazgo).
   as_root cp -p "${copia}" "${copia}.bak"
   as_root mv "${copia}.sha256" "${copia}.sha256.bak"
-  as_root sh -c "printf 'Z' | dd of='${copia}' bs=1 seek=300 conv=notrunc 2>/dev/null"
+  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body
   rc=0
   restore_dry --file "${copia}" >/dev/null 2>&1 || rc=$?
   as_root mv -f "${copia}.bak" "${copia}"

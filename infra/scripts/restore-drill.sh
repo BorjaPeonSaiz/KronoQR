@@ -12,6 +12,10 @@
 #     existen, sin escribir una consulta por tabla.
 #   · CONTEOS. Cada tabla del manifiesto tiene en la copia restaurada al menos
 #     las filas que tenia al hacerla.
+#   · CADENA DE AUDITORIA (V5-DV-02). La cadena de hash de `audit_log` se verifica sobre la
+#     base restaurada con el mismo comando que la verificacion diaria
+#     (`compliance:verify-audit-chain`, RS-07), ejecutado con la imagen de la aplicacion.
+#     Una sola fila alterada o ausente hace fallar el simulacro con 6: «cero es cero».
 #
 # Y, desde la 2.2.0 (ADR-049), con `--mode pitr`, lo que ninguna otra
 # comprobacion ejercita: que la copia FISICA mas el WAL archivado y CIFRADO
@@ -41,6 +45,7 @@
 #   restore-drill.sh --mode database        sin Docker, en una base nueva
 #   restore-drill.sh --mode pitr            copia fisica + WAL cifrado, a un punto
 #   restore-drill.sh --keep                 no destruye el contenedor al acabar
+#   restore-drill.sh --skip-audit-chain     (solo con datos sinteticos) no verifica la cadena
 #
 # Opciones:
 #   --file RUTA     copia a restaurar. Por defecto la del puntero LATEST
@@ -56,6 +61,13 @@
 #   --mode MODO     container (por defecto), database o pitr
 #   --timeout SEG   espera maxima a que arranque el contenedor. Por defecto 90
 #   --keep          conserva el contenedor para inspeccionarlo a mano
+#   --php-image IMAGEN
+#                   imagen de la APLICACION con la que se verifica la cadena de hash de
+#                   audit_log sobre la base restaurada (por defecto la del paquete, por
+#                   digest, o la de IMAGE_TAG). Tiene que estar descargada
+#   --skip-audit-chain
+#                   no verifica la cadena de audit_log. SOLO para datos sinteticos sin el
+#                   esquema de la aplicacion (las pruebas de la CI); consta en el informe
 #   --accept-unauthenticated
 #                   acepta una copia (y segmentos de WAL) de la 2.1.0, sin MAC.
 #                   El `.sha256` sigue siendo obligatorio. Por invocacion; el
@@ -111,6 +123,9 @@ FUENTE_WAL=""
 IMAGEN_PREDETERMINADA="postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
 IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
+IMAGEN_PHP="${DRILL_PHP_IMAGE:-}"
+SALTAR_CADENA=0
+CLAVE_SIMULACRO=""
 ESPERA=90
 CONSERVAR=0
 CONTENEDOR=""
@@ -222,6 +237,7 @@ levantar_contenedor_limpio() {
   # Contraseña de usar y tirar para un contenedor que vive minutos y no publica
   # ningun puerto. No se imprime ni se guarda.
   clave="$(openssl rand -hex 16)"
+  CLAVE_SIMULACRO="$clave"
   CONTENEDOR="kronoqr-drill-$(timestamp_utc)"
   BASE_SIMULACRO="drill"
 
@@ -240,7 +256,9 @@ levantar_contenedor_limpio() {
   PSQL_CMD=(docker exec -i "$CONTENEDOR" psql -U postgres)
 
   while [ "$esperado" -lt "$ESPERA" ]; do
-    if docker exec "$CONTENEDOR" pg_isready -U postgres -d "$BASE_SIMULACRO" >/dev/null 2>&1; then
+    # `-h 127.0.0.1`: sin el, pg_isready contesta por el socket Unix del servidor TEMPORAL de initdb y
+    # pg_restore entra justo cuando ese servidor se apaga. Por TCP solo contesta el definitivo.
+    if docker exec "$CONTENEDOR" pg_isready -h 127.0.0.1 -U postgres -d "$BASE_SIMULACRO" >/dev/null 2>&1; then
       informar "Contenedor listo en ${esperado} s."
       return 0
     fi
@@ -387,6 +405,115 @@ comprobar_conteos() {
   compare_table_counts "$BASE_SIMULACRO" "$manifiesto"
 }
 
+# La imagen de la APLICACION del producto (la que lleva `artisan`), con la misma regla de digest que la
+# de postgres: la fijada por el paquete (ADR-053) o, sin ella, IMAGE_TAG. Con ella se verifica la
+# cadena de hash de `audit_log` sobre la base restaurada (V5-DV-02).
+imagen_php() {
+  local digest
+  [ -z "$IMAGEN_PHP" ] || {
+    printf '%s' "$IMAGEN_PHP"
+    return 0
+  }
+  digest="$(digest_php_del_paquete)" || die "${KQ_EXIT_REQUIREMENTS}" \
+    "IMAGE_DIGEST_PHP (o el images.lock del paquete) no es un digest valido (@sha256:<64 hexadecimales>). Corrigelo, o dejalo VACIO a proposito si quieres usar la etiqueta (ADR-053). No se ha tocado nada."
+  if [ -n "$digest" ]; then
+    printf '%s/php@%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$digest"
+    return 0
+  fi
+  [ -n "${IMAGE_TAG:-}" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+    "el simulacro verifica la cadena de auditoria con la imagen de la aplicacion y no se sabe cual: el paquete no la fija por digest (falta images.lock) y el .env no tiene IMAGE_TAG. Pon IMAGE_TAG en el .env o pasa --php-image <imagen> (por ejemplo ghcr.io/kronoqr/php:<version>). Para datos sinteticos sin esquema de la aplicacion, --skip-audit-chain. No se ha tocado nada."
+  printf '%s/php:%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$IMAGE_TAG"
+}
+
+# ¿Hay con que verificar la cadena? Se pregunta ANTES de restaurar: un simulacro que tarda minutos y
+# falla al final por una imagen que no esta descargada es un mal simulacro. Deja en
+# VERIFICADOR_CADENA `local` (php y artisan en esta maquina, solo en --mode database) o la imagen.
+preparar_verificacion_cadena() {
+  local imagen dir="${KQ_ARTISAN_DIR:-/var/www/html}"
+
+  VERIFICADOR_CADENA=""
+  if [ "$SALTAR_CADENA" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$MODO" = "database" ] && [ -z "$IMAGEN_PHP" ] && command -v php >/dev/null 2>&1 && [ -f "${dir}/artisan" ]; then
+    VERIFICADOR_CADENA="local"
+    return 0
+  fi
+  imagen="$(imagen_php)"
+  require_cmd docker docker
+  docker image inspect "$imagen" >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no esta la imagen de la aplicacion '${imagen}', con la que se verifica la cadena de auditoria de la base restaurada. Descargala ('docker pull ${imagen}') o indica otra con --php-image. No se ha tocado nada."
+  VERIFICADOR_CADENA="$imagen"
+}
+
+# V5-DV-02. «Cero es cero»: la primera pregunta tras restaurar una copia es si la cadena de hash de
+# `audit_log` sigue encajando, y no puede quedar de paso manual del runbook. Se ejecuta el MISMO
+# comando que la verificacion diaria (`compliance:verify-audit-chain`, RS-07) contra la base ya
+# restaurada, en un proceso que no es el de produccion: el contenedor de la aplicacion se une a la red
+# del contenedor limpio (`--network container:`), que sigue sin hablar con nadie mas, y ni el
+# resultado ni sus metricas llegan a la instalacion. Lo que imprime son identificadores y hashes
+# (regla dura 21): se copia al informe.
+comprobar_cadena_auditoria() {
+  local existe filas codigo=0 salida="" app_key host usuario clave
+
+  if [ "$SALTAR_CADENA" -eq 1 ]; then
+    informar "Cadena de auditoria: OMITIDA con --skip-audit-chain. Solo es valido con datos sinteticos sin el esquema de la aplicacion."
+    return 0
+  fi
+
+  existe="$(psql_q "$BASE_SIMULACRO" "SELECT to_regclass('public.audit_log') IS NOT NULL" | tr -d '[:space:]')"
+  if [ "$existe" != "t" ]; then
+    err "La copia restaurada NO contiene la tabla audit_log: una copia de una instalacion de KronoQR siempre la lleva. Si esta copia es de una instalacion real, es un incidente: comprueba que backup.sh se conecta a la base correcta (DB_DATABASE). Con datos sinteticos, usa --skip-audit-chain."
+    informar "Cadena de auditoria: FALLA, la copia no tiene audit_log."
+    return 1
+  fi
+  filas="$(psql_q "$BASE_SIMULACRO" "SELECT count(*) FROM audit_log" | tr -d '[:space:]')"
+  informar "Cadena de auditoria: verificando ${filas:-0} entradas de audit_log restauradas (compliance:verify-audit-chain)"
+
+  app_key="base64:$(openssl rand -base64 32)"
+  if [ "$MODO" = "container" ]; then
+    host="127.0.0.1"
+    usuario="postgres"
+    clave="$CLAVE_SIMULACRO"
+  else
+    host="${PGHOST:-127.0.0.1}"
+    usuario="${PGUSER:-postgres}"
+    clave="${PGPASSWORD:-}"
+  fi
+
+  # Las variables viajan por el entorno del proceso hijo, sin valor en la linea de ordenes.
+  # shellcheck disable=SC2030,SC2031 # el subshell es a proposito: nada de esto debe quedar exportado.
+  salida="$(
+    export APP_ENV=production APP_KEY="$app_key" LOG_CHANNEL=stderr CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
+    export DB_CONNECTION=pgsql_migrator DB_HOST="$host" DB_PORT="${PGPORT:-5432}" DB_DATABASE="$BASE_SIMULACRO"
+    export DB_MIGRATION_USERNAME="$usuario" DB_MIGRATION_PASSWORD="$clave"
+    if [ "$VERIFICADOR_CADENA" = "local" ]; then
+      cd -- "${KQ_ARTISAN_DIR:-/var/www/html}" && php artisan compliance:verify-audit-chain 2>&1
+    else
+      red=(--network host)
+      [ "$MODO" != "container" ] || red=(--network "container:${CONTENEDOR}")
+      docker run --rm "${red[@]}" --entrypoint php \
+        -e APP_ENV -e APP_KEY -e LOG_CHANNEL -e CACHE_STORE -e SESSION_DRIVER -e QUEUE_CONNECTION \
+        -e DB_CONNECTION -e DB_HOST -e DB_PORT -e DB_DATABASE -e DB_MIGRATION_USERNAME -e DB_MIGRATION_PASSWORD \
+        "$VERIFICADOR_CADENA" artisan compliance:verify-audit-chain 2>&1
+    fi
+  )" || codigo=$?
+
+  # Solo las lineas del veredicto y de las roturas: identificadores y hashes, nunca el log completo.
+  printf '%s\n' "$salida" | grep -E 'Cadena integra|ROTURA|^  |Purga sellada|Accion desconocida|Incidente' | head -n 25 |
+    while IFS= read -r linea; do
+      informar "cadena: ${linea}"
+    done
+
+  if [ "$codigo" -ne 0 ]; then
+    err "LA CADENA DE AUDITORIA DE LA COPIA RESTAURADA NO ENCAJA (salida ${codigo}). Esta copia no es de fiar para el registro legal. Procedimiento: docs/runbooks/rotura-cadena-auditoria.md; despues, repite con la copia anterior (--file)."
+    informar "Cadena de auditoria: FALLA (compliance:verify-audit-chain salio con ${codigo})."
+    return 1
+  fi
+  informar "Cadena de auditoria: correcta (la cadena de hash de ${filas:-0} entradas encaja sobre la base restaurada)."
+  return 0
+}
+
 #------------------------------------------------------------------------------
 # --mode pitr: copia fisica + WAL archivado y CIFRADO (RNF-D-02, ADR-049)
 #------------------------------------------------------------------------------
@@ -398,13 +525,14 @@ comprobar_conteos() {
 #      internet, o la vuelta atras in place de update.sh): se usa la etiqueta.
 #   2. El `images.lock` que package.sh deja junto a este script.
 #   3. Nada: un paquete armado sin KQ_IMAGES_LOCK (la CI, un entorno de desarrollo).
-digest_postgres_del_paquete() {
-  local valor="" lock="${SCRIPT_DIR}/images.lock"
+digest_del_paquete() {
+  local servicio="$1" variable="$2" valor="" lock="${SCRIPT_DIR}/images.lock"
 
-  if [ -n "${IMAGE_DIGEST_POSTGRES+x}" ]; then
-    valor="${IMAGE_DIGEST_POSTGRES#@}"
+  if [ -n "${!variable+x}" ]; then
+    valor="${!variable}"
+    valor="${valor#@}"
   elif [ -f "$lock" ]; then
-    valor="$(awk '$1 == "postgres" { print $2 }' "$lock" 2>/dev/null || true)"
+    valor="$(awk -v servicio="$servicio" '$1 == servicio { print $2 }' "$lock" 2>/dev/null || true)"
   fi
   if [[ "$valor" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     printf '%s' "$valor"
@@ -414,6 +542,17 @@ digest_postgres_del_paquete() {
     return 2
   fi
   return 0
+}
+
+# El de postgres: la forma historica, que usa imagen_pitr.
+digest_postgres_del_paquete() {
+  digest_del_paquete postgres IMAGE_DIGEST_POSTGRES
+}
+
+# El de la imagen de la aplicacion (php), la que lleva `artisan`: con ella se verifica la cadena de
+# auditoria de la base restaurada (V5-DV-02). Mismas reglas que la de postgres.
+digest_php_del_paquete() {
+  digest_del_paquete php IMAGE_DIGEST_PHP
 }
 
 # La imagen de postgres DEL PRODUCTO: trae `kronoqr-restore-wal` y el formato KQE1.
@@ -492,7 +631,9 @@ simulacro_pitr() {
 
   # `postgres` directamente, con cada opcion como argumento propio (sin pasar por
   # una cadena de shell). La clave del WAL NO esta en ninguna opcion.
+  # shellcheck disable=SC2031 # el subshell de la cadena de auditoria no cambia estas variables fuera de si.
   usuario="${DB_MIGRATION_USERNAME:-fichaje_migrator}"
+  # shellcheck disable=SC2031
   BASE_SIMULACRO="${DB_DATABASE:-fichaje}"
   informar "Arrancando en recuperacion: restore_command=kronoqr-restore-wal, hasta el final del WAL, y promocion"
   docker exec -d "$CONTENEDOR" sh -c 'exec "$@" >/tmp/pg.log 2>&1' sh \
@@ -610,6 +751,18 @@ main() {
       CONSERVAR=1
       shift
       ;;
+    --php-image)
+      IMAGEN_PHP="${2:-}"
+      shift 2
+      ;;
+    --php-image=*)
+      IMAGEN_PHP="${1#*=}"
+      shift
+      ;;
+    --skip-audit-chain)
+      SALTAR_CADENA=1
+      shift
+      ;;
     --accept-unauthenticated)
       ACEPTAR_HEREDADA=1
       shift
@@ -648,6 +801,11 @@ main() {
   if [ "$MODO" = "pitr" ]; then
     informar "Simulacro de restauracion (RNF-D-05), modo pitr: copia fisica + WAL archivado."
     simulacro_pitr || resultado=1
+    if [ "$resultado" -eq 0 ]; then
+      # La base recuperada de la copia fisica no se abre por la red del contenedor (solo socket Unix):
+      # la cadena la verifica el modo por defecto sobre el volcado. Consta en el informe, no se calla.
+      informar "Cadena de auditoria: NO se verifica en --mode pitr (la base recuperada solo escucha en su socket). La verifica el simulacro por defecto sobre el volcado logico."
+    fi
   else
     [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
     [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
@@ -663,6 +821,9 @@ main() {
     else
       informar "Copia heredada de la 2.1.0, SIN autenticar (aceptada con --accept-unauthenticated)."
     fi
+
+    # La imagen con la que se verifica la cadena, antes de gastar minutos en restaurar.
+    preparar_verificacion_cadena
 
     if [ "$MODO" = "container" ]; then
       levantar_contenedor_limpio
@@ -685,6 +846,7 @@ main() {
     if [ "$resultado" -eq 0 ]; then
       comprobar_integridad_referencial || resultado=1
       comprobar_conteos || resultado=1
+      comprobar_cadena_auditoria || resultado=1
     fi
   fi
 

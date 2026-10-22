@@ -144,7 +144,7 @@ it('restaura en un contenedor limpio la copia cifrada que hace backup.sh', funct
             ->and($contents)->not->toContain('employee_code');
 
         // El simulacro: contenedor limpio, integridad referencial y conteos del manifiesto.
-        $drill = restoreCycleRun('restore-drill.sh', ['--timeout', '120'], $backupPath);
+        $drill = restoreCycleRun('restore-drill.sh', ['--skip-audit-chain', '--timeout', '120'], $backupPath);
         expect($drill->getExitCode())->toBe(0, $drill->getOutput().$drill->getErrorOutput());
     } finally {
         restoreCycleRemove($backupPath);
@@ -169,7 +169,7 @@ it('rechaza con salida 6 una copia alterada: no se restaura lo que no se autenti
         fwrite($handle, 'basura');
         fclose($handle);
 
-        $drill = restoreCycleRun('restore-drill.sh', ['--timeout', '120'], $backupPath);
+        $drill = restoreCycleRun('restore-drill.sh', ['--skip-audit-chain', '--timeout', '120'], $backupPath);
         expect($drill->getExitCode())->toBe(6, $drill->getOutput().$drill->getErrorOutput());
         // El 6 tambien saldria si la restauracion fallara despues de abrir la copia:
         // el motivo tiene que ser que NO supera la comprobacion de autenticidad.
