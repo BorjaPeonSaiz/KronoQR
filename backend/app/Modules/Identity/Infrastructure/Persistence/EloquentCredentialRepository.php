@@ -240,6 +240,19 @@ final readonly class EloquentCredentialRepository implements CredentialRepositor
         return $row instanceof Credential ? $this->toEntity($row) : null;
     }
 
+    public function employeeIdsWithActiveCredentials(): array
+    {
+        return array_values(array_map(
+            static fn (mixed $id): int => is_numeric($id) ? (int) $id : 0,
+            Credential::query()
+                ->whereNull('revoked_at')
+                ->distinct()
+                ->orderBy('employee_id')
+                ->pluck('employee_id')
+                ->all(),
+        ));
+    }
+
     public function countSignedWith(string $keyId): int
     {
         return Credential::query()->where('key_id', $keyId)->count();
