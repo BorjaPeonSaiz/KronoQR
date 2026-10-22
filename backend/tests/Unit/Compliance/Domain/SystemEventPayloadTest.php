@@ -386,3 +386,39 @@ it('PP-10: portal_exposed no admite false, texto ni otro valor, ni en la vuelta 
     expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, [...restoredData(), 'portal_exposed' => true]))
         ->toThrow(InvalidSystemEventPayload::class, 'no esta en la lista cerrada');
 })->with([false, 'true', 1, null])->group('RL-04', 'RS-07', 'RF-PD-10', 'RF-ID-08');
+
+/*
+ * Los recuentos de `credentials:revoke-offboarded` (tarea 12.4 de la 2.3.0):
+ * `update.sh` los lleva al asiento de la actualizacion como enteros JSON.
+ */
+it('acepta los recuentos de la revocacion de tarjetas de bajas, cero incluido', function (int $valor): void {
+    $data = [...updatedData(), 'revoked_credentials' => $valor, 'employees' => $valor, 'failed' => $valor];
+
+    expect(SystemEventPayload::for(AuditAction::SystemUpdated, $data)->payload->data)
+        ->toMatchArray(['revoked_credentials' => $valor, 'employees' => $valor, 'failed' => $valor]);
+})->with([0, 1, 37])->group('RL-04', 'RF-PD-10');
+
+it('no exige los recuentos de la revocacion: una actualizacion sin ellos sigue siendo valida', function (): void {
+    expect(SystemEventPayload::for(AuditAction::SystemUpdated, updatedData())->payload->data)
+        ->not->toHaveKeys(['revoked_credentials', 'employees', 'failed']);
+})->group('RL-04', 'RF-PD-10');
+
+it('rechaza un recuento de la revocacion negativo o que no es un entero', function (string $campo, mixed $valor): void {
+    $data = [...updatedData(), $campo => $valor];
+
+    expect(static fn (): SystemEventPayload => SystemEventPayload::for(AuditAction::SystemUpdated, $data))
+        ->toThrow(InvalidSystemEventPayload::class, 'El campo «'.$campo.'» del payload no cumple su forma: se esperaba un recuento entero no negativo.');
+})->with([
+    'negativo' => ['revoked_credentials', -1],
+    'decimal' => ['employees', 1.5],
+    'en texto' => ['failed', '3'],
+    'booleano' => ['failed', true],
+    'nulo' => ['revoked_credentials', null],
+])->group('RL-04');
+
+it('no admite los recuentos de la revocacion en el asiento de una vuelta atras', function (string $campo): void {
+    $data = [...restoredData(), $campo => 0];
+
+    expect(static fn (): SystemEventPayload => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data))
+        ->toThrow(InvalidSystemEventPayload::class);
+})->with(['revoked_credentials', 'employees', 'failed'])->group('RL-04');
