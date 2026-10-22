@@ -152,6 +152,35 @@ it('la ejecucion minimiza la ficha, deja un asiento por persona y borra la foto 
         ->and($asiento->payload)->not->toContain('fotos/');
 })->group('RL-11', 'RL-04', 'RL-08', 'RS-05', 'RF-PR-03');
 
+it('no minimiza en la misma pasada la ficha que libera su propia purga: espera a la siguiente', function (): void {
+    $ficha = fichaVencida();
+    // Su jornada vencida la retiene: la simulacion no la cuenta.
+    DB::table('daily_totals')->insert([
+        'employee_id' => $ficha['id'],
+        'work_date' => '2015-03-30',
+        'total_minutes' => 480,
+        'shift_count' => 1,
+        'recalculated_at' => '2015-03-30 23:00:00+00',
+    ]);
+
+    $simulada = retencionDeFichas(true);
+    $primera = retencionDeFichas(false);
+
+    // La purga de esta pasada se lleva la jornada, pero la ficha no la conto
+    // el plan: sigue entera.
+    expect($simulada['code'])->toBe(0, $simulada['output'])
+        ->and($primera['code'])->toBe(0, $primera['output'])
+        ->and(DB::table('daily_totals')->where('employee_id', $ficha['id'])->count())->toBe(0)
+        ->and(DB::table('employees')->where('id', $ficha['id'])->value('first_name'))->toBe('Lucia')
+        ->and(DB::table('audit_log')->where('action', AuditAction::RetentionPersonnelRecordAnonymized->value)->count())->toBe(0);
+
+    $segunda = retencionDeFichas(false);
+
+    expect($segunda['code'])->toBe(0, $segunda['output'])
+        ->and(DB::table('employees')->where('id', $ficha['id'])->value('first_name'))->toBe('')
+        ->and(DB::table('audit_log')->where('action', AuditAction::RetentionPersonnelRecordAnonymized->value)->count())->toBe(1);
+})->group('RL-11', 'RF-PR-03');
+
 it('si el asiento falla, no se minimiza ninguna ficha ni se borra su foto', function (): void {
     $ficha = fichaVencida();
 

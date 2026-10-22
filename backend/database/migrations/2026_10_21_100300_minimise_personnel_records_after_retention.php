@@ -34,18 +34,26 @@ use Illuminate\Support\Facades\DB;
  *   propietario de la tabla, es decir, la funcion de abajo.
  * - `public.personnel_record_retention_candidates(p_cutoff date)`: las fichas
  *   que se minimizarian con ese corte. La usan la funcion y la simulacion.
- * - `public.personnel_record_anonymize_batch(p_cutoff date, p_batch int)`,
- *   `SECURITY DEFINER`, `search_path` cerrado y `lock_timeout` propio. Calcula
- *   su corte maximo con `personnel_record_retention_years` del perfil (el mas
- *   largo entre centros) y rechaza uno posterior con 42501. Solo minimiza una
- *   ficha de baja cuyo cese es anterior o igual al corte, de la que no queda
- *   ninguna fila en el registro horario y cuya particion de `audit_log` del
- *   año del cese ya se solto. Borra sus contratos, sus ausencias y sus sesiones
- *   del portal, y devuelve lo borrado y la ruta de la foto, que la aplicacion
- *   borra despues del `COMMIT`. `EXECUTE` solo para la aplicacion.
- * - La aplicacion pierde `DELETE` sobre `employment_contracts` y `absences`:
- *   ningun codigo los borra (comprobado), y desde ahora solo los borra esta
- *   funcion.
+ * - `public.personnel_record_anonymize_batch(p_cutoff date, p_batch int,
+ *   p_only bigint[])`, `SECURITY DEFINER`, `search_path` cerrado y
+ *   `lock_timeout` propio. Calcula su corte maximo con
+ *   `personnel_record_retention_years` del perfil (el mas largo entre centros,
+ *   con `effective_compliance_profile_ids()`) y rechaza uno posterior con
+ *   42501. Solo toca las fichas de `p_only`, las que conto el plan antes de
+ *   purgar: lo que libera la purga de esa misma pasada espera a la siguiente
+ *   (decision del propietario del 22-10-2026). Solo minimiza una ficha de baja
+ *   cuyo cese es anterior o igual al corte, de la que no queda ninguna fila en
+ *   el registro horario y cuya particion de `audit_log` del año del cese ya se
+ *   solto. Borra sus contratos, sus ausencias y sus sesiones del portal,
+ *   sustituye el motivo de revocar sus tarjetas por uno fijo, y devuelve lo
+ *   borrado y la ruta de la foto, que la aplicacion borra despues del
+ *   `COMMIT`. `EXECUTE` solo para la aplicacion.
+ * - `employees_guard_anonymized_dependents`, `BEFORE INSERT OR UPDATE OF
+ *   employee_id` en `employment_contracts` y `absences`: una ficha minimizada
+ *   no recibe contratos ni ausencias (42501).
+ * - La aplicacion pierde `DELETE` sobre `employment_contracts` y `absences`
+ *   (ningun codigo los borra, comprobado; desde ahora solo esta funcion) y
+ *   sobre `employees` y `users`, que se minimizan y nunca se borran.
  *
  * ## Despliegue (expand)
  *
@@ -67,11 +75,26 @@ return new class extends Migration
     private const string PORTAL_TOKENABLE = 'App\Modules\Workforce\Infrastructure\Persistence\Employee';
 
     /**
-     * Las dos tablas que pierden `DELETE` para la aplicacion.
+     * El motivo que sustituye al de revocar cada tarjeta de la ficha
+     * minimizada: el original es texto libre. Publico para las pruebas.
+     */
+    public const string CREDENTIAL_REASON = 'Motivo retirado al minimizar la ficha (ADR-060)';
+
+    /**
+     * Las tablas que pierden `DELETE` para la aplicacion: contratos y
+     * ausencias, que solo borra la funcion de abajo, y la ficha y la cuenta de
+     * gestion, que se minimizan en sitio y no se borran nunca (ADR-060).
      *
      * @var list<string>
      */
-    private const array NO_DELETE = ['employment_contracts', 'absences'];
+    private const array NO_DELETE = ['employment_contracts', 'absences', 'employees', 'users'];
+
+    /**
+     * Las tablas que no admiten filas nuevas de una ficha minimizada.
+     *
+     * @var list<string>
+     */
+    private const array DEPENDENTS = ['employment_contracts', 'absences'];
 
     public function up(): void
     {
@@ -95,16 +118,25 @@ return new class extends Migration
             DB::statement('CREATE TRIGGER employees_guard_anonymized BEFORE INSERT OR UPDATE ON employees '
                 .'FOR EACH ROW EXECUTE FUNCTION public.employees_guard_anonymized()');
 
+            DB::statement($this->dependentsGuardFunction());
+
+            foreach (self::DEPENDENTS as $table) {
+                DB::statement('DROP TRIGGER IF EXISTS '.$table.'_guard_anonymized_employee ON '.$table);
+                DB::statement('CREATE TRIGGER '.$table.'_guard_anonymized_employee BEFORE INSERT OR UPDATE OF employee_id ON '.$table
+                    .' FOR EACH ROW EXECUTE FUNCTION public.employees_guard_anonymized_dependents()');
+            }
+
             DB::statement($this->candidatesFunction());
             DB::statement($this->anonymizeFunction());
 
             $application = $this->applicationRole();
 
             DB::statement('REVOKE ALL ON FUNCTION public.employees_guard_anonymized() FROM PUBLIC');
+            DB::statement('REVOKE ALL ON FUNCTION public.employees_guard_anonymized_dependents() FROM PUBLIC');
             DB::statement('REVOKE ALL ON FUNCTION public.personnel_record_retention_candidates(date) FROM PUBLIC');
-            DB::statement('REVOKE ALL ON FUNCTION public.personnel_record_anonymize_batch(date, integer) FROM PUBLIC');
+            DB::statement('REVOKE ALL ON FUNCTION public.personnel_record_anonymize_batch(date, integer, bigint[]) FROM PUBLIC');
             DB::statement('GRANT EXECUTE ON FUNCTION public.personnel_record_retention_candidates(date) TO '.$application);
-            DB::statement('GRANT EXECUTE ON FUNCTION public.personnel_record_anonymize_batch(date, integer) TO '.$application);
+            DB::statement('GRANT EXECUTE ON FUNCTION public.personnel_record_anonymize_batch(date, integer, bigint[]) TO '.$application);
 
             foreach (self::NO_DELETE as $table) {
                 DB::statement('REVOKE DELETE ON TABLE '.$table.' FROM '.$application);
@@ -133,8 +165,14 @@ return new class extends Migration
                 DB::statement('GRANT DELETE ON TABLE '.$table.' TO '.$application);
             }
 
-            DB::statement('DROP FUNCTION IF EXISTS public.personnel_record_anonymize_batch(date, integer)');
+            DB::statement('DROP FUNCTION IF EXISTS public.personnel_record_anonymize_batch(date, integer, bigint[])');
             DB::statement('DROP FUNCTION IF EXISTS public.personnel_record_retention_candidates(date)');
+
+            foreach (self::DEPENDENTS as $table) {
+                DB::statement('DROP TRIGGER IF EXISTS '.$table.'_guard_anonymized_employee ON '.$table);
+            }
+
+            DB::statement('DROP FUNCTION IF EXISTS public.employees_guard_anonymized_dependents()');
             DB::statement('DROP TRIGGER IF EXISTS employees_guard_anonymized ON employees');
             DB::statement('DROP FUNCTION IF EXISTS public.employees_guard_anonymized()');
             DB::statement('ALTER TABLE employees DROP CONSTRAINT IF EXISTS '.self::CHECK_MINIMISED);
@@ -168,6 +206,36 @@ return new class extends Migration
                         RAISE EXCEPTION 'employees_guard_anonymized: anonymized_at solo lo escribe personnel_record_anonymize_batch (ADR-060)'
                             USING ERRCODE = '42501';
                     END IF;
+                END IF;
+
+                RETURN NEW;
+            END;
+            $kronoqr$
+            SQL;
+    }
+
+    /**
+     * Ni contrato ni ausencia nuevos para una ficha minimizada: el dominio ya
+     * los rechaza, y esto es la misma regla en el motor para quien no pase
+     * por el.
+     */
+    private function dependentsGuardFunction(): string
+    {
+        return <<<'SQL'
+            CREATE OR REPLACE FUNCTION public.employees_guard_anonymized_dependents()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            SET search_path = pg_catalog, pg_temp
+            AS $kronoqr$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM public.employees e
+                     WHERE e.id = NEW.employee_id
+                       AND e.anonymized_at IS NOT NULL
+                ) THEN
+                    RAISE EXCEPTION '%: la ficha % esta minimizada por retencion y no admite filas nuevas (ADR-060)',
+                        TG_TABLE_NAME, NEW.employee_id
+                        USING ERRCODE = '42501';
                 END IF;
 
                 RETURN NEW;
@@ -228,8 +296,8 @@ return new class extends Migration
 
     private function anonymizeFunction(): string
     {
-        return str_replace('__PORTAL_TOKENABLE__', self::PORTAL_TOKENABLE, <<<'SQL'
-            CREATE OR REPLACE FUNCTION public.personnel_record_anonymize_batch(p_cutoff date, p_batch integer)
+        return str_replace(['__PORTAL_TOKENABLE__', '__CREDENTIAL_REASON__'], [self::PORTAL_TOKENABLE, self::CREDENTIAL_REASON], <<<'SQL'
+            CREATE OR REPLACE FUNCTION public.personnel_record_anonymize_batch(p_cutoff date, p_batch integer, p_only bigint[])
             RETURNS TABLE (employee_uuid uuid, terminated_on date, contracts bigint, absences bigint, tokens bigint, photo_path text)
             LANGUAGE plpgsql
             SECURITY DEFINER
@@ -247,22 +315,16 @@ return new class extends Migration
                         USING ERRCODE = '22023';
                 END IF;
 
+                IF p_only IS NULL THEN
+                    RAISE EXCEPTION 'personnel_record_anonymize_batch: falta la lista de fichas que conto el plan'
+                        USING ERRCODE = '22023';
+                END IF;
+
                 -- Los años de la ficha de cada centro: su perfil, o el de por
                 -- defecto. Entre centros, el mas largo.
                 SELECT max(p.personnel_record_retention_years)
                   INTO v_years
-                  FROM (
-                        SELECT COALESCE(
-                                   s.compliance_profile_id,
-                                   (SELECT d.id FROM public.compliance_profiles d WHERE d.is_default ORDER BY d.id LIMIT 1)
-                               ) AS profile_id
-                          FROM public.sites s
-                        UNION ALL
-                        SELECT d.id
-                          FROM public.compliance_profiles d
-                         WHERE d.is_default
-                           AND NOT EXISTS (SELECT 1 FROM public.sites)
-                       ) effective
+                  FROM public.effective_compliance_profile_ids() effective
                   JOIN public.compliance_profiles p ON p.id = effective.profile_id;
 
                 IF v_years IS NULL THEN
@@ -282,6 +344,9 @@ return new class extends Migration
                     SELECT e.id, e.uuid, e.terminated_at, e.photo_path
                       FROM public.employees e
                      WHERE e.id IN (SELECT c.id FROM public.personnel_record_retention_candidates(p_cutoff) c)
+                       -- Solo las que conto el plan de esta pasada, antes de
+                       -- purgar: lo que libera la purga espera a la siguiente.
+                       AND e.id = ANY (p_only)
                        -- Se vuelve a mirar con la fila tomada: otra pasada pudo minimizarla.
                        AND e.status = 'terminated'
                        AND e.anonymized_at IS NULL
@@ -299,6 +364,15 @@ return new class extends Migration
                      WHERE t.tokenable_type = '__PORTAL_TOKENABLE__'
                        AND t.tokenable_id = v_record.id;
                     GET DIAGNOSTICS tokens = ROW_COUNT;
+
+                    -- El motivo de revocar sus tarjetas es texto libre y pudo
+                    -- nombrar a alguien. El CHECK exige motivo en una revocada:
+                    -- se sustituye, no se vacia.
+                    UPDATE public.credentials c
+                       SET revoked_reason = '__CREDENTIAL_REASON__'
+                     WHERE c.employee_id = v_record.id
+                       AND c.revoked_reason IS NOT NULL
+                       AND c.revoked_reason <> '__CREDENTIAL_REASON__';
 
                     UPDATE public.employees e
                        SET first_name = '',

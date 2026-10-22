@@ -27,9 +27,6 @@ final readonly class DatabasePersonnelRecordArchive implements PersonnelRecordAr
     /** La funcion `SECURITY DEFINER` que minimiza. */
     public const string ANONYMIZE_FUNCTION = 'personnel_record_anonymize_batch';
 
-    /** El lote mas grande que admite la funcion. */
-    public const int MAX_BATCH = 10000;
-
     public function __construct(
         private ConnectionInterface $connection,
         /** Directorio de las fotos; `photo_path` es relativo a el. */
@@ -59,13 +56,24 @@ final readonly class DatabasePersonnelRecordArchive implements PersonnelRecordAr
         );
     }
 
-    public function anonymize(DateTimeImmutable $cutoff, int $batchSize): array
+    public function candidates(DateTimeImmutable $cutoff): array
+    {
+        /** @var list<object{id: int|string}> $rows */
+        $rows = $this->connection->select(
+            'SELECT c.id FROM public.personnel_record_retention_candidates(?::date) c ORDER BY c.id',
+            [$cutoff->format('Y-m-d')],
+        );
+
+        return array_map(static fn (object $row): int => (int) $row->id, $rows);
+    }
+
+    public function anonymize(DateTimeImmutable $cutoff, int $batchSize, array $only): array
     {
         /** @var list<object{employee_uuid: string, terminated_on: string, contracts: int|string, absences: int|string, tokens: int|string, photo_path: string|null}> $rows */
         $rows = $this->connection->select(
             'SELECT employee_uuid::text AS employee_uuid, terminated_on::text AS terminated_on, contracts, absences, tokens, photo_path'
-            .' FROM public.'.self::ANONYMIZE_FUNCTION.'(?::date, ?::integer)',
-            [$cutoff->format('Y-m-d'), min(self::MAX_BATCH, max(1, $batchSize))],
+            .' FROM public.'.self::ANONYMIZE_FUNCTION.'(?::date, ?::integer, ?::bigint[])',
+            [$cutoff->format('Y-m-d'), min(self::MAX_BATCH, max(1, $batchSize)), self::idArray($only)],
         );
 
         return array_map(
@@ -98,5 +106,13 @@ final readonly class DatabasePersonnelRecordArchive implements PersonnelRecordAr
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * @param  list<int>  $ids
+     */
+    private static function idArray(array $ids): string
+    {
+        return '{'.implode(',', array_map(static fn (int $id): string => (string) $id, $ids)).'}';
     }
 }

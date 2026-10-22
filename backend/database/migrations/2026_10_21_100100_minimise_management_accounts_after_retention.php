@@ -37,10 +37,15 @@ use Illuminate\Support\Facades\DB;
  * - `users_guard_anonymized`, `BEFORE INSERT OR UPDATE`: una fila minimizada
  *   no se modifica (42501), y `anonymized_at` solo lo escribe el propietario
  *   de la tabla, es decir, la funcion de abajo.
- * - `public.management_account_anonymize_batch(p_cutoff date, p_batch int)`,
- *   `SECURITY DEFINER`, `search_path` cerrado y `lock_timeout` propio. Calcula
- *   ella misma el corte maximo a partir del perfil —el mismo que la purga del
- *   registro— y rechaza uno posterior con 42501. Solo minimiza cuentas
+ * - `public.effective_compliance_profile_ids()`: el perfil que rige cada
+ *   centro. La comparten las dos funciones de minimizar.
+ * - `public.management_account_anonymize_batch(p_cutoff date, p_batch int,
+ *   p_only bigint[])`, `SECURITY DEFINER`, `search_path` cerrado y
+ *   `lock_timeout` propio. Calcula ella misma el corte maximo a partir del
+ *   perfil —el mismo que la purga del registro— y rechaza uno posterior con
+ *   42501. Solo toca las cuentas de `p_only`, las que conto el plan antes de
+ *   purgar (decision del propietario del 22-10-2026: la ejecucion no minimiza
+ *   mas de lo que aprobo la simulacion). Solo minimiza cuentas
  *   inactivas, dadas de baja en o antes del corte y de las que no queda ningun
  *   asiento (como actor ni como sujeto) ni ninguna correccion ni resolucion de
  *   incidencia: mientras quede algo suyo, la cuenta se conserva como autora.
@@ -120,16 +125,18 @@ return new class extends Migration
             DB::statement('CREATE TRIGGER users_guard_anonymized BEFORE INSERT OR UPDATE ON users '
                 .'FOR EACH ROW EXECUTE FUNCTION public.users_guard_anonymized()');
 
+            DB::statement($this->effectiveProfilesFunction());
             DB::statement($this->candidatesFunction());
             DB::statement($this->anonymizeFunction());
 
             DB::statement('REVOKE ALL ON FUNCTION public.users_stamp_deactivation() FROM PUBLIC');
             DB::statement('REVOKE ALL ON FUNCTION public.users_guard_anonymized() FROM PUBLIC');
+            DB::statement('REVOKE ALL ON FUNCTION public.effective_compliance_profile_ids() FROM PUBLIC');
             DB::statement('REVOKE ALL ON FUNCTION public.management_account_retention_candidates(date) FROM PUBLIC');
             DB::statement('GRANT EXECUTE ON FUNCTION public.management_account_retention_candidates(date) TO '
                 .$this->applicationRole());
-            DB::statement('REVOKE ALL ON FUNCTION public.management_account_anonymize_batch(date, integer) FROM PUBLIC');
-            DB::statement('GRANT EXECUTE ON FUNCTION public.management_account_anonymize_batch(date, integer) TO '
+            DB::statement('REVOKE ALL ON FUNCTION public.management_account_anonymize_batch(date, integer, bigint[]) FROM PUBLIC');
+            DB::statement('GRANT EXECUTE ON FUNCTION public.management_account_anonymize_batch(date, integer, bigint[]) TO '
                 .$this->applicationRole());
         });
 
@@ -150,8 +157,9 @@ return new class extends Migration
         DB::transaction(function (): void {
             $this->limitLockWait();
 
-            DB::statement('DROP FUNCTION IF EXISTS public.management_account_anonymize_batch(date, integer)');
+            DB::statement('DROP FUNCTION IF EXISTS public.management_account_anonymize_batch(date, integer, bigint[])');
             DB::statement('DROP FUNCTION IF EXISTS public.management_account_retention_candidates(date)');
+            DB::statement('DROP FUNCTION IF EXISTS public.effective_compliance_profile_ids()');
             DB::statement('DROP TRIGGER IF EXISTS users_guard_anonymized ON users');
             DB::statement('DROP FUNCTION IF EXISTS public.users_guard_anonymized()');
             DB::statement('DROP TRIGGER IF EXISTS users_stamp_deactivation ON users');
@@ -223,6 +231,37 @@ return new class extends Migration
     }
 
     /**
+     * El perfil de cumplimiento que rige cada centro —el suyo o el de por
+     * defecto— y, sin centros, el de por defecto. La usan las dos funciones de
+     * minimizar de la 2.3.0 para calcular sus años; la purga del registro
+     * (`work_record_purge_batch`, 14-10-2026) lleva la misma consulta dentro y
+     * no se redefine aqui. Sin `SECURITY DEFINER` ni `EXECUTE` para nadie: solo
+     * la llaman funciones del mismo propietario.
+     */
+    private function effectiveProfilesFunction(): string
+    {
+        return <<<'SQL'
+            CREATE OR REPLACE FUNCTION public.effective_compliance_profile_ids()
+            RETURNS TABLE (profile_id bigint)
+            LANGUAGE sql
+            STABLE
+            SET search_path = pg_catalog, pg_temp
+            AS $kronoqr$
+                SELECT COALESCE(
+                           s.compliance_profile_id,
+                           (SELECT d.id FROM public.compliance_profiles d WHERE d.is_default ORDER BY d.id LIMIT 1)
+                       )
+                  FROM public.sites s
+                UNION ALL
+                SELECT d.id
+                  FROM public.compliance_profiles d
+                 WHERE d.is_default
+                   AND NOT EXISTS (SELECT 1 FROM public.sites)
+            $kronoqr$
+            SQL;
+    }
+
+    /**
      * Las cuentas que se minimizarian con ese corte, en un solo sitio: la usan
      * la funcion de minimizar y la simulacion de `compliance:apply-retention`,
      * que asi no pueden contar cosas distintas. Sin `SECURITY DEFINER`: solo
@@ -268,7 +307,7 @@ return new class extends Migration
     private function anonymizeFunction(): string
     {
         return <<<'SQL'
-            CREATE OR REPLACE FUNCTION public.management_account_anonymize_batch(p_cutoff date, p_batch integer)
+            CREATE OR REPLACE FUNCTION public.management_account_anonymize_batch(p_cutoff date, p_batch integer, p_only bigint[])
             RETURNS TABLE (user_id bigint, user_uuid uuid, deactivated_on date, tokens bigint)
             LANGUAGE plpgsql
             SECURITY DEFINER
@@ -286,23 +325,17 @@ return new class extends Migration
                         USING ERRCODE = '22023';
                 END IF;
 
+                IF p_only IS NULL THEN
+                    RAISE EXCEPTION 'management_account_anonymize_batch: falta la lista de cuentas que conto el plan'
+                        USING ERRCODE = '22023';
+                END IF;
+
                 -- Los mismos años que la purga del registro (ADR-057 §3): el
                 -- perfil de cada centro, o el de por defecto, sin bajar del
                 -- suelo de su jurisdiccion. Entre centros, el mas largo.
                 SELECT max(GREATEST(p.retention_years, public.work_record_retention_floor(p.jurisdiction)))
                   INTO v_years
-                  FROM (
-                        SELECT COALESCE(
-                                   s.compliance_profile_id,
-                                   (SELECT d.id FROM public.compliance_profiles d WHERE d.is_default ORDER BY d.id LIMIT 1)
-                               ) AS profile_id
-                          FROM public.sites s
-                        UNION ALL
-                        SELECT d.id
-                          FROM public.compliance_profiles d
-                         WHERE d.is_default
-                           AND NOT EXISTS (SELECT 1 FROM public.sites)
-                       ) effective
+                  FROM public.effective_compliance_profile_ids() effective
                   JOIN public.compliance_profiles p ON p.id = effective.profile_id;
 
                 IF v_years IS NULL THEN
@@ -322,6 +355,9 @@ return new class extends Migration
                     SELECT u.id, u.uuid, (u.deactivated_at AT TIME ZONE 'UTC')::date AS deactivated_on
                       FROM public.users u
                      WHERE u.id IN (SELECT c.id FROM public.management_account_retention_candidates(p_cutoff) c)
+                       -- Solo las que conto el plan de esta pasada, antes de
+                       -- purgar: lo que libera la purga espera a la siguiente.
+                       AND u.id = ANY (p_only)
                        -- Se vuelve a mirar con la fila tomada: otra pasada pudo minimizarla.
                        AND u.is_active = false
                        AND u.anonymized_at IS NULL

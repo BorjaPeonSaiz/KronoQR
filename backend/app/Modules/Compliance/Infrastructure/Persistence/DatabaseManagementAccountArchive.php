@@ -22,9 +22,6 @@ final readonly class DatabaseManagementAccountArchive implements ManagementAccou
     /** La funcion `SECURITY DEFINER` que minimiza. */
     public const string ANONYMIZE_FUNCTION = 'management_account_anonymize_batch';
 
-    /** El lote mas grande que admite la funcion. */
-    public const int MAX_BATCH = 10000;
-
     public function __construct(private ConnectionInterface $connection) {}
 
     public function inspect(DateTimeImmutable $cutoff): RetentionTally
@@ -50,13 +47,24 @@ final readonly class DatabaseManagementAccountArchive implements ManagementAccou
         );
     }
 
-    public function anonymize(DateTimeImmutable $cutoff, int $batchSize): array
+    public function candidates(DateTimeImmutable $cutoff): array
+    {
+        /** @var list<object{id: int|string}> $rows */
+        $rows = $this->connection->select(
+            'SELECT c.id FROM public.management_account_retention_candidates(?::date) c ORDER BY c.id',
+            [$cutoff->format('Y-m-d')],
+        );
+
+        return array_map(static fn (object $row): int => (int) $row->id, $rows);
+    }
+
+    public function anonymize(DateTimeImmutable $cutoff, int $batchSize, array $only): array
     {
         /** @var list<object{user_id: int|string, user_uuid: string, deactivated_on: string, tokens: int|string}> $rows */
         $rows = $this->connection->select(
             'SELECT user_id, user_uuid::text AS user_uuid, deactivated_on::text AS deactivated_on, tokens'
-            .' FROM public.'.self::ANONYMIZE_FUNCTION.'(?::date, ?::integer)',
-            [$cutoff->format('Y-m-d'), min(self::MAX_BATCH, max(1, $batchSize))],
+            .' FROM public.'.self::ANONYMIZE_FUNCTION.'(?::date, ?::integer, ?::bigint[])',
+            [$cutoff->format('Y-m-d'), min(self::MAX_BATCH, max(1, $batchSize)), self::idArray($only)],
         );
 
         return array_map(
@@ -68,5 +76,13 @@ final readonly class DatabaseManagementAccountArchive implements ManagementAccou
             ),
             $rows,
         );
+    }
+
+    /**
+     * @param  list<int>  $ids
+     */
+    private static function idArray(array $ids): string
+    {
+        return '{'.implode(',', array_map(static fn (int $id): string => (string) $id, $ids)).'}';
     }
 }

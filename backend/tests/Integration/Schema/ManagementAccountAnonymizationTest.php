@@ -57,8 +57,9 @@ function cuentaMinimizar(string $cutoff, int $batch = 100): array
     /** @var list<object{user_id: int|string, user_uuid: string, deactivated_on: string, tokens: int|string}> $rows */
     $rows = DB::select(
         'SELECT user_id, user_uuid::text AS user_uuid, deactivated_on::text AS deactivated_on, tokens FROM public.'
-        .DatabaseManagementAccountArchive::ANONYMIZE_FUNCTION.'(?::date, ?::integer)',
-        [$cutoff, $batch],
+        .DatabaseManagementAccountArchive::ANONYMIZE_FUNCTION.'(?::date, ?::integer,'
+        .' ARRAY(SELECT c.id FROM public.management_account_retention_candidates(?::date) c))',
+        [$cutoff, $batch, $cutoff],
     );
 
     return $rows;
@@ -194,8 +195,8 @@ it('la ejecuta la aplicacion y nadie mas, como propietario y con el search_path 
         return (bool) $row->granted;
     };
 
-    expect($can($application, 'management_account_anonymize_batch(date, integer)'))->toBeTrue()
-        ->and($can('public', 'management_account_anonymize_batch(date, integer)'))->toBeFalse()
+    expect($can($application, 'management_account_anonymize_batch(date, integer, bigint[])'))->toBeTrue()
+        ->and($can('public', 'management_account_anonymize_batch(date, integer, bigint[])'))->toBeFalse()
         ->and($can('public', 'management_account_retention_candidates(date)'))->toBeFalse()
         ->and($can('public', 'users_guard_anonymized()'))->toBeFalse()
         ->and($can('public', 'users_stamp_deactivation()'))->toBeFalse();
@@ -204,7 +205,7 @@ it('la ejecuta la aplicacion y nadie mas, como propietario y con el search_path 
     $function = DB::selectOne(<<<'SQL'
         SELECT p.prosecdef AS definer, pg_get_userbyid(p.proowner) AS owner, array_to_string(p.proconfig, ';') AS config
           FROM pg_proc p
-         WHERE p.oid = 'public.management_account_anonymize_batch(date, integer)'::regprocedure
+         WHERE p.oid = 'public.management_account_anonymize_batch(date, integer, bigint[])'::regprocedure
         SQL);
 
     expect($function->definer)->toBeTrue()

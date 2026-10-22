@@ -108,8 +108,9 @@ function fichaMinimizar(string $cutoff, int $batch = 100, ?ConnectionInterface $
     /** @var list<object{employee_uuid: string, terminated_on: string, contracts: int|string, absences: int|string, tokens: int|string, photo_path: string|null}> $rows */
     $rows = ($connection ?? DB::connection())->select(
         'SELECT employee_uuid::text AS employee_uuid, terminated_on::text AS terminated_on, contracts, absences, tokens, photo_path'
-        .' FROM public.'.DatabasePersonnelRecordArchive::ANONYMIZE_FUNCTION.'(?::date, ?::integer)',
-        [$cutoff, $batch],
+        .' FROM public.'.DatabasePersonnelRecordArchive::ANONYMIZE_FUNCTION.'(?::date, ?::integer,'
+        .' ARRAY(SELECT c.id FROM public.personnel_record_retention_candidates(?::date) c))',
+        [$cutoff, $batch, $cutoff],
     );
 
     return $rows;
@@ -229,10 +230,67 @@ it('una ficha minimizada queda congelada y la aplicacion no escribe anonymized_a
         ->and(fichaRechazo(static fn () => DB::table('employees')->where('id', $otra['id'])->update(['anonymized_at' => now()])))->toBe('42501');
 })->group('RL-11', 'RS-07');
 
-it('la aplicacion ya no borra contratos ni ausencias', function (string $table): void {
+it('la aplicacion ya no borra contratos, ausencias, fichas ni cuentas de gestion', function (string $table): void {
     fichaDeBaja(status: 'active');
 
     expect(fichaRechazo(static fn () => DB::table($table)->delete()))->toBe('42501');
+})->with(['employment_contracts', 'absences', 'employees', 'users'])->group('RL-11', 'RS-07');
+
+it('solo minimiza las fichas de la lista que conto el plan, y sin lista no minimiza ninguna', function (): void {
+    $contada = fichaDeBaja('2015-03-31');
+    $liberada = fichaDeBaja('2015-04-30');
+
+    /** @var list<object{employee_uuid: string}> $rows */
+    $rows = DB::select(
+        'SELECT employee_uuid::text AS employee_uuid FROM public.'.DatabasePersonnelRecordArchive::ANONYMIZE_FUNCTION
+        .'(?::date, 100, ARRAY[?]::bigint[])',
+        [fichaCorte(), $contada['id']],
+    );
+
+    expect(array_map(static fn (object $row): string => $row->employee_uuid, $rows))->toBe([$contada['uuid']])
+        ->and(DB::table('employees')->where('id', $liberada['id'])->value('anonymized_at'))->toBeNull()
+        ->and(fichaRechazo(static fn () => DB::select(
+            'SELECT * FROM public.'.DatabasePersonnelRecordArchive::ANONYMIZE_FUNCTION.'(?::date, 100, NULL)',
+            [fichaCorte()],
+        )))->toBe('22023');
+})->group('RL-11', 'RS-07');
+
+it('sustituye el motivo de revocar sus tarjetas por uno fijo y deja el resto de la tarjeta', function (): void {
+    $ficha = fichaDeBaja();
+
+    DB::table('credentials')->insert([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'key_id' => 'a3',
+        'secret_hash' => hash('sha256', $ficha['uuid']),
+        'issued_at' => '2014-01-01 00:00:00+00',
+        'printed_at' => '2014-01-01 00:00:00+00',
+        'revoked_at' => '2015-06-30 10:00:00+00',
+        'revoked_reason' => 'Lucia Ferrer perdio la tarjeta en el vestuario',
+    ]);
+
+    $migration = require database_path('migrations/'.PERSONNEL_ANONYMIZATION_MIGRATION.'.php');
+
+    fichaMinimizar(fichaCorte());
+
+    /** @var object{revoked_reason: string, revoked_at: string, key_id: string} $tarjeta */
+    $tarjeta = DB::table('credentials')->where('employee_id', $ficha['id'])->first();
+
+    expect($tarjeta->revoked_reason)->toBe($migration::CREDENTIAL_REASON)
+        ->and($tarjeta->revoked_at)->not->toBeNull()
+        ->and($tarjeta->key_id)->toBe('a3');
+})->group('RL-11', 'RL-08');
+
+it('una ficha minimizada no recibe contratos ni ausencias nuevos', function (string $table): void {
+    $ficha = fichaDeBaja();
+    fichaMinimizar(fichaCorte());
+
+    $row = $table === 'absences'
+        ? ['uuid' => Str::uuid7()->toString(), 'employee_id' => $ficha['id'], 'type' => 'vacation', 'starts_on' => '2015-05-01', 'ends_on' => '2015-05-01', 'created_at' => '2026-10-22 00:00:00+00']
+        : ['employee_id' => $ficha['id'], 'weekly_hours' => 40, 'schedule_type' => 'continua', 'valid_from' => '2015-01-01', 'created_at' => '2026-10-22 00:00:00+00'];
+
+    expect(fichaRechazo(static fn () => DB::table($table)->insert($row)))->toBe('42501')
+        ->and(DB::table($table)->where('employee_id', $ficha['id'])->count())->toBe(0);
 })->with(['employment_contracts', 'absences'])->group('RL-11', 'RS-07');
 
 it('el CHECK no admite una ficha marcada como minimizada con sus datos dentro', function (): void {
@@ -265,8 +323,8 @@ it('la ejecuta la aplicacion y nadie mas, como propietario y con el search_path 
         return (bool) $row->granted;
     };
 
-    expect($can($application, 'personnel_record_anonymize_batch(date, integer)'))->toBeTrue()
-        ->and($can('public', 'personnel_record_anonymize_batch(date, integer)'))->toBeFalse()
+    expect($can($application, 'personnel_record_anonymize_batch(date, integer, bigint[])'))->toBeTrue()
+        ->and($can('public', 'personnel_record_anonymize_batch(date, integer, bigint[])'))->toBeFalse()
         ->and($can('public', 'personnel_record_retention_candidates(date)'))->toBeFalse()
         ->and($can('public', 'employees_guard_anonymized()'))->toBeFalse();
 
@@ -274,7 +332,7 @@ it('la ejecuta la aplicacion y nadie mas, como propietario y con el search_path 
     $function = DB::selectOne(<<<'SQL'
         SELECT p.prosecdef AS definer, pg_get_userbyid(p.proowner) AS owner, array_to_string(p.proconfig, ';') AS config
           FROM pg_proc p
-         WHERE p.oid = 'public.personnel_record_anonymize_batch(date, integer)'::regprocedure
+         WHERE p.oid = 'public.personnel_record_anonymize_batch(date, integer, bigint[])'::regprocedure
         SQL);
 
     expect($function->definer)->toBeTrue()

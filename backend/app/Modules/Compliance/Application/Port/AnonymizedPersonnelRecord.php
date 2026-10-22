@@ -12,8 +12,9 @@ namespace App\Modules\Compliance\Application\Port;
 final readonly class AnonymizedPersonnelRecord
 {
     /**
-     * Los campos que la minimizacion vacia o sustituye. La misma lista que el
-     * `CHECK employees_chk_anonymized_is_minimised`.
+     * Los campos que la minimizacion vacia o sustituye. Los de la ficha son los del
+     * `CHECK employees_chk_anonymized_is_minimised`; el ultimo es el motivo de
+     * revocar sus tarjetas, en `credentials`.
      *
      * @var list<string>
      */
@@ -29,6 +30,8 @@ final readonly class AnonymizedPersonnelRecord
         'pin_delivered_at',
         'pin_delivered_by_user_id',
         'pin_length',
+        // Texto libre que pudo nombrar a alguien: se sustituye por un motivo fijo.
+        'credentials.revoked_reason',
     ];
 
     public function __construct(

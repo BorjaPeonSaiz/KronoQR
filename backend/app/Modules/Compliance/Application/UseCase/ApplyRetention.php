@@ -142,6 +142,17 @@ final readonly class ApplyRetention
     ): RetentionOutcome {
         $this->assertConfirmed($command, $plan);
 
+        // Las fichas y cuentas que se minimizaran, contadas ANTES de purgar,
+        // como las conto la simulacion aprobada. Purgar el registro y soltar
+        // particiones libera otras: esas esperan a la pasada siguiente, que
+        // las contara en su simulacion (decision del propietario del 22-10-2026).
+        $personnelCandidates = $plan->personnelRecordCutoff === null
+            ? []
+            : $this->personnelRecords->candidates($plan->personnelRecordCutoff);
+        $accountCandidates = $plan->managementAccountCutoff === null
+            ? []
+            : $this->managementAccounts->candidates($plan->managementAccountCutoff);
+
         // Paso 3, antes de borrar nada. Si algo no cuadra sale por excepcion y la
         // instalacion se queda exactamente como estaba.
         $verified = $this->verifyPartitions($plan, $now);
@@ -151,8 +162,8 @@ final readonly class ApplyRetention
         $tallies = [
             ...$this->purgeWorkRecords($command, $plan),
             ...$this->dropPartitions($verified['anchors'], $command),
-            ...$this->anonymizePersonnelRecords($command, $plan, $notes),
-            ...$this->anonymizeManagementAccounts($command, $plan),
+            ...$this->anonymizePersonnelRecords($command, $plan, $personnelCandidates, $notes),
+            ...$this->anonymizeManagementAccounts($command, $plan, $accountCandidates),
             ...$this->purgeShortCycles($command, $plan),
         ];
 
@@ -163,10 +174,11 @@ final readonly class ApplyRetention
      * Minimiza las fichas vencidas de personas dadas de baja (ADR-060, tarea
      * 11.3 A).
      *
-     * **Despues de purgar el registro y soltar particiones**: una ficha no es
-     * candidata mientras quede algo suyo en el registro horario o en la
-     * particion de `audit_log` del año de su cese, y las dos cosas se acaban de
-     * ir. **Antes de las cuentas de gestion**: minimizar una ficha libera
+     * **Despues de purgar el registro y soltar particiones**, pero **solo las
+     * fichas que ya eran candidatas antes** (`$candidates`): las que esa purga
+     * acaba de liberar no las conto la simulacion aprobada y esperan a la
+     * pasada siguiente. La funcion vuelve a comprobar cada una con la fila
+     * tomada. **Antes de las cuentas de gestion**: minimizar una ficha libera
      * `pin_delivered_by_user_id`, que no impide nada hoy pero puede hacerlo.
      *
      * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
@@ -177,32 +189,37 @@ final readonly class ApplyRetention
      * sin foto si el lote fallara. Si no se puede borrar, queda en el log y en
      * las observaciones del informe, con el `employee_uuid` y sin la ruta.
      *
+     * @param  list<int>  $candidates
      * @param  list<string>  $notes
      * @return list<RetentionTally>
      */
-    private function anonymizePersonnelRecords(RetentionRunCommand $command, RetentionReport $plan, array &$notes): array
-    {
+    private function anonymizePersonnelRecords(
+        RetentionRunCommand $command,
+        RetentionReport $plan,
+        array $candidates,
+        array &$notes,
+    ): array {
         $cutoff = $plan->personnelRecordCutoff;
 
         if ($cutoff === null) {
             return [];
         }
 
-        // Como con las cuentas: nada que minimizar, nada que pedir a la funcion.
-        if ($this->personnelRecords->inspect($cutoff)->isEmpty()) {
-            return [new RetentionTally(scope: RetentionScope::PersonnelRecords, dataset: 'employees', rows: 0)];
-        }
-
         $total = 0;
         $orphaned = 0;
+        // El lote no pasa del que admite la funcion: con uno mayor, la funcion
+        // cortaria en su tope y el resto de la lista quedaria sin minimizar.
+        $size = min(PersonnelRecordArchive::MAX_BATCH, max(1, $command->batchSize));
 
-        do {
+        // Nada que minimizar, nada que pedir a la funcion: `array_chunk` de una
+        // lista vacia no da ningun lote.
+        foreach (array_chunk($candidates, $size) as $only) {
             $this->assertResponsible($command);
 
             /** @var list<AnonymizedPersonnelRecord> $batch */
             $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
-                function () use ($command, $plan, $cutoff): array {
-                    $records = $this->personnelRecords->anonymize($cutoff, $command->batchSize);
+                function () use ($command, $plan, $cutoff, $size, $only): array {
+                    $records = $this->personnelRecords->anonymize($cutoff, $size, $only);
 
                     foreach ($records as $record) {
                         $this->recordPersonnelRecordAnonymized($command, $plan, $cutoff, $record);
@@ -220,7 +237,7 @@ final readonly class ApplyRetention
             }
 
             $total += \count($batch);
-        } while (\count($batch) >= max(1, $command->batchSize));
+        }
 
         if ($orphaned > 0) {
             $notes[] = $orphaned.' foto(s) de fichas minimizadas no se pudieron borrar del disco: la ficha ya no las '
@@ -531,8 +548,10 @@ final readonly class ApplyRetention
     /**
      * Minimiza las cuentas de gestion vencidas (ADR-060, tarea 11.3 B).
      *
-     * **Despues de soltar particiones**: una cuenta no es candidata mientras
-     * quede algun asiento suyo, y los de los años vencidos acaban de irse.
+     * **Despues de soltar particiones**, pero **solo las cuentas que ya eran
+     * candidatas antes** (`$candidates`): las que libera la suelta de los
+     * asientos de los años vencidos no las conto la simulacion aprobada y
+     * esperan a la pasada siguiente.
      *
      * **Por lotes, una transaccion por lote y bajo el candado de la cadena**
      * (ADR-046): la funcion toma las filas `FOR UPDATE` ya dentro, y el asiento
@@ -540,9 +559,10 @@ final readonly class ApplyRetention
      * asiento falla, el lote entero se deshace: no queda una cuenta minimizada
      * sin su constancia.
      *
+     * @param  list<int>  $candidates
      * @return list<RetentionTally>
      */
-    private function anonymizeManagementAccounts(RetentionRunCommand $command, RetentionReport $plan): array
+    private function anonymizeManagementAccounts(RetentionRunCommand $command, RetentionReport $plan, array $candidates): array
     {
         $cutoff = $plan->managementAccountCutoff;
 
@@ -550,23 +570,18 @@ final readonly class ApplyRetention
             return [];
         }
 
-        // Nada que minimizar: no se le pide nada a la funcion, que calcula su
-        // corte con el reloj de la base de datos. Se vuelve a contar aqui, y no
-        // con el recuento del plan, porque la suelta de particiones de arriba
-        // puede haber liberado cuentas.
-        if ($this->managementAccounts->inspect($cutoff)->isEmpty()) {
-            return [new RetentionTally(scope: RetentionScope::ManagementAccounts, dataset: 'users', rows: 0)];
-        }
-
         $total = 0;
+        $size = min(ManagementAccountArchive::MAX_BATCH, max(1, $command->batchSize));
 
-        do {
+        // Sin candidatas no se le pide nada a la funcion, que calcula su corte
+        // con el reloj de la base de datos.
+        foreach (array_chunk($candidates, $size) as $only) {
             $this->assertResponsible($command);
 
             /** @var list<AnonymizedManagementAccount> $batch */
             $batch = $this->connection->transaction(fn (): array => $this->ledgerWrite->withChainLock(
-                function () use ($command, $plan, $cutoff): array {
-                    $accounts = $this->managementAccounts->anonymize($cutoff, $command->batchSize);
+                function () use ($command, $plan, $cutoff, $size, $only): array {
+                    $accounts = $this->managementAccounts->anonymize($cutoff, $size, $only);
 
                     foreach ($accounts as $account) {
                         $this->recordManagementAccountAnonymized($command, $plan, $cutoff, $account);
@@ -577,7 +592,7 @@ final readonly class ApplyRetention
             ));
 
             $total += \count($batch);
-        } while (\count($batch) >= max(1, $command->batchSize));
+        }
 
         return [new RetentionTally(
             scope: RetentionScope::ManagementAccounts,
