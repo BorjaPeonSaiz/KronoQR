@@ -21,8 +21,14 @@ import type { Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listReportExports, REPORT_EXPORTS_QUERY_KEY } from './reportExports.api'
 
-/** Mismo intervalo que fija la decision 8 de la ficha: cada 10 s mientras haya algo pendiente. */
-export const REPORT_EXPORTS_POLL_INTERVAL_MS = 10_000
+/** Cada 3 s mientras haya algo pendiente o en curso (no hay tiempo real para esto; zona management, 120 r/m). */
+export const REPORT_EXPORTS_POLL_INTERVAL_MS = 3_000
+
+/**
+ * Exportaciones que una pantalla ya sigue y anuncia por su cuenta (barra de
+ * avance, descarga): el aviso de cabecera no las repite.
+ */
+export const trackedExports = new Set<string>()
 
 export function useReportReadyNotices(enabled: Ref<boolean>) {
   const { t } = useI18n()
@@ -61,13 +67,16 @@ export function useReportReadyNotices(enabled: Ref<boolean>) {
         return
       }
 
-      const fresh = completed.filter((uuid) => !knownCompleted?.has(uuid))
+      const unseen = completed.filter((uuid) => !knownCompleted?.has(uuid))
+
+      knownCompleted = new Set([...knownCompleted, ...unseen])
+
+      const fresh = unseen.filter((uuid) => !trackedExports.has(uuid))
 
       if (fresh.length === 0) {
         return
       }
 
-      knownCompleted = new Set([...knownCompleted, ...fresh])
       readyUuids.value = [...readyUuids.value, ...fresh]
       announce(
         t(

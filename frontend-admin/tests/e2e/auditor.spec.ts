@@ -55,13 +55,16 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
       await page.getByLabel(/Desde/).fill('2026-03-01')
       await page.getByLabel(/Hasta/).fill('2026-03-31')
 
+      // Toda la plantilla se genera en segundo plano (14.4): primero el avance y,
+      // al terminar, la descarga con un enlace nuevo.
+      await page.getByRole('button', { name: 'Generar y descargar' }).click()
+      await expect(page.getByTestId('export-job')).toBeVisible()
+
       const download = page.waitForEvent('download')
 
-      await page.getByRole('button', { name: 'Generar y descargar' }).click()
+      await page.getByTestId('export-job-download').click()
 
-      expect((await download).suggestedFilename()).toBe(
-        'registro-horario-2026-03-01_2026-03-31.csv',
-      )
+      expect((await download).suggestedFilename()).toMatch(/\.csv$/)
     },
   )
   test(

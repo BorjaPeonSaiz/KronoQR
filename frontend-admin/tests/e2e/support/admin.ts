@@ -2186,6 +2186,8 @@ export async function stubManagementApi(
    */
   const reportExportDownloadTokens = new Map<string, string>()
   let reportExportTokenSequence = 0
+  /** Las exportaciones que el panel ha cancelado (`POST /reports/exports/{uuid}/cancel`). */
+  const cancelledReportExports = new Set<string>()
 
   /** El estado de cada fila EN ESTE INSTANTE: pending -> running -> completed. */
   function currentReportExports(): ReportExport[] {
@@ -2198,6 +2200,10 @@ export async function stubManagementApi(
         return row
       }
 
+      if (cancelledReportExports.has(row.uuid)) {
+        return { ...row, status: 'cancelled', cancelled_at: row.requested_at, progress: null }
+      }
+
       const elapsedMs = now - createdAt
 
       if (elapsedMs < 300) {
@@ -2205,7 +2211,13 @@ export async function stubManagementApi(
       }
 
       if (elapsedMs < 800) {
-        return { ...row, status: 'running', started_at: row.requested_at }
+        return {
+          ...row,
+          status: 'running',
+          started_at: row.requested_at,
+          // Sin porcentaje: la barra es indeterminada, como en todo lo que no es la exportacion legal.
+          progress: { stage: 'writing', percent: null, updated_at: row.requested_at },
+        }
       }
 
       return {
@@ -2772,6 +2784,31 @@ export async function stubManagementApi(
       // la fila esta `completed`, MINTA un enlace de descarga nuevo que
       // invalida el anterior (decision 3 de la ficha, ADR-041). Va ANTES del
       // `switch`: lleva un `uuid` dinamico en la ruta.
+      const reportExportCancelMatch = /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)\/cancel$/.exec(
+        url.pathname,
+      )
+
+      if (method === 'POST' && reportExportCancelMatch !== null) {
+        const target = currentReportExports().find(
+          (candidate) => candidate.uuid === reportExportCancelMatch[1],
+        )
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Exportación no encontrada')
+
+          return
+        }
+
+        if (target.status === 'pending' || target.status === 'running') {
+          cancelledReportExports.add(target.uuid)
+        }
+
+        const after = currentReportExports().find((candidate) => candidate.uuid === target.uuid)
+
+        await json(route, 200, { data: { ...after, download: null } })
+        return
+      }
+
       const reportExportStatusMatch = /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)$/.exec(
         url.pathname,
       )
@@ -4833,7 +4870,7 @@ export async function stubManagementApi(
           return
         case 'POST /api/v1/reports/exports': {
           const payload = request.postDataJSON() as {
-            kind?: 'period' | 'payroll'
+            kind?: ReportExport['kind']
             format?: 'csv' | 'xlsx' | 'pdf'
             from?: string
             to?: string
@@ -4867,7 +4904,7 @@ export async function stubManagementApi(
           const uuid = `0199f7b1-${String(reportExports.length).padStart(4, '0')}-7c3d-9e4f-5a6b7c8d9e02`
           const created: ReportExport = {
             uuid,
-            kind: payload.kind === 'payroll' ? 'payroll' : 'period',
+            kind: payload.kind ?? 'period',
             format: payload.format ?? 'csv',
             status: 'pending',
             parameters: {

@@ -38,8 +38,9 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getSite } from '@/shared/api/organisation.api'
-import type { ReportExport } from '@/shared/api/types'
+import type { ReportExport, ReportExportCollection } from '@/shared/api/types'
 import {
+  cancelReportExport,
   downloadReportExportFile,
   listReportExports,
   REPORT_EXPORTS_QUERY_KEY,
@@ -132,6 +133,35 @@ function rowCountLabel(row: ReportExport): string {
 
 function periodLabel(row: ReportExport): string {
   return t('reportExports.list.period', { from: row.parameters.from, to: row.parameters.to })
+}
+
+// --- Cancelar una exportacion pending/running ----------------------------------
+
+const cancellingUuid = ref<string | null>(null)
+
+async function cancel(row: ReportExport): Promise<void> {
+  cancellingUuid.value = row.uuid
+  downloadError.value = null
+
+  try {
+    const updated = await cancelReportExport(row.uuid)
+
+    queryClient.setQueryData<ReportExportCollection>(QUERY_KEY, (previous) => ({
+      data: (previous?.data ?? []).map((other) => (other.uuid === updated.uuid ? updated : other)),
+    }))
+    announce(t('reportExports.job.announce.cancelled'))
+  } catch (failure) {
+    downloadError.value = failure
+  } finally {
+    cancellingUuid.value = null
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+  }
+}
+
+function stageText(row: ReportExport): string {
+  return row.progress === null || row.progress === undefined
+    ? t('reportExports.job.running')
+    : t(`reportExports.job.stage.${row.progress.stage}`)
 }
 
 // --- Descargar una exportacion completada ------------------------------------
@@ -238,6 +268,34 @@ async function download(row: ReportExport): Promise<void> {
                 >
                   {{ t(`reportExports.status.${row.status}`) }}
                 </span>
+                <div v-if="row.status === 'running'" class="mt-1 text-sm text-kq-text-muted">
+                  <p :data-test="`stage-${row.uuid}`">{{ stageText(row) }}</p>
+                  <div
+                    role="progressbar"
+                    :aria-label="t('reportExports.job.progressLabel')"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="row.progress?.percent ?? undefined"
+                    :aria-valuetext="
+                      row.progress?.percent == null ? stageText(row) : `${row.progress.percent} %`
+                    "
+                    class="mt-1 h-2 w-32 overflow-hidden rounded-full bg-kq-surface-alt"
+                    :data-test="`progress-${row.uuid}`"
+                  >
+                    <div
+                      class="h-full rounded-full bg-kq-primary-strong"
+                      :class="row.progress?.percent == null ? 'w-1/3 animate-pulse' : ''"
+                      :style="
+                        row.progress?.percent == null
+                          ? undefined
+                          : { width: `${row.progress.percent}%` }
+                      "
+                    ></div>
+                  </div>
+                </div>
+                <p v-if="row.status === 'cancelled'" class="mt-1 text-sm text-kq-text-muted">
+                  {{ t('reportExports.job.cancelled') }}
+                </p>
                 <p v-if="row.status === 'failed'" class="mt-1 text-sm text-kq-text-muted">
                   {{
                     t('reportExports.list.failedReason', {
@@ -269,6 +327,22 @@ async function download(row: ReportExport): Promise<void> {
                     downloadingUuid === row.uuid
                       ? t('reportExports.list.downloading')
                       : t('reportExports.list.download')
+                  }}
+                </button>
+
+                <button
+                  v-if="row.status === 'pending' || row.status === 'running'"
+                  type="button"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+                  :disabled="cancellingUuid === row.uuid"
+                  :aria-busy="cancellingUuid === row.uuid"
+                  :data-test="`cancel-${row.uuid}`"
+                  @click="cancel(row)"
+                >
+                  {{
+                    cancellingUuid === row.uuid
+                      ? t('reportExports.job.cancelling')
+                      : t('reportExports.job.cancel')
                   }}
                 </button>
 

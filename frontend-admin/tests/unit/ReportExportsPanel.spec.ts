@@ -161,7 +161,7 @@ describe('ReportExportsPanel', () => {
     expect(criteria.text()).toContain('Otro criterio de ejemplo.')
   })
 
-  it('sondea cada 10 s SOLO mientras hay algo pendiente o en curso', async () => {
+  it('sondea cada 3 s SOLO mientras hay algo pendiente o en curso', async () => {
     vi.useFakeTimers()
 
     let listCalls = 0
@@ -180,11 +180,63 @@ describe('ReportExportsPanel', () => {
 
     expect(listCalls).toBe(1)
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(3_000)
     expect(listCalls).toBe(2)
 
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(3_000)
     expect(listCalls).toBe(3)
+  })
+
+  it('una exportacion en curso enseña su fase y su barra, y se puede cancelar; una cancelada se ve como tal (14.4)', async () => {
+    let cancelled = false
+    let cancelCalls = 0
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/cancel': () => {
+        cancelCalls += 1
+        cancelled = true
+
+        return jsonResponse({
+          data: reportExport({
+            uuid: `${UUID}-r`,
+            status: 'cancelled',
+            cancelled_at: '2026-07-01T08:01:00.000000Z',
+          }),
+        })
+      },
+      '/reports/exports': () =>
+        jsonResponse({
+          data: [
+            reportExport({
+              uuid: `${UUID}-r`,
+              status: cancelled ? 'cancelled' : 'running',
+              kind: 'legal',
+              progress: cancelled
+                ? null
+                : { stage: 'writing', percent: 40, updated_at: '2026-07-01T08:00:30.000000Z' },
+            }),
+          ],
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.find(`[data-test="stage-${UUID}-r"]`).text()).toBe(
+      es.reportExports.job.stage.writing,
+    )
+    expect(wrapper.find(`[data-test="progress-${UUID}-r"]`).attributes('aria-valuenow')).toBe('40')
+    expect(wrapper.text()).toContain(es.reportExports.kind.legal)
+
+    await wrapper.find(`[data-test="cancel-${UUID}-r"]`).trigger('click')
+    await settle()
+
+    expect(cancelCalls).toBe(1)
+    expect(wrapper.find(`[data-test="status-${UUID}-r"]`).text()).toBe(
+      es.reportExports.status.cancelled,
+    )
+    expect(wrapper.find(`[data-test="cancel-${UUID}-r"]`).exists()).toBe(false)
+    expect(wrapper.text()).toContain(es.reportExports.job.cancelled)
   })
 
   it('sin nada pendiente ni en curso, no vuelve a sondear', async () => {

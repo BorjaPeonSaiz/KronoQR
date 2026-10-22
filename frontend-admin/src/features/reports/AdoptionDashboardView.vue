@@ -50,7 +50,10 @@ import {
   isAdoptionReportTooLarge,
   type AdoptionReportQuery,
 } from './adoptionReport.api'
+import { DEFERRED_FROM_DAYS } from './deferral'
 import PdfBusyNotice from './PdfBusyNotice.vue'
+import ReportExportJobStatus from './ReportExportJobStatus.vue'
+import { isActiveExport, useReportExportJob } from './useReportExportJob'
 
 const FORMATS: readonly AdoptionExportFormat[] = ['csv', 'xlsx', 'pdf']
 
@@ -402,10 +405,41 @@ const downloadError = ref<unknown>(null)
 const pdfBusy = ref(false)
 const pdfBusyRetryAfter = ref<number | null>(null)
 
+// Un periodo de mas de un mes se exporta en segundo plano, con barra de avance y
+// cancelacion (RC2, V5-PA-4); uno corto sigue siendo al momento. El cuadro
+// siempre es de toda la plantilla, asi que lo que decide es la duracion.
+const {
+  job,
+  alreadyInProgress,
+  requesting: jobRequesting,
+  cancelling,
+  downloading: jobDownloading,
+  error: jobError,
+  start,
+  cancel,
+  download: downloadJob,
+  dismiss,
+} = useReportExportJob()
+
+const jobBusy = computed(
+  () => jobRequesting.value || (job.value !== null && isActiveExport(job.value)),
+)
+
 async function download(format: AdoptionExportFormat): Promise<void> {
   const query = generatedQuery.value
 
-  if (query === null || downloading.value !== null) {
+  if (query === null || downloading.value !== null || jobBusy.value) {
+    return
+  }
+
+  const period = report.value?.meta.period
+
+  if (period !== undefined && period.days >= DEFERRED_FROM_DAYS) {
+    dismiss()
+    pdfBusy.value = false
+    downloadError.value = null
+    await start({ kind: 'adoption', format, from: period.from, to: period.to })
+
     return
   }
 
@@ -704,7 +738,7 @@ const fieldClass =
             :key="format"
             type="button"
             class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-            :disabled="downloading !== null"
+            :disabled="downloading !== null || jobBusy"
             :data-test="`export-${format}`"
             @click="download(format)"
           >
@@ -716,6 +750,20 @@ const fieldClass =
         </section>
 
         <ErrorNotice v-if="downloadError !== null" :error="downloadError" class="mt-3" />
+        <ErrorNotice v-if="jobError !== null" :error="jobError" class="mt-3" />
+
+        <ReportExportJobStatus
+          v-if="job !== null"
+          class="mt-3"
+          :job="job"
+          :already-in-progress="alreadyInProgress"
+          :cancelling="cancelling"
+          :downloading="jobDownloading"
+          :can-open-reports="true"
+          @cancel="cancel"
+          @download="downloadJob"
+          @dismiss="dismiss"
+        />
 
         <PdfBusyNotice
           v-if="pdfBusy"

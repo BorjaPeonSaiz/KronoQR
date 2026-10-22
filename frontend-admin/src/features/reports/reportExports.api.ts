@@ -89,19 +89,63 @@ function isReportExportInProgress(problem: unknown): problem is ReportExportInPr
  */
 export async function requestReportExport(
   input: RequestReportExportInput,
-): Promise<ReportExportResource> {
+): Promise<RequestedReportExport> {
   try {
-    return await requestJson<ReportExportResource>('/api/v1/reports/exports', {
+    const created = await requestJson<ReportExportResource>('/api/v1/reports/exports', {
       method: 'POST',
       body: toRequestBody(input),
     })
+
+    return { data: created.data, alreadyInProgress: false }
   } catch (failure) {
     if (
       isApiError(failure) &&
       failure.status === 409 &&
       isReportExportInProgress(failure.problem)
     ) {
-      return { data: failure.problem.export }
+      return { data: failure.problem.export, alreadyInProgress: true }
+    }
+
+    throw failure
+  }
+}
+
+/** La fila de la exportacion y si ya habia otra en curso (`409`): la pantalla enlaza a la existente en vez de crear una. */
+export interface RequestedReportExport {
+  data: ReportExport
+  alreadyInProgress: boolean
+}
+
+/**
+ * `409 report-export-not-cancellable`: la exportacion ya termino (o fallo) y no hay
+ * nada que cancelar. Lleva la fila en `export` para pintarla como esta.
+ */
+function isNotCancellable(problem: unknown): problem is { export: ReportExport } {
+  return (
+    typeof problem === 'object' &&
+    problem !== null &&
+    (problem as { type?: unknown }).type === 'urn:kronoqr:problem:report-export-not-cancellable' &&
+    typeof (problem as { export?: unknown }).export === 'object'
+  )
+}
+
+/**
+ * Cancela una exportacion `pending` o `running` (`POST /reports/exports/{uuid}/cancel`).
+ * Idempotente en el servidor (200 con la misma fila si ya estaba cancelada). Si ya
+ * habia terminado (409), devuelve la fila tal como esta: cancelar lo ya hecho no es
+ * un fallo que explicar, es una pantalla que se ha quedado vieja.
+ */
+export async function cancelReportExport(uuid: string): Promise<ReportExport> {
+  try {
+    const response = await requestJson<ReportExportResource>(
+      `/api/v1/reports/exports/${uuid}/cancel`,
+      { method: 'POST' },
+    )
+
+    return response.data
+  } catch (failure) {
+    if (isApiError(failure) && failure.status === 409 && isNotCancellable(failure.problem)) {
+      return failure.problem.export
     }
 
     throw failure

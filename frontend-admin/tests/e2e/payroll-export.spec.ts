@@ -10,7 +10,7 @@
 // la pestaña.
 import type { Download } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { logInAsAdmin, logInAsManager, stubManagementApi } from './support/admin'
+import { EMPLOYEE_UUID, logInAsAdmin, logInAsManager, stubManagementApi } from './support/admin'
 import { confirmChanges } from './support/confirm'
 
 /** El texto del fichero descargado, sin volcarlo a disco. */
@@ -58,8 +58,11 @@ test(
 
     // 1) El estado de serie: separador punto y coma, etiqueta de fábrica.
     await page.getByRole('link', { name: 'Nómina', exact: true }).click()
-    await page.getByLabel('Desde').fill('2026-01-01')
-    await page.getByLabel('Hasta').fill('2026-06-30')
+    // Una persona en un periodo corto sigue siendo al momento; toda la plantilla o
+    // mas de un mes se genera en segundo plano (14.4).
+    await page.getByLabel('Desde').fill('2026-06-01')
+    await page.getByLabel('Hasta').fill('2026-06-15')
+    await page.locator('#payroll-employee').fill(EMPLOYEE_UUID)
 
     const firstDownload = page.waitForEvent('download')
     await page.getByTestId('payroll-download').click()
@@ -101,8 +104,11 @@ test(
       'Horas trabajadas (personalizado)',
     )
 
-    await page.getByLabel('Desde').fill('2026-01-01')
-    await page.getByLabel('Hasta').fill('2026-06-30')
+    // Una persona en un periodo corto sigue siendo al momento; toda la plantilla o
+    // mas de un mes se genera en segundo plano (14.4).
+    await page.getByLabel('Desde').fill('2026-06-01')
+    await page.getByLabel('Hasta').fill('2026-06-15')
+    await page.locator('#payroll-employee').fill(EMPLOYEE_UUID)
 
     const secondDownload = page.waitForEvent('download')
     await page.getByTestId('payroll-download').click()

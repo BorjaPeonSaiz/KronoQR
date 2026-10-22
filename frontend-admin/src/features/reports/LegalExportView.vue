@@ -27,10 +27,32 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { REPORTS_MANAGE } from '@/features/auth/abilities'
+import { useSessionStore } from '@/features/auth/session.store'
+import { shouldDeferExport } from './deferral'
 import LegalExportEmployeePicker from './LegalExportEmployeePicker.vue'
 import { downloadLegalExport, type LegalExportTally } from './legalExport.api'
+import ReportExportJobStatus from './ReportExportJobStatus.vue'
+import { isActiveExport, useReportExportJob } from './useReportExportJob'
 
 const { t } = useI18n()
+const session = useSessionStore()
+
+// Toda la plantilla, o mas de un mes, se genera en segundo plano con barra de
+// avance y cancelacion (RC2, V5-PA-4); una persona en un periodo corto sigue siendo
+// al momento. El endpoint sincrono se mantiene para ese caso.
+const {
+  job,
+  alreadyInProgress,
+  requesting,
+  cancelling,
+  downloading: jobDownloading,
+  error: jobError,
+  start,
+  cancel,
+  download: downloadJob,
+  dismiss,
+} = useReportExportJob()
 
 const from = ref('')
 const to = ref('')
@@ -56,6 +78,8 @@ const canSubmit = computed(
     to.value !== '' &&
     !invertedPeriod.value &&
     !running.value &&
+    !requesting.value &&
+    !(job.value !== null && isActiveExport(job.value)) &&
     (scope.value === 'all' || employeeUuid.value !== ''),
 )
 
@@ -70,9 +94,25 @@ async function submit(): Promise<void> {
     return
   }
 
-  running.value = true
   error.value = null
   lastTally.value = null
+
+  if (
+    shouldDeferExport({ from: from.value, to: to.value, wholeWorkforce: scope.value === 'all' })
+  ) {
+    dismiss()
+    await start({
+      kind: 'legal',
+      format: 'csv',
+      from: from.value,
+      to: to.value,
+      ...(scope.value === 'one' ? { employeeUuid: employeeUuid.value } : {}),
+    })
+
+    return
+  }
+
+  running.value = true
 
   try {
     const exported = await downloadLegalExport({
@@ -183,10 +223,26 @@ async function submit(): Promise<void> {
           {{ t('reports.legalExport.submit') }}
         </button>
         <p v-if="running" class="text-kq-text-muted">{{ t('reports.legalExport.running') }}</p>
+        <p v-if="scope === 'all'" class="text-sm text-kq-text-muted">
+          {{ t('reportExports.job.deferred.legal') }}
+        </p>
       </div>
     </form>
 
     <ErrorNotice v-if="error !== null" :error="error" />
+    <ErrorNotice v-if="jobError !== null" :error="jobError" data-test="export-job-error" />
+
+    <ReportExportJobStatus
+      v-if="job !== null"
+      :job="job"
+      :already-in-progress="alreadyInProgress"
+      :cancelling="cancelling"
+      :downloading="jobDownloading"
+      :can-open-reports="session.can(REPORTS_MANAGE)"
+      @cancel="cancel"
+      @download="downloadJob"
+      @dismiss="dismiss"
+    />
 
     <p
       v-if="lastTally !== null"
