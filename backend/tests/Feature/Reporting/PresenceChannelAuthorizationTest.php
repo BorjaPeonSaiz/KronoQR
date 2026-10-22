@@ -328,3 +328,31 @@ it('solo atiende POST: el GET que registraba el framework ya no existe', functio
     Api::as($token)->get('/api/v1/broadcasting/auth?socket_id=1234.5678&channel_name=private-presence.all&callback=x')
         ->assertStatus(405);
 })->group('RF-PA-01', 'RS-04');
+
+/*
+ * SOLO LOS DOS CANALES QUE EXISTEN, ESCRITOS TAL CUAL (bloque 12 de la 2.3.0).
+ * El difusor de Pusher normaliza `private-encrypted-` y `presence-` antes de
+ * buscar el callback, y el patron de `Broadcast::channel()` no escapa el punto:
+ * los tres nombres de abajo llegaban al callback de `presence.all` y se le
+ * firmaban a RRHH. Ahora son el mismo `403` que un canal ajeno, sin pasar por el
+ * difusor y sin asiento de divulgacion.
+ */
+it('niega con el 403 de un canal ajeno cualquier nombre que no sea uno de los dos canales', function (string $canal): void {
+    escenarioDeCanales();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+    $ajeno = autorizarCanal(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO)), 'presence.all');
+    Auth::forgetGuards();
+    $asientos = DB::table('audit_log')->count();
+
+    $respuesta = Api::as($token)->post('/api/v1/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => $canal]);
+
+    $respuesta->assertStatus(403)->assertValidResponse(403);
+
+    expect($respuesta->json())->toBe($ajeno->json())
+        ->and(DB::table('error_events')->count())->toBe(0)
+        ->and(DB::table('audit_log')->count())->toBe($asientos);
+})->with([
+    'cifrado' => ['private-encrypted-presence.all'],
+    'presencia de Pusher' => ['presence-presence.all'],
+    'punto sin escapar' => ['private-presenceXall'],
+])->group('RF-ID-03', 'RS-04', 'RS-05');
