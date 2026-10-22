@@ -44,6 +44,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property int|null $two_factor_last_slice Franja del ultimo codigo aceptado (antirreenvio).
  * @property CarbonImmutable|null $temporary_password_expires_at Caducidad de la contrasena temporal (RF-ID-10); nulo si es propia.
  * @property Carbon|null $created_at
+ * @property string|null $anonymized_at Minimizada por retencion (ADR-060); la escribe solo la base de datos.
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */

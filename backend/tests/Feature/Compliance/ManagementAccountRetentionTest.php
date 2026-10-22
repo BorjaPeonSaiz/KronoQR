@@ -13,7 +13,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -119,6 +121,32 @@ it('la ejecucion minimiza la cuenta y deja su asiento a nombre de quien firma', 
         ->and($asiento->payload)->not->toContain('vieja@hotel.example')
         ->and($asiento->payload)->not->toContain('Persona Antigua');
 })->group('RL-11', 'RL-04', 'RS-05', 'RF-PR-03');
+
+it('el acceso con el correo de una cuenta minimizada da el mismo 401 que una cuenta inexistente', function (string $password): void {
+    $id = cuentaVencida();
+    retencionDeCuentas(false);
+
+    $correo = DB::table('users')->where('id', $id)->value('email');
+    $correo = \is_string($correo) ? $correo : '';
+
+    $minimizada = Api::guest()->post('/api/v1/auth/login', ['email' => $correo, 'password' => $password]);
+    $inexistente = Api::guest()->post('/api/v1/auth/login', ['email' => 'nadie@hotel.example', 'password' => $password]);
+
+    $cuerpo = static function (TestResponse $respuesta): mixed {
+        $json = $respuesta->json();
+        \is_array($json) && \array_key_exists('instance', $json) ? $json['instance'] = '-' : null;
+
+        return $json;
+    };
+
+    expect(str_starts_with($correo, 'anonymized+'))->toBeTrue()
+        ->and($minimizada->status())->toBe(401)
+        ->and($inexistente->status())->toBe(401)
+        ->and($cuerpo($minimizada))->toBe($cuerpo($inexistente));
+})->with([
+    'la marca que deja la minimizacion' => ['!'],
+    'una cualquiera' => ['una-contrasena-cualquiera'],
+])->group('RL-11', 'RS-03');
 
 it('si el asiento falla, no se minimiza ninguna cuenta', function (): void {
     $id = cuentaVencida();
