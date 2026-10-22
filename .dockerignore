@@ -17,6 +17,9 @@
 **/*.pem
 **/*.key
 **/*.crt
+# Credenciales de gestores de paquetes: un token de registro en una capa es una fuga.
+**/auth.json
+**/.npmrc
 infra/docker/nginx/certs/
 
 # Dependencias: las resuelve la propia imagen, con su version de PHP y de Node.
@@ -59,9 +62,10 @@ backend/pint.json
 backend/storage/
 backend/bootstrap/cache/
 dist/
-coverage/
-.phpunit.result.cache
-.phpunit.cache/
+**/coverage/
+**/.phpunit.result.cache
+**/.phpunit.cache/
+**/.deptrac.cache
 
 # Documentacion y planificacion: no forman parte de ninguna imagen.
 docs/
@@ -74,7 +78,7 @@ CLAUDE.md
 # Editor y sistema operativo
 .idea/
 .vscode/
-*.log
+**/*.log
 .DS_Store
 Thumbs.db
 

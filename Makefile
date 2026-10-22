@@ -903,6 +903,11 @@ nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /por
 # `jq` sin volver a escanear.
 TRIVY_EXIT_CODE ?= 1
 TRIVY_FORMAT    ?= table
+# Que escaner corre cada objetivo. La CI parte cada uno en dos pasos (bloque 12 de la 2.3.0):
+# `vuln` depende de avisos EXTERNOS y en ramas bloquea solo si el cambio toca lo que audita;
+# `misconfig` y `secret` no dependen de ningun aviso externo y bloquean siempre.
+TRIVY_FS_SCANNERS    ?= vuln,misconfig,secret
+TRIVY_IMAGE_SCANNERS ?= vuln,secret
 
 # LA SALIDA ESTANDAR DE ESTE OBJETIVO ES SOLO LA DE TRIVY.
 #
@@ -914,8 +919,8 @@ TRIVY_FORMAT    ?= table
 # log del job, pero no ensucia lo que se va a parsear. El aviso final, por lo
 # mismo.
 trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	@echo "[make] trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
-	@$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
+	@echo "[make] trivy fs --scanners $(TRIVY_FS_SCANNERS) --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
+	@$(TRIVY) fs --scanners $(TRIVY_FS_SCANNERS) --severity HIGH,CRITICAL --ignore-unfixed \
 	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
 	  .
@@ -957,7 +962,7 @@ trivy-image: ## Trivy sobre las imagenes ya construidas (TRIVY_IMAGES=...; bloqu
 	  }; \
 	done
 	@for imagen in $(TRIVY_IMAGES); do \
-	  $(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed \
+	  $(TRIVY_IMAGE_CMD) image --scanners $(TRIVY_IMAGE_SCANNERS) --severity HIGH,CRITICAL --ignore-unfixed \
 	    --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	    --ignorefile infra/docker/.trivyignore.yaml "$$imagen" || exit $$?; \
 	done

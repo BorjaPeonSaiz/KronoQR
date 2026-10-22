@@ -29,7 +29,7 @@ FROM php:${PHP_VERSION}-fpm-alpine@${PHP_IMAGE_DIGEST} AS base
 # install-php-extensions resuelve por si solo las dependencias de compilacion y
 # las de runtime, y borra las primeras. Es la via mas fiable de mantener la
 # imagen pequena sin dejar toolchain dentro (Trivy lo agradece).
-COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=mlocati/php-extension-installer:2@sha256:ac4b252c153a9f6de5578ff2c417790aba836bb49855543144606033eceda253 /usr/bin/install-php-extensions /usr/local/bin/
 
 # APK_INDEX_STAMP: sello que INVALIDA LA CACHE de la capa de paquetes una vez
 # al dia. Lo pone `make build-ci-images` (fecha UTC, `AAAA-MM-DD`) y no hace
@@ -169,7 +169,7 @@ CMD ["fpm"]
 FROM base AS dev
 
 USER root
-COPY --from=composer/composer:2-bin /composer /usr/local/bin/composer
+COPY --from=composer/composer:2-bin@sha256:016c41066558559142758092f7ef286d66ae113df23d49e086fdda0166dd5f01 /composer /usr/local/bin/composer
 RUN set -eux; \
   install-php-extensions xdebug; \
   # Xdebug instalado pero APAGADO: encenderlo cuesta rendimiento en cada
@@ -181,7 +181,7 @@ USER app
 FROM base AS vendor
 
 USER root
-COPY --from=composer/composer:2-bin /composer /usr/local/bin/composer
+COPY --from=composer/composer:2-bin@sha256:016c41066558559142758092f7ef286d66ae113df23d49e086fdda0166dd5f01 /composer /usr/local/bin/composer
 USER app
 
 # Requiere backend/composer.json, que crea la tarea 0.2. Hasta entonces esta

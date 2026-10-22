@@ -975,7 +975,7 @@ jobs:
             base="$(git merge-base origin/main HEAD)"
             ficheros="$(git diff --name-only "${base}" HEAD)"
             digests="$(git diff -U0 "${base}" HEAD)"
-            if grep -Eq '(^|/)(composer\.lock|package-lock\.json|images\.lock)$|(^|/)Dockerfile[^/]*$' <<<"${ficheros}"; then
+            if grep -Eq '(^|/)(composer\.lock|package-lock\.json|images\.lock)$|(^|/)Dockerfile[^/]*$|(^|/)\.dockerignore$|^infra/docker/' <<<"${ficheros}"; then
               motivo="el cambio toca un lock, un Dockerfile o images.lock"
             elif grep -Eq '^\+[^+].*@sha256:' <<<"${digests}"; then
               motivo="el cambio toca un digest"
@@ -995,7 +995,7 @@ jobs:
 
       - name: composer audit (0 vulnerabilidades)
         id: audit_php
-        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         run: make deps-audit-php
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -1004,7 +1004,7 @@ jobs:
 
       - name: npm audit del workspace (0 criticas ni altas en produccion; desarrollo informa)
         id: audit_js
-        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         run: make deps-audit-js
 
       - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)
@@ -1112,9 +1112,9 @@ jobs:
           APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
         run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
 
-      - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
+      - name: Trivy fs — vulnerabilidades de dependencias (bloqueante; en ramas, segun la puerta)
         id: trivy_fs
-        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         # BLOQUEANTE desde el 29 de agosto de 2026: el unico hallazgo que
         # tenia (DS-0002, el Dockerfile de PostgreSQL sin `USER`) se corrigio
         # en la propia imagen, no con una excepcion. El TRIVY_EXIT_CODE por
@@ -1126,7 +1126,7 @@ jobs:
         # (docs/runbooks/triaje-hallazgos-seguridad.md).
         run: |
           set +e
-          make trivy-fs TRIVY_FORMAT=json >trivy-fs.json
+          make trivy-fs TRIVY_FS_SCANNERS=vuln TRIVY_FORMAT=json >trivy-fs.json
           estado=$?
           set -e
           jq -r '
@@ -1146,9 +1146,9 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
 
-      - name: Trivy image — postgres:ci, app:ci y nginx:ci (bloqueante)
+      - name: Trivy image — vulnerabilidades de postgres:ci, app:ci y nginx:ci (bloqueante; en ramas, segun la puerta)
         id: trivy_image
-        continue-on-error: ${{ steps.gate.outputs.bloquea != 'true' }}
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         # BLOQUEANTE desde el 29 de agosto de 2026. Los 21 HIGH que tenia
         # kronoqr/postgres:ci estaban todos en usr/local/bin/gosu (Go stdlib
         # de la imagen oficial), y la imagen ya no lleva ese binario: arranca
@@ -1158,7 +1158,7 @@ jobs:
         # salida que en el paso anterior.
         run: |
           set +e
-          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
+          make trivy-image TRIVY_IMAGE_SCANNERS=vuln TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
           set -e
           jq -s -r '
@@ -1178,8 +1178,18 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
 
+      - name: Trivy fs — Dockerfiles mal configurados y secretos del repo (bloquea siempre)
+        id: trivy_fs_static
+        # Ni misconfig ni secret dependen de avisos externos: un hallazgo es del cambio, en
+        # cualquier rama. Por eso no pasan por la puerta (`gate`) de los avisos de vulnerabilidades.
+        run: make trivy-fs TRIVY_FS_SCANNERS=misconfig,secret
+
+      - name: Trivy image — secretos en postgres:ci, app:ci y nginx:ci (bloquea siempre)
+        id: trivy_image_secret
+        run: make trivy-image TRIVY_IMAGE_SCANNERS=secret TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"
+
       - name: Avisar de los controles que han fallado sin bloquear
-        if: always() && steps.gate.outputs.bloquea != 'true'
+        if: always() && steps.gate.outputs.bloquea == 'false'
         env:
           AUDIT_PHP: ${{ steps.audit_php.outcome }}
           AUDIT_JS: ${{ steps.audit_js.outcome }}

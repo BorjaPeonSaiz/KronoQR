@@ -230,19 +230,21 @@ a quien mantiene el cron. Sin runbook asociado una alerta es ruido: este es.
 | `composer audit` | bloquea **si el cambio toca lo que audita**; si no, informa | bloquea | bloquea | bloquea |
 | `npm audit --omit=dev` (producción) | ídem | bloquea | bloquea | bloquea |
 | `npm audit` (desarrollo) | informa | informa | informa | informa |
-| `trivy fs` (HIGH/CRITICAL con parche) | ídem | bloquea | bloquea (CI de la etiqueta) | bloquea |
-| `trivy image` postgres, app **y nginx** | ídem | bloquea | bloquea | las tres **publicadas** |
+| `trivy fs --scanners vuln` (HIGH/CRITICAL con parche) | ídem | bloquea | bloquea (CI de la etiqueta) | bloquea |
+| `trivy fs --scanners misconfig,secret` | **bloquea siempre** | bloquea | bloquea | bloquea |
+| `trivy image --scanners vuln` postgres, app **y nginx** | ídem | bloquea | bloquea | las tres **publicadas** |
+| `trivy image --scanners secret` | **bloquea siempre** | bloquea | bloquea | las tres **publicadas** |
 | gitleaks (`SCOPE=head`) | bloquea | bloquea | bloquea | histórico completo, nocturno (`secrets-history`) |
 | El commit etiquetado es ancestro de `main` | — | — | bloquea (`resolver`, V6-DV-6) | — |
 
 **«Toca lo que audita»** lo decide el paso `gate` del job `security` de `ci.yml`
 con `git diff` contra `git merge-base origin/main HEAD`: cualquier
 `composer.lock`, `package-lock.json` o `images.lock`, cualquier `Dockerfile*`,
-o una línea añadida con `:` (un digest). Con eso, quien introduce una
+cualquier `.dockerignore` o fichero bajo `infra/docker/`, o una línea añadida con `@sha256:` (un digest). Con eso, quien introduce una
 dependencia o una base vulnerable no puede fusionar, y quien cambia un literal
 de la interfaz no se entera de un aviso ajeno. **Si no bloquea, el paso corre
 igual**: queda con `continue-on-error`, y un paso final emite un `::warning`
-por cada control que ha fallado, además del `::notice` del `gate` con el motivo.
+por cada control que ha fallado, además del `::notice` del `gate` con el motivo. **Los escáneres de secretos y de mala configuración no dependen de ningún aviso externo** (un hallazgo es del cambio), así que no pasan por la puerta: bloquean en toda rama. Y si la puerta no llega a decidir (salida vacía), bloquea: solo el valor explícito `false` relaja.
 `main`, la etiqueta y `release.yml` bloquean siempre: una versión publicada
 nunca sale con un HIGH/CRITICAL corregible. El aviso nuevo lo da la auditoría
 semanal, no el `push`.
