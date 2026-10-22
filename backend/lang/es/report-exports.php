@@ -21,6 +21,8 @@ return [
         'subject' => 'Tu informe ya se puede descargar',
         'greeting' => 'Hola, :name:',
         'intro' => 'El informe de horas del :from al :to ya esta generado, en formato :format.',
+        'intro_legal' => 'La exportacion para la Inspeccion de Trabajo del :from al :to ya esta generada, en formato :format.',
+        'intro_adoption' => 'El cuadro de impacto y adopcion del :from al :to ya esta generado, en formato :format.',
         'rows' => 'Lleva :rows filas de datos.',
         'expires' => 'Podras descargarlo hasta el :date (hora UTC). Despues se borra solo del servidor.',
         'where' => 'Entra en el panel, apartado «Informes», y pulsa «Descargar» en la lista de exportaciones en segundo plano.',

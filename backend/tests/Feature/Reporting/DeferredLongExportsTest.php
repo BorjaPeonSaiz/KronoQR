@@ -17,12 +17,15 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportProgress;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Reporting\Infrastructure\Job\GenerateReportExportJob;
+use App\Modules\Reporting\Infrastructure\Notification\ReportExportReadyNotification;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 use App\Modules\Shared\Domain\ValueObject\LegalRecordFile;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
@@ -511,3 +514,26 @@ it('el auditor ve, consulta y cancela las suyas', function (): void {
     Api::as($token)->get('/api/v1/reports/exports/'.$suya->uuid)->assertValidResponse(200);
     Api::as($token)->post('/api/v1/reports/exports/'.$suya->uuid.'/cancel')->assertValidResponse(200);
 })->group('RF-ID-02', 'RF-IN-05', 'RQ-07');
+
+it('el aviso por correo dice que se genero la exportacion para la Inspeccion, no un informe de horas', function (): void {
+    Notification::fake();
+    Config::set('mail.default', 'smtp');
+    WorkforceFixtures::site();
+
+    $export = ReportExports::pendingFor(
+        ManagementUsers::withRole(UserRole::AUDITOR)->id,
+        kind: ReportExportKind::Legal,
+        parameters: ReportExportParameters::span('2026-03-01', '2026-03-31'),
+    );
+
+    app(GenerateReportExportHandler::class)->handle($export->uuid);
+
+    Notification::assertSentOnDemand(
+        ReportExportReadyNotification::class,
+        static function (ReportExportReadyNotification $aviso, array $canales, object $destinatario): bool {
+            $lineas = implode(' ', $aviso->toMail($destinatario)->introLines);
+
+            return str_contains($lineas, 'Inspeccion') && ! str_contains($lineas, 'informe de horas');
+        },
+    );
+})->group('RF-IN-05', 'RF-IN-06');

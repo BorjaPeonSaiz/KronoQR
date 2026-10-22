@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Infrastructure\Notification;
 
 use App\Modules\Reporting\Application\Port\ReportExportRecipient;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
@@ -73,7 +74,13 @@ final class ReportExportReadyNotification extends Notification
         return (new MailMessage)
             ->subject(Lang::get('report-exports.mail.subject', [], $locale))
             ->greeting(Lang::get('report-exports.mail.greeting', ['name' => $this->recipient->name], $locale))
-            ->line(Lang::get('report-exports.mail.intro', [
+            // Que se genero, con su nombre: «el informe de horas» de una
+            // exportacion para la Inspeccion seria una frase falsa (V5-PA-4).
+            ->line(Lang::get(match ($this->export->kind) {
+                ReportExportKind::Legal => 'report-exports.mail.intro_legal',
+                ReportExportKind::Adoption => 'report-exports.mail.intro_adoption',
+                ReportExportKind::Period, ReportExportKind::Payroll => 'report-exports.mail.intro',
+            }, [
                 'from' => $this->export->parameters->from,
                 'to' => $this->export->parameters->to,
                 'format' => strtoupper($this->export->format),
