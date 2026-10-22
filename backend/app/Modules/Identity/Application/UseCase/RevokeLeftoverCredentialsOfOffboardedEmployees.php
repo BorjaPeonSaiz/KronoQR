@@ -11,6 +11,7 @@ use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use Throwable;
 
 /**
  * **Las tarjetas que se quedaron activas en bajas anteriores a la 2.2.0**
@@ -59,7 +60,10 @@ final readonly class RevokeLeftoverCredentialsOfOffboardedEmployees
     ) {}
 
     /**
-     * @return array{employees: int, credentials: int} personas de baja tratadas y tarjetas revocadas
+     * Personas de baja tratadas, tarjetas revocadas y personas cuya revocacion
+     * fallo, con su excepcion.
+     *
+     * @return array{employees: int, credentials: int, failed: int, failures: list<Throwable>}
      */
     public function handle(): array
     {
@@ -69,12 +73,13 @@ final readonly class RevokeLeftoverCredentialsOfOffboardedEmployees
             static fn (array $result): array => [
                 'employee_count' => $result['employees'],
                 'revoked_count' => $result['credentials'],
+                'failed_count' => $result['failed'],
             ],
         );
     }
 
     /**
-     * @return array{employees: int, credentials: int}
+     * @return array{employees: int, credentials: int, failed: int, failures: list<Throwable>}
      */
     private function sweep(): array
     {
@@ -82,6 +87,7 @@ final readonly class RevokeLeftoverCredentialsOfOffboardedEmployees
         $statuses = $holders === [] ? [] : $this->employmentStatus->statusesOf($holders);
         $employees = 0;
         $revoked = 0;
+        $failures = [];
 
         foreach ($holders as $employeeId) {
             if (($statuses[$employeeId] ?? null) !== EmploymentStatus::TERMINATED) {
@@ -94,9 +100,19 @@ final readonly class RevokeLeftoverCredentialsOfOffboardedEmployees
                 continue;
             }
 
-            $count = $this->serialized->withChainLock(
-                fn (): int => $this->revoke->handle($employeeUuid, $this->clock->now()),
-            );
+            // Una persona que falla no detiene a las demas: su transaccion se
+            // revierte entera y la excepcion vuelve a quien llama, que la
+            // notifica (`report()`, con el saneado de `error_events`). Repetir
+            // la orden la vuelve a intentar.
+            try {
+                $count = $this->serialized->withChainLock(
+                    fn (): int => $this->revoke->handle($employeeUuid, $this->clock->now()),
+                );
+            } catch (Throwable $exception) {
+                $failures[] = $exception;
+
+                continue;
+            }
 
             if ($count > 0) {
                 $employees++;
@@ -104,6 +120,6 @@ final readonly class RevokeLeftoverCredentialsOfOffboardedEmployees
             }
         }
 
-        return ['employees' => $employees, 'credentials' => $revoked];
+        return ['employees' => $employees, 'credentials' => $revoked, 'failed' => \count($failures), 'failures' => $failures];
     }
 }

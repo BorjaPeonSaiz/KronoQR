@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePersonnelRecordArchive;
 use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmployee;
+use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Domain\ValueObject\PortalSession;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -62,7 +64,7 @@ it('revoca las tarjetas activas de las bajas con el motivo de la baja, la fecha 
     $escenario = bajasConTarjeta();
 
     expect(revocarBajas())->toBe(0)
-        ->and(trim(Artisan::output()))->toBe('revoked_credentials=2 employees=1');
+        ->and(trim(Artisan::output()))->toBe('revoked_credentials=2 employees=1 failed=0');
 
     $tarjetas = DB::table('credentials')->where('employee_id', $escenario['bajaId'])->get();
     $revocadasHoy = $tarjetas->where('revoked_reason', RevokeCredentialsOfOffboardedEmployee::REASON);
@@ -98,7 +100,7 @@ it('es idempotente: la segunda ejecucion no revoca ni asienta nada', function ()
     $asientos = DB::table('audit_log')->count();
 
     expect(revocarBajas())->toBe(0)
-        ->and(trim(Artisan::output()))->toBe('revoked_credentials=0 employees=0')
+        ->and(trim(Artisan::output()))->toBe('revoked_credentials=0 employees=0 failed=0')
         ->and(DB::table('audit_log')->count())->toBe($asientos);
 })->group('RN-14', 'RL-04');
 
@@ -136,3 +138,43 @@ it('revoca tambien la tarjeta activa de una ficha ya minimizada sin chocar con s
         ->and(DB::table('credentials')->where('employee_id', $escenario['bajaId'])->whereNull('revoked_at')->count())->toBe(0)
         ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
 })->group('RN-14', 'RL-11', 'RL-04');
+
+it('una persona que falla no impide revocar a las demas, y la orden sale con 1 sin el mensaje', function (): void {
+    $escenario = bajasConTarjeta();
+    $otra = WorkforceFixtures::employee($escenario['site'], null, 'terminated');
+    $otraId = AttendanceFixtures::employeeIdOf($otra);
+    Credentials::issueFor($otraId);
+
+    // El cierre del portal de la primera baja falla dentro de su transaccion:
+    // sus dos tarjetas tienen que quedar como estaban, sin asiento.
+    $real = app(PortalSessionIssuer::class);
+    app()->instance(PortalSessionIssuer::class, new readonly class($real, $escenario['bajaUuid']) implements PortalSessionIssuer
+    {
+        public function __construct(private PortalSessionIssuer $real, private string $falla) {}
+
+        public function issueFor(string $employeeUuid, string $sessionName, array $abilities, DateTimeImmutable $expiresAt): ?PortalSession
+        {
+            return $this->real->issueFor($employeeUuid, $sessionName, $abilities, $expiresAt);
+        }
+
+        public function revokeAllFor(string $employeeUuid): int
+        {
+            if ($employeeUuid === $this->falla) {
+                throw new RuntimeException('Fallo de prueba con el uuid '.$employeeUuid);
+            }
+
+            return $this->real->revokeAllFor($employeeUuid);
+        }
+    });
+
+    expect(revocarBajas())->toBe(1);
+    $salida = Artisan::output();
+
+    expect($salida)->toContain('revoked_credentials=1 employees=1 failed=1')
+        ->and($salida)->toContain('RuntimeException')
+        ->and($salida)->not->toContain($escenario['bajaUuid'])
+        ->and(DB::table('credentials')->where('employee_id', $otraId)->whereNull('revoked_at')->count())->toBe(0)
+        ->and(DB::table('credentials')->where('employee_id', $escenario['bajaId'])->whereNull('revoked_at')->count())->toBe(2)
+        ->and(DB::table('audit_log')->where('action', 'credential.revoked')->count())->toBe(1)
+        ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
+})->group('RN-14', 'RL-04');
