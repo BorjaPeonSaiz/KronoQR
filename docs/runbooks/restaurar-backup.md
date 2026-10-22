@@ -38,6 +38,7 @@ datos** por disco lleno.
 | `backup.sh verify` | MAC (autenticidad) + `.sha256` + descifrado + `pg_restore --list` | — |
 | `restore.sh` | Restauración con intercambio de bases y vuelta atrás | `BACKUP_PATH/reports/` |
 | `restore-drill.sh` | Simulacro en contenedor limpio, trimestral | `BACKUP_PATH/reports/` |
+| `schedule-drill.sh` | Programa el simulacro trimestral en el cron del servidor (`install`, `status`, `remove`) | `/etc/cron.d/kronoqr-restore-drill` |
 
 **Objetivos que sostiene** (doc 01 §6.2): **RPO ≤ 15 min** — volcado diario +
 copia física semanal + WAL archivado con `archive_timeout=900`. **RTO ≤ 4 h** —
@@ -355,6 +356,23 @@ docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh prune
 El dato real de tu instalación está en
 `kronoqr_backup_restore_drill_duration_seconds`, que publica el simulacro
 trimestral. Si crece, el RTO se está estrechando.
+
+**Medida con volumen y umbrales (CI).** El simulacro de la integración continua
+restaura apenas 8 700 filas; no dice nada del RTO. Por eso el fabricante mide
+cada lunes (`backup-drill.yml`, trabajo `volumen`) una base de **3,65 millones
+de filas** —500 empleados durante cuatro años, con índices y claves ajenas— y
+falla si se pasa de estos umbrales, escritos en el propio workflow
+(`RESTORE_VOLUME_MAX_SECONDS`, `BACKUP_VOLUME_MAX_SECONDS`):
+
+| Medida | Umbral | De dónde sale |
+| --- | --- | --- |
+| Restauración en contenedor limpio | **600 s** | Mitad de lo alto de la franja «Restauración e intercambio de bases» de la tabla de arriba (5–20 min): deja margen para un servidor más lento que el runner. Referencia: 61 s con la misma cantidad de filas en la 2.2.0 |
+| Copia lógica (`backup.sh run --mode dump`) | **120 s** | Es una parte de la ventana de 503 de `update.sh`, cuyo tope en la CI es de 180 s |
+
+Si el trabajo se pone en rojo, **el RTO de 4 h (RNF-D-02) se está estrechando**:
+el resumen del run trae las dos medidas y el tamaño de la base. No subas el
+umbral para que pase: averigua qué ha cambiado (índices nuevos, una versión de
+PostgreSQL, el runner) y decide con el responsable del producto.
 
 ### 6.2 Procedimiento
 
@@ -680,9 +698,29 @@ vuelve atrás.
 
 **Una copia no verificada no es una copia, y una copia que nunca se ha
 restaurado no está verificada del todo.** El simulacro levanta un contenedor
-limpio, restaura la última copia y comprueba dos cosas que ninguna verificación
+limpio, restaura la última copia y comprueba tres cosas que ninguna verificación
 barata demuestra: que **todas** las claves ajenas se satisfacen con los datos
-restaurados, y que los **conteos por tabla** cuadran con el manifiesto.
+restaurados, que los **conteos por tabla** cuadran con el manifiesto y —desde
+la 2.3.0— que **la cadena de hash de `audit_log` encaja** sobre la base
+restaurada.
+
+**La cadena de auditoría (V5-DV-02).** «Cero es cero»: lo primero que hay que
+saber de una base restaurada es si su registro de auditoría sigue íntegro. El
+simulacro ejecuta sobre ella el mismo comando que la verificación diaria
+(`compliance:verify-audit-chain`, RS-07), con la imagen de la aplicación del
+paquete (la misma que está en marcha: por digest del `images.lock`, o por
+`IMAGE_TAG`), en un proceso aparte que se une a la red —cerrada— del contenedor
+limpio. Una fila alterada o ausente hace fallar el simulacro con `6`; el informe
+(`BACKUP_PATH/reports/drill-<marca>.log`) nombra el identificador de la fila y
+la huella esperada y la encontrada, nunca datos personales. Si falla: esa copia
+no es de fiar para el registro legal; sigue
+[`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) y repite con la copia
+anterior (`--file`). Notas: la imagen tiene que estar descargada (si no, el
+simulacro se niega **antes** de restaurar y dice cuál bajar, o indica otra con
+`--php-image`); `--skip-audit-chain` existe solo para datos sintéticos sin el
+esquema de la aplicación (la CI) y deja «OMITIDA» en el informe; en `--mode pitr`
+no se verifica (la base recuperada solo escucha en su socket) y el informe lo
+dice: la verifica el simulacro por defecto.
 
 ```bash
 # En el servidor del cliente (necesita Docker, que ya está), desde el directorio
@@ -706,14 +744,40 @@ No toca la instalación: ni la base de producción, ni los contenedores del
 producto, ni las copias, que se abren en lectura. El volcado descifrado vive y
 muere dentro del contenedor del simulacro; nunca toca el disco del servidor.
 
-**Automatizarlo, que es lo que exige RNF-D-05.** Entrada de cron en el servidor
-del cliente, el día 1 de cada trimestre:
+**Automatizarlo, que es lo que exige RNF-D-05 (V5-DV-04).** Una orden, en el
+directorio de la instalación:
 
-```cron
-0 4 1 1,4,7,10 * cd /opt/kronoqr-<version> && ./restore-drill.sh >> /var/log/kronoqr-drill.log 2>&1
+```bash
+sudo ./schedule-drill.sh install      # lo programa (idempotente)
+sudo ./schedule-drill.sh status       # ¿está puesto?
+sudo ./schedule-drill.sh remove       # lo retira
 ```
 
-La ruta lleva la versión porque el directorio vigente cambia con cada actualización lado a lado (`update.sh` retira el anterior): **cámbiala en el cron cada vez que actualices** ([`actualizacion-cliente.md`](actualizacion-cliente.md) §3). Si lo olvidas, el cron sigue ejecutando el script (y la imagen) de la versión anterior, y deja de probar lo que de verdad está en marcha; la alerta `SimulacroDeRestauracionCaducado` solo te lo recuerda a los 100 días.
+Escribe `/etc/cron.d/kronoqr-restore-drill` (`40 4 1 1,4,7,10 *`: día 1 de enero,
+abril, julio y octubre a las 04:40 hora del servidor, después de la copia de las 03:15 y de las
+tareas de 04:05–04:30, y lejos del cambio de turno; otra cadencia con
+`--schedule "M H D MES DS"`) y un lanzador en
+`/usr/local/sbin/kronoqr-restore-drill`. **El lanzador localiza la instalación
+vigente preguntando a Docker**, igual que `doctor.sh` y `update.sh`, así que la
+entrada de cron no lleva la versión y **no hay que tocarla al actualizar** (con
+la línea de cron manual de la 2.2.x había que cambiar la ruta en cada
+actualización, y si se olvidaba el cron seguía probando la versión retirada).
+Sale en `/var/log/kronoqr-drill.log`. Se puede probar sin esperar al trimestre:
+`sudo /usr/local/sbin/kronoqr-restore-drill`.
+
+**Qué consume y qué no.** No para ningún servicio ni toca la base de producción
+ni las copias (las abre en lectura). Levanta un contenedor aparte, sin red, y lo
+destruye: unos minutos de CPU y de disco de Docker del orden del tamaño de la
+base de datos (61 s con 3,65 M de filas). Necesita descargadas la imagen del
+simulacro (`postgres:17-alpine`, por digest) y la de la aplicación: en un
+servidor sin salida a internet, cárgalas antes con `docker load`; si falta
+alguna, el simulacro se niega sin tocar nada y el log lo dice.
+
+**Quién avisa si no corre.** `./doctor.sh` (sin Prometheus) avisa en amarillo si
+nunca ha habido un simulacro, si el último falló o si el último correcto tiene
+más de 95 días; las alertas `SimulacroDeRestauracionNuncaEjecutado` y
+`SimulacroDeRestauracionCaducado` (perfil de observabilidad) lo repiten a las
+24 h y a los 100 días.
 
 El simulacro lee el `.env` que está junto al script (el del directorio vigente, `/opt/kronoqr-<version>/.env`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
