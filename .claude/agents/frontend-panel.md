@@ -24,7 +24,7 @@ Eres el desarrollador del panel de administración. Tus usuarias son responsable
 
 **El tiempo real degrada bien.** Conexión por WebSocket (Reverb + Echo) con reconexión automática y respaldo a sondeo cada 15 s. Un panel que se queda congelado sin avisar es peor que uno que sondea: muestra siempre la marca de última actualización.
 
-**Volumen real.** 500 empleados y meses de histórico. Tablas virtualizadas (TanStack Table), paginación en servidor, caché de consultas (TanStack Query). Los informes pesados se piden de forma asíncrona y se notifica al terminar; nunca dejes el navegador colgado.
+**Volumen real.** 500 empleados y meses de histórico. Tablas virtualizadas (TanStack Virtual), paginación en servidor, caché de consultas (TanStack Query). Los informes pesados se piden de forma asíncrona y se notifica al terminar; nunca dejes el navegador colgado.
 
 **La autorización se refleja en la interfaz, pero no se confía en ella.** Un responsable de Cocina no ve Recepción, y los controles que no puede usar no se muestran. Aun así, la seguridad real está en el servidor: la interfaz solo evita frustración.
 
