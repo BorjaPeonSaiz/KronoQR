@@ -97,6 +97,7 @@ it('proyecta el peor requerimiento por debajo de la mitad del techo del trabajo 
      * `CommittedDatabase`, asi que corre cuando la tabla ya esta vacia: la
      * compacta y deja sus estadisticas al dia, con el rol propietario.
      */
+    // @phpstan-ignore method.notFound (en el cierre de `it()` Pest enlaza `$this` al TestCase de la prueba, que si tiene beforeApplicationDestroyed; la extension de PHPStan lo tipa como TestCall)
     $this->beforeApplicationDestroyed(static function (): void {
         $owner = DB::connection(config()->string('database.migrations.connection'));
 
