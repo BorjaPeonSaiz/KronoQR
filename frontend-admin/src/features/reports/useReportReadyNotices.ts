@@ -6,7 +6,7 @@
 // enteraba. Ahora lo observa el marco de la aplicacion, que esta siempre
 // montado, sobre la MISMA consulta (`REPORT_EXPORTS_QUERY_KEY`): la cache se
 // comparte con el panel y las pantallas que piden exportaciones, y el sondeo
-// de 10 s sigue encendido solo mientras haya una `pending`/`running`.
+// de 3 s sigue encendido solo mientras haya una `pending`/`running`.
 //
 // SE AVISA DE LO QUE TERMINA, NO DE LO QUE YA ESTABA TERMINADO. La primera
 // lista que llega es la linea base (hasta 20 exportaciones completadas de
@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isActiveExport } from './exportPresentation'
 import { listReportExports, REPORT_EXPORTS_QUERY_KEY } from './reportExports.api'
 
 /** Cada 3 s mientras haya algo pendiente o en curso (no hay tiempo real para esto; zona management, 120 r/m). */
@@ -41,9 +42,8 @@ export function useReportReadyNotices(enabled: Ref<boolean>) {
     retry: false,
     refetchInterval: (query) => {
       const rows = query.state.data?.data ?? []
-      const active = rows.some((row) => row.status === 'pending' || row.status === 'running')
 
-      return active ? REPORT_EXPORTS_POLL_INTERVAL_MS : false
+      return rows.some(isActiveExport) ? REPORT_EXPORTS_POLL_INTERVAL_MS : false
     },
   })
 

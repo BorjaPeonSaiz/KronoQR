@@ -14,6 +14,8 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import type { ReportExport } from '@/shared/api/types'
+import ExportProgressBar from './ExportProgressBar.vue'
+import { failureReasonLabel, isActiveExport, stageText } from './exportPresentation'
 
 const props = defineProps<{
   job: ReportExport
@@ -29,19 +31,10 @@ const emit = defineEmits<{ cancel: []; download: []; dismiss: [] }>()
 
 const { t } = useI18n()
 
-const active = computed(() => props.job.status === 'pending' || props.job.status === 'running')
+const active = computed(() => isActiveExport(props.job))
 const percent = computed(() => props.job.progress?.percent ?? null)
-const stageText = computed(() =>
-  props.job.progress === null || props.job.progress === undefined
-    ? t('reportExports.job.running')
-    : t(`reportExports.job.stage.${props.job.progress.stage}`),
-)
-
-const failureText = computed(() => {
-  const code = props.job.failure_reason
-
-  return code === null ? t('common.empty') : t(`reportExports.list.failureReasons.${code}`, code)
-})
+const stage = computed(() => stageText(t, props.job))
+const failureText = computed(() => failureReasonLabel(t, props.job.failure_reason))
 </script>
 
 <template>
@@ -74,26 +67,16 @@ const failureText = computed(() => {
 
     <template v-if="active">
       <p class="mt-2" data-test="export-job-phase">
-        {{ job.status === 'pending' ? t('reportExports.job.queued') : stageText }}
+        {{ job.status === 'pending' ? t('reportExports.job.queued') : stage }}
       </p>
 
-      <div
+      <ExportProgressBar
         v-if="job.status === 'running'"
-        role="progressbar"
-        :aria-label="t('reportExports.job.progressLabel')"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-valuenow="percent ?? undefined"
-        :aria-valuetext="percent === null ? stageText : `${percent} %`"
-        class="mt-2 h-3 w-full overflow-hidden rounded-full bg-kq-surface-alt"
+        :percent="percent"
+        :stage="stage"
+        class="mt-2 h-3 w-full"
         data-test="export-job-progress"
-      >
-        <div
-          class="h-full rounded-full bg-kq-primary-strong"
-          :class="percent === null ? 'w-1/3 animate-pulse' : ''"
-          :style="percent === null ? undefined : { width: `${percent}%` }"
-        ></div>
-      </div>
+      />
 
       <p class="mt-2 text-sm text-kq-text-muted">{{ t('reportExports.job.keepWorking') }}</p>
 

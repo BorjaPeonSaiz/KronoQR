@@ -14,7 +14,7 @@
 //
 // **SONDEO SOLO MIENTRAS HAYA `pending`/`running`** (mismo criterio que
 // `DataExportPanel`, tarea 5.10): una instalacion sin ninguna exportacion en
-// curso no golpea el servidor cada 10 s para nada, y `useQuery` para el
+// curso no golpea el servidor cada 3 s para nada, y `useQuery` para el
 // sondeo en cuanto se desmonta la pantalla -no hace falta un `onUnmounted`
 // propio, es lo que ya hace TanStack Query-.
 //
@@ -46,6 +46,8 @@ import {
   REPORT_EXPORTS_QUERY_KEY,
   showReportExport,
 } from './reportExports.api'
+import ExportProgressBar from './ExportProgressBar.vue'
+import { failureReasonLabel, stageText } from './exportPresentation'
 import { REPORT_EXPORTS_POLL_INTERVAL_MS } from './useReportReadyNotices'
 
 const QUERY_KEY = REPORT_EXPORTS_QUERY_KEY
@@ -96,30 +98,6 @@ function instantLabel(value: string | null): string {
     : formatInstantWithZone(value, timezone.value, locale.value)
 }
 
-/**
- * Los codigos ESTABLES de `failure_reason` que el catalogo declara (mismo
- * criterio que `dataExport.list.failureReasons`, tarea 5.10): nunca el
- * mensaje de una excepcion (regla dura 21). Un codigo que esta pantalla
- * todavia no conoce se enseña tal cual llega, en vez de esconderlo.
- */
-const FAILURE_REASON_KEYS: Readonly<Record<string, string>> = {
-  write_failed: 'reportExports.list.failureReasons.write_failed',
-  database_error: 'reportExports.list.failureReasons.database_error',
-  query_timeout: 'reportExports.list.failureReasons.query_timeout',
-  stale: 'reportExports.list.failureReasons.stale',
-  unexpected: 'reportExports.list.failureReasons.unexpected',
-}
-
-function failureReasonLabel(code: string | null): string {
-  if (code === null) {
-    return t('common.empty')
-  }
-
-  const key = FAILURE_REASON_KEYS[code]
-
-  return key === undefined ? code : t(key)
-}
-
 /** Tamaño legible, en unidades BINARIAS (`formatBytes` de `@kronoqr/web-kit`, ADR-036, misma funcion que `DataExportPanel`): no es una cifra del registro legal. */
 function sizeLabel(bytes: number | null): string {
   return bytes === null ? t('common.empty') : formatBytes(bytes, locale.value)
@@ -139,6 +117,12 @@ function periodLabel(row: ReportExport): string {
 
 const cancellingUuid = ref<string | null>(null)
 
+const CANCEL_ANNOUNCEMENTS: Readonly<Partial<Record<ReportExport['status'], string>>> = {
+  cancelled: 'reportExports.job.announce.cancelled',
+  completed: 'reportExports.job.announce.completed',
+  failed: 'reportExports.job.announce.failed',
+}
+
 async function cancel(row: ReportExport): Promise<void> {
   cancellingUuid.value = row.uuid
   downloadError.value = null
@@ -149,19 +133,19 @@ async function cancel(row: ReportExport): Promise<void> {
     queryClient.setQueryData<ReportExportCollection>(QUERY_KEY, (previous) => ({
       data: (previous?.data ?? []).map((other) => (other.uuid === updated.uuid ? updated : other)),
     }))
-    announce(t('reportExports.job.announce.cancelled'))
+    // Se anuncia lo que ha pasado de verdad: si ya habia terminado (409 not-cancellable),
+    // la fila vuelve `completed` o `failed`, no `cancelled`.
+    const outcome = CANCEL_ANNOUNCEMENTS[updated.status]
+
+    if (outcome !== undefined) {
+      announce(t(outcome))
+    }
   } catch (failure) {
     downloadError.value = failure
   } finally {
     cancellingUuid.value = null
     void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
   }
-}
-
-function stageText(row: ReportExport): string {
-  return row.progress === null || row.progress === undefined
-    ? t('reportExports.job.running')
-    : t(`reportExports.job.stage.${row.progress.stage}`)
 }
 
 // --- Descargar una exportacion completada ------------------------------------
@@ -269,29 +253,13 @@ async function download(row: ReportExport): Promise<void> {
                   {{ t(`reportExports.status.${row.status}`) }}
                 </span>
                 <div v-if="row.status === 'running'" class="mt-1 text-sm text-kq-text-muted">
-                  <p :data-test="`stage-${row.uuid}`">{{ stageText(row) }}</p>
-                  <div
-                    role="progressbar"
-                    :aria-label="t('reportExports.job.progressLabel')"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    :aria-valuenow="row.progress?.percent ?? undefined"
-                    :aria-valuetext="
-                      row.progress?.percent == null ? stageText(row) : `${row.progress.percent} %`
-                    "
-                    class="mt-1 h-2 w-32 overflow-hidden rounded-full bg-kq-surface-alt"
+                  <p :data-test="`stage-${row.uuid}`">{{ stageText(t, row) }}</p>
+                  <ExportProgressBar
+                    :percent="row.progress?.percent ?? null"
+                    :stage="stageText(t, row)"
+                    class="mt-1 h-2 w-32"
                     :data-test="`progress-${row.uuid}`"
-                  >
-                    <div
-                      class="h-full rounded-full bg-kq-primary-strong"
-                      :class="row.progress?.percent == null ? 'w-1/3 animate-pulse' : ''"
-                      :style="
-                        row.progress?.percent == null
-                          ? undefined
-                          : { width: `${row.progress.percent}%` }
-                      "
-                    ></div>
-                  </div>
+                  />
                 </div>
                 <p v-if="row.status === 'cancelled'" class="mt-1 text-sm text-kq-text-muted">
                   {{ t('reportExports.job.cancelled') }}
@@ -299,7 +267,7 @@ async function download(row: ReportExport): Promise<void> {
                 <p v-if="row.status === 'failed'" class="mt-1 text-sm text-kq-text-muted">
                   {{
                     t('reportExports.list.failedReason', {
-                      reason: failureReasonLabel(row.failure_reason),
+                      reason: failureReasonLabel(t, row.failure_reason),
                     })
                   }}
                 </p>

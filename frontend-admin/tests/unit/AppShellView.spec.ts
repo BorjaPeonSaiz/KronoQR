@@ -7,6 +7,7 @@ import { announce, announcement, clearAnnouncement } from '@kronoqr/web-kit/anno
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import { chunkLoadFailed, clearChunkLoadFailure } from '@/router/chunkLoadRecovery'
 import type { ReportExport } from '@/shared/api/types'
+import { trackedExports } from '@/features/reports/useReportReadyNotices'
 import { managementUser } from './support/fixtures'
 import {
   createTestPinia,
@@ -284,6 +285,58 @@ describe('AppShellView — informe listo fuera de Informes (V21-5-PA-1, V5-PA-3,
     }
 
     expect(wrapper.find('[data-test="report-ready"]').exists()).toBe(false)
+  })
+
+  /** Una exportacion que tarda un sondeo en completarse; `nuevo` termina en el segundo. */
+  async function mountWithFinishingExport(
+    beforeFinish: () => void,
+  ): Promise<Awaited<ReturnType<typeof mountShell>>> {
+    vi.useFakeTimers()
+    let polls = 0
+
+    stubFetch((url) => {
+      if (!url.includes('/api/v1/reports/exports')) {
+        return jsonResponse({}, 404)
+      }
+
+      polls += 1
+
+      return jsonResponse({
+        data: [
+          exportRow('viejo', 'completed'),
+          exportRow('nuevo', polls === 1 ? 'running' : 'completed'),
+        ],
+      })
+    })
+
+    const wrapper = await mountShell(['reports:*'])
+
+    await flushPromises()
+    beforeFinish()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await flushPromises()
+
+    return wrapper
+  }
+
+  it('si una pantalla sigue la exportacion, la cabecera no repite el aviso ni el anuncio', async () => {
+    const wrapper = await mountWithFinishingExport(() => trackedExports.add('nuevo'))
+
+    expect(wrapper.text()).not.toContain(es.reportExports.ready.open)
+    expect(announcement.value).toBe('')
+
+    trackedExports.delete('nuevo')
+  })
+
+  it('al desmontarse la pantalla que la seguia, la cabecera si avisa de lo que termina despues', async () => {
+    const wrapper = await mountWithFinishingExport(() => {
+      trackedExports.add('nuevo')
+      // La pantalla se desmonta antes de que termine: retira su registro.
+      trackedExports.delete('nuevo')
+    })
+
+    expect(wrapper.text()).toContain(es.reportExports.ready.open)
+    expect(announcement.value.trim()).toBe(es.reportExports.ready.announce.split(' | ')[0])
   })
 
   it('quien no puede pedir informes no consulta las exportaciones', async () => {

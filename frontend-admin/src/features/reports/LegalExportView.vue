@@ -32,8 +32,9 @@ import { useSessionStore } from '@/features/auth/session.store'
 import { shouldDeferExport } from './deferral'
 import LegalExportEmployeePicker from './LegalExportEmployeePicker.vue'
 import { downloadLegalExport, type LegalExportTally } from './legalExport.api'
+import { isActiveExport } from './exportPresentation'
 import ReportExportJobStatus from './ReportExportJobStatus.vue'
-import { isActiveExport, useReportExportJob } from './useReportExportJob'
+import { useReportExportJob } from './useReportExportJob'
 
 const { t } = useI18n()
 const session = useSessionStore()

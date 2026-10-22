@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ReportExport, ReportExportCollection } from '@/shared/api/types'
+import { isActiveExport, stageText } from './exportPresentation'
 import {
   cancelReportExport,
   downloadReportExportFile,
@@ -25,10 +26,6 @@ import {
 } from './reportExports.api'
 import { REPORT_EXPORTS_POLL_INTERVAL_MS, trackedExports } from './useReportReadyNotices'
 
-export function isActiveExport(row: ReportExport): boolean {
-  return row.status === 'pending' || row.status === 'running'
-}
-
 export function useReportExportJob() {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -39,6 +36,8 @@ export function useReportExportJob() {
   const cancelling = ref(false)
   const downloading = ref(false)
   const error = ref<unknown>(null)
+  /** La pantalla ya se desmonto: nadie sigue esta exportacion, asi que la cabecera debe avisar de ella. */
+  let unmounted = false
 
   const { data } = useQuery({
     queryKey: REPORT_EXPORTS_QUERY_KEY,
@@ -65,12 +64,6 @@ export function useReportExportJob() {
     }))
   }
 
-  function stageLabel(row: ReportExport): string {
-    return row.progress === null || row.progress === undefined
-      ? t('reportExports.status.running')
-      : t(`reportExports.job.stage.${row.progress.stage}`)
-  }
-
   async function start(input: RequestReportExportInput): Promise<void> {
     if (requesting.value) {
       return
@@ -84,7 +77,12 @@ export function useReportExportJob() {
 
       uuid.value = requested.data.uuid
       alreadyInProgress.value = requested.alreadyInProgress
-      trackedExports.add(requested.data.uuid)
+      // Solo mientras la pantalla siga viva: registrar tras desmontarse dejaria el uuid
+      // «seguido» para siempre y la cabecera nunca avisaria.
+      if (!unmounted) {
+        trackedExports.add(requested.data.uuid)
+      }
+
       putInCache(requested.data)
       announce(
         requested.alreadyInProgress
@@ -171,7 +169,7 @@ export function useReportExportJob() {
       }
 
       if (status === 'running' && stage !== previousStage) {
-        announce(t('reportExports.job.announce.stage', { stage: stageLabel(row) }))
+        announce(t('reportExports.job.announce.stage', { stage: stageText(t, row) }))
       } else if (status === 'completed' && previousStatus !== 'completed') {
         announce(t('reportExports.job.announce.completed'))
       } else if (status === 'failed' && previousStatus !== 'failed') {
@@ -183,6 +181,8 @@ export function useReportExportJob() {
   )
 
   onUnmounted(() => {
+    unmounted = true
+
     if (uuid.value !== null) {
       trackedExports.delete(uuid.value)
     }

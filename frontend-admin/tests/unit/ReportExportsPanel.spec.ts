@@ -239,6 +239,35 @@ describe('ReportExportsPanel', () => {
     expect(wrapper.text()).toContain(es.reportExports.job.cancelled)
   })
 
+  it('cancelar algo que ya habia terminado (409) anuncia lo que ha pasado de verdad, no «cancelada»', async () => {
+    let finished = false
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/cancel': () => {
+        finished = true
+
+        return problemResponse(409, 'urn:kronoqr:problem:report-export-not-cancellable', {
+          export: reportExport({ uuid: `${UUID}-r`, status: 'completed' }),
+        })
+      },
+      '/reports/exports': () =>
+        jsonResponse({
+          data: [reportExport({ uuid: `${UUID}-r`, status: finished ? 'completed' : 'running' })],
+        }),
+    })
+
+    const wrapper = await mountPanel()
+
+    await wrapper.find(`[data-test="cancel-${UUID}-r"]`).trigger('click')
+    await settle()
+
+    expect(announcement.value.trim()).toBe(es.reportExports.job.announce.completed)
+    expect(wrapper.find(`[data-test="status-${UUID}-r"]`).text()).toBe(
+      es.reportExports.status.completed,
+    )
+  })
+
   it('sin nada pendiente ni en curso, no vuelve a sondear', async () => {
     vi.useFakeTimers()
 

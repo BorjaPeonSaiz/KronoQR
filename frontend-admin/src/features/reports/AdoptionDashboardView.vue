@@ -52,8 +52,9 @@ import {
 } from './adoptionReport.api'
 import { DEFERRED_FROM_DAYS } from './deferral'
 import PdfBusyNotice from './PdfBusyNotice.vue'
+import { isActiveExport } from './exportPresentation'
 import ReportExportJobStatus from './ReportExportJobStatus.vue'
-import { isActiveExport, useReportExportJob } from './useReportExportJob'
+import { useReportExportJob } from './useReportExportJob'
 
 const FORMATS: readonly AdoptionExportFormat[] = ['csv', 'xlsx', 'pdf']
 
