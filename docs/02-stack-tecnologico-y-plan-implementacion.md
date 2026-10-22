@@ -391,7 +391,7 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | **Cola offline (solo quiosco)** | **Dexie 4 (IndexedDB)** | Transaccional. `localStorage` es síncrono, con 5 MB y sin transacciones: inadecuado para una cola con garantías. |
 | Wake lock | Screen Wake Lock API con *fallback* | Evita que la tablet se suspenda. |
 | i18n | `vue-i18n` 11 | Español e inglés de serie, extensible. |
-| Tablas y datos (panel) | TanStack Table + TanStack Query + TanStack Virtual | Virtualización para 500 empleados y caché de consultas. |
+| Tablas y datos (panel) | TanStack Query + TanStack Virtual | Virtualización para 500 empleados y caché de consultas. Las tablas son `role="table"` propias sobre `useVirtualRows`; `@tanstack/vue-table` se retiró en la 2.3.0 por no usarse (RC3, R3-PA-10). |
 | Gráficos (panel) | ECharts 6 | Informes y tendencias, con tabla de datos alternativa. |
 
 > **El portal del empleado es una web sencilla, no una PWA.** No hay credencial que mostrar sin conexión, así que no necesita service worker, caché cifrada ni instalación. Es una página responsive de consulta. Esta decisión ahorra trabajo real y elimina toda una categoría de modos de fallo.

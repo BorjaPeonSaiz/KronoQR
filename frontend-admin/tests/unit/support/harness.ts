@@ -14,6 +14,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import type { Router } from 'vue-router'
 import { routes } from '@/router'
 import { createAppI18n } from '@/shared/i18n'
+import { testMessages } from './i18n'
 import type { AppLocale } from '@/shared/i18n'
 
 export function createTestPinia(): ReturnType<typeof createPinia> {
@@ -67,7 +68,7 @@ export async function mountView<Props extends Record<string, unknown>>(
       plugins: [
         pinia,
         router,
-        createAppI18n(options.locale ?? 'es'),
+        createAppI18n(options.locale ?? 'es', testMessages),
         [VueQueryPlugin, { queryClient: createTestQueryClient() }],
       ],
     },

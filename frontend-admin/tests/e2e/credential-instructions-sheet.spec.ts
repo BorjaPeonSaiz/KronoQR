@@ -33,6 +33,7 @@ const BOARD_PENDING_DELIVERY: CredentialStatusBoard = {
       },
     },
   ],
+  meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
   summary: {
     employees: 1,
     pending_print: 0,

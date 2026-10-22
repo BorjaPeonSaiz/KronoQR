@@ -171,6 +171,7 @@ export function board(
 ): CredentialStatusBoard {
   return {
     data: rows,
+    meta: { page: 1, per_page: 50, total: rows.length, total_pages: 1 },
     summary: {
       employees: 60,
       pending_print: rows.filter((row) => row.status === 'pending_print').length,

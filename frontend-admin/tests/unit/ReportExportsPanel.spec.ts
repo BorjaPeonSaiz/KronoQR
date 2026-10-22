@@ -38,6 +38,8 @@ function reportExport(overrides: Partial<ReportExport> = {}): ReportExport {
     started_at: '2026-07-01T08:00:02.000000Z',
     completed_at: '2026-07-01T08:00:40.000000Z',
     failed_at: null,
+    cancelled_at: null,
+    progress: null,
     failure_reason: null,
     file_name: 'kronoqr-horas-2026-01-01_2026-06-30.csv',
     size_bytes: 1_048_576,

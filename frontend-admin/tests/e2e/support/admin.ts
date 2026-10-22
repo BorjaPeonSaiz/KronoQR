@@ -469,6 +469,7 @@ export const EMPLOYEES: EmployeeCollection = {
 
 export const CREDENTIAL_BOARD: CredentialStatusBoard = {
   data: [],
+  meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   summary: {
     employees: 1,
     pending_print: 1,
@@ -489,6 +490,7 @@ export const RETIRING_KEY_ID = 'a2'
  */
 export const CREDENTIAL_BOARD_IN_ROTATION: CredentialStatusBoard = {
   data: [],
+  meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   summary: {
     employees: 60,
     pending_print: 12,
@@ -521,6 +523,7 @@ export const CREDENTIAL_BOARD_PENDING_REPRINT: CredentialStatusBoard = {
       },
     },
   ],
+  meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
   summary: CREDENTIAL_BOARD_IN_ROTATION.summary,
 }
 
@@ -940,6 +943,8 @@ export const REPORT_EXPORT_COMPLETED: ReportExport = {
   started_at: '2026-07-01T08:00:02.000000Z',
   completed_at: '2026-07-01T08:00:40.000000Z',
   failed_at: null,
+  cancelled_at: null,
+  progress: null,
   failure_reason: null,
   file_name: 'kronoqr-horas-2026-01-01_2026-06-30.csv',
   size_bytes: 1_048_576,
@@ -4864,6 +4869,8 @@ export async function stubManagementApi(
             started_at: null,
             completed_at: null,
             failed_at: null,
+            cancelled_at: null,
+            progress: null,
             failure_reason: null,
             file_name: null,
             size_bytes: null,

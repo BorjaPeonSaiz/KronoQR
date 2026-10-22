@@ -384,7 +384,7 @@ describe('useLivePresenceStore', () => {
 
     // Pasan 10 min sin fichajes: un latido mueve el contacto, no la ultima actualizacion.
     vi.setSystemTime(new Date('2030-01-01T00:10:00Z'))
-    sockets[0]?.receive('pusher:ping')
+    sockets[0]?.receive('pusher:ping', {})
 
     expect(store.lastContactAt).toBe('2026-03-14T09:10:00.000Z')
     expect(store.lastUpdatedAt).toBe('2026-03-14T09:00:00.000000Z')

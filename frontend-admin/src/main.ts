@@ -18,7 +18,8 @@ import { registerAuthGuard } from './router/guards'
 import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
-import { createAppI18n, resolveAppLocale } from './shared/i18n'
+import { createAppI18n, ensureLocaleLoaded, resolveAppLocale } from './shared/i18n'
+import type { AppLocale } from './shared/i18n'
 
 const app = createApp(App)
 
@@ -57,7 +58,25 @@ function currentLocale() {
     browser: navigator.languages,
   })
 }
-const i18n = createAppI18n(currentLocale())
+const initialLocale = currentLocale()
+const i18n = createAppI18n(initialLocale)
+
+/**
+ * Pasa a `locale` cuando su catalogo esta descargado. Si el trozo no llega
+ * (red caida) se queda en el idioma actual y se reintenta en el siguiente cambio,
+ * en vez de pintar claves.
+ */
+async function applyLocale(locale: AppLocale): Promise<void> {
+  try {
+    await ensureLocaleLoaded(i18n, locale)
+    i18n.global.locale.value = locale
+  } catch {
+    // El idioma anterior sigue en pantalla; el aviso de trozo perdido lo da el router.
+  }
+}
+
+// Sin los textos no hay interfaz: se espera al idioma de arranque antes de montar.
+await applyLocale(initialLocale)
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
@@ -102,7 +121,7 @@ syncDocumentLang(() => i18n.global.locale.value)
 watch(
   () => [branding.current.locales, session.user?.locale] as const,
   () => {
-    i18n.global.locale.value = currentLocale()
+    void applyLocale(currentLocale())
   },
 )
 

@@ -21,7 +21,6 @@
   "dependencies": {
     "@kronoqr/web-kit": "*",
     "@tanstack/vue-query": "^5.104.1",
-    "@tanstack/vue-table": "^9.2.8",
     "@tanstack/vue-virtual": "^3.13.40",
     "echarts": "^6.1.0",
     "pinia": "^4.0.3",
