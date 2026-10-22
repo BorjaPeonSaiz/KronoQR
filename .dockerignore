@@ -8,17 +8,21 @@
 .gitattributes
 
 # Secretos y configuracion local. NUNCA en una imagen.
-.env
-.env.*
-*.pem
-*.key
-*.crt
+#
+# Con `**/` (R4-SC-07, R2-DV-02): en un .dockerignore, `.env` solo casa en la RAIZ
+# del contexto, no en `backend/.env`, y `COPY backend/ ./` lo metia en una imagen
+# construida en local (Laravel lo carga como respaldo, con DB_MIGRATION_PASSWORD).
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.crt
 infra/docker/nginx/certs/
 
 # Dependencias: las resuelve la propia imagen, con su version de PHP y de Node.
 # Copiar las del host produce imagenes que "funcionan en mi maquina".
 backend/vendor/
-node_modules/
+**/node_modules/
 
 # LA SEMILLA DE DESARROLLO NO ENTRA EN NINGUNA IMAGEN (SC7-03).
 #

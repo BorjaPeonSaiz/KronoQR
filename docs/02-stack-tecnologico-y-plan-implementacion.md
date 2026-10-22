@@ -721,15 +721,20 @@ sequenceDiagram
 
 ```nginx
 add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; object-src 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; object-src 'none'" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=()" always;
 add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Embedder-Policy "credentialless" always;
 add_header Cross-Origin-Resource-Policy "same-origin" always;
 ```
 
 `img-src` y `media-src` incluyen `blob:` porque el escaneo por cámara los necesita. `script-src` lleva `'wasm-unsafe-eval'` (PIN-01, 2.2.0): `libsodium-wrappers`, que sella el PIN del quiosco, compila WebAssembly, y con `script-src 'self'` a secas el fichaje por PIN falla siempre en producción; el token no permite `eval` de JavaScript y **`'unsafe-eval'` y `'unsafe-inline'` siguen prohibidos** (lo comprueba `QualityGatesTest`). `camera=(self)` es imprescindible: sin ello, la PWA del quiosco no puede acceder al dispositivo de vídeo. Es un fallo de configuración que se diagnostica mal y cuesta horas.
+
+**`connect-src 'self'` sin `wss:` (CFG-2, 2.3.0).** El panel abre su canal en vivo contra su propio origen (`/app/`), y CSP3 hace que `'self'` cubra `ws:`/`wss:` del mismo host y puerto; el `wss:` suelto permitía abrir un WebSocket hacia cualquier host. Si un navegador antiguo no aplicase ese emparejamiento, el panel cae al sondeo (RNF-D-03, ADR-011): se degrada, no pierde datos. **`/apps/`** (la API HTTP de Reverb) ya no sale al borde (CFG-1): solo la usa el backend por la red interna y nginx responde `404`.
+
+**COEP `credentialless` (V2-DV-04, 2.3.0).** Aplica y no rompe nada: las tres SPA, las fuentes autoalojadas, las imágenes de marca, los iconos, el WebSocket y la cámara (`getUserMedia`) son del mismo origen, y la CSP `default-src 'self'` impide cargar otra cosa; COEP solo afecta a recursos de otros orígenes. Junto con COOP `same-origin` aísla el documento entre orígenes (Spectre) y la regla 90004 de ZAP pasa sin fila en `zap-baseline.conf`. Se eligió `credentialless` y no `require-corp` para que un recurso cross-origin futuro se cargue sin cookies en vez de romper la pantalla; Safari lo ignora (sin aislamiento, sin ruptura). Si un día se sirve algo de otro origen, se decide en esa `location` y se documenta aquí.
 
 ### 7.3 Ámbitos de token
 
