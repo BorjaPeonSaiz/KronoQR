@@ -1757,6 +1757,20 @@ anotadas.** Nada de esto impide fichar:
   del registro propio del portal también cambia de versión**: no compares una
   huella de antes de la 2.3.0 con una de después.
 
+**Al actualizar a la 2.3.0: el borde cierra una puerta que no usabas.** Nada
+de esto impide fichar ni exige tocar la configuración:
+
+- **El panel y el portal solo pueden abrir conexiones en directo contra su
+  propio servidor** (antes admitían cualquier destino seguro). En un navegador
+  muy antiguo que no lo entienda, la presencia en directo pasa al sondeo cada
+  pocos segundos y el panel lo anuncia; el fichaje no cambia.
+- **La interfaz HTTP interna del servicio en directo (`/apps/`) deja de
+  publicarse** por el servidor web: el producto no la usa desde fuera. Si
+  algún sistema tuyo la llamaba, recibirá `404`.
+- **El panel de observabilidad** (si lo tienes activo): el sondeador de
+  disponibilidad se recrea al actualizar, sin permisos de administrador y sin
+  acceso a la red de la aplicación. No hay nada que hacer.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,

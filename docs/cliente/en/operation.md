@@ -1777,6 +1777,20 @@ None of this stops clock-in:
   the portal's own-record PDF also changes version**: do not compare a
   checksum from before 2.3.0 with one from after it.
 
+**When updating to 2.3.0: the edge closes a door you were not using.** None of
+this stops clock-in or requires touching the configuration:
+
+- **The panel and the portal can only open live connections to their own
+  server** (before, any secure destination was allowed). In a very old browser
+  that does not understand this, live presence falls back to polling every few
+  seconds and the panel says so; clocking does not change.
+- **The internal HTTP interface of the live service (`/apps/`) is no longer
+  published** by the web server: the product does not use it from outside. If
+  any system of yours called it, it will now get `404`.
+- **The observability panel** (if enabled): the availability prober is
+  recreated on update, without administrator rights and without access to the
+  application network. There is nothing to do.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or
