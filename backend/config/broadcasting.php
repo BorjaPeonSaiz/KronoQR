@@ -46,7 +46,10 @@ return [
          *
          * `host`, `port` y `scheme` son los del SERVIDOR hablando con Reverb por
          * la red interna de Docker, no los del navegador: el panel llega por el
-         * mismo origen a traves de Nginx, que proxifica `/app/` y `/apps/`.
+         * mismo origen a traves de Nginx, que solo proxifica `/app/` (el
+         * WebSocket). `/apps/` —la API HTTP de Reverb con la que este servidor
+         * publica— no sale al borde desde la 2.3.0 (CFG-1): nginx responde
+         * `404` y la aplicacion la llama por la red interna.
          */
         'reverb' => [
             'driver' => 'reverb',

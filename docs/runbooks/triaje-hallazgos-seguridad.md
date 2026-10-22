@@ -195,3 +195,62 @@ fecha, no se deja un TODO.
 Lo que enseña el caso de `gosu` para el próximo triaje: antes de excepcionar
 un binario de la imagen base, comprobar si hace falta en absoluto. Un
 componente que no se ejecuta en nuestro uso se elimina, no se justifica.
+
+---
+
+## 4. Qué bloquea y dónde (bloque 12 de la 2.3.0)
+
+**El problema que resuelve (R6-DV-04, V2-DV-01).** Un aviso externo —un CVE nuevo
+en la base de nginx, un `npm audit` sobre una dependencia que nadie ha tocado—
+aparece sin que nadie haya cambiado nada, y si el control bloquea en toda rama
+pone en rojo **a la vez** todas las que haya abiertas, sin relación con lo que
+cada una cambia (ocurrió con `basic-ftp`, el 01-10-2026). El remedio no es
+dejar de mirar, es **mirar antes y en un sitio donde el rojo tenga un
+destinatario**: el workflow semanal.
+
+### 4.1 La auditoría semanal
+
+`.github/workflows/auditoria-semanal.yml` corre los lunes a las 05:23 UTC (y a
+mano: `gh workflow run auditoria-semanal.yml`) **siempre sobre `main`**, con tres
+jobs independientes:
+
+| Job | Qué mira | Si falla |
+| --- | --- | --- |
+| `dependencias` | `composer audit` y `npm audit` (bloquea producción, desarrollo informa) | Aviso en una dependencia: PR de actualización (§1, punto 1) |
+| `repositorio` | `trivy fs`: dependencias, Dockerfiles y secretos del árbol | Igual que en la CI (§1) |
+| `imagenes-publicadas` | `trivy image` sobre `php`, `nginx` y `postgres` **de la última versión publicada**, tal como las tiene un cliente | Las imágenes son inmutables (ADR-053): **no se reconstruye la etiqueta**. Se corrige en `main` y se publica un parche (`actualizacion-cliente.md`). Mientras tanto, el CVE se anota en `HANDOFF.md` con su alcance |
+
+El fallo del workflow es la alerta: GitHub envía el correo de ejecución fallida
+a quien mantiene el cron. Sin runbook asociado una alerta es ruido: este es.
+
+### 4.2 Qué bloquea en cada sitio (política vigente, aprobada por el propietario)
+
+| Control | Rama que no es `main` (push o `workflow_dispatch`) | `main` | Etiqueta `v*` / `release.yml` | Semanal |
+| --- | --- | --- | --- | --- |
+| `composer audit` | bloquea **si el cambio toca lo que audita**; si no, informa | bloquea | bloquea | bloquea |
+| `npm audit --omit=dev` (producción) | ídem | bloquea | bloquea | bloquea |
+| `npm audit` (desarrollo) | informa | informa | informa | informa |
+| `trivy fs --scanners vuln` (HIGH/CRITICAL con parche) | ídem | bloquea | bloquea (CI de la etiqueta) | bloquea |
+| `trivy fs --scanners misconfig,secret` | **bloquea siempre** | bloquea | bloquea | bloquea |
+| `trivy image --scanners vuln` postgres, app **y nginx** | ídem | bloquea | bloquea | las tres **publicadas** |
+| `trivy image --scanners secret` | **bloquea siempre** | bloquea | bloquea | las tres **publicadas** |
+| gitleaks (`SCOPE=head`) | bloquea | bloquea | bloquea | histórico completo, nocturno (`secrets-history`) |
+| El commit etiquetado es ancestro de `main` | — | — | bloquea (`resolver`, V6-DV-6) | — |
+
+**«Toca lo que audita»** lo decide el paso `gate` del job `security` de `ci.yml`
+con `git diff` contra `git merge-base origin/main HEAD`: cualquier
+`composer.lock`, `package-lock.json` o `images.lock`, cualquier `Dockerfile*`,
+cualquier `.dockerignore` o fichero bajo `infra/docker/`, o una línea añadida con `@sha256:` (un digest). Con eso, quien introduce una
+dependencia o una base vulnerable no puede fusionar, y quien cambia un literal
+de la interfaz no se entera de un aviso ajeno. **Si no bloquea, el paso corre
+igual**: queda con `continue-on-error`, y un paso final emite un `::warning`
+por cada control que ha fallado, además del `::notice` del `gate` con el motivo. **Los escáneres de secretos y de mala configuración no dependen de ningún aviso externo** (un hallazgo es del cambio), así que no pasan por la puerta: bloquean en toda rama. Y si la puerta no llega a decidir (salida vacía), bloquea: solo el valor explícito `false` relaja.
+`main`, la etiqueta y `release.yml` bloquean siempre: una versión publicada
+nunca sale con un HIGH/CRITICAL corregible. El aviso nuevo lo da la auditoría
+semanal, no el `push`.
+
+Todas usan `--ignore-unfixed`: un CVE sin parche publicado no bloquea a nadie.
+
+Si una rama sale en amarillo con el aviso, no es una excusa para ignorarlo: el
+PR que la integra en `main` fallará en `main` (o, antes, lo habrá visto la
+auditoría semanal). Tria el hallazgo con el árbol de decisión del §1.

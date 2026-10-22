@@ -223,3 +223,11 @@ it('no escribe nada si la integridad de la copia sale del vocabulario cerrado', 
     'motivo en texto libre' => ['wal_integrity', 'aborted_at:el MAC no cuadra'],
     'recuento que no es un numero' => ['legacy_wal', 'muchos'],
 ])->group('RL-12', 'RS-07', 'RF-PD-10');
+
+it('encadena el asiento de la actualizacion con los recuentos de la revocacion de tarjetas de bajas (2.3.0)', function (): void {
+    // Tal y como lo arma `update.sh` tras `credentials:revoke-offboarded`.
+    $data = [...updatePayload(), 'revoked_credentials' => 4, 'employees' => 2, 'failed' => 0];
+
+    expect(recordSystemEvent('system.updated', $data))->toBe(0)
+        ->and(json_decode(lastAuditRow()->payload, true, 8, JSON_THROW_ON_ERROR))->toEqual($data);
+})->group('RL-04', 'RF-PD-10');

@@ -89,9 +89,22 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 10 integrados (#182 a #187, #189 a #191, #193 y #194). **Bloque 11** (`fix/minimizacion-y-asientos`): 11.1–11.6 ✅, revisiones de dominio, seguridad y código aplicadas; CI manual y PR en curso.
+**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 11 integrados (#182 a #187, #189 a #191 y #193 a #195). **Bloque 12** (`fix/endurecimiento-borde`): 12.1–12.4 ✅, revisiones de código y seguridad aplicadas; CI manual y PR en curso.
 
-Lo que conviene saber del bloque 11 (detalle en Engram `2.3.0/b11-decisiones` y `2.3.0/b11-decisiones-revision`):
+Lo que conviene saber del bloque 12 (decisiones en Engram `2.3.0/b12-decisiones`):
+
+- **Borde:** COEP `credentialless`; CSP `connect-src 'self'` sin `wss:` (decisión del propietario; si un navegador no lo aplica, la presencia cae al sondeo); `/apps/` de Reverb da 404 en nginx; `types {}` del manifiesto a nivel `http` (dentro de una `location` sustituye el mapa y el JS sale sin tipo); blackbox sin root y solo en `observability`; todo `FROM` y `COPY --from` externo por digest (prueba en `EdgeHardeningTest`).
+- **Rutas:** fuera `sanctum/csrf-cookie` y `storage/{path}`; `broadcasting/auth` en el contrato, solo `POST`, canal validado (otro nombre = 403 sin asiento); `x-route-exclusions` del contrato (`/metrics`, `/horizon/*`) y `OpenApiContractTest` compara router y contrato en los dos sentidos.
+- **Cadena:** `release.yml` exige que el SHA etiquetado sea ancestro de `main` y todos los jobs construyen ese SHA (`assert-tag-at-sha.sh`); `auditoria-semanal.yml` (lunes, sobre `main`, sin secretos, incluye imágenes de terceros solo informativo); `.github/scripts/resolve-registry.sh` compartido.
+- **Política de ramas (decisión del propietario, R6-DV-04):** en ramas, `vuln` de composer, npm y Trivy bloquea solo si el diff toca locks, Dockerfiles, `infra/docker/`, `.dockerignore` o digests (paso `gate` del job `security`); secretos y misconfig bloquean siempre; `main`, etiqueta y `release.yml` bloquean todo. Runbook `triaje-hallazgos-seguridad.md` §4.
+- **12.4:** `credentials:revoke-offboarded` (no migración: una migración no puede escribir en `audit_log`). `update.sh` la lanza tras migrar y antes de `CHAIN_AFTER`; los recuentos van al `--data` de `system.updated`; si falla, salida 6 sin deshacer y se repite a mano.
+- **Doc 07:** cerrados R4-SC-05 y DIV-1 (bloque 11) y los del bloque 12; de los MEDIO sin motivo escrito queda F4.
+- **Pendiente:**
+  - lanzar a mano `auditoria-semanal.yml` una vez tras el merge (`gh workflow run auditoria-semanal.yml`) y revisar `releases/latest` y el pull anónimo;
+  - el ruleset de etiquetas `v*` va con la tarea 23.3;
+  - las imágenes de observabilidad siguen por versión sin digest (ADR-053).
+
+Lo que conviene saber del bloque 11 (#195; detalle en Engram `2.3.0/b11-decisiones` y `2.3.0/b11-decisiones-revision`):
 
 - **ADR-060 aceptado:** la ficha del empleado de baja y la cuenta de gestión se minimizan en sitio al vencer su plazo (no se borran: las FK RESTRICT lo impiden), con asiento por persona y función `SECURITY DEFINER` + trigger que impide revertirlo. Contratos y ausencias se borran en la misma pasada. Plazo de la ficha: `personnel_record_retention_years` del perfil (de serie 4, 1–30). No hay reactivación (ADR-051).
 - **Decisiones del propietario tras la revisión:** `credentials.revoked_reason` pasa a constante; `locale` y `teleworking` se conservan como cuasi-identificadores aceptados (doc 07 §6); `fichaje_app` sin `DELETE` en `employees`, `users`, `employment_contracts` y `absences`; la ejecución de la purga no minimiza más de lo que contó la simulación (lo liberado entra en la pasada siguiente) y la frase de confirmación cubre el plazo de la ficha.
@@ -163,7 +176,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 11 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 12 (endurecimiento del borde y de la cadena, rama `fix/endurecimiento-borde`), marcando ✅ el título del bloque 11 en su primer commit.
+**Siguiente acción:** si el bloque 12 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 13 (copias y recuperación, rama `fix/copias-y-wal`), marcando ✅ el título del bloque 12 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

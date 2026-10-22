@@ -18,7 +18,7 @@
 # construye, y una imagen de entrega tiene que salir identica de un checkout
 # limpio. `dist/` esta ademas en .dockerignore, asi que un build local no puede
 # colarse en la capa.
-FROM node:25-alpine AS frontends
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS frontends
 
 WORKDIR /build
 
@@ -98,7 +98,12 @@ RUN set -eux; \
 #------------------------------------------------------------------------------
 # Etapa 2 — el borde HTTP que se entrega
 #------------------------------------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.31-alpine
+# Fijada por DIGEST (V2-DV-02), mismo criterio que php y postgres: `1.31-alpine` es un tag
+# movil y dos builds del mismo dia podrian partir de bases distintas. Sube de base un PR de
+# Dependabot (ecosistema `docker`), no una reconstruccion silenciosa. Actualizar con
+# `docker pull nginxinc/nginx-unprivileged:1.31-alpine && docker inspect
+# --format='{{index .RepoDigests 0}}' nginxinc/nginx-unprivileged:1.31-alpine`.
+FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 
 USER root
 

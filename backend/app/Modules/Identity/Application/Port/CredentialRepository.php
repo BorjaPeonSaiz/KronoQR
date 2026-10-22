@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Application\Port;
 
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Model\Credential;
+use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 
 /**
  * Las credenciales, vistas por los casos de uso de este modulo.
@@ -115,6 +116,18 @@ interface CredentialRepository
      * {@see pendingPrintForEmployees()}.
      */
     public function activeForEmployee(int $employeeId): ?Credential;
+
+    /**
+     * Los empleados que conservan **alguna** credencial activa, sin repetir y en
+     * orden ascendente.
+     *
+     * Es la seleccion del barrido de bajas anteriores a la 2.2.0
+     * (`credentials:revoke-offboarded`, R3-AR-07): quien filtra por estado
+     * laboral es el caso de uso, con {@see EmploymentStatusLookup}.
+     *
+     * @return list<int>
+     */
+    public function employeeIdsWithActiveCredentials(): array;
 
     /**
      * **Paso 4 de la verificacion del §5.2**: la credencial cuyo token produce

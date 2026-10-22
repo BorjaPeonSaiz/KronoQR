@@ -41,7 +41,7 @@ Pero el requisito de disponibilidad tira en la otra dirección: el sistema se in
 ## Consecuencias
 
 - **Un proceso más que operar y monitorizar.** El `docker compose` gana el servicio `reverb`, y el panel de salud debe distinguir «WebSocket caído» de «sistema caído», porque no son lo mismo y el segundo es mucho más grave.
-- **Nginx necesita configuración de *upgrade*** para el tráfico WSS, y la CSP debe permitir `connect-src 'self' wss:` (§7.2). Es un fallo de configuración que se diagnostica mal y cuesta horas.
+- **Nginx necesita configuración de *upgrade*** para el tráfico WSS, y la CSP debe permitir el WebSocket del propio origen (§7.2). *Desde la 2.3.0 (CFG-2) es `connect-src 'self'`, sin el `wss:` suelto que admitía cualquier host; `'self'` cubre `ws:`/`wss:` del mismo origen en CSP3 y, si un navegador no lo aplicara, el panel cae al sondeo, que es el fallback de este ADR.* Es un fallo de configuración que se diagnostica mal y cuesta horas.
 - **Los canales son privados y autorizados por rol.** Un responsable de departamento no puede suscribirse a la presencia de otro: la autorización del canal es tan obligatoria como la del endpoint (regla dura 18, RF-ID-03).
 - **Hay dos caminos que mantener y probar**, el *push* y el sondeo, y el segundo tiende a pudrirse porque casi nunca se usa. Por eso su prueba es explícita y no opcional.
 - **La degradación a sondeo es visible al usuario.** Un indicador dice que la vista se actualiza cada 15 s; sin él, el operador cree que no entra nadie.

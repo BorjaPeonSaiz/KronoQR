@@ -1300,6 +1300,9 @@ services:
   blackbox-exporter:
     profiles: [observability]
     image: prom/blackbox-exporter:v0.29.0
+    # Sin root (S3, R4-SC-09): solo hace sondas HTTP, le basta `nobody`. Sin `user:` la imagen
+    # corria como uid 0.
+    user: "65534:65534"
     command:
       - --config.file=/etc/blackbox_exporter/blackbox.yml
       - --web.listen-address=:9115
@@ -1309,9 +1312,9 @@ services:
     labels:
       kronoqr.observability.revision: "${KQ_OBSERVABILITY_REVISION:-}"
     networks:
-      # 'app': tiene que alcanzar `nginx:8080`. 'observability': Prometheus lo
-      # scrapea via /probe.
-      - app
+      # SOLO 'observability' (R4-SC-09): alcanza `nginx:8443` porque nginx esta tambien en esa
+      # red, y Prometheus lo scrapea via /probe. Fuera de 'app', un blackbox comprometido no
+      # ve postgres, redis ni reverb.
       - observability
     restart: unless-stopped
     logging:

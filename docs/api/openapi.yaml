@@ -41,6 +41,12 @@ info:
     endurecer una validacion exige `/api/v2`, porque hay quioscos con la cola
     offline llena que llevan dias sin conectar.
 
+    **Todo esta aqui o tiene su motivo.** Cada ruta que el servidor atiende es
+    una operacion de `paths:` o figura en `x-route-exclusions` con la razon por
+    la que no es de esta API (las metricas de Prometheus y el panel cerrado del
+    gestor de colas). No hay rutas de cookie de sesion ni de ficheros servidos
+    por firma.
+
     **Tiempo.** Todo instante viaja y se almacena en UTC, con sufijo `Z`
     (regla dura 3). La conversion a la zona del centro ocurre en la capa de
     presentacion, nunca en el transporte.
@@ -343,6 +349,36 @@ tags:
       en la zona del centro y en UTC, y las correcciones a la vista con su autor
       y su motivo. Lo que aqui se exporta se defiende en un expediente, asi que
       generarlo deja siempre asiento en `audit_log`.
+
+# Rutas que el servidor registra y que NO son de esta API (B2, B4, R1-BE-01;
+# bloque 12 de la 2.3.0).
+#
+# Todo lo que cruza la frontera del servidor esta en `paths:` o aqui, con su
+# motivo. `OpenApiContractTest` recorre el router y falla si aparece una ruta que
+# no es ninguna de las dos cosas: una version nueva de un paquete que registre
+# rutas propias, o un endpoint escrito sin contrato, rompe la suite en lugar de
+# quedar alcanzable sin que nadie lo haya decidido. `path` es la ruta tal y como
+# la registra el servidor; un `/*` final abarca todo lo que cuelga de ella.
+#
+# Lo que se quito en vez de inventariarse: `GET /sanctum/csrf-cookie` (ninguna
+# aplicacion cliente usa cookies de sesion; abria una sesion por peticion
+# anonima) y `GET|PUT /storage/{path}` (el disco privado no se sirve por HTTP).
+x-route-exclusions:
+  - path: /metrics
+    methods: [GET]
+    reason: |
+      Exposicion de metricas para Prometheus (doc 02 §8), en su formato de texto
+      y no en JSON. No es de ninguna aplicacion cliente: solo responde a la red
+      interna de observabilidad (`RestrictToMetricsNetwork`) y el servidor web
+      la cierra hacia fuera. Su forma la fija el catalogo de metricas
+      (`MetricsCatalogueTest`), no este contrato.
+  - path: /horizon/*
+    methods: [GET, POST, DELETE]
+    reason: |
+      Panel y API interna del gestor de colas (Laravel Horizon), que el paquete
+      registra siempre. Cerrados a todo el mundo en cualquier entorno
+      (`viewHorizon` deniega; `HorizonDashboardClosedTest`) y el servidor web
+      responde `404` en `/horizon` (hallazgo T1 de la 2.1.0).
 
 paths:
   /api/v1/health:
@@ -4360,6 +4396,80 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/SiteNotConfigured'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/broadcasting/auth:
+    post:
+      operationId: authorizeRealtimeChannel
+      summary: Firma de la suscripcion a un canal de presencia
+      description: |
+        Firma la suscripcion del WebSocket a un canal privado de presencia
+        (ADR-011, RF-PA-01). La llama el panel cada vez que abre o reabre la
+        conexion, con el `socket_id` que Reverb le acaba de asignar y el nombre
+        del canal **tal y como viaja por el cable**, con el prefijo `private-`:
+        `private-presence.all` o `private-presence.department.{id}`. Donde esta
+        y que canales puede pedir lo dice `meta.realtime` de
+        `GET /api/v1/attendance/live`.
+
+        **Dos comprobaciones, como en cualquier otra ruta** (regla dura 18): el
+        ambito `attendance:read` y la misma policy que la foto de
+        `GET /api/v1/attendance/live`. Despues, el canal vuelve a comprobar el
+        alcance por departamento (RF-ID-03) y la licencia (ADR-023): sin
+        licencia que conceda el tiempo real, **ningun canal se firma** y el
+        panel sigue por sondeo. Desde fuera no se distingue «ese canal no
+        existe» de «no puedes entrar»: los dos son `403`, porque distinguirlos
+        diria cuantos departamentos hay. Los actores de soporte del fabricante
+        no se suscriben nunca (regla dura 16).
+
+        **Solo `POST`.** No escribe nada: es `POST` por el protocolo de Pusher.
+        Admite JSON —lo que envia el panel— y el formulario
+        `application/x-www-form-urlencoded` del cliente de Pusher; es la unica
+        ruta, junto a las de subida de ficheros, a la que no se aplica la regla
+        del `415` de **Cuerpo de la peticion**. Cualquier otro campo, tambien un
+        `callback` de JSONP, es un `422`.
+
+        **Se registra en `audit_log`** (RS-05): la suscripcion concedida, agrupada
+        por cuenta y canal en una ventana como la consulta de la foto, y la
+        denegada por alcance. Si el asiento no se puede escribir, no se firma.
+      tags: [Reporting]
+      security:
+        - managementToken: ['attendance:read']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelAuthorizationRequest'
+            examples:
+              canal-global:
+                value:
+                  socket_id: '1234.5678'
+                  channel_name: private-presence.all
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChannelAuthorizationRequest'
+      responses:
+        '200':
+          description: |
+            La firma de la suscripcion, que el cliente entrega a Reverb tal cual.
+            Vale solo para ese `socket_id` y ese canal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelAuthorization'
+              examples:
+                firmada:
+                  value:
+                    auth: 'kronoqr:3f2a9c0d4b1e8f7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -18901,6 +19011,39 @@ components:
         realtime:
           $ref: '#/components/schemas/RealtimeSubscription'
 
+    ChannelAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [socket_id, channel_name]
+      description: |
+        Lo que pide el cliente de WebSocket para suscribirse a un canal privado
+        (`POST /api/v1/broadcasting/auth`).
+      properties:
+        socket_id:
+          type: string
+          maxLength: 64
+          pattern: '^\d+\.\d+$'
+          description: Identificador que Reverb asigno a la conexion, con la forma del protocolo de Pusher.
+          examples: ['1234.5678']
+        channel_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: |
+            El canal con el prefijo del cable: `private-presence.all` o
+            `private-presence.department.{id}`. Un nombre que no es ninguno de
+            los dos no es un `422`: es un `403`, el mismo que un canal ajeno.
+          examples: [private-presence.all]
+    ChannelAuthorization:
+      type: object
+      additionalProperties: false
+      required: [auth]
+      description: La firma de una suscripcion a un canal privado.
+      properties:
+        auth:
+          type: string
+          minLength: 1
+          description: '`<clave publica>:<HMAC-SHA256>` del `socket_id` y el canal, con el secreto de Reverb.'
     RealtimeSubscription:
       type: object
       title: RealtimeSubscription

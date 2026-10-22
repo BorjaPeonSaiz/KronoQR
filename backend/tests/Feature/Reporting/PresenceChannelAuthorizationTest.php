@@ -5,8 +5,12 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Spectator\Spectator;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
@@ -81,6 +85,10 @@ beforeEach(function (): void {
      * el tiempo real intacto si la unica comprobacion viviera en la respuesta.
      */
     LicenseKeys::grantAll();
+
+    // Desde el bloque 12 de la 2.3.0 la ruta tiene operacion en el contrato
+    // (B3, R6-BD-02), y sus respuestas se validan contra el.
+    Spectator::using('openapi.yaml');
 });
 
 /**
@@ -126,7 +134,7 @@ it('firma al responsable la suscripcion al canal de su departamento', function (
 
     $respuesta = autorizarCanal($escenario['jefeDeCocina'], 'presence.department.'.$escenario['cocina']);
 
-    $respuesta->assertOk();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('auth'))->toBeString();
 })->group('RF-ID-03', 'RS-04', 'RF-PA-01');
@@ -135,7 +143,8 @@ it('niega al responsable el canal de otro departamento', function (): void {
     $escenario = escenarioDeCanales();
 
     autorizarCanal($escenario['jefeDeCocina'], 'presence.department.'.$escenario['recepcion'])
-        ->assertStatus(403);
+        ->assertStatus(403)
+        ->assertValidResponse(403);
 })->group('RF-ID-03', 'RS-04');
 
 it('niega al responsable el canal global de la instalacion', function (): void {
@@ -194,7 +203,7 @@ it('deniega sin token', function (): void {
     Api::guest()->post('/api/v1/broadcasting/auth', [
         'socket_id' => '1234.5678',
         'channel_name' => 'private-presence.all',
-    ])->assertStatus(401);
+    ])->assertStatus(401)->assertValidResponse(401);
 })->group('RS-04');
 
 it('no confunde un nombre de canal con basura detras del numero', function (): void {
@@ -270,3 +279,80 @@ it('firma a un admin del cliente los dos canales que le niega al soporte', funct
     autorizarCanal($token, 'presence.all')->assertOk();
     autorizarCanal($token, 'presence.department.'.$escenario['cocina'])->assertOk();
 })->group('RF-PA-01', 'RF-PD-11', 'RQ-07');
+
+/*
+ * LA PETICION MAL FORMADA ES UN 422, NO UN 500 (B3, R6-BD-02; bloque 12 de la
+ * 2.3.0). El controlador del framework pasaba `socket_id` tal cual a la libreria
+ * de Pusher, que revienta con uno que no tiene la forma `123.456`; y respondia
+ * JSONP si llegaba un `callback`. Ninguna de las dos formas esta en el contrato.
+ */
+it('rechaza con 422 un socket_id mal formado o ausente, y un callback de JSONP', function (array $cuerpo): void {
+    escenarioDeCanales();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->post('/api/v1/broadcasting/auth', $cuerpo)
+        ->assertStatus(422)
+        ->assertValidResponse(422);
+
+    expect(DB::table('error_events')->count())->toBe(0);
+})->with([
+    'socket_id sin punto' => [['socket_id' => 'abc', 'channel_name' => 'private-presence.all']],
+    'sin socket_id' => [['channel_name' => 'private-presence.all']],
+    'sin canal' => [['socket_id' => '1234.5678']],
+    'con callback' => [['socket_id' => '1234.5678', 'channel_name' => 'private-presence.all', 'callback' => 'robar']],
+])->group('RF-PA-01', 'RQ-06');
+
+it('firma tambien el formulario que envia el cliente de Pusher', function (): void {
+    escenarioDeCanales();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    // Un formulario, como lo envia `pusher-js` con su autorizador de serie;
+    // `Api` siempre envia JSON. Por el kernel HTTP, como `call()` de la prueba.
+    $peticion = Request::create('/api/v1/broadcasting/auth', 'POST', ['socket_id' => '1234.5678', 'channel_name' => 'private-presence.all'], server: [
+        'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+        'HTTP_ACCEPT' => 'application/json',
+        'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+    ]);
+    $kernel = app(HttpKernel::class);
+    $respuesta = TestResponse::fromBaseResponse($kernel->handle($peticion), $peticion);
+    $kernel->terminate($peticion, $respuesta->baseResponse);
+
+    $respuesta->assertOk();
+    expect($respuesta->json('auth'))->toStartWith('kronoqr-test-key:');
+})->group('RF-PA-01');
+
+it('solo atiende POST: el GET que registraba el framework ya no existe', function (): void {
+    escenarioDeCanales();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->get('/api/v1/broadcasting/auth?socket_id=1234.5678&channel_name=private-presence.all&callback=x')
+        ->assertStatus(405);
+})->group('RF-PA-01', 'RS-04');
+
+/*
+ * SOLO LOS DOS CANALES QUE EXISTEN, ESCRITOS TAL CUAL (bloque 12 de la 2.3.0).
+ * El difusor de Pusher normaliza `private-encrypted-` y `presence-` antes de
+ * buscar el callback, y el patron de `Broadcast::channel()` no escapa el punto:
+ * los tres nombres de abajo llegaban al callback de `presence.all` y se le
+ * firmaban a RRHH. Ahora son el mismo `403` que un canal ajeno, sin pasar por el
+ * difusor y sin asiento de divulgacion.
+ */
+it('niega con el 403 de un canal ajeno cualquier nombre que no sea uno de los dos canales', function (string $canal): void {
+    escenarioDeCanales();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+    $ajeno = autorizarCanal(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO)), 'presence.all');
+    Auth::forgetGuards();
+    $asientos = DB::table('audit_log')->count();
+
+    $respuesta = Api::as($token)->post('/api/v1/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => $canal]);
+
+    $respuesta->assertStatus(403)->assertValidResponse(403);
+
+    expect($respuesta->json())->toBe($ajeno->json())
+        ->and(DB::table('error_events')->count())->toBe(0)
+        ->and(DB::table('audit_log')->count())->toBe($asientos);
+})->with([
+    'cifrado' => ['private-encrypted-presence.all'],
+    'presencia de Pusher' => ['presence-presence.all'],
+    'punto sin escapar' => ['private-presenceXall'],
+])->group('RF-ID-03', 'RS-04', 'RS-05');

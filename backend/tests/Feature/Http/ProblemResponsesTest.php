@@ -118,8 +118,8 @@ it('admite multipart solo en las rutas de subida', function (): void {
 })->group('RQ-06', 'RF-GP-05');
 
 it('no mira el formulario de broadcasting/auth, que va fuera del grupo api', function (): void {
-    // El cliente de Pusher envia un formulario. La ruta la declara
-    // `withBroadcasting()` sin el grupo `api`, asi que la puerta ni la ve: no
+    // El cliente de Pusher envia un formulario. La ruta se declara en el `then:`
+    // de `withRouting()` sin el grupo `api`, asi que la puerta ni la ve: no
     // hace falta (ni existe) una excepcion para ella.
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
 

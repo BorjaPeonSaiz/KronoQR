@@ -330,6 +330,9 @@ CHAIN_DISCARDED=""
 # se pudo escribir: el trabajo no se deshace por eso, pero final_report()
 # sale con KQ_EXIT_VERIFY_FAILED (6) en vez de KQ_EXIT_OK.
 AUDIT_ENTRY_FAILED=0
+# 1 si `credentials:revoke-offboarded` (12.4) fallo tras migrar: tampoco se deshace nada (las
+# personas ya procesadas quedan revocadas y repetirla continua), pero se sale con 6.
+REVOKE_OFFBOARDED_FAILED=0
 declare -a CHECKPOINTS=()
 declare -a REPORT_CHECKS=()
 
@@ -1082,7 +1085,7 @@ audit_json_object() {
     [ -n "${value}" ] || continue
     [ "${first}" -eq 1 ] || out+=","
     first=0
-    if [ "${key}" = "migrations_applied" ] && [[ "${value}" =~ ^[0-9]+$ ]]; then
+    if [[ "${key}" =~ ^(migrations_applied|revoked_credentials|employees|failed)$ ]] && [[ "${value}" =~ ^[0-9]+$ ]]; then
       out+="\"${key}\":${value}"
     elif [ "${key}" = "portal_exposed" ] && [ "${value}" = "true" ]; then
       out+="\"${key}\":true"
@@ -3110,6 +3113,48 @@ phase_start_and_verify() {
     ;;
   esac
 
+  # 12.4 (2.3.0): revoca las tarjetas activas de las bajas anteriores a la 2.2.0. Va DESPUES de
+  # migrar y de verificar privilegios y ANTES de calcular CHAIN_AFTER, para que sus asientos
+  # queden dentro del `chain_after` del asiento `system.updated`. Idempotente: repetirla
+  # continua donde se quedo sin duplicar. Imprime `revoked_credentials=<n> employees=<n>`, sin
+  # nombres ni uuid. Un fallo NO deshace la actualizacion (el trabajo esta hecho): avisa y sale 6.
+  detail_note "--- credentials:revoke-offboarded ---"
+  revoke_status=0
+  revoke_output="$(compose_new exec -T app php artisan credentials:revoke-offboarded 2>&1)" ||
+    revoke_status=$?
+  detail_note "${revoke_output}"
+
+  # La linea de recuento se toma POR PATRON (stdout y stderr van mezclados: la ultima linea
+  # puede ser un aviso de PHP). Aunque la orden falle a medias, el recuento de lo ya revocado
+  # es el que consta en el asiento. Sin tuberias hacia grep -q (pipefail).
+  revoke_line="$(grep -E '^revoked_credentials=[0-9]+ employees=[0-9]+ failed=[0-9]+$' <<<"${revoke_output}" | tail -n 1 || true)"
+  REVOKED_CREDENTIALS=""
+  REVOKED_EMPLOYEES=""
+  REVOKED_FAILED=""
+  if [ -n "${revoke_line}" ]; then
+    REVOKED_CREDENTIALS="${revoke_line#revoked_credentials=}"
+    REVOKED_CREDENTIALS="${REVOKED_CREDENTIALS%% *}"
+    REVOKED_EMPLOYEES="${revoke_line#*employees=}"
+    REVOKED_EMPLOYEES="${REVOKED_EMPLOYEES%% *}"
+    REVOKED_FAILED="${revoke_line#*failed=}"
+  fi
+
+  # Correcto = salida 0, linea de recuento presente y failed=0. Sin la linea (falla la seleccion
+  # inicial, o la salida cambio de forma) se trata como fallo: no se da por hecho lo que no consta.
+  if [ "${revoke_status}" -eq 0 ] && [ "${REVOKED_FAILED}" = "0" ]; then
+    kq_msg check_ok "$(kq_format u_verify_revoke_offboarded_ok "${revoke_line}")"
+    remember_check "revoke-offboarded" "$(kq_text u_report_ok)"
+  else
+    if [ "${revoke_status}" -eq 0 ]; then
+      revoke_status="${REVOKED_FAILED:+failed=${REVOKED_FAILED}}"
+      revoke_status="${revoke_status:-sin recuento}"
+    fi
+    kq_msg check_warn "$(kq_format u_verify_revoke_offboarded_warn "${revoke_status}")"
+    kq_msg fix "$(kq_text u_verify_revoke_offboarded_warn_fix)"
+    remember_check "revoke-offboarded" "$(kq_text u_report_failed) (${revoke_status})"
+    REVOKE_OFFBOARDED_FAILED=1
+  fi
+
   # Punta de la cadena DESPUES de migrar y de verificar (RF-PD-10): con la
   # de `check_audit_chain` (CHAIN_BEFORE), es lo que el asiento `system.updated`
   # necesita para decir por donde iba el trail antes y despues de tocar nada.
@@ -3119,6 +3164,9 @@ phase_start_and_verify() {
     "from_version=${SOURCE_VERSION}" \
     "to_version=${TARGET_VERSION}" \
     "migrations_applied=${MIGRATIONS_APPLIED}" \
+    "revoked_credentials=${REVOKED_CREDENTIALS}" \
+    "employees=${REVOKED_EMPLOYEES}" \
+    "failed=${REVOKED_FAILED}" \
     "chain_before=${CHAIN_BEFORE}" \
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
@@ -3914,7 +3962,7 @@ final_report() {
   # El trabajo se hizo: no se deshace nada por esto (instruccion (e)). Se sale
   # con KQ_EXIT_VERIFY_FAILED en vez de KQ_EXIT_OK para que quien automatiza
   # la actualizacion note que el asiento de auditoria no quedo escrito.
-  if [ "${AUDIT_ENTRY_FAILED}" -eq 1 ]; then
+  if [ "${AUDIT_ENTRY_FAILED}" -eq 1 ] || [ "${REVOKE_OFFBOARDED_FAILED}" -eq 1 ]; then
     exit_code="${KQ_EXIT_VERIFY_FAILED}"
   fi
 

@@ -142,6 +142,19 @@ gzip_types
   image/svg+xml;
 
 #------------------------------------------------------------------------------
+# Tipo MIME del manifiesto estatico (R6-KI-02)
+#------------------------------------------------------------------------------
+# El `mime.types` de la imagen no conoce `.webmanifest`, y sin esto nginx lo servia como
+# `application/octet-stream` (con `nosniff`). El manifiesto que enlaza el quiosco es el
+# dinamico de la API; este es el de reserva que genera el build (`/kiosk/manifest.webmanifest`).
+# Un segundo `types {}` en el mismo contexto AMPLIA el mapa, no lo sustituye: por eso se
+# declara aqui, a nivel http, y no dentro de una `location` (alli SI lo sustituiria y las
+# SPA perderian el tipo de JS y CSS).
+types {
+  application/manifest+json webmanifest;
+}
+
+#------------------------------------------------------------------------------
 # Caducidad de la cache de las tres SPA
 #------------------------------------------------------------------------------
 # Dos politicas, y la frontera la marca Vite: todo lo de `assets/` lleva el
@@ -537,10 +550,12 @@ server {
     include /etc/nginx/snippets/proxy-websocket.conf;
   }
 
+  # La API HTTP de Reverb (`/apps/`) NO sale al borde (CFG-1). Solo la usa el backend para
+  # publicar eventos, y lo hace por la red interna (`REVERB_HOST=reverb:8080`), sin pasar por
+  # nginx. Publicada, era una superficie sin uso y sin `limit_req`; la atenuaba la firma con el
+  # secreto de la app, pero lo mas barato es no exponerla. `^~` cubre todo lo que cuelga de ella.
   location ^~ /apps/ {
-    set $kronoqr_reverb_upstream reverb:8080;
-    proxy_pass http://$kronoqr_reverb_upstream;
-    include /etc/nginx/snippets/proxy-websocket.conf;
+    return 404;
   }
 
   # Las tres SPA. En PRODUCCION este directorio trae `spa.conf` desde la propia

@@ -15,9 +15,11 @@ declare(strict_types=1);
  *
  * EL PROCESO. Corre en su propio contenedor (`infra/compose.*.yaml`, servicio
  * `reverb`) con `reverb:start --host=0.0.0.0 --port=8080`. Nginx le proxifica
- * `/app/` —el WebSocket del navegador— y `/apps/` —la API HTTP con la que el
- * servidor publica mensajes y consulta metricas—, con la cabecera de *upgrade*
- * puesta. La CSP ya permite `connect-src 'self' wss:` (§7.2).
+ * solo `/app/` —el WebSocket del navegador—, con la cabecera de *upgrade*
+ * puesta. `/apps/` —la API HTTP con la que el servidor publica mensajes y
+ * consulta metricas— no sale al borde desde la 2.3.0 (CFG-1): nginx responde
+ * `404` y la aplicacion la llama por la red interna (`REVERB_HOST`). El
+ * WebSocket es del mismo origen, asi que basta `connect-src 'self'` (CFG-2, §7.2).
  *
  * LOS CREDENCIALES SE GENERAN EN LA INSTALACION. El repositorio no lleva ninguno:
  * `REVERB_APP_SECRET` no tiene valor por defecto ni aqui ni en `.env.example`, y

@@ -65,7 +65,14 @@ final readonly class SystemEventPayload
     private const array SPEC = [
         'system.updated' => [
             'required' => ['from_version', 'to_version', 'migrations_applied'],
-            'optional' => ['chain_before', 'chain_after', 'backup_fingerprint', 'report_id', 'portal_exposed', 'image_signature'],
+            // `revoked_credentials`, `employees` y `failed`: el recuento de
+            // `credentials:revoke-offboarded` (tarea 12.4 de la 2.3.0), que
+            // `update.sh` lanza tras migrar. Opcionales: una actualizacion que
+            // no la lanza no los manda.
+            'optional' => [
+                'chain_before', 'chain_after', 'backup_fingerprint', 'report_id', 'portal_exposed', 'image_signature',
+                'revoked_credentials', 'employees', 'failed',
+            ],
         ],
         'system.restored_from_backup' => [
             'required' => ['backup_file', 'backup_taken_at', 'failed_step', 'reason', 'from_version', 'to_version'],
@@ -204,10 +211,11 @@ final readonly class SystemEventPayload
     /**
      * La forma que debe tener cada clave admitida.
      *
-     * Los cinco campos que no estan en {@see self::SHAPES} son los que no son una
+     * Los campos que no estan en {@see self::SHAPES} son los que no son una
      * cadena con una forma: tres son vocabularios cerrados —en dos la lista de
      * valores la da el propio enum, para que anadir un motivo no obligue a tocar
-     * aqui—, y `migrations_applied` y `legacy_wal` pueden ser un numero.
+     * aqui—, y `migrations_applied`, `legacy_wal` y los tres recuentos de la
+     * revocacion de tarjetas de bajas son un numero.
      */
     private static function assertShape(string $field, mixed $value): void
     {
@@ -215,6 +223,12 @@ final readonly class SystemEventPayload
             [$pattern, $expected] = self::SHAPES[$field];
 
             self::assertMatches($field, $value, $pattern, $expected);
+
+            return;
+        }
+
+        if (in_array($field, self::COUNTS, true)) {
+            self::assertCount($field, $value);
 
             return;
         }
@@ -291,6 +305,26 @@ final readonly class SystemEventPayload
             'legacy_wal',
             'un recuento entero entre 0 y '.self::LEGACY_WAL_MAX,
         );
+    }
+
+    /**
+     * Los recuentos de `credentials:revoke-offboarded` que `update.sh` lleva al
+     * asiento de la actualizacion (tarea 12.4 de la 2.3.0).
+     *
+     * @var list<string>
+     */
+    private const array COUNTS = ['revoked_credentials', 'employees', 'failed'];
+
+    /**
+     * Los recuentos de `credentials:revoke-offboarded`: un entero JSON no
+     * negativo. `update.sh` los convierte a numero antes de armar el JSON, asi
+     * que una cadena aqui es un script que ha dejado de hacerlo.
+     */
+    private static function assertCount(string $field, mixed $value): void
+    {
+        if (! is_int($value) || $value < 0) {
+            throw InvalidSystemEventPayload::malformedField($field, 'un recuento entero no negativo');
+        }
     }
 
     private static function assertMatches(string $field, mixed $value, string $pattern, string $expected): void

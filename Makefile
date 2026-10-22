@@ -277,8 +277,8 @@ help: ## Muestra esta ayuda
 	@echo "  make observability-check  Reglas de Prometheus y Alertmanager (etapa 2 de la CI)"
 	@echo "  make sast             Semgrep: reglas propias de .semgrep (bloqueante)"
 	@echo "  make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)"
-	@echo "  make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)"
-	@echo "  make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)"
+	@echo "  make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (bloqueante)"
+	@echo "  make trivy-image      Trivy: postgres:ci, app:ci y nginx:ci ya construidas (bloqueante)"
 	@echo "  make secrets-scan     gitleaks sobre el historico completo (bloqueante)"
 	@echo "  make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json"
 	@echo "  make dast             ZAP baseline manual contra 'make up' (informe, fuera de ci.yml)"
@@ -903,6 +903,11 @@ nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /por
 # `jq` sin volver a escanear.
 TRIVY_EXIT_CODE ?= 1
 TRIVY_FORMAT    ?= table
+# Que escaner corre cada objetivo. La CI parte cada uno en dos pasos (bloque 12 de la 2.3.0):
+# `vuln` depende de avisos EXTERNOS y en ramas bloquea solo si el cambio toca lo que audita;
+# `misconfig` y `secret` no dependen de ningun aviso externo y bloquean siempre.
+TRIVY_FS_SCANNERS    ?= vuln,misconfig,secret
+TRIVY_IMAGE_SCANNERS ?= vuln,secret
 
 # LA SALIDA ESTANDAR DE ESTE OBJETIVO ES SOLO LA DE TRIVY.
 #
@@ -914,8 +919,8 @@ TRIVY_FORMAT    ?= table
 # log del job, pero no ensucia lo que se va a parsear. El aviso final, por lo
 # mismo.
 trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	@echo "[make] trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
-	@$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
+	@echo "[make] trivy fs --scanners $(TRIVY_FS_SCANNERS) --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
+	@$(TRIVY) fs --scanners $(TRIVY_FS_SCANNERS) --severity HIGH,CRITICAL --ignore-unfixed \
 	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
 	  .
@@ -942,8 +947,9 @@ endif
 # unico que se rompio.
 #
 # Por defecto, las TRES de entrega. Cada job pasa las que ha construido:
-#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci"
-#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"
+#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"  (desde la 2.3.0)
+#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"   (la del paquete, en main y en la etiqueta)
+#   auditoria semanal  las tres imagenes PUBLICADAS (.github/workflows/auditoria-semanal.yml)
 # En local, `make build-ci-images IMAGES="postgres app nginx" && make trivy-image`
 # las cubre las tres sin argumentos.
 TRIVY_IMAGES ?= kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci
@@ -956,7 +962,7 @@ trivy-image: ## Trivy sobre las imagenes ya construidas (TRIVY_IMAGES=...; bloqu
 	  }; \
 	done
 	@for imagen in $(TRIVY_IMAGES); do \
-	  $(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed \
+	  $(TRIVY_IMAGE_CMD) image --scanners $(TRIVY_IMAGE_SCANNERS) --severity HIGH,CRITICAL --ignore-unfixed \
 	    --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	    --ignorefile infra/docker/.trivyignore.yaml "$$imagen" || exit $$?; \
 	done

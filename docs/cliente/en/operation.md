@@ -1777,6 +1777,41 @@ None of this stops clock-in:
   the portal's own-record PDF also changes version**: do not compare a
   checksum from before 2.3.0 with one from after it.
 
+**When updating to 2.3.0: the cards of earlier leavers are revoked.**
+`update.sh` revokes by itself, right after migrating, the cards that were still
+active for people who left before 2.2.0. **Leavers from 2.1.0 with a future termination
+date also lose their card**, those listed earlier in this same section ("When
+updating from 2.1.0: offboardings with a future termination date"). The person could not
+clock in already; what changes is that the card stops being valid. If they have
+to be re-hired, a new card is issued. The update report carries the count
+(without names). **If the update exits with code 6 because of this step**,
+nothing is rolled back: people already processed stay revoked, and you repeat it
+without duplicating with
+`docker compose exec app php artisan credentials:revoke-offboarded`.
+
+**When updating to 2.3.0: the edge closes a door you were not using.** None of
+this stops clock-in or requires touching the configuration:
+
+- **The panel and the portal can only open live connections to their own
+  server** (before, any secure destination was allowed). In a very old browser
+  that does not understand this, live presence falls back to polling every few
+  seconds and the panel says so; clocking does not change.
+- **The internal HTTP interface of the live service (`/apps/`) is no longer
+  published** by the web server: the product does not use it from outside. If
+  any system of yours called it, it will now get `404`.
+- **The observability panel** (if enabled): the availability prober is
+  recreated on update, without administrator rights and without access to the
+  application network. There is nothing to do.
+
+**When updating to 2.3.0: cards that were still active for people already
+offboarded are revoked automatically.** Since 2.2.0, offboarding withdraws the
+card at once; people offboarded before that kept theirs "active" in the panel,
+although it did not let them clock in. `update.sh` revokes them once the
+migrations finish, with the same reason as an offboarding today
+(`Baja del empleado (RN-14)`), the date of the update and an audit-log entry
+for each card. There is nothing to do; if you count them in the panel, you
+will see fewer active cards.
+
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from
 2.2.0 will see for the first time. **None of them stops clocking or

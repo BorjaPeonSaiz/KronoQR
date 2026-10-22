@@ -83,6 +83,7 @@ use App\Modules\Identity\Infrastructure\Console\ResetManagementPasswordCommand;
 use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Infrastructure\Console\RetireSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\RevokeOffboardedCredentialsCommand;
 use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\UnlockPortalOriginCommand;
 use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
@@ -276,6 +277,9 @@ final class IdentityServiceProvider extends ServiceProvider
                 DeliverCredentialCommand::class,
                 CredentialStatusCommand::class,
                 RevokeCredentialCommand::class,
+                // Bajas anteriores a la 2.2.0 con tarjetas activas (R3-AR-07):
+                // la lanza `update.sh` tras migrar; idempotente.
+                RevokeOffboardedCredentialsCommand::class,
                 // Rotacion con solape (RF-QR-07). No tienen endpoint y no lo
                 // tendran: rotar la clave es un acto operativo con semanas de
                 // logistica de reimpresion detras, no un boton de panel.

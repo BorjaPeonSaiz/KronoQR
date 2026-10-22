@@ -1757,6 +1757,40 @@ anotadas.** Nada de esto impide fichar:
   del registro propio del portal también cambia de versión**: no compares una
   huella de antes de la 2.3.0 con una de después.
 
+**Al actualizar a la 2.3.0: las tarjetas de las bajas antiguas se revocan.**
+`update.sh` revoca solo, justo después de migrar, las tarjetas que seguían
+activas de personas ya dadas de baja antes de la 2.2.0. **Pierden la tarjeta
+también las bajas de la 2.1.0 con fecha de cese futura** que se listan más
+arriba en este mismo apartado («Al actualizar desde la 2.1.0: bajas con fecha
+de cese futura»). La persona no podía fichar ya; lo que cambia es que su
+tarjeta deja de ser válida. Si hay que volver a darla de alta, se emite una
+tarjeta nueva. El informe de la actualización lleva el recuento (sin nombres).
+**Si la actualización sale con el código 6 por este paso**, no se ha deshecho
+nada: las personas ya procesadas quedan revocadas y se repite sin duplicar con
+`docker compose exec app php artisan credentials:revoke-offboarded`.
+
+**Al actualizar a la 2.3.0: el borde cierra una puerta que no usabas.** Nada
+de esto impide fichar ni exige tocar la configuración:
+
+- **El panel y el portal solo pueden abrir conexiones en directo contra su
+  propio servidor** (antes admitían cualquier destino seguro). En un navegador
+  muy antiguo que no lo entienda, la presencia en directo pasa al sondeo cada
+  pocos segundos y el panel lo anuncia; el fichaje no cambia.
+- **La interfaz HTTP interna del servicio en directo (`/apps/`) deja de
+  publicarse** por el servidor web: el producto no la usa desde fuera. Si
+  algún sistema tuyo la llamaba, recibirá `404`.
+- **El panel de observabilidad** (si lo tienes activo): el sondeador de
+  disponibilidad se recrea al actualizar, sin permisos de administrador y sin
+  acceso a la red de la aplicación. No hay nada que hacer.
+
+**Al actualizar a la 2.3.0: se revocan solas las tarjetas que seguían activas
+de personas ya dadas de baja.** Desde la 2.2.0 la baja retira la tarjeta en el
+acto; las bajas registradas antes conservaban la suya «activa» en el panel,
+aunque no dejaba fichar. `update.sh` las revoca al terminar de migrar, con el
+mismo motivo que una baja de hoy (`Baja del empleado (RN-14)`), la fecha de la
+actualización y su asiento en el registro de auditoría por cada tarjeta. No hay
+que hacer nada; si las cuentas en el panel, verás menos tarjetas activas.
+
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que
 venga de la 2.2.0 verá por primera vez. **Ninguno impide fichar ni actualizar**,

@@ -123,7 +123,7 @@ it('los ambitos de lectura de read_only no abren NINGUNA ruta que escriba', func
     //
     // Se declara como lista cerrada, no se ignora: cualquier otra que aparezca
     // rompe la prueba.
-    $sinEfecto = ['GET|POST /api/v1/broadcasting/auth'];
+    $sinEfecto = ['POST /api/v1/broadcasting/auth'];
 
     $lectura = array_diff(SupportScope::ReadOnly->abilities(), SupportScope::Diagnostics->abilities());
 
@@ -173,7 +173,7 @@ it('ningun alcance alcanza una ruta de escritura que no sea de configuracion', f
         'POST /api/v1/diagnostics/bundle',
         // No escribe: es la autorizacion de suscripcion al canal de presencia
         // (ADR-011), `POST` por protocolo. Ver la prueba de arriba.
-        'GET|POST /api/v1/broadcasting/auth',
+        'POST /api/v1/broadcasting/auth',
         // LOS DOS DEL ASISTENTE DE PUESTA EN MARCHA viajan bajo `settings:*`, asi
         // que el AMBITO de `configuration` los alcanza; esta prueba solo mira el
         // middleware. Quien los cierra es la POLICY: `SetupPolicy` rechaza a todo
@@ -288,7 +288,7 @@ it('ningun alcance lleva un ambito que el contrato prohibe', function (SupportSc
 /**
  * Las rutas de la API que SOLO leen.
  *
- * `GET|POST /api/v1/broadcasting/auth` queda fuera por llevar `POST`: la trata
+ * `POST /api/v1/broadcasting/auth` queda fuera por ser `POST`: la trata
  * la mitad de escritura, donde su excepcion esta razonada.
  *
  * @return list<Route>

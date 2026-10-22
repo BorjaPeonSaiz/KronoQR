@@ -958,12 +958,44 @@ jobs:
           # nada anterior al ultimo commit.
           fetch-depth: 0
 
+      - name: Decidir si los controles de dependencias e imagenes bloquean (R6-DV-04)
+        id: gate
+        # Politica del bloque 12 (docs/runbooks/triaje-hallazgos-seguridad.md, §4). `main` y las
+        # etiquetas bloquean siempre. En cualquier otra rama (push o workflow_dispatch) bloquean
+        # solo si el cambio toca lo que auditan: un lock de composer o de npm, un Dockerfile, un
+        # digest o `images.lock`. Si no, un aviso externo ajeno al cambio no pone la rama en rojo:
+        # el paso corre igual y su resultado queda visible como aviso. Sin tuberias hacia grep -q (pipefail): se usan cadenas aqui (here-strings).
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          bloquea=true
+          motivo="main o etiqueta: bloquea siempre"
+          if [ "${REF}" != "refs/heads/main" ] && [[ "${REF}" != refs/tags/* ]]; then
+            base="$(git merge-base origin/main HEAD)"
+            ficheros="$(git diff --name-only "${base}" HEAD)"
+            digests="$(git diff -U0 "${base}" HEAD)"
+            if grep -Eq '(^|/)(composer\.lock|package-lock\.json|images\.lock)$|(^|/)Dockerfile[^/]*$|(^|/)\.dockerignore$|^infra/docker/' <<<"${ficheros}"; then
+              motivo="el cambio toca un lock, un Dockerfile o images.lock"
+            elif grep -Eq '^\+[^+].*@sha256:' <<<"${digests}"; then
+              motivo="el cambio toca un digest"
+            else
+              bloquea=false
+              motivo="el cambio no toca locks, Dockerfiles ni digests: los avisos informan y no bloquean"
+            fi
+          fi
+          echo "bloquea=${bloquea}" >>"${GITHUB_OUTPUT}"
+          echo "Controles de dependencias e imagenes: bloquea=${bloquea} (${motivo})."
+          echo "::notice title=Controles de dependencias e imagenes::bloquea=${bloquea}; ${motivo}."
+
       - uses: ./.github/actions/php-toolchain
         with:
           php-version: ${{ env.PHP_VERSION }}
           coverage: none
 
       - name: composer audit (0 vulnerabilidades)
+        id: audit_php
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         run: make deps-audit-php
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -971,6 +1003,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: npm audit del workspace (0 criticas ni altas en produccion; desarrollo informa)
+        id: audit_js
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         run: make deps-audit-js
 
       - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)
@@ -1064,18 +1098,23 @@ jobs:
         # existe para evitar; instalar esta accion, fijada por SHA, es mas
         # barato que pagar esa reconstruccion en cada ejecucion.
 
-      - name: Construir kronoqr/postgres:ci y kronoqr/app:ci (con cache de Actions)
+      - name: Construir kronoqr/postgres:ci, kronoqr/app:ci y kronoqr/nginx:ci (con cache de Actions)
         # `make build-ci-images` (IMPORTANTE 10 de la auditoria: la misma
         # orden que usan el job `unit` y backup-drill.yml, en un solo
         # objetivo). Aqui, y solo aqui, con BUILDX_CACHE=gha: es el unico job
         # que construye las DOS imagenes en cada push y el unico que tiene
         # justo encima el paso de `ghaction-github-runtime`.
+        #
+        # Las TRES desde el bloque 12 de la 2.3.0 (V6-DV-7): la de nginx solo se escaneaba en
+        # la etapa ⑧ de `main` y de la etiqueta, asi que un CVE de la base de nginx aparecia
+        # justo al publicar. Su build (las tres SPA) entra en cache de Actions como las otras.
         env:
           APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
-        run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
 
-      - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
+      - name: Trivy fs — vulnerabilidades de dependencias (bloqueante; en ramas, segun la puerta)
         id: trivy_fs
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         # BLOQUEANTE desde el 29 de agosto de 2026: el unico hallazgo que
         # tenia (DS-0002, el Dockerfile de PostgreSQL sin `USER`) se corrigio
         # en la propia imagen, no con una excepcion. El TRIVY_EXIT_CODE por
@@ -1087,7 +1126,7 @@ jobs:
         # (docs/runbooks/triaje-hallazgos-seguridad.md).
         run: |
           set +e
-          make trivy-fs TRIVY_FORMAT=json >trivy-fs.json
+          make trivy-fs TRIVY_FS_SCANNERS=vuln TRIVY_FORMAT=json >trivy-fs.json
           estado=$?
           set -e
           jq -r '
@@ -1107,8 +1146,9 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
 
-      - name: Trivy image — postgres:ci y app:ci (bloqueante)
+      - name: Trivy image — vulnerabilidades de postgres:ci, app:ci y nginx:ci (bloqueante; en ramas, segun la puerta)
         id: trivy_image
+        continue-on-error: ${{ steps.gate.outputs.bloquea == 'false' }}
         # BLOQUEANTE desde el 29 de agosto de 2026. Los 21 HIGH que tenia
         # kronoqr/postgres:ci estaban todos en usr/local/bin/gosu (Go stdlib
         # de la imagen oficial), y la imagen ya no lleva ese binario: arranca
@@ -1118,7 +1158,7 @@ jobs:
         # salida que en el paso anterior.
         run: |
           set +e
-          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci" TRIVY_FORMAT=json >trivy-image.json
+          make trivy-image TRIVY_IMAGE_SCANNERS=vuln TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
           set -e
           jq -s -r '
@@ -1137,6 +1177,31 @@ jobs:
             fi
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$estado"
+
+      - name: Trivy fs — Dockerfiles mal configurados y secretos del repo (bloquea siempre)
+        id: trivy_fs_static
+        # Ni misconfig ni secret dependen de avisos externos: un hallazgo es del cambio, en
+        # cualquier rama. Por eso no pasan por la puerta (`gate`) de los avisos de vulnerabilidades.
+        run: make trivy-fs TRIVY_FS_SCANNERS=misconfig,secret
+
+      - name: Trivy image — secretos en postgres:ci, app:ci y nginx:ci (bloquea siempre)
+        id: trivy_image_secret
+        run: make trivy-image TRIVY_IMAGE_SCANNERS=secret TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"
+
+      - name: Avisar de los controles que han fallado sin bloquear
+        if: always() && steps.gate.outputs.bloquea == 'false'
+        env:
+          AUDIT_PHP: ${{ steps.audit_php.outcome }}
+          AUDIT_JS: ${{ steps.audit_js.outcome }}
+          TRIVY_FS: ${{ steps.trivy_fs.outcome }}
+          TRIVY_IMAGE: ${{ steps.trivy_image.outcome }}
+        run: |
+          set -euo pipefail
+          for par in "composer audit:${AUDIT_PHP}" "npm audit:${AUDIT_JS}" "trivy fs:${TRIVY_FS}" "trivy image:${TRIVY_IMAGE}"; do
+            if [ "${par##*:}" = "failure" ]; then
+              echo "::warning title=${par%%:*} con hallazgos (no bloquea)::Este cambio no toca locks, Dockerfiles ni digests, asi que el aviso informa y no bloquea. main y la etiqueta si bloquearan: docs/runbooks/triaje-hallazgos-seguridad.md, §4."
+            fi
+          done
 
       - name: SBOM CycloneDX
         run: make sbom

@@ -2174,6 +2174,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/broadcasting/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Firma de la suscripcion a un canal de presencia
+         * @description Firma la suscripcion del WebSocket a un canal privado de presencia
+         *     (ADR-011, RF-PA-01). La llama el panel cada vez que abre o reabre la
+         *     conexion, con el `socket_id` que Reverb le acaba de asignar y el nombre
+         *     del canal **tal y como viaja por el cable**, con el prefijo `private-`:
+         *     `private-presence.all` o `private-presence.department.{id}`. Donde esta
+         *     y que canales puede pedir lo dice `meta.realtime` de
+         *     `GET /api/v1/attendance/live`.
+         *
+         *     **Dos comprobaciones, como en cualquier otra ruta** (regla dura 18): el
+         *     ambito `attendance:read` y la misma policy que la foto de
+         *     `GET /api/v1/attendance/live`. Despues, el canal vuelve a comprobar el
+         *     alcance por departamento (RF-ID-03) y la licencia (ADR-023): sin
+         *     licencia que conceda el tiempo real, **ningun canal se firma** y el
+         *     panel sigue por sondeo. Desde fuera no se distingue «ese canal no
+         *     existe» de «no puedes entrar»: los dos son `403`, porque distinguirlos
+         *     diria cuantos departamentos hay. Los actores de soporte del fabricante
+         *     no se suscriben nunca (regla dura 16).
+         *
+         *     **Solo `POST`.** No escribe nada: es `POST` por el protocolo de Pusher.
+         *     Admite JSON —lo que envia el panel— y el formulario
+         *     `application/x-www-form-urlencoded` del cliente de Pusher; es la unica
+         *     ruta, junto a las de subida de ficheros, a la que no se aplica la regla
+         *     del `415` de **Cuerpo de la peticion**. Cualquier otro campo, tambien un
+         *     `callback` de JSONP, es un `422`.
+         *
+         *     **Se registra en `audit_log`** (RS-05): la suscripcion concedida, agrupada
+         *     por cuenta y canal en una ventana como la consulta de la foto, y la
+         *     denegada por alcance. Si el asiento no se puede escribir, no se firma.
+         */
+        post: operations["authorizeRealtimeChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compliance/summary": {
         parameters: {
             query?: never;
@@ -10106,6 +10153,29 @@ export interface components {
             realtime: components["schemas"]["RealtimeSubscription"];
         };
         /**
+         * @description Lo que pide el cliente de WebSocket para suscribirse a un canal privado
+         *     (`POST /api/v1/broadcasting/auth`).
+         */
+        ChannelAuthorizationRequest: {
+            /**
+             * @description Identificador que Reverb asigno a la conexion, con la forma del protocolo de Pusher.
+             * @example 1234.5678
+             */
+            socket_id: string;
+            /**
+             * @description El canal con el prefijo del cable: `private-presence.all` o
+             *     `private-presence.department.{id}`. Un nombre que no es ninguno de
+             *     los dos no es un `422`: es un `403`, el mismo que un canal ajeno.
+             * @example private-presence.all
+             */
+            channel_name: string;
+        };
+        /** @description La firma de una suscripcion a un canal privado. */
+        ChannelAuthorization: {
+            /** @description `<clave publica>:<HMAC-SHA256>` del `socket_id` y el canal, con el secreto de Reverb. */
+            auth: string;
+        };
+        /**
          * RealtimeSubscription
          * @description Como suscribirse al canal de presencia (ADR-011). **Viaja en la respuesta
          *     y no se compila en el panel**: el producto se instala en el servidor de
@@ -16058,6 +16128,39 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["SiteNotConfigured"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    authorizeRealtimeChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelAuthorizationRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["ChannelAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description La firma de la suscripcion, que el cliente entrega a Reverb tal cual.
+             *     Vale solo para ese `socket_id` y ese canal.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelAuthorization"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];

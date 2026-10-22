@@ -372,6 +372,11 @@ main() {
   for ruta in /kiosk/ /admin/ /portal/ /api/v1/ready; do
     sin_cabecera "${ruta}" Content-Security-Policy "'unsafe-eval'|'unsafe-inline'"
     cabecera "${ruta}" Cross-Origin-Resource-Policy "^Cross-Origin-Resource-Policy: same-origin$"
+    # V2-DV-04: COEP en las tres SPA y en la API.
+    cabecera "${ruta}" Cross-Origin-Embedder-Policy "^Cross-Origin-Embedder-Policy: credentialless$"
+    # CFG-2: connect-src solo con el origen propio; ni `wss:` ni `ws:` ni comodines.
+    cabecera "${ruta}" Content-Security-Policy "connect-src 'self';"
+    sin_cabecera "${ruta}" Content-Security-Policy "wss?:[ ;]|\*"
   done
 
   # PT-P2: los estaticos de una SPA salen comprimidos.
@@ -381,6 +386,8 @@ main() {
     fallo=1
   else
     cabecera "/kiosk/${activo}" Content-Encoding "^Content-Encoding: gzip$" "Accept-Encoding: gzip"
+    # El `types {}` del manifiesto AMPLIA el mapa; si sustituyera al de la imagen, el JS perderia su tipo.
+    cabecera "/kiosk/${activo}" Content-Type "^Content-Type: (text|application)/javascript"
   fi
 
   # PP-02 y PP-08: el 403 del portal sigue siendo 403 (RF-ID-08), con pagina
@@ -402,6 +409,13 @@ main() {
   # T1: Horizon no llega a PHP-FPM (aqui daria 502, no 404).
   comprobar /horizon 404
   comprobar /horizon/dashboard 404
+
+  # CFG-1: la API HTTP de Reverb no sale al borde (aqui no hay Reverb: daria 502, no 404).
+  comprobar /apps/ 404
+  comprobar /apps/kronoqr/events 404
+
+  # R6-KI-02: el manifiesto estatico de reserva sale como manifest+json, no octet-stream.
+  cabecera /kiosk/manifest.webmanifest Content-Type "^Content-Type: application/manifest\+json"
 
   # F4a-2, CH4: los errores que genera nginx en la API salen como problem+json,
   # no como HTML. Sin aplicacion detras no hay PHP-FPM: 502. Un cuerpo de 9 MiB
