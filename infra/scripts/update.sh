@@ -1085,7 +1085,7 @@ audit_json_object() {
     [ -n "${value}" ] || continue
     [ "${first}" -eq 1 ] || out+=","
     first=0
-    if [ "${key}" = "migrations_applied" ] && [[ "${value}" =~ ^[0-9]+$ ]]; then
+    if [[ "${key}" =~ ^(migrations_applied|revoked_credentials|employees)$ ]] && [[ "${value}" =~ ^[0-9]+$ ]]; then
       out+="\"${key}\":${value}"
     elif [ "${key}" = "portal_exposed" ] && [ "${value}" = "true" ]; then
       out+="\"${key}\":true"
@@ -3124,8 +3124,21 @@ phase_start_and_verify() {
     revoke_status=$?
   detail_note "${revoke_output}"
 
+  # La linea de recuento se toma POR PATRON (stdout y stderr van mezclados: la ultima linea
+  # puede ser un aviso de PHP). Aunque la orden falle a medias, el recuento de lo ya revocado
+  # es el que consta en el asiento. Sin tuberias hacia grep -q (pipefail).
+  revoke_line="$(grep -E '^revoked_credentials=[0-9]+ employees=[0-9]+( failed=[0-9]+)?$' <<<"${revoke_output}" | tail -n 1 || true)"
+  REVOKED_CREDENTIALS=""
+  REVOKED_EMPLOYEES=""
+  if [ -n "${revoke_line}" ]; then
+    REVOKED_CREDENTIALS="${revoke_line#revoked_credentials=}"
+    REVOKED_CREDENTIALS="${REVOKED_CREDENTIALS%% *}"
+    REVOKED_EMPLOYEES="${revoke_line#*employees=}"
+    REVOKED_EMPLOYEES="${REVOKED_EMPLOYEES%% *}"
+  fi
+
   if [ "${revoke_status}" -eq 0 ]; then
-    kq_msg check_ok "$(kq_format u_verify_revoke_offboarded_ok "$(printf '%s\n' "${revoke_output}" | tail -n 1)")"
+    kq_msg check_ok "$(kq_format u_verify_revoke_offboarded_ok "${revoke_line:-?}")"
     remember_check "revoke-offboarded" "$(kq_text u_report_ok)"
   else
     kq_msg check_warn "$(kq_format u_verify_revoke_offboarded_warn "${revoke_status}")"
@@ -3143,6 +3156,8 @@ phase_start_and_verify() {
     "from_version=${SOURCE_VERSION}" \
     "to_version=${TARGET_VERSION}" \
     "migrations_applied=${MIGRATIONS_APPLIED}" \
+    "revoked_credentials=${REVOKED_CREDENTIALS}" \
+    "employees=${REVOKED_EMPLOYEES}" \
     "chain_before=${CHAIN_BEFORE}" \
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \

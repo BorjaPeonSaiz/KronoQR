@@ -1757,6 +1757,18 @@ anotadas.** Nada de esto impide fichar:
   del registro propio del portal también cambia de versión**: no compares una
   huella de antes de la 2.3.0 con una de después.
 
+**Al actualizar a la 2.3.0: las tarjetas de las bajas antiguas se revocan.**
+`update.sh` revoca solo, justo después de migrar, las tarjetas que seguían
+activas de personas ya dadas de baja antes de la 2.2.0. **Pierden la tarjeta
+también las bajas de la 2.1.0 con fecha de cese futura** que se listan más
+arriba en este mismo apartado («Al actualizar desde la 2.1.0: bajas con fecha
+de cese futura»). La persona no podía fichar ya; lo que cambia es que su
+tarjeta deja de ser válida. Si hay que volver a darla de alta, se emite una
+tarjeta nueva. El informe de la actualización lleva el recuento (sin nombres).
+**Si la actualización sale con el código 6 por este paso**, no se ha deshecho
+nada: las personas ya procesadas quedan revocadas y se repite sin duplicar con
+`docker compose exec app php artisan credentials:revoke-offboarded`.
+
 **Al actualizar a la 2.3.0: el borde cierra una puerta que no usabas.** Nada
 de esto impide fichar ni exige tocar la configuración:
 

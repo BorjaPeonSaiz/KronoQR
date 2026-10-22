@@ -1777,6 +1777,18 @@ None of this stops clock-in:
   the portal's own-record PDF also changes version**: do not compare a
   checksum from before 2.3.0 with one from after it.
 
+**When updating to 2.3.0: the cards of earlier leavers are revoked.**
+`update.sh` revokes by itself, right after migrating, the cards that were still
+active for people who left before 2.2.0. **Leavers from 2.1.0 with a future termination
+date also lose their card**, those listed earlier in this same section ("When
+updating from 2.1.0: offboardings with a future termination date"). The person could not
+clock in already; what changes is that the card stops being valid. If they have
+to be re-hired, a new card is issued. The update report carries the count
+(without names). **If the update exits with code 6 because of this step**,
+nothing is rolled back: people already processed stay revoked, and you repeat it
+without duplicating with
+`docker compose exec app php artisan credentials:revoke-offboarded`.
+
 **When updating to 2.3.0: the edge closes a door you were not using.** None of
 this stops clock-in or requires touching the configuration:
 
