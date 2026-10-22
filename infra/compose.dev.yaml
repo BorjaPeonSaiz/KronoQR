@@ -447,6 +447,9 @@ services:
     container_name: kronoqr-node-kiosk
     environment:
       FRONTEND_NAME: kiosk
+      # El proxy /api de Vite apunta al Nginx del entorno por la red de
+      # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
+      KRONOQR_DEV_API_TARGET: https://nginx:8443
       # Unico de los tres con esta variable a "true": el que ejecuta
       # `npm ci` en la raiz del workspace. Ver el comentario de arriba.
       NODE_WORKSPACE_INSTALLER: "true"
@@ -473,6 +476,9 @@ services:
     container_name: kronoqr-node-admin
     environment:
       FRONTEND_NAME: admin
+      # El proxy /api de Vite apunta al Nginx del entorno por la red de
+      # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
+      KRONOQR_DEV_API_TARGET: https://nginx:8443
     working_dir: /app/frontend-admin
     volumes: *node-workspace-volumes
     ports:
@@ -492,6 +498,9 @@ services:
     container_name: kronoqr-node-portal
     environment:
       FRONTEND_NAME: portal
+      # El proxy /api de Vite apunta al Nginx del entorno por la red de
+      # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
+      KRONOQR_DEV_API_TARGET: https://nginx:8443
     working_dir: /app/frontend-portal
     volumes: *node-workspace-volumes
     ports:
