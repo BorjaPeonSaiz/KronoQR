@@ -89,9 +89,23 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (21-10-2026):** bloques 0 a 9 integrados (#182 a #187, #189 a #191 y #193). **Bloque 10** (`fix/degradacion-y-errores`): 10.1–10.8 ✅, revisiones aplicadas, CI manual 39630579067 en verde; PR y merge en curso.
+**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 10 integrados (#182 a #187, #189 a #191, #193 y #194). **Bloque 11** (`fix/minimizacion-y-asientos`): 11.1–11.6 ✅, revisiones de dominio, seguridad y código aplicadas; CI manual y PR en curso.
 
-Lo que conviene saber del bloque 10 (detalle en Engram `2.3.0/b10-adr-059`):
+Lo que conviene saber del bloque 11 (detalle en Engram `2.3.0/b11-decisiones` y `2.3.0/b11-decisiones-revision`):
+
+- **ADR-060 aceptado:** la ficha del empleado de baja y la cuenta de gestión se minimizan en sitio al vencer su plazo (no se borran: las FK RESTRICT lo impiden), con asiento por persona y función `SECURITY DEFINER` + trigger que impide revertirlo. Contratos y ausencias se borran en la misma pasada. Plazo de la ficha: `personnel_record_retention_years` del perfil (de serie 4, 1–30). No hay reactivación (ADR-051).
+- **Decisiones del propietario tras la revisión:** `credentials.revoked_reason` pasa a constante; `locale` y `teleworking` se conservan como cuasi-identificadores aceptados (doc 07 §6); `fichaje_app` sin `DELETE` en `employees`, `users`, `employment_contracts` y `absences`; la ejecución de la purga no minimiza más de lo que contó la simulación (lo liberado entra en la pasada siguiente) y la frase de confirmación cubre el plazo de la ficha.
+- **Motivo de soporte:** se vacía a los 90 días (mínimo 30) y rechaza correo, DNI/NIE y teléfono. **Tokens caducados** se purgan a las 03:40; `doctor` avisa de cuentas sin uso y tokens sin caducidad.
+- **Asientos de lectura nuevos (enmienda ADR-037):** presencia por Reverb (agrupada 900 s por cuenta y canal; si el asiento falla se libera la plaza), `GET /management-accounts` e `identity:list-users`, informe diferido a nombre de quien lo pidió.
+- **Paquete de diagnóstico `schema_version` 2:** la huella cubre el manifiesto; `--verify` comprueba un v1 con su regla. La huella del PDF del portal también es v2.
+- **Foto:** el producto no escribe fotos hoy; si el borrado falla tras el COMMIT queda el log `retention.personnel_photo_orphaned` y la nota del informe (la alerta de Loki se retiró).
+- **Infra:** `work-record-privileges.sh` vigila funciones, triggers, CHECK y DELETE retirado del bloque; un trigger o CHECK ausente cuenta como manipulación (rollback en `update.sh`).
+- **Pendiente:**
+  - la conciliación (ADR-057 §4) no detecta una ficha minimizada sin su asiento ni al revés;
+  - el `fix` de `access.tokens_without_expiry` remite a `identity:reset-password`; no hay orden que corte solo los tokens antiguos;
+  - A-27 queda CERRADO en doc 07; el DPO debe validar los cuasi-identificadores residuales y los plazos.
+
+Lo que conviene saber del bloque 10 (#194; detalle en Engram `2.3.0/b10-adr-059`):
 
 - **ADR-059 aceptado.** Decisiones del propietario:
   - con Redis caído, el portal sigue abierto (zona `portal` en fallo abierto, con los bloqueos del PIN en disco); el panel se cierra con 503;
@@ -149,7 +163,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 10 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 11 (minimización y asientos), marcando ✅ el título del bloque 10 en su primer commit.
+**Siguiente acción:** si el bloque 11 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 12 (endurecimiento del borde y de la cadena, rama `fix/endurecimiento-borde`), marcando ✅ el título del bloque 11 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
