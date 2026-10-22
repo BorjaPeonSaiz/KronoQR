@@ -1251,7 +1251,6 @@ services:
       LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
-      - ./observability/loki/rules:/loki/rules:ro
       - loki-data:/loki
     networks:
       - app

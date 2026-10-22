@@ -110,7 +110,7 @@ kq_obs_manifest() {
 kq_obs_is_protected() {
   case "$1" in
   prometheus/rules/local-* | prometheus/rules/kiosk.yml) return 1 ;;
-  prometheus/rules/*.yml | prometheus/prometheus.yml.template | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | retention-guard.sh | loki/loki.yaml | loki/rules/*/*.yml | tempo/tempo.yaml) return 0 ;;
+  prometheus/rules/*.yml | prometheus/prometheus.yml.template | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | retention-guard.sh | loki/loki.yaml | tempo/tempo.yaml) return 0 ;;
   esac
   return 1
 }
