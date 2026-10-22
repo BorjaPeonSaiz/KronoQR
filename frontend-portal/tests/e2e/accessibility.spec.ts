@@ -10,8 +10,7 @@
 // desde Linux, asi que declararlo ya no exige el `npm install` que en
 // Windows con `node_modules/` presente rompia los binarios nativos de
 // `@tailwindcss/oxide` (ver HANDOFF.md -> "Trampas del entorno").
-import AxeBuilder from '@axe-core/playwright'
-import type { Page, Route } from '@playwright/test'
+import type { Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import {
   dayWithBreak,
@@ -21,22 +20,7 @@ import {
   stubPortalApi,
   submitLoginForm,
 } from './support/portal'
-
-/** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoBlockingViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
-}
+import { expectNoBlockingViolations } from './support/axe'
 
 test(
   'el acceso no tiene violaciones criticas ni graves',

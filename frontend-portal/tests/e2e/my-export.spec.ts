@@ -6,7 +6,6 @@
 // backend, que es donde se escribe (regla dura 18); lo que SI es de este
 // nivel es que la descarga se dispara con el token de la sesion y que el
 // nombre del fichero no lleva el nombre de nadie (regla dura 21).
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
   PORTAL_SESSION_TOKEN,
@@ -15,6 +14,7 @@ import {
   logInToPortal,
   stubPortalApi,
 } from './support/portal'
+import { expectNoBlockingViolations } from './support/axe'
 
 test(
   'descarga su historico con el periodo por omision, sin su nombre en el fichero',
@@ -128,6 +128,7 @@ test(
 
     await expect(notice).toBeVisible()
     await expect(notice).toContainText('no se puede generar el PDF')
+    await expectNoBlockingViolations(page)
 
     const download = page.waitForEvent('download')
     await notice.getByRole('button', { name: 'Descargar CSV en su lugar' }).click()
@@ -153,6 +154,7 @@ test(
     await expect(notice).toBeVisible()
     await expect(notice).toContainText('Inténtalo de nuevo en 5 segundos')
     await expect(page.getByTestId('pdf-unavailable')).toHaveCount(0)
+    await expectNoBlockingViolations(page)
 
     const download = page.waitForEvent('download')
     await notice.getByRole('button', { name: 'Descargar CSV en su lugar' }).click()
@@ -190,12 +192,7 @@ for (const width of [320, 195]) {
         expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width + 1)
       }
 
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-        .analyze()
-      expect(
-        results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious'),
-      ).toEqual([])
+      await expectNoBlockingViolations(page)
 
       const download = page.waitForEvent('download')
       await submit.click()
