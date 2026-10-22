@@ -2392,6 +2392,19 @@ export interface paths {
          *     **El propio empleado no entra por aqui.** El `self` del Anexo B se sirve
          *     en `GET /api/v1/me/workdays`, con ambito `self:read` y sesion de portal
          *     (ADR-015): esta ruta es la de gestion y exige una cuenta de panel.
+         *
+         *     **Pagina en el servidor por jornadas enteras** (V5-PA-2, V21-5-PA-3).
+         *     Un año de una persona con dos tramos al dia eran 38 000 nodos en la
+         *     pantalla y quince segundos de bloqueo en un equipo lento. `page` y
+         *     `per_page` recorren las jornadas **con actividad** del rango, de la mas
+         *     antigua a la mas reciente; una jornada nunca se parte entre dos paginas.
+         *     `from` y `to` de la respuesta siguen siendo el rango pedido, no el de la
+         *     pagina. Por omision, `per_page` es 31: el mes que el panel abre de serie
+         *     cabe en una pagina y la respuesta no cambia para quien no pagina.
+         *
+         *     El asiento de divulgacion cuenta **las jornadas de la pagina servida**,
+         *     con el tramo de fechas que cubren y el numero de pagina: es lo que de
+         *     verdad salio.
          */
         get: operations["listEmployeeWorkDays"];
         put?: never;
@@ -2718,10 +2731,17 @@ export interface paths {
          *     es la lectura de una sola persona y no deja asiento, igual que
          *     `GET /employees/{uuid}` ([ADR-037](../adr/ADR-037-que-lecturas-de-datos-personales-dejan-asiento.md)).
          *
-         *     Sin paginacion a proposito: la respuesta es la plantilla de la instalacion
-         *     —decenas o pocos cientos de filas— y es una tabla que se ordena y se
-         *     filtra entera en el panel. Paginar obligaria a pedir todas las paginas
-         *     para poder contar, que es lo que este endpoint viene a evitar.
+         *     **Pagina y filtra en el servidor** (HC1, 2.3.0). Hasta la 2.2.1 la
+         *     respuesta era la plantilla entera y el panel filtraba en el navegador:
+         *     cada visita descargaba —y dejaba auditadas como divulgadas— todas las
+         *     filas para enseñar treinta. Ahora `q`, `department_id`,
+         *     `without_department` y `status` acotan las filas, `page` y `per_page`
+         *     recortan la pagina, y **el asiento cuenta solo las filas servidas**.
+         *     Contar sigue sin exigir todas las paginas: `summary` es la plantilla
+         *     entera y `meta.total` las que pasan el filtro.
+         *
+         *     Todos los filtros se combinan con **Y logico**. Ninguno toca `summary`
+         *     salvo `employee_uuid` (ver su descripcion).
          */
         get: operations["credentialStatusBoard"];
         put?: never;
@@ -3572,6 +3592,13 @@ export interface paths {
          *     quien lo saco y cuando forma parte de lo que el cliente tiene que poder
          *     responder. **Ni un nombre y ni una hora de nadie** en el asiento (regla
          *     dura 21).
+         *
+         *     ## Tambien en segundo plano
+         *
+         *     El PDF arranca un navegador y el cuadro cruza dos periodos: el mismo
+         *     fichero se pide en diferido con `POST /api/v1/reports/exports` y
+         *     `kind: adoption`, con progreso y cancelacion (V5-PA-4). Al generarse deja
+         *     el mismo `adoption_report.exported`, a nombre de quien lo pidio.
          */
         get: operations["exportAdoptionReport"];
         put?: never;
@@ -3626,6 +3653,13 @@ export interface paths {
          *     alcance (`legal_export.generated`, regla dura 6). Descargar el registro
          *     horario de la plantilla es un acceso a datos personales de terceros y no
          *     puede ser anonimo.
+         *
+         *     **Sincrona, y con un techo que no es suyo**: la respuesta tiene que
+         *     llegar antes de que nginx y PHP-FPM corten (60 s de serie). Para la
+         *     plantilla entera y un periodo largo, **la misma exportacion se pide en
+         *     segundo plano** con `POST /api/v1/reports/exports` y `kind: legal`: mismo
+         *     fichero, con progreso, cancelacion y enlace de descarga (V5-PA-4). Esta
+         *     ruta se mantiene para la consulta corta y para quien ya la usa.
          */
         get: operations["generateLegalExport"];
         put?: never;
@@ -3731,11 +3765,17 @@ export interface paths {
          *     se purgo sigue en la lista como `purged`, con sus fechas, su huella y su
          *     recuento. El historico completo esta en `audit_log`
          *     (`report_export.requested`, `report_export.generated`,
-         *     `report_export.downloaded`).
+         *     `report_export.downloaded`, `report_export.cancelled`).
          *
-         *     Rol `{admin, rrhh}` con ambito `reports:*` (documento 02 §7.3; regla dura
-         *     18), el mismo que el informe sincrono: lo que sale es exactamente lo
-         *     mismo.
+         *     **Mientras uno esta `running`, la fila trae `progress`** (V5-PA-4): la
+         *     fase en curso y, cuando se puede medir, el porcentaje. No hay canal en
+         *     tiempo real para esto: la pantalla sondea esta misma lista, que no acuña
+         *     enlaces y por eso se puede pedir cada pocos segundos.
+         *
+         *     Rol `{admin, rrhh, auditor}` con ambito `reports:*` o `reports:legal`
+         *     (documento 02 §7.3; regla dura 18). El `auditor` solo puede tener
+         *     exportaciones `kind: legal` —es el unico informe que puede pedir—, asi que
+         *     su lista solo trae esas.
          */
         get: operations["listReportExports"];
         put?: never;
@@ -3767,21 +3807,52 @@ export interface paths {
          *     una comprobacion en PHP: dos pestañas pulsando a la vez pasarian cualquier
          *     `SELECT` previo.
          *
-         *     **`kind`** elige que se genera. `period` es el informe de horas
-         *     (RF-IN-01..03), rol `{admin, rrhh}` y funcionalidad `advanced_reports`;
-         *     `payroll` es la salida configurable para nomina (RF-IN-07), rol `rrhh` del
-         *     Anexo B y funcionalidad `payroll_export`. La licencia se comprueba **al
-         *     pedir**: sin ella, `402` (ADR-019, ADR-023). Un trabajo ya encolado termina
-         *     aunque la licencia caduque entre medias — un fichero a medias no le sirve a
-         *     nadie. **La exportacion para la Inspeccion no se degrada jamas** y no se
-         *     pide por aqui: es `GET /api/v1/reports/legal-export` (RL-06, regla dura 15).
+         *     **`kind`** elige que se genera:
+         *
+         *     - `period` — el informe de horas (RF-IN-01..03). Rol `{admin, rrhh}`,
+         *       ambito `reports:*` y funcionalidad `advanced_reports`.
+         *     - `payroll` — la salida configurable para nomina (RF-IN-07). Rol `rrhh`
+         *       del Anexo B, ambito `reports:*` y funcionalidad `payroll_export`.
+         *     - `legal` — **la exportacion para la Inspeccion** (RF-IN-05, RL-06), el
+         *       mismo fichero que `GET /api/v1/reports/legal-export`: mismas filas,
+         *       mismo formato y la misma cabecera de criterios. Rol
+         *       `{admin, rrhh, auditor}` y ambito `reports:legal` o `reports:*`.
+         *       **No se degrada jamas** (regla dura 15): no comprueba licencia. Solo
+         *       admite `from`, `to` y `employee_uuid` —la plantilla completa o una
+         *       persona—, y solo `csv`. **Sin techo de dias**, como la sincrona.
+         *     - `adoption` — el cuadro de impacto y adopcion (RF-IN-08), el mismo de
+         *       `GET /api/v1/reports/adoption/export`. Rol `{admin, rrhh}`, ambito
+         *       `reports:*` y funcionalidad `impact_dashboard`. Solo admite `from` y
+         *       `to`; el rango no pasa de 366 dias.
+         *
+         *     Cualquier otro parametro con `kind: legal` o `kind: adoption` es `422`:
+         *     un filtro ignorado en silencio dejaria a quien atiende un requerimiento
+         *     convencido de haber acotado la exportacion.
+         *
+         *     La licencia se comprueba **al pedir**: sin ella, `402` (ADR-019, ADR-023).
+         *     Un trabajo ya encolado termina aunque la licencia caduque entre medias — un
+         *     fichero a medias no le sirve a nadie.
          *
          *     **`payroll` no admite `pdf`**: un programa de nomina no importa un PDF.
          *
+         *     **El limite de concurrencia es el de siempre**: una exportacion en curso
+         *     por persona, sea de la clase que sea. Lo que se pide desde la pantalla de
+         *     la Inspeccion, desde la de nomina o desde la de informes ocupa el mismo
+         *     turno; para pedir otra hay que esperar o cancelar la que corre
+         *     (`POST /api/v1/reports/exports/{uuid}/cancel`).
+         *
+         *     **Idempotencia razonable sin cabecera**: el `409` con la fila en curso es
+         *     lo que convierte un doble clic o un reintento tras un corte en «esta es
+         *     la que ya pediste», no en dos ficheros.
+         *
          *     El fichero se escribe fuera de `public/`, caduca a los
          *     `REPORTING_EXPORT_RETENTION_DAYS` (7 de serie) y se purga solo; la fila
-         *     queda. Pedirlo, generarlo y descargarlo dejan asiento en `audit_log`
-         *     (RS-05, regla dura 6).
+         *     queda. Pedirlo, generarlo, cancelarlo y descargarlo dejan asiento en
+         *     `audit_log` (RS-05, regla dura 6), **a nombre de quien lo pidio**, tambien
+         *     el de la generacion, que corre en la cola. Con `kind: legal` la
+         *     generacion deja ademas el mismo `legal_export.generated` que la descarga
+         *     sincrona, para que «quien saco el registro de la plantilla» se conteste
+         *     con una sola consulta.
          */
         post: operations["requestReportExport"];
         delete?: never;
@@ -3831,19 +3902,90 @@ export interface paths {
          *
          *     ## `download: null` no es un error
          *
-         *     Sale asi con la exportacion `pending`, `running`, `failed`, `purged` o
-         *     cuyo fichero ya caduco. La pantalla enseña el estado y sigue sondeando.
+         *     Sale asi con la exportacion `pending`, `running`, `failed`, `cancelled`,
+         *     `purged` o cuyo fichero ya caduco. La pantalla enseña el estado y sigue
+         *     sondeando.
          *
          *     ## `404` para la exportacion de otra persona
          *
          *     Y no `403`: un `403` confirmaria que existe. Solo el solicitante consulta
          *     la suya, tambien si quien pregunta es `admin` (decision 2 de la ficha 3.9).
          *
-         *     Rol `{admin, rrhh}` con ambito `reports:*`.
+         *     Rol `{admin, rrhh, auditor}` con ambito `reports:*` o `reports:legal`.
          */
         get: operations["showReportExport"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/exports/{uuid}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar un informe en diferido que sigue en curso
+         * @description Detiene una exportacion `pending` o `running` y la deja `cancelled`
+         *     (V5-PA-4, RF-IN-06). **Libera en el acto el turno de esa persona**: la
+         *     siguiente peticion ya no recibe `409`.
+         *
+         *     ## Que pasa con el trabajo que estaba corriendo
+         *
+         *     La fila cambia de estado **ya**, dentro de la transaccion de esta
+         *     peticion. El trabajador de cola lo comprueba entre fases y cada pocos
+         *     cientos de filas, deja de escribir, **borra el fichero a medias** y no
+         *     publica nada: una exportacion cancelada no deja un fichero en el disco ni
+         *     un asiento de generacion. Lo unico que no se puede interrumpir es una
+         *     consulta de PostgreSQL que ya esta en marcha; esa termina —o la corta su
+         *     propio `statement_timeout`— y su resultado se descarta.
+         *
+         *     Si el trabajo llego a cerrar la fila un instante antes, gana el cierre:
+         *     esta peticion responde `409` con la fila ya `completed`, y el fichero se
+         *     puede descargar.
+         *
+         *     ## Idempotente
+         *
+         *     Cancelar una exportacion ya `cancelled` responde `200` con la misma fila,
+         *     sin un segundo asiento: un doble clic o un reintento tras un corte de red
+         *     no es un error. Cancelar una `completed`, `failed` o `purged` es `409`
+         *     `urn:kronoqr:problem:report-export-not-cancellable`, con la fila en
+         *     `export`: ahi no hay nada que detener, y borrar un fichero ya generado no
+         *     es cancelar (regla dura 5; caduca solo).
+         *
+         *     ## `404` para la exportacion de otra persona
+         *
+         *     Como la consulta: solo el solicitante cancela la suya, tambien si quien
+         *     pregunta es `admin`. Un `403` confirmaria que existe.
+         *
+         *     **Deja asiento** `report_export.cancelled` a nombre de quien la pidio, con
+         *     el estado en que estaba (RS-05, regla dura 6): una exportacion de la
+         *     plantilla que se pidio y se detuvo sigue siendo una intencion que una
+         *     revision de accesos tiene que poder ver.
+         *
+         *     Rol `{admin, rrhh, auditor}` con ambito `reports:*` o `reports:legal`.
+         */
+        post: operations["cancelReportExport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3905,8 +4047,8 @@ export interface paths {
          *       pedir otro. Por eso `410` y no `404`.
          *     - `410` `urn:kronoqr:problem:report-export-link-expired` — se le paso el
          *       plazo. Misma salida.
-         *     - `404` — el `uuid` no existe, el informe fallo, se purgo por caducidad
-         *       (la fila sigue en la lista como `purged`), sigue en curso, el fichero ya
+         *     - `404` — el `uuid` no existe, el informe fallo o se cancelo, se purgo por
+         *       caducidad (la fila sigue en la lista como `purged`), sigue en curso, el fichero ya
          *       no esta en el disco, o **el token no es el vigente y hay otro vivo**
          *       —el caso de un enlace ya rotado por una consulta posterior—. Sin
          *       detalle: enumerar la causa confirmaria que ese identificador existe.
@@ -9519,17 +9661,21 @@ export interface components {
         };
         /**
          * CredentialStatusBoard
-         * @description El panel completo (RF-QR-08): las filas y el recuento.
-         *
-         *     Sin `meta` de paginacion porque no hay paginacion: ver la descripcion del
-         *     endpoint.
+         * @description El panel (RF-QR-08): una pagina de filas, el recuento de la plantilla y
+         *     la situacion de la pagina (HC1).
          */
         CredentialStatusBoard: {
             /**
              * @description Ordenadas por departamento y apellido — el mismo orden en el que
-             *     salen las tarjetas de una hoja A4.
+             *     salen las tarjetas de una hoja A4. Solo las de la pagina pedida.
              */
             data: components["schemas"]["CredentialStatusRow"][];
+            /**
+             * @description La pagina dentro de las filas **que pasan los filtros**. `total` es
+             *     cuantas personas cumplen el filtro; el denominador de la plantilla
+             *     esta en `summary.employees`.
+             */
+            meta: components["schemas"]["PageMeta"];
             /**
              * @description **Siempre presente, tambien a cero.** Un recuento ausente y uno en
              *     cero se ven igual en un panel, y solo el segundo dice «ya esta todo
@@ -9793,11 +9939,23 @@ export interface components {
             data: components["schemas"]["WorkDayDetail"][];
             meta: {
                 /**
-                 * @description Cuantas jornadas trae `data`. **No hay paginacion**: el rango ya
-                 *     acota el resultado y partir una jornada por la mitad no significa
-                 *     nada.
+                 * @description Cuantas jornadas con actividad hay **en el rango**. En el portal
+                 *     (`GET /api/v1/me/workdays`), que no pagina, coincide con las que
+                 *     trae `data`. En el panel
+                 *     (`GET /api/v1/employees/{uuid}/workdays`) es el total de todas
+                 *     las paginas.
                  */
                 total: number;
+                /**
+                 * @description Solo en `GET /api/v1/employees/{uuid}/workdays`, que pagina por
+                 *     **jornadas enteras** (V5-PA-2): una jornada nunca se parte entre
+                 *     dos paginas, con todos sus tramos y sus correcciones.
+                 */
+                page?: number;
+                /** @description Solo en `GET /api/v1/employees/{uuid}/workdays`. */
+                per_page?: number;
+                /** @description Solo en `GET /api/v1/employees/{uuid}/workdays`. */
+                total_pages?: number;
             };
         };
         /**
@@ -12617,6 +12775,11 @@ export interface components {
          *     hubiera un filtro de mas o de menos, el fichero que llega por el enlace
          *     describiria un informe distinto del que se estaba mirando en pantalla.
          *
+         *     **Con `kind: legal` son los de `GET /api/v1/reports/legal-export`**
+         *     (`from`, `to` y `employee_uuid`) **y con `kind: adoption` los de
+         *     `GET /api/v1/reports/adoption/export`** (`from` y `to`, aqui
+         *     obligatorios). Cualquier otro con esas dos clases es `422`.
+         *
          *     **El alcance no se pide.** Lo resuelve el servidor a partir del token
          *     (RF-ID-03) y queda **congelado** en la fila: el trabajo lo aplica tal cual
          *     y nunca lo recalcula, de modo que el fichero describe el alcance con el
@@ -12627,17 +12790,21 @@ export interface components {
              * @description `period` es el informe de horas (RF-IN-01..03): rol `{admin, rrhh}` y
              *     funcionalidad `advanced_reports`. `payroll` es la salida configurable
              *     para nomina (RF-IN-07): rol `rrhh` del Anexo B y funcionalidad
-             *     `payroll_export`.
+             *     `payroll_export`. `legal` es la exportacion para la Inspeccion
+             *     (RF-IN-05): rol `{admin, rrhh, auditor}`, sin licencia. `adoption` es
+             *     el cuadro de impacto (RF-IN-08): rol `{admin, rrhh}` y funcionalidad
+             *     `impact_dashboard`.
              * @enum {string}
              */
-            kind: "period" | "payroll";
+            kind: "period" | "payroll" | "legal" | "adoption";
             /**
              * @description **Obligatorio y sin valor por omision**: quien pulsa un boton de
              *     descarga ya ha elegido formato, y suponer CSV seria decidir por el.
              *
-             *     `pdf` **solo con `kind: period`**. Un programa de nomina no importa un
-             *     PDF, asi que ofrecerlo produciria ficheros inservibles; con
-             *     `kind: payroll` es `422`.
+             *     `pdf` **solo con `kind: period` y `kind: adoption`**. Un programa de
+             *     nomina no importa un PDF, asi que ofrecerlo produciria ficheros
+             *     inservibles; con `kind: payroll` es `422`. **`kind: legal` solo admite
+             *     `csv`** (RL-06: formato tabular, legible y no propietario).
              * @enum {string}
              */
             format: "csv" | "xlsx" | "pdf";
@@ -12652,30 +12819,40 @@ export interface components {
              * @description Ultimo dia del periodo, inclusive. El rango no puede superar los 366
              *     dias: mas de un año son dos informes. **Los techos sincronos —tres
              *     meses y veinte mil filas— no aplican aqui**: son exactamente lo que
-             *     esta ruta existe para saltarse.
+             *     esta ruta existe para saltarse. **Con `kind: legal` no hay techo**,
+             *     como en la exportacion sincrona: un requerimiento puede abarcar los
+             *     cuatro años de conservacion (RL-02).
              * @example 2026-05-31
              */
             to: string;
             /**
+             * @description Solo con `kind: period` y `kind: payroll`.
              * @default day
              * @enum {string}
              */
             granularity: "day" | "week" | "month" | "range";
             /**
+             * @description Solo con `kind: period` y `kind: payroll`.
              * @default employee
              * @enum {string}
              */
             group_by: "employee" | "department" | "site";
-            /** @default false */
+            /**
+             * @description Solo con `kind: period` y `kind: payroll`.
+             * @default false
+             */
             include_open_shifts: boolean;
             /**
              * @description Filtro, no autorizacion: uno fuera del alcance produce un resultado
-             *     vacio, nunca `403`.
+             *     vacio, nunca `403`. Solo con `kind: period` y `kind: payroll`.
              */
             department_id?: number;
             /**
              * Format: uuid
              * @description Identificador publico de una persona, para el informe de una sola.
+             *     Con `kind: legal` es el `employee_uuid` de la exportacion sincrona:
+             *     sin el, la plantilla completa. No se admite con `kind: adoption`, que
+             *     es un agregado sin personas.
              */
             employee_uuid?: string;
         };
@@ -12722,22 +12899,24 @@ export interface components {
             /** Format: uuid */
             uuid: string;
             /** @enum {string} */
-            kind: "period" | "payroll";
+            kind: "period" | "payroll" | "legal" | "adoption";
             /** @enum {string} */
             format: "csv" | "xlsx" | "pdf";
             /**
              * @description `pending` espera al trabajador de cola; `running` esta generando;
              *     `completed` se puede descargar; `failed` no se genero (la causa, sin
-             *     datos personales, en `failure_reason`); `purged` existio y su fichero
-             *     ya no existe: se borro por caducidad o desaparecio antes (ADR-045).
-             *     En el segundo caso `purged_at` es anterior a `expires_at` y queda el
-             *     asiento `report_export.file_missing`.
+             *     datos personales, en `failure_reason`); `cancelled` lo detuvo quien lo
+             *     pidio y no dejo fichero; `purged` existio y su fichero ya no existe:
+             *     se borro por caducidad o desaparecio antes (ADR-045). En el segundo
+             *     caso `purged_at` es anterior a `expires_at` y queda el asiento
+             *     `report_export.file_missing`.
              *
              *     **`purged` no es `failed`**: confundirlos seria decirle a quien lo
              *     pidio que su informe nunca se hizo cuando se hizo y se lo pudo llevar.
+             *     **Y `cancelled` tampoco**: no fallo nada, alguien decidio pararlo.
              * @enum {string}
              */
-            status: "pending" | "running" | "completed" | "failed" | "purged";
+            status: "pending" | "running" | "completed" | "failed" | "cancelled" | "purged";
             parameters: components["schemas"]["ReportExportParameters"];
             /**
              * @description El alcance con el que se autorizo (RF-ID-03), **congelado** en el
@@ -12766,6 +12945,8 @@ export interface components {
             started_at: components["schemas"]["UtcTimestamp"] | null;
             completed_at: components["schemas"]["UtcTimestamp"] | null;
             failed_at: components["schemas"]["UtcTimestamp"] | null;
+            /** @description Cuando lo cancelo quien lo pidio. Nulo salvo en `cancelled`. */
+            cancelled_at: components["schemas"]["UtcTimestamp"] | null;
             /**
              * @description Por que no se genero, como **codigo estable**. Nulo mientras no haya
              *     fallado.
@@ -12792,10 +12973,12 @@ export interface components {
              */
             failure_reason: "write_failed" | "query_timeout" | "database_error" | "stale" | "unexpected" | null;
             /**
-             * @description `kronoqr-horas-<desde>_<hasta>.<ext>`. **Sin ningun nombre de persona**
-             *     (regla dura 21): viaja en `Content-Disposition` y acaba en el historial
-             *     de descargas de un navegador que puede ser compartido. Nulo hasta que
-             *     termina.
+             * @description `kronoqr-horas-<desde>_<hasta>.<ext>` para `period` y `payroll`,
+             *     `registro-horario-<desde>_<hasta>.csv` para `legal` —el mismo nombre
+             *     que la descarga sincrona— y el del cuadro de impacto para `adoption`.
+             *     **Sin ningun nombre de persona** (regla dura 21): viaja en
+             *     `Content-Disposition` y acaba en el historial de descargas de un
+             *     navegador que puede ser compartido. Nulo hasta que termina.
              * @example kronoqr-horas-2026-03-01_2026-05-31.csv
              */
             file_name: string | null;
@@ -12840,26 +13023,60 @@ export interface components {
              */
             notification_channel: "panel" | "mail" | null;
             /**
+             * @description Por donde va la generacion. **Solo con `status: running`**; nulo en
+             *     cualquier otro estado, y tambien en `running` mientras el trabajador
+             *     no haya informado todavia de nada.
+             */
+            progress: components["schemas"]["ReportExportProgress"] | null;
+            /**
              * @description Solo en `GET /api/v1/reports/exports/{uuid}`, y solo cuando hay fichero
              *     que entregar. En la lista y en el `202` es siempre ausente o `null`.
              */
             download?: components["schemas"]["ReportExportDownload"] | null;
         };
         /**
+         * ReportExportProgress
+         * @description El avance de una exportacion en curso (V5-PA-4), para la barra y para la
+         *     region viva de la pantalla.
+         *
+         *     **Es una indicacion, no un registro**: vive en la cache y no en la fila,
+         *     caduca sola y puede faltar si la cache no responde. Lo que cuenta —el
+         *     estado, las fechas, el fichero— esta en la fila; si este objeto llega
+         *     nulo, la exportacion sigue igual de viva.
+         */
+        ReportExportProgress: {
+            /**
+             * @description `reading` consulta el registro; `writing` escribe el fichero;
+             *     `sealing` calcula la huella y lo cierra. El panel lo traduce.
+             * @enum {string}
+             */
+            stage: "reading" | "writing" | "sealing";
+            /**
+             * @description Porcentaje **medido**, nunca estimado a ojo. Solo lo hay cuando se
+             *     sabe de antemano cuantas filas van a salir —hoy, la exportacion
+             *     `legal` mientras escribe—. Nulo significa «indeterminado»: la barra
+             *     se pinta sin valor (`aria-valuenow` ausente), no al 0 %. Nunca llega
+             *     a 100 antes de que la fila este `completed`.
+             */
+            percent: number | null;
+            updated_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
          * ReportExportParameters
          * @description Lo que se pidio, tal cual se pidio. Son las mismas claves que acepta
          *     `POST /api/v1/reports/exports`, para que la fila y la peticion se lean
-         *     igual.
+         *     igual. Con `kind: legal` y `kind: adoption`, `granularity` y `group_by`
+         *     son nulos e `include_open_shifts` es `false`: esas clases no los admiten.
          */
         ReportExportParameters: {
             /** Format: date */
             from: string;
             /** Format: date */
             to: string;
-            /** @enum {string} */
-            granularity: "day" | "week" | "month" | "range";
-            /** @enum {string} */
-            group_by: "employee" | "department" | "site";
+            /** @enum {string|null} */
+            granularity: "day" | "week" | "month" | "range" | null;
+            /** @enum {string|null} */
+            group_by: "employee" | "department" | "site" | null;
             include_open_shifts: boolean;
             department_id: number | null;
             /** Format: uuid */
@@ -14034,6 +14251,12 @@ export interface components {
          * @example 2026-03-01
          */
         WorkDateFrom: string;
+        /**
+         * @description Jornadas por pagina del registro de una persona (V5-PA-2). Por omision
+         *     **31**, el mes que el panel abre de serie; como mucho 100.
+         * @example 31
+         */
+        WorkDayPerPage: number;
         /**
          * @description Primera **jornada** de la descarga del historico propio, inclusive
          *     (`shift_entries.work_date`): una fecha civil en la zona del centro, no un
@@ -16281,6 +16504,17 @@ export interface operations {
                  * @example 2026-03-31
                  */
                 to?: components["parameters"]["WorkDateTo"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Jornadas por pagina del registro de una persona (V5-PA-2). Por omision
+                 *     **31**, el mes que el panel abre de serie; como mucho 100.
+                 * @example 31
+                 */
+                per_page?: components["parameters"]["WorkDayPerPage"];
             };
             header?: never;
             path: {
@@ -16297,9 +16531,10 @@ export interface operations {
         requestBody?: never;
         responses: {
             /**
-             * @description Las jornadas del rango, de la mas antigua a la mas reciente. Un
+             * @description Las jornadas de la pagina, de la mas antigua a la mas reciente. Un
              *     empleado sin jornadas en el rango devuelve `data` vacio, no un `404`:
-             *     no haber trabajado esos dias es una respuesta.
+             *     no haber trabajado esos dias es una respuesta. Una pagina mas alla de
+             *     la ultima tambien devuelve `data` vacio, con `meta.total` intacto.
              */
             200: {
                 headers: {
@@ -16588,6 +16823,37 @@ export interface operations {
     credentialStatusBoard: {
         parameters: {
             query?: {
+                /**
+                 * @description Subcadena del **nombre completo** o del **codigo de empleado**, sin
+                 *     distinguir mayusculas ni acentos («garcia» encuentra a «García»).
+                 *     Recortada; en blanco no filtra. Como mucho 100 caracteres. **No queda
+                 *     en el asiento**: el termino puede ser un nombre (regla dura 21).
+                 * @example garcia
+                 */
+                q?: string;
+                /**
+                 * @description Solo la plantilla de ese departamento. Uno que no existe devuelve
+                 *     `data: []`, no `422`: es un filtro, no una referencia.
+                 * @example 3
+                 */
+                department_id?: number;
+                /**
+                 * @description Solo quien **no tiene departamento asignado**. No se combina con
+                 *     `department_id`: juntos son `422`.
+                 */
+                without_department?: boolean;
+                /** @description Solo las filas en ese estado de la tarjeta. */
+                status?: components["schemas"]["CredentialLifecycleStatus"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Filas por pagina. Por omision 30, como la tabla del panel; como mucho 100.
+                 * @example 30
+                 */
+                per_page?: number;
                 /**
                  * @description Acota el tablero a **una sola persona** —la ficha de empleado del
                  *     panel—, de modo que `data` traiga 0 o 1 filas.
@@ -18080,8 +18346,10 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no es valida: rango invertido o por encima de los 366 dias
-             *     del calendario, granularidad o agrupacion desconocidas, o un `format`
-             *     que esa clase de informe no admite (`pdf` con `kind: payroll`).
+             *     del calendario (salvo `kind: legal`, que no tiene techo), granularidad
+             *     o agrupacion desconocidas, un `format` que esa clase de informe no
+             *     admite (`pdf` con `kind: payroll`; cualquiera salvo `csv` con
+             *     `kind: legal`) o un parametro que esa clase no admite.
              */
             422: {
                 headers: {
@@ -18129,6 +18397,59 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    cancelReportExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La exportacion, ya `cancelled`. Nunca trae `download`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportExportResource"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description La exportacion ya termino (`completed`, `failed` o `purged`) y no hay
+             *     nada que cancelar. El cuerpo lleva la fila en `export` para que la
+             *     pantalla la enseñe tal como esta.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        export: components["schemas"]["ReportExport"];
+                    };
+                };
+            };
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };
