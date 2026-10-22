@@ -4965,7 +4965,7 @@ export async function stubManagementApi(
             },
             body: JSON.stringify({
               manifest: {
-                schema_version: 1,
+                schema_version: 2,
                 product_version: '2.2.0',
                 generated_at: '2026-09-08T10:15:00.000000Z',
                 anonymized: !(payload?.include_personal_data ?? false),
