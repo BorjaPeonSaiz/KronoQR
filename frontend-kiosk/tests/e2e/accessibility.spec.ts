@@ -1,23 +1,12 @@
 // Accesibilidad automatizada con axe-core (doc 02 §9.2 y §9.4).
 //
-// Criterio: CERO violaciones criticas o graves. Las de impacto menor se listan
-// en la salida para que se vean, pero no bloquean: axe marca como «minor» cosas
-// que en una pantalla de quiosco sin teclado no significan nada.
-//
-// REGLA DESACTIVADA, CON MOTIVO. `video-caption` exige una pista de subtitulos
-// en todo `<video>`. Aqui el `<video>` no es contenido audiovisual: es el visor
-// EN VIVO de la camara, se abre con `audio: false` y va marcado `aria-hidden`.
-// No hay nada que subtitular, y anadir un `<track>` vacio para contentar a la
-// herramienta seria falsear el resultado en lugar de arreglarlo.
+// La pasada (etiquetas, `best-practice`, criterio y la regla `video-caption`
+// desactivada con su motivo) vive en `support/axe.ts`, compartida por todos los
+// E2E del quiosco.
 
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { expectNoBlockingViolations } from './support/axe'
 import { delayCameraStart, stubBrandingApi, stubKioskApi, stubScanApi } from './support/kiosk'
-
-const DISABLED_RULES = ['video-caption']
-
-/** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
 test.beforeEach(async ({ page }) => {
   await stubKioskApi(page)
@@ -31,19 +20,7 @@ test(
     await page.goto('/')
     await expect(page.getByTestId('privacy-notice')).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -55,19 +32,7 @@ test(
     await page.goto('/')
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -84,19 +49,7 @@ test(
     await page.goto('/')
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected')
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -107,19 +60,7 @@ test('en ingles tampoco', { tag: ['@RF-KI-05', '@RF-KI-06'] }, async ({ page }) 
   await page.getByRole('button', { name: 'English' }).click()
   await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
 
-  const results = await new AxeBuilder({ page })
-    .withTags(WCAG_TAGS)
-    .disableRules(DISABLED_RULES)
-    .analyze()
-
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
+  await expectNoBlockingViolations(page)
 })
 
 test(
@@ -153,19 +94,7 @@ test(
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('break-armed-hint')).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -183,19 +112,7 @@ test(
 
     await expect(page.getByTestId('clock-skew-banner')).toBeVisible({ timeout: 5_000 })
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -214,18 +131,6 @@ test(
     await expect(page.getByTestId('brand-logo')).toBeVisible()
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )

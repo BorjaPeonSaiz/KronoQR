@@ -6,9 +6,9 @@
 // codigo de servicio se comprueba en local contra la huella que ya trae el
 // ultimo latido (decision 6 de la tarea).
 
-import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { expectNoBlockingViolations } from './support/axe'
 import { stubKioskApi, stubScanApi } from './support/kiosk'
 import { announceOnline, readQueue, seedQueue } from './support/offlineQueue'
 import { stubPairing } from './support/pairing'
@@ -266,20 +266,6 @@ test.describe('pantalla de diagnostico (RF-KI-08, tarea 3.3)', () => {
     },
   )
 })
-
-/** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5), como en `accessibility.spec.ts`. */
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoBlockingViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page })
-    .withTags(WCAG_TAGS)
-    .disableRules(['video-caption'])
-    .analyze()
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-  expect(blocking, blocking.map((v) => `${v.id}: ${v.help}`).join('\n')).toEqual([])
-}
 
 test.describe('accesibilidad (RF-KI-08, RF-KI-06)', () => {
   test(
