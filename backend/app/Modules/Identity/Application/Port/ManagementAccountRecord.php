@@ -33,5 +33,7 @@ final readonly class ManagementAccountRecord
         public ?DateTimeImmutable $temporaryPasswordExpiresAt,
         public ?DateTimeImmutable $lastLoginAt,
         public DateTimeImmutable $createdAt,
+        /** Cuando se minimizo por retencion (ADR-060), o `null` si se conserva entera. */
+        public ?DateTimeImmutable $anonymizedAt,
     ) {}
 }

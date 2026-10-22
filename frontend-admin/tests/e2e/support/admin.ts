@@ -1435,6 +1435,7 @@ export const ACCOUNT_OWN: ManagementAccount = {
   password_status: 'own',
   last_login_at: '2026-10-06T07:42:10Z',
   created_at: '2026-09-02T09:05:00Z',
+  anonymized_at: null,
 }
 
 export const ACCOUNT_COOK: ManagementAccount = {
@@ -1449,6 +1450,7 @@ export const ACCOUNT_COOK: ManagementAccount = {
   password_status: 'own',
   last_login_at: '2026-10-06T07:42:10Z',
   created_at: '2026-09-02T09:05:00Z',
+  anonymized_at: null,
 }
 
 export const ACCOUNT_DEACTIVATED: ManagementAccount = {
@@ -1463,6 +1465,7 @@ export const ACCOUNT_DEACTIVATED: ManagementAccount = {
   password_status: 'own',
   last_login_at: null,
   created_at: '2026-08-01T09:00:00Z',
+  anonymized_at: null,
 }
 
 export interface RecordedRequest {
@@ -3406,6 +3409,7 @@ export async function stubManagementApi(
             password_status: 'temporary',
             last_login_at: null,
             created_at: '2026-10-07T08:00:00Z',
+            anonymized_at: null,
           }
 
           accountsState.push(account)

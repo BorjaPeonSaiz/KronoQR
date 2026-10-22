@@ -7515,11 +7515,21 @@ export interface components {
              * @description Identificador publico de la cuenta. La clave interna no sale nunca.
              */
             uuid: string;
+            /**
+             * @description **Vacio solo en una cuenta minimizada por retencion** (ADR-060,
+             *     tarea 11.3 B; `anonymized_at` no nulo): la de una cuenta dada de
+             *     baja hace mas que los años del registro y de la que ya no queda
+             *     ningun asiento. El panel enseña un texto de sustitucion; el alta y
+             *     la modificacion siguen exigiendo un nombre.
+             */
             name: string;
             /**
-             * Format: email
              * @description Identificador de acceso al panel. **No es un canal**: el producto no
-             *     envia por el ninguna credencial (regla dura 12).
+             *     envia por el ninguna credencial (regla dura 12). En una cuenta
+             *     minimizada es `anonymized+<uuid>@invalid` (ADR-060): unico, no
+             *     entregable —`invalid` es un dominio reservado— y sin sesion posible.
+             *     No es un correo bien formado, y por eso es la segunda rama del
+             *     `anyOf`.
              */
             email: string;
             /** @example es */
@@ -7547,6 +7557,18 @@ export interface components {
             last_login_at: components["schemas"]["UtcTimestamp"] | null;
             /** @description Alta de la cuenta, en UTC. */
             created_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * Format: date-time
+             * @description Cuando se minimizo la cuenta por retencion (ADR-060, tarea 11.3 B),
+             *     en UTC; `null` mientras se conserva entera. Es **la** forma de
+             *     reconocer una cuenta minimizada: desde ese instante `name` es `''`,
+             *     `email` es `anonymized+<uuid>@invalid`, `status` es `deactivated`, sin
+             *     segundo factor ni ultimo acceso. La cuenta conserva su `uuid` y sus
+             *     roles porque sigue siendo la autora de lo que hizo, y ya no se puede
+             *     modificar ni reactivar.
+             * @example null
+             */
+            anonymized_at: string | null;
         };
         /**
          * ManagementAccountCollection
@@ -12272,6 +12294,10 @@ export interface components {
             granted_by: {
                 /** Format: uuid */
                 uuid: string;
+                /**
+                 * @description `''` si esa cuenta ya se minimizo por retencion (ADR-060, tarea
+                 *     11.3 B); el `uuid` sigue diciendo cual fue.
+                 */
                 name: string;
             };
             granted_at: components["schemas"]["UtcTimestamp"];
@@ -15924,6 +15950,11 @@ export interface operations {
              * @description Ya hay un contrato vigente en esa fecha. El cuerpo es correcto; lo que
              *     no encaja es el estado, asi que la accion siguiente es releer los
              *     contratos de esa persona, no reescribir el formulario.
+             *
+             *     Tambien `409` si la ficha esta **minimizada por retencion**
+             *     (`anonymized_at` no nulo, ADR-060): ya no admite contratos. El
+             *     `detail` lo dice en el idioma negociado, con la fecha de la
+             *     minimizacion.
              */
             409: {
                 headers: {
@@ -19237,6 +19268,11 @@ export interface operations {
              *     `409` y no `422`: el cuerpo es valido, lo que no encaja es el estado,
              *     y la accion siguiente es releer las ausencias de esa persona en lugar
              *     de reescribir el formulario.
+             *
+             *     Tambien `409` si la ficha esta **minimizada por retencion**
+             *     (`anonymized_at` no nulo, ADR-060): ya no admite ausencias. El
+             *     `detail` lo dice en el idioma negociado, con la fecha de la
+             *     minimizacion.
              */
             409: {
                 headers: {

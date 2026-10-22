@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -147,6 +148,30 @@ it('el acceso con el correo de una cuenta minimizada da el mismo 401 que una cue
     'la marca que deja la minimizacion' => ['!'],
     'una cualquiera' => ['una-contrasena-cualquiera'],
 ])->group('RL-11', 'RS-03');
+
+it('el listado de cuentas enseña la minimizada con anonymized_at y nombre vacio, segun el contrato', function (): void {
+    Spectator::using('openapi.yaml');
+    Config::set('identity.two_factor.required_roles', []);
+    $id = cuentaVencida();
+    retencionDeCuentas(false);
+    $uuid = DB::table('users')->where('id', $id)->value('uuid');
+
+    $respuesta = Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->get('/api/v1/management-accounts?per_page=100')
+        ->assertValidResponse(200);
+
+    /** @var list<array<string, mixed>> $cuentas */
+    $cuentas = $respuesta->json('data');
+    $minimizada = collect($cuentas)->firstWhere('uuid', $uuid);
+    $entera = collect($cuentas)->first(static fn (array $cuenta): bool => $cuenta['uuid'] !== $uuid);
+
+    expect($minimizada)->toBeArray()
+        ->and($minimizada['name'] ?? null)->toBe('')
+        ->and($minimizada['status'] ?? null)->toBe('deactivated')
+        ->and($minimizada['anonymized_at'] ?? null)->toBeString()->toEndWith('Z')
+        ->and($entera)->toBeArray()
+        ->and(is_array($entera) && array_key_exists('anonymized_at', $entera) ? $entera['anonymized_at'] : 'falta')->toBeNull();
+})->group('RL-11', 'RF-ID-10');
 
 it('si el asiento falla, no se minimiza ninguna cuenta', function (): void {
     $id = cuentaVencida();

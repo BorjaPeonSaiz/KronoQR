@@ -553,6 +553,7 @@ export function managementAccount(overrides: Partial<ManagementAccount> = {}): M
     password_status: 'own',
     last_login_at: '2026-10-06T07:42:10Z',
     created_at: '2026-09-02T09:05:00Z',
+    anonymized_at: null,
     ...overrides,
   }
 }
