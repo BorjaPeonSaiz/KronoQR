@@ -21,6 +21,7 @@ import { expect, test } from '@playwright/test'
 // parte del mismo programa de TypeScript que `src/sw/testHooks.ts` y el
 // compilador no conoceria esas dos propiedades de `Window`.
 import type {} from '@/sw/testHooks'
+import { expectNoBlockingViolations } from './support/axe'
 import { stubKioskApi, stubScanApi } from './support/kiosk'
 import { announceOnline, readQueue, stubBatchApi } from './support/offlineQueue'
 
@@ -267,5 +268,6 @@ test(
       'Actualización urgente pendiente',
     )
     await expect(page.getByTestId('diagnostics-minimum-version')).toHaveText('999.0.0')
+    await expectNoBlockingViolations(page)
   },
 )

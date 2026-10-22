@@ -134,3 +134,51 @@ test(
     await expectNoBlockingViolations(page)
   },
 )
+
+// La confirmacion LOCAL de un fichaje sin red (`pending`, RF-AT-10) es la que
+// ve el empleado cada vez que falla la conexion, y ninguna pasada de axe la
+// afirmaba: la prueba de la pantalla de escaneo esperaba solo al aviso de
+// privacidad (AX7-03, R7-QA-01).
+
+test(
+  'la confirmacion pendiente de un fichaje sin red tampoco',
+  { tag: ['@RF-KI-06', '@RF-AT-10', '@RF-KI-03'] },
+  async ({ page }) => {
+    await stubScanApi(page, { outcome: 'offline' })
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
+    await expect(page.getByTestId('confirmation-pending-badge')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'la confirmacion pendiente en ingles tampoco',
+  { tag: ['@RF-KI-06', '@RF-AT-10', '@RF-KI-05'] },
+  async ({ page }) => {
+    await delayCameraStart(page, 3_000)
+    await stubScanApi(page, { outcome: 'offline' })
+    await stubBrandingApi(page, { variant: 'bilingual' })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'English' }).click()
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending', {
+      timeout: 10_000,
+    })
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'la confirmacion de una salida tampoco',
+  { tag: ['@RF-KI-06', '@RF-AT-05'] },
+  async ({ page }) => {
+    await stubScanApi(page, { outcome: 'clock_out', workedMinutes: 495 })
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
+
+    await expectNoBlockingViolations(page)
+  },
+)
