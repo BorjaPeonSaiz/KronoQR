@@ -53,8 +53,14 @@ final class InvalidSupportGrant extends ProductDomainException implements Busine
      */
     public static function personalData(string $kind): self
     {
+        $what = match ($kind) {
+            'email' => 'an email address',
+            'national_id' => 'a national ID',
+            'phone' => 'a phone number',
+        };
+
         return new self(
-            \sprintf('A support grant reason must not carry personal data, and this one looks like it carries a %s.', str_replace('_', ' ', $kind)),
+            \sprintf('A support grant reason must not carry personal data, and this one looks like it carries %s.', $what),
             'support.errors.reason_personal_data',
             [],
         );

@@ -10,6 +10,7 @@ use App\Modules\Product\Domain\ValueObject\SupportGrantAuthor;
 use App\Modules\Product\Domain\ValueObject\SupportGrantStatus;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Una concesion de acceso de soporte: expresa, temporal, limitada, revocable y
@@ -71,7 +72,15 @@ final class SupportGrant
          * original sigue en el asiento `support_grant.granted`.
          */
         public readonly ?DateTimeImmutable $reasonPurgedAt = null,
-    ) {}
+    ) {
+        // Lo mismo que el CHECK support_grants_chk_reason_purged: sin motivo
+        // exactamente cuando hay fecha de vaciado.
+        if (($reason === null) === ($reasonPurgedAt === null)) {
+            throw new InvalidArgumentException(
+                'Una concesion de soporte no tiene motivo exactamente cuando se vacio: motivo y fecha de vaciado van juntos (tarea 11.3 C).',
+            );
+        }
+    }
 
     /**
      * Concede el acceso.
@@ -167,7 +176,6 @@ final class SupportGrant
         );
     }
 
-    /** La misma concesion, ya persistida y con su clave interna. */
     /**
      * Que clase de dato personal parece llevar un motivo, o `null` si ninguna
      * (tarea 11.3 C, RGPD art. 5.1.c).
@@ -187,20 +195,33 @@ final class SupportGrant
     {
         $patterns = [
             'email' => '/[^\s@]+@[^\s@]+\.[^\s@]+/u',
-            // DNI (8 cifras y letra) y NIE (X, Y o Z, 7 cifras y letra), con o
-            // sin espacio o guion antes de la letra.
-            'national_id' => '/(?<![\w-])(?:\d{8}|[XYZxyz][\s-]?\d{7})[\s-]?[A-Za-z](?![\w-])/u',
-            // Nueve cifras o mas en grupos (612 345 678, +34 612-34-56-78), sin
-            // pegarse a letras ni a guiones de un identificador.
-            'phone' => '/(?<![\w-])(?:\+\d{1,3}[\s.-]?)?\d(?:[\s.-]?\d){8,}(?![\w-])/u',
+            // DNI (8 cifras, con o sin puntos de millar) y NIE (X, Y o Z y 7
+            // cifras), seguidos de una LETRA DE CONTROL OFICIAL en mayuscula,
+            // pegada o tras espacio o guion, y que no empieza una palabra:
+            // «12345678 y el 87654321» o «de 20261022 a 20261031» no lo son.
+            'national_id' => '/(?<![\w.-])(?:\d{2}\.?\d{3}\.?\d{3}|[XYZ][\s-]?\d{7})(?<=\d)[\s-]?[TRWAGMYFPDXBNJZSQVHLCKE](?![\w-])/u',
+            // Nueve cifras o mas en grupos que empiezan como un telefono
+            // español (6, 7, 8 o 9: 612 345 678) o con prefijo internacional
+            // (+34 612-34-56-78), sin pegarse a letras ni a guiones de un
+            // identificador. Un numero de incidencia que empieza por 1 no lo es.
+            'phone' => '/(?<![\w-])(?:\+\d{1,3}[\s.-]?\d|[6-9])(?:[\s.-]?\d){8,}(?![\w-])/u',
         ];
 
-        // Los uuid fuera antes de buscar: son la forma correcta de señalar a una
-        // persona, y uno con todos sus grupos en cifras parece un telefono.
-        $withoutUuids = (string) preg_replace('/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i', ' ', $reason);
+        // Fuera antes de buscar lo que tiene forma de cifras y no es de nadie:
+        // los uuid —la forma correcta de señalar a una persona—, las fechas
+        // ISO con su hora y las direcciones IPv4.
+        $neutral = (string) preg_replace(
+            [
+                '/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i',
+                '/(?<!\d)\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?(?!\d)/',
+                '/(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/',
+            ],
+            ' ',
+            $reason,
+        );
 
         foreach ($patterns as $kind => $pattern) {
-            if (preg_match($pattern, $withoutUuids) === 1) {
+            if (preg_match($pattern, $neutral) === 1) {
                 return $kind;
             }
         }
@@ -208,6 +229,7 @@ final class SupportGrant
         return null;
     }
 
+    /** La misma concesion, ya persistida y con su clave interna. */
     public function withId(int $id): self
     {
         return new self(

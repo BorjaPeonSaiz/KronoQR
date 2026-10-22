@@ -25,7 +25,7 @@ dataset('rechazos de una concesion de soporte', [
         fn (): InvalidSupportGrant => InvalidSupportGrant::personalData('phone'),
         'support.errors.reason_personal_data',
         [],
-        'A support grant reason must not carry personal data, and this one looks like it carries a phone.',
+        'A support grant reason must not carry personal data, and this one looks like it carries a phone number.',
     ],
     'duracion fuera de rango' => [
         fn (): InvalidSupportGrant => InvalidSupportGrant::duration(73, 72),

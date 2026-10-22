@@ -2846,6 +2846,7 @@ final readonly class ErrorVocabulary
     private const array WORDS_V = [
         'va',
         'vacia',
+        'vaciado',
         'vacio',
         'vacuum',
         'vale',
@@ -2862,6 +2863,7 @@ final readonly class ErrorVocabulary
         'valores',
         'value',
         'values',
+        'van',
         'var',
         'varchar',
         'variable',
