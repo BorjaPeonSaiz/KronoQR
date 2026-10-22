@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Domain\ValueObject\SetupStep;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -96,7 +98,24 @@ it('conserva la marca del paso si la cuenta que lo resolvio desaparece', functio
     // El hecho de que el paso se resolvio no se pierde con la persona. Este dato
     // NO es el registro legal de quien hizo que —eso es `audit_log`, solo-append
     // y encadenado por hash— sino lo que permite decir «esto lo dejaste tu».
-    $userId = DB::table('users')->insertGetId([
+    //
+    // Con el propietario del esquema y en su propia transaccion, que se deshace
+    // al final: desde la 2.3.0 la aplicacion no tiene `DELETE` sobre `users`
+    // (ADR-060), y lo que se prueba aqui es la clave ajena, no el privilegio.
+    $owner = SchemaOwner::connection();
+    $owner->beginTransaction();
+
+    try {
+        $owner->statement("SET LOCAL lock_timeout = '5s'");
+        setupProgressSchemaSinCuenta($owner);
+    } finally {
+        $owner->rollBack();
+    }
+})->group('RF-PD-03');
+
+function setupProgressSchemaSinCuenta(ConnectionInterface $owner): void
+{
+    $userId = $owner->table('users')->insertGetId([
         'uuid' => (string) Str::uuid7(),
         'name' => 'Cuenta de prueba',
         'email' => 'prueba-setup@kronoqr.test',
@@ -107,21 +126,21 @@ it('conserva la marca del paso si la cuenta que lo resolvio desaparece', functio
         'updated_at' => now(),
     ]);
 
-    DB::table('setup_progress')->insert([
+    $owner->table('setup_progress')->insert([
         'step' => SetupStep::LICENSE->value,
         'state' => 'skipped',
         'recorded_at' => '2026-09-02 08:00:00+00',
         'recorded_by_user_id' => $userId,
     ]);
 
-    DB::table('users')->where('id', $userId)->delete();
+    $owner->table('users')->where('id', $userId)->delete();
 
-    $row = DB::table('setup_progress')->where('step', SetupStep::LICENSE->value)->first();
+    $row = $owner->table('setup_progress')->where('step', SetupStep::LICENSE->value)->first();
 
     expect($row)->not->toBeNull()
         ->and($row?->state)->toBe('skipped')
         ->and($row?->recorded_by_user_id)->toBeNull();
-})->group('RF-PD-03');
+}
 
 it('sigue impidiendo un segundo centro con el indice de fila unica', function (): void {
     // ADR-040. El alta del asistente se apoya en `sites_single_row_uidx` y no en
