@@ -85,6 +85,26 @@ function muestraParaElRitmoDeLaExportacionLegal(): void
 }
 
 it('proyecta el peor requerimiento por debajo de la mitad del techo del trabajo de cola', function (): void {
+    /*
+     * LA BASE SE DEVUELVE COMO ESTABA, ESTADISTICAS INCLUIDAS.
+     *
+     * `CommittedDatabase` vacia las tablas con `DELETE`, que deja los 73.000
+     * tramos como filas muertas: unos 12 MB de `shift_entries` hinchada hasta
+     * que pase el autovacuum. La prueba siguiente en el orden de la CI,
+     * `LegalExportIndexUsageTest`, siembra 40.000 tramos encima y juzga el plan
+     * de la consulta, y con la tabla hinchada el planificador puede elegir otro
+     * camino (CI 39848984113). Este callback se registra despues del de
+     * `CommittedDatabase`, asi que corre cuando la tabla ya esta vacia: la
+     * compacta y deja sus estadisticas al dia, con el rol propietario.
+     */
+    $this->beforeApplicationDestroyed(static function (): void {
+        $owner = DB::connection(config()->string('database.migrations.connection'));
+
+        foreach (['shift_entries', 'employees'] as $table) {
+            $owner->statement('VACUUM (FULL, ANALYZE) '.$table);
+        }
+    });
+
     muestraParaElRitmoDeLaExportacionLegal();
     $path = sys_get_temp_dir().'/kronoqr-legal-throughput-'.Str::random(8).'.csv';
     $avisos = 0;
