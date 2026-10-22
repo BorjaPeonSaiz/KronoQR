@@ -169,15 +169,11 @@ it('tampoco responde en dias por la ficha de personal ni por las cuentas', funct
     'cuentas' => [RetentionScope::ManagementAccounts],
 ])->group('RL-11');
 
-it('describe los dos ambitos nuevos con su nombre, su unidad y su plazo en años', function (): void {
+it('describe los dos ambitos nuevos con su nombre y su unidad', function (): void {
     expect(RetentionScope::PersonnelRecords->label())->toBe('Fichas de personal')
         ->and(RetentionScope::PersonnelRecords->unit())->toBe('personas')
-        ->and(RetentionScope::PersonnelRecords->isLegalRecord())->toBeTrue()
         ->and(RetentionScope::ManagementAccounts->label())->toBe('Cuentas de gestion')
         ->and(RetentionScope::ManagementAccounts->unit())->toBe('cuentas')
-        ->and(RetentionScope::ManagementAccounts->isLegalRecord())->toBeTrue()
-        ->and(RetentionScope::TechnicalLog->isLegalRecord())->toBeFalse()
-        ->and(RetentionScope::ErrorHistory->isLegalRecord())->toBeFalse()
         ->and(RetentionScope::TechnicalLog->unit())->toBe('ficheros')
         ->and(RetentionScope::WorkRecords->unit())->toBe('filas')
         ->and(array_map(static fn (RetentionScope $scope): string => $scope->value, RetentionScope::cases()))

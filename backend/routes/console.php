@@ -799,7 +799,7 @@ ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
  *
  * Los tokens con `expires_at` nulo no los toca: Sanctum no los da por caducados.
  * Hoy ningun emisor los crea; los que queden de versiones antiguas los cuenta
- * `product:doctor` (`identity.tokens_without_expiry`).
+ * `product:doctor` (`access.tokens_without_expiry`).
  *
  * 03:40 UTC: cinco minutos despues de la purga del historico de errores, en el
  * mismo hueco sin nada mas corriendo.

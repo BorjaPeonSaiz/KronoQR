@@ -56,7 +56,13 @@ final readonly class PruneSupportGrantReasons
     /** Las concesiones cerradas en o antes de este instante pierden el motivo. */
     public function cutoff(): DateTimeImmutable
     {
-        return $this->clock->now()->sub(new DateInterval('P'.$this->retentionDays().'D'));
+        return $this->cutoffAt($this->clock->now());
+    }
+
+    /** El corte para un instante ya leido del reloj: el mismo calculo en un solo sitio. */
+    public function cutoffAt(DateTimeImmutable $now): DateTimeImmutable
+    {
+        return $now->sub(new DateInterval('P'.$this->retentionDays().'D'));
     }
 
     /** Cuantas vaciaria {@see self::handle()} ahora. */
@@ -71,7 +77,7 @@ final readonly class PruneSupportGrantReasons
         return UseCaseInstrumentation::run('product.prune_support_grant_reasons', function (): int {
             $now = $this->clock->now();
 
-            return $this->grants->purgeReasonsClosedBy($now->sub(new DateInterval('P'.$this->retentionDays().'D')), $now);
+            return $this->grants->purgeReasonsClosedBy($this->cutoffAt($now), $now);
         });
     }
 }

@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Broadcast;
 /*
  * Autorizacion de los canales de la presencia en vivo (ADR-011, RF-ID-03, regla
  * dura 18).
- * dura 18).
  *
  * LA SUSCRIPCION A UN CANAL ES UN ENDPOINT MAS. Se autoriza con los mismos dos
  * controles que cualquier ruta del §7.3 y con el mismo rigor: el AMBITO del token

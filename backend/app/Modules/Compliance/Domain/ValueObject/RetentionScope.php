@@ -74,12 +74,6 @@ enum RetentionScope: string
         };
     }
 
-    /** Si su plazo lo fija el perfil de cumplimiento (anos) o la instalacion (dias). */
-    public function isLegalRecord(): bool
-    {
-        return $this !== self::TechnicalLog && $this !== self::ErrorHistory;
-    }
-
     /**
      * Que se cuenta en este ambito. El log tecnico son ficheros y no filas, y
      * llamarlos «filas» en el informe hace dudar de si se han borrado lineas de
