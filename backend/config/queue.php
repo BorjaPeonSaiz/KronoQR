@@ -95,7 +95,7 @@ return [
                 'driver' => 'redis',
                 'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
                 'queue' => 'reports',
-                'retry_after' => (int) env('REPORTING_QUEUE_RETRY_AFTER', 1900),
+                'retry_after' => 1900,
                 'block_for' => null,
                 'after_commit' => false,
             ],
@@ -104,7 +104,7 @@ return [
                 'connection' => env('DB_QUEUE_CONNECTION'),
                 'table' => env('DB_QUEUE_TABLE', 'jobs'),
                 'queue' => 'reports',
-                'retry_after' => (int) env('REPORTING_QUEUE_RETRY_AFTER', 1900),
+                'retry_after' => 1900,
                 'after_commit' => false,
             ],
             default => [
