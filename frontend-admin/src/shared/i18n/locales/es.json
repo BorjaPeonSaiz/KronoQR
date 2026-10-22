@@ -870,7 +870,9 @@
       "timeDoesNotExist": "Esa hora no existió en esta zona: el reloj saltó al cambiar de horario. Elige otra.",
       "noChange": "Cambia al menos una hora o cómo terminó el tramo para poder guardar: una corrección que no cambia nada es una fila de auditoría que miente.",
       "voidSummary": "Este tramo dejará de contar para el total del día. La versión que tenía se conserva y sigue siendo consultable en el historial.",
-      "previewCaption": "Lo que cambia en este tramo"
+      "previewCaption": "Lo que cambia en este tramo",
+      "futureHint": "No puede ser posterior a ahora: el registro anota lo que ya ha ocurrido (se admite un margen de pocos minutos).",
+      "futureRejected": "Esa hora es posterior a la actual. Un registro horario solo anota lo que ya ha ocurrido: no se puede rellenar por adelantado ni cerrar un turno con una salida prevista. Pon la hora real, o deja la salida en blanco y ciérralo cuando ocurra."
     }
   },
   "chartWithTable": {

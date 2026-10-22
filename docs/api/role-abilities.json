@@ -1,0 +1,37 @@
+{
+  "description": "Catalogo de ambitos de token de las cuentas de gestion tal como lo deja la cadena de migraciones de roles (doc 02 §7.3): 2026_08_19_101500_seed_role_and_permission_catalog + 2026_08_30_100100_grant_read_ability + 2026_10_07_100100_grant_accounts_ability + 2026_10_16_100300_narrow_auditor_abilities. Lo lee la prueba frontend-admin/tests/unit/roleCatalog.spec.ts para atar el menu, las rutas y las fixtures a lo que el servidor concede de verdad. Si cambia un rol, cambian esta lista y la migracion a la vez; una prueba del backend debe compararla con la tabla role_has_permissions.",
+  "roles": {
+    "responsable_departamento": [
+      "attendance:read",
+      "attendance:correct",
+      "incidents:*",
+      "employees:read"
+    ],
+    "rrhh": [
+      "attendance:read",
+      "attendance:correct",
+      "incidents:*",
+      "employees:read",
+      "employees:*",
+      "credentials:*",
+      "reports:*"
+    ],
+    "auditor": ["reports:legal"],
+    "admin": [
+      "attendance:read",
+      "attendance:correct",
+      "incidents:*",
+      "employees:read",
+      "employees:*",
+      "credentials:*",
+      "reports:*",
+      "reports:legal",
+      "audit:read",
+      "settings:*",
+      "license:*",
+      "support:*",
+      "diagnostics:*",
+      "accounts:*"
+    ]
+  }
+}

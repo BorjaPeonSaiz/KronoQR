@@ -379,7 +379,9 @@ export const MANAGER_USER: ManagementUser = {
 /**
  * Administrador de instalacion (RF-ID-02): el unico rol que lleva
  * `settings:*` (doc 02 §7.3, nota 5) y por tanto el unico que ve «Quioscos»
- * (RF-PD-06, tarea 5.6). Abilities `['*']`, como el que crea el asistente.
+ * (RF-PD-06, tarea 5.6). Lleva los ambitos que el servidor concede al rol `admin`
+ * (`docs/api/role-abilities.json`; `roleCatalog.spec.ts` los compara), no un
+ * comodin: una fixture mas ancha que el servidor deja pasar pantallas que darian 403.
  */
 export const ADMIN_USER: ManagementUser = {
   uuid: '0199f0aa-4444-7000-8000-0123456789ae',
@@ -387,15 +389,30 @@ export const ADMIN_USER: ManagementUser = {
   email: 'direccion@hotel.example',
   locale: 'es',
   roles: ['admin'],
-  abilities: ['*'],
+  abilities: [
+    'attendance:read',
+    'attendance:correct',
+    'incidents:*',
+    'employees:read',
+    'employees:*',
+    'credentials:*',
+    'reports:*',
+    'reports:legal',
+    'audit:read',
+    'settings:*',
+    'license:*',
+    'support:*',
+    'diagnostics:*',
+    'accounts:*',
+  ],
   scope: { kind: 'all', department_ids: [] },
 }
 
 /**
- * Auditor (RF-ID-02): `attendance:read` sin `attendance:correct`. Sirve para
- * comprobar que quien solo puede LEER el registro horario no ve ningun boton
- * de las tres operaciones de correccion (RF-PA-04, tarea 5.11b) — el mismo
- * `attendance:read` con el que se abre `EmployeeWorkDaysView`, y nada mas.
+ * Auditor (RF-ID-02): desde la 2.2.1 (bloque 25) lleva solo `reports:legal`, la
+ * exportacion para la Inspeccion; ni presencia, ni registro horario, ni
+ * correcciones. Sirve para comprobar que su unica pantalla es esa y que no ve
+ * ningun control de nada mas.
  */
 export const AUDITOR_USER: ManagementUser = {
   uuid: '0199f0aa-5555-7000-8000-0123456789af',
@@ -1508,8 +1525,8 @@ export interface ManagementApiOptions {
    * completo; `manager` es `MANAGER_USER`, un `responsable_departamento` con
    * `incidents:*` y sin plantilla ni credenciales (RF-ID-03); `admin` es
    * `ADMIN_USER`, el unico que ve «Quioscos» (RF-PD-06, tarea 5.6); `auditor`
-   * es `AUDITOR_USER`, con `attendance:read` y sin `attendance:correct` (RF-ID-02,
-   * tarea 5.11b): ve el registro horario y ningun boton de sus tres correcciones.
+   * es `AUDITOR_USER`, con solo `reports:legal` (RF-ID-02, bloque 25 de la 2.2.1): su unica
+   * pantalla es la exportacion para la Inspeccion.
    */
   readonly role?: 'rrhh' | 'manager' | 'admin' | 'auditor'
   /** `Site.timezone_locked` de partida (RN-23): `true` = ya hubo fichajes y la zona no se puede cambiar. Por omision, `false`. */

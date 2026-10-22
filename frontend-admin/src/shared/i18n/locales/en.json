@@ -870,7 +870,9 @@
       "timeDoesNotExist": "That time did not exist in this zone: the clock skipped it when daylight saving changed. Choose another.",
       "noChange": "Change at least one time or how the shift ended to save: a correction that changes nothing is an audit row that lies.",
       "voidSummary": "This entry will stop counting towards the daily total. The version it had is kept and stays available in the history.",
-      "previewCaption": "What changes on this entry"
+      "previewCaption": "What changes on this entry",
+      "futureHint": "It cannot be later than now: the record only notes what has already happened (a margin of a few minutes is allowed).",
+      "futureRejected": "That time is later than the current one. A time record only notes what has already happened: it cannot be filled in ahead of time, nor can a shift be closed with a planned exit. Enter the real time, or leave the exit blank and close it when it happens."
     }
   },
   "chartWithTable": {
