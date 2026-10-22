@@ -207,7 +207,6 @@ function authorizationMatrix(): array
         'POST api/v1/incidents/{id}/resolve' => [$admin, $rrhh, $responsable],
         // El canal global de presencia: el responsable solo firma el de sus
         // departamentos, y el auditor no tiene ni el ambito ni el rol.
-        'GET api/v1/broadcasting/auth' => [$admin, $rrhh],
         'POST api/v1/broadcasting/auth' => [$admin, $rrhh],
 
         // Informes: rrhh y admin; la exportacion legal, tambien el auditor.

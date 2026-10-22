@@ -11,16 +11,16 @@ use Tests\Contract\Support\Contract;
 /*
  * El contrato de la API, comprobado (doc 02 §9.2, RQ-06, ADR-013).
  *
- * QUE SE PUEDE PROBAR HOY Y QUE NO. `routes/api_v1.php` esta vacio a proposito:
- * el contrato se escribe ANTES que el codigo, asi que todavia no hay respuesta
- * que validar contra el esquema. Eso llega con el endpoint, en la tarea 1.7, y
- * sera una prueba distinta: peticion real -> `assertValidResponse()`.
+ * QUE SE PRUEBA AQUI Y QUE NO. Las respuestas de cada endpoint se validan contra
+ * el esquema en sus propias pruebas de feature (`assertValidResponse()`), y
+ * `ContractResponseCoverageTest` exige que ninguna operacion se quede sin una.
+ * Aqui se prueba el documento y su relacion con el router:
  *
- * Lo que si se puede probar hoy, y no es poco:
- *
- *   1. Que Spectator carga el fichero. Si no lo carga, la prueba de la 1.7 no
- *      fallaria: se saltaria la validacion sin decir nada, que es peor.
- *   2. Que el contrato sigue diciendo lo que las reglas duras exigen que diga.
+ *   1. Que Spectator carga el fichero. Si no lo carga, las pruebas de feature no
+ *      fallarian: se saltarian la validacion sin decir nada, que es peor.
+ *   2. Que cada ruta registrada tiene su operacion o su exclusion razonada en
+ *      `x-route-exclusions`, y que cada operacion tiene su ruta (R1-BE-01).
+ *   3. Que el contrato sigue diciendo lo que las reglas duras exigen que diga.
  *      Un contrato es un documento, y un documento se erosiona: alguien añade un
  *      campo «solo para depurar», alguien afloja un patron para que le pase un
  *      caso. Estas pruebas son las que convierten las decisiones de este fichero
@@ -127,6 +127,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // inicial del panel y el camino de sondeo al que degrada el WebSocket
         // (ADR-011): por eso vive en la API y no solo en el canal.
         '/api/v1/attendance/live',
+        // Bloque 12 de la 2.3.0 (B3, R6-BD-02): la firma de la suscripcion al
+        // canal de presencia. Funcionaba desde la 2.4 sin operacion; ahora es
+        // solo `POST` y valida su peticion.
+        '/api/v1/broadcasting/auth',
         // Tarea 3.4: la vista de cumplimiento (RF-PA-06). Mismo ambito que la
         // presencia y que el registro horario —`attendance:read`— porque es una
         // lectura del registro con los umbrales del perfil aplicados encima.
@@ -359,6 +363,136 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/absences/{uuid}/void',
     ]);
 })->group('RQ-06');
+
+/*
+ * RUTAS FRENTE A CONTRATO, EN LOS DOS SENTIDOS (R1-BE-01, B2-B4; bloque 12 de la
+ * 2.3.0).
+ *
+ * Hasta aqui el inventario de la Fase 0 de cada verificacion se hacia a mano con
+ * `route:list`: una ruta registrada por un paquete —`sanctum/csrf-cookie`,
+ * `storage/{path}`— o un endpoint escrito sin contrato quedaban alcanzables sin
+ * que nada fallara. Ahora cada ruta del router es una operacion de `paths:` o
+ * esta en `x-route-exclusions` del propio contrato, con su motivo; y cada
+ * operacion tiene su ruta.
+ */
+
+/**
+ * Las claves `VERBO /ruta` del router, sin `HEAD`, que Laravel añade a todo `GET`.
+ *
+ * @return list<string>
+ */
+function openApiContractRouterKeys(): array
+{
+    $keys = [];
+
+    foreach (app('router')->getRoutes()->getRoutes() as $route) {
+        foreach (array_diff($route->methods(), ['HEAD']) as $method) {
+            $keys[] = $method.' /'.ltrim($route->uri(), '/');
+        }
+    }
+
+    $keys = array_values(array_unique($keys));
+    sort($keys);
+
+    return $keys;
+}
+
+/**
+ * @return list<array{path: string, methods: list<string>, reason: string}>
+ */
+function openApiContractExclusions(): array
+{
+    $exclusions = [];
+
+    foreach (Contract::map('x-route-exclusions') as $exclusion) {
+        expect($exclusion)->toBeArray()->toHaveKeys(['path', 'methods', 'reason']);
+
+        /** @var array{path: string, methods: list<string>, reason: string} $exclusion */
+        $exclusions[] = $exclusion;
+    }
+
+    return $exclusions;
+}
+
+function openApiContractExcludes(string $key): bool
+{
+    [$method, $path] = explode(' ', $key, 2);
+
+    foreach (openApiContractExclusions() as $exclusion) {
+        $matches = str_ends_with($exclusion['path'], '/*')
+            ? str_starts_with($path, substr($exclusion['path'], 0, -1))
+            : $path === $exclusion['path'];
+
+        if ($matches && \in_array($method, $exclusion['methods'], true)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @return list<string>
+ */
+function openApiContractOperationKeys(): array
+{
+    $keys = array_map(
+        static fn (array $operation): string => strtoupper($operation['method']).' '.$operation['path'],
+        Contract::operations(),
+    );
+    sort($keys);
+
+    return $keys;
+}
+
+it('tiene una operacion o una exclusion razonada para cada ruta registrada', function (): void {
+    $sinContrato = array_values(array_filter(
+        array_diff(openApiContractRouterKeys(), openApiContractOperationKeys()),
+        static fn (string $key): bool => ! openApiContractExcludes($key),
+    ));
+
+    expect($sinContrato)->toBe(
+        [],
+        'Ruta(s) registrada(s) sin operacion en docs/api/openapi.yaml ni exclusion en x-route-exclusions. '
+        .'Contrato primero (ADR-013): describe la operacion, o quita la ruta si es de un paquete y no se usa, '
+        .'o inventariala en x-route-exclusions con su motivo.',
+    );
+})->group('RQ-06', 'RS-04');
+
+it('tiene una ruta registrada para cada operacion del contrato', function (): void {
+    expect(array_values(array_diff(openApiContractOperationKeys(), openApiContractRouterKeys())))->toBe([]);
+})->group('RQ-06');
+
+it('no guarda exclusiones muertas ni sin motivo, y ninguna tapa una ruta de la API', function (): void {
+    $rutas = openApiContractRouterKeys();
+
+    foreach (openApiContractExclusions() as $exclusion) {
+        $prefijo = str_ends_with($exclusion['path'], '/*') ? substr($exclusion['path'], 0, -1) : null;
+        $cubiertas = array_filter(
+            $rutas,
+            static fn (string $key): bool => \in_array(explode(' ', $key, 2)[0], $exclusion['methods'], true)
+                && ($prefijo === null
+                    ? explode(' ', $key, 2)[1] === $exclusion['path']
+                    : str_starts_with(explode(' ', $key, 2)[1], $prefijo)),
+        );
+
+        expect($cubiertas)->not->toBe([], 'x-route-exclusions declara '.$exclusion['path'].' y no hay ninguna ruta asi.')
+            ->and(trim($exclusion['reason']))->not->toBe('')
+            ->and($exclusion['path'])->not->toStartWith('/api/');
+    }
+})->group('RQ-06');
+
+it('no registra las rutas de terceros que el producto no usa', function (): void {
+    // La cookie de sesion de las SPA de Sanctum —abria una sesion por cada
+    // peticion anonima— y los ficheros del disco privado servidos por firma.
+    $rutas = openApiContractRouterKeys();
+
+    expect($rutas)->not->toContain('GET /sanctum/csrf-cookie')
+        ->and($rutas)->not->toContain('GET /storage/{path}')
+        ->and($rutas)->not->toContain('PUT /storage/{path}')
+        ->and($rutas)->toContain('GET /metrics', 'POST /api/v1/broadcasting/auth')
+        ->and($rutas)->not->toContain('GET /api/v1/broadcasting/auth');
+})->group('RQ-06', 'RS-04');
 
 it('declara en el contrato exactamente el catalogo de claves de configuracion', function (): void {
     // RF-PD-01. El catalogo vive en `SettingKey` y **se escribe otras dos veces**

@@ -66,6 +66,7 @@ use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
+use App\Modules\Reporting\Http\Controller\ChannelAuthorizationController;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
@@ -93,6 +94,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Number;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
@@ -122,6 +124,28 @@ return Application::configure(basePath: dirname(__DIR__))
         // que consultara Redis para saber si puede responder haria que Docker
         // reiniciara PHP cuando el que se cae es Redis. Cada ruta declara su
         // zona de limite en routes/api_v1.php.
+        then: static function (): void {
+            /*
+             * La firma de los canales de WebSocket, `POST` y nada mas (ver abajo).
+             *
+             * Se declara aqui y no con `withBroadcasting()`, que registra
+             * `GET|POST` con el `BroadcastController` del framework: sin
+             * validacion (un `socket_id` mal formado era un `500`) y con
+             * respuesta JSONP si llega un `callback`, dos formas que el contrato
+             * no declara (B3, R6-BD-02; bloque 12 de la 2.3.0). Aqui, ademas,
+             * entra en la cache de rutas como las demas.
+             *
+             * FUERA del grupo `api`, como estaba: el cliente de Pusher envia un
+             * formulario y la puerta de tipos de contenido no tiene que verlo.
+             */
+            Route::post('api/v1/broadcasting/auth', ChannelAuthorizationController::class)
+                ->middleware([
+                    'auth:sanctum',
+                    'ability:'.TokenAbility::ATTENDANCE_READ->value,
+                    'throttle:management',
+                ])
+                ->name('broadcasting.auth');
+        },
     )
     /*
      * Autorizacion de los canales de WebSocket (ADR-011, tarea 2.4).
@@ -141,18 +165,13 @@ return Application::configure(basePath: dirname(__DIR__))
      * `throttle:management` porque esta ruta la llama el panel cada vez que
      * reconecta, y un panel en bucle de reconexion no puede consumir el proceso
      * que atiende al fichaje (RS-02, §7.1).
+     *
+     * La ruta se declara en el `then:` de `withRouting()`; aqui solo se cargan
+     * los canales, que es la otra mitad de lo que hacia `withBroadcasting()`.
      */
-    ->withBroadcasting(
-        __DIR__.'/../routes/channels.php',
-        attributes: [
-            'prefix' => 'api/v1',
-            'middleware' => [
-                'auth:sanctum',
-                'ability:'.TokenAbility::ATTENDANCE_READ->value,
-                'throttle:management',
-            ],
-        ],
-    )
+    ->booted(static function (): void {
+        require __DIR__.'/../routes/channels.php';
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         /*
          * QUE PROXIES SE CREE LA APLICACION — y de serie, ninguno (RS-02, RS-09,

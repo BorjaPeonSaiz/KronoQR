@@ -50,6 +50,15 @@ use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 return [
 
     /*
+     * Sin la ruta `GET /sanctum/csrf-cookie` del paquete (B2, R3-BE-06; bloque
+     * 12 de la 2.3.0). Es la pieza de las SPA con cookie de sesion, y aqui no hay
+     * ninguna: sin ella, cada peticion anonima a esa ruta abria una sesion en
+     * Redis con su `XSRF-TOKEN`. Que no vuelva lo vigila
+     * `OpenApiContractTest` (toda ruta registrada tiene contrato o exclusion).
+     */
+    'routes' => false,
+
+    /*
      * Dominios con sesion. Ninguno, por lo dicho arriba: el producto no tiene
      * clientes de primera parte con cookies. Se deja explicito y vacio en lugar
      * de heredar la lista de `localhost` del paquete.

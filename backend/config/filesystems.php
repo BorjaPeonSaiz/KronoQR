@@ -35,7 +35,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Sin las rutas firmadas `GET|PUT /storage/{path}` (B2, R3-BE-06): el
+            // disco privado no se sirve por HTTP; las descargas tienen su endpoint.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

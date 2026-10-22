@@ -30,7 +30,7 @@ use Symfony\Component\HttpFoundation\Response;
  * - **Sin cuerpo** no se mira nada: un `POST` de accion sin datos es legitimo.
  *
  * **`broadcasting/auth` queda fuera, y no por una excepcion de aqui**: la
- * declara `withBroadcasting()` en `bootstrap/app.php` con su propia lista de
+ * declara el `then:` de `withRouting()` en `bootstrap/app.php` con su propia lista de
  * middleware, sin el grupo `api`, asi que este middleware no la ve. El cliente
  * de Pusher le envia un formulario (`application/x-www-form-urlencoded`), que
  * es su formato fijo.
