@@ -124,7 +124,33 @@ describe('EmployeeWorkDaysView', () => {
 
     const workdaysUrl = requestedUrls.find((url) => url.includes('/workdays')) ?? ''
 
-    expect(workdaysUrl).toBe(`/api/v1/employees/${EMPLOYEE_UUID}/workdays`)
+    // Sin periodo (lo resuelve el servidor) y con la primera pagina, de 31 jornadas.
+    expect(workdaysUrl).toBe(`/api/v1/employees/${EMPLOYEE_UUID}/workdays?page=1&per_page=31`)
+  })
+
+  it('pagina en el servidor por jornadas enteras: sin barra con una sola pagina, con ella y la siguiente pagina se pide (V5-PA-2)', async () => {
+    const single = await mountWorkDays()
+
+    expect(single.find('nav[aria-label="' + es.workdays.pagination.label + '"]').exists()).toBe(
+      false,
+    )
+
+    requestedUrls = []
+
+    const paged = await mountWorkDays({
+      workdays: employeeWorkDays([workDay()], {
+        meta: { total: 45, page: 1, per_page: 31, total_pages: 2 },
+      }),
+    })
+    const nav = paged.find('nav[aria-label="' + es.workdays.pagination.label + '"]')
+
+    expect(nav.exists()).toBe(true)
+    expect(paged.text()).toContain('45')
+
+    await nav.findAll('button')[1]?.trigger('click')
+    await settle()
+
+    expect(requestedUrls.some((url) => url.includes('page=2'))).toBe(true)
   })
 
   it('dice que periodo se esta viendo y en que zona horaria', async () => {

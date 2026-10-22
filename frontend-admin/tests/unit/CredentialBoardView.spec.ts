@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
-import { CLIENT_PER_PAGE } from '@/features/credentials/useCredentialRows'
 import es from '@/shared/i18n/locales/es.json'
 import type { CredentialStatusRow } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { CREDENTIAL_UUID, SITE, board, boardRow, credential } from './support/fixtures'
 import { buttonWith, jsonResponse, mountView, settle, stubFetch } from './support/harness'
+
+// El `URL` global se sustituye en cada prueba (createObjectURL): este es el de verdad.
+const NativeURL = URL
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
@@ -46,6 +48,15 @@ function routes(
   return (url: string, init: RequestInit | undefined) => {
     if (url.startsWith('/api/v1/site')) {
       return jsonResponse(SITE)
+    }
+
+    if (url.startsWith('/api/v1/departments')) {
+      return jsonResponse({
+        data: [
+          { id: 3, name: 'Cocina' },
+          { id: 4, name: 'Recepción' },
+        ],
+      })
     }
 
     const handled = extra?.(url, init) ?? null
@@ -277,126 +288,142 @@ describe('CredentialBoardView', () => {
     expect(wrapper.text()).toContain(es.credentials.empty.allDelivered)
   })
 
-  it('filtra las filas por estado en el cliente, sin volver a pedir al servidor (RF-QR-08)', async () => {
-    const spy = stubFetch(
-      routes([
-        boardRow({ employee_uuid: 'a', status: 'pending_print' }),
-        boardRow({ employee_uuid: 'b', status: 'delivered' }),
-      ]),
-    )
+  /** Las URLs de `/credentials/status` que ha pedido el panel, en orden. */
+  function boardUrls(spy: ReturnType<typeof stubFetch>): InstanceType<typeof NativeURL>[] {
+    return spy.mock.calls
+      .map((call) => String(call[0]))
+      .filter((url) => url.includes('/api/v1/credentials/status'))
+      .map((url) => new NativeURL(url, 'http://localhost'))
+  }
 
+  it('el estado, el departamento y la pagina viajan al servidor; el panel no filtra por su cuenta (RF-QR-08, V5-PA-2)', async () => {
+    const spy = stubFetch(routes([boardRow({ employee_uuid: 'a', status: 'delivered' })]))
     const wrapper = await mountView(CredentialBoardView)
 
     await settle()
-    const callsBefore = spy.mock.calls.length
+
+    // Se pide la primera pagina de 30, sin filtros.
+    const first = boardUrls(spy)[0]
+
+    expect(first?.searchParams.get('page')).toBe('1')
+    expect(first?.searchParams.get('per_page')).toBe('30')
+    expect(first?.searchParams.has('status')).toBe(false)
 
     await wrapper.find('#credentials-status-filter').setValue('delivered')
     await settle()
-
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.find('tbody tr').text()).toContain(es.credentials.status.delivered)
-    expect(spy.mock.calls.length).toBe(callsBefore)
-  })
-
-  it('la busqueda ignora mayusculas y acentos (RF-QR-08)', async () => {
-    const wrapper = await mountBoard([
-      boardRow({ employee_uuid: 'a', full_name: 'García Núñez' }),
-      boardRow({ employee_uuid: 'b', full_name: 'Otra Persona' }),
-    ])
-
-    await wrapper.find('#credentials-search-filter').setValue('GARCIA nunez')
+    await wrapper.find('#credentials-department-filter').setValue('3')
     await settle()
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.text()).toContain('García Núñez')
+    const last = boardUrls(spy).at(-1)
+
+    expect(last?.searchParams.get('status')).toBe('delivered')
+    expect(last?.searchParams.get('department_id')).toBe('3')
+    expect(last?.searchParams.get('page')).toBe('1')
   })
 
-  it('el filtro de departamento usa los nombres presentes en las filas (RF-QR-08)', async () => {
-    const wrapper = await mountBoard([
-      boardRow({ employee_uuid: 'a', department_name: 'Cocina' }),
-      boardRow({ employee_uuid: 'b', department_name: 'Recepcion' }),
-    ])
+  it('«sin departamento» pide without_department, no un departamento inventado', async () => {
+    const spy = stubFetch(routes([boardRow()]))
+    const wrapper = await mountView(CredentialBoardView)
 
-    await wrapper.find('#credentials-department-filter').setValue('Cocina')
+    await settle()
+    await wrapper.find('#credentials-department-filter').setValue('__no_department__')
     await settle()
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.text()).toContain('Cocina')
+    const last = boardUrls(spy).at(-1)
+
+    expect(last?.searchParams.get('without_department')).toBe('true')
+    expect(last?.searchParams.has('department_id')).toBe(false)
   })
 
-  it('pagina en el cliente y avanza a la siguiente pagina (RF-QR-08)', async () => {
-    const total = CLIENT_PER_PAGE + 5
-    const rows = Array.from({ length: total }, (_, index) =>
-      boardRow({
-        employee_uuid: `row-${index}`,
-        employee_code: `CODE${index}`,
-        full_name: `Persona ${index}`,
-      }),
-    )
+  it('los departamentos salen de GET /departments, no de las filas de la pagina', async () => {
+    const wrapper = await mountBoard([boardRow({ department_name: 'Lavanderia' })])
+    const options = wrapper
+      .find('#credentials-department-filter')
+      .findAll('option')
+      .map((option) => option.text())
 
-    const wrapper = await mountBoard(rows)
+    expect(options).toContain('Cocina')
+    expect(options).toContain('Recepción')
+    expect(options).not.toContain('Lavanderia')
+  })
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(CLIENT_PER_PAGE)
-    expect(wrapper.text()).toContain(`1–${CLIENT_PER_PAGE} de ${total}`)
+  it('la busqueda espera a que se deje de teclear y se hace en el servidor', async () => {
+    const spy = stubFetch(routes([boardRow()]))
+    const wrapper = await mountView(CredentialBoardView)
+
+    await settle()
+    const before = boardUrls(spy).length
+
+    await wrapper.find('#credentials-search-filter').setValue('garcia')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(boardUrls(spy).length).toBe(before)
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await settle()
+
+    expect(boardUrls(spy).at(-1)?.searchParams.get('q')).toBe('garcia')
+  })
+
+  it('pagina en el servidor: enseña la pagina que llega y pide la siguiente al avanzar (RF-QR-08)', async () => {
+    const total = 35
+    const spy = stubFetch((url, init) => {
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
+      }
+
+      if (url.startsWith('/api/v1/departments')) {
+        return jsonResponse({ data: [] })
+      }
+
+      const page = Number(new NativeURL(url, 'http://localhost').searchParams.get('page') ?? '1')
+      const rows = Array.from({ length: page === 1 ? 30 : 5 }, (_, index) =>
+        boardRow({
+          employee_uuid: `row-${page}-${index}`,
+          employee_code: `CODE${index}`,
+          full_name: `Persona ${page}-${index}`,
+        }),
+      )
+
+      void init
+
+      return jsonResponse({
+        ...board(rows),
+        meta: { page, per_page: 30, total, total_pages: 2 },
+      })
+    })
+    const wrapper = await mountView(CredentialBoardView)
+
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(30)
+    expect(wrapper.text()).toContain(`1–30 de ${total}`)
 
     await wrapper.findAll('nav button')[1]?.trigger('click')
     await settle()
 
+    expect(boardUrls(spy).at(-1)?.searchParams.get('page')).toBe('2')
     expect(wrapper.findAll('tbody tr')).toHaveLength(5)
   })
 
-  it('el filtro de departamento encaja aunque la fila viviera en una pagina en cliente distinta (RF-QR-08)', async () => {
-    // El tablero llega ENTERO del servidor (`board.data`): el filtro se aplica
-    // sobre todas esas filas antes de paginar en cliente, nunca solo sobre las
-    // 30 que se estarian viendo en la pagina 1. Se coloca la unica fila de
-    // «Cocina» en la posicion que, sin filtrar, caeria en la pagina 3.
-    const rows = Array.from({ length: CLIENT_PER_PAGE * 2 + 4 }, (_, index) =>
-      boardRow({
-        employee_uuid: `row-${index}`,
-        employee_code: `CODE${index}`,
-        full_name: `Persona ${index}`,
-        department_name: 'Recepcion',
-      }),
+  it('un filtro nuevo vuelve a la primera pagina', async () => {
+    const spy = stubFetch(
+      routes([boardRow()], (url) =>
+        url.includes('/credentials/status')
+          ? jsonResponse({
+              ...board([boardRow()]),
+              meta: { page: 2, per_page: 30, total: 35, total_pages: 2 },
+            })
+          : null,
+      ),
     )
-    rows[rows.length - 1] = boardRow({
-      employee_uuid: 'cocina',
-      employee_code: 'CODE-COCINA',
-      full_name: 'Persona de Cocina',
-      department_name: 'Cocina',
-    })
+    const wrapper = await mountView(CredentialBoardView)
 
-    const wrapper = await mountBoard(rows)
-
-    await wrapper.find('#credentials-department-filter').setValue('Cocina')
+    await settle()
+    await wrapper.findAll('nav button')[0]?.trigger('click')
+    await wrapper.find('#credentials-status-filter').setValue('revoked')
     await settle()
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.text()).toContain('Persona de Cocina')
-  })
-
-  it('el filtro de estado encaja aunque la fila viviera en una pagina en cliente distinta (RF-QR-08)', async () => {
-    const rows = Array.from({ length: CLIENT_PER_PAGE * 2 + 4 }, (_, index) =>
-      boardRow({
-        employee_uuid: `row-${index}`,
-        employee_code: `CODE${index}`,
-        full_name: `Persona ${index}`,
-        status: 'pending_print',
-      }),
-    )
-    rows[rows.length - 1] = boardRow({
-      employee_uuid: 'entregada',
-      employee_code: 'CODE-ENTREGADA',
-      full_name: 'Persona Entregada',
-      status: 'delivered',
-    })
-
-    const wrapper = await mountBoard(rows)
-
-    await wrapper.find('#credentials-status-filter').setValue('delivered')
-    await settle()
-
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.text()).toContain('Persona Entregada')
+    expect(boardUrls(spy).at(-1)?.searchParams.get('page')).toBe('1')
   })
 
   it('«pendiente de tarjeta» es una opcion mas del select de estado, sin control deshabilitado que nadie con teclado o lector de pantalla pueda alcanzar (RF-QR-08)', async () => {
@@ -421,12 +448,21 @@ describe('CredentialBoardView', () => {
   })
 
   it('el vacio filtrado es distinto del vacio real (RF-QR-08)', async () => {
-    const wrapper = await mountBoard([boardRow({ full_name: 'Lucia Martinez' })])
+    const wrapper = await mountBoard([boardRow({ full_name: 'Lucia Martinez' })], (url) =>
+      url.includes('q=nadie')
+        ? jsonResponse({
+            ...board([]),
+            meta: { page: 1, per_page: 30, total: 0, total_pages: 1 },
+          })
+        : null,
+    )
 
     await wrapper.find('#credentials-search-filter').setValue('nadie encaja con esto')
+    await new Promise((resolve) => setTimeout(resolve, 450))
     await settle()
 
     expect(wrapper.text()).toContain(es.credentials.empty.filtered)
+    expect(wrapper.text()).not.toContain(es.credentials.empty.description)
   })
 
   // --- Rotacion de la clave de firma (RF-QR-07, tarea 2.12) ------------------

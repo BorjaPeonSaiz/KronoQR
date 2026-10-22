@@ -24,9 +24,13 @@ export interface WorkDateRange {
 /** Un rango sin pedir: el servidor decide, que es quien sabe que dia es hoy en el centro. */
 export const UNBOUNDED_RANGE: WorkDateRange = { from: '', to: '' }
 
+/** Jornadas por pagina que se piden al servidor (31 por omision, maximo 100): un mes entero cabe en una. */
+export const WORKDAYS_PER_PAGE = 31
+
 export function listEmployeeWorkDays(
   uuid: string,
   range: WorkDateRange = UNBOUNDED_RANGE,
+  page = 1,
 ): Promise<EmployeeWorkDays> {
   return requestJson<EmployeeWorkDays>(`/api/v1/employees/${uuid}/workdays`, {
     query: {
@@ -35,6 +39,9 @@ export function listEmployeeWorkDays(
       // usaria la zona del navegador, que es justo la que no vale.
       from: range.from === '' ? undefined : range.from,
       to: range.to === '' ? undefined : range.to,
+      // El servidor pagina por jornadas ENTERAS: un turno de noche nunca se parte entre paginas.
+      page,
+      per_page: WORKDAYS_PER_PAGE,
     },
   })
 }

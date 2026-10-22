@@ -21,11 +21,11 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { computed, ref, watch } from 'vue'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
-import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { getSite } from '@/shared/api/organisation.api'
+import { getSite, listDepartments } from '@/shared/api/organisation.api'
 import type { CredentialLifecycleStatus } from '@/shared/api/types'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
@@ -37,14 +37,14 @@ import {
   fetchCredentialInstructionsSheet,
   printCredentialBatch,
 } from './credentials.api'
-import {
-  CLIENT_PER_PAGE,
-  NO_DEPARTMENT,
-  departmentOptionsFrom,
-  filterRows,
-  paginate,
-  reprintProgressOf,
-} from './useCredentialRows'
+import { reprintProgressOf } from './useCredentialRows'
+
+/** Filas por pagina del tablero, pedidas al servidor (maximo 100). */
+const PER_PAGE = 30
+/** Espera tras la ultima tecla antes de buscar en el servidor. */
+const SEARCH_DEBOUNCE_MS = 300
+/** Valor del selector de departamento que significa «sin departamento» (without_department). */
+const NO_DEPARTMENT = '__no_department__'
 
 const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
   'no_credential',
@@ -71,16 +71,35 @@ const { t, locale } = useI18n()
 const { personFullName } = usePersonName()
 const queryClient = useQueryClient()
 
-// Filtros EN CLIENTE (RF-QR-08): el contrato no pagina ni filtra por
-// departamento o texto, y eso no se cambia aqui. La opcion «pendiente de
-// tarjeta» del select de estado, en cambio, va al servidor porque tambien
-// acota el lote de impresion y el resumen; un estado concreto se filtra en
-// cliente sobre el lote ya cargado. No hay filtro por centro: hay exactamente
-// uno por instalacion (ADR-040).
+// Filtros y paginacion EN EL SERVIDOR (RF-QR-08, V5-PA-2, HC1): texto, departamento,
+// estado y pagina viajan en la consulta, y el summary sigue contando la plantilla
+// entera («faltan 3 de 60»). La opcion «pendiente de tarjeta» del select de estado
+// tambien acota el lote de impresion. No hay filtro por centro: hay exactamente uno
+// por instalacion (ADR-040).
+const searchInput = ref('')
 const searchFilter = ref('')
 const departmentFilter = ref('')
 const statusFilter = ref<StatusFilterValue>('')
-const clientPage = ref(1)
+const page = ref(1)
+
+let searchDebounce: ReturnType<typeof setTimeout> | undefined
+
+watch(searchInput, (value) => {
+  clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    searchFilter.value = value
+  }, SEARCH_DEBOUNCE_MS)
+})
+
+onUnmounted(() => {
+  clearTimeout(searchDebounce)
+})
+
+const { data: departments } = useQuery({
+  queryKey: ['departments'] as const,
+  queryFn: listDepartments,
+})
+const departmentOptions = computed(() => departments.value?.data ?? [])
 
 // El centro de la instalacion: su zona horaria es la que da sentido a las
 // horas de impresion y entrega (regla dura 3, RN-05).
@@ -98,7 +117,18 @@ const reprintKeyFilter = ref<string | null>(null)
 
 const boardQuery = computed(() => ({
   ...(statusFilter.value === PENDING_ONLY_OPTION ? { pendingOnly: true } : {}),
+  ...(statusFilter.value !== '' && statusFilter.value !== PENDING_ONLY_OPTION
+    ? { status: statusFilter.value }
+    : {}),
   ...(reprintKeyFilter.value === null ? {} : { keyId: reprintKeyFilter.value }),
+  ...(searchFilter.value.trim() === '' ? {} : { q: searchFilter.value }),
+  ...(departmentFilter.value === NO_DEPARTMENT
+    ? { withoutDepartment: true }
+    : departmentFilter.value === ''
+      ? {}
+      : { departmentId: Number(departmentFilter.value) }),
+  page: page.value,
+  perPage: PER_PAGE,
 }))
 
 const {
@@ -108,25 +138,15 @@ const {
 } = useQuery({
   queryKey: computed(() => ['credential-board', boardQuery.value] as const),
   queryFn: () => fetchCredentialBoard(boardQuery.value),
+  // Al cambiar de pagina o de filtro se sigue viendo la lista anterior hasta que
+  // llegue la nueva, en vez de un parpadeo a «cargando».
+  placeholderData: keepPreviousData,
 })
 
 const rows = computed(() => board.value?.data ?? [])
+const pageRows = rows
 const summary = computed(() => board.value?.summary ?? null)
-
-const departmentOptions = computed(() => departmentOptionsFrom(rows.value))
-
-// La opcion «pendiente de tarjeta» ya acota `rows` desde el servidor: no se
-// vuelve a filtrar por estado en cliente cuando esta elegida.
-const filteredRows = computed(() =>
-  filterRows(rows.value, {
-    search: searchFilter.value,
-    department: departmentFilter.value,
-    status: statusFilter.value === PENDING_ONLY_OPTION ? '' : statusFilter.value,
-  }),
-)
-
-const paged = computed(() => paginate(filteredRows.value, clientPage.value, CLIENT_PER_PAGE))
-const pageRows = computed(() => paged.value.data)
+const meta = computed(() => board.value?.meta ?? null)
 
 const hasFilters = computed(
   () =>
@@ -136,23 +156,33 @@ const hasFilters = computed(
     reprintKeyFilter.value !== null,
 )
 
+// Cualquier cambio de filtro vuelve a la primera pagina.
 watch([searchFilter, departmentFilter, statusFilter, reprintKeyFilter], () => {
-  clientPage.value = 1
+  page.value = 1
 })
 
-// Se vigila el RECUENTO, no el array: `filteredRows` es un `computed` que
-// produce una referencia nueva en cada recalculo (por ejemplo, cuando
-// `refreshBoard()` recarga tras emitir, imprimir, entregar o revocar), y eso
-// pisaria en la region viva el anuncio de la propia accion con un anuncio de
-// recuento que nadie pidio.
+// Se vigila el TOTAL del filtro, no las filas: refrescar tras emitir, imprimir,
+// entregar o revocar recarga la pagina y pisaria en la region viva el anuncio de
+// la propia accion con un recuento que nadie pidio.
 watch(
-  () => filteredRows.value.length,
+  () => meta.value?.total,
   (count) => {
-    announce(t('credentials.announce.results', { count }))
+    if (count !== undefined) {
+      announce(t('credentials.announce.results', { count }))
+    }
   },
 )
 
+/** Hay algun filtro ademas de «pendiente de tarjeta»: el vacio ya no significa «todo entregado». */
+const hasOtherFilters = computed(
+  () =>
+    searchFilter.value.trim() !== '' ||
+    departmentFilter.value !== '' ||
+    reprintKeyFilter.value !== null,
+)
+
 function clearFilters(): void {
+  searchInput.value = ''
   searchFilter.value = ''
   departmentFilter.value = ''
   statusFilter.value = ''
@@ -322,18 +352,18 @@ const selectClass =
           <div class="flex items-center gap-2">
             <input
               id="credentials-search-filter"
-              v-model="searchFilter"
+              v-model="searchInput"
               type="search"
               :placeholder="t('credentials.filters.searchPlaceholder')"
               :class="selectClass"
-              @keydown.esc="searchFilter = ''"
+              @keydown.esc="searchInput = ''"
             />
             <button
-              v-if="searchFilter !== ''"
+              v-if="searchInput !== ''"
               type="button"
               :class="selectClass"
               class="px-2 py-2 text-sm"
-              @click="searchFilter = ''"
+              @click="searchInput = ''"
             >
               <span aria-hidden="true">&times;</span>
               <span class="sr-only">{{ t('common.filters.clearSearch') }}</span>
@@ -351,11 +381,14 @@ const selectClass =
             :class="selectClass"
           >
             <option value="">{{ t('credentials.filters.departmentAll') }}</option>
-            <option v-for="department of departmentOptions" :key="department" :value="department">
-              {{
-                department === NO_DEPARTMENT ? t('credentials.filters.departmentNone') : department
-              }}
+            <option
+              v-for="department of departmentOptions"
+              :key="department.id"
+              :value="department.id"
+            >
+              {{ department.name }}
             </option>
+            <option :value="NO_DEPARTMENT">{{ t('credentials.filters.departmentNone') }}</option>
           </select>
         </div>
 
@@ -518,17 +551,19 @@ const selectClass =
     <LoadingPanel v-if="isPending" :label="t('credentials.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
     <EmptyState
-      v-else-if="rows.length === 0"
+      v-else-if="rows.length === 0 && !hasFilters"
       class="mt-4"
       :title="t('credentials.empty.title')"
-      :description="
-        statusFilter === PENDING_ONLY_OPTION
-          ? t('credentials.empty.allDelivered')
-          : t('credentials.empty.description')
-      "
+      :description="t('credentials.empty.description')"
     />
     <EmptyState
-      v-else-if="filteredRows.length === 0"
+      v-else-if="rows.length === 0 && statusFilter === PENDING_ONLY_OPTION && !hasOtherFilters"
+      class="mt-4"
+      :title="t('credentials.empty.title')"
+      :description="t('credentials.empty.allDelivered')"
+    />
+    <EmptyState
+      v-else-if="rows.length === 0"
       class="mt-4"
       :title="t('credentials.empty.title')"
       :description="t('credentials.empty.filtered')"
@@ -588,12 +623,13 @@ const selectClass =
       </div>
 
       <PaginationBar
-        :page="paged.page"
-        :per-page="paged.perPage"
-        :total="paged.total"
-        :total-pages="paged.totalPages"
+        v-if="meta !== null"
+        :page="meta.page"
+        :per-page="meta.per_page"
+        :total="meta.total"
+        :total-pages="meta.total_pages"
         :label="t('credentials.pagination.label')"
-        @update:page="(next) => (clientPage = next)"
+        @update:page="(next) => (page = next)"
       />
     </template>
 

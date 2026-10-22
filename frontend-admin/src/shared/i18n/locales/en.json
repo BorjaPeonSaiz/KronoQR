@@ -1122,14 +1122,17 @@
     "intro": "Reports that do not fit in an immediate response are generated here. Every download link is single-use and expires: ask again if you need it a second time.",
     "kind": {
       "period": "Hours by period",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "legal": "Labour inspection",
+      "adoption": "Impact and adoption"
     },
     "status": {
       "pending": "Queued",
       "running": "Generating",
       "completed": "Ready to download",
       "failed": "Failed",
-      "purged": "Expired"
+      "purged": "Expired",
+      "cancelled": "Cancelled"
     },
     "list": {
       "loading": "Loading the exports…",
@@ -1170,6 +1173,38 @@
       "message": "You have one report ready to download. | You have {count} reports ready to download.",
       "open": "Go to Reports",
       "dismiss": "Dismiss"
+    },
+    "job": {
+      "running": "Generating",
+      "queued": "Queued: it starts as soon as there is room.",
+      "stage": {
+        "reading": "Reading the data",
+        "writing": "Writing the file",
+        "sealing": "Sealing and checking the file"
+      },
+      "progressLabel": "Export progress",
+      "keepWorking": "You can keep using the panel: we will tell you when it finishes.",
+      "cancel": "Cancel the export",
+      "cancelling": "Cancelling…",
+      "completed": "The export is ready to download.",
+      "cancelled": "Export cancelled. No file was kept.",
+      "dismiss": "Close",
+      "alreadyRunning": "You already had an export running (only one per person is allowed): it is the one shown here.",
+      "seeExisting": "See my exports",
+      "progressInList": "{stage}",
+      "announce": {
+        "started": "Export requested. It is being generated in the background.",
+        "alreadyRunning": "An export was already running; that one is shown.",
+        "requestFailed": "The export could not be requested.",
+        "stage": "Export: {stage}.",
+        "completed": "The export is ready to download.",
+        "failed": "The export failed.",
+        "cancelled": "Export cancelled."
+      },
+      "deferred": {
+        "legal": "This export is large (whole workforce or more than a month): it is generated in the background.",
+        "generic": "This export is large (whole workforce or more than a month): it is generated in the background and we will tell you when it finishes."
+      }
     }
   },
   "payrollExport": {
@@ -1334,6 +1369,9 @@
         "break_start": "Break",
         "unknown": "Not recorded"
       }
+    },
+    "pagination": {
+      "label": "Workday pages"
     }
   },
   "live": {

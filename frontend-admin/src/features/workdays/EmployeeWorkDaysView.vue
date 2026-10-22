@@ -50,6 +50,7 @@ import { getEmployee } from '@/features/employees/employees.api'
 import type { CorrectedShiftEntry, WorkDayShiftEntry } from '@/shared/api/types'
 import CorrectionDialog from './CorrectionDialog.vue'
 import WorkDayCard from './WorkDayCard.vue'
+import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import { useEmployeeWorkDays, WORKDAYS_QUERY_KEY } from './useEmployeeWorkDays'
 import type { WorkDateRange } from './workdays.api'
 import { UNBOUNDED_RANGE } from './workdays.api'
@@ -157,7 +158,9 @@ const rangeErrors = computed<string[]>(() => {
   return tooWide.value ? [t('workdays.filters.tooWide', { days: MAX_RANGE_DAYS })] : []
 })
 
-const { data, error, isPending, isFetching } = useEmployeeWorkDays(() => props.uuid, applied)
+const page = ref(1)
+
+const { data, error, isPending, isFetching } = useEmployeeWorkDays(() => props.uuid, applied, page)
 
 /**
  * La ficha, solo para poner un nombre en la cabecera. Es una consulta aparte y
@@ -202,6 +205,7 @@ const days = computed(() => data.value?.data ?? [])
 
 function submit(): void {
   if (canSubmit.value) {
+    page.value = 1
     applied.value = { ...draft.value }
   }
 }
@@ -331,6 +335,16 @@ watch(data, (value) => {
         :employee-uuid="uuid"
         @correct="openCorrect"
         @void="openVoid"
+      />
+
+      <PaginationBar
+        v-if="data !== undefined && (data.meta.total_pages ?? 1) > 1"
+        :page="data.meta.page ?? 1"
+        :per-page="data.meta.per_page ?? 31"
+        :total="data.meta.total"
+        :total-pages="data.meta.total_pages ?? 1"
+        :label="t('workdays.pagination.label')"
+        @update:page="(next) => (page = next)"
       />
     </div>
 

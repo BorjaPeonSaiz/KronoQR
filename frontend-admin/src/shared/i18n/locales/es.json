@@ -1122,14 +1122,17 @@
     "intro": "Los informes que no caben en una respuesta al momento se generan aquí. Cada enlace de descarga es de un solo uso y caduca: si lo necesitas otra vez, pídelo de nuevo.",
     "kind": {
       "period": "Horas por periodo",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "legal": "Inspección de Trabajo",
+      "adoption": "Impacto y adopción"
     },
     "status": {
       "pending": "En cola",
       "running": "Generando",
       "completed": "Lista para descargar",
       "failed": "Fallida",
-      "purged": "Caducada"
+      "purged": "Caducada",
+      "cancelled": "Cancelada"
     },
     "list": {
       "loading": "Cargando las exportaciones…",
@@ -1170,6 +1173,38 @@
       "message": "Tienes un informe listo para descargar. | Tienes {count} informes listos para descargar.",
       "open": "Ir a Informes",
       "dismiss": "Descartar"
+    },
+    "job": {
+      "running": "Generando",
+      "queued": "En cola: empezará en cuanto haya hueco.",
+      "stage": {
+        "reading": "Leyendo los datos",
+        "writing": "Escribiendo el fichero",
+        "sealing": "Sellando y comprobando el fichero"
+      },
+      "progressLabel": "Avance de la exportación",
+      "keepWorking": "Puedes seguir usando el panel: te avisamos al terminar.",
+      "cancel": "Cancelar la exportación",
+      "cancelling": "Cancelando…",
+      "completed": "La exportación está lista para descargar.",
+      "cancelled": "Exportación cancelada. No se ha guardado ningún fichero.",
+      "dismiss": "Cerrar",
+      "alreadyRunning": "Ya tenías una exportación en curso (solo se admite una por persona): es la que ves aquí.",
+      "seeExisting": "Ver mis exportaciones",
+      "progressInList": "{stage}",
+      "announce": {
+        "started": "Exportación pedida. Se genera en segundo plano.",
+        "alreadyRunning": "Ya había una exportación en curso; se muestra esa.",
+        "requestFailed": "No se ha podido pedir la exportación.",
+        "stage": "Exportación: {stage}.",
+        "completed": "La exportación está lista para descargar.",
+        "failed": "La exportación ha fallado.",
+        "cancelled": "Exportación cancelada."
+      },
+      "deferred": {
+        "legal": "Esta exportación es grande (toda la plantilla o más de un mes): se genera en segundo plano.",
+        "generic": "Esta exportación es grande (toda la plantilla o más de un mes): se genera en segundo plano y te avisamos al terminar."
+      }
     }
   },
   "payrollExport": {
@@ -1334,6 +1369,9 @@
         "break_start": "Pausa",
         "unknown": "Sin dato"
       }
+    },
+    "pagination": {
+      "label": "Páginas de jornadas"
     }
   },
   "live": {

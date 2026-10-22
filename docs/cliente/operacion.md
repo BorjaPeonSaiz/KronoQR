@@ -1910,6 +1910,29 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   `report_exports.csv` gana la columna `cancelled_at`. Si comparas exportaciones
   de antes y de después, esa columna es la diferencia (`manifest.json` lo dice).
 
+**Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
+plano, con avance y cancelación.** Nada de esto cambia lo que contiene cada
+fichero:
+
+- **La exportación para la Inspección, la salida a nómina y la exportación del
+  cuadro de impacto** se piden en segundo plano cuando abarcan **toda la
+  plantilla o más de un mes**. La pantalla enseña la fase («Leyendo los
+  datos», «Escribiendo el fichero», «Sellando…») y una barra de avance, y
+  tiene un botón **«Cancelar la exportación»**. Solo la exportación para la
+  Inspección da un porcentaje; en las demás la barra es indeterminada. Puedes
+  seguir usando el panel: al terminar, la propia pantalla (o el aviso de la
+  cabecera) ofrece **«Descargar»**.
+- **Una exportación en curso por persona.** Si pides otra mientras hay una
+  corriendo, el panel te enseña la que ya está en marcha en vez de crear otra.
+- Una consulta **corta** (una persona o un departamento en un periodo de hasta
+  un mes) sigue entregándose al momento, como antes.
+- **El registro horario de una persona y el tablero de credenciales** cargan
+  por páginas desde el servidor (31 jornadas y 30 personas por página). Las
+  jornadas no se parten entre páginas, y el resumen de credenciales sigue
+  contando la plantilla entera.
+- El acceso de soporte del fabricante **no** pide exportaciones en segundo
+  plano.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

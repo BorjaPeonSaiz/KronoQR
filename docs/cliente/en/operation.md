@@ -1933,6 +1933,26 @@ API users.** None of this changes the record or prevents clocking:
   gains the `cancelled_at` column. If you compare exports from before and after,
   that column is the difference (`manifest.json` says so).
 
+**When updating to 2.3.0: large exports are generated in the background, with
+progress and cancellation.** None of this changes what each file contains:
+
+- **The labour-inspection export, the payroll output and the impact dashboard
+  export** are requested in the background when they cover **the whole
+  workforce or more than a month**. The screen shows the stage ("Reading the
+  data", "Writing the file", "Sealing…") and a progress bar, and has a **"Cancel
+  the export"** button. Only the labour-inspection export gives a percentage;
+  for the others the bar is indeterminate. You can keep using the panel: when
+  it finishes, the screen itself (or the header notice) offers **"Download"**.
+- **One export in progress per person.** If you request another while one is
+  running, the panel shows you the one already running instead of creating
+  another.
+- A **short** query (one person or one department over up to a month) is still
+  delivered immediately, as before.
+- **A person's time record and the credentials board** load in pages from the
+  server (31 workdays and 30 people per page). Workdays are never split across
+  pages, and the credentials summary still counts the whole workforce.
+- The manufacturer's support access does **not** request background exports.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet
