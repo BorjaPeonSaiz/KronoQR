@@ -167,3 +167,24 @@ it('el asiento cuenta las filas servidas y nunca el termino buscado', function (
         // Regla dura 21: el termino puede ser un nombre.
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('recepcion');
 })->group('RF-QR-08', 'RS-05', 'RL-15');
+
+it('busca como el directorio de plantilla: Ł y ø sin acento, y los comodines como caracteres', function (string $termino, int $total): void {
+    // Revision de codigo del bloque 14: el tablero usaba su propia comparacion
+    // (NFD sin marcas), que no convierte «Ł» ni «ø». Ahora es `PersonNameSearch`,
+    // la de `GET /employees`, las cuentas y la exportacion legal.
+    $contexto = tableroPaginadoContexto();
+    $site = WorkforceFixtures::onlySiteId();
+    WorkforceFixtures::employee($site, firstName: 'Łukasz', lastName: 'Kowalski');
+    WorkforceFixtures::employee($site, firstName: 'Søren', lastName: 'Kierkegaard');
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status', ['q' => $termino])
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', $total);
+})->with([
+    'lukasz' => ['lukasz', 1],
+    'soren' => ['soren', 1],
+    'Søren con su letra' => ['Søren', 1],
+    'un porcentaje no es comodin' => ['%', 0],
+    'un subrayado tampoco' => ['_', 0],
+])->group('RF-QR-08');

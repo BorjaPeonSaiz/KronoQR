@@ -19,7 +19,6 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
-use Normalizer;
 
 /**
  * El panel de estado de credenciales (RF-QR-08): **quien no puede fichar
@@ -123,7 +122,7 @@ final readonly class CredentialStatusBoard
             ));
         }
 
-        $rows = self::narrowed($rows, $query);
+        $rows = self::narrowed($rows, $query, $this->matchingIds($query));
         $total = \count($rows);
         $rows = self::pageOf($rows, $query);
 
@@ -149,24 +148,45 @@ final readonly class CredentialStatusBoard
      * logico. **Ninguno toca la cobertura**, que ya esta calculada sobre la
      * plantilla: el denominador es la plantilla, no lo que se ve.
      *
+     * El texto llega ya resuelto como un conjunto de claves (`$matching`): lo
+     * busca PostgreSQL con `PersonNameSearch`, como el directorio de plantilla y
+     * las cuentas. El estado se filtra aqui porque es derivado —sale de las
+     * fechas de la credencial, no de una columna—, y por eso la pagina tambien
+     * se corta aqui: no se puede paginar en SQL lo que se filtra despues.
+     *
      * @param  list<CredentialStatusRow>  $rows
+     * @param  array<int, true>|null  $matching  Claves que casan con `q`, o nulo sin `q`.
      * @return list<CredentialStatusRow>
      */
-    private static function narrowed(array $rows, CredentialStatusQuery $query): array
+    private static function narrowed(array $rows, CredentialStatusQuery $query, ?array $matching): array
     {
         if (! $query->narrowsRows()) {
             return $rows;
         }
-
-        $needle = $query->search === null ? '' : self::folded($query->search);
 
         return array_values(array_filter(
             $rows,
             static fn (CredentialStatusRow $row): bool => ($query->status === null || $row->status === $query->status)
                 && (! $query->withoutDepartment || $row->employee->departmentId === null)
                 && ($query->departmentId === null || $row->employee->departmentId === $query->departmentId)
-                && ($needle === '' || str_contains(self::folded($row->employee->fullName.' '.$row->employee->employeeCode), $needle)),
+                && ($matching === null || isset($matching[$row->employee->employeeId])),
         ));
+    }
+
+    /**
+     * Quien casa con `q`, segun PostgreSQL (`unaccent()` y comodines escapados):
+     * «lukasz» encuentra a «Łukasz» y «soren» a «Søren», igual que en
+     * `GET /employees`. Nulo sin `q`.
+     *
+     * @return array<int, true>|null
+     */
+    private function matchingIds(CredentialStatusQuery $query): ?array
+    {
+        if ($query->search === null) {
+            return null;
+        }
+
+        return array_fill_keys($this->directory->activeIdsMatching($query->search), true);
     }
 
     /**
@@ -186,19 +206,6 @@ final readonly class CredentialStatusBoard
         $perPage = max(1, $query->perPage);
 
         return \array_slice($rows, (max(1, $query->page) - 1) * $perPage, $perPage);
-    }
-
-    /**
-     * Minusculas y sin diacriticos, para que «garcia» encuentre a «García».
-     *
-     * Se descompone en NFD y se quitan las marcas combinantes: el mismo criterio
-     * que el panel aplicaba en el navegador, ahora en un solo sitio.
-     */
-    private static function folded(string $text): string
-    {
-        $decomposed = Normalizer::normalize($text, Normalizer::FORM_D);
-
-        return mb_strtolower(trim((string) preg_replace('/\p{Mn}+/u', '', \is_string($decomposed) ? $decomposed : $text)));
     }
 
     /**

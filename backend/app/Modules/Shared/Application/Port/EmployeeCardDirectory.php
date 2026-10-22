@@ -66,4 +66,18 @@ interface EmployeeCardDirectory
      * negocio explicita y no porque falte el nombre que va en el PDF.
      */
     public function profileFor(int $employeeId): ?EmployeeCardProfile;
+
+    /**
+     * Las claves internas de la plantilla de alta cuyo nombre, apellidos,
+     * nombre completo o codigo contienen `$search`, sin distinguir mayusculas
+     * ni acentos (2.3.0, HC1).
+     *
+     * **Con la misma busqueda que el directorio de plantilla, las cuentas y la
+     * exportacion legal** (`PersonNameSearch`: `unaccent()` en PostgreSQL y
+     * comodines escapados): «lukasz» encuentra a «Łukasz» y «soren» a «Søren»
+     * en el tablero de credenciales igual que en `GET /employees`.
+     *
+     * @return list<int>
+     */
+    public function activeIdsMatching(string $search): array;
 }
