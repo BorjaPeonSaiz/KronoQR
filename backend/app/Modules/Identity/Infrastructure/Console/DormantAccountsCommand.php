@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Identity\Application\Port\DormantAccountMetrics;
-use App\Modules\Identity\Application\Port\DormantAccounts;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 
@@ -28,7 +28,7 @@ final class DormantAccountsCommand extends Command
 
     protected $description = 'Cuenta las cuentas de gestion activas sin uso y publica management_accounts_dormant';
 
-    public function handle(DormantAccounts $accounts, DormantAccountMetrics $metrics, Clock $clock): int
+    public function handle(DormantManagementAccounts $accounts, DormantAccountMetrics $metrics, Clock $clock): int
     {
         $days = max(1, Config::integer('identity.dormant_account_days', 90));
         $byRole = $accounts->byRole($days);

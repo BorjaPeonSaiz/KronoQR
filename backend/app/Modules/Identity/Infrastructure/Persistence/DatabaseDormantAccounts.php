@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Persistence;
 
-use App\Modules\Identity\Application\Port\DormantAccounts;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -12,7 +12,7 @@ use Illuminate\Database\ConnectionInterface;
  * o, si nunca entraron, `created_at`. El mismo criterio que la comprobacion
  * `access.dormant_accounts` de `product:doctor`.
  */
-final readonly class DatabaseDormantAccounts implements DormantAccounts
+final readonly class DatabaseDormantAccounts implements DormantManagementAccounts
 {
     public function __construct(private ConnectionInterface $connection) {}
 

@@ -179,6 +179,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
@@ -2194,6 +2195,7 @@ final class ProductServiceProvider extends ServiceProvider
         return new AccessHardeningProbe(
             pinLengthProvider: $app->make(PinLengthProvider::class),
             facts: new DatabaseAccessHardeningFacts(DB::connection()),
+            dormant: $app->make(DormantManagementAccounts::class),
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
             secondFactorRoles: array_values(array_filter(
                 Config::array('identity.two_factor.required_roles', []),

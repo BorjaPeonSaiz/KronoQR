@@ -47,13 +47,4 @@ interface AccessHardeningFacts
      * emisor los crea: son de versiones antiguas.
      */
     public function accessTokensWithoutExpiry(): int;
-
-    /**
-     * Cuentas de gestion ACTIVAS sin entrar al panel desde hace mas de `$days`
-     * dias (`last_login_at`, o `created_at` si nunca entraron), por rol (ADR-060,
-     * tarea 11.3 B). Solo el numero por rol, nunca quienes.
-     *
-     * @return array<string, int> Rol => cuentas. Sin los roles que no tienen ninguna.
-     */
-    public function dormantAccountsByRole(int $days): array;
 }

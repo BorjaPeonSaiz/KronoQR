@@ -60,32 +60,6 @@ final readonly class DatabaseAccessHardeningFacts implements AccessHardeningFact
             ->count();
     }
 
-    public function dormantAccountsByRole(int $days): array
-    {
-        /** @var list<object{role: string, accounts: int|string}> $rows */
-        $rows = $this->connection->select(
-            <<<'SQL'
-                SELECT r.name AS role, count(DISTINCT u.id) AS accounts
-                  FROM users u
-                  JOIN model_has_roles mhr ON mhr.model_id = u.id
-                  JOIN roles r ON r.id = mhr.role_id
-                 WHERE u.is_active = true
-                   AND COALESCE(u.last_login_at, u.created_at) < now() - make_interval(days => ?)
-                 GROUP BY r.name
-                 ORDER BY r.name
-                SQL,
-            [max(1, $days)],
-        );
-
-        $byRole = [];
-
-        foreach ($rows as $row) {
-            $byRole[$row->role] = (int) $row->accounts;
-        }
-
-        return $byRole;
-    }
-
     public function accessTokensWithoutExpiry(): int
     {
         return $this->connection->table('personal_access_tokens')

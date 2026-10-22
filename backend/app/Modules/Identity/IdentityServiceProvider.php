@@ -14,7 +14,6 @@ use App\Modules\Identity\Application\Port\CredentialSecretFactory;
 use App\Modules\Identity\Application\Port\DeviceRepository;
 use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\DormantAccountMetrics;
-use App\Modules\Identity\Application\Port\DormantAccounts;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
@@ -105,6 +104,7 @@ use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
+use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
@@ -555,7 +555,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(CredentialMetrics::class, TextfileCredentialMetrics::class);
 
         // Cuentas activas sin uso (ADR-060, tarea 11.3 B).
-        $this->app->bind(DormantAccounts::class, static fn (): DatabaseDormantAccounts => new DatabaseDormantAccounts(DB::connection()));
+        $this->app->bind(DormantManagementAccounts::class, static fn (): DatabaseDormantAccounts => new DatabaseDormantAccounts(DB::connection()));
         $this->app->bind(DormantAccountMetrics::class, TextfileDormantAccountMetrics::class);
 
         $this->app->bind(
