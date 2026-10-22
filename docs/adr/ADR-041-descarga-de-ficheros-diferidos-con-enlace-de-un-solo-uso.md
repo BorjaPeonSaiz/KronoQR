@@ -159,3 +159,11 @@ enlace**:
   lo vería nadie hasta el final. Es una indicación: si falta, la exportación sigue igual de viva.
 - **Los asientos de la generación siguen siendo de quien la pidió**: `legal_export.generated` con las
   mismas claves que la síncrona, y `adoption_report.exported`, ambos en la transacción del cierre.
+- **Decisiones del propietario (22-10-2026):** las descargas síncronas (`GET /reports/legal-export`,
+  `/reports/payroll-export`, `/reports/adoption/export`) **se mantienen**; el diferido es una vía más,
+  no un sustituto. Y **el soporte del fabricante no pide la exportación legal en diferido**: una
+  concesión de soporte (ADR-020) puede usar la síncrona si la concesión lo justifica, pero no deja
+  ficheros con la plantilla en el disco del cliente durante días. Lo aplica `ReportExportPolicy`.
+- **Techo:** el peor requerimiento —500 personas × 4 años con dos tramos al día— se proyecta en
+  ~1 minuto de escritura (`LegalExportDeferredThroughputTest`, 26.000 filas/s medidas), muy por debajo
+  de los 30 min del trabajo de cola y de los 60 de la obsolescencia. No hay techo propio para `legal`.
