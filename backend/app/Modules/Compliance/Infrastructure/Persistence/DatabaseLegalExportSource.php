@@ -247,6 +247,32 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
     }
 
     /**
+     * El total de filas de {@see self::records()}, con su mismo filtro.
+     *
+     * Tramos **no sustituidos** —los anulados entran, como en el recorrido— mas
+     * las correcciones de **cualquier** version del tramo, que es lo que el
+     * recorrido une a la CTE `scope` sin filtrar por estado. Dos `count(*)` que
+     * usan los mismos indices que la consulta grande y no ordenan nada: el coste
+     * es una fraccion del recorrido.
+     */
+    public function count(LegalExportPeriod $period, LegalExportScope $scope): int
+    {
+        $row = $this->connection->selectOne(<<<'SQL'
+            WITH scope AS (
+                SELECT se.id, se.status
+                  FROM shift_entries se
+                  JOIN employees e ON e.id = se.employee_id
+                 WHERE se.work_date BETWEEN CAST(? AS date) AND CAST(? AS date)
+                   AND (CAST(? AS uuid) IS NULL OR e.uuid = CAST(? AS uuid))
+            )
+            SELECT (SELECT count(*) FROM scope WHERE status <> 'superseded')
+                 + (SELECT count(*) FROM shift_corrections c JOIN scope s ON s.id = c.shift_entry_id) AS total
+            SQL, [$period->from, $period->to, $scope->employeeUuid, $scope->employeeUuid]);
+
+        return \is_object($row) ? Row::of($row)->int('total') : 0;
+    }
+
+    /**
      * Abre el cursor y devuelve su nombre.
      *
      * El nombre lleva un sufijo aleatorio porque un cursor es un objeto **de la
