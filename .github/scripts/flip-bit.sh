@@ -17,9 +17,11 @@
 # Uso:
 #   flip-bit.sh FICHERO REGION [SEMILLA]
 #
-#   REGION   header (la linea de cabecera KQE1), body (entre la cabecera y los ultimos 32
-#            bytes) o trailer (los ultimos 32 bytes)
-#   SEMILLA  entero. Por omision KQ_BITFLIP_SEED y, sin ella, uno aleatorio
+#   REGION   header (la linea de cabecera KQE1), body (entre la cabecera y el trailer) o
+#            trailer (los KQE_TRAILER_BYTES = 65 ultimos bytes: lib/kqe.sh)
+#   SEMILLA  entero. Por omision KQ_BITFLIP_SEED y, sin ella, uno aleatorio. Cada region
+#            deriva de ella su propia semilla: con la misma, header, body y trailer caen en
+#            sitios distintos (no en el mismo desplazamiento relativo)
 #
 # Imprime una linea: `flip-bit: FICHERO region=R pos=P bit=B semilla=S`. Para repetir:
 # KQ_BITFLIP_SEED=S con el mismo fichero (la posicion depende de la semilla y del tamano).
@@ -47,9 +49,15 @@ if [[ ! "$semilla" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+# El trailer de KQE1 mide lo que dice lib/kqe.sh (65 bytes: MAC en hexadecimal y salto de linea).
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../infra/scripts/lib/kqe.sh disable=SC1091
+. "${SCRIPT_DIR}/../../infra/scripts/lib/kqe.sh"
+cola="$KQE_TRAILER_BYTES"
+
 tamano="$(stat -c %s "$fichero")"
 cabecera="$(head -n 1 "$fichero" | wc -c | tr -d '[:space:]')"
-if [ "$tamano" -lt $((cabecera + 40)) ]; then
+if [ "$tamano" -lt $((cabecera + cola + 8)) ]; then
   printf 'flip-bit: %s es demasiado corto (%s bytes) para tener cabecera, cuerpo y cola\n' "$fichero" "$tamano" >&2
   exit 1
 fi
@@ -59,14 +67,17 @@ header)
   # Sin el salto de linea final: cambiarlo no es una alteracion «de contenido».
   min=0
   max=$((cabecera - 2))
+  desfase=0
   ;;
 body)
   min="$cabecera"
-  max=$((tamano - 33))
+  max=$((tamano - cola - 1))
+  desfase=1000003
   ;;
 trailer)
-  min=$((tamano - 32))
+  min=$((tamano - cola))
   max=$((tamano - 1))
+  desfase=2000003
   ;;
 *)
   printf 'flip-bit: region «%s» desconocida (header, body o trailer)\n' "$region" >&2
@@ -74,8 +85,8 @@ trailer)
   ;;
 esac
 
-posicion="$(awk -v semilla="$semilla" -v min="$min" -v max="$max" 'BEGIN { srand(semilla); print min + int(rand() * (max - min + 1)) }')"
-bit="$(awk -v semilla="$semilla" 'BEGIN { srand(semilla + 1); print int(rand() * 8) }')"
+posicion="$(awk -v semilla="$((semilla + desfase))" -v min="$min" -v max="$max" 'BEGIN { srand(semilla); print min + int(rand() * (max - min + 1)) }')"
+bit="$(awk -v semilla="$((semilla + desfase))" 'BEGIN { srand(semilla + 1); print int(rand() * 8) }')"
 
 original="$(dd if="$fichero" bs=1 skip="$posicion" count=1 status=none | od -An -tu1 | tr -d '[:space:]')"
 nuevo=$((original ^ (1 << bit)))

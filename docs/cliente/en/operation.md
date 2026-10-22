@@ -1837,7 +1837,11 @@ already works:
   not undo it (`sudo ./schedule-drill.sh install` schedules it again; `status`
   says how it stands). `./doctor.sh` warns (yellow, never red) if there has
   never been a drill, if the last one failed, or if the last successful one is
-  more than 95 days old: also when you have turned it off.
+  more than 95 days old, or if the last one did not verify the audit chain
+  (`--skip-audit-chain`, `--mode pitr`): also when you have turned it off.
+  Before restoring it checks there is free space on Docker (4 times the copy
+  plus 512 MiB) and, if not, exits without touching anything; the launcher
+  removes by itself any `kronoqr-drill-*` containers a cut left behind.
 
 **When updating from 2.2.0: `./doctor.sh` may come out yellow where yesterday
 it was green.** 2.2.1 added three warnings that an installation coming from

@@ -82,11 +82,11 @@ it('schedule-drill.sh programa el simulacro de forma idempotente y lo retira', f
 
         expect(drillSchedule(['status'], $dir)->getOutput())->toContain('PROGRAMADO: 0 3 2 * *');
 
-        $remove = drillSchedule(['remove'], $dir);
+        $remove = drillSchedule(['remove'], $dir, ['KQ_DRILL_OPTOUT' => $dir.'/optout']);
         expect($remove->getExitCode())->toBe(0)
             ->and(file_exists($dir.'/cron'))->toBeFalse()
             ->and(file_exists($dir.'/launcher'))->toBeFalse()
-            ->and(drillSchedule(['remove'], $dir)->getOutput())->toContain('No estaba programado');
+            ->and(drillSchedule(['remove'], $dir, ['KQ_DRILL_OPTOUT' => $dir.'/optout'])->getOutput())->toContain('No estaba programado');
     } finally {
         drillRemoveDir($dir);
     }
@@ -123,7 +123,7 @@ it('el lanzador entra en el directorio de la instalacion que Docker dice y ejecu
         file_put_contents($dir.'/bin/docker', "#!/bin/sh\necho '{$dir}/instalacion-vigente/docker-compose.yml,{$dir}/instalacion-vigente/otro.yml'\n");
         chmod($dir.'/bin/docker', 0o755);
 
-        $run = new Process([$dir.'/launcher', '--skip-audit-chain'], env: ['PATH' => $dir.'/bin:'.getenv('PATH')], timeout: 30.0);
+        $run = new Process([$dir.'/launcher', '--skip-audit-chain'], env: drillLauncherEnv($dir), timeout: 30.0);
         $run->run();
 
         expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
@@ -131,7 +131,7 @@ it('el lanzador entra en el directorio de la instalacion que Docker dice y ejecu
 
         // Dos instalaciones (o ninguna): no adivina, dice que hacer.
         file_put_contents($dir.'/bin/docker', "#!/bin/sh\nprintf '/a/docker-compose.yml\\n/b/docker-compose.yml\\n'\n");
-        $two = new Process([$dir.'/launcher'], env: ['PATH' => $dir.'/bin:'.getenv('PATH')], timeout: 30.0);
+        $two = new Process([$dir.'/launcher'], env: drillLauncherEnv($dir), timeout: 30.0);
         $two->run();
 
         expect($two->getExitCode())->toBe(2)
@@ -174,10 +174,26 @@ function drillDoctorCheck(?string $metrics, string $lang = 'es'): array
     return ['salida' => $output, 'fallos' => (int) ($m[1] ?? -1), 'avisos' => (int) ($m[2] ?? -1)];
 }
 
-function drillMetrics(int $result, int $successTimestamp): string
+function drillMetrics(int $result, int $successTimestamp, ?int $chainVerified = 1): string
 {
     return "kronoqr_backup_restore_drill_last_result {$result}\n"
-        ."kronoqr_backup_restore_drill_last_success_timestamp_seconds {$successTimestamp}\n";
+        ."kronoqr_backup_restore_drill_last_success_timestamp_seconds {$successTimestamp}\n"
+        .($chainVerified === null ? '' : "kronoqr_backup_restore_drill_audit_chain_verified {$chainVerified}\n");
+}
+
+/**
+ * Entorno del lanzador en las pruebas: el uid de confianza es el de quien corre la prueba y el recorrido
+ * hacia arriba termina en el directorio temporal (/tmp es 1777 y se marcaria como inseguro).
+ *
+ * @return array<string, string>
+ */
+function drillLauncherEnv(string $dir): array
+{
+    return [
+        'PATH' => $dir.'/bin:'.getenv('PATH'),
+        'KQ_DRILL_TRUSTED_UID' => (string) getmyuid(),
+        'KQ_DRILL_CHECK_UP_TO' => $dir,
+    ];
 }
 
 it('doctor.sh avisa de un simulacro que nunca se ha hecho, que fallo o que tiene mas de 95 dias', function (): void {
@@ -202,6 +218,134 @@ it('doctor.sh avisa de un simulacro que nunca se ha hecho, que fallo o que tiene
     expect($recent['avisos'])->toBe(0)->and($recent['fallos'])->toBe(0);
 })->group('RNF-D-05', 'RQ-09');
 
+it('doctor.sh no da por bueno un simulacro que no verifico la cadena de audit_log (--skip-audit-chain, pitr, 2.2.x)', function (): void {
+    foreach ([0, null] as $chain) {
+        $unverified = drillDoctorCheck(drillMetrics(1, time() - 3600, $chain));
+
+        expect($unverified['avisos'])->toBe(1)->and($unverified['fallos'])->toBe(0)
+            ->and($unverified['salida'])->toContain('no verifico la cadena de auditoria')
+            ->and($unverified['salida'])->not->toContain('fue hace');
+    }
+
+    // Correcto pero omitido y sin ninguno verificado antes: tampoco es «nunca se ha hecho».
+    expect(drillDoctorCheck(drillMetrics(1, 0, 0))['salida'])->toContain('no verifico la cadena de auditoria');
+})->group('RNF-D-05', 'RS-07');
+
+it('el lanzador se niega a ejecutar como root lo que otro usuario puede haber cambiado', function (): void {
+    $dir = drillTempDir();
+
+    try {
+        expect(drillSchedule(['install'], $dir)->getExitCode())->toBe(0);
+        mkdir($dir.'/instalacion/lib', 0o755, true);
+        file_put_contents($dir.'/instalacion/restore-drill.sh', "#!/bin/sh\necho ejecutado\n");
+        chmod($dir.'/instalacion/restore-drill.sh', 0o755);
+        mkdir($dir.'/bin', 0o755, true);
+        file_put_contents($dir.'/bin/docker', "#!/bin/sh\necho '{$dir}/instalacion/docker-compose.yml'\n");
+        chmod($dir.'/bin/docker', 0o755);
+
+        $launch = static function () use ($dir): Process {
+            $process = new Process([$dir.'/launcher'], env: drillLauncherEnv($dir), timeout: 30.0);
+            $process->run();
+
+            return $process;
+        };
+
+        expect($launch()->getOutput())->toContain('ejecutado');
+
+        // Escribible por el grupo: no se ejecuta.
+        chmod($dir.'/instalacion', 0o775);
+        $group = $launch();
+        expect($group->getExitCode())->toBe(2)
+            ->and($group->getErrorOutput())->toContain('admite escritura de grupo u otros')
+            ->and($group->getOutput())->not->toContain('ejecutado');
+        chmod($dir.'/instalacion', 0o755);
+
+        // El script en si, escribible por otros.
+        chmod($dir.'/instalacion/restore-drill.sh', 0o757);
+        expect($launch()->getExitCode())->toBe(2);
+        chmod($dir.'/instalacion/restore-drill.sh', 0o755);
+
+        // lib/ escribible: se puede sustituir una biblioteca que carga el script.
+        chmod($dir.'/instalacion/lib', 0o777);
+        expect($launch()->getErrorOutput())->toContain('lib');
+        chmod($dir.'/instalacion/lib', 0o755);
+
+        // De otro usuario que el de confianza.
+        $other = new Process([$dir.'/launcher'], env: [...drillLauncherEnv($dir), 'KQ_DRILL_TRUSTED_UID' => (string) (getmyuid() + 1)], timeout: 30.0);
+        $other->run();
+        expect($other->getExitCode())->toBe(2)->and($other->getErrorOutput())->toContain('no de root');
+    } finally {
+        drillRemoveDir($dir);
+    }
+})->group('RNF-D-05', 'RS-08');
+
+it('el lanzador retira los contenedores kronoqr-drill-* que un corte dejo vivos', function (): void {
+    $dir = drillTempDir();
+
+    try {
+        expect(drillSchedule(['install'], $dir)->getExitCode())->toBe(0);
+        mkdir($dir.'/instalacion', 0o755, true);
+        file_put_contents($dir.'/instalacion/restore-drill.sh', "#!/bin/sh\necho ejecutado\n");
+        chmod($dir.'/instalacion/restore-drill.sh', 0o755);
+        mkdir($dir.'/bin', 0o755, true);
+        file_put_contents($dir.'/bin/docker', <<<SH
+            #!/bin/sh
+            case "\$1" in
+              ps) if [ "\$2" = "-aq" ]; then echo abc123; else echo '{$dir}/instalacion/docker-compose.yml'; fi ;;
+              rm) echo "\$@" >> {$dir}/docker.log ;;
+            esac
+            SH);
+        chmod($dir.'/bin/docker', 0o755);
+
+        $run = new Process([$dir.'/launcher'], env: drillLauncherEnv($dir), timeout: 30.0);
+        $run->run();
+
+        expect($run->getOutput())->toContain('ejecutado')
+            ->and((string) file_get_contents($dir.'/docker.log'))->toContain('rm -fv abc123');
+    } finally {
+        drillRemoveDir($dir);
+    }
+})->group('RNF-D-05');
+
+it('un simulacro correcto sin cadena verificada no mueve el momento del ultimo verificado', function (): void {
+    $dir = drillTempDir();
+    $scripts = Repo::file('infra/scripts');
+    file_put_contents($dir.'/kronoqr_backup_drill.prom', drillMetrics(1, 1700000000, 1));
+
+    try {
+        $run = static function (int $chain) use ($dir, $scripts): string {
+            $process = Process::fromShellCommandline(
+                'bash -c '.escapeshellarg(
+                    'set -euo pipefail; . '.escapeshellarg($scripts.'/restore-drill.sh').'; BACKUP_DIR_METRICS='.escapeshellarg($dir)
+                    .'; CADENA_VERIFICADA='.$chain.'; MODO=container; metricas_del_simulacro 1 5 3 10; cat '.escapeshellarg($dir.'/kronoqr_backup_drill.prom')
+                ),
+                env: ['BACKUP_ENV_FILE' => '/dev/null', 'KRONOQR_LANG' => 'es'],
+                timeout: 30.0,
+            );
+            $process->run();
+
+            return $process->getOutput().$process->getErrorOutput();
+        };
+
+        // Sin cadena verificada: conserva el momento y el 1 del ultimo simulacro bueno.
+        $skipped = $run(0);
+        expect($skipped)->toContain('last_success_timestamp_seconds 1700000000')
+            ->and($skipped)->toContain('audit_chain_verified 1');
+
+        // Con la cadena verificada: momento nuevo y 1.
+        $verified = $run(1);
+        expect($verified)->not->toContain('last_success_timestamp_seconds 1700000000')
+            ->and($verified)->toContain('audit_chain_verified 1');
+
+        // Sin ninguno previo verificado: 0 y 0 (las alertas lo ven como caducado).
+        file_put_contents($dir.'/kronoqr_backup_drill.prom', drillMetrics(1, 0, 0));
+        $none = $run(0);
+        expect($none)->toContain('last_success_timestamp_seconds 0')->and($none)->toContain('audit_chain_verified 0');
+    } finally {
+        drillRemoveDir($dir);
+    }
+})->group('RNF-D-05', 'RS-07');
+
 it('doctor.sh da el aviso del simulacro tambien en ingles', function (): void {
     $old = drillDoctorCheck(drillMetrics(1, time() - 120 * 86400), 'en');
 
@@ -225,7 +369,7 @@ function drillPhpImage(?string $lock, array $env = [], int $exitCode = 0): strin
     }
 
     $process = new Process(
-        ['bash', '-c', 'set -euo pipefail; . '.escapeshellarg($dir.'/restore-drill.sh').'; imagen_php'],
+        ['bash', '-c', 'set -euo pipefail; . '.escapeshellarg($dir.'/restore-drill.sh').'; imagen_del_producto php "${IMAGEN_PHP}"'],
         env: array_merge(['BACKUP_ENV_FILE' => '/dev/null', 'KRONOQR_LANG' => 'es'], $env),
         timeout: 30.0,
     );
@@ -261,6 +405,17 @@ it('restore-drill.sh verifica la cadena de audit_log tras restaurar y deja el fa
     expect($script)
         ->toContain('compliance:verify-audit-chain')
         ->toContain('comprobar_cadena_auditoria || resultado=1')
+        // La verificacion no puede escribir la metrica de PRODUCCION de la cadena (rama local incluida).
+        ->toContain('export METRICS_TEXTFILE_ENABLED=false')
+        ->toContain('-e METRICS_TEXTFILE_ENABLED')
+        // Rotura y «no se ha podido verificar» son dos mensajes, con su runbook.
+        ->toContain('ROTURA DE LA CADENA')
+        ->toContain('NO SE HA PODIDO VERIFICAR')
+        // docker rm con -v, tambien en el aviso de --keep.
+        ->toContain('docker rm -fv "$CONTENEDOR"')
+        ->not->toContain('docker rm -f "$CONTENEDOR"')
+        // Los datos de una fila que falla en COPY no llegan al informe (regla dura 21).
+        ->toContain('filtrar_salida_pg')
         // Antes de gastar minutos restaurando, se sabe si hay con que verificar.
         ->toContain('preparar_verificacion_cadena')
         // El unico camino para no verificar es explicito y consta en el informe.
@@ -306,6 +461,18 @@ it('flip-bit.sh cambia exactamente un bit, siempre, y es reproducible con la mis
                     ->and($differences)->toBe(1)
                     ->and($xor & ($xor - 1))->toBe(0)
                     ->and($run->getOutput())->toContain("region={$region}")->toContain("semilla={$seed}");
+
+                // Limites de cada region: cabecera sin su salto de linea, cuerpo hasta el trailer de 65 bytes
+                // (KQE_TRAILER_BYTES, lib/kqe.sh) y trailer entero.
+                preg_match('/pos=(\d+)/', $run->getOutput(), $position);
+                $pos = (int) ($position[1] ?? -1);
+                $headerLength = strlen("KQE1 kind=dump kid=abcd1234 name=x\n");
+                $size = strlen($original);
+                match ($region) {
+                    'header' => expect($pos)->toBeGreaterThanOrEqual(0)->toBeLessThanOrEqual($headerLength - 2),
+                    'body' => expect($pos)->toBeGreaterThanOrEqual($headerLength)->toBeLessThanOrEqual($size - 66),
+                    'trailer' => expect($pos)->toBeGreaterThanOrEqual($size - 65)->toBeLessThanOrEqual($size - 1),
+                };
 
                 // Misma semilla, mismo cambio.
                 file_put_contents($dir.'/copia-2', $original);

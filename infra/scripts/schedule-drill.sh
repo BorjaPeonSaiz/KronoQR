@@ -37,9 +37,16 @@
 # claves ajenas, conteos y la cadena de hash de audit_log, y destruye el contenedor. NO toca la
 # base de produccion, ni los contenedores de la aplicacion, ni las copias (las abre en lectura), y
 # NO para nada. Consume CPU y disco de Docker mientras dura: del orden del tamano de la base de
-# datos en disco, durante unos minutos (61 s con 3,65 M de filas en la medida de la 2.2.0). Necesita
-# la imagen `postgres:17-alpine` del simulacro y la de la aplicacion descargadas: en un servidor
-# sin salida a internet, cargalas antes (docs/runbooks/restaurar-backup.md §7).
+# datos en disco, durante unos minutos (61 s con 3,65 M de filas en la medida de la 2.2.0; la
+# comprobacion de la cadena de audit_log suma el tiempo de leerla). NO necesita internet (V5-DV-03):
+# usa las imagenes de postgres y de la aplicacion del producto, que ya estan cargadas; solo si la de
+# postgres no esta cae a `postgres:17-alpine` por digest. Si no hay espacio libre en Docker, sale
+# sin restaurar.
+#
+# EL LANZADOR CORRE COMO ROOT, asi que antes del `exec` exige que lo que va a ejecutar no lo pueda
+# haber cambiado nadie mas: el directorio de la instalacion, sus padres, restore-drill.sh y lib/
+# tienen que ser de root y sin escritura de grupo ni de otros. Si no, sale con 2 y dice cual. Tambien
+# retira los contenedores `kronoqr-drill-*` que un corte anterior dejara vivos.
 #
 # Uso:
 #   schedule-drill.sh install [--schedule "M H D MES DS"]   lo programa (idempotente)
@@ -123,6 +130,55 @@ directorio="$(dirname -- "$configs")"
 if [ ! -x "${directorio}/restore-drill.sh" ]; then
   printf 'kronoqr-restore-drill: %s/restore-drill.sh no existe o no es ejecutable. Reinstala el paquete.\n' "$directorio" >&2
   exit 2
+fi
+
+# Root ejecuta lo que hay en ese directorio: que no lo haya podido cambiar otro usuario.
+# KQ_DRILL_TRUSTED_UID y KQ_DRILL_CHECK_UP_TO existen para las pruebas; el cron no los define.
+uid_de_confianza="${KQ_DRILL_TRUSTED_UID:-0}"
+tope="${KQ_DRILL_CHECK_UP_TO:-/}"
+
+inseguro() {
+  local info uid modo grupo otros
+  info="$(stat -c '%u %a' -- "$1" 2>/dev/null)" || {
+    printf '%s no se puede leer\n' "$1"
+    return 0
+  }
+  uid="${info%% *}"
+  modo="${info##* }"
+  if [ "$uid" != "$uid_de_confianza" ]; then
+    printf '%s es del uid %s y no de root\n' "$1" "$uid"
+    return 0
+  fi
+  modo="000${modo}"
+  grupo="${modo: -2:1}"
+  otros="${modo: -1}"
+  if [ $((grupo & 2)) -ne 0 ] || [ $((otros & 2)) -ne 0 ]; then
+    printf '%s admite escritura de grupo u otros (modo %s)\n' "$1" "${info##* }"
+  fi
+  return 0
+}
+
+problemas=""
+camino="$directorio"
+while :; do
+  problemas+="$(inseguro "$camino")"
+  [ "$camino" = "$tope" ] || [ "$camino" = "/" ] && break
+  camino="$(dirname -- "$camino")"
+done
+for objeto in "${directorio}/restore-drill.sh" "${directorio}/lib" "${directorio}/lib/backup-common.sh" "${directorio}/lib/kqe.sh"; do
+  [ ! -e "$objeto" ] || problemas+="$(inseguro "$objeto")"
+done
+if [ -n "$problemas" ]; then
+  printf 'kronoqr-restore-drill: NO se ejecuta como root porque algo del paquete podria haberlo cambiado otro usuario:\n%s\nCorrigelo (chown root:root y chmod go-w) y repite; si el paquete es tuyo, revisa quien ha tocado ese directorio.\n' "$problemas" >&2
+  exit 2
+fi
+
+# Un corte anterior (apagon, SIGKILL) deja el contenedor del simulacro vivo, con la base restaurada
+# en el disco de Docker.
+mapfile -t restos < <(docker ps -aq --filter "name=kronoqr-drill-" 2>/dev/null || true)
+if [ "${#restos[@]}" -gt 0 ] && [ -n "${restos[0]}" ]; then
+  printf 'kronoqr-restore-drill: retirando %s contenedor(es) de un simulacro anterior cortado\n' "${#restos[@]}" >&2
+  docker rm -fv "${restos[@]}" >/dev/null 2>&1 || true
 fi
 
 printf '%s kronoqr-restore-drill: simulacro en %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$directorio"

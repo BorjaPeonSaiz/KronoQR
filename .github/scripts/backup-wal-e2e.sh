@@ -184,8 +184,12 @@ leaks_wal_key() {
 # --- ⑧ · instalacion limpia ---------------------------------------------------
 
 mode_clean() {
-  local seg first newest copia nombre kid_envhash last
+  local seg first newest copia nombre kid_envhash last seed_bits
 
+  # Semilla de los bits cambiados (V5-DV-01): se imprime y se pasa a flip-bit.sh como argumento (sudo no
+  # hereda el entorno). Repetible con KQ_BITFLIP_SEED.
+  seed_bits="${KQ_BITFLIP_SEED:-$((RANDOM * 32768 + RANDOM))}"
+  echo "Semilla de los bits cambiados: ${seed_bits}"
   step "1 · El archivo de WAL esta CIFRADO (R5-DV-02, RL-12)"
   sql "CREATE TABLE IF NOT EXISTS ci_wal_probe(id serial primary key, scan_id text, employee text, kiosk text)"
   sql "INSERT INTO ci_wal_probe(scan_id, employee, kiosk) SELECT 'scan_id-' || g, 'employee-' || g, 'kiosk-' || g FROM generate_series(1, 2000) g"
@@ -233,6 +237,7 @@ mode_clean() {
 #!/bin/sh
 if [ -e /tmp/wal-sync-test/0000000100000000000000FD.gz.enc ]; then v=con; else v=sin; fi
 printf "%s %s\n" "\$v" "\$*" >>/tmp/sync-shim/calls
+if [ -n "\${KQ_SYNC_FAIL:-}" ] && [ "\$#" -gt 0 ]; then echo "sync: fsync: Input/output error" >&2; exit 1; fi
 exec /bin/busybox sync "\$@"
 SHIM
     chmod +x /tmp/sync-shim/sync
@@ -240,8 +245,26 @@ SHIM
   ' || fail "kronoqr-archive-wal no archivo con el sync falso (¿la clave del contenedor es valida?)"
   last="$(dc exec -T postgres tail -n 1 /tmp/sync-shim/calls | tr -d '\r')"
   [ "${last}" = "con /tmp/wal-sync-test" ] || fail "el ultimo sync no fue del directorio tras el mv (fue: '${last}')"
-  dc exec -T postgres rm -rf /tmp/wal-sync-test /tmp/sync-shim
   ok "el ultimo sync ocurre con el segmento ya publicado y sobre el directorio de destino"
+  # Reintento IDENTICO (PostgreSQL repite tras un corte): tambien sincroniza el directorio.
+  # shellcheck disable=SC2016
+  dc exec -T postgres sh -c 'PATH=/tmp/sync-shim:$PATH KRONOQR_WAL_ARCHIVE_DIR=/tmp/wal-sync-test kronoqr-archive-wal /tmp/seg-e2e 0000000100000000000000FD' ||
+    fail "el reintento identico no devolvio 0"
+  last="$(dc exec -T postgres tail -n 1 /tmp/sync-shim/calls | tr -d '\r')"
+  [ "${last}" = "con /tmp/wal-sync-test" ] || fail "el reintento identico no sincronizo el directorio (fue: '${last}')"
+  ok "el reintento identico tambien sincroniza el directorio"
+  # Un fsync que FALLA no se da por bueno: exit 1 (PostgreSQL conserva el segmento y reintenta), tanto
+  # al publicar uno nuevo como en el reintento identico.
+  # shellcheck disable=SC2016
+  if dc exec -T -e KQ_SYNC_FAIL=1 postgres sh -c 'PATH=/tmp/sync-shim:$PATH KRONOQR_WAL_ARCHIVE_DIR=/tmp/wal-sync-test kronoqr-archive-wal /tmp/seg-e2e 0000000100000000000000FD'; then
+    fail "el archivado dio 0 con un fsync del directorio que falla (reintento identico)"
+  fi
+  # shellcheck disable=SC2016
+  if dc exec -T -e KQ_SYNC_FAIL=1 postgres sh -c 'PATH=/tmp/sync-shim:$PATH KRONOQR_WAL_ARCHIVE_DIR=/tmp/wal-sync-test kronoqr-archive-wal /tmp/seg-e2e 0000000100000000000000FC'; then
+    fail "el archivado dio 0 con un fsync del directorio que falla (segmento nuevo)"
+  fi
+  dc exec -T postgres rm -rf /tmp/wal-sync-test /tmp/sync-shim
+  ok "un fsync del directorio que falla da exit 1"
 
   step "3 · Matriz de montajes de BACKUP_PATH (A3-R2, C18)"
   expect_readonly horizon "${BACKUP_PATH}/.e2e-probe"
@@ -310,7 +333,7 @@ SHIM
   local rc
   # Un bit cambiado en el cuerpo.
   as_root cp -p "${copia}" "${copia}.bak"
-  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body
+  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body "${seed_bits}"
   rc=0
   restore_dry --file "${copia}" >/dev/null 2>&1 || rc=$?
   as_root mv -f "${copia}.bak" "${copia}"
@@ -319,7 +342,7 @@ SHIM
   # .sha256 borrado y .enc modificado (el ataque del hallazgo).
   as_root cp -p "${copia}" "${copia}.bak"
   as_root mv "${copia}.sha256" "${copia}.sha256.bak"
-  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body
+  as_root bash "$(dirname -- "${BASH_SOURCE[0]}")/flip-bit.sh" "${copia}" body "${seed_bits}"
   rc=0
   restore_dry --file "${copia}" >/dev/null 2>&1 || rc=$?
   as_root mv -f "${copia}.bak" "${copia}"

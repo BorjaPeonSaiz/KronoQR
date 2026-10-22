@@ -109,6 +109,11 @@ Un `429` en esas dos rutas con `from_kiosk_vlan` en `false` es un quiosco que
 sale por una IP fuera de `KIOSK_VLAN_CIDR`: corrige el CIDR
 ([`instalacion.md`](../cliente/instalacion.md)), no el límite.
 
+**Diferido (R3-DV-05):** subir `limit_conn` (64 conexiones por IP) para la VLAN
+queda para más adelante. Con muchos quioscos y el panel abierto desde la misma IP,
+ese límite se acerca antes que el de peticiones (K quioscos + 2·P pestañas del panel
+≤ 64); la licencia vigente (1 quiosco) no lo alcanza.
+
 ---
 
 ## 4. Descartar el falso positivo antes de escalar

@@ -359,17 +359,30 @@ trimestral. Si crece, el RTO se está estrechando.
 
 **Medida con volumen y umbrales (CI).** El simulacro de la integración continua
 restaura apenas 8 700 filas; no dice nada del RTO. Por eso el fabricante mide
-cada lunes (`backup-drill.yml`, trabajo `volumen`) una base de **3,65 millones
-de filas** —500 empleados durante cuatro años, con índices y claves ajenas— y
-falla si se pasa de estos umbrales, escritos en el propio workflow
-(`RESTORE_VOLUME_MAX_SECONDS`, `BACKUP_VOLUME_MAX_SECONDS`):
+cada lunes (`backup-drill.yml`, trabajo `volumen`; programada semanal y a mano,
+no nocturna ni en cada rama: genera ~3,9 millones de filas, cuesta runner, y lo que
+cambia con el tiempo es el volumen, no el código) una base con el **esquema real**
+de la aplicación —particiones, índices, disparadores y claves ajenas— con **1 millón
+de asientos de `audit_log` con la cadena de hash válida** y cuatro años de datos de
+volumen de 500 empleados, y falla si se pasa de estos umbrales, escritos en el propio
+workflow (`RESTORE_VOLUME_MAX_SECONDS`, `BACKUP_VOLUME_MAX_SECONDS`,
+`CHAIN_VOLUME_MAX_SECONDS`).
+
+**La duración del simulacro cambia de significado en la 2.3.0.**
+`kronoqr_backup_restore_drill_duration_seconds` incluye ahora la verificación de la
+cadena de `audit_log`. El «61 s con 3,65 M de filas» de la 2.2.0 era solo restaurar y
+**ya no describe esa métrica**: el tiempo de restaurar es `duration_seconds` menos
+`kronoqr_backup_restore_drill_audit_chain_seconds`. Con un histórico grande, la cadena
+puede ser la parte más larga.
 
 | Medida | Umbral | De dónde sale |
 | --- | --- | --- |
 | Restauración en contenedor limpio | **600 s** | Mitad de lo alto de la franja «Restauración e intercambio de bases» de la tabla de arriba (5–20 min): deja margen para un servidor más lento que el runner. Referencia: 61 s con la misma cantidad de filas en la 2.2.0 |
 | Copia lógica (`backup.sh run --mode dump`) | **120 s** | Es una parte de la ventana de 503 de `update.sh`, cuyo tope en la CI es de 180 s |
+| Verificación de la cadena sobre 1 M de asientos | **600 s** | La comprobación diaria corre a las 04:05 y tiene que acabar con holgura antes del cambio de turno de las 06:00. **Propuesta inicial**, sin medida previa: se ajusta tras las primeras ejecuciones |
 
-**Umbrales aceptados por el propietario (22-10-2026):** 600 s y 120 s, ejecución semanal
+**Umbrales aceptados por el propietario (22-10-2026):** 600 s y 120 s (el de la cadena,
+600 s, es una propuesta nueva por revisar), ejecución semanal
 (lunes 02:30 UTC) y a mano; se revisan tras las 3–4 primeras ejecuciones con las medidas
 reales del resumen del run.
 
@@ -812,6 +825,27 @@ pendiente: lanza el primero a mano (`sudo bash ./restore-drill.sh`, arriba),
 déjalo terminar y, con él correcto, la alerta se apaga sola. Si el primero
 falla, la métrica ya existe y quien suena es `SimulacroDeRestauracionCaducado`
 (`last_result == 0`): vale lo de abajo.
+
+**Dos fallos distintos, los dos con salida `6`.** Léelos en el informe:
+
+- **«ROTURA»** (`Cadena de auditoria: ROTURA`, con las filas y las huellas): el
+  verificador ha dicho que la cadena de la copia restaurada **no encaja**. Es un
+  incidente de integridad: esa copia no es de fiar para el registro legal. Sigue
+  [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) y repite con la copia
+  anterior.
+- **«NO VERIFICADA»** (`Cadena de auditoria: NO VERIFICADA`): el verificador no ha
+  llegado a dar veredicto (la imagen de la aplicación no arranca o no tiene `artisan`,
+  Docker, la conexión a la base restaurada). **No dice que la copia esté mal ni que la
+  cadena esté rota**: arregla el entorno que cuenta el informe (últimas líneas
+  `verificador:`) y repite. Hasta entonces, trata la copia como no verificada, pero
+  no abras el runbook de integridad.
+
+**Un simulacro correcto que no verificó la cadena no cuenta.** `--skip-audit-chain` (solo
+para datos sintéticos; se **rechaza** si `audit_log` tiene `hash` y `prev_hash`) y
+`--mode pitr` terminan bien pero no mueven `last_success_timestamp` ni ponen
+`kronoqr_backup_restore_drill_audit_chain_verified` a 1: `doctor.sh` avisa de que el
+último simulacro no verificó la cadena y las alertas `SimulacroDeRestauracion*` siguen
+viendo el último verificado (o ninguno).
 
 **Si el simulacro falla**, la última copia no sirve:
 

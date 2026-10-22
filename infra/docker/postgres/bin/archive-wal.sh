@@ -74,10 +74,21 @@ trabajo=""
 # DIRECTORIO. Sin fsync del directorio, un corte de luz despues de decir «archivado»
 # puede dejar el segmento sin su nombre definitivo cuando PostgreSQL ya ha reciclado
 # el original. `sync <ruta>` hace fsync de esa ruta (coreutils y BusyBox, que es lo
-# que trae postgres:alpine); si la implementacion no lo admite se cae al `sync`
-# global, que tambien vuelca los directorios.
+# que trae postgres:alpine). SOLO si la implementacion no admite argumentos (error de
+# uso) se cae al `sync` global; un fsync que FALLA (EIO, disco o recurso de red que
+# miente) no se tapa con un sync global que quiza no devuelva el error: es un fallo.
 sync_destino() {
-  sync "$DESTINO" 2>/dev/null || sync
+  local salida
+  if salida="$(sync "$DESTINO" 2>&1)"; then
+    return 0
+  fi
+  case "$salida" in
+  *"nvalid option"* | *"nrecognized"* | *"sage"* | *"extra operand"*) sync ;;
+  *)
+    err "fsync de '${DESTINO}' fallo: ${salida}"
+    return 1
+    ;;
+  esac
 }
 
 # Cualquier salida distinta de 0 y de 1 pasa a 1 (ver cabecera); el temporal y el
@@ -161,6 +172,11 @@ if [ -f "$final" ]; then
 fi
 if [ -f "$heredado" ]; then
   if gzip -dc "$heredado" 2>/dev/null | cmp -s - "$origen"; then
+    # Igual que con el cifrado: el renombrado del reintento pudo no llegar a disco.
+    sync_destino || {
+      err "no se ha podido sincronizar '${DESTINO}'. PostgreSQL lo reintentara."
+      exit 1
+    }
     exit 0
   fi
   err "'${nombre}' ya esta archivado (formato heredado .gz) con un contenido DISTINTO. No se sobrescribe. Casi siempre significa que dos servidores archivan en el mismo destino: separa los destinos antes de seguir. Ver docs/runbooks/restaurar-backup.md §4."

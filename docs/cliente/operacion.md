@@ -1816,7 +1816,11 @@ ni cambia lo que ya funciona:
   actualizaciones no la deshacen (`sudo ./schedule-drill.sh install` lo vuelve
   a programar; `status` dice cómo está). `./doctor.sh` avisa (amarillo, nunca
   rojo) si nunca ha habido un simulacro, si el último falló o si el último
-  correcto tiene más de 95 días: también cuando lo has desactivado.
+  correcto tiene más de 95 días, o si el último no verificó la cadena de
+  auditoría (`--skip-audit-chain`, `--mode pitr`): también cuando lo has
+  desactivado. Antes de restaurar comprueba que hay espacio libre en Docker
+  (4 veces la copia más 512 MiB) y, si no lo hay, sale sin tocar nada; el
+  lanzador retira solo los contenedores `kronoqr-drill-*` que un corte dejara.
 
 **Al actualizar desde la 2.2.0: `./doctor.sh` puede salir en amarillo donde
 ayer estaba en verde.** La 2.2.1 añadió tres avisos que una instalación que

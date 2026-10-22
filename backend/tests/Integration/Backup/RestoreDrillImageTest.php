@@ -32,7 +32,7 @@ function imagenDelSimulacro(?string $lock, array $env = [], int $exitCode = 0): 
     }
 
     $process = new Process(
-        ['bash', '-c', 'set -euo pipefail; . '.escapeshellarg($dir.'/restore-drill.sh').'; imagen_pitr'],
+        ['bash', '-c', 'set -euo pipefail; . '.escapeshellarg($dir.'/restore-drill.sh').'; imagen_del_producto postgres "${IMAGEN}"'],
         env: array_merge(['BACKUP_ENV_FILE' => '/dev/null', 'KRONOQR_LANG' => 'es'], $env),
         timeout: 30.0,
     );

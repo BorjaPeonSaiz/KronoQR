@@ -925,6 +925,8 @@ kronoqr_backup_volume_free_ratio                         gauge
 kronoqr_backup_restore_drill_last_result                 gauge
 kronoqr_backup_restore_drill_last_success_timestamp_seconds  gauge
 kronoqr_backup_restore_drill_duration_seconds            gauge
+kronoqr_backup_restore_drill_audit_chain_verified     gauge   # 1 si el simulacro del ultimo success_timestamp verifico la cadena de audit_log
+kronoqr_backup_restore_drill_audit_chain_seconds         gauge   # parte de duration_seconds que ocupo esa verificacion
 
 # Ficheros generados — ADR-045, una sola etiqueta `class` de catálogo cerrado
 generated_files_orphans_removed_total{class}             counter
@@ -971,7 +973,7 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 `kronoqr_backup_last_verify_result` es la métrica que da sentido a las demás:
 *una copia no verificada no es una copia.* Y
 `kronoqr_backup_restore_drill_duration_seconds` es la única medida real del
-**RTO**: si crece, el objetivo de 4 h se está estrechando.
+**RTO**: si crece, el objetivo de 4 h se está estrechando. **Desde la 2.3.0 incluye la verificación de la cadena de `audit_log`**; `kronoqr_backup_restore_drill_audit_chain_seconds` dice cuánto de ese tiempo es la cadena, y `kronoqr_backup_restore_drill_audit_chain_verified` si el último simulacro correcto la verificó (un `--skip-audit-chain` o un `pitr` no mueve `last_success_timestamp`).
 
 `projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia. Lo mismo `work_record_reconciliation_discrepancies` (ADR-057 §4): tramos de `shift_entries` que no cuadran con sus asientos de `audit_log` y asientos de purga que no se pueden creer, por alcance (`recent`, la pasada diaria de los últimos 7 días; `full`, la semanal sobre todo el registro) y por tipo. Es un *gauge* de la última pasada de cada alcance y no un contador, porque un tramo descuadrado sí se puede devolver a lo que dice su asiento; las tres series las escribe `compliance:reconcile-work-record` por el colector *textfile*, un fichero por alcance.
 
