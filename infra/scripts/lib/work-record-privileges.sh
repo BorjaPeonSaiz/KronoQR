@@ -59,7 +59,7 @@ readonly KQ_MINIMISE_CANDIDATES_PERSONNEL="personnel_record_retention_candidates
 readonly KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS="users_guard_anonymized users_stamp_deactivation"
 readonly KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL="employees_guard_anonymized"
 # Tablas que pierden DELETE para el rol: se minimizan en sitio (RN-13: no se borra la ficha).
-readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences"
+readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences employees users"
 
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
