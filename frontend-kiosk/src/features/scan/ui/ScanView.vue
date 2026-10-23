@@ -243,6 +243,11 @@ onMounted(() => {
   cancelDeferredStart = afterFirstPaint(() => {
     void scanner.start()
     void wakeLock.request()
+    // V21-5-KI-1 / R5-KI-01: el `AudioContext` cuesta ~520 ms en construirse y,
+    // creado en el primer `play()`, entra en la latencia del primer fichaje de
+    // cada arranque (el de las 06:00 si la tablet se reinicia antes). Se crea aqui,
+    // en reposo; sin gesto previo queda suspendido y `play()` lo reanuda.
+    sound.unlock()
   })
   heartbeat.start()
 })
