@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptado** por el propietario el 23-10-2026 (las diez decisiones del diseño de la tarea 17.9 de la 2.3.0, con las recomendaciones tal cual). La política de dominio está escrita (`UnprocessableScanPolicy`). El contrato, las migraciones, el servicio que la aplica en las tres rutas, el asiento y la métrica son de `backend-laravel`. El quiosco es de `frontend-quiosco`, y las alertas y el runbook, de `devops-observabilidad` |
+| **Estado** | **Aceptado** por el propietario el 23-10-2026 (las diez decisiones del diseño de la tarea 17.9 de la 2.3.0, con las recomendaciones tal cual). **Revisado el 24-10-2026** con tres decisiones del propietario tras la revisión de `seguridad-cumplimiento`: un descarte QR sin atribuir busca a su titular por la huella del contenido y, si no lo encuentra, abre una incidencia sin persona (A2, revisa la P5); `scan_processing_failures` es dato seudonimizado (A4); y el cupo diario tiene un techo de 20. La política de dominio está escrita (`UnprocessableScanPolicy`). El contrato, las migraciones, el servicio que la aplica en las tres rutas, el asiento y la métrica son de `backend-laravel`. El quiosco es de `frontend-quiosco`, y las alertas y el runbook, de `devops-observabilidad` |
 | **Fecha** | 23 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 17 de la 2.3.0, tarea 17.9; fila «cola atascada» de doc 07 §6) |
 | **Afecta a** | **Enmienda** [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md) (la consecuencia «un `503` que no se cura atasca toda la cola») · Respeta [ADR-008](ADR-008-offline-first-con-idempotencia-por-scan-id.md), [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-029](ADR-029-configuracion-en-el-entorno-del-contenedor.md), [ADR-048](ADR-048-el-texto-libre-del-historico-de-errores-pasa-por-una-lista-blanca-de-palabras.md) y [ADR-059](ADR-059-con-una-dependencia-caida-el-fichaje-se-encola-y-el-resto-responde-503-con-rastro.md) · `Attendance/Domain/Policy/UnprocessableScanPolicy.php`, `ScanDiscardThreshold`, `ScanFailureHistory`, `UnprocessableScanVerdict` · puertos `ScanDiscardSettings`, `ScanFailureLedger`, `ScanFailureClassifier` · `RegisterScanBatchHandler`, `RegisterScanHandler`, `RegisterPinScanHandler` · tabla nueva `scan_processing_failures` · `scan_events.result`, `discarded_scan_reports` · `docs/api/openapi.yaml` (`ScanDiscarded`) · `syncRunner.ts` |
@@ -51,7 +51,7 @@ sigue.**
     El fichaje que sale bien no gana ninguna escritura (RNF-P-01).
   - **Un intento solo suma si llega del mismo quiosco y con el mismo contenido** que el primero.
     Nadie con otro token puede envenenar el `scan_id` de otro quiosco.
-  - Sin dato personal. Retención técnica de 30 días. El paquete de diagnóstico solo lleva recuentos.
+  - **Es dato seudonimizado** (A4, 24-10-2026), no anónimo. La huella del contenido es la misma que guarda `scan_events.payload_fingerprint`, así que enlaza con la tarjeta y, por ella, con su titular. Se trata como dato personal: entra en el registro de actividades del cliente y en ningún log. Retención de 30 días. El paquete de diagnóstico solo lleva recuentos.
   - Si no se puede escribir el fallo, no se cuenta, y eso es lo correcto. Si lo que falla es
     PostgreSQL, es una dependencia caída y no un veneno.
 
@@ -90,7 +90,7 @@ Lo decide `UnprocessableScanPolicy`, una política pura (sin reloj ni configurac
 2. **Al menos `T` minutos entre el primer intento contado y el actual**, con el reloj del servidor y
    el borde incluido. De serie, **60**; el suelo es 15.
 3. **El quiosco no ha agotado su cupo** de descartes del servidor en las últimas 24 h, una ventana
-   que no se configura. De serie, **3**. **Con `0` la funcionalidad queda apagada** y se vuelve a
+   que no se configura. De serie, **3**, y **como mucho 20** (24-10-2026): un cupo mayor dejaría de frenar el defecto general. **Con `0` la funcionalidad queda apagada** y se vuelve a
    conservar para siempre.
 
 El cupo se mira el último. Si se habría descartado y el cupo está agotado, el veredicto es
@@ -180,8 +180,14 @@ duda, se falla hacia conservar.
 
 **La incidencia es la `discarded_scan` de RN-22**, una por persona y jornada, con `source` y
 `attempts` en el `context`. Quien la revisa crea el tramo con una corrección trazada (RN-13) si la
-persona trabajó. **Un descarte sin atribuir no abre incidencia**, como en RN-22: lo ve la alerta, y
-el runbook explica cómo cruzarlo con el quiosco y la hora.
+persona trabajó.
+
+**Un descarte QR del servidor que no se pudo atribuir no se queda sin revisar** (A2, 24-10-2026; revisa la P5, que lo dejaba solo en la alerta):
+
+- **Primero se busca a su titular por la huella del contenido.** Se buscan fichajes **aceptados** anteriores de esa misma tarjeta, con el mismo `payload_fingerprint` en `scan_events`, y se toma el titular del más reciente. Si aparece, se atribuye con `attribution = fingerprint_match` y se abre la `discarded_scan` de esa persona.
+- **`employee_id` de la fila de `scan_events` sigue nulo.** La firma no se ha podido verificar ahora: la coincidencia es una deducción, no una autenticación (el mismo criterio que la duda 3). El dueño consta en `discarded_scan_reports.owner_employee_id`.
+- **Si no aparece, se abre una `discarded_scan` sin persona** para el administrador, con el quiosco, la hora (`occurred_at`) y el `scan_id`. Es una por quiosco y jornada. Quien la revisa cruza el quiosco y la hora con el cuadrante.
+- **Solo vale para el descarte del servidor.** El aviso del quiosco sin atribuir (RN-22) sigue sin abrir nada: lo puede fabricar quien tenga el token, y abriría incidencias a voluntad. El del servidor exige un defecto reproducible, la espera de la ventana y el cupo.
 
 ### 7. Vigilancia
 
@@ -233,7 +239,7 @@ el runbook explica cómo cruzarlo con el quiosco y la hora.
 - Con un token de quiosco robado, sembrar incidencias así exige un defecto reproducible y esperar `T`
   por cada una. El techo es el de RN-22 (una por persona y jornada, en la ventana de fechas, solo con
   tarjeta auténtica o código de quien puede fichar), y `/scan/discarded` ya lo permite de forma más
-  barata. **No sube el techo aceptado en ADR-047.**
+  barata. **No sube el techo aceptado en ADR-047.** La incidencia sin persona de A2 añade, como mucho, una por quiosco y jornada, dentro del cupo.
 - `scan_events.result` gana un valor. Toda consulta por `employee_id` que quiera solo lo aceptado ya
   filtraba por `result` (ADR-047).
 
