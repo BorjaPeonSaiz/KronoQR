@@ -849,6 +849,12 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     stop() {
       running = false
       cancelTimer()
+      // R2-KI-06: un relanzamiento pedido durante el drenaje en vuelo (un
+      // `online`, un `wakeNow`) se anula. Sin esto, el `finally` del drenaje lo
+      // lanzaba igual y un quiosco ya parado -o recien desvinculado- volvia a
+      // enviar. El envio que ya esta en vuelo si termina: su desenlace se aplica.
+      rerun = false
+      rerunIgnoreSchedule = false
     },
 
     wakeNow,
