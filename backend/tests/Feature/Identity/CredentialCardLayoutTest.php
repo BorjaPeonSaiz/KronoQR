@@ -9,6 +9,7 @@ use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\EndroidQrEncoder;
 use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
+use App\Modules\Shared\Domain\ValueObject\HexColor;
 use App\Modules\Shared\Domain\ValueObject\LogoFormat;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
 use Illuminate\Support\Facades\Config;
@@ -315,3 +316,45 @@ it('cabe en un A4 con el margen de impresora, sin cortar tarjetas entre paginas'
 
     expect(substr_count($sheet, '<div class="sheet">'))->toBe(2);
 })->group('RF-QR-04');
+
+/** La regla `.card__X { … }` de la hoja de estilos, o una cadena vacia. */
+function cardStyleRule(string $html, string $selector): string
+{
+    return preg_match('/\.'.preg_quote($selector, '/').' \{([^}]*)\}/', $html, $match) === 1 ? $match[1] : '';
+}
+
+it('imprime el nombre de la instalacion a un cuerpo legible, por encima del departamento', function (): void {
+    // V1-UX-1: el nombre de la marca se imprimia a 6 pt en mayusculas. 8 pt es
+    // el cuerpo que fija `_credential-styles.blade.php`, y la jerarquia se
+    // afirma ademas en relativo: encabeza la columna, asi que no baja del
+    // departamento ni del centro, y no compite con el codigo ni con el nombre.
+    $html = cardRenderer(new Branding('Hotel Marina', null, '#ffe14d'))->htmlFor(printableCards(), CardFormat::CARD);
+
+    $size = static function (string $selector) use ($html): float {
+        preg_match('/font-size: ([0-9.]+)pt/', cardStyleRule($html, $selector), $match);
+
+        return (float) ($match[1] ?? 0);
+    };
+
+    expect($html)->toContain('<div class="card__brand">Hotel Marina</div>')
+        ->and($size('card__brand'))->toBe(8.0)
+        ->and($size('card__brand'))->toBeGreaterThanOrEqual($size('card__site'))
+        ->and($size('card__brand'))->toBeLessThan($size('card__code'))
+        ->and($size('card__code'))->toBeLessThan($size('card__name'));
+})->group('RF-QR-04', 'RF-PD-08');
+
+it('pinta el nombre de la instalacion con el acento oscurecido y el filete con el acento tal cual', function (string $acento, string $impreso): void {
+    // V1-UX-1, MB3: un amarillo palido como texto quedaba a 1,3:1 en la tarjeta
+    // que lleva cada empleado. El texto lleva `accentForTextOnWhite()`; el
+    // filete, que no se lee, el color del cliente sin tocar.
+    $html = cardRenderer(new Branding('Hotel Marina', null, $acento))->htmlFor(printableCards(), CardFormat::CARD);
+
+    expect(cardStyleRule($html, 'card__brand'))->toContain('color: '.$impreso.';')
+        ->and(cardStyleRule($html, 'card__accent'))->toContain('background: '.$acento.';')
+        ->and(HexColor::fromHex($impreso)->contrastWith(HexColor::white()))
+        ->toBeGreaterThanOrEqual(HexColor::WCAG_TEXT_MINIMUM);
+})->with([
+    'amarillo palido (1,28:1)' => ['#f5e663', '#7b7332'],
+    'verde azulado medio (3,32:1)' => ['#2a9d8f', '#238276'],
+    'el de serie, que ya llega' => ['#b8542a', '#b8542a'],
+])->group('RF-QR-04', 'RF-PD-08');

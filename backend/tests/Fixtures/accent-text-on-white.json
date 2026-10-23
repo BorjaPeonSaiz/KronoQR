@@ -1,0 +1,21 @@
+{
+  "description": "Acento de marca oscurecido hasta 4,5:1 sobre blanco (WCAG 2.2 1.4.3), redondeado a enteros antes de medir. Fuente de verdad: Branding::accentForTextOnWhite() / HexColor::darkenedUntil(). La consumen tests/Unit/Shared/Domain/AccentTextOnWhiteFixtureTest.php (backend) y, cuando adjustUntil() de packages/web-kit/src/branding.ts redondee antes de medir (tarea 16.3), su prueba unitaria: los dos lados tienen que dar el mismo tono.",
+  "background": "#ffffff",
+  "minimum": 4.5,
+  "steps": 40,
+  "cases": [
+    { "label": "acento de serie (ya llega)", "accent": "#b8542a", "text": "#b8542a" },
+    { "label": "azul oscuro (ya llega)", "accent": "#0f5c8c", "text": "#0f5c8c" },
+    { "label": "justo en el minimo", "accent": "#767676", "text": "#767676" },
+    { "label": "negro", "accent": "#000000", "text": "#000000" },
+    { "label": "amarillo palido (MB3)", "accent": "#ffe14d", "text": "#867628" },
+    { "label": "casi blanco", "accent": "#fafafa", "text": "#707070" },
+    { "label": "gris medio", "accent": "#808080", "text": "#767676" },
+    { "label": "rojo puro", "accent": "#ff0000", "text": "#ec0000" },
+    { "label": "terracota claro del producto", "accent": "#d66c3a", "text": "#b65c31" },
+    { "label": "blanco", "accent": "#ffffff", "text": "#737373" },
+    { "label": "amarillo de la verificacion (V21-6-UX-1: 1,28:1)", "accent": "#f5e663", "text": "#7b7332" },
+    { "label": "verde azulado medio (3,32:1)", "accent": "#2a9d8f", "text": "#238276" },
+    { "label": "un pelo por debajo", "accent": "#777777", "text": "#747474" }
+  ]
+}

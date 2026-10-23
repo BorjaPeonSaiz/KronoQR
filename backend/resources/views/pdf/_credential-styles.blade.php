@@ -98,11 +98,20 @@
         padding: calc({{ $accentMm }}mm + 2.5mm) 1.5mm 4mm 4.5mm;
     }
 
+    /* El nombre de la instalacion (V1-UX-1). 8 pt y no 6: es el texto mas
+       pequeno que se lee sin esfuerzo en papel a la distancia de la mano, queda
+       por encima del departamento y el centro (7,5 pt) porque encabeza la
+       columna, y por debajo del codigo (9 pt) y del nombre (12 pt), que son los
+       que identifican. En la columna de texto —42,8 mm menos 6 mm de margen—
+       caben unas 18 mayusculas a este cuerpo; un nombre mas largo se corta con
+       puntos suspensivos y jamas empuja al QR. El color es el acento
+       OSCURECIDO hasta 4,5:1 sobre blanco (`accentText`); el crudo queda para
+       el filete, que no se lee. */
     .card__brand {
-        font-size: 6pt;
+        font-size: 8pt;
         letter-spacing: 0.4pt;
         text-transform: uppercase;
-        color: {{ $brand['accent'] }};
+        color: {{ $brand['accentText'] }};
         margin-bottom: 1mm;
         white-space: nowrap;
         overflow: hidden;

@@ -61,6 +61,13 @@
 
         /* --- Cabecera de marca (RF-PD-08) ------------------------------- */
 
+        /* DOS COLORES DE MARCA (V1-UX-1). `accent` es el del cliente tal cual y
+           solo pinta lo que no se lee: el filete de la cabecera y las vinetas.
+           `accentText` es ese acento oscurecido hasta 4,5:1 sobre blanco
+           (`Branding::accentForTextOnWhite()`) y pinta lo que se lee: el
+           nombre, los titulos y los pictogramas. Un amarillo palido como texto
+           quedaria a 1,3:1 en la hoja que se entrega a cada empleado. */
+
         .brand {
             display: flex;
             align-items: center;
@@ -80,7 +87,7 @@
             font-size: 9pt;
             letter-spacing: 0.6pt;
             text-transform: uppercase;
-            color: {{ $brand['accent'] }};
+            color: {{ $brand['accentText'] }};
         }
 
         h1 {
@@ -107,7 +114,7 @@
         .block__icon {
             flex: 0 0 15mm;
             /* Los pictogramas heredan el color de acento por `currentColor`. */
-            color: {{ $brand['accent'] }};
+            color: {{ $brand['accentText'] }};
         }
 
         .icon {
@@ -124,7 +131,7 @@
         h2 {
             font-size: 11.5pt;
             margin: 0 0 1mm;
-            color: {{ $brand['accent'] }};
+            color: {{ $brand['accentText'] }};
         }
 
         .list {
