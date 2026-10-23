@@ -499,7 +499,11 @@ Hay **un quiosco activo** con ese nombre. Dos salidas, según lo que esté pasan
 ### …la tablet muestra un código nuevo justo después de confirmar el anterior
 
 Se perdió la respuesta con el token: el servidor ya dio la solicitud por recogida
-(el código vale una sola vez) y la tablet nunca llegó a recibirla. El quiosco
+(el código vale una sola vez) y la tablet nunca llegó a recibirla. **Desde la
+2.3.0 esto es raro**: entre los 10 y los 60 segundos siguientes a esa primera
+recogida, la tablet puede repetirla desde la misma red y recibe otro token para el
+mismo quiosco, que deja constancia en la auditoría (`device.pairing_reclaimed`).
+Si llegas aquí es porque la tablet no repitió a tiempo o cambió de red. El quiosco
 **ya existe y está activo**, sin tablet; si confirmas el código nuevo con el mismo
 nombre, el panel dirá «ese nombre ya está en uso».
 

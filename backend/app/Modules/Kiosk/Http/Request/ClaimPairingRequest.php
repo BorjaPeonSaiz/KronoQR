@@ -10,6 +10,7 @@ use App\Modules\Kiosk\Application\Command\ClaimPairingCommand;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\Config;
 
 /**
  * Validacion de `POST /api/v1/kiosk/pair/claim` (contrato `PairingClaimRequest`).
@@ -67,6 +68,28 @@ final class ClaimPairingRequest extends FormRequest
         return new ClaimPairingCommand(
             pairingId: $this->string('pairing_id')->value(),
             secret: $this->string('pairing_secret')->value(),
+            origin: $this->originFingerprint(),
         );
+    }
+
+    /**
+     * Huella opaca del origen de la peticion, para la recogida repetida
+     * (V6-KI-02): un HMAC-SHA256 de la direccion del cliente —la que deja
+     * `TrustProxies` tras el borde— con la clave de la aplicacion. **Nunca la
+     * direccion**: lo que se guarda en `device_pairing_requests` no permite
+     * recuperarla, ni siquiera probando las cuatro mil millones de IPv4, sin la
+     * clave. Nula si no hay direccion o no hay clave: entonces no se puede
+     * repetir la recogida, que es fallar hacia el comportamiento de antes.
+     */
+    private function originFingerprint(): ?string
+    {
+        $ip = $this->ip();
+        $key = Config::string('app.key', '');
+
+        if ($ip === null || $ip === '' || $key === '') {
+            return null;
+        }
+
+        return hash_hmac('sha256', 'pairing-origin|'.$ip, $key);
     }
 }

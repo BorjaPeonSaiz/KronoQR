@@ -11,6 +11,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
+use App\Modules\Kiosk\Domain\Event\PairingReclaimed;
 
 /**
  * Sella en `audit_log` el alta —o la reactivacion— de un quiosco por codigo de
@@ -90,6 +91,27 @@ final readonly class RecordDeviceProvisioning
                 // Por que via se dio de alta. Es el mismo recurso que usa la
                 // rotacion de tokens para distinguirse dentro de `device.paired`.
                 'via' => 'pairing_code',
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    /**
+     * `device.pairing_reclaimed` (V6-KI-02): la tablet repitio la recogida y
+     * recibio otro token. Actor `system`, como la recogida: el `claim` es
+     * anonimo. La emision en si ya deja `device.paired`; este dice por que.
+     */
+    public function reclaimed(PairingReclaimed $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::system(),
+            action: AuditAction::DevicePairingReclaimed,
+            subject: AuditSubject::of('device', $event->deviceId),
+            payload: AuditPayload::of([
+                'device_uuid' => $event->deviceUuid,
+                'pairing_request_uuid' => $event->pairingRequestUuid,
+                'seconds_since_first_claim' => $event->secondsSinceFirstClaim,
+                'reclaim' => $event->reclaim,
             ]),
             occurredAt: $event->occurredAt(),
         ));

@@ -8,10 +8,12 @@ use App\Modules\Identity\Application\Command\IssueDeviceTokenCommand;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Kiosk\Application\Command\ClaimPairingCommand;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
+use App\Modules\Kiosk\Application\Port\KioskEventPublisher;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Application\Port\PairingRequests;
 use App\Modules\Kiosk\Application\Port\PairingSecrets;
 use App\Modules\Kiosk\Application\Query\PairingClaimResult;
+use App\Modules\Kiosk\Domain\Event\PairingReclaimed;
 use App\Modules\Kiosk\Domain\Model\PairingRequest;
 use App\Modules\Kiosk\Domain\ValueObject\ClaimOutcome;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
@@ -61,6 +63,13 @@ use Psr\Log\LoggerInterface;
  * **Nunca en la respuesta** (regla dura 17) y **nunca con datos personales**
  * (regla dura 21): un emparejamiento no conoce a nadie.
  *
+ * ## Salvo la recogida repetida (V6-KI-02, 2.3.0)
+ *
+ * Si la respuesta `paired` se pierde, la tablet puede repetir la recogida entre
+ * los 10 y los 60 segundos siguientes, desde el mismo origen: se reemite el token
+ * del MISMO dispositivo y se retira el anterior. Lo decide el agregado
+ * (`ClaimOutcome::Reclaimed`) y lo ejecuta {@see self::reclaim()}.
+ *
  * ## Un solo uso bajo concurrencia
  *
  * `markClaimed()` escribe con `WHERE status = 'confirmed'`. Dos sondeos
@@ -96,6 +105,7 @@ final readonly class ClaimPairing
         private LoggerInterface $log,
         private Clock $clock,
         private ConstantTimeFloor $floor,
+        private KioskEventPublisher $events,
     ) {}
 
     public function handle(ClaimPairingCommand $command): PairingClaimResult
@@ -121,7 +131,7 @@ final readonly class ClaimPairing
         // decida por el mismo camino en los tres rechazos.
         $request = $found['request'] ?? $this->missingRequest($now);
 
-        $outcome = $request->claim($now, $secretMatches);
+        $outcome = $request->claim($now, $secretMatches, $command->origin);
 
         if ($outcome === ClaimOutcome::Pending) {
             return PairingClaimResult::pending();
@@ -135,8 +145,12 @@ final readonly class ClaimPairing
             );
         }
 
+        if ($outcome === ClaimOutcome::Reclaimed) {
+            return $this->reclaim($startedAt, $command, $request, $now);
+        }
+
         // Confirmada: un solo uso. La escritura condicional decide quien gana.
-        if (! $this->requests->markClaimed($request->uuid, $now)) {
+        if (! $this->requests->markClaimed($request->uuid, $now, $command->origin)) {
             return $this->rejected($startedAt, $command->pairingId, 'race');
         }
 
@@ -175,6 +189,69 @@ final readonly class ClaimPairing
             'device_uuid' => $device->uuid,
         ]);
         $this->metrics->pairingClaimed();
+
+        return PairingClaimResult::paired(
+            deviceUuid: $device->uuid,
+            deviceName: $device->name,
+            token: $token->plainTextToken,
+            tokenExpiresAt: $token->expiresAt,
+        );
+    }
+
+    /**
+     * La recogida repetida (V6-KI-02): la respuesta de la primera se perdio.
+     *
+     * **La escritura condicional va delante de la emision**, como en la
+     * primera: dos recogidas repetidas simultaneas entran las dos y solo una
+     * incrementa `reclaims`; la otra degrada a rechazo antes de pedir ningun
+     * token. La emision es la de siempre (`IssueDeviceToken`), que **retira todos
+     * los tokens anteriores** del dispositivo en su misma transaccion: en ningun
+     * momento hay dos vivos.
+     *
+     * Deja el asiento `device.pairing_reclaimed` ademas del `device.paired` de la
+     * emision. Sin suelo de tiempo, como el `paired` de la primera: a este camino
+     * solo se llega con el secreto.
+     */
+    private function reclaim(float|int $startedAt, ClaimPairingCommand $command, PairingRequest $request, DateTimeImmutable $now): PairingClaimResult
+    {
+        if (! $this->requests->markReclaimed($request->uuid, $request->reclaims, $now)) {
+            return $this->rejected($startedAt, $command->pairingId, 'reclaim_race');
+        }
+
+        $device = $request->deviceId === null ? null : $this->devices->findById($request->deviceId);
+
+        if (! $device instanceof DeviceSummary) {
+            return $this->rejected($startedAt, $command->pairingId, 'device_missing');
+        }
+
+        $token = $this->tokens->handle(new IssueDeviceTokenCommand(
+            deviceUuid: $device->uuid,
+            rotation: false,
+            actorUserId: null,
+        ));
+
+        if ($token === null) {
+            // Desvinculado entre la primera recogida y esta: rechazo generico.
+            return $this->rejected($startedAt, $command->pairingId, 'token_null');
+        }
+
+        $firstClaim = $request->claimedAt ?? $now;
+
+        $this->events->publish(new PairingReclaimed(
+            deviceId: $device->id,
+            deviceUuid: $device->uuid,
+            pairingRequestUuid: $request->uuid,
+            secondsSinceFirstClaim: max(0, $now->getTimestamp() - $firstClaim->getTimestamp()),
+            reclaim: $request->reclaims + 1,
+            occurredAt: $now,
+        ));
+
+        $this->log->warning('pairing_reclaimed', [
+            'pairing_id' => $command->pairingId,
+            'device_uuid' => $device->uuid,
+            'reclaim' => $request->reclaims + 1,
+        ]);
+        $this->metrics->pairingReclaimed();
 
         return PairingClaimResult::paired(
             deviceUuid: $device->uuid,

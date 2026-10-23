@@ -2206,6 +2206,8 @@ final readonly class ErrorVocabulary
         'recien',
         'recipient',
         'recipients',
+        'reclaim',
+        'reclaimed',
         'reconcile',
         'reconciled',
         'reconciliation',

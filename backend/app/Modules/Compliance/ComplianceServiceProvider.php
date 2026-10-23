@@ -118,6 +118,7 @@ use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
+use App\Modules\Kiosk\Domain\Event\PairingReclaimed;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\DataExportDownloaded;
 use App\Modules\Product\Domain\Event\DataExportFileMissing;
@@ -783,6 +784,8 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordDeviceProvisioning(): void
     {
         Event::listen(DeviceProvisioned::class, [RecordDeviceProvisioning::class, 'handle']);
+        // V6-KI-02: la recogida repetida del emparejamiento, con su propio asiento.
+        Event::listen(PairingReclaimed::class, [RecordDeviceProvisioning::class, 'reclaimed']);
     }
 
     /**

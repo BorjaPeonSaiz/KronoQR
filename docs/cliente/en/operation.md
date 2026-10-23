@@ -1970,6 +1970,32 @@ too.** You do not need to do anything:
   a name longer than about 18 letters is cut earlier with an ellipsis. Cards
   already printed remain valid; there is no need to reprint.
 
+**When updating to 2.3.0: a clock-in the server cannot process no longer jams
+the tablet forever.** You do not need to do anything. Until now, if one
+particular clock-in always failed on the server (a product defect with that
+data), the tablet's queue stopped at it and the clock-ins behind it waited.
+From this version on, if the server fails **the same clock-in** at least **10
+times over at least 60 minutes** —not counting a database or Redis outage,
+which is still waited out as always—, it **discards** it: the queue moves on,
+the clock-in **is not recorded** and, if it is known whose it was, the
+"Discarded clock-in" incident opens so that HR completes it with a correction.
+It is kept in the audit log (`scan.discarded`). At most **3 discards per kiosk
+in 24 hours**: once used up, the tablet waits again and a critical alert fires,
+because then the fault is the server's and not the clock-in's. The three
+numbers are changed in `.env` (`SCAN_DISCARD_MIN_ATTEMPTS`,
+`SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`; with the budget at `0`
+discarding is switched off), and they are best left alone unless technical
+support asks. Every discard is a defect the vendor needs to reproduce: let them
+know. The technical table of failed attempts purges itself after 30 days.
+
+**When updating to 2.3.0: pairing a tablet survives a network cut right at the
+end.** You do not need to do anything. If the tablet loses the response at the
+very moment it collects its token, between 10 seconds and one minute later
+it can ask again and receives a new one for the **same** kiosk —the previous one stops
+working at once—, instead of being unable to clock until someone unpairs it.
+Only from the same network address; after that minute, the tablet asks for a
+new code as always.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet

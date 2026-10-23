@@ -202,6 +202,14 @@ enum AuditAction: string
     case DevicePaired = 'device.paired';
     case DeviceRevoked = 'device.revoked';
 
+    /**
+     * La tablet repitio la recogida de su emparejamiento dentro de la ventana
+     * corta y recibio otro token para el mismo quiosco (V6-KI-02, 2.3.0). Actor
+     * `system`, sujeto el dispositivo; lleva el `pairing_id`, los segundos desde
+     * la primera recogida y que repeticion es. Nunca el origen ni su huella.
+     */
+    case DevicePairingReclaimed = 'device.pairing_reclaimed';
+
     // --- Acceso a datos personales de terceros (RS-05) -----------------------
 
     case PersonalDataAccessed = 'personal_data.accessed';

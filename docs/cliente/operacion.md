@@ -1950,6 +1950,32 @@ en lo impreso.** No tienes que hacer nada:
   nombre de más de unas 18 letras se corta antes con puntos suspensivos. Las
   tarjetas ya impresas siguen valiendo; no hace falta reimprimir.
 
+**Al actualizar a la 2.3.0: un fichaje que el servidor no consigue procesar ya
+no atasca la tablet para siempre.** No tienes que hacer nada. Hasta ahora, si un
+fichaje concreto fallaba siempre en el servidor (un defecto del producto con
+ese dato), la cola de la tablet se quedaba detenida en él y los fichajes de
+detrás esperaban. Desde esta versión, si el servidor falla **el mismo fichaje**
+al menos **10 veces durante al menos 60 minutos** —sin contar una base de datos
+o un Redis caídos, que se siguen esperando como siempre—, lo **descarta**: la
+cola sigue, el fichaje **no se registra** y, si se sabe de quién era, abre la
+incidencia «Fichaje descartado» para que RRHH lo complete con una corrección.
+Queda en el registro de auditoría (`scan.discarded`). Como mucho **3 descartes
+por quiosco en 24 horas**: si se agotan, la tablet vuelve a esperar y salta una
+alerta crítica, porque entonces el fallo es del servidor y no del fichaje. Los
+tres números se cambian en el `.env` (`SCAN_DISCARD_MIN_ATTEMPTS`,
+`SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`; con el cupo a `0` el
+descarte queda apagado), y no conviene tocarlos salvo que lo pida soporte
+técnico. Cada descarte es un defecto que el fabricante tiene que reproducir:
+avísale. La tabla técnica de intentos fallidos se purga sola a los 30 días.
+
+**Al actualizar a la 2.3.0: emparejar una tablet aguanta un corte de red justo
+al final.** No tienes que hacer nada. Si la tablet pierde la respuesta en el
+mismo instante en que recoge su token, entre los 10 segundos y el minuto
+siguientes puede volver a pedirlo y recibe uno nuevo para el **mismo** quiosco —el anterior deja de
+valer en el acto—, en lugar de quedarse sin poder fichar hasta que alguien la
+desvincule. Solo desde la misma dirección de red; pasado ese minuto, la tablet
+pide otro código como siempre.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

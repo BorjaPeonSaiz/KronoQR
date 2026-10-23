@@ -56,9 +56,35 @@ use DateTimeImmutable;
  * hicieran, teclear mal tres veces dejaria sin emparejar una tablet que estaba
  * perfectamente, y bastaria sondear con un secreto inventado para tumbar el alta
  * de un quiosco ajeno.
+ *
+ * ## La recogida repetida (V6-KI-02, 2.3.0)
+ *
+ * Si la respuesta `paired` se pierde por el camino, la tablet se quedaria con un
+ * dispositivo dado de alta y sin token. Por eso una solicitud ya `claimed` admite
+ * **repetir la recogida** —se reemite el token del MISMO dispositivo y se retira
+ * el anterior— solo si se cumple todo a la vez:
+ *
+ * - el secreto coincide (se mira primero, como siempre);
+ * - llega **desde el mismo origen** que la primera recogida, comparado sin
+ *   cortocircuito (`hash_equals`);
+ * - han pasado **al menos {@see self::RECLAIM_NOT_BEFORE_SECONDS} segundos** desde
+ *   la primera: dos sondeos simultaneos de la misma tablet no son una respuesta
+ *   perdida, y reemitir entre ellos dejaria a la tablet con el token retirado
+ *   del que procesara primero;
+ * - y **menos de {@see self::RECLAIM_WINDOW_SECONDS}**, contados desde la
+ *   primera recogida y no desde la ultima: repetir no alarga la ventana.
+ *
+ * Fuera de eso, el `Rejected` de siempre. Es estructural, no se configura: una
+ * ventana mas ancha seria un hueco mas ancho para quien tuviera el secreto.
  */
 final readonly class PairingRequest
 {
+    /** Segundos desde la primera recogida antes de los cuales no se repite. */
+    public const int RECLAIM_NOT_BEFORE_SECONDS = 10;
+
+    /** Segundos desde la primera recogida durante los cuales se puede repetir. */
+    public const int RECLAIM_WINDOW_SECONDS = 60;
+
     private function __construct(
         /** Identificador **publico** (`device_pairing_requests.uuid`): el `pairing_id` del contrato. */
         public string $uuid,
@@ -66,6 +92,15 @@ final readonly class PairingRequest
         public DateTimeImmutable $expiresAt,
         /** La fila de `devices`, que existe solo a partir del `confirm`. */
         public ?int $deviceId,
+        /** Cuando se recogio el token por primera vez; nulo hasta entonces. */
+        public ?DateTimeImmutable $claimedAt = null,
+        /**
+         * Huella opaca del origen de la primera recogida, para la recogida
+         * repetida. Nula en las solicitudes consumidas antes de la 2.3.0.
+         */
+        public ?string $claimedOrigin = null,
+        /** Recogidas repetidas ya hechas: la que se gana la carrera la incrementa. */
+        public int $reclaims = 0,
     ) {}
 
     /**
@@ -79,8 +114,11 @@ final readonly class PairingRequest
         PairingStatus $status,
         DateTimeImmutable $expiresAt,
         ?int $deviceId = null,
+        ?DateTimeImmutable $claimedAt = null,
+        ?string $claimedOrigin = null,
+        int $reclaims = 0,
     ): self {
-        return new self($uuid, $status, $expiresAt, $deviceId);
+        return new self($uuid, $status, $expiresAt, $deviceId, $claimedAt, $claimedOrigin, $reclaims);
     }
 
     /**
@@ -126,8 +164,10 @@ final readonly class PairingRequest
      *                               resuelve **siempre**, exista o no la fila, y con el mismo
      *                               trabajo: es lo que impide que la respuesta delate que
      *                               `pairing_id` son reales.
+     * @param  string|null  $origin  Huella opaca del origen de esta peticion. Solo cuenta
+     *                               para la recogida repetida: ver el docblock de la clase.
      */
-    public function claim(DateTimeImmutable $now, bool $secretMatches): ClaimOutcome
+    public function claim(DateTimeImmutable $now, bool $secretMatches, ?string $origin = null): ClaimOutcome
     {
         // Primero y en todas las ramas. Ver el docblock de la clase.
         if (! $secretMatches) {
@@ -143,8 +183,30 @@ final readonly class PairingRequest
             // Confirmada. **Sin comprobar la caducidad**: ver el docblock.
             PairingStatus::Confirmed => ClaimOutcome::Paired,
 
-            // Un solo uso: el token se emitio y no se vuelve a emitir.
-            PairingStatus::Claimed => ClaimOutcome::Rejected,
+            // Un solo uso: el token se emitio y no se vuelve a emitir, salvo la
+            // recogida repetida de la ventana corta (V6-KI-02).
+            PairingStatus::Claimed => $this->canBeReclaimedAt($now, $origin)
+                ? ClaimOutcome::Reclaimed
+                : ClaimOutcome::Rejected,
         };
+    }
+
+    /**
+     * Si una solicitud ya consumida admite repetir la recogida ahora y desde
+     * este origen. Ver el docblock de la clase.
+     */
+    private function canBeReclaimedAt(DateTimeImmutable $now, ?string $origin): bool
+    {
+        if (! $this->claimedAt instanceof DateTimeImmutable || $this->claimedOrigin === null || $origin === null) {
+            return false;
+        }
+
+        if (! hash_equals($this->claimedOrigin, $origin)) {
+            return false;
+        }
+
+        $elapsed = $now->getTimestamp() - $this->claimedAt->getTimestamp();
+
+        return $elapsed >= self::RECLAIM_NOT_BEFORE_SECONDS && $elapsed < self::RECLAIM_WINDOW_SECONDS;
     }
 }

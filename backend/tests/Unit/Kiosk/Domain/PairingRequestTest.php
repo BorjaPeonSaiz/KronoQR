@@ -168,3 +168,65 @@ it('no cambia de estado con un confirm ni con un claim fallidos', function (): v
         // Y sigue sirviendo: el que la teclea bien despues, la confirma.
         ->and($solicitud->confirm(instante()))->toBe(ConfirmOutcome::Confirmed);
 })->group('RF-PD-06');
+
+// --- La recogida repetida (V6-KI-02) -----------------------------------------
+
+const RECOGIDA_REPETIDA_ORIGEN = 'b1b4c6f3a9d2e8f70123456789abcdef0123456789abcdef0123456789abcdef';
+
+function consumidaA(string $claimedAt = AHORA, ?string $origen = RECOGIDA_REPETIDA_ORIGEN, int $reclaims = 0): PairingRequest
+{
+    return PairingRequest::reconstitute(
+        uuid: '0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32',
+        status: PairingStatus::Claimed,
+        expiresAt: new DateTimeImmutable('2026-09-07T10:10:00Z', new DateTimeZone('UTC')),
+        deviceId: 7,
+        claimedAt: new DateTimeImmutable($claimedAt, new DateTimeZone('UTC')),
+        claimedOrigin: $origen,
+        reclaims: $reclaims,
+    );
+}
+
+it('admite repetir la recogida desde el mismo origen entre los 10 y los 60 segundos', function (string $momento, ClaimOutcome $esperado): void {
+    expect(consumidaA()->claim(instante($momento), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))->toBe($esperado);
+})->with([
+    'a los 9 s, dos sondeos que se solapan' => ['2026-09-07T10:00:09Z', ClaimOutcome::Rejected],
+    'a los 10 s justos' => ['2026-09-07T10:00:10Z', ClaimOutcome::Reclaimed],
+    'a los 59 s' => ['2026-09-07T10:00:59Z', ClaimOutcome::Reclaimed],
+    'a los 60 s justos' => ['2026-09-07T10:01:00Z', ClaimOutcome::Rejected],
+    'con el reloj hacia atras' => ['2026-09-07T09:59:30Z', ClaimOutcome::Rejected],
+])->group('RF-PD-06');
+
+it('no admite repetir la recogida desde otro origen ni sin origen', function (?string $guardado, ?string $peticion): void {
+    expect(consumidaA(origen: $guardado)->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: $peticion))
+        ->toBe(ClaimOutcome::Rejected);
+})->with([
+    'otro origen' => [RECOGIDA_REPETIDA_ORIGEN, str_repeat('0', 64)],
+    'sin origen en la peticion' => [RECOGIDA_REPETIDA_ORIGEN, null],
+    'consumida antes de la 2.3.0, sin origen guardado' => [null, RECOGIDA_REPETIDA_ORIGEN],
+])->group('RF-PD-06', 'RS-03');
+
+it('comprueba el secreto tambien en la recogida repetida', function (): void {
+    expect(consumidaA()->claim(instante('2026-09-07T10:00:20Z'), secretMatches: false, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Rejected);
+})->group('RF-PD-06', 'RS-03');
+
+it('cuenta la ventana desde la primera recogida aunque ya se haya repetido', function (): void {
+    expect(consumidaA(reclaims: 2)->claim(instante('2026-09-07T10:00:59Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Reclaimed)
+        ->and(consumidaA(reclaims: 2)->claim(instante('2026-09-07T10:01:00Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Rejected);
+})->group('RF-PD-06');
+
+it('no repite la recogida de una solicitud consumida sin instante de recogida', function (): void {
+    $sinInstante = PairingRequest::reconstitute(
+        uuid: '0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32',
+        status: PairingStatus::Claimed,
+        expiresAt: new DateTimeImmutable('2026-09-07T10:10:00Z', new DateTimeZone('UTC')),
+        deviceId: 7,
+        claimedOrigin: RECOGIDA_REPETIDA_ORIGEN,
+    );
+
+    expect($sinInstante->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Rejected)
+        ->and($sinInstante->reclaims)->toBe(0);
+})->group('RF-PD-06');
