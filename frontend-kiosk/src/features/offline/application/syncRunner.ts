@@ -687,6 +687,22 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
   }
 
+  /**
+   * El camino rapido tambien MIRA si el borrado llego a IndexedDB (V7-RV-4): el
+   * contrato del puerto lo exige a quien llama. Si no llego, la fila sigue
+   * elegible AHORA MISMO y se reenviaria sin pausa; se aplaza con retroceso y se
+   * dice. Reenviar es seguro: el `scan_id` es la clave de idempotencia (regla 8).
+   */
+  async function confirmFastPath(scanId: string): Promise<void> {
+    const removed = await queue.confirm([scanId])
+    if (removed) return
+    options.onDiagnostic?.('sync.confirm_not_persisted', {
+      items: 1,
+      message: 'confirm_not_persisted',
+    })
+    await queue.retryLater([scanId], clock.now())
+  }
+
   async function submit(scan: QueuedScan): Promise<ScanSubmissionResult> {
     const outcome = await queue.enqueue(scan)
     if (!outcome.stored) {
@@ -761,7 +777,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (result.outcome === 'ok') {
       options.onReachability?.(true)
       options.onAuthOutcome?.(false)
-      await queue.confirm([scan.scan_id])
+      await confirmFastPath(scan.scan_id)
       // Lo que se encolo mientras viajaba esta fila esperaba a que terminara
       // (RN-21): ahora si puede salir.
       scheduleNext()
@@ -774,7 +790,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       options.onReachability?.(true)
       options.onAuthOutcome?.(false)
       // Decidido por el servidor: reintentarlo daria `422` para siempre.
-      await queue.confirm([scan.scan_id])
+      await confirmFastPath(scan.scan_id)
       scheduleNext()
       return { kind: 'rejected' }
     }

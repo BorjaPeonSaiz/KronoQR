@@ -2,7 +2,7 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
-import { canUpdateNowGlobal } from './features/offline/useOfflineQueue'
+import { canUpdateNowGlobal, peekPersistedQueue } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
@@ -91,6 +91,10 @@ app.mount('#app')
 // `registerServiceWorker` la reevalua cada minuto mientras haya una version
 // pendiente (decision 10 de la tarea 3.12): si la ventana esta cerrada ahora,
 // puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
+// V6-KI-01: lo que hay en disco se cuenta ya, sin esperar a que una pantalla monte
+// la cola. Hasta que responde, la puerta de actualizacion no se abre.
+void peekPersistedQueue()
+
 void registerServiceWorker({
   onError: (context) => bootReporter.report('kiosk.service_worker.failed', context),
   // Modo urgente (version minima del servidor por encima de esta PWA): se

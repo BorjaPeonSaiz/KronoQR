@@ -15,6 +15,10 @@
 //     entro DESPUES, no lo que hay en disco: `stats().size` es `null`
 //     («desconocido») y el latido lo dice con `queue_storage`. En cada drenaje se
 //     intenta volver al disco, y al volver se migra lo de memoria.
+//     EXCEPCION (V2-KI-02): si el disco sigue LEYENDOSE y solo falla escribir
+//     (cuota agotada), no se da por perdido: forma con la memoria un almacen
+//     compuesto (`overlayStorage.ts`) y el recuento SI se sabe. Las filas del disco
+//     se envian y se borran, que es lo que libera el sitio.
 //  4. **El contador que se ve en pantalla no espera a IndexedDB.** Se mantiene
 //     un espejo en memoria que se actualiza tras cada mutacion y se publica a
 //     los suscriptores. El indicador de RF-KI-04 se pinta de ahi.
@@ -36,6 +40,8 @@ import type {
   RetrySchedule,
 } from '../infrastructure/queueStorage'
 import { createMemoryQueueStorage } from '../infrastructure/queueStorage'
+import type { OverlayQueueStorage } from '../infrastructure/overlayStorage'
+import { createOverlayQueueStorage, OverlayDiskWriteError } from '../infrastructure/overlayStorage'
 
 /**
  * Techo de filas que se leen de una vez. Con 50 por lote, 500 son diez envios
@@ -179,6 +185,8 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
   const leased = new Set<string>()
 
   let store: QueueStorage
+  /** Disco que se lee pero no se escribe + memoria (V2-KI-02). `store` es esto mientras no sea `null`. */
+  let overlay: OverlayQueueStorage | null = null
   /** `true` si el disco existe pero no se ve: lo que haya en el es desconocido. */
   let diskUnknown = false
   /** `true` si la ultima operacion sobre el respaldo en memoria fallo: ni eso acepta. */
@@ -230,10 +238,50 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     }
   }
 
-  /** Degradacion a memoria en marcha. Nunca se propaga el fallo al empleado. */
-  function fallBackToMemory(reason: unknown, current: QueueStorage): void {
+  /** El disco responde a las TRES lecturas que hace `recompute()`: se ve aunque no se pueda escribir. */
+  async function isReadable(target: QueueStorage): Promise<boolean> {
+    try {
+      await target.count()
+      await target.list(1)
+      await target.listDiscarded(1)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Degradacion en marcha. Nunca se propaga el fallo al empleado.
+   *
+   * Si el disco todavia se LEE (cuota agotada: lo que falla es escribir), no se da
+   * por perdido: queda como mitad de lectura de un almacen compuesto, y lo que no
+   * admite entra en memoria (V2-KI-02). Asi las filas que ya estan en disco se
+   * siguen enviando y borrando, que es justo lo que libera el sitio. Solo si el
+   * disco tampoco se lee se cae a memoria pura, con el disco «desconocido».
+   */
+  async function degrade(reason: unknown, current: QueueStorage): Promise<void> {
     options.onStorageFailure?.(errorName(reason))
+    if (await isReadable(current)) {
+      const memory = createMemoryQueueStorage()
+      overlay = createOverlayQueueStorage(current, memory, {
+        onDiskLost: (lost) => {
+          // El disco dejo de leerse tambien: memoria pura y disco desconocido.
+          options.onStorageFailure?.(errorName(lost))
+          if (store === overlay) {
+            store = memory
+            overlay = null
+            diskUnknown = true
+            lastDiskCount = null
+          }
+        },
+      })
+      store = overlay
+      diskUnknown = false
+      memoryBroken = false
+      return
+    }
     closeQuietly(current)
+    overlay = null
     store = createMemoryQueueStorage()
     diskUnknown = true
     memoryBroken = false
@@ -259,7 +307,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
           if (!current.durable) memoryBroken = false
           return value
         } catch (error) {
-          if (!current.durable) memoryBroken = true
+          if (!current.durable && !(error instanceof OverlayDiskWriteError)) memoryBroken = true
           throw error
         }
       }
@@ -285,7 +333,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         }
       }
 
-      fallBackToMemory(last, current)
+      await degrade(last, current)
       try {
         const value = await operation(store)
         memoryBroken = false
@@ -312,7 +360,8 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       return value
     } catch (error) {
       if (!target.durable) {
-        memoryBroken = true
+        // Una escritura que el DISCO rechaza (cuota) no estropea la memoria.
+        if (!(error instanceof OverlayDiskWriteError)) memoryBroken = true
         throw error
       }
       return reopenAndRepeat(target, operation, error)
@@ -600,9 +649,10 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     },
 
     async tryReopen() {
-      // Solo tiene sentido si hubo un disco que se perdio: una cola que nacio
-      // sobre un almacen no duradero (pruebas) no tiene a donde volver.
-      if (store.durable || !diskUnknown) return false
+      // Solo tiene sentido si hubo un disco que se perdio (o que ya no admite
+      // escrituras): una cola que nacio sobre un almacen no duradero (pruebas) no
+      // tiene a donde volver.
+      if (store.durable || (!diskUnknown && overlay === null)) return false
       const nowMs = clock.now().getTime()
       if (lastReopenAt !== null && nowMs - lastReopenAt < recoveryIntervalMs) return false
       lastReopenAt = nowMs
@@ -618,22 +668,42 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       let candidate: QueueStorage | null = null
       let recovered = false
       try {
-        candidate = options.openStorage()
-        const memory = store
+        const current = overlay
+        // La mitad de memoria es lo que un reinicio perderia y hay que llevar al disco.
+        const memory = current === null ? store : current.memoryPart
         const rows = await memory.list(Number.MAX_SAFE_INTEGER)
         const discarded = await memory.listDiscarded(Number.MAX_SAFE_INTEGER)
-        // Sondeo explicito: abrir es perezoso y un disco que sigue roto solo se
-        // nota al tocarlo.
-        await candidate.count()
-        // Clave primaria `scan_id`: `add` de una fila que ya esta no duplica, asi
-        // que repetir la migracion tras un fallo a medias es seguro.
-        for (const row of rows) await candidate.add(row)
-        for (const entry of discarded) await candidate.putDiscarded(entry)
-        store = candidate
-        diskUnknown = false
-        memoryBroken = false
-        closeQuietly(memory)
-        recovered = true
+
+        if (current !== null && rows.length === 0 && discarded.length === 0) {
+          // Disco que se lee y nada en memoria: se vuelve a el solo si la ultima
+          // escritura funciono (el drenaje libero sitio). Sin esa prueba se
+          // degradaria otra vez en el siguiente fichaje, avisando cada minuto.
+          if (current.diskWritable()) {
+            store = current.diskPart
+            overlay = null
+            diskUnknown = false
+            memoryBroken = false
+            closeQuietly(memory)
+            recovered = true
+          }
+        } else {
+          candidate = options.openStorage()
+          // Sondeo explicito: abrir es perezoso y un disco que sigue roto solo se
+          // nota al tocarlo.
+          await candidate.count()
+          // Clave primaria `scan_id`: `add` de una fila que ya esta no duplica, asi
+          // que repetir la migracion tras un fallo a medias es seguro.
+          for (const row of rows) await candidate.add(row)
+          for (const entry of discarded) await candidate.putDiscarded(entry)
+          const previous = store
+          store = candidate
+          overlay = null
+          diskUnknown = false
+          memoryBroken = false
+          closeQuietly(previous)
+          if (current !== null) closeQuietly(current.diskPart)
+          recovered = true
+        }
       } catch {
         if (candidate !== null) closeQuietly(candidate)
       } finally {

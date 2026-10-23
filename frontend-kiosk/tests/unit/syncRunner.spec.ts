@@ -1337,3 +1337,57 @@ describe('KT3 — rescate cuando no hay donde encolar (RF-KI-03)', () => {
     expect(auth).toEqual([true])
   })
 })
+
+describe('V7-RV-4 — el camino rapido tambien comprueba que el borrado llego', () => {
+  function brokenRemoveRunner(bench: Harness): {
+    runner: ReturnType<typeof createSyncRunner>
+    queue: ScanQueue
+  } {
+    const store = createMemoryQueueStorage()
+    const queue = createScanQueue({
+      openStorage: () => ({
+        ...store,
+        remove: () => Promise.reject(new Error('QuotaExceededError')),
+      }),
+      clock: CLOCK,
+    })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      onDiagnostic: (code) => bench.diagnostics.push(code),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+    return { runner, queue }
+  }
+
+  it('aceptado y borrado fallido: se dice y la fila se aplaza con retroceso, sin reenvio inmediato', async () => {
+    const bench = harness()
+    const { runner, queue } = brokenRemoveRunner(bench)
+
+    const result = await runner.submit(
+      scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+
+    // El empleado ve el desenlace del servidor igualmente.
+    expect(result.kind).toBe('accepted')
+    expect(bench.diagnostics).toContain('sync.confirm_not_persisted')
+    expect(queue.stats().size).toBe(1)
+    expect(queue.stats().nextAttemptAt).toBeGreaterThan(CLOCK.now().getTime())
+  })
+
+  it('rechazado (422 estandar) y borrado fallido: lo mismo', async () => {
+    const bench = harness({ onSingle: () => ({ outcome: 'rejected', problem: {} as never }) })
+    const { runner, queue } = brokenRemoveRunner(bench)
+
+    const result = await runner.submit(
+      scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91', '2026-08-14T08:00:00.000Z'),
+    )
+
+    expect(result.kind).toBe('rejected')
+    expect(bench.diagnostics).toContain('sync.confirm_not_persisted')
+    expect(queue.stats().nextAttemptAt).toBeGreaterThan(CLOCK.now().getTime())
+  })
+})

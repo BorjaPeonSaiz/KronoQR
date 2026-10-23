@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Cableado de la puerta de actualizacion sobre la cola offline (RF-KI-07,
 // tarea 3.12): cada escaneo que pasa por `submission.submit` dice «hubo
 // alguien delante de la camara» (`storeLastScanAt`), y `canUpdateNow` lee esa
@@ -13,8 +14,12 @@ import {
   resetInteractions,
 } from '@/features/offline/application/interactionGuard'
 import {
+  canUpdateNowGlobal,
   disposeOfflineQueue,
   createOfflineQueueController,
+  pendingScanCount,
+  peekPersistedQueue,
+  resetPersistedQueuePeek,
 } from '@/features/offline/useOfflineQueue'
 import {
   readLastScanAt,
@@ -167,5 +172,56 @@ describe('la cola alimenta la puerta de actualizacion (RF-KI-07, tarea 3.12)', (
     expect(interactionInProgress()).toBe(true)
     expect(controller.canUpdateNow(noon, true)).toBe(false)
     expect(controller.canUpdateNow(noon, false)).toBe(false)
+  })
+})
+
+describe('la puerta global sin controlador mira el disco antes de decidir (V6-KI-01, V21-6-KI-2)', () => {
+  const DB = 'kronoqr-update-gate-boot'
+  // Dentro de la ventana por defecto (02:00-05:00 en la zona de la tablet) y con
+  // el ultimo escaneo muy lejano.
+  const inWindow = new Date(2026, 7, 14, 3, 0, 0)
+
+  async function seed(count: number): Promise<void> {
+    const controller = createOfflineQueueController({
+      api: offlineApi(),
+      reporter: silentReporter(),
+      databaseName: DB,
+    })
+    for (let index = 0; index < count; index += 1) {
+      await controller.submission.submit({
+        kind: 'qr',
+        scan_id: `0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8c0${index}`,
+        qr_payload: PAYLOAD,
+        occurred_at: `2026-08-14T05:5${index}:00.000Z`,
+        intent: 'auto',
+        device_id: 'kiosk-1',
+      })
+    }
+    await controller.dispose()
+    localStorage.removeItem('kronoqr.kiosk.last_scan_at')
+  }
+
+  it('antes de mirar el disco NO se aplica; con fichajes pendientes en disco, tampoco', async () => {
+    await seed(3)
+    await disposeOfflineQueue()
+    resetPersistedQueuePeek()
+
+    expect(canUpdateNowGlobal(false, inWindow)).toBe(false)
+
+    expect(await peekPersistedQueue(DB)).toBe(3)
+    expect(pendingScanCount()).toBe(3)
+    expect(canUpdateNowGlobal(false, inWindow)).toBe(false)
+  })
+})
+
+describe('la puerta global con el disco vacio (V6-KI-01)', () => {
+  it('una vez mirado un disco vacio, la puerta se abre dentro de la ventana', async () => {
+    await disposeOfflineQueue()
+    resetPersistedQueuePeek()
+    const inWindow = new Date(2026, 7, 14, 3, 0, 0)
+
+    expect(canUpdateNowGlobal(false, inWindow)).toBe(false)
+    expect(await peekPersistedQueue('kronoqr-update-gate-empty')).toBe(0)
+    expect(canUpdateNowGlobal(false, inWindow)).toBe(true)
   })
 })

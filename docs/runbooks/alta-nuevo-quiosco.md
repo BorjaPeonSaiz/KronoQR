@@ -427,6 +427,19 @@ Hay **un quiosco activo** con ese nombre. Dos salidas, según lo que esté pasan
   noche` son quioscos distintos; `Recepción` y `Recepcion` también, y eso último
   es fuente segura de confusión — sé consistente con los acentos.
 
+### …la tablet muestra un código nuevo justo después de confirmar el anterior
+
+Se perdió la respuesta con el token: el servidor ya dio la solicitud por recogida
+(el código vale una sola vez) y la tablet nunca llegó a recibirla. El quiosco
+**ya existe y está activo**, sin tablet; si confirmas el código nuevo con el mismo
+nombre, el panel dirá «ese nombre ya está en uso».
+
+1. En el panel: **Quioscos** › el quiosco con ese nombre, que no ha latido nunca ›
+   **Desvincular** (§5.2). El nombre queda libre al instante.
+2. En la tablet, confirma el código nuevo con el mismo nombre (§3.2).
+
+No se pierde ningún fichaje: la tablet no había llegado a fichar.
+
 ### …la tablet vuelve sola a la pantalla de emparejamiento
 
 Significa que **su token ya no vale**, por una de dos razones. No es un fallo de
