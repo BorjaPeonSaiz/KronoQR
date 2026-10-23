@@ -234,10 +234,16 @@ export async function registerServiceWorker(
     // Solo cuenta una comprobacion que SE RESUELVE (una tablet sin red no se rinde
     // por no poder preguntar). Si tras ella no hay version pendiente, es un
     // intento en vacio; al acumular varios, la minima se da por inalcanzable.
-    void registration
+    const checked = registration
+    void checked
       .update()
       .then(() => {
         if (pending) return
+        // V21-3-KI-4: `update()` resuelve al EMPEZAR a instalar la version
+        // nueva, no al acabar de precachearla (~1 460 KiB). Con un trabajador
+        // instalandose o esperando, la version existe: no es una comprobacion
+        // en vacio, y contarla como tal acercaba la rendicion (`gave_up`).
+        if ((checked.installing ?? null) !== null || (checked.waiting ?? null) !== null) return
         options.onUrgentCheckEmpty?.()
         handleUrgentSignal()
       })
