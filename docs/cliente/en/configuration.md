@@ -213,7 +213,7 @@ a version is waiting— is in [`operation.md`](operation.md) §11.1.
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `BRANDING_APP_NAME` | `KronoQR` | Application name. Up to 60 characters: that is what fits in the header of the printed card. |
+| `BRANDING_APP_NAME` | `KronoQR` | Application name. Up to 60 characters. About 18 capital letters fit in the header of the printed card: a longer name is cut with an ellipsis (the QR never shrinks); on the instructions sheet, in the PDF documents and in the e-mails it appears in full. |
 | `BRANDING_LOGO_PATH` | *(empty)* | **Absolute path on the server** to a PNG or an SVG. Empty means “the product's logo”, not “no logo”. |
 | `BRANDING_ACCENT_COLOR` | `#b8542a` | Accent colour, in `#rrggbb` notation. Any other form is rejected. A colour that does not reach 4.5:1 on the panel's light background is saved only if you confirm it (see below). |
 | `PRIVACY_CONTROLLER_NAME` | *(empty)* | **Data controller** named by the privacy notice on the tablet: your company's legal name. Up to 160 characters, on a single line. Empty means “the generic text”, not “no notice”. Since 2.2.0; see “The kiosk privacy notice”, below. |
@@ -221,8 +221,12 @@ a version is waiting— is in [`operation.md`](operation.md) §11.1.
 
 **Where it shows.** In the header and in the browser tab title of the panel, the
 portal and the kiosk; on the sign-in screen of all three; on the printed
-credential card; in the header of the PDF hours report; and in the first line
-of the export for the Labour Inspectorate. A change applies **on the next
+credential card and on the instructions sheet handed out with it; in the header
+of the PDF hours report; in the first line of the export for the Labour
+Inspectorate; in the subject, header, sign-off and footer of the product's
+e-mails (pending incidents, weekly summary and report ready), which are written
+in the language of the receiving account; and in the title of the `README.md`
+of the full data export. A change applies **on the next
 request**, without restarting anything. Cards already printed, naturally, do not
 change.
 
@@ -231,8 +235,10 @@ of at least 4.5:1 to be readable. If you choose an accent that does not reach it
 —a yellow, a light grey—, the **Branding** screen tells you so and asks you to
 tick a box to save it, and the server rejects the change if it arrives without
 that confirmation (`"confirm_low_contrast": true` in the same request, if you use
-`curl`). Once saved, the screens and the PDF documents darken it just enough to
-be readable; the installation name appears in the PDF header whether or not
+`curl`). Once saved, the screens, the PDF documents, the card and the
+instructions sheet darken it just enough to be readable —the colour strip on the
+card and the line under the sheet's header, which are not text, keep it as it
+is—; the installation name appears in the PDF header whether or not
 there is a logo.
 
 **What never changes**: the technical identifiers. The `FH1` prefix of the QR

@@ -210,7 +210,7 @@ una versión esperando— está en [`operacion.md`](operacion.md) §11.1.
 
 | Clave | De serie | Qué es |
 | --- | --- | --- |
-| `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres: es lo que cabe en la cabecera de la tarjeta impresa. |
+| `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres. En la cabecera de la tarjeta impresa caben unas 18 mayúsculas: un nombre más largo se corta con puntos suspensivos (el QR no se encoge); en la hoja de instrucciones, en los PDF y en los correos sale entero. |
 | `BRANDING_LOGO_PATH` | *(vacío)* | Ruta **absoluta en el servidor** a un PNG o un SVG. Vacío significa «el logotipo del producto», no «sin logotipo». |
 | `BRANDING_ACCENT_COLOR` | `#b8542a` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. Un color que no llega a 4,5:1 sobre el fondo claro del panel se guarda solo si lo confirmas (ver abajo). |
 | `PRIVACY_CONTROLLER_NAME` | *(vacío)* | **Responsable del tratamiento** que nombra el aviso de privacidad de la tablet: la razón social de tu empresa. Hasta 160 caracteres, en una sola línea. Vacío significa «el texto genérico», no «sin aviso». Desde la 2.2.0; ver «El aviso de privacidad del quiosco», más abajo. |
@@ -218,8 +218,12 @@ una versión esperando— está en [`operacion.md`](operacion.md) §11.1.
 
 **Dónde se ve.** En la cabecera y en el título de pestaña del panel, del portal y
 del quiosco; en la pantalla de acceso de los tres; en la tarjeta de credencial
-impresa; en la cabecera del informe de horas en PDF; y en la primera línea de la
-exportación para la Inspección. Un cambio se aplica **en la petición siguiente**,
+impresa y en la hoja de instrucciones que se entrega con ella; en la cabecera del
+informe de horas en PDF; en la primera línea de la exportación para la
+Inspección; en el asunto, la cabecera, la despedida y el pie de los correos del
+producto (incidencias pendientes, resumen semanal e informe listo), que van en el
+idioma de la cuenta que los recibe; y en el título del `README.md` de la
+exportación íntegra. Un cambio se aplica **en la petición siguiente**,
 sin reiniciar nada. Las tarjetas ya impresas, naturalmente, no cambian.
 
 **Un color muy claro se avisa y se confirma.** El texto necesita un contraste
@@ -227,8 +231,10 @@ mínimo de 4,5:1 para leerse. Si eliges un acento que no llega —un amarillo, u
 gris claro—, la pantalla **Marca** te lo dice y te pide marcar una casilla para
 guardarlo, y el servidor rechaza el cambio si llega sin esa confirmación
 (`"confirm_low_contrast": true` en la misma petición, si lo haces con `curl`).
-Una vez guardado, las pantallas y los PDF lo oscurecen lo justo para que se lea;
-el nombre de la instalación sale en la cabecera de los PDF tenga o no logotipo.
+Una vez guardado, las pantallas, los PDF, la tarjeta y la hoja de instrucciones
+lo oscurecen lo justo para que se lea —el filete de color de la tarjeta y la
+línea de la cabecera de la hoja, que no son texto, lo llevan tal cual—; el nombre
+de la instalación sale en la cabecera de los PDF tenga o no logotipo.
 
 **Lo que no cambia nunca**: los identificadores técnicos. El prefijo `FH1` de los
 códigos QR, los nombres de las tablas, las rutas de la API y los comandos siguen
