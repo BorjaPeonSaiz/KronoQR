@@ -95,7 +95,7 @@ info:
     `detail` van en el idioma negociado (abajo, **Idioma**) y la respuesta lleva
     `Content-Language`. Un `422` siempre trae `errors`, con el detalle por campo.
     **Excepcion:** los rechazos del fichaje y del emparejamiento —`ScanRejected`,
-    `ScanNotProcessed`, `ScanHeldBack`, `PairingRejected` y
+    `ScanNotProcessed`, `ScanHeldBack`, `ScanDiscarded`, `PairingRejected` y
     `PairingCodeRejected`— son **texto fijo**, el mismo en toda peticion y sin
     negociar: son genericos y de tiempo constante (RS-03), el esquema los fija
     con `enum` y el cliente los distingue por `type`, nunca por el texto.
@@ -513,6 +513,19 @@ paths:
         **El quiosco no espera a esta respuesta** (regla dura 19, documento 02 §6).
         Confirma al empleado en local en menos de 300 ms y encola; esta llamada
         sincroniza. Un fallo de red no puede impedir fichar.
+
+        **Un fichaje que el servidor no consigue procesar se descarta tras un
+        umbral** (RN-22, [ADR-061](../adr/ADR-061-un-fichaje-que-el-servidor-no-consigue-procesar-se-descarta-tras-un-umbral.md),
+        2.3.0). Si el mismo `scan_id`, desde el mismo quiosco y con el mismo
+        contenido, falla en el servidor al menos 10 veces durante al menos 60
+        minutos por una causa que no es una dependencia caida, y el quiosco no ha
+        agotado su cupo de 3 descartes del servidor en 24 h, la respuesta deja de
+        ser el `500` y pasa a ser `422` con `urn:kronoqr:problem:scan-discarded`
+        (`ScanDiscarded`). Es un desenlace terminal: **todo reenvio del mismo
+        `scan_id` devuelve exactamente ese `422`** sin volver a intentarlo. El
+        fichaje no se registra; abre la incidencia `discarded_scan` para revision
+        humana si se puede atribuir. Los tres numeros son configuracion del
+        servidor.
       tags: [Attendance]
       security:
         - kioskToken: ['scan:write']
@@ -654,10 +667,18 @@ paths:
             el cliente recibe este mismo cuerpo. **No se distingue desde fuera**, y no
             es un descuido: distinguirlo daria un canal por el que averiguar el
             estado de la jornada de otra persona pasando su tarjeta.
+
+            **O descartado por el servidor** (`ScanDiscarded`, RN-22, ADR-061):
+            el servidor fallo el mismo fichaje durante el umbral configurado y lo
+            da por decidido sin registrarlo. Tambien es terminal y tambien saca el
+            fichaje de la cola, pero **no es un rechazo**: el servidor no llego a
+            decidir sobre la credencial. Se distinguen por `type`.
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ScanRejected'
+                oneOf:
+                  - $ref: '#/components/schemas/ScanRejected'
+                  - $ref: '#/components/schemas/ScanDiscarded'
               examples:
                 rechazado:
                   summary: La unica respuesta de rechazo que existe
@@ -666,6 +687,16 @@ paths:
                     title: Escaneo no valido
                     status: 422
                     detail: El escaneo no se ha podido registrar.
+                    scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                descartado:
+                  summary: |
+                    El servidor no consiguio procesar este fichaje durante el umbral
+                    configurado y lo descarta con incidencia (RN-22, ADR-061)
+                  value:
+                    type: 'urn:kronoqr:problem:scan-discarded'
+                    title: Escaneo descartado
+                    status: 422
+                    detail: El escaneo no se ha podido procesar y queda pendiente de revision.
                     scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
         '429':
           $ref: '#/components/responses/TooManyRequests'
@@ -706,6 +737,19 @@ paths:
         lote y no por persona**: el servidor no sabe de quien es un elemento que
         fallo, a lo mejor, resolviendo su credencial. Un rechazo (`422`) es un
         desenlace y **no** detiene nada.
+
+        **Hasta un umbral** (RN-22, [ADR-061](../adr/ADR-061-un-fichaje-que-el-servidor-no-consigue-procesar-se-descarta-tras-un-umbral.md),
+        2.3.0). Si el mismo elemento, desde el mismo quiosco y con el mismo
+        contenido, falla al menos 10 veces durante al menos 60 minutos por una
+        causa que no es una dependencia caida, y el quiosco no ha agotado su cupo
+        de 3 descartes del servidor en 24 h, el servidor lo **descarta**: su
+        elemento responde `422` con `urn:kronoqr:problem:scan-discarded` y **lo que
+        viene detras se procesa con normalidad**. Es un desenlace terminal e
+        idempotente: un reenvio del mismo `scan_id` devuelve el mismo `422`. El
+        fichaje no se registra y, si se puede atribuir, abre la incidencia
+        `discarded_scan`. Con el cupo agotado, el elemento vuelve a salir `503` y
+        la cola espera, a proposito: si el siguiente tambien falla, el fallo es del
+        servidor y no del fichaje.
 
         **Idempotencia por `scan_id`, elemento a elemento** (regla dura 8). Reenviar
         el mismo lote —o un lote que solape con otro ya enviado— devuelve para cada
@@ -781,7 +825,8 @@ paths:
             reordena.
 
             Detras de un `503` solo puede haber `503` (RN-21): el primero no
-            procesado y, despues, los aplazados.
+            procesado y, despues, los aplazados. Un `422` `scan-discarded` no es un
+            `503`: tras el, el lote sigue (ADR-061).
           content:
             application/json:
               schema:
@@ -858,6 +903,31 @@ paths:
                           status: 503
                           detail: El escaneo no se ha procesado porque uno anterior del lote sigue pendiente. Reintenta mas tarde.
                           scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
+                uno-descartado:
+                  summary: |
+                    La entrada de las 05:58 lleva mas de una hora fallando siempre
+                    en el servidor: se descarta con incidencia y la salida de las
+                    14:03 se procesa detras (RN-22, ADR-061).
+                  value:
+                    results:
+                      - scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        status: 422
+                        outcome:
+                          type: 'urn:kronoqr:problem:scan-discarded'
+                          title: Escaneo descartado
+                          status: 422
+                          detail: El escaneo no se ha podido procesar y queda pendiente de revision.
+                          scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                      - scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
+                        status: 200
+                        outcome:
+                          scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
+                          action: clock_in
+                          employee_display_name: Maria G.
+                          work_date: '2026-08-14'
+                          occurred_at: '2026-08-14T14:03:12Z'
+                          recorded_at: '2026-08-14T16:10:04.288Z'
+                          worked_minutes: 0
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -932,6 +1002,13 @@ paths:
         fichaje de esa persona en los 10 minutos siguientes, la revision diaria abre una
         incidencia `rejected_pin_scan` para el responsable (RN-19). La respuesta de este
         endpoint no cambia por ello.
+
+        **Un fichaje que el servidor no consigue procesar se descarta tras un
+        umbral**, igual que en `/scan` (RN-22, ADR-061, 2.3.0): `422` con
+        `urn:kronoqr:problem:scan-discarded`, terminal e idempotente. El tramo de
+        PIN de la cola offline sale siempre por aqui, de uno en uno, y sin esto un
+        PIN que el servidor falla siempre atascaria la cola entera (RN-21). Un
+        reenvio de un fichaje ya descartado no vuelve a comprobar el PIN.
       tags: [Attendance]
       security:
         - kioskToken: ['scan:write']
@@ -1005,10 +1082,15 @@ paths:
             El cuerpo esta fijado campo a campo en el esquema y no admite miembros
             adicionales: el contrato hace **imposible** describir la causa, incluida la
             de «tu PIN esta bloqueado durante 15 minutos», que es la que mas tienta.
+
+            **O descartado por el servidor** (`ScanDiscarded`, RN-22, ADR-061), con
+            el mismo cuerpo que en `/scan`.
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ScanRejected'
+                oneOf:
+                  - $ref: '#/components/schemas/ScanRejected'
+                  - $ref: '#/components/schemas/ScanDiscarded'
               examples:
                 rechazado:
                   summary: La unica respuesta de rechazo que existe
@@ -1017,6 +1099,14 @@ paths:
                     title: Escaneo no valido
                     status: 422
                     detail: El escaneo no se ha podido registrar.
+                    scan_id: 0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f
+                descartado:
+                  summary: Descartado por el servidor tras el umbral (RN-22, ADR-061)
+                  value:
+                    type: 'urn:kronoqr:problem:scan-discarded'
+                    title: Escaneo descartado
+                    status: 422
+                    detail: El escaneo no se ha podido procesar y queda pendiente de revision.
                     scan_id: 0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f
         '429':
           $ref: '#/components/responses/TooManyRequests'
@@ -1524,6 +1614,24 @@ paths:
         la misma solicitud confirmada producen **un solo token**, porque el cambio
         de estado es una escritura condicional atomica y no un `SELECT` previo.
 
+        **Salvo una recogida repetida, durante 60 segundos** (2.3.0, V6-KI-02).
+        Si la respuesta `paired` se pierde por el camino —un corte de red justo
+        en ese instante—, la tablet se quedaria con un dispositivo dado de alta y
+        sin token: huerfana hasta que alguien la desvinculara. Por eso, durante
+        los **60 segundos siguientes a la primera recogida correcta**, repetir el
+        `claim` con el mismo `pairing_id`, el mismo `pairing_secret` y **desde la
+        misma direccion de origen** que la primera vuelve a responder `paired`
+        con **un token nuevo** para el **mismo** dispositivo —nunca un segundo
+        dispositivo— y **retira en el acto el anterior**: en cada momento hay un
+        solo token vivo para esa tablet. Cada recogida repetida deja su asiento
+        en `audit_log` (`device.pairing_reclaimed`, ademas del `device.paired` de
+        la emision). Dos recogidas repetidas simultaneas producen tambien **un
+        solo token**: la segunda se rechaza. Fuera de la ventana, o desde otra
+        direccion, la respuesta es el rechazo generico de siempre. La ventana se
+        cuenta desde la primera recogida, no desde la ultima: repetir no la
+        alarga. **El cliente debe quedarse con el token de la ultima respuesta
+        `paired` que reciba** y dejar de sondear en cuanto la tenga.
+
         **La caducidad deja de aplicar una vez confirmada.** `expires_at` acota lo
         que puede esperar un codigo **sin confirmar**; despues del `confirm` la
         fila de `devices` ya existe, y negar la recogida solo dejaria un
@@ -1580,7 +1688,8 @@ paths:
               `uuid`, su nombre y el token con los ambitos del documento 02 §7.3
               (`scan:write`, `roster:read`, `heartbeat:write`). **Es la unica vez
               que ese token viaja**: la tablet lo guarda y no vuelve a haber forma
-              de recuperarlo.
+              de recuperarlo. Una recogida repetida dentro de los 60 segundos
+              (arriba) no lo recupera: emite **otro** y retira este.
 
             Es `200` en los dos casos a proposito. Un `202` para la espera
             obligaria a la PWA a ramificar por codigo de estado ademas de por
@@ -1614,6 +1723,9 @@ paths:
             **Emparejamiento rechazado.** Respuesta unica, generica y de tiempo
             constante para las tres causas —solicitud desconocida, secreto que no
             coincide, y solicitud caducada o ya consumida— (regla dura 17, RS-03).
+            «Ya consumida» incluye la recogida repetida fuera de su ventana de 60
+            segundos, desde otra direccion de origen o perdiendo la carrera con
+            otra recogida repetida simultanea.
             El cuerpo esta fijado campo a campo en el esquema y no admite miembros
             adicionales: el contrato hace **imposible** describir cual de las tres
             fue.
@@ -13641,6 +13753,10 @@ components:
         con retroceso, no descartar. **Nunca aparece en `POST /api/v1/scan`**, que
         con un fallo asi responde `500` y el quiosco reintenta el envio completo.
 
+        **No para siempre** (RN-22, ADR-061, 2.3.0): tras un numero de intentos y
+        un tiempo configurados, y si el quiosco no ha agotado su cupo, el servidor
+        deja de devolver esto para ese `scan_id` y devuelve `ScanDiscarded`.
+
         **Lo que viene detras en el lote no se procesa** (RN-21): sale como
         `ScanHeldBack`.
       additionalProperties: false
@@ -13700,6 +13816,61 @@ components:
           type: string
           enum: ['El escaneo no se ha procesado porque uno anterior del lote sigue pendiente. Reintenta mas tarde.']
           description: Texto fijo. No dice cual de los anteriores fallo ni por que.
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+
+    ScanDiscarded:
+      type: object
+      title: ScanDiscarded
+      description: |
+        **El servidor no ha conseguido procesar este fichaje y lo da por decidido
+        sin registrarlo** (RN-22,
+        [ADR-061](../adr/ADR-061-un-fichaje-que-el-servidor-no-consigue-procesar-se-descarta-tras-un-umbral.md),
+        2.3.0). Aparece en `POST /api/v1/scan`, `POST /api/v1/scan/pin` y en cada
+        elemento de `POST /api/v1/scan/batch`.
+
+        Ocurre cuando el mismo `scan_id`, desde el mismo quiosco y con el mismo
+        contenido, ha fallado en el servidor un numero minimo de veces durante un
+        tiempo minimo (10 veces y 60 minutos de serie), por una causa que no es
+        una dependencia caida ni una contencion transitoria, y el quiosco no ha
+        agotado su cupo de descartes del servidor (3 en 24 h de serie). Antes de
+        eso la respuesta es la de siempre (`503` en el lote, `500` suelto) y el
+        quiosco conserva y reintenta.
+
+        **Es un desenlace terminal**: el quiosco lo saca de su cola. **No es un
+        rechazo** —el servidor no llego a decidir sobre la credencial—, por eso
+        tiene su propio `type`. El fichaje no se registra: queda constancia en
+        el servidor con su `occurred_at`, y si se puede atribuir a una persona
+        abre la incidencia `discarded_scan`, que una persona resuelve con una
+        correccion (RN-13). El quiosco no necesita avisarlo por
+        `POST /api/v1/scan/discarded`; si lo hace, el aviso se acusa sin crear
+        nada nuevo.
+
+        **Idempotente** (regla dura 8): todo reenvio del mismo `scan_id`, por
+        cualquiera de las tres rutas, devuelve este mismo cuerpo y no se vuelve a
+        intentar.
+
+        **Texto fijo y de tiempo constante**, como `ScanRejected`: no dice por que
+        fallo, ni si la tarjeta era de alguien.
+      additionalProperties: false
+      required: [type, title, status, detail, scan_id]
+      properties:
+        type:
+          type: string
+          format: uri
+          enum: ['urn:kronoqr:problem:scan-discarded']
+        title:
+          type: string
+          enum: ['Escaneo descartado']
+        status:
+          type: integer
+          enum: [422]
+        detail:
+          type: string
+          enum: ['El escaneo no se ha podido procesar y queda pendiente de revision.']
+          description: |
+            Texto fijo. El quiosco muestra su propio texto de i18n a partir de
+            `type`.
         scan_id:
           $ref: '#/components/schemas/ScanId'
 
@@ -13775,6 +13946,11 @@ components:
             jornada; ningun reintento cambia ni una ni otra). El quiosco lo descarta
             en los dos casos, que es justo lo que hace que la cola vacie.
 
+            Desde la 2.3.0 el `422` cubre ademas el **descarte por el servidor**
+            (`scan-discarded`, RN-22, ADR-061): un elemento que el servidor fallo
+            durante el umbral configurado. Tambien saca el elemento de la cola, y
+            el lote sigue detras de el.
+
             El `503` cubre tambien **dos** situaciones: el elemento que no se pudo
             procesar (`scan-not-processed`) y los que venian detras en el lote y se
             aplazaron para no adelantarlo (`scan-held-back`, RN-21).
@@ -13787,14 +13963,15 @@ components:
           description: |
             El cuerpo que habria devuelto el endpoint individual, sin cambios, o
             el aplazamiento propio del lote. Las formas se distinguen sin
-            ambiguedad: `action` discrimina las dos aceptadas y `type` las tres de
-            problema.
+            ambiguedad: `action` discrimina las dos aceptadas y `type` las cuatro
+            de problema.
           oneOf:
             - $ref: '#/components/schemas/ScanAccepted'
             - $ref: '#/components/schemas/ScanDebounced'
             - $ref: '#/components/schemas/ScanRejected'
             - $ref: '#/components/schemas/ScanNotProcessed'
             - $ref: '#/components/schemas/ScanHeldBack'
+            - $ref: '#/components/schemas/ScanDiscarded'
 
     DiscardedScanReportBatch:
       type: object
