@@ -6,23 +6,25 @@ import {
 } from '@/features/offline/domain/updateWindow'
 import {
   persistPairedDevice,
-  readBreakClockingEnabled,
-  readClockSkewToleranceSeconds,
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
+  resolveDeviceId,
+} from '@/shared/device/deviceIdentity'
+import {
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
   readLastScanAt,
   readServiceCodeHash,
   readUpdateQuietMinutes,
   readUpdateWindow,
-  resolveDeviceId,
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,
   storeLastScanAt,
   storeServiceCodeHash,
   storeUpdateQuietMinutes,
   storeUpdateWindow,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 
 const KEYS = [
   'kronoqr.kiosk.device_token',

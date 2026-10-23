@@ -38,12 +38,16 @@ import {
   storeSiteTimeZone,
   storeUpdateQuietMinutes,
   storeUpdateWindow,
-} from './deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
 import { storeMinimumAppVersionReading } from './urgentUpdate'
 import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './heartbeatInterval'
-import type { RotatedToken, TokenAdoptionOutcome } from './tokenRotation'
-import { adoptRotatedToken, isTokenAdoptionFailure, parseRotatedToken } from './tokenRotation'
+import type { RotatedToken, TokenAdoptionOutcome } from '@/shared/device/tokenRotation'
+import {
+  adoptRotatedToken,
+  isTokenAdoptionFailure,
+  parseRotatedToken,
+} from '@/shared/device/tokenRotation'
 
 /**
  * Tope de `client_errors` por latido (contrato,

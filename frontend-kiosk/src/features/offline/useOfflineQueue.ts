@@ -14,20 +14,20 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, ref } from 'vue'
-import { registerRosterKeyRotator } from '@/shared/telemetry/tokenRotation'
+import { registerRosterKeyRotator } from '@/shared/device/tokenRotation'
 import { createDeviceRevocationWatcher } from '@/features/pairing/application/deviceRevocation'
 import type { RosterLookupPort, ScanSubmissionPort } from '@/features/scan/application/ports'
 import type { ApiClient } from '@/shared/api/client'
 import type { ConnectivityController } from '@/shared/connectivity/useConnectivity'
 import type { ClientErrorCode, ErrorReporter } from '@/shared/telemetry/errorReporter'
+import { readDeviceToken } from '@/shared/device/deviceIdentity'
 import {
-  readDeviceToken,
   readLastScanAt,
   readSiteTimeZone,
   readUpdateQuietMinutes,
   readUpdateWindow,
   storeLastScanAt,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import type { KioskTelemetrySnapshot } from '@/shared/telemetry/heartbeat'
 import type { CachedRoster, RosterDiagnostic } from './application/cachedRoster'
 import { createCachedRoster, ROSTER_REFRESH_MS } from './application/cachedRoster'

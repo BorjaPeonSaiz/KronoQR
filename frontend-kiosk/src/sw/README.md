@@ -48,7 +48,7 @@ service worker es el logotipo, porque sus bytes no caben en `localStorage`.
 
 La franja YA NO esta en el codigo: la declara el centro (`KIOSK_UPDATE_WINDOW`,
 `KIOSK_UPDATE_QUIET_MINUTES` en `installation_settings`) y viaja en cada latido
-(`KioskHeartbeat.update_window`), cacheada en `shared/telemetry/deviceIdentity.ts` para que
+(`KioskHeartbeat.update_window`), cacheada en `shared/device/deviceSettings.ts` para que
 la puerta funcione sin red. `features/offline/domain/updateWindow.ts` -> `canApplyUpdate` es
 verdadera solo si la cola esta vacia, no hubo ningun escaneo en los ultimos `quiet_minutes`
 minutos, y la hora LOCAL de la tablet cae dentro de la ventana (que puede cruzar la

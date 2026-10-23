@@ -25,7 +25,7 @@
 import { PRODUCT_BRANDING, type Branding } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { readSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
+import { readSiteTimeZone } from '@/shared/device/deviceSettings'
 import { formatClockTime } from '../domain/clockTime'
 import { clockSkewMinutesFrom } from '../domain/clockSkewMessage'
 import { greetingSlotFor } from '../domain/greeting'

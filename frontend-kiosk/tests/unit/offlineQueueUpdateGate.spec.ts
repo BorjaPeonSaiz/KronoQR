@@ -25,7 +25,7 @@ import {
   readLastScanAt,
   storeUpdateQuietMinutes,
   storeUpdateWindow,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import type { ErrorReporter } from '@/shared/telemetry/errorReporter'
 
 const PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'

@@ -6,7 +6,7 @@ import { canUpdateNowGlobal, peekPersistedQueue } from './features/offline/useOf
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { clearStoredLocale, createAppI18n, initialLocale } from './shared/i18n'
-import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
+import { APP_VERSION, resolveDeviceId } from './shared/device/deviceIdentity'
 import {
   currentUrgentGiveUpMotive,
   currentUrgentUpdateMode,

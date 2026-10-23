@@ -26,13 +26,13 @@ import type {
   UrgentUpdateAttempts,
   UrgentUpdateMode,
 } from '@/features/offline/domain/minimumVersion'
+import { APP_VERSION } from '@/shared/device/deviceIdentity'
 import {
-  APP_VERSION,
   readMinimumAppVersion,
   readUrgentUpdateAttempts,
   storeMinimumAppVersion,
   storeUrgentUpdateAttempts,
-} from './deviceIdentity'
+} from '@/shared/device/deviceSettings'
 
 export type { UrgentGiveUpMotive, UrgentUpdateMode }
 

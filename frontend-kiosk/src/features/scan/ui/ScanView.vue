@@ -26,16 +26,14 @@ import { markInteraction } from '@/features/offline/application/interactionGuard
 import { useBranding } from '@/shared/branding/useBranding'
 import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
+import { APP_VERSION, clearDeviceToken, resolveDeviceId } from '@/shared/device/deviceIdentity'
 import {
-  APP_VERSION,
-  clearDeviceToken,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
-  resolveDeviceId,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
-import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
+import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'

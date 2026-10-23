@@ -1,6 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
-import { readDeviceToken } from '@/shared/telemetry/deviceIdentity'
+import { readDeviceToken } from '@/shared/device/deviceIdentity'
 import ScanView from '@/features/scan/ui/ScanView.vue'
 
 // La pantalla de escaneo se importa de forma ESTATICA a proposito: es la unica

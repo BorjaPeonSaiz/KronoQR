@@ -14,7 +14,7 @@ import {
   readServiceCodeHash,
   readUpdateQuietMinutes,
   readUpdateWindow,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/features/offline/domain/minimumVersion'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
 import {

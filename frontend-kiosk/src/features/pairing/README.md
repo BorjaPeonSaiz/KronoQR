@@ -15,4 +15,4 @@ Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
   token y el padron lo hace `useOfflineQueue`, y navegar, la pantalla.
 
 El token del quiosco no se vuelve a emparejar para renovarse: se releva en el latido, con solape
-del anterior (`shared/telemetry/heartbeat.ts` y `tokenRotation.ts`, F1-1, RF-ID-04).
+del anterior (`shared/telemetry/heartbeat.ts` y `shared/device/tokenRotation.ts`, F1-1, RF-ID-04).

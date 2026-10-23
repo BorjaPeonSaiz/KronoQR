@@ -36,16 +36,18 @@ import {
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
+  resolveDeviceId,
+} from '@/shared/device/deviceIdentity'
+import {
   readMinimumAppVersion,
   readServiceCodeHash,
   readSiteTimeZone,
   readUpdateWindow,
-  resolveDeviceId,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
-import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
+import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
 import { resolveTimeZone } from '@kronoqr/web-kit/datetime'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'

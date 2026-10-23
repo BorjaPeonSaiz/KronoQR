@@ -14,7 +14,7 @@
 // («ventana configurable») y la regla dura 13 («nada de cliente en el
 // codigo»). La franja la declara el CENTRO en `installation_settings` y viaja
 // en cada latido (`KioskHeartbeat.update_window`, cacheada por
-// `shared/telemetry/heartbeat.ts` en `shared/telemetry/deviceIdentity.ts`).
+// `shared/telemetry/heartbeat.ts` en `shared/device/deviceSettings.ts`).
 // Sin configuracion recibida todavia (tablet que nunca ha latido en esta
 // sesion, o en ninguna anterior), la ventana DE SERIE es `03:00-05:00` con 10
 // minutos de silencio: el mismo valor por defecto que declara el ajuste
