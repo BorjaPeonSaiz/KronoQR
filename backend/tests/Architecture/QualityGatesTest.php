@@ -472,6 +472,16 @@ it('comprueba el presupuesto de bundle del quiosco en el propio build', function
     expect($package['scripts']['build'] ?? '')->toContain('check-bundle-budget');
 })->group('RNF-P-07');
 
+it('comprueba el presupuesto del quiosco tambien sobre el dist que entra en la imagen de Nginx', function (): void {
+    // R5-KI-03 (2.2.0), tarea 17.7: la imagen construye el quiosco con
+    // `npx vite build`, no con `npm run build`, asi que el enganche de la prueba
+    // anterior no la cubre. El presupuesto tiene que correr en la misma etapa y
+    // con el mismo `KRONOQR_BASE=/kiosk/` del build que se copia a la imagen.
+    $dockerfile = repoContents('infra/docker/nginx/Dockerfile');
+
+    expect($dockerfile)->toContain('KRONOQR_BASE=/kiosk/ node scripts/check-bundle-budget.mjs');
+})->group('RNF-P-07');
+
 it('comprueba el presupuesto de bundle del panel en el propio build', function (): void {
     // RNF-P-04 (carga del panel): JS critico <= 190 KiB gzip, CSS <= 40 KiB. El
     // chunk de entrada pesaba ~247 KiB cuando las vistas se importaban de forma

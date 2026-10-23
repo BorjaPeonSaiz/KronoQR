@@ -76,10 +76,16 @@ COPY VERSION ./VERSION
 # y el respaldo de navegacion del service worker.
 #
 # Se invoca `vite build` y no `npm run build` porque el script de npm encadena
-# `type-check` y, en el quiosco, el presupuesto de bundle: las dos son puertas
-# de la CI (etapas ① y ⑥) y repetirlas aqui alargaria cada construccion de
-# imagen sin anadir garantia. Si el type-check falla, la CI no llega a este
-# paso.
+# `type-check`, que es puerta de la CI (etapa ①) y repetirlo aqui alargaria cada
+# construccion de imagen sin anadir garantia. Si el type-check falla, la CI no
+# llega a este paso.
+#
+# EL PRESUPUESTO DEL QUIOSCO SI SE REPITE, sobre el `dist/` que se copia a la
+# imagen (RNF-P-07, R5-KI-03 de la 2.2.0). Cuesta menos de un segundo y es lo
+# unico que ata la puerta al artefacto que se entrega: la etapa ⑥ mide su propio
+# `npm run build`, y una imagen construida con otra base, otra version o sin
+# pasar por la CI no la habria pasado nunca. Mismo `KRONOQR_BASE` que el build,
+# para que resuelva los trozos criticos bajo `/kiosk/`.
 #
 # APP_VERSION (opcional) fija el `app_version` de la PWA del quiosco y GANA sobre
 # VERSION. Debe ser el mismo valor que recibe la imagen de PHP: el servidor
@@ -90,6 +96,7 @@ ARG APP_VERSION=
 RUN set -eux; \
   cd /build/frontend-admin && KRONOQR_BASE=/admin/ npx vite build; \
   cd /build/frontend-kiosk && KRONOQR_APP_VERSION="${APP_VERSION}" KRONOQR_BASE=/kiosk/ npx vite build; \
+  cd /build/frontend-kiosk && KRONOQR_BASE=/kiosk/ node scripts/check-bundle-budget.mjs; \
   cd /build/frontend-portal && KRONOQR_BASE=/portal/ npx vite build; \
   test -f /build/frontend-admin/dist/index.html; \
   test -f /build/frontend-kiosk/dist/index.html; \
