@@ -11,6 +11,7 @@
 // La tarea 5.8 (marca blanca) reutiliza esta tabla para avisar cuando los
 // colores que configure un cliente no alcancen el minimo.
 import type { ContrastRequirement } from './contrast'
+import type { PairState } from './pairContrast'
 
 export interface ThemePair {
   /** Token del primer plano (texto, icono, borde), p. ej. `--kq-color-text`. */
@@ -20,6 +21,11 @@ export interface ThemePair {
   readonly requirement: ContrastRequirement
   /** Para que se usa esa pareja; aparece en el nombre de la prueba. */
   readonly use: string
+  /**
+   * Estado de interaccion si la pareja solo existe en uno (hover con filtro,
+   * deshabilitado con opacidad). Sin estado = en reposo.
+   */
+  readonly state?: PairState
 }
 
 const pair = (
@@ -27,7 +33,55 @@ const pair = (
   background: string,
   requirement: ContrastRequirement,
   use: string,
-): ThemePair => ({ foreground, background, requirement, use })
+  state?: PairState,
+): ThemePair =>
+  state === undefined
+    ? { foreground, background, requirement, use }
+    : { foreground, background, requirement, use, state }
+
+/** Clave unica de una pareja: la misma pareja en reposo y en hover son dos filas. */
+export function pairKey(item: ThemePair): string {
+  const state = item.state
+  if (state === undefined) return `${item.foreground}/${item.background}`
+  return `${item.foreground}/${item.background}/${state.kind}:${state.shade ?? ''}:${state.opacity ?? ''}`
+}
+
+/** `hover:brightness-95` de un boton solido: el filtro oscurece fondo y texto. */
+const HOVER_BRIGHTNESS: PairState = { kind: 'hover', shade: 0.95 }
+
+/**
+ * Parejas de un control deshabilitado a cada opacidad usada en las plantillas
+ * (`aria-disabled:opacity-60`, `disabled:opacity-40`...). Requisito `inactive`.
+ */
+function disabledPairs(
+  bases: ReadonlyArray<readonly [string, string, string]>,
+  opacities: readonly number[],
+  ground: string,
+): ThemePair[] {
+  return opacities.flatMap((opacity) =>
+    bases.map(([foreground, background, what]) =>
+      pair(
+        foreground,
+        background,
+        'inactive',
+        `disabled ${what} at ${Math.round(opacity * 100)} % opacity`,
+        { kind: 'disabled', opacity, ground },
+      ),
+    ),
+  )
+}
+
+/**
+ * Los tokens con los que el grafico del panel pinta sus series (barras y
+ * rosco). Cada uno se mide como componente grafico (>= 3:1, WCAG 1.4.11)
+ * contra `surface-raised`, donde se dibuja el lienzo.
+ */
+export const chartSeriesTokens: readonly string[] = [
+  '--kq-color-primary-strong',
+  '--kq-color-accent',
+  '--kq-color-warning',
+  '--kq-color-text-muted',
+]
 
 /** Parejas del panel y del portal (fondo claro). */
 export const lightPairs: readonly ThemePair[] = [
@@ -53,6 +107,13 @@ export const lightPairs: readonly ThemePair[] = [
   pair('--kq-color-border', '--kq-color-surface', 'decorative', 'dividers on page background'),
   pair('--kq-color-border', '--kq-color-surface-raised', 'decorative', 'dividers on cards'),
   pair(
+    '--kq-color-border',
+    '--kq-color-surface-alt',
+    'decorative',
+    'dividers of table headers and framed sections',
+  ),
+  pair('--kq-color-border', '--kq-color-primary-soft', 'decorative', 'dividers of a selected row'),
+  pair(
     '--kq-color-border-strong',
     '--kq-color-surface',
     'large',
@@ -69,6 +130,36 @@ export const lightPairs: readonly ThemePair[] = [
     '--kq-color-surface-alt',
     'large',
     'input borders on alternate rows',
+  ),
+  pair(
+    '--kq-color-border-strong',
+    '--kq-color-primary-soft',
+    'large',
+    'control borders on a selected row',
+  ),
+  pair(
+    '--kq-color-border-strong',
+    '--kq-color-accent-soft',
+    'large',
+    'control borders on an accent panel',
+  ),
+  pair(
+    '--kq-color-border-strong',
+    '--kq-color-success-soft',
+    'large',
+    'control borders on a success notice',
+  ),
+  pair(
+    '--kq-color-border-strong',
+    '--kq-color-warning-soft',
+    'large',
+    'control borders on a warning notice',
+  ),
+  pair(
+    '--kq-color-border-strong',
+    '--kq-color-danger-soft',
+    'large',
+    'control borders on an error notice',
   ),
 
   // Primario.
@@ -92,6 +183,25 @@ export const lightPairs: readonly ThemePair[] = [
     '--kq-color-surface-raised',
     'text',
     'links and brand text on cards',
+  ),
+  pair(
+    '--kq-color-primary-strong',
+    '--kq-color-surface-alt',
+    'text',
+    'links and brand text on table headers, alternate rows and a hovered link',
+  ),
+  pair(
+    '--kq-color-primary-strong',
+    '--kq-color-primary-soft',
+    'text',
+    'links and brand text on a selected row',
+  ),
+  pair(
+    '--kq-color-on-primary',
+    '--kq-color-primary-strong',
+    'text',
+    'label of a hovered solid primary button (brightness 95 %)',
+    HOVER_BRIGHTNESS,
   ),
   pair(
     '--kq-color-on-primary-soft',
@@ -128,6 +238,7 @@ export const lightPairs: readonly ThemePair[] = [
   // y con su texto de contraste cuando son fondo solido.
   pair('--kq-color-success', '--kq-color-surface', 'text', 'success text on page'),
   pair('--kq-color-success', '--kq-color-surface-raised', 'text', 'success text on cards'),
+  pair('--kq-color-success', '--kq-color-surface-alt', 'text', 'success text on alternate rows'),
   pair('--kq-color-success', '--kq-color-success-soft', 'text', 'label of a success badge'),
   pair('--kq-color-on-success', '--kq-color-success', 'text', 'label of a solid success control'),
   pair('--kq-color-text', '--kq-color-success-soft', 'text', 'body text on a success notice'),
@@ -139,6 +250,7 @@ export const lightPairs: readonly ThemePair[] = [
   ),
   pair('--kq-color-warning', '--kq-color-surface', 'text', 'warning text on page'),
   pair('--kq-color-warning', '--kq-color-surface-raised', 'text', 'warning text on cards'),
+  pair('--kq-color-warning', '--kq-color-surface-alt', 'text', 'warning text on alternate rows'),
   pair('--kq-color-warning', '--kq-color-warning-soft', 'text', 'label of a warning badge'),
   pair('--kq-color-on-warning', '--kq-color-warning', 'text', 'label of a solid warning control'),
   pair('--kq-color-text', '--kq-color-warning-soft', 'text', 'body text on a warning notice'),
@@ -150,6 +262,7 @@ export const lightPairs: readonly ThemePair[] = [
   ),
   pair('--kq-color-danger', '--kq-color-surface', 'text', 'error text on page'),
   pair('--kq-color-danger', '--kq-color-surface-raised', 'text', 'error text on cards'),
+  pair('--kq-color-danger', '--kq-color-surface-alt', 'text', 'error text on alternate rows'),
   pair('--kq-color-danger', '--kq-color-danger-soft', 'text', 'label of an error badge'),
   pair('--kq-color-on-danger', '--kq-color-danger', 'text', 'label of a solid destructive button'),
   pair('--kq-color-text', '--kq-color-danger-soft', 'text', 'body text on an error notice'),
@@ -166,6 +279,23 @@ export const lightPairs: readonly ThemePair[] = [
   pair('--kq-color-focus', '--kq-color-surface-alt', 'large', 'focus ring on alternate rows'),
   // Margen: hoy el anillo cae sobre la cabecera (outline-offset 2px); cuenta si el offset baja a 0.
   pair('--kq-color-focus', '--kq-color-primary-soft', 'large', 'focus ring on a pressed nav link'),
+  pair('--kq-color-focus', '--kq-color-accent-soft', 'large', 'focus ring on an accent panel'),
+  pair('--kq-color-focus', '--kq-color-success-soft', 'large', 'focus ring on a success notice'),
+  pair('--kq-color-focus', '--kq-color-warning-soft', 'large', 'focus ring on a warning notice'),
+  pair('--kq-color-focus', '--kq-color-danger-soft', 'large', 'focus ring on an error notice'),
+
+  // Estado deshabilitado: WCAG 1.4.3 y 1.4.11 eximen al control inactivo, asi que el
+  // minimo es el suelo de producto (1,5:1, `inactive`), no 4,5 ni 3. Se mide el color
+  // PINTADO: el control entero, con la opacidad de la plantilla, sobre la pagina.
+  ...disabledPairs(
+    [
+      ['--kq-color-on-primary', '--kq-color-primary-strong', 'solid primary button'],
+      ['--kq-color-text', '--kq-color-surface', 'text button on the page'],
+      ['--kq-color-text', '--kq-color-surface-raised', 'outlined button on a card'],
+    ],
+    [0.5, 0.6],
+    '--kq-color-surface',
+  ),
 ]
 
 /** Parejas del quiosco (fondo oscuro, lectura a distancia). */
@@ -217,6 +347,17 @@ export const kioskPairs: readonly ThemePair[] = [
     '--kq-color-kiosk-surface-raised',
     'large',
     'kiosk focus ring on panels',
+  ),
+
+  // Teclado numerico y botones del quiosco apagados (`disabled:opacity-40`).
+  ...disabledPairs(
+    [
+      ['--kq-color-kiosk-on-primary', '--kq-color-kiosk-primary-strong', 'solid kiosk button'],
+      ['--kq-color-kiosk-text', '--kq-color-kiosk-surface-raised', 'kiosk key'],
+      ['--kq-color-kiosk-text-muted', '--kq-color-kiosk-surface-raised', 'kiosk secondary key'],
+    ],
+    [0.4],
+    '--kq-color-kiosk-surface',
   ),
 ]
 

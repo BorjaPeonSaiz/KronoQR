@@ -23,6 +23,7 @@
 // sobreescribe ningun token y el sistema visual del doc 06 queda intacto.
 
 import { contrastRatio, parseHexColor, WCAG_AA_MINIMUM, type Rgb } from './contrast'
+import { paintedColors } from './pairContrast'
 import { kioskPairs, lightPairs, type ThemePair } from './themePairs'
 
 export interface LocalePolicy {
@@ -215,11 +216,24 @@ export function parseBranding(value: unknown): Branding | null {
 // Aritmetica de color. Solo lo que hace falta para derivar tonos legibles.
 // ---------------------------------------------------------------------------
 
-function toHex({ r, g, b }: Rgb): string {
-  const channel = (value: number): string =>
-    Math.round(Math.min(255, Math.max(0, value)))
-      .toString(16)
-      .padStart(2, '0')
+/** Un canal de 0 a 255, entero: el que de verdad llega al navegador. */
+function snapChannel(value: number): number {
+  return Math.round(Math.min(255, Math.max(0, value)))
+}
+
+/**
+ * El color tal como se pinta: cada canal a 8 bits. Todo candidato se redondea
+ * ANTES de medirlo (R6-UX-02): medir en coma flotante y redondear despues dejaba
+ * el color aplicado entre 4,47 y 4,49:1 con algunos acentos. El valor que se
+ * mide es el que se escribe en el token.
+ */
+function snap({ r, g, b }: Rgb): Rgb {
+  return { r: snapChannel(r), g: snapChannel(g), b: snapChannel(b) }
+}
+
+function toHex(color: Rgb): string {
+  const { r, g, b } = snap(color)
+  const channel = (value: number): string => value.toString(16).padStart(2, '0')
   return `#${channel(r)}${channel(g)}${channel(b)}`
 }
 
@@ -234,8 +248,10 @@ function mix(a: Rgb, b: Rgb, weight: number): Rgb {
 
 /**
  * Acerca `color` a `target` (blanco para aclarar, negro para oscurecer) en
- * pasos de un 2,5 % hasta que alcance `minimum` sobre `background`. Si ni el
- * propio `target` llega, devuelve `target`: es lo mas lejos que se puede ir.
+ * pasos de un 2,5 % hasta que alcance `minimum` sobre `background`. Cada
+ * candidato se redondea a 8 bits antes de medirlo (`snap`): lo que se mide es
+ * lo que se pinta. Si ni el propio `target` llega, devuelve `target`: es lo mas
+ * lejos que se puede ir.
  */
 function adjustUntil(
   color: Rgb,
@@ -246,7 +262,7 @@ function adjustUntil(
   const backgrounds: readonly Rgb[] = 'r' in background ? [background] : background
   const STEPS = 40
   for (let step = 0; step <= STEPS; step += 1) {
-    const candidate = mix(target, color, step / STEPS)
+    const candidate = snap(mix(target, color, step / STEPS))
     if (backgrounds.every((item) => contrastRatio(candidate, item) >= minimum)) return candidate
   }
   return target
@@ -328,22 +344,30 @@ export function accentOverrides(
   const surfaceRaised = parseHexColor(tokens('--kq-color-surface-raised'))
   const surfaces = lightSurfaces(tokens)
   const bodyText = parseHexColor(tokens('--kq-color-text'))
+  // Fondo tintado: un 10 % de acento sobre la tarjeta blanca, redondeado a 8 bits.
+  const soft = snap(mix(color, surfaceRaised, 0.1))
   // El acento como texto o boton de marca se OSCURECE hasta 4,5:1 frente a la
-  // peor de las superficies de texto (MB1): un amarillo o un verde lima elegidos
-  // tal cual dejarian el boton principal y los enlaces entre 1,02:1 y 3,95:1.
-  // Un acento que ya llega no cambia ni un canal (paso 0 = el propio color).
+  // peor de las superficies donde `primary-strong` es texto (MB1): pagina,
+  // tarjeta, filas alternas y fila seleccionada (doc 06 §2; R7-UX-01). Un
+  // amarillo o un verde lima elegidos tal cual dejarian el boton principal y
+  // los enlaces entre 1,02:1 y 3,95:1. Un acento que ya llega a todas no
+  // cambia ni un canal (paso 0 = el propio color).
   // `primary` y `primary-strong` coinciden: el cliente aporta UN tono.
-  const strong = adjustUntil(color, BLACK, lightSurfaces(tokens, true), text)
+  const strong = adjustUntil(color, BLACK, [...lightSurfaces(tokens), soft], text)
   const onPrimary = bestOn(strong, [WHITE, bodyText])
-  // Fondo tintado: un 10 % de acento sobre la tarjeta blanca. El texto que va
-  // encima es el acento oscurecido hasta leerse como texto normal.
-  const soft = mix(color, surfaceRaised, 0.1)
+  // El texto sobre el fondo tintado es el acento oscurecido hasta leerse como
+  // texto normal.
   const onSoft = adjustUntil(color, BLACK, soft, text)
   // El anillo de foco no es marca: es lo que permite saber donde esta el
   // teclado (WCAG 2.4.11). Lleva el acento, pero oscurecido hasta verse como
   // componente (3:1) sobre la tarjeta blanca, que es la superficie mas
   // exigente; un acento casi blanco dejaria sin foco al panel entero.
-  const focus = adjustUntil(color, BLACK, surfaces, WCAG_AA_MINIMUM.large)
+  // El anillo tambien se dibuja sobre los avisos tintados (exito, aviso, error,
+  // acento) y sobre la fila seleccionada: se mide contra todos (V7-UX-02).
+  const tinted = ['accent-soft', 'success-soft', 'warning-soft', 'danger-soft'].map((name) =>
+    parseHexColor(tokens(`--kq-color-${name}`)),
+  )
+  const focus = adjustUntil(color, BLACK, [...surfaces, soft, ...tinted], WCAG_AA_MINIMUM.large)
 
   return {
     '--kq-color-primary': toHex(strong),
@@ -357,8 +381,10 @@ export function accentOverrides(
 
 /**
  * Las superficies claras del producto. Con `textOnly`, solo las dos sobre las
- * que el acento se lee como TEXTO (pagina y tarjeta, doc 06 §2); la tercera,
- * las filas alternas, lo lleva solo como elemento grande (3:1).
+ * que el acento SIN DERIVAR se mide como texto (pagina y tarjeta): es la regla
+ * de `accentContrast`, que el servidor replica (`AccentContrastPolicy`) y que
+ * decide si el panel pide confirmar. La DERIVACION de `primary-strong` va mas
+ * lejos y tambien cubre las filas alternas y la fila seleccionada.
  */
 function lightSurfaces(tokens: TokenResolver, textOnly = false): Rgb[] {
   const names = textOnly
@@ -422,8 +448,13 @@ export function contrastWarnings(
 
     for (const pair of pairs) {
       if (!(pair.foreground in overrides) && !(pair.background in overrides)) continue
-      const foreground = resolve(pair.foreground)
-      const background = resolve(pair.background)
+      // El color PINTADO: con el estado de la pareja (hover, deshabilitado) aplicado.
+      const { foreground, background } = paintedColors(
+        pair.foreground,
+        pair.background,
+        pair.state,
+        resolve,
+      )
       const ratio = contrastRatio(foreground, background)
       const minimum = WCAG_AA_MINIMUM[pair.requirement]
       if (ratio < minimum) {

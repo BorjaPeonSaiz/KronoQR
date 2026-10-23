@@ -13,7 +13,7 @@ export interface Rgb {
 }
 
 /** Que exige WCAG 2.2 AA a cada tipo de pareja. */
-export type ContrastRequirement = 'text' | 'large' | 'decorative'
+export type ContrastRequirement = 'text' | 'large' | 'decorative' | 'inactive'
 
 /**
  * Minimos de WCAG 2.2 AA por tipo de uso:
@@ -22,11 +22,15 @@ export type ContrastRequirement = 'text' | 'large' | 'decorative'
  *     interfaz o graficos con significado (1.4.3 y 1.4.11), >= 3:1.
  *   - `decorative`: sin exigencia. Solo se admite en elementos que no
  *     transmiten informacion (una franja, un fondo de ilustracion).
+ *   - `inactive`: control deshabilitado. WCAG 1.4.3 y 1.4.11 lo EXIMEN, pero el
+ *     producto fija un suelo de 1,5:1 para que un control apagado siga siendo
+ *     perceptible como control (decision de producto, doc 06 §2).
  */
 export const WCAG_AA_MINIMUM: Readonly<Record<ContrastRequirement, number>> = {
   text: 4.5,
   large: 3,
   decorative: 1,
+  inactive: 1.5,
 }
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
