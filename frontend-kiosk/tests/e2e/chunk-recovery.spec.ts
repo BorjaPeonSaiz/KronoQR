@@ -69,13 +69,6 @@ test(
   'si el decodificador no carga, el escaner se recupera solo y la tarjeta vuelve a fichar',
   { tag: ['@RF-KI-02', '@RF-KI-01'] },
   async ({ page }) => {
-    // DEFECTO ABIERTO (17.10, para frontend-quiosco): `useQrScanner.ts` deja el
-    // escaner en `unavailable` cuando el `import()` del decodificador falla y
-    // solo lo reintenta al volver a mostrarse la pagina, cosa que una tablet de
-    // pared no hace nunca: hasta recargarla solo queda el PIN. Cuando el
-    // escaner reintente solo, esta prueba empezara a pasar y `test.fail` la
-    // hara fallar: entonces se quita esta linea.
-    test.fail(true, 'el escaner no reintenta solo la carga del decodificador')
     await stubKioskApi(page)
     const scans = await stubScanApi(page, { outcome: 'clock_in' })
     const decoderChunk = await failFirstRequest(page, '**/assets/esm-*.js')
