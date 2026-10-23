@@ -8,7 +8,7 @@
 // El navegador compone en 8 bits por canal: cada color se redondea ANTES de
 // medir, igual que `branding.ts` redondea el acento antes de medirlo (R6-UX-02):
 // el valor que se mide es el que se pinta.
-import { parseHexColor, type Rgb } from './contrast'
+import { mix, parseHexColor, toHex, type Rgb } from './contrast'
 
 export type PairStateKind = 'hover' | 'disabled'
 
@@ -22,23 +22,10 @@ export interface PairState {
   readonly ground?: string
 }
 
-const channel = (value: number): string =>
-  Math.round(Math.min(255, Math.max(0, value)))
-    .toString(16)
-    .padStart(2, '0')
-
-const toHex = ({ r, g, b }: Rgb): string => `#${channel(r)}${channel(g)}${channel(b)}`
-
 const scale = (color: Rgb, factor: number): Rgb => ({
   r: color.r * factor,
   g: color.g * factor,
   b: color.b * factor,
-})
-
-const blend = (top: Rgb, ground: Rgb, alpha: number): Rgb => ({
-  r: top.r * alpha + ground.r * (1 - alpha),
-  g: top.g * alpha + ground.g * (1 - alpha),
-  b: top.b * alpha + ground.b * (1 - alpha),
 })
 
 /**
@@ -60,8 +47,8 @@ export function paintedColors(
   }
   if (state?.opacity !== undefined) {
     const ground = parseHexColor(resolve(state.ground ?? background))
-    fg = blend(fg, ground, state.opacity)
-    bg = blend(bg, ground, state.opacity)
+    fg = mix(fg, ground, state.opacity)
+    bg = mix(bg, ground, state.opacity)
   }
 
   return { foreground: toHex(fg), background: toHex(bg) }

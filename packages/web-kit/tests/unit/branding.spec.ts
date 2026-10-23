@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  ACCENT_ADJUST_STEPS,
   accentContrast,
   accentTextOn,
   accentOverrides,
@@ -361,9 +362,18 @@ const accentTextFixture = JSON.parse(
     ),
     'utf8',
   ),
-) as { readonly background: string; readonly minimum: number; readonly cases: AccentTextCase[] }
+) as {
+  readonly background: string
+  readonly minimum: number
+  readonly steps: number
+  readonly cases: AccentTextCase[]
+}
 
 describe('accentTextOn: el mismo tono que el backend (accentForTextOnWhite)', () => {
+  it('usa los mismos pasos de busqueda que el fixture compartido', () => {
+    expect(ACCENT_ADJUST_STEPS).toBe(accentTextFixture.steps)
+  })
+
   it.each(accentTextFixture.cases.map((item) => [item.label, item.accent, item.text] as const))(
     '%s: %s -> %s',
     (_label, accent, expected) => {

@@ -22,7 +22,15 @@
 // El valor por defecto ES el producto: con `accentColor: null` no se
 // sobreescribe ningun token y el sistema visual del doc 06 queda intacto.
 
-import { contrastRatio, parseHexColor, WCAG_AA_MINIMUM, type Rgb } from './contrast'
+import {
+  contrastRatio,
+  mix,
+  parseHexColor,
+  snap,
+  toHex,
+  WCAG_AA_MINIMUM,
+  type Rgb,
+} from './contrast'
 import { paintedColors } from './pairContrast'
 import { kioskPairs, lightPairs, type ThemePair } from './themePairs'
 
@@ -81,8 +89,10 @@ export const PRODUCT_BRANDING: Branding = Object.freeze({
 })
 
 /**
- * El acento de serie del catalogo (`BRANDING_ACCENT_COLOR`): el
- * `primary-strong` de theme.css. El panel lo escribe cuando el cliente quiere
+ * El acento de serie del catalogo (`BRANDING_ACCENT_COLOR`). Ya NO coincide
+ * con el `primary-strong` de theme.css (`#b0502a`, 2.3.0): el token se oscurecio
+ * un punto para leerse sobre `surface-alt`, y este valor es el que el catalogo
+ * y el papel conservan. El panel lo escribe cuando el cliente quiere
  * «volver al color del producto», porque no hay forma de retirar una clave
  * desde la API. Vive aqui, y solo aqui, para que el frontend no tenga dos
  * sitios con el mismo hexadecimal.
@@ -216,35 +226,8 @@ export function parseBranding(value: unknown): Branding | null {
 // Aritmetica de color. Solo lo que hace falta para derivar tonos legibles.
 // ---------------------------------------------------------------------------
 
-/** Un canal de 0 a 255, entero: el que de verdad llega al navegador. */
-function snapChannel(value: number): number {
-  return Math.round(Math.min(255, Math.max(0, value)))
-}
-
-/**
- * El color tal como se pinta: cada canal a 8 bits. Todo candidato se redondea
- * ANTES de medirlo (R6-UX-02): medir en coma flotante y redondear despues dejaba
- * el color aplicado entre 4,47 y 4,49:1 con algunos acentos. El valor que se
- * mide es el que se escribe en el token.
- */
-function snap({ r, g, b }: Rgb): Rgb {
-  return { r: snapChannel(r), g: snapChannel(g), b: snapChannel(b) }
-}
-
-function toHex(color: Rgb): string {
-  const { r, g, b } = snap(color)
-  const channel = (value: number): string => value.toString(16).padStart(2, '0')
-  return `#${channel(r)}${channel(g)}${channel(b)}`
-}
-
-/** Mezcla lineal: `weight` = 1 devuelve `a`, 0 devuelve `b`. */
-function mix(a: Rgb, b: Rgb, weight: number): Rgb {
-  return {
-    r: a.r * weight + b.r * (1 - weight),
-    g: a.g * weight + b.g * (1 - weight),
-    b: a.b * weight + b.b * (1 - weight),
-  }
-}
+/** Pasos de la busqueda del tono: 2,5 %. El backend usa el mismo (`steps` del fixture compartido). */
+export const ACCENT_ADJUST_STEPS = 40
 
 /**
  * Acerca `color` a `target` (blanco para aclarar, negro para oscurecer) en
@@ -260,9 +243,8 @@ function adjustUntil(
   minimum: number,
 ): Rgb {
   const backgrounds: readonly Rgb[] = 'r' in background ? [background] : background
-  const STEPS = 40
-  for (let step = 0; step <= STEPS; step += 1) {
-    const candidate = snap(mix(target, color, step / STEPS))
+  for (let step = 0; step <= ACCENT_ADJUST_STEPS; step += 1) {
+    const candidate = snap(mix(target, color, step / ACCENT_ADJUST_STEPS))
     if (backgrounds.every((item) => contrastRatio(candidate, item) >= minimum)) return candidate
   }
   return target

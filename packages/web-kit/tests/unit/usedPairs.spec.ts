@@ -6,7 +6,7 @@
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { contrastRatio, parseHexColor, WCAG_AA_MINIMUM } from '../../src/contrast'
+import { contrastRatio, mix, parseHexColor, toHex, WCAG_AA_MINIMUM } from '../../src/contrast'
 import { kioskPairs, lightPairs, pairKey, themePairs } from '../../src/themePairs'
 import { readRootTokens } from './support/themeTokens'
 import { scanSource, scanTree, type ClassPair } from './support/scanClassPairs'
@@ -30,17 +30,6 @@ for (const root of roots) {
   scan.disabled.push(...part.disabled)
   scan.brightness.push(...part.brightness)
   scan.translucent.push(...part.translucent)
-}
-
-/** `top` con opacidad `alpha` sobre `ground`, redondeado a 8 bits como lo compone el navegador. */
-function painted(top: string, ground: string, alpha: number): string {
-  const a = parseHexColor(top)
-  const b = parseHexColor(ground)
-  const channel = (x: number, y: number): string =>
-    Math.round(x * alpha + y * (1 - alpha))
-      .toString(16)
-      .padStart(2, '0')
-  return `#${channel(a.r, b.r)}${channel(a.g, b.g)}${channel(a.b, b.b)}`
 }
 
 const measured = new Set(themePairs.map((p) => `${p.foreground}/${p.background}`))
@@ -145,7 +134,9 @@ describe('las parejas que usan las plantillas estan medidas', () => {
     const tokens = readRootTokens()
     const hex = (token: string): string => tokens.get(token) ?? ''
     for (const alpha of [0.8, 0.9]) {
-      const veil = painted(hex('--kq-color-kiosk-surface'), '#ffffff', alpha)
+      const veil = toHex(
+        mix(parseHexColor(hex('--kq-color-kiosk-surface')), parseHexColor('#ffffff'), alpha),
+      )
       for (const text of ['--kq-color-kiosk-text', '--kq-color-kiosk-text-muted']) {
         expect(
           contrastRatio(hex(text), veil),
