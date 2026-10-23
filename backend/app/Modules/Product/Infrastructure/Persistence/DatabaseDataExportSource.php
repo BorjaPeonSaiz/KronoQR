@@ -541,7 +541,10 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                e.uuid::text      AS owner_employee_uuid,
                dr.attribution,
                to_char(dr.credential_issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS credential_issued_at,
-               dr.already_recorded::text AS already_recorded
+               dr.already_recorded::text AS already_recorded,
+               dr.source,
+               dr.failed_attempts::text AS failed_attempts,
+               to_char(dr.first_failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS first_failed_at
           FROM discarded_scan_reports dr
           JOIN devices d         ON d.id = dr.device_id
           LEFT JOIN employees e  ON e.id = dr.owner_employee_id

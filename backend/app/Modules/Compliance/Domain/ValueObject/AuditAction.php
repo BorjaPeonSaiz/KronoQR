@@ -61,6 +61,17 @@ enum AuditAction: string
     case ShiftEntryClosed = 'shift_entry.closed';
     case ShiftEntryVoided = 'shift_entry.voided';
 
+    /**
+     * El servidor descarto un fichaje que no conseguia procesar (RN-22,
+     * ADR-061, 2.3.0). Actor `system`: es la primera vez que el servidor decide
+     * por si solo que un fichaje confirmado al empleado no entra en el registro.
+     * Lleva el quiosco, el `scan_id`, los instantes, los intentos, la
+     * atribucion y el `employee_uuid` si se atribuyo; nunca la clase de la
+     * excepcion ni texto libre. El aviso del quiosco (`/scan/discarded`) no
+     * deja asiento: no decide nada.
+     */
+    case ScanDiscarded = 'scan.discarded';
+
     // --- Credenciales (RF-QR-*, ADR-014) -------------------------------------
 
     case CredentialIssued = 'credential.issued';
@@ -833,6 +844,9 @@ enum AuditAction: string
      */
     private const array EVENT_BY_SUBJECT = [
         'shift_entry' => AuditableEvent::ShiftEntryLifecycle,
+        // El descarte de un fichaje por el servidor (ADR-061): describe un
+        // fichaje que no llego a crear tramo, y es de la misma familia.
+        'scan' => AuditableEvent::ShiftEntryLifecycle,
         'credential' => AuditableEvent::CredentialLifecycle,
         // La clave de firma es lo que hace valida a la tarjeta: rotarla y
         // retirarla son actos del ciclo de vida de TODAS las credenciales a la

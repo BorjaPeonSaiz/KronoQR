@@ -32,4 +32,30 @@ return [
      */
     'discard_review_window_days' => max(1, (int) env('ATTENDANCE_DISCARD_REVIEW_WINDOW_DAYS', 31)),
 
+    /*
+     * RN-22 (ADR-061, 2.3.0): cuando deja el servidor de intentar un fichaje que
+     * no consigue procesar y lo descarta con incidencia, para que la cola del
+     * quiosco siga. Las tres condiciones a la vez:
+     *
+     * - `min_attempts`: intentos fallidos contados del mismo fichaje, el ultimo
+     *   incluido. De serie 10; **nunca menos de 3**.
+     * - `min_minutes`: minutos entre el primer intento contado y el actual. De
+     *   serie 60; **nunca menos de 15**. Da margen a arreglar un defecto pasajero
+     *   antes de que cueste trabajo a RRHH.
+     * - `daily_budget`: descartes del servidor por quiosco en 24 h. De serie 3.
+     *   **Con 0 el descarte queda apagado** y el servidor conserva para siempre,
+     *   como antes de ADR-061.
+     *
+     * Son configuracion TECNICA, no umbrales legales: no van al perfil de
+     * cumplimiento (regla dura 14). Un valor por debajo de un suelo NO se corrige
+     * aqui en silencio: `ScanDiscardThreshold` se niega a construirse y el error
+     * salta al leerlo. Se guardan como cadenas y los convierte el adaptador, para
+     * que un valor no numerico tambien falle en voz alta en lugar de valer cero.
+     */
+    'scan_discard' => [
+        'min_attempts' => (string) env('SCAN_DISCARD_MIN_ATTEMPTS', '10'),
+        'min_minutes' => (string) env('SCAN_DISCARD_MIN_MINUTES', '60'),
+        'daily_budget' => (string) env('SCAN_DISCARD_DAILY_BUDGET', '3'),
+    ],
+
 ];

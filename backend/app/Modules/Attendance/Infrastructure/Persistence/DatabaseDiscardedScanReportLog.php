@@ -19,6 +19,11 @@ use Illuminate\Database\ConnectionInterface;
  * encuentra fila: la sentencia, el plan y el numero de viajes son los mismos se
  * atribuya o no.
  *
+ * **`already_recorded` no cuenta el descarte del servidor** (ADR-061): la fila
+ * `discarded_unprocessable` de `scan_events` dice que el fichaje NO se
+ * registro, y contarla como registrado dejaria fuera de la revision justo el
+ * descarte que tiene que llegar a ella.
+ *
  * **La idempotencia es el UNIQUE** (regla dura 8): `ON CONFLICT DO NOTHING`
  * espera a la transaccion que inserta la misma clave y devuelve cero. Nunca dos
  * filas.
@@ -37,11 +42,15 @@ final readonly class DatabaseDiscardedScanReportLog implements DiscardedScanRepo
                 INSERT INTO discarded_scan_reports (
                     scan_id, device_id, origin, occurred_at, discarded_at, recorded_at,
                     http_status, problem_type, owner_employee_id, attribution, credential_issued_at,
-                    already_recorded
+                    already_recorded, source, failed_attempts, first_failed_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
                     ?, ?, (SELECT id FROM employees WHERE uuid = CAST(? AS uuid)), ?, ?,
-                    EXISTS (SELECT 1 FROM scan_events WHERE scan_id = CAST(? AS uuid))
+                    EXISTS (
+                        SELECT 1 FROM scan_events
+                         WHERE scan_id = CAST(? AS uuid) AND result <> 'discarded_unprocessable'
+                    ),
+                    ?, ?, ?
                 )
                 ON CONFLICT (scan_id) DO NOTHING
             SQL,
@@ -58,6 +67,9 @@ final readonly class DatabaseDiscardedScanReportLog implements DiscardedScanRepo
                 $attribution->method->value,
                 $issuedAt instanceof DateTimeImmutable ? $this->toTimestamp($issuedAt) : null,
                 $report->scanId,
+                $report->source,
+                $report->failedAttempts,
+                $report->firstFailedAt instanceof DateTimeImmutable ? $this->toTimestamp($report->firstFailedAt) : null,
             ],
         );
 

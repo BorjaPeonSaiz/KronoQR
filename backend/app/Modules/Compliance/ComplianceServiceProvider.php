@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Compliance\Application\Port\AuditChainHead;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditLogPartitions;
@@ -75,6 +76,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordPersonalDataIncludedInD
 use App\Modules\Compliance\Infrastructure\Listener\RecordPlanLimitExcess;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordReportExportLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordServerScanDiscard;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSetupCompletion;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSiteConfiguration;
@@ -717,6 +719,11 @@ final class ComplianceServiceProvider extends ServiceProvider
         // antes y el despues (regla dura 6, RF-PR-02, tarea 2.7). Sincrono y
         // dentro de la transaccion de la correccion, como el resto.
         Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
+
+        // El descarte de un fichaje por el servidor (RN-22, ADR-061): sincrono y
+        // dentro de la transaccion del descarte. Si el asiento falla, el
+        // descarte no se confirma y el fichaje se queda en la cola.
+        Event::listen(UnprocessableScanDiscarded::class, [RecordServerScanDiscard::class, 'handle']);
     }
 
     /**

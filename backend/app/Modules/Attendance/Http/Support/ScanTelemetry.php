@@ -131,6 +131,15 @@ final readonly class ScanTelemetry
             return;
         }
 
+        // RN-22, ADR-061: descartado por el servidor (o su reenvio). No es un
+        // rechazo, y tampoco algo normal: el detalle —intentos, clases de
+        // excepcion— lo deja el guardian en `attendance.scan_discarded_after_failures`.
+        if ($result->isDiscarded()) {
+            $this->logger->warning('attendance.scan_discarded', $context);
+
+            return;
+        }
+
         $this->logger->info('attendance.scan_processed', $context);
     }
 }

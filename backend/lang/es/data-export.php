@@ -426,6 +426,9 @@ return [
                 'attribution' => 'Como se atribuyo: `credential` (tarjeta), `employee_code` (codigo por PIN) o `none`.',
                 'credential_issued_at' => 'Cuando se emitio la tarjeta que lo atribuyo (UTC). Solo con `credential`.',
                 'already_recorded' => 'Si ese fichaje ya estaba registrado al recibir el aviso. Entonces no abre nada.',
+                'source' => 'Quien lo descarto: `kiosk` (lo aviso la tablet) o `server` (el servidor no consiguio procesarlo durante el umbral configurado y lo dio por decidido, desde la 2.3.0).',
+                'failed_attempts' => 'Solo con `server`: cuantas veces fallo el servidor al procesarlo antes de descartarlo.',
+                'first_failed_at' => 'Solo con `server`: cuando fallo el primer intento (UTC).',
             ],
         ],
 

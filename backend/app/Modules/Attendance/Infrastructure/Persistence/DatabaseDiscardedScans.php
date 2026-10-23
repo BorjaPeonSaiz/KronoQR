@@ -27,6 +27,11 @@ use Illuminate\Database\ConnectionInterface;
  * las filas con dueño y sin registrar. Se une con `employees` para el UUID y la
  * fecha del alta, y con `devices` para el UUID del quiosco. Ni un nombre ni un
  * codigo de empleado salen de aqui (regla dura 21).
+ *
+ * **El descarte del servidor entra igual** (ADR-061): su fila de `scan_events`
+ * (`discarded_unprocessable`) dice que el fichaje NO se registro, asi que no
+ * cuenta como «ya esta en el registro». Lleva sus intentos (`failed_attempts`)
+ * para el `context` de la incidencia.
  */
 final readonly class DatabaseDiscardedScans implements DiscardedScans
 {
@@ -34,7 +39,7 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
 
     public function attributedBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
     {
-        /** @var list<object{scan_id: string, owner_uuid: string, owner_hired_on: string, device_uuid: string, origin: string, occurred_at: string, recorded_at: string, http_status: int|string, problem_type: string|null, attribution: string, credential_issued_at: string|null}> $rows */
+        /** @var list<object{scan_id: string, owner_uuid: string, owner_hired_on: string, device_uuid: string, origin: string, occurred_at: string, recorded_at: string, http_status: int|string, problem_type: string|null, attribution: string, credential_issued_at: string|null, failed_attempts: int|string|null}> $rows */
         $rows = $this->connection->select(
             <<<'SQL'
                 SELECT d.scan_id::text AS scan_id,
@@ -42,14 +47,17 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
                        e.hired_at::text AS owner_hired_on,
                        dv.uuid::text AS device_uuid,
                        d.origin, d.occurred_at, d.recorded_at, d.http_status, d.problem_type,
-                       d.attribution, d.credential_issued_at
+                       d.attribution, d.credential_issued_at, d.failed_attempts
                   FROM discarded_scan_reports d
                   JOIN employees e ON e.id = d.owner_employee_id
                   JOIN devices dv ON dv.id = d.device_id
                  WHERE d.owner_employee_id IS NOT NULL
                    AND NOT d.already_recorded
                    AND d.recorded_at BETWEEN ? AND ?
-                   AND NOT EXISTS (SELECT 1 FROM scan_events s WHERE s.scan_id = d.scan_id)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM scan_events s
+                        WHERE s.scan_id = d.scan_id AND s.result <> 'discarded_unprocessable'
+                   )
                  ORDER BY d.occurred_at, d.scan_id
             SQL,
             [$this->toTimestamp($fromRecordedAt), $this->toTimestamp($toRecordedAt)],
@@ -70,6 +78,7 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
                 attribution: DiscardedScanAttributionMethod::from($row->attribution),
                 credentialIssuedAt: $row->credential_issued_at === null ? null : $this->toUtc($row->credential_issued_at),
                 ownerHiredOn: substr($row->owner_hired_on, 0, 10),
+                serverAttempts: $row->failed_attempts === null ? null : (int) $row->failed_attempts,
             );
         }
 

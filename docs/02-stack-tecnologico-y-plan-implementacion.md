@@ -836,7 +836,8 @@ kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
 kiosk_queue_storage_degraded{device}                     gauge
 kiosk_unreported_discards{device}                        gauge
-kiosk_discarded_scans_total{device,attributed}           counter
+kiosk_discarded_scans_total{device,attributed,source}    counter
+kiosk_scan_discard_budget_exhausted_total{device}        counter
 scan_batch_items_not_processed_total{device}             counter
 kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
@@ -1708,6 +1709,9 @@ ATTENDANCE_FUTURE_TOLERANCE_MINUTES=5  # F1, RF-PA-04 · margen sobre la hora de
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos
+SCAN_DISCARD_MIN_ATTEMPTS=10           # RN-22, ADR-061 · fallos del mismo fichaje antes de que el
+SCAN_DISCARD_MIN_MINUTES=60            # servidor lo descarte (suelos: 3 intentos y 15 min), y cupo
+SCAN_DISCARD_DAILY_BUDGET=3            # de descartes por quiosco y 24 h; 0 apaga el descarte
 IDENTITY_PIN_MAX_ATTEMPTS=3            # RS-12 · primer escalón de bloqueo
 IDENTITY_PIN_LOCKOUT_SECONDS=300       # RS-12 · 5 min tras IDENTITY_PIN_MAX_ATTEMPTS fallos
 IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS=5  # RS-12 · §7.5 exige bloqueo creciente

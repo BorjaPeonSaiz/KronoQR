@@ -192,8 +192,15 @@ final class MetricCatalogue
                 'kiosk_discarded_scans_total',
                 MetricType::Counter,
                 MetricStorage::LabelledHash,
-                'Avisos de fichaje descartado recibidos, por quiosco y por si se pudieron atribuir a alguien (RN-22). Sin scan_id ni empleado.',
-                ['device', 'attributed'],
+                'Fichajes descartados, por quiosco, por si se pudieron atribuir a alguien y por quien los descarto: el quiosco al avisar o el servidor tras el umbral (RN-22, ADR-061). Sin scan_id ni empleado.',
+                ['device', 'attributed', 'source'],
+            ),
+            new MetricDefinition(
+                'kiosk_scan_discard_budget_exhausted_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Veces que el servidor habria descartado un fichaje de este quiosco y no lo hizo por tener agotado el cupo de 24 h (ADR-061). La cola vuelve a esperar.',
+                ['device'],
             ),
             new MetricDefinition(
                 'scan_batch_items_not_processed_total',

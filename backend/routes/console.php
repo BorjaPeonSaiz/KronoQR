@@ -779,6 +779,24 @@ ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
     ->runInBackground());
 
 /*
+ * Purga de los intentos fallidos de procesar un fichaje (RN-22, ADR-061 §1,
+ * 2.3.0).
+ *
+ * QUE SE BORRA: las filas de `scan_processing_failures` de mas de 30 dias. Son
+ * datos TECNICOS -la historia con la que el servidor decide descartar un
+ * fichaje que no consigue procesar-, sin datos personales. Como la del
+ * historico de errores: sin confirmacion y sin asiento. El descarte en si, que
+ * si es constancia, vive en `scan_events` y en `discarded_scan_reports`.
+ *
+ * 03:37 UTC: dos minutos despues de la del historico, en el mismo hueco sin nada
+ * mas corriendo. La tabla casi siempre esta vacia.
+ */
+ScheduledTaskOutput::toLog(Schedule::command('attendance:prune-scan-failures')
+    ->dailyAt('03:37')
+    ->withoutOverlapping()
+    ->runInBackground());
+
+/*
  * Tokens de acceso caducados (bloque 11 de la 2.3.0, tarea 11.3 D, F4; RGPD
  * art. 5.1.e).
  *

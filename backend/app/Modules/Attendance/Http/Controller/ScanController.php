@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Controller;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Application\UseCase\GuardedScanRegistration;
+use App\Modules\Attendance\Application\UseCase\ScanRegistration;
 use App\Modules\Attendance\Http\Request\RegisterScanRequest;
 use App\Modules\Attendance\Http\Resource\ScanResource;
+use App\Modules\Attendance\Http\Response\ScanDiscardedResponse;
 use App\Modules\Attendance\Http\Response\ScanRejectedResponse;
 use App\Modules\Attendance\Http\Support\ScanTelemetry;
 use Illuminate\Http\JsonResponse;
@@ -42,12 +44,21 @@ use Illuminate\Http\JsonResponse;
  * resuelve el dispositivo desde el cuerpo de la peticion**: sale del token
  * autenticado (ver `ScanningDevice`), porque si viajara en el cuerpo cualquier
  * portador podria atribuir un fichaje a otro quiosco.
+ *
+ * ## Por el guardian del descarte (RN-22, ADR-061)
+ *
+ * Pide {@see ScanRegistration} y no el caso de uso concreto: el contenedor le da
+ * {@see GuardedScanRegistration}, y asi este endpoint no puede saltarse el
+ * descarte de un fichaje que el servidor falla una y otra vez
+ * (`UnprocessableScanGuardCoverageTest`). Un descarte es el tercer desenlace
+ * de este controlador: `422 scan-discarded`, terminal y que **no** es un
+ * rechazo.
  */
 final class ScanController extends Controller
 {
     public function __invoke(
         RegisterScanRequest $request,
-        RegisterScanHandler $handler,
+        ScanRegistration $handler,
         ScanTelemetry $telemetry,
     ): JsonResponse {
         $command = $request->toCommand();
@@ -57,6 +68,10 @@ final class ScanController extends Controller
             $command->deviceUuid,
             static fn () => $handler->handle($command),
         );
+
+        if ($result->isDiscarded()) {
+            return ScanDiscardedResponse::for($result->scanId);
+        }
 
         if ($result->isRejected()) {
             return ScanRejectedResponse::for($result->scanId);

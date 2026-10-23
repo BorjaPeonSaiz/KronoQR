@@ -19,6 +19,11 @@ use InvalidArgumentException;
  * **Sin datos personales** (regla dura 21): el dueño por su UUID, el quiosco por
  * el suyo, el escaneo por su `scan_id`. Ni el contenido del QR ni el codigo de
  * empleado llegan nunca aqui, porque no se guardan.
+ *
+ * **Desde la 2.3.0 tambien lo descarta el servidor** (ADR-061): `serverAttempts`
+ * lleva cuantos intentos fallaron antes del descarte, y es nulo exactamente
+ * cuando lo aviso el quiosco. La incidencia es la misma; su `context` dice de
+ * donde vino.
  */
 final readonly class DiscardedScan
 {
@@ -41,6 +46,8 @@ final readonly class DiscardedScan
         public ?DateTimeImmutable $credentialIssuedAt,
         /** Fecha civil del alta del dueño (`YYYY-MM-DD`): la cota de un aviso por PIN. */
         public string $ownerHiredOn,
+        /** Intentos del servidor antes de descartarlo (ADR-061); nulo si lo aviso el quiosco. */
+        public ?int $serverAttempts = null,
     ) {
         if ($scanId === '' || $ownerUuid === '') {
             throw new InvalidArgumentException('Un aviso con dueño necesita su scan_id y su dueño.');
@@ -54,8 +61,18 @@ final readonly class DiscardedScan
             throw new InvalidArgumentException('Solo el aviso atribuido por tarjeta lleva la emision de la tarjeta.');
         }
 
+        if ($serverAttempts !== null && $serverAttempts < 1) {
+            throw new InvalidArgumentException('Un descarte del servidor lleva al menos un intento fallido.');
+        }
+
         TimeRange::assertUtc('occurredAt', $occurredAt);
         TimeRange::assertUtc('recordedAt', $recordedAt);
+    }
+
+    /** `server` si lo descarto el servidor (ADR-061); `kiosk` si lo aviso el quiosco. */
+    public function source(): string
+    {
+        return $this->serverAttempts === null ? 'kiosk' : 'server';
     }
 
     /**
@@ -96,5 +113,8 @@ final readonly class DiscardedScan
         'not-found',
         'conflict',
         'http-error',
+        // El descarte del propio servidor (ADR-061): llega por la fila que
+        // escribe el servidor, no por un aviso.
+        'scan-discarded',
     ];
 }

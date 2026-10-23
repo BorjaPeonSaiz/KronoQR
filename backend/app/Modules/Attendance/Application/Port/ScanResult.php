@@ -7,9 +7,10 @@ namespace App\Modules\Attendance\Application\Port;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
+use LogicException;
 
 /**
- * El desenlace detallado de un escaneo: los nueve valores de
+ * El desenlace detallado de un escaneo: los diez valores de
  * `scan_events.result` (doc 01 §5.5).
  *
  * **Nunca sale por la API.** RS-03 y la regla dura 17 obligan a que el rechazo
@@ -69,6 +70,20 @@ enum ScanResult: string
     case REJECTED_OUT_OF_ORDER = 'rejected_out_of_order';
 
     /**
+     * RN-22, ADR-061 (2.3.0): **el servidor no consiguio procesar este fichaje**
+     * durante el umbral configurado y lo dio por decidido sin registrarlo.
+     *
+     * **No es un rechazo**: el servidor no llego a decidir sobre la credencial.
+     * Por eso no lleva el prefijo `rejected_` y por eso hacia fuera no es el
+     * `422 scan-rejected` sino el `422 scan-discarded`. Es la fila que hace
+     * idempotente el descarte: cualquier reenvio del mismo `scan_id` la
+     * encuentra y repite el desenlace sin volver a intentarlo (regla dura 8).
+     * Nunca apunta a un tramo y nunca lleva acumulado (los dos `CHECK` de la
+     * migracion `allow_discarded_unprocessable_scan_result`).
+     */
+    case DISCARDED_UNPROCESSABLE = 'discarded_unprocessable';
+
+    /**
      * El valor de columna que corresponde a lo que el dominio decidio
      * ({@see ClockingAction}, ADR-024).
      *
@@ -102,22 +117,44 @@ enum ScanResult: string
      * tampoco, y ahi el `null` es la afirmacion mas fuerte del enum: un fichaje
      * irreconciliable **no puede** haber producido accion ninguna.
      *
-     * El `match` es exhaustivo a proposito —sin `default`—: un desenlace nuevo no
-     * compila hasta que alguien decida si creo tramo o no, que es justo la
-     * pregunta que no se puede resolver por omision.
+     * El descarte del servidor (ADR-061) tampoco: el servidor no decidio nada.
+     *
+     * **Una tabla y no un `match`** desde que el enum tiene diez valores: el
+     * `match` exhaustivo superaba la complejidad ciclomatica del §3.5 sin que
+     * hubiera ninguna complejidad real. La tabla conserva lo que el `match`
+     * garantizaba: **cada valor tiene su entrada escrita a mano**, tambien los
+     * `null`, y un desenlace nuevo sin entrada no cae en un `null` por omision:
+     * lanza, y `ScanResultTest` lo detecta antes (cada caso tiene entrada).
      */
     public function action(): ?ClockingAction
     {
-        return match ($this) {
-            self::CLOCK_IN => ClockingAction::CLOCK_IN,
-            self::CLOCK_OUT => ClockingAction::CLOCK_OUT,
-            self::BREAK_START => ClockingAction::BREAK_START,
-            self::BREAK_END => ClockingAction::BREAK_END,
-            self::REJECTED_UNKNOWN, self::REJECTED_REVOKED,
-            self::REJECTED_DEBOUNCE, self::REJECTED_SIGNATURE,
-            self::REJECTED_OUT_OF_ORDER => null,
-        };
+        if (! \array_key_exists($this->value, self::ACTIONS)) {
+            throw new LogicException(
+                'scan_events.result '.$this->value.' no declara si creo tramo: anadelo a ScanResult::ACTIONS.'
+            );
+        }
+
+        return self::ACTIONS[$this->value];
     }
+
+    /**
+     * La accion que produjo cada desenlace, o `null` si no creo tramo. Ver
+     * {@see action()}.
+     *
+     * @var array<string, ClockingAction|null>
+     */
+    private const array ACTIONS = [
+        'clock_in' => ClockingAction::CLOCK_IN,
+        'clock_out' => ClockingAction::CLOCK_OUT,
+        'break_start' => ClockingAction::BREAK_START,
+        'break_end' => ClockingAction::BREAK_END,
+        'rejected_unknown' => null,
+        'rejected_revoked' => null,
+        'rejected_debounce' => null,
+        'rejected_signature' => null,
+        'rejected_out_of_order' => null,
+        'discarded_unprocessable' => null,
+    ];
 
     /**
      * El motivo con el que el dominio describio el rechazo, traducido al valor
@@ -178,5 +215,16 @@ enum ScanResult: string
     public function isDebounce(): bool
     {
         return $this === self::REJECTED_DEBOUNCE;
+    }
+
+    /**
+     * El descarte del servidor (RN-22, ADR-061). Cuenta como no aceptado
+     * —{@see isRejection()} es verdadero, porque no creo tramo—, pero **no es un
+     * rechazo de cara al cliente**: viaja como `scan-discarded` y no como
+     * `scan-rejected`. Quien decide la respuesta pregunta por aqui.
+     */
+    public function isDiscard(): bool
+    {
+        return $this === self::DISCARDED_UNPROCESSABLE;
     }
 }

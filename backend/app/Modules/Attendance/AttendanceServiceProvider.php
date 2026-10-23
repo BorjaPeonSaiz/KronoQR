@@ -19,6 +19,9 @@ use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\PatternDetectionMetrics;
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\RejectedPinScans;
+use App\Modules\Attendance\Application\Port\ScanDiscardSettings;
+use App\Modules\Attendance\Application\Port\ScanFailureClassifier;
+use App\Modules\Attendance\Application\Port\ScanFailureLedger;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
@@ -27,15 +30,19 @@ use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
 use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
-use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Application\UseCase\GuardedScanRegistration;
 use App\Modules\Attendance\Application\UseCase\ReportDiscardedScans;
 use App\Modules\Attendance\Application\UseCase\ScanRegistration;
+use App\Modules\Attendance\Application\UseCase\UnprocessableScanGuard;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
+use App\Modules\Attendance\Infrastructure\Adapter\ConfiguredScanDiscardSettings;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
+use App\Modules\Attendance\Infrastructure\Adapter\ScanFailureTransience;
 use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
 use App\Modules\Attendance\Infrastructure\Console\DetectPatternsCommand;
+use App\Modules\Attendance\Infrastructure\Console\PruneScanFailuresCommand;
 use App\Modules\Attendance\Infrastructure\Console\ReconcileProjectionsCommand;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisAnomalyMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
@@ -45,6 +52,7 @@ use App\Modules\Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetric
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScanReportLog;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScans;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseScanFailureLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseWithdrawnCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentAnomalousPatternHistory;
@@ -104,7 +112,28 @@ final class AttendanceServiceProvider extends ServiceProvider
 
         // RN-21: el lote depende del contrato y no de la clase final, para que
         // la regla del orquestador se pruebe sin base de datos.
-        $this->app->bind(ScanRegistration::class, RegisterScanHandler::class);
+        //
+        // RN-22 (ADR-061): y el contrato lo sirve la puerta CON guardian. El
+        // lote y `/scan` piden `ScanRegistration`, asi que ninguno de los dos
+        // llega al caso de uso sin pasar por el descarte del fichaje que el
+        // servidor falla una y otra vez (`UnprocessableScanGuardCoverageTest`).
+        $this->app->bind(ScanRegistration::class, GuardedScanRegistration::class);
+
+        // ADR-061: el guardian del descarte y sus tres puertos. La clasificacion
+        // de lo transitorio reutiliza la de ADR-059 (`DependencyFailure`); el
+        // umbral sale de `config/attendance.php`.
+        $this->app->bind(ScanFailureLedger::class, DatabaseScanFailureLedger::class);
+        $this->app->bind(ScanFailureClassifier::class, ScanFailureTransience::class);
+        $this->app->bind(ScanDiscardSettings::class, ConfiguredScanDiscardSettings::class);
+
+        // RS-03: un descarte verifica la firma de la tarjeta para atribuirlo, y
+        // se rellena hasta el MISMO suelo que el aviso del quiosco, que hace
+        // ese mismo trabajo (el doble del de RS-03, ver abajo).
+        $this->app->when(UnprocessableScanGuard::class)
+            ->needs(ConstantTimeFloor::class)
+            ->give(static fn (): ConstantTimeFloor => new ConstantTimeFloor(
+                2 * max(0, Config::integer('security.rejection_floor_ms', 25)),
+            ));
 
         // Correcciones (tarea 1.15). Las dos las sirve este mismo modulo:
         // `shift_corrections` es parte del registro horario —se consulta al
@@ -297,6 +326,7 @@ final class AttendanceServiceProvider extends ServiceProvider
             $this->commands([
                 DetectIncidentsCommand::class,
                 DetectPatternsCommand::class,
+                PruneScanFailuresCommand::class,
                 ReconcileProjectionsCommand::class,
             ]);
         }

@@ -347,6 +347,11 @@ final class DataExportCatalog
                 'attribution',
                 'credential_issued_at',
                 'already_recorded',
+                // ADR-061 (2.3.0): quien lo descarto, y si fue el servidor,
+                // cuantos intentos fallaron y cuando fallo el primero.
+                'source',
+                'failed_attempts',
+                'first_failed_at',
             ]),
 
             // --- Las evidencias -----------------------------------------------

@@ -244,6 +244,9 @@ it('abre una sola discarded_scan por persona y jornada con los avisos atribuidos
             'problem' => 'invalid-request',
             'attribution' => 'employee_code',
             'reports' => 1,
+            // ADR-061 (2.3.0): de donde vino. Un aviso del quiosco no lleva
+            // `attempts`: no hubo intentos del servidor que contar.
+            'source' => 'kiosk',
         ]);
 })->group('RN-22', 'RF-PR-01');
 
@@ -342,3 +345,56 @@ it('no abre scan_before_revocation con un escaneo mas antiguo que la ventana de 
     expect(DB::table('scan_events')->where('flagged_for_review', true)->count())->toBe(1)
         ->and(incidenciasDe('scan_before_revocation'))->toBe([]);
 })->group('RN-20', 'RF-PR-01');
+
+it('abre una sola discarded_scan con source server y los intentos para el descarte del servidor', function (): void {
+    // ADR-061 §6: el descarte del servidor deja su fila en `scan_events`
+    // (`discarded_unprocessable`) Y en `discarded_scan_reports`. La revision
+    // tiene que abrir la incidencia igual: esa fila de `scan_events` dice que el
+    // fichaje NO se registro.
+    $escenario = escenarioDeRevision();
+    $titularId = AttendanceFixtures::employeeIdOf($escenario['employee']);
+    $scanId = Str::uuid7()->toString();
+
+    DB::table('scan_events')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $escenario['device'],
+        'employee_id' => $titularId,
+        'occurred_at' => '2026-08-15 09:50:00+00',
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'origin' => 'pin_kiosk',
+        'intent' => 'auto',
+        'result' => 'discarded_unprocessable',
+    ]);
+    DB::table('discarded_scan_reports')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $escenario['device'],
+        'origin' => 'pin_kiosk',
+        'occurred_at' => '2026-08-15 09:50:00+00',
+        'discarded_at' => '2026-08-15 10:00:00+00',
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'http_status' => 422,
+        'problem_type' => 'urn:kronoqr:problem:scan-discarded',
+        'owner_employee_id' => $titularId,
+        'attribution' => 'employee_code',
+        'credential_issued_at' => null,
+        'already_recorded' => false,
+        'source' => 'server',
+        'failed_attempts' => 11,
+        'first_failed_at' => '2026-08-15 08:55:00+00',
+    ]);
+
+    revisionDiaria();
+    revisionDiaria();
+
+    $incidencias = incidenciasDe('discarded_scan');
+
+    expect($incidencias)->toHaveCount(1)
+        ->and($incidencias[0]->employee_id)->toBe($titularId)
+        ->and(contextoDe($incidencias[0]))->toMatchArray([
+            'scan_id' => $scanId,
+            'http_status' => 422,
+            'problem' => 'scan-discarded',
+            'source' => 'server',
+            'attempts' => 11,
+        ]);
+})->group('RN-22', 'RF-PR-01');

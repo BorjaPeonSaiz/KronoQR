@@ -401,6 +401,9 @@ return [
                 'attribution' => 'How it was attributed: `credential` (card), `employee_code` (code via PIN) or `none`.',
                 'credential_issued_at' => 'When the attributing card was issued (UTC). Only with `credential`.',
                 'already_recorded' => 'Whether that clocking was already recorded when the report arrived. If so, nothing is opened.',
+                'source' => 'Who discarded it: `kiosk` (the tablet reported it) or `server` (the server could not process it within the configured threshold and settled it, since 2.3.0).',
+                'failed_attempts' => 'Only with `server`: how many times the server failed to process it before discarding it.',
+                'first_failed_at' => 'Only with `server`: when the first attempt failed (UTC).',
             ],
         ],
 

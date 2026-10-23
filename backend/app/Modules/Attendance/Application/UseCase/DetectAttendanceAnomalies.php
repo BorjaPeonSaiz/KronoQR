@@ -743,6 +743,11 @@ final readonly class DetectAttendanceAnomalies
      * catalogo cerrado de este producto o `other` (F9): nunca el texto que trajo
      * la tablet. **Nunca el contenido del QR ni el codigo**, que no se guardan.
      *
+     * **Desde la 2.3.0 tambien los que descarto el propio servidor** (ADR-061),
+     * en la misma incidencia: el `context` dice de donde vino el primero
+     * (`source`: `kiosk` o `server`) y cuantos intentos fallaron en el servidor
+     * (`attempts`, nulo si lo aviso el quiosco).
+     *
      * @return list<DetectedAnomaly>
      */
     private function inspectDiscardedScans(
@@ -782,6 +787,24 @@ final readonly class DetectAttendanceAnomalies
         foreach ($groups as $group) {
             $first = $group['first'];
 
+            $context = [
+                'scan_id' => $first->scanId,
+                'occurred_at' => UtcInstant::of($first->occurredAt),
+                'device_uuid' => $first->deviceUuid,
+                'origin' => $first->origin->value,
+                'http_status' => $first->httpStatus,
+                'problem' => $first->problem(),
+                'attribution' => $first->attribution->value,
+                'reports' => $group['reports'],
+                'source' => $first->source(),
+            ];
+
+            // Solo si lo descarto el servidor: el `context` es de escalares y
+            // un aviso del quiosco no tiene intentos que contar (ADR-061).
+            if ($first->serverAttempts !== null) {
+                $context['attempts'] = $first->serverAttempts;
+            }
+
             $anomalies[] = new DetectedAnomaly(
                 type: AnomalyType::DISCARDED_SCAN,
                 employeeUuid: $first->ownerUuid,
@@ -789,16 +812,7 @@ final readonly class DetectAttendanceAnomalies
                 workDate: $group['workDate'],
                 shiftEntryUuid: null,
                 detectedAt: $now,
-                context: [
-                    'scan_id' => $first->scanId,
-                    'occurred_at' => UtcInstant::of($first->occurredAt),
-                    'device_uuid' => $first->deviceUuid,
-                    'origin' => $first->origin->value,
-                    'http_status' => $first->httpStatus,
-                    'problem' => $first->problem(),
-                    'attribution' => $first->attribution->value,
-                    'reports' => $group['reports'],
-                ],
+                context: $context,
             );
         }
 

@@ -313,7 +313,7 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
 
         foreach (AdoptionIndicators::ORIGINS as $index => $origin) {
             $originColumns .= ",\n                   count(s.id) FILTER ("
-                ."WHERE NOT starts_with(s.result, 'rejected_') AND s.origin = ?) AS origin_{$index}";
+                ."WHERE NOT starts_with(s.result, 'rejected_') AND s.result <> 'discarded_unprocessable' AND s.origin = ?) AS origin_{$index}";
             $originBindings[] = $origin;
         }
 
