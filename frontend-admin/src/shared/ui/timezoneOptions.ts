@@ -24,11 +24,38 @@ export const COMMON_TIME_ZONES: readonly string[] = [
   'UTC',
 ]
 
+/**
+ * Alias de CLDR/ICU que devuelve `Intl.supportedValuesOf` y que el servidor rechaza: PHP
+ * (`DateTimeZone::listIdentifiers()`, `SiteTimezone`) solo acepta los nombres canonicos de tzdb.
+ * Se traducen al canonico; una prueba compara el resultado con el volcado de PHP.
+ */
+export const CANONICAL_TIME_ZONES: Readonly<Record<string, string>> = {
+  'Africa/Asmera': 'Africa/Asmara',
+  'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+  'America/Catamarca': 'America/Argentina/Catamarca',
+  'America/Coral_Harbour': 'America/Atikokan',
+  'America/Cordoba': 'America/Argentina/Cordoba',
+  'America/Godthab': 'America/Nuuk',
+  'America/Indianapolis': 'America/Indiana/Indianapolis',
+  'America/Jujuy': 'America/Argentina/Jujuy',
+  'America/Louisville': 'America/Kentucky/Louisville',
+  'America/Mendoza': 'America/Argentina/Mendoza',
+  'Asia/Calcutta': 'Asia/Kolkata',
+  'Asia/Katmandu': 'Asia/Kathmandu',
+  'Asia/Rangoon': 'Asia/Yangon',
+  'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+  'Atlantic/Faeroe': 'Atlantic/Faroe',
+  'Europe/Kiev': 'Europe/Kyiv',
+  'Pacific/Enderbury': 'Pacific/Kanton',
+  'Pacific/Ponape': 'Pacific/Pohnpei',
+  'Pacific/Truk': 'Pacific/Chuuk',
+}
+
 interface IntlWithSupportedValues {
   readonly supportedValuesOf?: (key: 'timeZone') => string[]
 }
 
-/** Las comunes primero (sin repetir) y despues el resto, en el orden del navegador. */
+/** Las comunes primero y despues el resto en nombre canonico, sin repetir. */
 export function timezoneOptions(
   intl: IntlWithSupportedValues = Intl as unknown as IntlWithSupportedValues,
 ): readonly string[] {
@@ -40,8 +67,10 @@ export function timezoneOptions(
   }
   if (supported.length === 0) return COMMON_TIME_ZONES
 
-  const all = new Set(supported)
-  const common = COMMON_TIME_ZONES.filter((zone) => all.has(zone) || zone === 'UTC')
-  const rest = supported.filter((zone) => !common.includes(zone))
-  return [...common, ...rest]
+  // Las comunes se conservan SIEMPRE (aunque el motor las llame de otra forma); el resto, en canonico.
+  const common = new Set(COMMON_TIME_ZONES)
+  const rest = [...new Set(supported.map((zone) => CANONICAL_TIME_ZONES[zone] ?? zone))].filter(
+    (zone) => !common.has(zone),
+  )
+  return [...COMMON_TIME_ZONES, ...rest]
 }

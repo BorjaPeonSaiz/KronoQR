@@ -24,6 +24,7 @@ import {
   accentContrast,
   accentOverrides,
   contrastWarnings,
+  accentTextOn,
   PRODUCT_ACCENT_COLOR,
   readThemeTokens,
   type ContrastWarning,
@@ -42,7 +43,14 @@ import type { InstallationSettings, UpdateSettingsRequest } from '@/shared/api/t
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import { fetchInstallationSettings, stringValue, updateInstallationSettings } from './settings.api'
 import { useLicenseStore } from './license.store'
-import { logoIconIssues, MINIMUM_ICON_SIDE, readLogoFacts, type LogoIconIssue } from './logoIcon'
+import {
+  logoIconAdvice,
+  logoIconIssues,
+  MINIMUM_ICON_SIDE,
+  readLogoFacts,
+  type LogoIconAdvice,
+  type LogoIconIssue,
+} from './logoIcon'
 
 // El color de acento del PRODUCTO (doc 06, `primary-strong`) vive en
 // `@kronoqr/web-kit/branding` (correccion de revision de UI/UX): una sola
@@ -71,6 +79,7 @@ const accentColor = ref(PRODUCT_ACCENT_COLOR)
 const logoPath = ref('')
 /** Que le pasa al logotipo GUARDADO como icono de la tablet. `null` = sin logotipo o sin medir. */
 const logoIssues = ref<LogoIconIssue[] | null>(null)
+const logoAdvice = ref<LogoIconAdvice[]>([])
 let logoReadToken = 0
 
 // El logotipo se mide cuando cambia el guardado (V21-6-UX-3): el campo es una ruta del servidor,
@@ -80,9 +89,12 @@ watch(
   async (url) => {
     const token = ++logoReadToken
     logoIssues.value = null
+    logoAdvice.value = []
     if (url === null) return
     const facts = await readLogoFacts(url)
-    if (token === logoReadToken && facts !== null) logoIssues.value = logoIconIssues(facts)
+    if (token !== logoReadToken || facts === null) return
+    logoIssues.value = logoIconIssues(facts)
+    logoAdvice.value = logoIconAdvice(facts)
   },
   { immediate: true },
 )
@@ -252,6 +264,15 @@ const accentAssessment = computed(() => {
 
   try {
     return accentContrast(accentColor.value, readThemeTokens(document))
+  } catch {
+    return null
+  }
+})
+
+/** El tono que imprime la tarjeta sobre papel blanco: el mismo algoritmo que `Branding::accentForTextOnWhite()`. */
+const printedTone = computed(() => {
+  try {
+    return accentTextOn(accentColor.value)
   } catch {
     return null
   }
@@ -635,6 +656,28 @@ async function save(): Promise<void> {
             <span>{{ t('branding.accentContrast.confirm') }}</span>
           </label>
         </div>
+        <p
+          v-if="printedTone !== null"
+          class="flex flex-wrap items-center gap-2 text-kq-text"
+          data-test="accent-tones"
+        >
+          <span
+            aria-hidden="true"
+            class="inline-block h-6 w-6 shrink-0 rounded-kq-sm border border-kq-border-strong"
+            :style="{ backgroundColor: accentAssessment.applied }"
+          ></span>
+          <span
+            aria-hidden="true"
+            class="inline-block h-6 w-6 shrink-0 rounded-kq-sm border border-kq-border-strong"
+            :style="{ backgroundColor: printedTone }"
+          ></span>
+          <span>{{
+            t('branding.accentContrast.tones', {
+              screen: accentAssessment.applied,
+              print: printedTone,
+            })
+          }}</span>
+        </p>
       </div>
 
       <!-- Previsualizacion en vivo: SOLO estilos en linea sobre estos
@@ -818,6 +861,20 @@ async function save(): Promise<void> {
           <p class="mt-1 text-sm">{{ t('branding.logoIcon.consequence') }}</p>
         </template>
         <p v-else>{{ t('branding.logoIcon.ok') }}</p>
+      </div>
+
+      <div
+        v-if="logoAdvice.length > 0"
+        role="note"
+        class="rounded-kq border border-kq-border bg-kq-surface-alt p-4 text-kq-text"
+        data-test="logo-icon-advice"
+      >
+        <p class="font-semibold">{{ t('branding.logoIcon.adviceHeading') }}</p>
+        <ul class="mt-1 list-disc pl-5">
+          <li v-for="advice of logoAdvice" :key="advice" :data-test="`logo-icon-${advice}`">
+            {{ t(`branding.logoIcon.advice.${advice}`) }}
+          </li>
+        </ul>
       </div>
 
       <fieldset class="flex flex-col gap-4 rounded-kq border border-kq-border p-4">

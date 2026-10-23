@@ -169,7 +169,7 @@ test(
 
     // Una sola señal: el foco, con el mensaje como nombre accesible (sin alert ni region viva).
     await expect(notice).toBeFocused()
-    await expect(notice).toHaveAccessibleName(/Inténtalo de nuevo en (1[0-5]|[1-9]) segundos/)
+    await expect(notice).toHaveAccessibleName('Ahora mismo hay muchas descargas en PDF.')
     await page.keyboard.press('Tab')
     await expect(notice.getByTestId('pdf-busy-use-csv')).toBeFocused()
   },

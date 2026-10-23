@@ -43,7 +43,7 @@ const retryAfterSeconds = ref<number | null>(null)
 
 // Cuenta atras real (V21-3-UX-2): baja cada segundo y, a 0, dice que ya se puede reintentar.
 const remaining = useCountdown(() => retryAfterSeconds.value)
-const busyMessage = computed(() => {
+const busyDetail = computed(() => {
   if (remaining.value === null) return t('myExport.pdfBusy.messageNoWait')
 
   return remaining.value === 0
@@ -224,11 +224,12 @@ async function submit(): Promise<void> {
 
     <NoticeWithActions
       v-if="pdfBusy"
-      :message="busyMessage"
+      :message="t('myExport.pdfBusy.title')"
       focus-on-mount
       class="mt-4"
       data-test="pdf-busy"
     >
+      <p class="mt-1" data-test="pdf-busy-detail">{{ busyDetail }}</p>
       <template #actions>
         <BaseButton
           variant="secondary"

@@ -3,6 +3,9 @@
 // (descargar en otro formato, reintentar). Antes el aviso de «motor de PDF ocupado» estaba escrito
 // a mano en el panel y otra vez en el portal; aqui hay una sola forma.
 //
+// El nombre accesible (`message`) es FIJO: lo que cambia cada segundo (una cuenta atras) va en el
+// slot por omision, fuera de `aria-labelledby`, para que ni el lector ni el nombre se muevan.
+//
 // Una sola señal para un lector de pantalla: el aviso es un `group` cuyo nombre accesible es el
 // mensaje y, con `focusOnMount`, recibe el foco al aparecer. Sin `role="alert"` ni `announce()`,
 // que lo harian sonar dos veces (V21-3-PA-7). Las acciones van en el slot `actions`; el detalle

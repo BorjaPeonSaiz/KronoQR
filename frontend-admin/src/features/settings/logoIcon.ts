@@ -10,7 +10,10 @@
 /** Debe coincidir con `GetKioskManifestHandler::MINIMUM_ICON_SIDE`. */
 export const MINIMUM_ICON_SIDE = 512
 
-export type LogoIconIssue = 'notPng' | 'notSquare' | 'tooSmall' | 'transparent'
+export type LogoIconIssue = 'notPng' | 'notSquare' | 'tooSmall'
+
+/** Lo que no impide el icono pero conviene saber (el manifiesto lo publica igual). */
+export type LogoIconAdvice = 'transparent'
 
 export interface LogoFacts {
   /** `Content-Type` del logotipo servido (p. ej. `image/png`, `image/svg+xml`). */
@@ -29,9 +32,13 @@ export function logoIconIssues(facts: LogoFacts): LogoIconIssue[] {
   const issues: LogoIconIssue[] = []
   if (facts.width !== facts.height) issues.push('notSquare')
   if (Math.min(facts.width, facts.height) < MINIMUM_ICON_SIDE) issues.push('tooSmall')
-  if (facts.hasTransparency) issues.push('transparent')
 
   return issues
+}
+
+/** Recomendaciones sobre un logotipo que SI sirve: la transparencia no bloquea el icono. */
+export function logoIconAdvice(facts: LogoFacts): LogoIconAdvice[] {
+  return facts.mime === 'image/png' && facts.hasTransparency ? ['transparent'] : []
 }
 
 /** Lo unico que `readLogoFacts` necesita del navegador; inyectable para probar sin DOM real. */

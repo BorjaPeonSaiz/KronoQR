@@ -896,8 +896,9 @@
   },
   "reports": {
     "pdfBusy": {
-      "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
-      "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available.",
+      "title": "There are a lot of PDF downloads right now.",
+      "message": "Try again in {seconds} seconds, or download the CSV, which is always available.",
+      "messageNoWait": "Try again in a moment, or download the CSV, which is always available.",
       "messageReady": "You can try the PDF again now, or download the CSV, which is always available.",
       "useFormat": "Download {format}"
     },
@@ -1789,6 +1790,7 @@
       "privacyPolicyUrl": "Full address starting with https:// (up to 512 characters, ASCII characters only, no username or password). The tablet shows it as a link and a QR code. Leave it blank to say the policy is available at reception."
     },
     "accentContrast": {
+      "tones": "On screen the colour will be {screen}; on the printed card, {print}.",
       "meets": "Accent contrast on the light background: {ratio}:1. It meets the {minimum}:1 minimum of WCAG 2.2 AA.",
       "fails": "Accent contrast on the light background: {ratio}:1. It falls short of the {minimum}:1 minimum of WCAG 2.2 AA: with this colour, buttons and links would be hard to read.",
       "applied": "So that it stays legible, the panel and the portal will use a darker version of the same colour ({color}). The kiosk lightens it against its dark background.",
@@ -1810,14 +1812,17 @@
     "contrastPreviewLink": "See the preview",
     "contrastWarningsHint": "The colour can still be saved: this is a warning, not a block. Pick a darker or lighter shade to fix it.",
     "logoIcon": {
+      "adviceHeading": "Recommendation (does not stop the logo from being the icon)",
+      "advice": {
+        "transparent": "The PNG has transparent areas: depending on the tablet home screen they will show over black or white. An opaque background is more predictable."
+      },
       "heading": "The saved logo is not suitable as the tablet icon",
       "ok": "The saved logo works as the tablet icon.",
       "consequence": "The tablet will be installed with the product icon. The logo is still used in the three applications and in reports; only the home-screen icon changes.",
       "issues": {
         "notPng": "It is not a PNG (for example, it is an SVG). The installed icon needs a PNG.",
         "notSquare": "It is not square. Use an image with equal width and height.",
-        "tooSmall": "It is smaller than {side} pixels on a side. Use at least {side} × {side}.",
-        "transparent": "It has transparent areas: depending on the tablet home screen they will show over black or white. An opaque background is more predictable."
+        "tooSmall": "It is smaller than {side} pixels on a side. Use at least {side} × {side}."
       }
     },
     "contrastLabels": {

@@ -27,7 +27,7 @@ const emit = defineEmits<{ use: [format: string] }>()
 const { t } = useI18n()
 const remaining = useCountdown(() => props.retryAfterSeconds)
 
-const message = computed(() => {
+const detail = computed(() => {
   if (remaining.value === null) return t('reports.pdfBusy.messageNoWait')
 
   return remaining.value === 0
@@ -37,7 +37,13 @@ const message = computed(() => {
 </script>
 
 <template>
-  <NoticeWithActions :message="message" focus-on-mount class="mt-3" data-test="pdf-busy">
+  <NoticeWithActions
+    :message="t('reports.pdfBusy.title')"
+    focus-on-mount
+    class="mt-3"
+    data-test="pdf-busy"
+  >
+    <p class="mt-1" data-test="pdf-busy-detail">{{ detail }}</p>
     <template #actions>
       <BaseButton
         v-for="format of formats"

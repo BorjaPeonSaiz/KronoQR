@@ -115,6 +115,11 @@ describe('PdfBusyNotice, cuenta atras real (V21-3-UX-2)', () => {
       props: { retryAfterSeconds: 3, formats: ['csv'], disabled: false },
     })
     const text = (): string => wrapper.get('[data-test="pdf-busy"]').text()
+    const name = (): string => {
+      const root = wrapper.get('[data-test="pdf-busy"]')
+      return wrapper.get('#' + CSS.escape(root.attributes('aria-labelledby') ?? '')).text()
+    }
+    const fixedName = name()
 
     expect(text()).toContain(es.reports.pdfBusy.message.replace('{seconds}', '3'))
 
@@ -123,6 +128,9 @@ describe('PdfBusyNotice, cuenta atras real (V21-3-UX-2)', () => {
 
     await vi.advanceTimersByTimeAsync(2000)
     expect(text()).toContain(es.reports.pdfBusy.messageReady)
+    // El nombre accesible no cambia con la cuenta atras.
+    expect(name()).toBe(fixedName)
+    expect(fixedName).not.toMatch(/[0-9]/)
     expect(text()).not.toContain('segundos')
 
     wrapper.unmount()
