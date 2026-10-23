@@ -25,8 +25,10 @@ import {
   readLastScanAt,
   readSiteTimeZone,
   readUpdateQuietMinutes,
+  readQueueClearPending,
   readUpdateWindow,
   storeLastScanAt,
+  storeQueueClearPending,
 } from '@/shared/device/deviceSettings'
 import type { KioskTelemetrySnapshot } from '@/shared/telemetry/heartbeat'
 import type { CachedRoster, RosterDiagnostic } from './application/cachedRoster'
@@ -133,6 +135,17 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
 
   const queue: ScanQueue = createScanQueue({
     openStorage: () => createDexieQueueStorage(openKioskDatabase(options.databaseName)),
+    // KT5: un vaciado que deja filas en disco se senala (sin datos) y se reintenta.
+    onClearOutcome: (complete) => {
+      storeQueueClearPending(!complete)
+      if (!complete) {
+        reporter.report('kiosk.offline.storage_unavailable', {
+          reason: 'clear_incomplete',
+          durable: false,
+          message: 'clear_incomplete',
+        })
+      }
+    },
     onStorageFailure: (reason) =>
       reporter.report('kiosk.offline.storage_unavailable', {
         reason,
@@ -179,6 +192,14 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     onAuthOutcome: (unauthorized) =>
       unauthorized ? revocation.reportUnauthorized() : revocation.reportAuthenticated(),
   })
+
+  // Un vaciado pendiente de una desvinculacion se reintenta al arrancar, y SOLO
+  // mientras la tablet siga sin emparejar: con un token nuevo la cola ya es de
+  // fichajes legitimos y jamas se toca.
+  if (readQueueClearPending()) {
+    if (readDeviceToken() === null) void queue.clear()
+    else storeQueueClearPending(false)
+  }
 
   const wake = (): void => runner.wakeNow()
   let rosterTimer: ReturnType<typeof setInterval> | null = null
