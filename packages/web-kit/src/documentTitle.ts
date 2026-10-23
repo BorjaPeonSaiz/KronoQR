@@ -44,11 +44,15 @@ export function bindDocumentTitle(options: {
   const doc = options.document ?? globalThis.document
   const { router, i18n } = options
 
-  function refresh(): void {
+  function composed(): string {
     const key = router.currentRoute.value.meta.titleKey
     const name = options.applicationName()
 
-    doc.title = key === undefined ? name : `${i18n.global.t(key)}${TITLE_SEPARATOR}${name}`
+    return key === undefined ? name : `${i18n.global.t(key)}${TITLE_SEPARATOR}${name}`
+  }
+
+  function refresh(): void {
+    doc.title = composed()
   }
 
   const stopScreen = watch(
@@ -63,11 +67,26 @@ export function bindDocumentTitle(options: {
     { flush: 'post' },
   )
 
+  // Quien reescriba el titulo despues —`applyBranding` lo hace SIEMPRE al terminar, tambien
+  // cuando la marca falla o llega invalida y no cambia nada reactivo— se vuelve a componer. Sin
+  // esto el titulo de pantalla se perdia justo en el caso en que la marca no llega.
+  const titleElement = doc.querySelector('title')
+  const observer = new MutationObserver(() => {
+    if (doc.title !== composed()) {
+      refresh()
+    }
+  })
+
+  if (titleElement !== null) {
+    observer.observe(titleElement, { childList: true, characterData: true, subtree: true })
+  }
+
   return {
     refresh,
     stop: () => {
       stopScreen()
       stopBranding()
+      observer.disconnect()
     },
   }
 }
