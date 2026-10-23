@@ -42,6 +42,7 @@ import type { InstallationSettings, UpdateSettingsRequest } from '@/shared/api/t
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import { fetchInstallationSettings, stringValue, updateInstallationSettings } from './settings.api'
 import { useLicenseStore } from './license.store'
+import { logoIconIssues, MINIMUM_ICON_SIDE, readLogoFacts, type LogoIconIssue } from './logoIcon'
 
 // El color de acento del PRODUCTO (doc 06, `primary-strong`) vive en
 // `@kronoqr/web-kit/branding` (correccion de revision de UI/UX): una sola
@@ -68,6 +69,24 @@ const accentConfirmed = ref(false)
 const appName = ref('')
 const accentColor = ref(PRODUCT_ACCENT_COLOR)
 const logoPath = ref('')
+/** Que le pasa al logotipo GUARDADO como icono de la tablet. `null` = sin logotipo o sin medir. */
+const logoIssues = ref<LogoIconIssue[] | null>(null)
+let logoReadToken = 0
+
+// El logotipo se mide cuando cambia el guardado (V21-6-UX-3): el campo es una ruta del servidor,
+// asi que lo que se puede medir en el navegador es lo que el servidor ya sirve.
+watch(
+  () => branding.current.logoUrl,
+  async (url) => {
+    const token = ++logoReadToken
+    logoIssues.value = null
+    if (url === null) return
+    const facts = await readLogoFacts(url)
+    if (token === logoReadToken && facts !== null) logoIssues.value = logoIconIssues(facts)
+  },
+  { immediate: true },
+)
+
 const privacyControllerName = ref('')
 const privacyPolicyUrl = ref('')
 
@@ -778,6 +797,28 @@ async function save(): Promise<void> {
           />
         </template>
       </FormField>
+
+      <div
+        v-if="logoIssues !== null"
+        :role="logoIssues.length > 0 ? 'note' : undefined"
+        :class="
+          logoIssues.length > 0
+            ? 'rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning'
+            : 'text-sm text-kq-text-muted'
+        "
+        data-test="logo-icon-check"
+      >
+        <template v-if="logoIssues.length > 0">
+          <p class="font-semibold">{{ t('branding.logoIcon.heading') }}</p>
+          <ul class="mt-1 list-disc pl-5">
+            <li v-for="issue of logoIssues" :key="issue" :data-test="`logo-icon-${issue}`">
+              {{ t(`branding.logoIcon.issues.${issue}`, { side: MINIMUM_ICON_SIDE }) }}
+            </li>
+          </ul>
+          <p class="mt-1 text-sm">{{ t('branding.logoIcon.consequence') }}</p>
+        </template>
+        <p v-else>{{ t('branding.logoIcon.ok') }}</p>
+      </div>
 
       <fieldset class="flex flex-col gap-4 rounded-kq border border-kq-border p-4">
         <legend class="px-2 font-medium">{{ t('branding.privacy.heading') }}</legend>
