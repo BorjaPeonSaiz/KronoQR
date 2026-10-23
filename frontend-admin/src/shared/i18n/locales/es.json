@@ -898,6 +898,7 @@
     "pdfBusy": {
       "message": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
       "messageNoWait": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible.",
+      "messageReady": "Ya puedes volver a intentarlo con el PDF, o descargar el CSV, que siempre está disponible.",
       "useFormat": "Descargar {format}"
     },
     "legalExport": {
@@ -1808,6 +1809,17 @@
     "contrastWarning": "{what} {where}: se lee a {ratio}:1 y hace falta {minimum}:1.",
     "contrastPreviewLink": "Ver la previsualización",
     "contrastWarningsHint": "El color se puede guardar igualmente: es un aviso, no un bloqueo. Elige un tono más oscuro o más claro si quieres corregirlo.",
+    "logoIcon": {
+      "heading": "El logotipo guardado no sirve como icono de la tablet",
+      "ok": "El logotipo guardado sirve como icono de la tablet.",
+      "consequence": "La tablet se instalará con el icono del producto. El logotipo se sigue usando en las tres aplicaciones y en los informes; solo cambia el icono de inicio.",
+      "issues": {
+        "notPng": "No es un PNG (por ejemplo, es un SVG). El icono instalado necesita un PNG.",
+        "notSquare": "No es cuadrado. Usa una imagen con el mismo ancho y alto.",
+        "tooSmall": "Mide menos de {side} píxeles de lado. Usa al menos {side} × {side}.",
+        "transparent": "Tiene zonas transparentes: según la pantalla de inicio de la tablet se verán sobre negro o sobre blanco. Un fondo opaco queda más predecible."
+      }
+    },
     "contrastLabels": {
       "genericForeground": "el texto",
       "genericBackground": "sobre este fondo",

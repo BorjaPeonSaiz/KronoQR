@@ -23,6 +23,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ApiError, isApiError } from '../http'
+import BaseButton from './BaseButton.vue'
 
 const props = defineProps<{
   error: unknown
@@ -54,15 +55,15 @@ const fields = computed(() =>
     <p v-if="apiError.retryAfterSeconds !== null" class="mt-1">
       {{ t('errors.retryAfter', { seconds: apiError.retryAfterSeconds }) }}
     </p>
-    <button
+    <BaseButton
       v-if="onRetry !== undefined"
-      type="button"
-      class="mt-3 rounded-kq-sm border border-kq-danger bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt"
+      variant="secondary"
+      class="mt-3"
       data-test="error-retry"
       @click="onRetry()"
     >
       {{ t('errors.retry') }}
-    </button>
+    </BaseButton>
     <ul v-if="fields.length > 0" class="mt-2 list-disc pl-5">
       <li v-for="{ field, label, messages } of fields" :key="field">
         {{ label }}: {{ messages.join(' ') }}

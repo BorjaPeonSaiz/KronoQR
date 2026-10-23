@@ -23,7 +23,7 @@ import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, resolveAppLocale } from './shared/i18n'
 import { createLocaleController, renderBootFailure } from './shared/i18n/localeController'
 import { installFocusRecovery } from './shared/ui/focusRecovery'
-import { vAriaDisabled } from './shared/ui/vAriaDisabled'
+import { vAriaDisabled } from '@kronoqr/web-kit/vAriaDisabled'
 
 const app = createApp(App)
 

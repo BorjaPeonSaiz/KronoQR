@@ -898,6 +898,7 @@
     "pdfBusy": {
       "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
       "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available.",
+      "messageReady": "You can try the PDF again now, or download the CSV, which is always available.",
       "useFormat": "Download {format}"
     },
     "legalExport": {
@@ -1808,6 +1809,17 @@
     "contrastWarning": "{what} {where}: it reads at {ratio}:1 and needs {minimum}:1.",
     "contrastPreviewLink": "See the preview",
     "contrastWarningsHint": "The colour can still be saved: this is a warning, not a block. Pick a darker or lighter shade to fix it.",
+    "logoIcon": {
+      "heading": "The saved logo is not suitable as the tablet icon",
+      "ok": "The saved logo works as the tablet icon.",
+      "consequence": "The tablet will be installed with the product icon. The logo is still used in the three applications and in reports; only the home-screen icon changes.",
+      "issues": {
+        "notPng": "It is not a PNG (for example, it is an SVG). The installed icon needs a PNG.",
+        "notSquare": "It is not square. Use an image with equal width and height.",
+        "tooSmall": "It is smaller than {side} pixels on a side. Use at least {side} × {side}.",
+        "transparent": "It has transparent areas: depending on the tablet home screen they will show over black or white. An opaque background is more predictable."
+      }
+    },
     "contrastLabels": {
       "genericForeground": "the text",
       "genericBackground": "on this background",

@@ -118,7 +118,7 @@ describe('MyExportView', () => {
     await settle(1)
 
     expect(wrapper.text()).toContain(es.myExport.filters.inverted)
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('form').trigger('submit')
     await settle(1)
