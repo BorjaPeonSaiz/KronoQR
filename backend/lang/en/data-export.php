@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 return [
 
-    'title' => 'Full data export from KronoQR',
+    'title' => ':app_name · full data export',
 
     'intro' => <<<'TEXT'
         This archive contains **all** the data in your KronoQR installation, in open

@@ -37,7 +37,7 @@ declare(strict_types=1);
 
 return [
 
-    'title' => 'Exportacion integra de los datos de KronoQR',
+    'title' => ':app_name · exportacion integra de los datos',
 
     'intro' => <<<'TEXT'
         Este fichero contiene **todos** los datos de tu instalacion de KronoQR en formato

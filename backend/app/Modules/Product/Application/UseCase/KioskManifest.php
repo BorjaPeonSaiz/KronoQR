@@ -9,7 +9,7 @@ namespace App\Modules\Product\Application\UseCase;
  * `WebAppManifest`).
  *
  * Solo las partes que dependen de la instalacion. Lo que es comportamiento del
- * quiosco —`id`, `start_url`, `display`, `orientation`, `background_color`— no
+ * quiosco —`id`, `start_url`, `display`, `background_color`— no
  * viaja aqui: lo fija el contrato y lo escribe el borde HTTP, y asi ningun
  * ajuste puede moverlo.
  */
@@ -23,10 +23,10 @@ final readonly class KioskManifest
         public string $applicationName,
         /** El idioma por defecto de la instalacion. */
         public string $locale,
-        /** `#rrggbb`: el acento de la marca o el color de serie del quiosco. */
+        /** `#rrggbb`: el fondo del quiosco (no el acento de la marca); es `theme_color` y `background_color`. */
         public string $themeColor,
-        /** Si `themeColor` es el de la marca y no el de serie. */
-        public bool $customThemeColor,
+        /** Si la instalacion tiene un acento de marca propio (telemetria; no afecta al manifiesto). */
+        public bool $customAccent,
         public array $icons,
         /** Si los iconos son el logotipo de la marca y no los de serie. */
         public bool $brandedIcons,

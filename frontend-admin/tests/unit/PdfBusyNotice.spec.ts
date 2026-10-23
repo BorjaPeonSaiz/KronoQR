@@ -23,8 +23,9 @@ describe('PdfBusyNotice', () => {
     const notice = wrapper.find('[data-test="pdf-busy"]')
 
     expect(notice.attributes('role')).toBe('group')
+    // El nombre es fijo (sin la cifra): la cuenta atras vive en otro nodo.
     expect(wrapper.find('#' + CSS.escape(notice.attributes('aria-labelledby') ?? '')).text()).toBe(
-      expected,
+      es.reports.pdfBusy.title,
     )
     expect(announcement.value).toBe('')
 

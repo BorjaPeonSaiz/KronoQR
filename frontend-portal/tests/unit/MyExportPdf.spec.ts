@@ -160,6 +160,43 @@ describe('MyExportView, elegir CSV o PDF (RF-ID-05, RL-05)', () => {
     expect(text).not.toMatch(/\d+ segundos/)
   })
 
+  it('el aviso de PDF ocupado se oculta al cambiar a CSV y su cuenta atras baja de verdad', async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            type: 'urn:kronoqr:problem:pdf-rendering-busy',
+            title: 'Ocupado',
+            status: 503,
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '3' },
+          },
+        ),
+    )
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+
+    const wrapper = await mountView(MyExportView)
+
+    await wrapper.findAll('input[type="radio"]')[1]?.setValue(true)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const text = (): string => wrapper.find('[data-test="pdf-busy"]').text()
+
+    expect(text()).toContain('en 3 segundos')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(text()).toContain('en 2 segundos')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(text()).toContain(es.myExport.pdfBusy.messageReady)
+
+    await wrapper.findAll('input[type="radio"]')[0]?.setValue(true)
+
+    expect(wrapper.find('[data-test="pdf-busy"]').exists()).toBe(false)
+    vi.useRealTimers()
+  })
+
   it.each([401, 403, 422, 429])(
     'un %s del PDF se explica con el aviso generico, no con el del PDF no disponible',
     async (status) => {

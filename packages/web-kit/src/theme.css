@@ -57,9 +57,11 @@
   /* --- Primario (terracota) --- */
   /* El terracota claro NO alcanza 4.5:1 con texto blanco: se reserva a acentos
      grandes y decorativos (iconos, franjas, texto >= 24 px). Los botones
-     solidos y los enlaces usan el terracota oscuro. */
+     solidos y los enlaces usan el terracota oscuro, que llega a 4.5:1 como TEXTO
+     sobre las cuatro superficies donde se lee: pagina, tarjeta, filas alternas
+     y fila seleccionada (themePairs.ts; R7-UX-01). */
   --kq-color-primary: #d66c3a;
-  --kq-color-primary-strong: #b8542a; /* boton solido, enlace, texto de marca */
+  --kq-color-primary-strong: #b0502a; /* boton solido, enlace, texto de marca */
   --kq-color-primary-soft: #fff0e5; /* fondo tintado: chip, fila seleccionada */
   --kq-color-on-primary: #ffffff; /* texto sobre primary-strong */
   --kq-color-on-primary-soft: #9a4520; /* texto sobre primary-soft */

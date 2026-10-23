@@ -9467,8 +9467,10 @@ paths:
           **el nombre no lo degrada la licencia**.
         - `lang`: el idioma por defecto de la instalacion (`LOCALE_DEFAULT`), y
           `description` en ese idioma.
-        - `theme_color`: el color de acento elegido, o el de serie del quiosco
-          si no hay ninguno o el plan no incluye la marca blanca (ADR-023).
+        - Nada de color: `theme_color` y `background_color` son siempre el fondo del
+          quiosco (`--kq-color-kiosk-surface`), para que la barra del sistema y la
+          pantalla de arranque coincidan con la pantalla oscura. El acento del
+          cliente no viaja aqui.
         - `icons`: **el logotipo de la marca solo si es un PNG cuadrado de al
           menos 512 px de lado**, que es lo que Android necesita para ofrecer la
           instalacion; se publica la misma URL con huella que
@@ -9482,8 +9484,9 @@ paths:
 
         **Lo que no cambia nunca:** `id` es `/kiosk/` siempre —cambiar la marca
         no convierte la aplicacion instalada en otra—, y `start_url`, `scope`,
-        `display`, `display_override`, `orientation` y `background_color` son los
-        del quiosco, porque son comportamiento y no aspecto.
+        `display`, `display_override` y los colores son los
+        del quiosco, porque son comportamiento y no aspecto. No hay `orientation`: la
+        tablet se monta tambien en vertical.
 
         **Es publico, y tiene que serlo**: el navegador lo pide sin credenciales
         al cargar la pagina, antes de que la tablet tenga token. Lo que revela es
@@ -9512,9 +9515,8 @@ paths:
                     scope: /kiosk/
                     display: fullscreen
                     display_override: [fullscreen, standalone]
-                    orientation: landscape
-                    theme_color: '#0f172a'
-                    background_color: '#0f172a'
+                    theme_color: '#241a15'
+                    background_color: '#241a15'
                     icons:
                       - src: /kiosk/icons/icon-192.png
                         sizes: 192x192
@@ -9540,9 +9542,8 @@ paths:
                     scope: /kiosk/
                     display: fullscreen
                     display_override: [fullscreen, standalone]
-                    orientation: landscape
-                    theme_color: '#0f5c8c'
-                    background_color: '#0f172a'
+                    theme_color: '#241a15'
+                    background_color: '#241a15'
                     icons:
                       - src: /api/v1/branding/logo?v=3f9a1c2b7e4d
                         sizes: 1024x1024
@@ -16788,7 +16789,6 @@ components:
         - scope
         - display
         - display_override
-        - orientation
         - theme_color
         - background_color
         - icons
@@ -16833,17 +16833,14 @@ components:
           items:
             type: string
             enum: [fullscreen, standalone]
-        orientation:
-          type: string
-          const: landscape
         theme_color:
           type: string
           pattern: '^#[0-9a-fA-F]{6}$'
-          description: El color de acento de la marca, o el de serie del quiosco.
+          description: El fondo del quiosco (`--kq-color-kiosk-surface`), con o sin marca.
         background_color:
           type: string
           pattern: '^#[0-9a-fA-F]{6}$'
-          description: Fijo, el de la pantalla de arranque del quiosco; no es marca.
+          description: El fondo del quiosco (`--kq-color-kiosk-surface`); no es marca.
         icons:
           type: array
           minItems: 1

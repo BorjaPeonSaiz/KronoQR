@@ -22,7 +22,16 @@
 // El valor por defecto ES el producto: con `accentColor: null` no se
 // sobreescribe ningun token y el sistema visual del doc 06 queda intacto.
 
-import { contrastRatio, parseHexColor, WCAG_AA_MINIMUM, type Rgb } from './contrast'
+import {
+  contrastRatio,
+  mix,
+  parseHexColor,
+  snap,
+  toHex,
+  WCAG_AA_MINIMUM,
+  type Rgb,
+} from './contrast'
+import { paintedColors } from './pairContrast'
 import { kioskPairs, lightPairs, type ThemePair } from './themePairs'
 
 export interface LocalePolicy {
@@ -80,8 +89,10 @@ export const PRODUCT_BRANDING: Branding = Object.freeze({
 })
 
 /**
- * El acento de serie del catalogo (`BRANDING_ACCENT_COLOR`): el
- * `primary-strong` de theme.css. El panel lo escribe cuando el cliente quiere
+ * El acento de serie del catalogo (`BRANDING_ACCENT_COLOR`). Ya NO coincide
+ * con el `primary-strong` de theme.css (`#b0502a`, 2.3.0): el token se oscurecio
+ * un punto para leerse sobre `surface-alt`, y este valor es el que el catalogo
+ * y el papel conservan. El panel lo escribe cuando el cliente quiere
  * «volver al color del producto», porque no hay forma de retirar una clave
  * desde la API. Vive aqui, y solo aqui, para que el frontend no tenga dos
  * sitios con el mismo hexadecimal.
@@ -215,27 +226,15 @@ export function parseBranding(value: unknown): Branding | null {
 // Aritmetica de color. Solo lo que hace falta para derivar tonos legibles.
 // ---------------------------------------------------------------------------
 
-function toHex({ r, g, b }: Rgb): string {
-  const channel = (value: number): string =>
-    Math.round(Math.min(255, Math.max(0, value)))
-      .toString(16)
-      .padStart(2, '0')
-  return `#${channel(r)}${channel(g)}${channel(b)}`
-}
-
-/** Mezcla lineal: `weight` = 1 devuelve `a`, 0 devuelve `b`. */
-function mix(a: Rgb, b: Rgb, weight: number): Rgb {
-  return {
-    r: a.r * weight + b.r * (1 - weight),
-    g: a.g * weight + b.g * (1 - weight),
-    b: a.b * weight + b.b * (1 - weight),
-  }
-}
+/** Pasos de la busqueda del tono: 2,5 %. El backend usa el mismo (`steps` del fixture compartido). */
+export const ACCENT_ADJUST_STEPS = 40
 
 /**
  * Acerca `color` a `target` (blanco para aclarar, negro para oscurecer) en
- * pasos de un 2,5 % hasta que alcance `minimum` sobre `background`. Si ni el
- * propio `target` llega, devuelve `target`: es lo mas lejos que se puede ir.
+ * pasos de un 2,5 % hasta que alcance `minimum` sobre `background`. Cada
+ * candidato se redondea a 8 bits antes de medirlo (`snap`): lo que se mide es
+ * lo que se pinta. Si ni el propio `target` llega, devuelve `target`: es lo mas
+ * lejos que se puede ir.
  */
 function adjustUntil(
   color: Rgb,
@@ -244,12 +243,27 @@ function adjustUntil(
   minimum: number,
 ): Rgb {
   const backgrounds: readonly Rgb[] = 'r' in background ? [background] : background
-  const STEPS = 40
-  for (let step = 0; step <= STEPS; step += 1) {
-    const candidate = mix(target, color, step / STEPS)
+  for (let step = 0; step <= ACCENT_ADJUST_STEPS; step += 1) {
+    const candidate = snap(mix(target, color, step / ACCENT_ADJUST_STEPS))
     if (backgrounds.every((item) => contrastRatio(candidate, item) >= minimum)) return candidate
   }
   return target
+}
+
+/**
+ * El acento oscurecido hasta leerse como texto sobre UN fondo (por defecto, el
+ * blanco del papel): el mismo algoritmo que deriva `primary-strong`, con el
+ * candidato redondeado a 8 bits antes de medirlo. El backend lo replica en
+ * `Branding::accentForTextOnWhite()` y las dos pruebas comparten
+ * `backend/tests/Fixtures/accent-text-on-white.json`: si cambia el algoritmo,
+ * cambian los dos lados.
+ */
+export function accentTextOn(
+  accent: string,
+  background = '#ffffff',
+  minimum: number = WCAG_AA_MINIMUM.text,
+): string {
+  return toHex(adjustUntil(parseHexColor(accent), BLACK, parseHexColor(background), minimum))
 }
 
 /** De entre los candidatos, el que mas contrasta con `background`. */
@@ -328,22 +342,30 @@ export function accentOverrides(
   const surfaceRaised = parseHexColor(tokens('--kq-color-surface-raised'))
   const surfaces = lightSurfaces(tokens)
   const bodyText = parseHexColor(tokens('--kq-color-text'))
+  // Fondo tintado: un 10 % de acento sobre la tarjeta blanca, redondeado a 8 bits.
+  const soft = snap(mix(color, surfaceRaised, 0.1))
   // El acento como texto o boton de marca se OSCURECE hasta 4,5:1 frente a la
-  // peor de las superficies de texto (MB1): un amarillo o un verde lima elegidos
-  // tal cual dejarian el boton principal y los enlaces entre 1,02:1 y 3,95:1.
-  // Un acento que ya llega no cambia ni un canal (paso 0 = el propio color).
+  // peor de las superficies donde `primary-strong` es texto (MB1): pagina,
+  // tarjeta, filas alternas y fila seleccionada (doc 06 §2; R7-UX-01). Un
+  // amarillo o un verde lima elegidos tal cual dejarian el boton principal y
+  // los enlaces entre 1,02:1 y 3,95:1. Un acento que ya llega a todas no
+  // cambia ni un canal (paso 0 = el propio color).
   // `primary` y `primary-strong` coinciden: el cliente aporta UN tono.
-  const strong = adjustUntil(color, BLACK, lightSurfaces(tokens, true), text)
+  const strong = adjustUntil(color, BLACK, [...lightSurfaces(tokens), soft], text)
   const onPrimary = bestOn(strong, [WHITE, bodyText])
-  // Fondo tintado: un 10 % de acento sobre la tarjeta blanca. El texto que va
-  // encima es el acento oscurecido hasta leerse como texto normal.
-  const soft = mix(color, surfaceRaised, 0.1)
+  // El texto sobre el fondo tintado es el acento oscurecido hasta leerse como
+  // texto normal.
   const onSoft = adjustUntil(color, BLACK, soft, text)
   // El anillo de foco no es marca: es lo que permite saber donde esta el
   // teclado (WCAG 2.4.11). Lleva el acento, pero oscurecido hasta verse como
   // componente (3:1) sobre la tarjeta blanca, que es la superficie mas
   // exigente; un acento casi blanco dejaria sin foco al panel entero.
-  const focus = adjustUntil(color, BLACK, surfaces, WCAG_AA_MINIMUM.large)
+  // El anillo tambien se dibuja sobre los avisos tintados (exito, aviso, error,
+  // acento) y sobre la fila seleccionada: se mide contra todos (V7-UX-02).
+  const tinted = ['accent-soft', 'success-soft', 'warning-soft', 'danger-soft'].map((name) =>
+    parseHexColor(tokens(`--kq-color-${name}`)),
+  )
+  const focus = adjustUntil(color, BLACK, [...surfaces, soft, ...tinted], WCAG_AA_MINIMUM.large)
 
   return {
     '--kq-color-primary': toHex(strong),
@@ -357,8 +379,10 @@ export function accentOverrides(
 
 /**
  * Las superficies claras del producto. Con `textOnly`, solo las dos sobre las
- * que el acento se lee como TEXTO (pagina y tarjeta, doc 06 §2); la tercera,
- * las filas alternas, lo lleva solo como elemento grande (3:1).
+ * que el acento SIN DERIVAR se mide como texto (pagina y tarjeta): es la regla
+ * de `accentContrast`, que el servidor replica (`AccentContrastPolicy`) y que
+ * decide si el panel pide confirmar. La DERIVACION de `primary-strong` va mas
+ * lejos y tambien cubre las filas alternas y la fila seleccionada.
  */
 function lightSurfaces(tokens: TokenResolver, textOnly = false): Rgb[] {
   const names = textOnly
@@ -422,8 +446,13 @@ export function contrastWarnings(
 
     for (const pair of pairs) {
       if (!(pair.foreground in overrides) && !(pair.background in overrides)) continue
-      const foreground = resolve(pair.foreground)
-      const background = resolve(pair.background)
+      // El color PINTADO: con el estado de la pareja (hover, deshabilitado) aplicado.
+      const { foreground, background } = paintedColors(
+        pair.foreground,
+        pair.background,
+        pair.state,
+        resolve,
+      )
       const ratio = contrastRatio(foreground, background)
       const minimum = WCAG_AA_MINIMUM[pair.requirement]
       if (ratio < minimum) {
@@ -456,11 +485,16 @@ export interface ApplyBrandingOptions {
   readonly document?: Document
   /** Por defecto, los tokens base se leen del propio documento. */
   readonly tokens?: TokenResolver
+  /**
+   * `false` = no toca `<title>`: quien compone «pantalla – nombre» (`bindDocumentTitle`, panel y
+   * portal) es el unico dueño del titulo. Por defecto `true`: el quiosco no tiene pantallas.
+   */
+  readonly manageTitle?: boolean
 }
 
 /**
  * Pinta la marca: sobreescribe (o limpia) los tokens del contexto, pone el
- * nombre en el titulo de la pestaña y el logotipo como favicon.
+ * nombre en el titulo de la pestaña (salvo `manageTitle: false`) y el logotipo como favicon.
  *
  * Idempotente y reversible: aplicar `PRODUCT_BRANDING` despues de una marca
  * con acento devuelve el documento a la paleta del producto. Nunca lanza por
@@ -487,7 +521,7 @@ export function applyBranding(branding: Branding, options: ApplyBrandingOptions)
   }
   root.setAttribute('data-kq-branded', branded ? 'accent' : 'product')
 
-  doc.title = branding.applicationName
+  if (options.manageTitle !== false) doc.title = branding.applicationName
 
   const existing = doc.head.querySelector<HTMLLinkElement>(`link[rel="icon"][${FAVICON_MARK}]`)
   if (branding.logoUrl === null) {

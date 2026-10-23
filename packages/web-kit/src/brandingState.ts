@@ -53,6 +53,8 @@ export interface BrandingStateOptions {
   readonly storage?: Storage | null
   /** Por defecto, `GET /api/v1/branding` anonimo con el cliente HTTP compartido. */
   readonly fetchBranding?: () => Promise<unknown>
+  /** Ver `ApplyBrandingOptions.manageTitle`. Panel y portal lo apagan: el titulo es de `bindDocumentTitle`. */
+  readonly manageTitle?: boolean
 }
 
 /** Panel y portal pintan lo mismo (`GET /api/v1/branding`) y comparten copia. */
@@ -120,12 +122,11 @@ export function createBrandingState(options: BrandingStateOptions): BrandingStat
     ((): Promise<unknown> => requestJson<unknown>('/api/v1/branding', { anonymous: true }))
 
   function apply(): void {
-    applyBranding(
-      current.value,
-      options.document === undefined
-        ? { mode: options.mode }
-        : { mode: options.mode, document: options.document },
-    )
+    applyBranding(current.value, {
+      mode: options.mode,
+      ...(options.document === undefined ? {} : { document: options.document }),
+      ...(options.manageTitle === undefined ? {} : { manageTitle: options.manageTitle }),
+    })
   }
 
   async function load(): Promise<void> {

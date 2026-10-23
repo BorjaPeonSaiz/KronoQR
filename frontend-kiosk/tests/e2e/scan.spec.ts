@@ -91,7 +91,7 @@ test(
     expect(served.ok).toBe(true)
     const parsed = served.body
     expect(parsed.display).toBe('fullscreen')
-    expect(parsed.orientation).toBe('landscape')
+    expect(parsed.orientation).toBeUndefined()
 
     await expect
       .poll(async () =>

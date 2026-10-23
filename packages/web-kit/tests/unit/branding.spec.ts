@@ -8,7 +8,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  ACCENT_ADJUST_STEPS,
   accentContrast,
+  accentTextOn,
   accentOverrides,
   applyBranding,
   contrastWarnings,
@@ -19,6 +21,7 @@ import {
   resolveUiLocale,
   type Branding,
 } from '../../src/branding'
+import { paintedColors } from '../../src/pairContrast'
 import { contrastRatio, WCAG_AA_MINIMUM } from '../../src/contrast'
 import { kioskPairs, lightPairs } from '../../src/themePairs'
 
@@ -257,7 +260,7 @@ describe('accentOverrides: toda pareja declarada cumple tras la derivacion (MB1)
   })
 
   it('un acento que ya contrasta no se toca', () => {
-    for (const accent of ['#b8542a', '#0f5c8c', '#111827']) {
+    for (const accent of ['#a8461f', '#0f5c8c', '#111827']) {
       const overrides = accentOverrides(accent, 'light', themeToken)
 
       expect(overrides['--kq-color-primary-strong']).toBe(accent)
@@ -274,13 +277,136 @@ describe('accentOverrides: toda pareja declarada cumple tras la derivacion (MB1)
   })
 })
 
+// R6-UX-02: el candidato se redondea a 8 bits ANTES de medirlo. Medido en coma flotante y
+// redondeado despues, 240 de 4512 acentos dejaban alguna pareja entre 2,98 y 4,48:1.
+// Estos son los peores de ese barrido, y una rejilla que recorre todo el espacio.
+const ROUNDING_WORST_ACCENTS = [
+  '#d1dce0',
+  '#b3ff80',
+  '#c653c6',
+  '#b8b494',
+  '#144508',
+  '#5d90e0',
+  '#165d65',
+  '#956d04',
+  '#56f792',
+] as const
+
+function failingPairs(accent: string): string[] {
+  const failures: string[] = []
+  for (const [mode, pairs] of [
+    ['light', lightPairs],
+    ['kiosk', kioskPairs],
+  ] as const) {
+    const overrides = accentOverrides(accent, mode, themeToken)
+    const resolve = (token: string): string => overrides[token] ?? themeToken(token)
+    for (const item of pairs) {
+      if (!(item.foreground in overrides) && !(item.background in overrides)) continue
+      const painted = paintedColors(item.foreground, item.background, item.state, resolve)
+      const ratio = contrastRatio(painted.foreground, painted.background)
+      if (ratio < WCAG_AA_MINIMUM[item.requirement]) {
+        failures.push(`${accent} ${mode}: ${item.use} ${ratio.toFixed(3)}`)
+      }
+    }
+  }
+  return failures
+}
+
+describe('accentOverrides: el valor que se mide es el que se pinta (R6-UX-02)', () => {
+  it.each(ROUNDING_WORST_ACCENTS)(
+    '%s: ninguna pareja baja de su minimo tras redondear',
+    (accent) => {
+      expect(failingPairs(accent)).toEqual([])
+    },
+  )
+
+  it('cada token escrito es un #rrggbb de 8 bits y la derivacion es estable', () => {
+    for (const accent of ROUNDING_WORST_ACCENTS) {
+      for (const mode of ['light', 'kiosk'] as const) {
+        const overrides = accentOverrides(accent, mode, themeToken)
+        for (const value of Object.values(overrides)) expect(value).toMatch(/^#[0-9a-f]{6}$/)
+        // Medir el valor escrito da lo mismo que medir el candidato: no hay segundo redondeo.
+        expect(accentOverrides(accent, mode, themeToken)).toEqual(overrides)
+      }
+    }
+  })
+
+  it('una rejilla de 1 331 acentos del espacio RGB no deja ninguna pareja bajo su minimo', () => {
+    const steps = [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255]
+    const failures: string[] = []
+    for (const r of steps) {
+      for (const g of steps) {
+        for (const b of steps) {
+          const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
+          failures.push(...failingPairs(hex))
+        }
+      }
+    }
+
+    expect(failures).toEqual([])
+  })
+})
+
+// Los mismos casos que el backend (`AccentTextOnWhiteFixtureTest`): los dos lados del
+// ajuste «acento oscurecido hasta 4,5:1 sobre blanco» tienen que dar el mismo tono.
+interface AccentTextCase {
+  readonly label: string
+  readonly accent: string
+  readonly text: string
+}
+const accentTextFixture = JSON.parse(
+  readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../../backend/tests/Fixtures/accent-text-on-white.json',
+    ),
+    'utf8',
+  ),
+) as {
+  readonly background: string
+  readonly minimum: number
+  readonly steps: number
+  readonly cases: AccentTextCase[]
+}
+
+describe('accentTextOn: el mismo tono que el backend (accentForTextOnWhite)', () => {
+  it('usa los mismos pasos de busqueda que el fixture compartido', () => {
+    expect(ACCENT_ADJUST_STEPS).toBe(accentTextFixture.steps)
+  })
+
+  it.each(accentTextFixture.cases.map((item) => [item.label, item.accent, item.text] as const))(
+    '%s: %s -> %s',
+    (_label, accent, expected) => {
+      expect(accentTextOn(accent, accentTextFixture.background, accentTextFixture.minimum)).toBe(
+        expected,
+      )
+    },
+  )
+
+  it('el tono resultante llega al minimo medido sobre el valor ya redondeado', () => {
+    for (const item of accentTextFixture.cases) {
+      expect(
+        contrastRatio(item.text, accentTextFixture.background),
+        item.label,
+      ).toBeGreaterThanOrEqual(accentTextFixture.minimum)
+    }
+  })
+})
+
 describe('accentContrast: lo que enseña el panel al elegir el color (MB2)', () => {
-  it('el acento de serie cumple y se aplica tal cual', () => {
+  it('el acento de serie cumple; se aplica un punto mas oscuro para leerse tambien sobre las filas alternas', () => {
     const result = accentContrast('#b8542a', themeToken)
 
     expect(result.meets).toBe(true)
     expect(result.minimum).toBe(WCAG_AA_MINIMUM.text)
-    expect(result.applied).toBe('#b8542a')
+    expect(result.applied).not.toBe('#b8542a')
+    // Es el primary-strong de serie de theme.css, a un punto de distancia como mucho.
+    expect(contrastRatio(result.applied, themeToken('--kq-color-primary-strong'))).toBeLessThan(
+      1.05,
+    )
+    expect(
+      contrastRatio(result.applied, themeToken('--kq-color-surface-alt')),
+    ).toBeGreaterThanOrEqual(WCAG_AA_MINIMUM.text)
   })
 
   it('un amarillo no cumple y dice con que tono se pintara', () => {

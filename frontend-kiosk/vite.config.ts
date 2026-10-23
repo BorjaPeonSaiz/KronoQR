@@ -256,9 +256,10 @@ export default defineConfig(({ mode }) => ({
         // no debe poder salirse de la aplicacion por rozar la barra de arriba.
         display: 'fullscreen',
         display_override: ['fullscreen', 'standalone'],
-        orientation: 'landscape',
-        background_color: '#0f172a',
-        theme_color: '#0f172a',
+        // Sin `orientation`: la tablet se monta tambien en vertical (V6-KI-03). Ambos colores
+        // son `--kq-color-kiosk-surface` (V21-6-UX-2); la paridad la ata KioskManifestParityTest.
+        background_color: '#241a15',
+        theme_color: '#241a15',
         lang: 'es',
         // Iconos de la marca del FABRICANTE (PR7), sin nombre ni marca de cliente
         // (regla dura 13): Android solo ofrece «Instalar» con PNG de 192 y 512.

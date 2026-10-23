@@ -8,12 +8,15 @@
 // servidor no puede generar el PDF (`503`, sin Chromium), se avisa y se ofrece
 // el CSV, que no depende de nada.
 import { announce } from '@kronoqr/web-kit/announcer'
+import BaseButton from '@kronoqr/web-kit/components/BaseButton.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import NoticeWithActions from '@kronoqr/web-kit/components/NoticeWithActions.vue'
+import { useCountdown } from '@kronoqr/web-kit/countdown'
 import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '../login/session.store'
 import { exportMyWorkDays } from './export.api'
@@ -38,11 +41,24 @@ const pdfUnavailable = ref(false)
 const pdfBusy = ref(false)
 const retryAfterSeconds = ref<number | null>(null)
 
-const busyMessage = computed(() =>
-  retryAfterSeconds.value === null
-    ? t('myExport.pdfBusy.messageNoWait')
-    : t('myExport.pdfBusy.message', { seconds: retryAfterSeconds.value }),
-)
+// Cuenta atras real (V21-3-UX-2): baja cada segundo y, a 0, dice que ya se puede reintentar.
+const remaining = useCountdown(() => retryAfterSeconds.value)
+const busyDetail = computed(() => {
+  if (remaining.value === null) return t('myExport.pdfBusy.messageNoWait')
+
+  return remaining.value === 0
+    ? t('myExport.pdfBusy.messageReady')
+    : t('myExport.pdfBusy.message', { seconds: remaining.value })
+})
+
+// Los avisos de PDF solo tienen sentido con el PDF elegido (V21-3-UX-2): al pasar a CSV se retiran.
+watch(format, (chosen) => {
+  if (chosen !== 'pdf') {
+    pdfBusy.value = false
+    pdfUnavailable.value = false
+    retryAfterSeconds.value = null
+  }
+})
 
 const inverted = computed(() => isInvertedRange(range.value))
 const tooWide = computed(() => exceedsMaxRange(range.value))
@@ -99,10 +115,8 @@ async function submit(): Promise<void> {
       if (isPdfRenderingBusy(caught)) {
         pdfBusy.value = true
         retryAfterSeconds.value = caught.retryAfterSeconds
-        announce(busyMessage.value)
       } else {
         pdfUnavailable.value = true
-        announce(t('myExport.pdfUnavailable.title'))
       }
     } else {
       error.value = caught
@@ -197,53 +211,58 @@ async function submit(): Promise<void> {
         </label>
       </fieldset>
 
-      <button
+      <BaseButton
         type="submit"
+        size="lg"
         :disabled="!canSubmit"
-        :aria-busy="submitting"
+        :busy="submitting"
         data-test="export-submit"
-        class="min-h-12 max-w-full break-words rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
       >
         {{ submitting ? t('myExport.downloading') : t(`myExport.download.${format}`) }}
-      </button>
+      </BaseButton>
     </form>
 
-    <div
+    <NoticeWithActions
       v-if="pdfBusy"
-      role="alert"
+      :message="t('myExport.pdfBusy.title')"
+      focus-on-mount
+      class="mt-4"
       data-test="pdf-busy"
-      class="mt-4 max-w-prose rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
     >
-      <p class="font-semibold">{{ busyMessage }}</p>
-      <button
-        type="button"
-        data-test="use-csv"
-        :disabled="submitting"
-        class="mt-3 min-h-12 max-w-full break-words rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-lg font-semibold text-kq-text"
-        @click="retryWithCsv"
-      >
-        {{ t('myExport.pdfUnavailable.useCsv') }}
-      </button>
-    </div>
+      <p class="mt-1" data-test="pdf-busy-detail">{{ busyDetail }}</p>
+      <template #actions>
+        <BaseButton
+          variant="secondary"
+          size="lg"
+          :busy="submitting"
+          data-test="use-csv"
+          @click="retryWithCsv"
+        >
+          {{ t('myExport.pdfUnavailable.useCsv') }}
+        </BaseButton>
+      </template>
+    </NoticeWithActions>
 
-    <div
+    <NoticeWithActions
       v-if="pdfUnavailable"
-      role="alert"
+      :message="t('myExport.pdfUnavailable.title')"
+      focus-on-mount
+      class="mt-4"
       data-test="pdf-unavailable"
-      class="mt-4 max-w-prose rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
     >
-      <p class="font-semibold">{{ t('myExport.pdfUnavailable.title') }}</p>
       <p class="mt-1">{{ t('myExport.pdfUnavailable.advice') }}</p>
-      <button
-        type="button"
-        data-test="use-csv"
-        :disabled="submitting"
-        class="mt-3 min-h-12 max-w-full break-words rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-lg font-semibold text-kq-text"
-        @click="retryWithCsv"
-      >
-        {{ t('myExport.pdfUnavailable.useCsv') }}
-      </button>
-    </div>
+      <template #actions>
+        <BaseButton
+          variant="secondary"
+          size="lg"
+          :busy="submitting"
+          data-test="use-csv"
+          @click="retryWithCsv"
+        >
+          {{ t('myExport.pdfUnavailable.useCsv') }}
+        </BaseButton>
+      </template>
+    </NoticeWithActions>
 
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 

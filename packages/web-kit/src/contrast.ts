@@ -13,7 +13,7 @@ export interface Rgb {
 }
 
 /** Que exige WCAG 2.2 AA a cada tipo de pareja. */
-export type ContrastRequirement = 'text' | 'large' | 'decorative'
+export type ContrastRequirement = 'text' | 'large' | 'decorative' | 'inactive'
 
 /**
  * Minimos de WCAG 2.2 AA por tipo de uso:
@@ -22,14 +22,49 @@ export type ContrastRequirement = 'text' | 'large' | 'decorative'
  *     interfaz o graficos con significado (1.4.3 y 1.4.11), >= 3:1.
  *   - `decorative`: sin exigencia. Solo se admite en elementos que no
  *     transmiten informacion (una franja, un fondo de ilustracion).
+ *   - `inactive`: control deshabilitado. WCAG 1.4.3 y 1.4.11 lo EXIMEN, pero el
+ *     producto fija un suelo de 1,5:1 para que un control apagado siga siendo
+ *     perceptible como control (decision de producto, doc 06 §2).
  */
 export const WCAG_AA_MINIMUM: Readonly<Record<ContrastRequirement, number>> = {
   text: 4.5,
   large: 3,
   decorative: 1,
+  inactive: 1.5,
 }
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+
+/** Un canal de 0 a 255, entero: el que de verdad llega al navegador. */
+function snapChannel(value: number): number {
+  return Math.round(Math.min(255, Math.max(0, value)))
+}
+
+/**
+ * El color tal como se pinta: cada canal a 8 bits. Todo candidato se redondea
+ * ANTES de medirlo (R6-UX-02): el valor que se mide es el que se escribe. Es la
+ * UNICA implementacion de «redondear, mezclar y pasar a hex»: la usan
+ * `branding.ts`, `pairContrast.ts` y las pruebas.
+ */
+export function snap({ r, g, b }: Rgb): Rgb {
+  return { r: snapChannel(r), g: snapChannel(g), b: snapChannel(b) }
+}
+
+/** `#rrggbb` del color redondeado a 8 bits. */
+export function toHex(color: Rgb): string {
+  const { r, g, b } = snap(color)
+  const channel = (value: number): string => value.toString(16).padStart(2, '0')
+  return `#${channel(r)}${channel(g)}${channel(b)}`
+}
+
+/** Mezcla lineal: `weight` = 1 devuelve `a`, 0 devuelve `b`. Sin redondear. */
+export function mix(a: Rgb, b: Rgb, weight: number): Rgb {
+  return {
+    r: a.r * weight + b.r * (1 - weight),
+    g: a.g * weight + b.g * (1 - weight),
+    b: a.b * weight + b.b * (1 - weight),
+  }
+}
 
 /** Acepta `#rgb` y `#rrggbb`. Lanza si la cadena no es un color hexadecimal. */
 export function parseHexColor(hex: string): Rgb {

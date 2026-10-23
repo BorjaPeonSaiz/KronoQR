@@ -961,6 +961,7 @@ final class ProductServiceProvider extends ServiceProvider
             DataExportGuide::class,
             static fn (Application $app): TranslatedDataExportGuide => new TranslatedDataExportGuide(
                 $app->make(Translator::class),
+                $app->make(BrandingProvider::class),
             ),
         );
 

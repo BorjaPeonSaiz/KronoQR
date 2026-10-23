@@ -281,7 +281,7 @@ return [
      */
     'weekly_summary' => [
 
-        'subject' => 'KronoQR · resumen de la semana del :from al :to',
+        'subject' => ':app_name · resumen de la semana del :from al :to',
 
         'greeting' => 'Hola:',
 

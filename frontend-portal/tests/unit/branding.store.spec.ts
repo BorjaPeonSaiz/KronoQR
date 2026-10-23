@@ -31,7 +31,7 @@ describe('tienda de marca del portal', () => {
 
     branding.apply()
 
-    expect(document.title).toBe(PRODUCT_BRANDING.applicationName)
+    expect(document.title).toBe('')
     expect(document.documentElement.getAttribute('data-kq-branded')).toBe('product')
   })
 
@@ -45,7 +45,7 @@ describe('tienda de marca del portal', () => {
 
     expect(branding.current.applicationName).toBe('Hotel Marina')
     expect(branding.current.logoUrl).toBe('/api/v1/branding/logo?v=3f9a1c2b7e4d')
-    expect(document.title).toBe('Hotel Marina')
+    expect(document.title).toBe('')
     // La derivacion de tonos sobre los tokens `--kq-*` (`accentOverrides`) ya
     // esta probada exhaustivamente en `packages/web-kit`; aqui solo importa
     // que la marca del servidor llega y se pinta, no como.
@@ -87,7 +87,7 @@ describe('tienda de marca del portal', () => {
     store.apply()
 
     expect(store.current.applicationName).toBe('Hotel Marina')
-    expect(document.title).toBe('Hotel Marina')
+    expect(document.title).toBe('')
   })
 
   it('MB4: una copia corrupta no impide arrancar con el producto', () => {

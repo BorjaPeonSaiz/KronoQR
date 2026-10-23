@@ -19,9 +19,10 @@
 // libreria que la mayoria de pantallas todavia no usa.
 //
 // **LOS COLORES SALEN DE LOS TOKENS `--kq-*` DEL `:root`, LEIDOS EN TIEMPO DE
-// EJECUCION** (doc 06): ninguna SPA declara un color propio, y la marca
-// blanca (tarea 5.8) cambia esos tokens sin que este componente tenga que
-// saber que existe. Si el lienzo no llega a montarse -entorno sin lienzo, o
+// EJECUCION** (doc 06) en `chartOption.ts`, sin ningun respaldo literal (U2):
+// ninguna SPA declara un color propio, y la marca blanca (tarea 5.8) cambia
+// esos tokens sin que este componente tenga que saber que existe. Las series
+// se distinguen ademas por un patron, no solo por el tono (V6-UX-3). Si el lienzo no llega a montarse -entorno sin lienzo, o
 // un fallo de red al cargar el modulo-, el componente no se rompe: se queda
 // en la tabla, que es autosuficiente.
 //
@@ -30,6 +31,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { buildChartOption } from './chartOption'
 
 /**
  * Una serie del grafico: una fila de barras, o el unico anillo de un rosco.
@@ -104,15 +106,17 @@ async function toggleView(): Promise<void> {
   }
 }
 
-/** Un token `--kq-*` del `:root`, o `fallback` si el entorno no tiene `window` (SSR, pruebas). */
-function readToken(name: string, fallback: string): string {
+/**
+ * Un token `--kq-*` del `:root`, tal como lo pinta el navegador ahora (con la
+ * marca del cliente aplicada). Sin hoja de estilos (jsdom, SSR) devuelve `''`:
+ * no hay respaldo literal (U2), `chartOption.ts` omite esa propiedad.
+ */
+function readToken(name: string): string {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return fallback
+    return ''
   }
 
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-
-  return value === '' ? fallback : value
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
 function prefersReducedMotion(): boolean {
@@ -129,81 +133,22 @@ function formatTooltipValue(value: unknown): string {
 }
 
 /**
- * La opcion de ECharts, construida SOLO con tokens `--kq-*` (doc 06): ningun
- * color propio de este componente. `readToken` trae el valor vigente en cada
- * llamada, asi que un cambio de marca en caliente (tarea 5.8) se refleja en
- * la proxima actualizacion.
+ * La opcion de ECharts, construida SOLO con tokens `--kq-*` (doc 06) por
+ * `buildChartOption`. `readToken` trae el valor vigente en cada llamada, asi
+ * que un cambio de marca en caliente (tarea 5.8) se refleja en la proxima
+ * actualizacion.
  */
 function buildOption(): Record<string, unknown> {
-  // U1, lista cerrada: los respaldos solo se usan sin `window` (SSR, jsdom), donde ECharts
-  // necesita un color real y `currentColor` no lo entiende. En el navegador mandan los tokens.
-  /* eslint-disable kronoqr-colors/no-literal-colors -- respaldos fuera del navegador, ver arriba */
-  const primary = readToken('--kq-color-primary-strong', '#b8542a')
-  const accent = readToken('--kq-color-accent', '#7a9b76')
-  const warning = readToken('--kq-color-warning', '#8a5312')
-  const muted = readToken('--kq-color-text-muted', '#6b5d54')
-  const textColor = readToken('--kq-color-text', '#3a2e28')
-  const borderColor = readToken('--kq-color-border', '#eaddcf')
-  /* eslint-enable kronoqr-colors/no-literal-colors */
-  const animation = !prefersReducedMotion()
-
-  const common = {
-    animation,
-    color: [primary, accent, warning, muted],
-    textStyle: { color: textColor },
-  }
-
-  if (props.type === 'pie') {
-    const first = props.series[0]
-
-    return {
-      ...common,
-      tooltip: {
-        trigger: 'item',
-        valueFormatter: formatTooltipValue,
-      },
-      legend: { bottom: 0, textStyle: { color: textColor } },
-      series: [
-        {
-          type: 'pie',
-          radius: ['45%', '70%'],
-          avoidLabelOverlap: true,
-          label: { color: textColor },
-          data: (first?.values ?? []).map((value, index) => ({
-            name: props.categories[index] ?? '',
-            value,
-          })),
-        },
-      ],
-    }
-  }
-
-  return {
-    ...common,
-    tooltip: {
-      trigger: 'axis',
-      valueFormatter: formatTooltipValue,
+  return buildChartOption(
+    {
+      type: props.type,
+      categories: props.categories,
+      series: props.series,
+      animation: !prefersReducedMotion(),
+      formatTooltipValue,
     },
-    legend: { top: 0, textStyle: { color: textColor } },
-    grid: { left: 56, right: 16, top: 32, bottom: 32, containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: [...props.categories],
-      axisLine: { lineStyle: { color: borderColor } },
-      axisLabel: { color: textColor },
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { lineStyle: { color: borderColor } },
-      axisLabel: { color: textColor },
-      splitLine: { lineStyle: { color: borderColor } },
-    },
-    series: props.series.map((entry) => ({
-      name: entry.name,
-      type: 'bar',
-      data: [...entry.values],
-    })),
-  }
+    readToken,
+  )
 }
 
 /**

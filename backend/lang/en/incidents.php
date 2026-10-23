@@ -38,7 +38,7 @@ return [
     ],
 
     'mail' => [
-        'subject' => 'KronoQR · attendance incidents waiting for review',
+        'subject' => ':app_name · attendance incidents waiting for review',
         'greeting' => 'Hello,',
         'intro' => 'The automatic review of the attendance record found :count situation(s) in your department that need a person to look at them.',
         'line' => ':date · :employee · :type (:severity priority)',

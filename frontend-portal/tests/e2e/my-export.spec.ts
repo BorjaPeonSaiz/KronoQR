@@ -152,7 +152,7 @@ test(
     const notice = page.getByTestId('pdf-busy')
 
     await expect(notice).toBeVisible()
-    await expect(notice).toContainText('Inténtalo de nuevo en 5 segundos')
+    await expect(notice).toContainText(/Inténtalo de nuevo en [1-5] segundos/)
     await expect(page.getByTestId('pdf-unavailable')).toHaveCount(0)
     await expectNoBlockingViolations(page)
 

@@ -37,6 +37,15 @@ tester.run('no-literal-colors (.ts)', rule, {
     'const fn = `calc(1px + 2px)`',
     "const text = 'garbage(1)'",
     'const n = 0xfff',
+    // Nombres de color: solo cuentan donde son un color, no una palabra.
+    "const variant = 'red'",
+    "const status = { tone: 'green', label: 'white paper' }",
+    "const ok = { color: 'transparent', fill: 'currentColor', stroke: 'inherit' }",
+    "const css = 'color: var(--kq-color-text); background: transparent; border: 1px solid var(--kq-color-border)'",
+    "const tokens = { color: 'var(--kq-color-text)' }",
+    // Comentarios: una referencia a una incidencia no es un color.
+    '// Incidencia #123 y #1',
+    '/* nombra el token --kq-color-text, no su valor */',
   ],
   invalid: [
     { code: "const a = '#b8542a'", errors: error },
@@ -54,11 +63,39 @@ tester.run('no-literal-colors (.ts)', rule, {
     { code: "const a = 'oklch(60% 0.1 40)'", errors: error },
     { code: 'const a = `hsl(${h} 50% 50%)`', errors: error },
     { code: 'const a = `${x} #abc`', errors: error },
+    // Funciones de color nuevas (V1-UX-2).
+    { code: "const a = 'color-mix(in srgb, red 10%, white)'", errors: error },
+    { code: "const a = 'color(display-p3 1 0 0)'", errors: error },
+    { code: "const a = 'light-dark(white, black)'", errors: error },
+    {
+      code: "const a = 'COLOR-MIX(in oklab, var(--kq-color-primary) 10%, transparent)'",
+      errors: error,
+    },
+    // Nombres de color donde son un color (V1-UX-2).
+    { code: "const a = 'color: red'", errors: error },
+    { code: "const a = 'border: 1px solid blue'", errors: error },
+    { code: "const a = 'fill:rebeccapurple;stroke:transparent'", errors: error },
+    { code: "const a = { color: 'red' }", errors: error },
+    { code: "const a = { backgroundColor: 'White' }", errors: error },
+    { code: "const a = { 'background-color': 'navy' }", errors: error },
+    { code: 'const a = { stroke: `orange` }', errors: error },
+    // Un hexadecimal en un comentario (R1-UX-01).
+    { code: '// tono #b8542a', errors: [{ messageId: 'literalColorComment' as const }] },
+    { code: '/* entry #064e3b */', errors: [{ messageId: 'literalColorComment' as const }] },
+    { code: '/** rojo #abc */', errors: [{ messageId: 'literalColorComment' as const }] },
   ],
 })
 
 vueTester.run('no-literal-colors (.vue)', rule, {
   valid: [
+    {
+      filename: 'style-ok.vue',
+      code: '<template><p /></template><style>p { color: var(--kq-color-text); background: transparent }</style>',
+    },
+    {
+      filename: 'attr-ok.vue',
+      code: '<template><svg fill="currentColor" stroke="none" class="text-kq-primary-strong" /></template>',
+    },
     {
       filename: 'ok.vue',
       code: '<template><p class="bg-kq-surface text-kq-text" :style="{ color: `var(--kq-color-text)` }">#123</p></template>',
@@ -70,6 +107,39 @@ vueTester.run('no-literal-colors (.vue)', rule, {
   ],
   invalid: [
     { filename: 'a.vue', code: '<template><path fill="#000" /></template>', errors: error },
+    { filename: 'a2.vue', code: '<template><path fill="red" /></template>', errors: error },
+    { filename: 'a3.vue', code: '<template><path :stroke="\'blue\'" /></template>', errors: error },
+    {
+      filename: 'a4.vue',
+      code: '<template><p :style="{ backgroundColor: \'gold\' }" /></template>',
+      errors: error,
+    },
+    {
+      filename: 'a5.vue',
+      code: '<template><p style="color: crimson" /></template>',
+      errors: error,
+    },
+    {
+      filename: 'a6.vue',
+      code: '<template><!-- #b8542a --><p /></template>',
+      errors: [{ messageId: 'literalColorComment' as const }],
+    },
+    // Bloques <style> (V1-UX-2).
+    {
+      filename: 's1.vue',
+      code: '<template><p /></template><style scoped>p { color: #fff }</style>',
+      errors: [{ messageId: 'literalColorStyle' as const }],
+    },
+    {
+      filename: 's2.vue',
+      code: '<template><p /></template><style>p { background: red }</style>',
+      errors: [{ messageId: 'literalColorStyle' as const }],
+    },
+    {
+      filename: 's3.vue',
+      code: '<template><p /></template><style>p { color: color-mix(in srgb, var(--kq-color-text) 50%, transparent) }</style>',
+      errors: [{ messageId: 'literalColorStyle' as const }],
+    },
     {
       filename: 'b.vue',
       code: '<template><p :style="{ color: \'#b8542a\' }" /></template>',

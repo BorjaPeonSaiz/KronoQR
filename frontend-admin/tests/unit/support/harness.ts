@@ -5,7 +5,7 @@
 // pruebas describen respuestas de la API, no interioridades del cliente: si
 // mañana cambia como se envia una peticion, siguen valiendo.
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import { vAriaDisabled } from '@/shared/ui/vAriaDisabled'
+import { vAriaDisabled } from '@kronoqr/web-kit/vAriaDisabled'
 import type { ComponentMountingOptions, DOMWrapper } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'

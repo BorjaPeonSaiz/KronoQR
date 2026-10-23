@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\Branding;
+use App\Modules\Shared\Domain\ValueObject\HexColor;
 use Tests\Support\Product\FixedLogo;
 
 /*
@@ -143,3 +144,24 @@ it('usa el motor real y no el doble de las pruebas de feature', function (): voi
     // enlazado por otra prueba de la suite.
     expect(app(InstructionsSheetRenderer::class))->toBeInstanceOf(BrowsershotInstructionsSheetRenderer::class);
 })->group('RL-05');
+
+it('pinta con el acento oscurecido lo que se lee y con el acento tal cual lo decorativo', function (string $acento, string $impreso): void {
+    // V1-UX-1: el nombre de la instalacion, los titulos de cada bloque y los
+    // pictogramas se leen; el filete de la cabecera y las vinetas no. Con un
+    // amarillo palido, lo primero quedaba a 1,28:1 en la hoja de cada empleado.
+    $html = renderizadorDeLaHoja()->htmlFor('es', new Branding('Hotel Marina', null, $acento), 'https://hotel-marina.example/portal/');
+
+    $rule = static fn (string $selector): string => preg_match('/'.preg_quote($selector, '/').' \{([^}]*)\}/', $html, $match) === 1 ? $match[1] : '';
+
+    expect($rule('.brand__name'))->toContain('color: '.$impreso.';')
+        ->and($rule('h2'))->toContain('color: '.$impreso.';')
+        ->and($rule('.block__icon'))->toContain('color: '.$impreso.';')
+        ->and($rule('.brand'))->toContain('solid '.$acento.';')
+        ->and($rule('.list li::before'))->toContain('background: '.$acento.';')
+        ->and(HexColor::fromHex($impreso)->contrastWith(HexColor::white()))
+        ->toBeGreaterThanOrEqual(HexColor::WCAG_TEXT_MINIMUM);
+})->with([
+    'amarillo palido (1,28:1)' => ['#f5e663', '#7b7332'],
+    'verde azulado medio (3,32:1)' => ['#2a9d8f', '#238276'],
+    'un acento que ya llega' => ['#0f766e', '#0f766e'],
+])->group('RL-05', 'RF-PD-08');

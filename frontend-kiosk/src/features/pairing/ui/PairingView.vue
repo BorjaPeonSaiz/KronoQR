@@ -24,6 +24,7 @@ import { useRouter } from 'vue-router'
 import { createPairingFlow } from '../application/pairingFlow'
 import type { PairingState } from '../application/pairingFlow'
 import { createApiClient } from '@/shared/api/client'
+import { useBranding } from '@/shared/branding/useBranding'
 import type { PairingCompleted } from '@/shared/api/types'
 import { APP_VERSION, persistPairedDevice } from '@/shared/telemetry/deviceIdentity'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -41,6 +42,13 @@ const api = createApiClient({
 })
 
 const state = ref<PairingState>({ kind: 'idle' })
+
+// Marca blanca antes de vincular (RF-PD-08, DC11). `useBranding` aplica YA la
+// copia guardada -o la del producto- y pide `GET /api/v1/branding` (publica)
+// en segundo plano: la pantalla no espera (regla dura 19). Si falla o llega
+// algo invalido, se queda lo que habia; se reintenta con cada codigo nuevo.
+const branding = useBranding({ api })
+let waitingEntries = 0
 
 function handlePaired(result: PairingCompleted): void {
   // El `device.uuid` sustituye al identificador local en la MISMA clave
@@ -96,8 +104,13 @@ function stopTicking(): void {
 watch(
   () => state.value.kind,
   (kind) => {
-    if (kind === 'waiting') ensureTicking()
-    else stopTicking()
+    if (kind === 'waiting') {
+      ensureTicking()
+      // La primera peticion ya la lanzo `useBranding`; las siguientes (un codigo
+      // nuevo) reintentan por si la tablet arranco sin red.
+      waitingEntries += 1
+      if (waitingEntries > 1) void branding.refresh()
+    } else stopTicking()
   },
   { immediate: true },
 )
@@ -151,6 +164,23 @@ onUnmounted(() => {
   >
     <h1 class="kiosk-sr-only">{{ t('pairing.title') }}</h1>
 
+    <div class="flex max-w-[60%] items-center justify-center">
+      <img
+        v-if="branding.current.value.logoUrl !== null"
+        :src="branding.current.value.logoUrl"
+        :alt="branding.current.value.applicationName"
+        class="h-16 max-w-64 object-contain"
+        data-testid="brand-logo"
+      />
+      <p
+        v-else
+        class="font-heading truncate text-3xl font-bold text-kq-kiosk-primary-strong"
+        data-testid="brand-name"
+      >
+        {{ branding.current.value.applicationName }}
+      </p>
+    </div>
+
     <div class="absolute top-6 left-6">
       <!-- Reloj y puerta de diagnostico (RF-KI-08, tarea 3.3, decision 8):
            una tablet sin emparejar es justo la que hay que poder
@@ -159,7 +189,7 @@ onUnmounted(() => {
     </div>
 
     <div class="absolute top-6 right-6">
-      <LanguageSelector />
+      <LanguageSelector :policy="branding.current.value.locales" />
     </div>
 
     <div

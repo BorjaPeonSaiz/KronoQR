@@ -621,6 +621,7 @@ final class ReportingServiceProvider extends ServiceProvider
             static fn (Application $app): MailReportExportNotifier => new MailReportExportNotifier(
                 $app->make(ReportExportRecipients::class),
                 Config::string('mail.default'),
+                $app->make(BrandingProvider::class),
             ),
         );
 

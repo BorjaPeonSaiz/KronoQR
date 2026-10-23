@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Notification;
 
 use App\Modules\Compliance\Application\Port\IncidentDigest;
 use App\Modules\Compliance\Application\Port\IncidentNotifier;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -45,6 +46,9 @@ use Throwable;
  */
 final readonly class MailIncidentNotifier implements IncidentNotifier
 {
+    /** La marca por el puerto, como la tarjeta y los PDF (R6-PL-07). */
+    public function __construct(private BrandingProvider $branding) {}
+
     public function notify(IncidentDigest $digest): bool
     {
         if ($digest->incidents === []) {
@@ -52,8 +56,10 @@ final readonly class MailIncidentNotifier implements IncidentNotifier
         }
 
         try {
+            // Dentro del `try`: si la marca no se puede leer, el aviso no sale,
+            // no se sella y se reintenta en la pasada siguiente.
             Notification::route('mail', $digest->email)
-                ->notify(new IncidentDigestNotification($digest));
+                ->notify(new IncidentDigestNotification($digest, $this->branding->current()->applicationName));
 
             return true;
         } catch (Throwable $exception) {

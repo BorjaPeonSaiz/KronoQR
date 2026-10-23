@@ -6,6 +6,7 @@
 // fijo, que no sabe de cambios de hora. La validacion real es del servidor.
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { useId } from 'vue'
+import { timezoneOptions } from './timezoneOptions'
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +20,7 @@ const props = withDefaults(
 const model = defineModel<string>({ required: true })
 
 const listId = useId()
+const zones = timezoneOptions()
 const inputClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
 </script>
@@ -38,10 +40,7 @@ const inputClass =
       data-test="timezone-input"
     />
     <datalist :id="listId">
-      <option value="Europe/Madrid" />
-      <option value="Atlantic/Canary" />
-      <option value="Europe/Lisbon" />
-      <option value="Europe/Paris" />
+      <option v-for="zone in zones" :key="zone" :value="zone" />
     </datalist>
   </FormField>
 </template>

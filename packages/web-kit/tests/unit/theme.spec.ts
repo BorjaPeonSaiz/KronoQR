@@ -7,7 +7,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { contrastRatio, WCAG_AA_MINIMUM } from '../../src/contrast'
-import { themePairs } from '../../src/themePairs'
+import { paintedColors } from '../../src/pairContrast'
+import { chartSeriesTokens } from '../../src/chartSeries'
+import { pairKey, themePairs } from '../../src/themePairs'
 
 // Ruta por `node:path` y no por `new URL(..., import.meta.url)`: bajo jsdom el
 // `URL` global es el del navegador simulado y `readFileSync` no lo acepta.
@@ -42,10 +44,13 @@ function valueOf(token: string): string {
 }
 
 describe('theme.css: contraste WCAG 2.2 AA de cada pareja declarada', () => {
-  it.each(themePairs.map((p) => [p.use, p.foreground, p.background, p.requirement] as const))(
+  // Se mide el color PINTADO: con el estado (hover con filtro, deshabilitado con
+  // opacidad) aplicado y cada canal redondeado a 8 bits, no el token en reposo.
+  it.each(themePairs.map((p) => [p.use, p.foreground, p.background, p.requirement, p] as const))(
     '%s: %s sobre %s (%s)',
-    (_use, foreground, background, requirement) => {
-      const ratio = contrastRatio(valueOf(foreground), valueOf(background))
+    (_use, _foreground, _background, requirement, item) => {
+      const painted = paintedColors(item.foreground, item.background, item.state, valueOf)
+      const ratio = contrastRatio(painted.foreground, painted.background)
 
       expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_MINIMUM[requirement])
     },
@@ -67,9 +72,63 @@ describe('theme.css: contraste WCAG 2.2 AA de cada pareja declarada', () => {
   })
 
   it('no repite parejas', () => {
-    const keys = themePairs.map((p) => `${p.foreground}/${p.background}`)
+    const keys = themePairs.map(pairKey)
 
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('theme.css: parejas de estado y de graficos', () => {
+  it('los estados oscurecen o apagan: el filtro y la opacidad cambian el color pintado', () => {
+    const states = themePairs.filter((p) => p.state !== undefined)
+
+    expect(states.length).toBeGreaterThan(0)
+    for (const item of states) {
+      const resting = paintedColors(item.foreground, item.background, undefined, valueOf)
+      const painted = paintedColors(item.foreground, item.background, item.state, valueOf)
+
+      expect(painted, item.use).not.toEqual(resting)
+    }
+  })
+
+  it('un control deshabilitado solo se mide con el suelo de producto, nunca con 4,5 ni 3', () => {
+    const disabled = themePairs.filter((p) => p.state?.kind === 'disabled')
+
+    expect(disabled.length).toBeGreaterThan(0)
+    expect(new Set(disabled.map((p) => p.requirement))).toEqual(new Set(['inactive']))
+  })
+
+  it('las series del grafico se miden como componente grafico contra la tarjeta (>= 3:1)', () => {
+    for (const token of chartSeriesTokens) {
+      expect(
+        contrastRatio(valueOf(token), valueOf('--kq-color-surface-raised')),
+        token,
+      ).toBeGreaterThanOrEqual(WCAG_AA_MINIMUM.large)
+      expect(
+        themePairs.some(
+          (p) =>
+            p.foreground === token &&
+            p.background === '--kq-color-surface-raised' &&
+            p.state === undefined,
+        ),
+        `${token} sobre surface-raised sin pareja`,
+      ).toBe(true)
+    }
+  })
+
+  it('las parejas de texto de primary-strong cubren todas las superficies donde se lee', () => {
+    const backgrounds = themePairs
+      .filter((p) => p.foreground === '--kq-color-primary-strong' && p.requirement === 'text')
+      .map((p) => p.background)
+
+    expect(backgrounds).toEqual(
+      expect.arrayContaining([
+        '--kq-color-surface',
+        '--kq-color-surface-raised',
+        '--kq-color-surface-alt',
+        '--kq-color-primary-soft',
+      ]),
+    )
   })
 })
 

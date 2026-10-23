@@ -4603,8 +4603,10 @@ export interface paths {
          *       **el nombre no lo degrada la licencia**.
          *     - `lang`: el idioma por defecto de la instalacion (`LOCALE_DEFAULT`), y
          *       `description` en ese idioma.
-         *     - `theme_color`: el color de acento elegido, o el de serie del quiosco
-         *       si no hay ninguno o el plan no incluye la marca blanca (ADR-023).
+         *     - Nada de color: `theme_color` y `background_color` son siempre el fondo del
+         *       quiosco (`--kq-color-kiosk-surface`), para que la barra del sistema y la
+         *       pantalla de arranque coincidan con la pantalla oscura. El acento del
+         *       cliente no viaja aqui.
          *     - `icons`: **el logotipo de la marca solo si es un PNG cuadrado de al
          *       menos 512 px de lado**, que es lo que Android necesita para ofrecer la
          *       instalacion; se publica la misma URL con huella que
@@ -4618,8 +4620,9 @@ export interface paths {
          *
          *     **Lo que no cambia nunca:** `id` es `/kiosk/` siempre —cambiar la marca
          *     no convierte la aplicacion instalada en otra—, y `start_url`, `scope`,
-         *     `display`, `display_override`, `orientation` y `background_color` son los
-         *     del quiosco, porque son comportamiento y no aspecto.
+         *     `display`, `display_override` y los colores son los
+         *     del quiosco, porque son comportamiento y no aspecto. No hay `orientation`: la
+         *     tablet se monta tambien en vertical.
          *
          *     **Es publico, y tiene que serlo**: el navegador lo pide sin credenciales
          *     al cargar la pagina, antes de que la tablet tenga token. Lo que revela es
@@ -8571,11 +8574,9 @@ export interface components {
              */
             display: "fullscreen";
             display_override: ("fullscreen" | "standalone")[];
-            /** @constant */
-            orientation: "landscape";
-            /** @description El color de acento de la marca, o el de serie del quiosco. */
+            /** @description El fondo del quiosco (`--kq-color-kiosk-surface`), con o sin marca. */
             theme_color: string;
-            /** @description Fijo, el de la pantalla de arranque del quiosco; no es marca. */
+            /** @description El fondo del quiosco (`--kq-color-kiosk-surface`); no es marca. */
             background_color: string;
             icons: components["schemas"]["WebAppManifestIcon"][];
         };

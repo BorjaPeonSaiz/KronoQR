@@ -247,8 +247,10 @@
       "useCsv": "Download CSV instead"
     },
     "pdfBusy": {
-      "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
-      "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available."
+      "title": "There are a lot of PDF downloads right now.",
+      "message": "Try again in {seconds} seconds, or download the CSV, which is always available.",
+      "messageNoWait": "Try again in a moment, or download the CSV, which is always available.",
+      "messageReady": "You can try the PDF again now, or download the CSV, which is always available."
     },
     "empty": "You have no work days in that period. The file was downloaded anyway, but it only has the criteria header: try other dates.",
     "downloading": "Generating the download…",

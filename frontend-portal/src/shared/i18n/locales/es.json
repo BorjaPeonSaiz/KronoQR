@@ -247,8 +247,10 @@
       "useCsv": "Descargar CSV en su lugar"
     },
     "pdfBusy": {
-      "message": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
-      "messageNoWait": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible."
+      "title": "Ahora mismo hay muchas descargas en PDF.",
+      "message": "Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
+      "messageNoWait": "Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible.",
+      "messageReady": "Ya puedes volver a intentarlo con el PDF, o descargar el CSV, que siempre está disponible."
     },
     "empty": "No tienes ninguna jornada en ese periodo. El fichero se ha descargado igualmente, pero solo lleva la cabecera con los criterios: prueba con otras fechas.",
     "downloading": "Generando la descarga…",

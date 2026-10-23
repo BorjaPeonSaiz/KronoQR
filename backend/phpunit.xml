@@ -64,6 +64,7 @@
             <directory>tests/Feature/Product</directory>
             <directory>tests/Feature/Quality</directory>
             <directory>tests/Feature/Reporting</directory>
+            <directory>tests/Feature/Shared</directory>
             <directory>tests/Feature/Workforce</directory>
         </testsuite>
         <testsuite name="Contract">

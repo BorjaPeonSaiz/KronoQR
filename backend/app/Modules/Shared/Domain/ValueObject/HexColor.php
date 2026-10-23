@@ -21,11 +21,12 @@ use InvalidArgumentException;
  * las dos cambia la formula, `HexColorTest` y `contrast.spec.ts` comparten los
  * valores publicados (negro/blanco 21:1, `#767676` 4,54:1) para que se note.
  *
- * **Una diferencia deliberada con `adjustUntil()`**: aqui cada candidato se
- * redondea a enteros ANTES de medirlo. El cliente mide el tono en coma flotante
- * y redondea al escribir el hexadecimal, y en el limite eso puede devolver un
- * color que, ya redondeado, se queda en 4,49:1. En un documento sellado lo que
- * cuenta es el color que se imprime, asi que se mide ese.
+ * **Cada candidato se redondea a enteros ANTES de medirlo**, aqui y, desde la
+ * 2.3.0 (R6-UX-02, tarea 16.3), tambien en `adjustUntil()`: medir en coma
+ * flotante y redondear al escribir el hexadecimal podia devolver un color que,
+ * ya redondeado, se quedaba en 4,49:1. Lo que cuenta es el color que se pinta o
+ * se imprime, asi que se mide ese. `accentForTextOnWhite()` y `accentTextOn()`
+ * de `branding.ts` comparten los casos de `tests/Fixtures/accent-text-on-white.json`.
  *
  * ## Por que en `Shared` y no en `Product`
  *

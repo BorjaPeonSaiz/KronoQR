@@ -42,12 +42,13 @@
 
    Los contrastes de los cinco fondos de confirmacion contra el blanco, medidos
    con la formula WCAG (`packages/web-kit/tests/unit/kioskConfirmation.spec.ts`
-   los vuelve a medir leyendo este fichero, UX7-01):
-     entry   #064e3b   9.72:1
-     exit    #1e3a8a  10.36:1
-     pending #312e81  11.42:1
-     notice  #78350f   9.07:1
-     error   #7f1d1d  10.02:1
+   los vuelve a medir leyendo este fichero, UX7-01; el valor de cada color es la
+   declaracion de debajo, y su tabla, la de docs/06-guia-visual.md, sin copias aqui):
+     entry    9.72:1
+     exit    10.36:1
+     pending 11.42:1
+     notice   9.07:1
+     error   10.02:1
    Todos por encima del 4.5:1 de AA y del 7:1 de AAA, que es el margen que hace
    falta bajo la iluminacion mala de un office a las seis de la manana. */
 

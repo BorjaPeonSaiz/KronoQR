@@ -46,11 +46,15 @@ use Throwable;
 final readonly class GetKioskManifestHandler
 {
     /**
-     * El color de serie del quiosco: el de su pantalla de arranque, el mismo
-     * que declara `frontend-kiosk/vite.config.ts`. Es del producto, no de un
+     * El color de serie del quiosco: el fondo real de su pantalla (token
+     * `--kq-color-kiosk-surface` de `packages/web-kit/src/theme.css`; una prueba de
+     * arquitectura ata los dos valores) y el que declara
+     * `frontend-kiosk/vite.config.ts`. Es `theme_color` y `background_color` SIEMPRE, con o sin marca: la
+     * barra del sistema y el arranque coinciden con el fondo oscuro, y el acento
+     * del cliente no se calcula aqui. Es del producto, no de un
      * cliente.
      */
-    public const string PRODUCT_THEME_COLOR = '#0f172a';
+    public const string PRODUCT_THEME_COLOR = '#241a15';
 
     /** Lado minimo del logotipo para publicarlo como icono. */
     public const int MINIMUM_ICON_SIDE = 512;
@@ -85,8 +89,8 @@ final readonly class GetKioskManifestHandler
         return new KioskManifest(
             applicationName: $branding->applicationName,
             locale: $branding->locales->default,
-            themeColor: $branding->accentColor ?? self::PRODUCT_THEME_COLOR,
-            customThemeColor: $branding->accentColor !== null,
+            themeColor: self::PRODUCT_THEME_COLOR,
+            customAccent: $branding->accentColor !== null,
             icons: $brandIcon instanceof KioskManifestIcon ? [$brandIcon] : self::productIcons(),
             brandedIcons: $brandIcon instanceof KioskManifestIcon,
         );

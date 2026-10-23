@@ -1933,6 +1933,23 @@ fichero:
 - El acceso de soporte del fabricante **no** pide exportaciones en segundo
   plano.
 
+**Al actualizar a la 2.3.0: la marca de tu instalación, también en los correos y
+en lo impreso.** No tienes que hacer nada:
+
+- **Los correos** (incidencias pendientes, resumen semanal e «informe listo»)
+  llevan en el asunto, la cabecera, la despedida y el pie el nombre de tu
+  instalación (`BRANDING_APP_NAME`, pantalla **Marca**), no «KronoQR», y van
+  enteros en el idioma de la cuenta que los recibe: se acabaron el «Regards,» y
+  el «All rights reserved.» en inglés. Si tienes una regla de correo que filtra
+  por el asunto «KronoQR · …», cámbiala por el nombre de tu instalación.
+- **El `README.md` de la exportación íntegra** se titula con ese nombre.
+- **La tarjeta y la hoja de instrucciones** pintan el nombre, los títulos y los
+  pictogramas con tu color de acento oscurecido lo justo para leerse sobre papel
+  blanco, como ya hacían los PDF; el filete de color de la tarjeta sigue con el
+  color tal cual. En la tarjeta, el nombre de la instalación pasa de 6 a 8 pt: un
+  nombre de más de unas 18 letras se corta antes con puntos suspensivos. Las
+  tarjetas ya impresas siguen valiendo; no hace falta reimprimir.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

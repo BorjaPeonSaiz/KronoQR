@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\ReportExportNotifier;
 use App\Modules\Reporting\Application\Port\ReportExportRecipients;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportNotificationChannel;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -74,6 +75,8 @@ final readonly class MailReportExportNotifier implements ReportExportNotifier
         private ReportExportRecipients $recipients,
         /** `MAIL_MAILER` ya resuelto (regla dura 14): el adaptador no lee configuracion. */
         private string $mailer,
+        /** La marca por el puerto, como la tarjeta y los PDF (R6-PL-07). */
+        private BrandingProvider $branding,
     ) {}
 
     public function notify(ReportExport $export): ReportExportNotificationChannel
@@ -90,7 +93,7 @@ final readonly class MailReportExportNotifier implements ReportExportNotifier
 
         try {
             Notification::route('mail', $recipient->email)
-                ->notify(new ReportExportReadyNotification($export, $recipient));
+                ->notify(new ReportExportReadyNotification($export, $recipient, $this->branding->current()->applicationName));
 
             return ReportExportNotificationChannel::Mail;
         } catch (Throwable $exception) {

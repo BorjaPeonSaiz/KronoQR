@@ -23,7 +23,9 @@ use App\Modules\Shared\Domain\ValueObject\HexColor;
  * color que el servidor acepta sin ella, o al reves. En el panel y el portal el
  * acento sustituye a `primary-strong`, texto de enlace y de marca sobre esas
  * dos superficies (doc 06 §2 y §7), y eso es texto normal (WCAG 1.4.3). El
- * valor de serie, `#b8542a`, da 4,56:1 sobre `surface`.
+ * acento de serie DEL CATALOGO (`BRANDING_ACCENT_COLOR`), `#b8542a`, da 4,56:1
+ * sobre `surface`. No es el `primary-strong` del tema por omision, que desde la
+ * 2.3.0 es `#b0502a` (16.3): ese solo se ve mientras no hay acento.
  *
  * Las dos superficies son tokens del tema base que **ningun cliente cambia**
  * (doc 06 §7: la marca solo toca la familia primaria). Estan copiadas aqui

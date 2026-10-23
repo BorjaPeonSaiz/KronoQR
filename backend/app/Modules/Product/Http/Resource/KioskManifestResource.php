@@ -14,7 +14,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * quiosco con la marca de la instalacion.
  *
  * Lo que es comportamiento del quiosco —`id`, `start_url`, `scope`, `display`,
- * `display_override`, `orientation`, `background_color`— se escribe aqui y no
+ * `display_override`— se escribe aqui y no
  * sale de ningun ajuste: son los mismos valores que `frontend-kiosk/vite.config.ts`
  * y el contrato los fija. **`id` no cambia nunca con la marca**: si cambiara, la
  * tablet trataria el quiosco rebautizado como otra aplicacion.
@@ -33,8 +33,6 @@ final class KioskManifestResource extends JsonResource
     public const string CONTENT_TYPE = 'application/manifest+json';
 
     private const string KIOSK_PATH = '/kiosk/';
-
-    private const string BACKGROUND_COLOR = '#0f172a';
 
     public static $wrap = null;
 
@@ -61,9 +59,10 @@ final class KioskManifestResource extends JsonResource
             'scope' => self::KIOSK_PATH,
             'display' => 'fullscreen',
             'display_override' => ['fullscreen', 'standalone'],
-            'orientation' => 'landscape',
             'theme_color' => $manifest->themeColor,
-            'background_color' => self::BACKGROUND_COLOR,
+            // El mismo color: el fondo real del quiosco. Una sola constante,
+            // `GetKioskManifestHandler::PRODUCT_THEME_COLOR`.
+            'background_color' => $manifest->themeColor,
             'icons' => array_map(
                 static fn (KioskManifestIcon $icon): array => [
                     'src' => $icon->kioskAsset ? self::KIOSK_PATH.$icon->src : $icon->src,

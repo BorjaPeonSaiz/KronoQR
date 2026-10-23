@@ -113,7 +113,13 @@ final readonly class BrowsershotInstructionsSheetRenderer implements Instruction
             'brand' => [
                 'name' => $brand->applicationName,
                 'logo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
+                // Dos colores y no uno (V1-UX-1): el filete de la cabecera y las
+                // vinetas son decoracion y llevan el acento tal cual; lo que se
+                // LEE —nombre de la instalacion, titulos y pictogramas— lleva el
+                // acento oscurecido hasta 4,5:1 sobre el papel blanco, como los
+                // PDF sellados (MB3). Lo calcula el dominio, no la plantilla.
                 'accent' => $brand->accentColor,
+                'accentText' => $brand->accentForTextOnWhite(),
             ],
         ])->render();
     }

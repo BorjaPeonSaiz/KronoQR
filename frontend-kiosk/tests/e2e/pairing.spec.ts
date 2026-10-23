@@ -11,6 +11,7 @@
 
 import { expect, test } from '@playwright/test'
 import { expectNoBlockingViolations } from './support/axe'
+import { stubBrandingApi } from './support/kiosk'
 import { DEVICE_UUID, stubPairing, TOKEN_VALUE } from './support/pairing'
 
 test.beforeEach(async ({ page }) => {
@@ -84,5 +85,30 @@ test(
     await expect(page.getByTestId('pairing-code')).toBeVisible()
 
     await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'la tablet sin vincular muestra la marca del cliente antes de emparejarse',
+  { tag: ['@RF-PD-06', '@RF-PD-08'] },
+  async ({ page }) => {
+    await stubBrandingApi(page, { variant: 'hotel-marina' })
+    await page.goto('/')
+
+    await expect(page.getByTestId('pairing-code')).toBeVisible()
+    await expect(page.getByTestId('brand-logo')).toHaveAttribute('alt', 'Hotel Marina')
+    await expect(page).toHaveTitle(/Hotel Marina/)
+  },
+)
+
+test(
+  'si la marca falla, la pantalla de emparejamiento sigue con la del producto',
+  { tag: ['@RF-PD-06', '@RF-PD-08'] },
+  async ({ page }) => {
+    await page.route('**/api/v1/branding', (route) => route.abort())
+    await page.goto('/')
+
+    await expect(page.getByTestId('pairing-code')).toBeVisible()
+    await expect(page.getByTestId('brand-name')).toHaveText('KronoQR')
   },
 )

@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Notification;
 use App\Modules\Reporting\Application\Port\WeeklySummaryMailer;
 use App\Modules\Reporting\Application\Port\WeeklySummaryRecipient;
 use App\Modules\Reporting\Domain\ValueObject\WeeklySummary;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -41,11 +42,16 @@ use Throwable;
  */
 final readonly class MailWeeklySummaryNotifier implements WeeklySummaryMailer
 {
+    /** La marca por el puerto, como la tarjeta y los PDF (R6-PL-07). */
+    public function __construct(private BrandingProvider $branding) {}
+
     public function send(WeeklySummaryRecipient $recipient, WeeklySummary $summary): bool
     {
         try {
+            // Dentro del `try`: si la marca no se puede leer, el resumen no sale
+            // y se cuenta como no entregado, igual que un SMTP caido.
             Notification::route('mail', $recipient->email)
-                ->notify(new WeeklySummaryNotification($recipient, $summary));
+                ->notify(new WeeklySummaryNotification($recipient, $summary, $this->branding->current()->applicationName));
 
             return true;
         } catch (Throwable $exception) {

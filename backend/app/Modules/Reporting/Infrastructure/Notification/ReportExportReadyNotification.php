@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Notification;
 use App\Modules\Reporting\Application\Port\ReportExportRecipient;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
+use App\Modules\Shared\Infrastructure\Notification\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
@@ -54,10 +55,20 @@ use Illuminate\Support\Facades\Lang;
  */
 final class ReportExportReadyNotification extends Notification
 {
+    /**
+     * @param  string  $brandName  El nombre de la instalacion (R6-PL-07): va en el
+     *                             asunto, la cabecera, la despedida y el pie.
+     *                             Nunca `APP_NAME`.
+     */
     public function __construct(
         private readonly ReportExport $export,
         private readonly ReportExportRecipient $recipient,
-    ) {}
+        private readonly string $brandName,
+    ) {
+        // El idioma del destinatario tambien para lo que Laravel pinta al
+        // enviar, no solo para las lineas del cuerpo (V6-PL-05).
+        $this->locale = $recipient->locale;
+    }
 
     /**
      * @return list<string>
@@ -71,8 +82,8 @@ final class ReportExportReadyNotification extends Notification
     {
         $locale = $this->recipient->locale;
 
-        return (new MailMessage)
-            ->subject(Lang::get('report-exports.mail.subject', [], $locale))
+        return BrandedMailMessage::create($this->brandName, $locale)
+            ->subject(Lang::get('report-exports.mail.subject', ['app_name' => $this->brandName], $locale))
             ->greeting(Lang::get('report-exports.mail.greeting', ['name' => $this->recipient->name], $locale))
             // Que se genero, con su nombre: «el informe de horas» de una
             // exportacion para la Inspeccion seria una frase falsa (V5-PA-4).

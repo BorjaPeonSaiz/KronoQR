@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { accentContrast, accentTextOn, readThemeTokens } from '@kronoqr/web-kit/branding'
 import { useSessionStore } from '@/features/auth/session.store'
 import BrandingView from '@/features/settings/BrandingView.vue'
 import es from '@/shared/i18n/locales/es.json'
@@ -119,6 +120,31 @@ describe('BrandingView', () => {
       '#b8542a',
     )
     expect(wrapper.find('[data-test="logo-path"]').element).toHaveProperty('value', '')
+  })
+
+  it('enseña siempre el tono en pantalla y el de la tarjeta impresa (#b8542a y #ffe14d)', async () => {
+    stubFetch(() => jsonResponse(RECIEN_INSTALADO))
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    // El acento de serie: cumple, y aun asi la pantalla dice que tono se usa y cual se imprime.
+    const tones = (): string => wrapper.find('[data-test="accent-tones"]').text()
+    const printed = (hex: string): string => accentTextOn(hex)
+
+    expect(tones()).toContain(
+      `En pantalla se usará ${accentContrast('#b8542a', readThemeTokens(document)).applied}`,
+    )
+    expect(tones()).toContain(`en la tarjeta impresa, ${printed('#b8542a')}`)
+
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#ffe14d')
+
+    // Fixture compartido con el backend: `Branding::accentForTextOnWhite()` da #867628.
+    expect(printed('#ffe14d')).toBe('#867628')
+    expect(tones()).toContain('en la tarjeta impresa, #867628')
+    expect(tones()).toContain(
+      `En pantalla se usará ${accentContrast('#ffe14d', readThemeTokens(document)).applied}`,
+    )
   })
 
   it('no deja guardar mientras no haya ningun cambio', async () => {

@@ -1953,6 +1953,23 @@ progress and cancellation.** None of this changes what each file contains:
   pages, and the credentials summary still counts the whole workforce.
 - The manufacturer's support access does **not** request background exports.
 
+**When updating to 2.3.0: your installation's brand, in the e-mails and on paper
+too.** You do not need to do anything:
+
+- **The e-mails** (pending incidents, weekly summary and "report ready") carry
+  your installation's name (`BRANDING_APP_NAME`, **Branding** screen), not
+  "KronoQR", in the subject, header, sign-off and footer, and are written
+  entirely in the language of the receiving account: no more "Regards," and
+  "All rights reserved." in English. If you have a mail rule that filters on the
+  "KronoQR · …" subject, change it to your installation's name.
+- **The `README.md` of the full data export** is titled with that name.
+- **The card and the instructions sheet** paint the name, the headings and the
+  pictograms with your accent colour darkened just enough to read on white
+  paper, as the PDF documents already did; the colour strip on the card keeps
+  the colour as it is. On the card, the installation name grows from 6 to 8 pt:
+  a name longer than about 18 letters is cut earlier with an ellipsis. Cards
+  already printed remain valid; there is no need to reprint.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet
