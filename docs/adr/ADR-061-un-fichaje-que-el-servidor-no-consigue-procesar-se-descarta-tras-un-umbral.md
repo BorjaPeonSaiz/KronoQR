@@ -150,7 +150,18 @@ umbral. Nada se borra (regla 5).
 
 1. **`scan_events`**: fila con `result = discarded_unprocessable`, `occurred_at` (del quiosco, el que
    vale para el registro legal) y `recorded_at` (el del servidor), con las columnas mínimas.
-   `employee_id` es el titular, solo si se atribuye. `shift_entry_id` queda nulo.
+   `shift_entry_id` queda nulo. **`employee_id` lleva al titular solo si se atribuye por una
+   tarjeta auténtica**, con el mismo significado que en RN-20: una firma válida dice de quién es la
+   tarjeta.
+   - **Atribuido por código de empleado (vía PIN), `employee_id` queda nulo, y también
+     `claimed_employee_id`.** Un código tecleado no autentica a nadie, y por eso ADR-043 lo separa
+     de `employee_id`.
+   - `claimed_employee_id` es la entrada de RN-19: rellenarlo abriría además una
+     `rejected_pin_scan` sobre algo que no es un PIN rechazado, es decir, dos incidencias por el
+     mismo fichaje.
+   - El dueño por PIN vive en un solo sitio: `discarded_scan_reports.owner_employee_id`, con
+     `attribution = employee_code`, que es lo que lee la revisión diaria. Lo decidió
+     `arquitecto-dominio` el 23-10-2026 (duda 3 de la implementación).
 2. **`discarded_scan_reports`**: la fila que ya lee la revisión diaria, con las columnas nuevas
    `source = server`, `failed_attempts` y `first_failed_at`, y además `http_status = 422`, el
    `problem_type` del descarte y `discarded_at = recorded_at`. La atribución es la de ADR-047 §2
@@ -205,6 +216,17 @@ el runbook explica cómo cruzarlo con el quiosco y la hora.
   y esa jornada, así que quien la revise ve las dos, y `turno-abierto-prolongado` avisa del turno de
   más. Los fichajes posteriores no se marcan para revisión: el lote no sabe de quién era la cabeza.
 - **Un defecto general sigue atascando la cola tras agotar el cupo**, a propósito y con alerta crítica.
+- **El cupo es aproximado bajo concurrencia, y se acepta así** (duda 4 de la implementación,
+  decidida por `arquitecto-dominio` el 23-10-2026). Se cuenta antes de la transacción del descarte y sin candado.
+  - Dos descartes simultáneos de `scan_id` distintos del mismo quiosco pueden excederlo: como mucho,
+    en el número de peticiones de ese quiosco en vuelo a la vez, que en la práctica es una o dos.
+  - El caso para el que existe el cupo, el defecto general, **es secuencial** por RN-21: solo falla
+    la cabeza de la cola, y la siguiente no se envía hasta que la anterior tiene desenlace. La
+    carrera no lo afecta.
+  - El exceso cuesta una o dos incidencias más para RRHH, y ningún fichaje registrado mal.
+  - Un candado por dispositivo (por ejemplo, un *advisory lock*) añadiría un candado más al orden
+    único de ADR-046, por delante de la cadena de auditoría que toma el asiento. Se reconsidera si
+    el exceso aparece en producción.
 - **Riesgo residual aceptado: un fichaje envenenado que mata el proceso no se cuenta nunca.** Pasa con
   el tiempo de PHP-FPM agotado, la memoria agotada o un `502`/`504` de nginx: no hay `catch` que
   escriba. Lo siguen viendo las alertas de cola atascada (doc 07 §6).
