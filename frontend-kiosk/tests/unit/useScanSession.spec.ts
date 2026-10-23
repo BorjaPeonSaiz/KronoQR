@@ -272,6 +272,28 @@ describe('sonido de la sesion: tras la respuesta del servidor', () => {
     session.dismiss()
   })
 
+  it('fallo de red explicito con `onLine` en true (V21-7-KI-1): `pending` en el momento, sin esperar al plazo', () => {
+    const { session, played } = scanned()
+
+    expect(played).toEqual([])
+    session.markPending('s1')
+    expect(played).toEqual(['pending'])
+
+    vi.advanceTimersByTime(SCAN_SOUND_SERVER_WAIT_MS * 2)
+    session.markPending('s1')
+    expect(played).toEqual(['pending'])
+    session.dismiss()
+  })
+
+  it('`markPending` de otro escaneo, o ya retirada la espera, no suena', () => {
+    const { session, played } = scanned()
+
+    session.markPending('otro')
+    session.dismiss()
+    session.markPending('s1')
+    expect(played).toEqual([])
+  })
+
   it('rechazo dentro del plazo: `error`, una sola vez', () => {
     const { session, played } = scanned()
 

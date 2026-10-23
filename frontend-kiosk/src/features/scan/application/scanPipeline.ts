@@ -109,6 +109,13 @@ export interface ScanPipelineOptions {
   readonly onUnqueuedRead?: () => void
   /** Llega cuando el servidor contesta. Puede no llegar nunca: es opcional por diseno. */
   readonly onSettled?: (confirmation: ScanConfirmation) => void
+  /**
+   * El envio ha vuelto SIN desenlace del servidor (`deferred`): fallo de red
+   * explicito aunque `navigator.onLine` siga en `true`, o cola por delante
+   * (V21-7-KI-1). No va a llegar ninguna respuesta dentro del plazo del tono, asi
+   * que la sesion suena `pending` en el momento en vez de esperar a que venza.
+   */
+  readonly onDeferred?: (scanId: string) => void
   readonly onError?: (
     code: 'submit_failed',
     context: Record<string, string | number | boolean>,
@@ -188,6 +195,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       // corregir una confirmacion que era correcta solo confunde. `fallbackName`
       // queda disponible para que la tarea 1.9 lo use al reintentar.
       void fallbackName
+      options.onDeferred?.(scan.scan_id)
       return
     }
     settle(confirmation)

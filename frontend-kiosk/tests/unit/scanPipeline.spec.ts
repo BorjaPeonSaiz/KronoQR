@@ -473,3 +473,38 @@ describe('tuberia del escaneo', () => {
     expect(Object.keys(settled[0] ?? {}).sort()).toEqual(['kind', 'occurredAt', 'scanId'])
   })
 })
+
+describe('tuberia del escaneo: envio sin desenlace', () => {
+  it('avisa con `onDeferred` en cuanto el envio vuelve diferido (V21-7-KI-1)', async () => {
+    const deferred: string[] = []
+    const settled: ScanConfirmation[] = []
+    const pipeline = createScanPipeline({
+      submission: { submit: async () => ({ kind: 'deferred' }) },
+      deviceId: 'dev-1',
+      onSettled: (confirmation) => settled.push(confirmation),
+      onDeferred: (scanId) => deferred.push(scanId),
+    })
+
+    const confirmation = pipeline.handleDecoded(PAYLOAD)
+    await vi.waitFor(() => expect(deferred).toHaveLength(1))
+
+    expect(deferred[0]).toBe(confirmation?.scanId)
+    expect(settled).toEqual([])
+  })
+
+  it('no avisa con `onDeferred` si el servidor ya decidio', async () => {
+    const onDeferred = vi.fn()
+    const settled: ScanConfirmation[] = []
+    const pipeline = createScanPipeline({
+      submission: { submit: async () => ({ kind: 'rejected' }) },
+      deviceId: 'dev-1',
+      onSettled: (confirmation) => settled.push(confirmation),
+      onDeferred,
+    })
+
+    pipeline.handleDecoded(PAYLOAD)
+    await vi.waitFor(() => expect(settled).toHaveLength(1))
+
+    expect(onDeferred).not.toHaveBeenCalled()
+  })
+})

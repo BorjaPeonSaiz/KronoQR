@@ -158,6 +158,7 @@ const pipeline = createScanPipeline({
   // armado para una tarjeta que no es la que se esperaba.
   onUnqueuedRead: () => breakIntent.disarm(),
   onSettled: (confirmation) => session.settle(confirmation),
+  onDeferred: (scanId) => session.markPending(scanId),
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),
 })
 

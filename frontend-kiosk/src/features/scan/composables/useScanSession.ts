@@ -65,6 +65,12 @@ export interface ScanSession {
   present(confirmation: ScanConfirmation): void
   /** Aplica el desenlace real del servidor sobre la confirmacion en pantalla. */
   settle(confirmation: ScanConfirmation): void
+  /**
+   * El envio ha vuelto sin desenlace (fallo de red explicito, cola por delante):
+   * suena `pending` ya, sin esperar al plazo del servidor (V21-7-KI-1). No hace
+   * nada si ese escaneo ya sono, o si su espera se cerro antes.
+   */
+  markPending(scanId: string): void
   dismiss(): void
 }
 
@@ -198,6 +204,11 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
       show(next)
       if (next.kind === 'verifying') return
       playOnce(next.scanId, toneFor(next))
+    },
+
+    markPending(scanId) {
+      if (soundWait?.scanId !== scanId) return
+      playOnce(scanId, 'pending')
     },
 
     dismiss() {
