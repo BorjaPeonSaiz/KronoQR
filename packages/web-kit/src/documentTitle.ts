@@ -1,9 +1,10 @@
 // Titulo de la pestaña por pantalla (WCAG 2.4.2 «Página titulada», V7-PA-2, R7-PO-03).
 //
-// `applyBranding` pone el nombre de la instalacion como titulo y no sabe en que pantalla
-// esta la persona. Aqui se compone `pantalla – nombre`, en el idioma que se esta mostrando,
-// y se recompone SOLA cada vez que la marca se aplica (despues de que ella reescriba el
-// titulo): quien lo usa no tiene que acordarse de llamar a ningun `refresh`.
+// El panel y el portal crean su estado de marca con `manageTitle: false`: `applyBranding` no
+// toca `<title>`, asi que este modulo es su UNICO dueño. Compone `pantalla – nombre`, en el
+// idioma que se esta mostrando, y se recompone solo cuando cambia la pantalla, el idioma o el
+// nombre de la instalacion. Que la marca falle o llegue invalida no cambia nada: el titulo
+// compuesto sigue ahi, sin vigilar el DOM.
 //
 // El titulo es siempre generico de la pantalla: nunca lleva el nombre de la persona cuya
 // ficha se mira (minimizacion de datos personales). Compartido por el panel y el portal.
@@ -34,11 +35,6 @@ export function bindDocumentTitle(options: {
   readonly router: TitledRouter
   readonly i18n: { readonly global: { t: (key: string) => string; locale: Ref<string> } }
   readonly applicationName: () => string
-  /**
-   * Cualquier cosa reactiva que cambie cuando la marca se vuelve a aplicar (p. ej. el objeto
-   * `branding.current`): `applyBranding` reescribe el titulo aunque el nombre sea el mismo.
-   */
-  readonly brandingVersion?: () => unknown
   readonly document?: Document
 }): DocumentTitleBinding {
   const doc = options.document ?? globalThis.document
@@ -60,33 +56,13 @@ export function bindDocumentTitle(options: {
     refresh,
     { immediate: true, flush: 'sync' },
   )
-  // Despues de que la marca haya reescrito el titulo, en el ciclo posterior.
-  const stopBranding = watch(
-    [options.applicationName, options.brandingVersion ?? (() => null)],
-    refresh,
-    { flush: 'post' },
-  )
-
-  // Quien reescriba el titulo despues —`applyBranding` lo hace SIEMPRE al terminar, tambien
-  // cuando la marca falla o llega invalida y no cambia nada reactivo— se vuelve a componer. Sin
-  // esto el titulo de pantalla se perdia justo en el caso en que la marca no llega.
-  const titleElement = doc.querySelector('title')
-  const observer = new MutationObserver(() => {
-    if (doc.title !== composed()) {
-      refresh()
-    }
-  })
-
-  if (titleElement !== null) {
-    observer.observe(titleElement, { childList: true, characterData: true, subtree: true })
-  }
+  const stopName = watch(options.applicationName, refresh, { flush: 'sync' })
 
   return {
     refresh,
     stop: () => {
       stopScreen()
-      stopBranding()
-      observer.disconnect()
+      stopName()
     },
   }
 }

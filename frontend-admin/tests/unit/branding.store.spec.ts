@@ -45,7 +45,7 @@ describe('branding.store', () => {
 
     store.apply()
 
-    expect(document.title).toBe(PRODUCT_BRANDING.applicationName)
+    expect(document.title).toBe('')
     expect(document.documentElement.getAttribute('data-kq-branded')).toBe('product')
   })
 
@@ -59,13 +59,12 @@ describe('branding.store', () => {
     expect(store.current.applicationName).toBe('Hotel Marina')
     expect(store.current.accentColor).toBe('#0f5c8c')
     expect(store.current.logoUrl).toBe(HOTEL_BRANDING.logo_url)
-    // El titulo lo pone `applyBranding` sin depender de ningun token de color:
-    // se comprueba aqui. Derivar los tonos del acento SI exige leer
+    // El titulo NO lo toca la marca (manageTitle: false, lo compone bindDocumentTitle). Derivar los tonos del acento SI exige leer
     // `theme.css` sobre el documento, y eso ya lo prueba
     // `packages/web-kit/tests/unit/branding.spec.ts` con un resolutor de
     // tokens de mentira; en jsdom, sin la hoja de estilos real cargada, no
     // hay nada que leer.
-    expect(document.title).toBe('Hotel Marina')
+    expect(document.title).toBe('')
   })
 
   it('un fallo de red se ignora en silencio: se queda la marca del producto', async () => {
@@ -116,7 +115,7 @@ describe('branding.store', () => {
     store.apply()
 
     expect(store.current.applicationName).toBe('Hotel Marina')
-    expect(document.title).toBe('Hotel Marina')
+    expect(document.title).toBe('')
   })
 
   it('MB4: una copia corrupta no impide arrancar con el producto', () => {

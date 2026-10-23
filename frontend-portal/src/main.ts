@@ -108,7 +108,6 @@ bindDocumentTitle({
   router,
   i18n,
   applicationName: () => branding.current.applicationName,
-  brandingVersion: () => branding.current,
 })
 
 void branding.load()

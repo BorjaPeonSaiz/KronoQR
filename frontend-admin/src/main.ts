@@ -148,7 +148,6 @@ bindDocumentTitle({
   router,
   i18n,
   applicationName: () => branding.current.applicationName,
-  brandingVersion: () => branding.current,
 })
 
 // El cambio de pantalla se anuncia llevando el foco al `<h1>`, y el foco que se

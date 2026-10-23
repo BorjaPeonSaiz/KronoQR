@@ -456,11 +456,16 @@ export interface ApplyBrandingOptions {
   readonly document?: Document
   /** Por defecto, los tokens base se leen del propio documento. */
   readonly tokens?: TokenResolver
+  /**
+   * `false` = no toca `<title>`: quien compone «pantalla – nombre» (`bindDocumentTitle`, panel y
+   * portal) es el unico dueño del titulo. Por defecto `true`: el quiosco no tiene pantallas.
+   */
+  readonly manageTitle?: boolean
 }
 
 /**
  * Pinta la marca: sobreescribe (o limpia) los tokens del contexto, pone el
- * nombre en el titulo de la pestaña y el logotipo como favicon.
+ * nombre en el titulo de la pestaña (salvo `manageTitle: false`) y el logotipo como favicon.
  *
  * Idempotente y reversible: aplicar `PRODUCT_BRANDING` despues de una marca
  * con acento devuelve el documento a la paleta del producto. Nunca lanza por
@@ -487,7 +492,7 @@ export function applyBranding(branding: Branding, options: ApplyBrandingOptions)
   }
   root.setAttribute('data-kq-branded', branded ? 'accent' : 'product')
 
-  doc.title = branding.applicationName
+  if (options.manageTitle !== false) doc.title = branding.applicationName
 
   const existing = doc.head.querySelector<HTMLLinkElement>(`link[rel="icon"][${FAVICON_MARK}]`)
   if (branding.logoUrl === null) {

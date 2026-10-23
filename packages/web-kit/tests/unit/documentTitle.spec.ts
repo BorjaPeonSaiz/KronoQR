@@ -1,31 +1,32 @@
 // Titulo de la pestaña por pantalla (WCAG 2.4.2, V7-PA-2, R7-PO-03), compartido por el panel y el
-// portal. El caso que importa: `applyBranding` reescribe el titulo con el nombre a secas SIEMPRE
-// al terminar, tambien cuando la marca falla o llega invalida y no cambia nada reactivo.
-import { describe, expect, it } from 'vitest'
-import { nextTick, ref } from 'vue'
+// portal. La marca ya no toca `<title>` (`manageTitle: false`): este modulo es su unico dueño y no
+// vigila el DOM. Lo que importa es que una marca que falla o llega invalida no pierde el titulo.
+import { afterEach, describe, expect, it } from 'vitest'
+import { ref } from 'vue'
+import { applyBranding, PRODUCT_BRANDING } from '../../src/branding'
+import { createBrandingState } from '../../src/brandingState'
 import { bindDocumentTitle } from '../../src/documentTitle'
 
 function setup() {
   document.head.innerHTML = '<title>KronoQR</title>'
   const locale = ref('es')
+  const name = ref('KronoQR')
   const currentRoute = ref({ meta: { titleKey: 'screen.title' as string | undefined } })
   const binding = bindDocumentTitle({
     router: { currentRoute },
     i18n: { global: { t: (key: string) => `[${locale.value}] ${key}`, locale } },
-    applicationName: () => 'KronoQR',
+    applicationName: () => name.value,
   })
 
-  return { binding, locale, currentRoute }
+  return { binding, locale, currentRoute, name }
 }
 
-/** Deja pasar el callback del MutationObserver. */
-const settle = async (): Promise<void> => {
-  await nextTick()
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
+afterEach(() => {
+  document.head.innerHTML = ''
+})
 
 describe('bindDocumentTitle', () => {
-  it('compone «pantalla – instalacion» y sigue al idioma y a la ruta', async () => {
+  it('compone «pantalla – instalacion» y sigue al idioma y a la ruta', () => {
     const { binding, locale, currentRoute } = setup()
 
     expect(document.title).toBe('[es] screen.title – KronoQR')
@@ -39,25 +40,65 @@ describe('bindDocumentTitle', () => {
     binding.stop()
   })
 
-  it('si la marca falla y reescribe el titulo a secas, vuelve a componerlo', async () => {
-    const { binding } = setup()
+  it('sigue al nombre de la instalacion cuando llega la marca', () => {
+    const { binding, name } = setup()
 
-    // Lo que hace `applyBranding` al terminar aunque la peticion haya fallado: nada reactivo cambia.
-    document.title = 'KronoQR'
-    await settle()
+    name.value = 'Hotel Marina'
 
-    expect(document.title).toBe('[es] screen.title – KronoQR')
-
+    expect(document.title).toBe('[es] screen.title – Hotel Marina')
     binding.stop()
   })
 
-  it('tras stop() deja de vigilar el titulo', async () => {
+  it('una marca que falla (red caida) no pierde el titulo de pantalla', async () => {
     const { binding } = setup()
+    const state = createBrandingState({
+      mode: 'light',
+      manageTitle: false,
+      storage: null,
+      fetchBranding: async () => {
+        throw new TypeError('Failed to fetch')
+      },
+    })
+
+    await state.load()
+
+    expect(document.title).toBe('[es] screen.title – KronoQR')
+    binding.stop()
+  })
+
+  it('una marca con forma invalida tampoco', async () => {
+    const { binding } = setup()
+    const state = createBrandingState({
+      mode: 'light',
+      manageTitle: false,
+      storage: null,
+      fetchBranding: async () => ({ application_name: '' }),
+    })
+
+    await state.load()
+
+    expect(document.title).toBe('[es] screen.title – KronoQR')
+    binding.stop()
+  })
+
+  it('applyBranding con manageTitle: false no escribe el titulo; por defecto si (quiosco)', () => {
+    const { binding } = setup()
+    const marina = { ...PRODUCT_BRANDING, applicationName: 'Hotel Marina' }
+
+    applyBranding(marina, { mode: 'light', document, tokens: () => '#000000', manageTitle: false })
+    expect(document.title).toBe('[es] screen.title – KronoQR')
 
     binding.stop()
-    document.title = 'Otro'
-    await settle()
+    applyBranding(marina, { mode: 'light', document, tokens: () => '#000000' })
+    expect(document.title).toBe('Hotel Marina')
+  })
 
-    expect(document.title).toBe('Otro')
+  it('tras stop() deja de reaccionar', () => {
+    const { binding, name } = setup()
+
+    binding.stop()
+    name.value = 'Otro'
+
+    expect(document.title).toBe('[es] screen.title – KronoQR')
   })
 })

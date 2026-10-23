@@ -18,5 +18,5 @@ import { createBrandingState } from '@kronoqr/web-kit/brandingState'
 import { defineStore } from 'pinia'
 
 export const useBrandingStore = defineStore('branding', () =>
-  createBrandingState({ mode: 'light' }),
+  createBrandingState({ mode: 'light', manageTitle: false }),
 )
