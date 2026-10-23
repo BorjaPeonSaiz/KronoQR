@@ -12,7 +12,7 @@ import { expectNoBlockingViolations } from './support/axe'
 import { stubKioskApi, stubScanApi } from './support/kiosk'
 import { announceOnline, readQueue, seedQueue } from './support/offlineQueue'
 import { stubPairing } from './support/pairing'
-import { expectTouchTargets } from './support/touchTargets'
+import { expectTouchTargets, TABLET_VIEWPORTS } from './support/touchTargets'
 
 const DEVICE_ID = 'e2e-diagnostics-device'
 const SERVICE_CODE = '48392017'
@@ -298,19 +298,43 @@ test.describe('accesibilidad (RF-KI-08, RF-KI-06)', () => {
   )
 })
 
-test(
-  'los objetivos tactiles del contenido del diagnostico miden al menos 48 px',
-  { tag: ['@RF-KI-08', '@RF-KI-06'] },
-  async ({ page }) => {
-    await stubKioskApi(page, { serviceCode: { deviceId: DEVICE_ID, code: SERVICE_CODE } })
-    await stubScanApi(page, { outcome: 'offline' })
-    await page.goto('/')
-    await openDiagnostics(page)
-    await enterServiceCode(page, SERVICE_CODE)
-    await expect(page.getByTestId('diagnostics-content')).toBeVisible()
+// KI7-03: la puerta del codigo de servicio y el contenido, en las tres
+// orientaciones; hasta la 2.3.0 solo el contenido y solo en apaisado.
+for (const { name, viewport } of TABLET_VIEWPORTS) {
+  test.describe(`diagnostico en ${name}`, () => {
+    test.use({ viewport })
 
-    await expectTouchTargets(
-      page.getByTestId('diagnostics-content').locator('button:visible, a[href]:visible'),
+    test(
+      'los objetivos tactiles de la puerta del codigo de servicio miden al menos 48 px',
+      { tag: ['@RF-KI-08', '@RF-KI-06'] },
+      async ({ page }) => {
+        await stubKioskApi(page, { serviceCode: { deviceId: DEVICE_ID, code: SERVICE_CODE } })
+        await stubScanApi(page, { outcome: 'offline' })
+        await page.goto('/')
+        await openDiagnostics(page)
+        await expect(page.getByTestId('diagnostics-gate')).toBeVisible()
+
+        await expectTouchTargets(
+          page.getByTestId('diagnostics-gate').locator('button:visible, a[href]:visible'),
+        )
+      },
     )
-  },
-)
+
+    test(
+      'los objetivos tactiles del contenido del diagnostico miden al menos 48 px',
+      { tag: ['@RF-KI-08', '@RF-KI-06'] },
+      async ({ page }) => {
+        await stubKioskApi(page, { serviceCode: { deviceId: DEVICE_ID, code: SERVICE_CODE } })
+        await stubScanApi(page, { outcome: 'offline' })
+        await page.goto('/')
+        await openDiagnostics(page)
+        await enterServiceCode(page, SERVICE_CODE)
+        await expect(page.getByTestId('diagnostics-content')).toBeVisible()
+
+        await expectTouchTargets(
+          page.getByTestId('diagnostics-content').locator('button:visible, a[href]:visible'),
+        )
+      },
+    )
+  })
+}

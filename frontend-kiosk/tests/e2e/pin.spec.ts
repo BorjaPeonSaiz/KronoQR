@@ -27,7 +27,7 @@ import {
   stubKioskApiWithPin,
   stubPinScanApi,
 } from './support/pin'
-import { expectTouchTargets } from './support/touchTargets'
+import { expectTouchTargets, TABLET_VIEWPORTS } from './support/touchTargets'
 
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const RAW_PIN = '483920'
@@ -416,19 +416,38 @@ test(
   },
 )
 
-test(
-  'el teclado numerico del PIN mide al menos 48 px por digito',
-  { tag: ['@RF-KI-06'] },
-  async ({ page }) => {
-    await blockCamera(page)
-    await stubKioskApiWithPin(page)
-    await openPinScreen(page)
-    await enterEmployeeCode(page, EMPLOYEE_CODE)
-    await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+// KI7-03: en las tres orientaciones, no solo en la apaisada de la configuracion.
+for (const { name, viewport } of TABLET_VIEWPORTS) {
+  test.describe(`PIN en ${name}`, () => {
+    test.use({ viewport })
 
-    await expectTouchTargets(page.getByTestId('pin-step-pin').getByRole('button'))
-  },
-)
+    test(
+      'el teclado numerico del PIN mide al menos 48 px por digito',
+      { tag: ['@RF-KI-06', '@RF-AT-11'] },
+      async ({ page }) => {
+        await blockCamera(page)
+        await stubKioskApiWithPin(page)
+        await openPinScreen(page)
+        await enterEmployeeCode(page, EMPLOYEE_CODE)
+        await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+
+        await expectTouchTargets(page.getByTestId('pin-step-pin').getByRole('button'))
+      },
+    )
+
+    test(
+      'los controles del paso del codigo de empleado miden al menos 48 px',
+      { tag: ['@RF-KI-06', '@RF-AT-11'] },
+      async ({ page }) => {
+        await blockCamera(page)
+        await stubKioskApiWithPin(page)
+        await openPinScreen(page)
+
+        await expectTouchTargets(page.locator('button:visible, a[href]:visible, input:visible'))
+      },
+    )
+  })
+}
 
 test(
   'si el navegador no puede arrancar WebAssembly, el quiosco no ofrece el PIN ni lo disfraza de «codigo no valido» (PIN-03)',
