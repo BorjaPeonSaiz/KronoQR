@@ -54,7 +54,7 @@ describe('TemporaryPasswordDialog', () => {
     const wrapper = await mountView(TemporaryPasswordDialog, { props: props() })
     const close = wrapper.find('[data-test="acknowledge"]')
 
-    expect(close.attributes('disabled')).toBeDefined()
+    expect(close.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="handed-over"]').setValue(true)
     await close.trigger('click')

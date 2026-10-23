@@ -290,9 +290,9 @@ const selectClass =
         {{ t('incidents.refresh.readAt', { moment: readAtMoment }) }}
       </p>
       <button
+        v-aria-disabled.busy="store.refreshing || store.loading"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-sm hover:bg-kq-surface-alt disabled:opacity-60"
-        :disabled="store.refreshing || store.loading"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-sm hover:bg-kq-surface-alt aria-disabled:opacity-60"
         :aria-busy="store.refreshing"
         data-test="refresh"
         @click="refresh"

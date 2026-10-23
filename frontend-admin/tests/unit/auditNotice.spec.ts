@@ -111,21 +111,24 @@ describe('AuditNotice', () => {
     const spanish = await mountView(AuditNotice, { locale: 'es' })
     const english = await mountView(AuditNotice, { locale: 'en' })
 
-    expect(spanish.text()).toBe(es.audit.readNotice)
-    expect(english.text()).toBe(en.audit.readNotice)
-    expect(es.audit.readNotice).toContain('anotada')
+    expect(spanish.text()).toContain(es.audit.noticeShort)
+    expect(spanish.find('[data-test="audit-notice-detail"]').text()).toBe(es.audit.readNotice)
+    expect(english.text()).toContain(en.audit.noticeShort)
+    expect(english.find('[data-test="audit-notice-detail"]').text()).toBe(en.audit.readNotice)
+    expect(es.audit.noticeShort).toContain('anotada')
+    expect(es.audit.readNotice).toContain('no guarda los datos que ves')
   })
 
-  it('no es una region viva: no suena en cada carga', async () => {
+  it('es una nota, no una region viva: no suena en cada carga', async () => {
     const wrapper = await mountView(AuditNotice)
 
-    expect(wrapper.attributes('role')).toBeUndefined()
+    expect(wrapper.attributes('role')).toBe('note')
     expect(wrapper.attributes('aria-live')).toBeUndefined()
   })
 
   it('admite el texto propio del registro horario', async () => {
     const wrapper = await mountView(AuditNotice, { props: { messageKey: 'workdays.auditNotice' } })
 
-    expect(wrapper.text()).toBe(es.workdays.auditNotice)
+    expect(wrapper.find('[data-test="audit-notice-detail"]').text()).toBe(es.workdays.auditNotice)
   })
 })

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from 'vue-router'
 import { routes } from '@/router'
-import { bindDocumentTitle } from '@/router/documentTitle'
+import { bindDocumentTitle } from '@kronoqr/web-kit/documentTitle'
 import { bindScreenChange } from '@/router/screenChange'
 import { createAppI18n } from '@/shared/i18n'
 import en from '@/shared/i18n/locales/en.json'
@@ -51,7 +51,7 @@ describe('titulo de la pestaña (V7-PA-2)', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('compone «pantalla · instalacion», sigue al idioma y nunca lleva el nombre de una persona', async () => {
+  it('compone «pantalla – instalacion», sigue al idioma y nunca lleva el nombre de una persona', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -73,13 +73,13 @@ describe('titulo de la pestaña (V7-PA-2)', () => {
     const binding = bindDocumentTitle({ router, i18n, applicationName: () => 'Hotel Marina' })
 
     await router.push('/')
-    expect(document.title).toBe(`${es.incidents.title} · Hotel Marina`)
+    expect(document.title).toBe(`${es.incidents.title} – Hotel Marina`)
 
     await router.push('/employees/0199f0c2-1f4a-7c3e-9b21-000000000001')
-    expect(document.title).toBe('Ficha del empleado · Hotel Marina')
+    expect(document.title).toBe('Ficha del empleado – Hotel Marina')
 
     i18n.global.locale.value = 'en'
-    expect(document.title).toBe('Employee record · Hotel Marina')
+    expect(document.title).toBe('Employee record – Hotel Marina')
 
     binding.stop()
   })

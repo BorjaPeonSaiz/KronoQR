@@ -90,14 +90,14 @@ describe('CredentialRowActions', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeDefined()
 
     await wrapper.find('#revocation-reason').setValue('lost')
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeUndefined()
   })
 
@@ -142,7 +142,7 @@ describe('CredentialRowActions', () => {
 
     expect(wrapper.find('#revocation-reason-text').exists()).toBe(true)
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeDefined()
 
     await wrapper
@@ -151,7 +151,7 @@ describe('CredentialRowActions', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeUndefined()
   })
 
@@ -212,7 +212,7 @@ describe('CredentialRowActions', () => {
     // no se ha resuelto: el dialogo sigue abierto y el boton, deshabilitado.
     expect(onChanged).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
-    expect(confirmButton.attributes('disabled')).toBeDefined()
+    expect(confirmButton.attributes('aria-disabled')).toBeDefined()
 
     releaseRefresh?.()
     await settle()
@@ -305,7 +305,7 @@ describe('CredentialRowActions', () => {
         es.credentials.confirm.deliver.sheetReminder,
       )
       expect(
-        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('disabled'),
+        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('aria-disabled'),
       ).toBeUndefined()
     })
 
@@ -321,7 +321,7 @@ describe('CredentialRowActions', () => {
         es.credentials.confirm.deliver.sheetReminder,
       )
       expect(
-        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('disabled'),
+        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('aria-disabled'),
       ).toBeUndefined()
     })
   })

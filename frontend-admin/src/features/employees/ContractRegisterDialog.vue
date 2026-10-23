@@ -286,12 +286,12 @@ const inputClass =
         {{ t('common.cancel') }}
       </button>
       <button
+        v-aria-disabled.reason="!canSubmit"
         type="submit"
         form="contract-register-form"
-        :disabled="!canSubmit"
         :aria-busy="submitting"
         data-test="contract-submit"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
       >
         {{ submitting ? t('common.saving') : t('contracts.register.submit') }}
       </button>

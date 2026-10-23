@@ -221,9 +221,9 @@ async function submit(): Promise<void> {
 
       <div class="flex items-center gap-3">
         <button
+          v-aria-disabled.reason="!canSubmit"
           type="submit"
-          :disabled="!canSubmit"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
         >
           {{ t('reports.legalExport.submit') }}
         </button>

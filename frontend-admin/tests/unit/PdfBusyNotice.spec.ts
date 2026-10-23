@@ -12,15 +12,20 @@ beforeEach(() => {
 })
 
 describe('PdfBusyNotice', () => {
-  it('dice cuanto esperar cuando el servidor da Retry-After y lo anuncia una sola vez, por su role=alert', async () => {
+  it('dice cuanto esperar cuando el servidor da Retry-After y lo nombra con el mensaje', async () => {
     const wrapper = await mountView(PdfBusyNotice, {
       props: { retryAfterSeconds: 30, formats: ['csv', 'xlsx'], disabled: false },
     })
     const expected = es.reports.pdfBusy.message.replace('{seconds}', '30')
 
     expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(expected)
-    // Una sola voz: el role=alert. La region viva global no repite el texto.
-    expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('alert')
+    // Una sola señal: el foco y un nombre accesible que es el mensaje; ni role=alert ni region viva.
+    const notice = wrapper.find('[data-test="pdf-busy"]')
+
+    expect(notice.attributes('role')).toBe('group')
+    expect(wrapper.find('#' + CSS.escape(notice.attributes('aria-labelledby') ?? '')).text()).toBe(
+      expected,
+    )
     expect(announcement.value).toBe('')
 
     wrapper.unmount()
@@ -54,13 +59,13 @@ describe('PdfBusyNotice', () => {
     wrapper.unmount()
   })
 
-  it('con la pantalla ocupada deshabilita los botones y es un aviso (role=alert)', async () => {
+  it('con la pantalla ocupada deshabilita los botones y es un grupo con nombre, no una alerta', async () => {
     const wrapper = await mountView(PdfBusyNotice, {
       props: { retryAfterSeconds: 10, formats: ['csv'], disabled: true },
     })
 
-    expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('alert')
-    expect(wrapper.find('[data-test="pdf-busy-use-csv"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('group')
+    expect(wrapper.find('[data-test="pdf-busy-use-csv"]').attributes('aria-disabled')).toBeDefined()
 
     wrapper.unmount()
   })

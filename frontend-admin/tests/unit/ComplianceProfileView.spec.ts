@@ -158,7 +158,7 @@ describe('perfil de cumplimiento', () => {
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
 
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('manda solo los campos que han cambiado', async () => {
@@ -267,6 +267,11 @@ describe('perfil de cumplimiento', () => {
     // Sin `fieldLabels`, el aviso diria «max_daily_hours», que es el nombre de la
     // columna y no lo que la persona acaba de escribir en la pantalla.
     expect(wrapper.text()).toContain(es.compliance.fields.maxDailyHours)
+    // El fallo de GUARDADO no ofrece «Reintentar»: volver a cargar borraria lo editado.
+    expect(wrapper.find('[data-test="error-retry"]').exists()).toBe(false)
+    expect((wrapper.find('[data-test="max-daily-hours"]').element as HTMLInputElement).value).toBe(
+      '90',
+    )
   })
 
   it('enseña el error de carga sin dejar el formulario a medias', async () => {
@@ -277,6 +282,8 @@ describe('perfil de cumplimiento', () => {
 
     expect(wrapper.find('[data-test="save"]').exists()).toBe(false)
     expect(wrapper.text()).not.toBe('')
+    // El de CARGA si lo ofrece.
+    expect(wrapper.find('[data-test="error-retry"]').exists()).toBe(true)
   })
 })
 
@@ -389,7 +396,7 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
     // Antes se descartaba sin decir nada: el campo se quedaba vacio, el PATCH no
     // lo incluia y el boton se deshabilitaba sin explicar por que.
     expect(wrapper.text()).toContain(es.compliance.errors.required)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('marca un decimal, que es lo unico que un campo numerico deja teclear mal', async () => {
@@ -403,7 +410,7 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
     await wrapper.find('[data-test="min-rest-hours"]').setValue('10.5')
 
     expect(wrapper.text()).toContain(es.compliance.errors.notAWholeNumber)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('deja de marcar el campo en cuanto se corrige', async () => {
@@ -416,7 +423,7 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
     await wrapper.find('[data-test="min-rest-hours"]').setValue('10')
 
     expect(wrapper.text()).not.toContain(es.compliance.errors.required)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   describe('antes -> despues (R3-PA-09)', () => {
@@ -518,7 +525,7 @@ describe('perfil de cumplimiento: suelo legal de la retencion (RF-PD-07, RL-02)'
     // Forma plural: «{years} año. | {years} años.»; con un suelo de 4, la segunda.
     const pluralBelowFloor = es.compliance.errors.belowFloor.split(' | ')[1] ?? ''
     expect(wrapper.text()).toContain(pluralBelowFloor.replace('{years}', '4'))
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('form').trigger('submit')
 

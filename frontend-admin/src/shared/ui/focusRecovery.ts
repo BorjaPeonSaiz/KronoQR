@@ -12,16 +12,20 @@
 // `parentElement`). Cuando el DOM cambia y el foco ha caido en `<body>` porque
 // ese elemento ya no esta, el foco pasa al ancestro enfocable mas cercano que
 // siga en el documento —un contenedor con desplazamiento (`tabindex="0"`), por
-// ejemplo— o, a falta de el, al contenido principal.
+// ejemplo— o, a falta de el, al encabezado `<h1>` del contenido.
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 export interface FocusRecoveryOptions {
-  /** Donde cae el foco si no sobrevive ningun ancestro enfocable. */
+  /** Donde cae el foco si no sobrevive ningun ancestro enfocable: el `<h1>` del contenido. */
   readonly fallback: () => HTMLElement | null
+  /** Hay un cambio de pantalla en curso: lo recoge `screenChange`, no se foca dos veces. */
+  readonly suspended?: () => boolean
   readonly document?: Document
 }
+
+const MODAL_SELECTOR = '[aria-modal="true"]'
 
 function ancestorsOf(element: Element): Element[] {
   const chain: Element[] = []
@@ -39,37 +43,69 @@ export function installFocusRecovery(options: FocusRecoveryOptions): () => void 
   let lastFocused: Element | null = null
   let lastAncestors: Element[] = []
 
+  function forget(): void {
+    lastFocused = null
+    lastAncestors = []
+  }
+
+  // Mientras hay un dialogo modal abierto el foco vive dentro de el y no cuenta: el sitio al
+  // que hay que volver es el de ANTES de abrirlo, asi que ni se recuerda lo de dentro ni se
+  // olvida el origen cuando el foco sale hacia el dialogo.
   function remember(event: FocusEvent): void {
     const target = event.target
 
-    // El foco que vive dentro de un dialogo modal no cuenta: el sitio al que hay que
-    // volver es el de ANTES de abrirlo. Si ese origen se retira mientras el dialogo
-    // esta abierto, al cerrarlo el foco aterriza en su contenedor y no en `<body>`.
-    if (
-      target instanceof Element &&
-      target !== doc.body &&
-      target.closest('[aria-modal="true"]') === null
-    ) {
+    if (doc.querySelector(MODAL_SELECTOR) !== null) {
+      return
+    }
+
+    if (target instanceof Element && target !== doc.body) {
       lastFocused = target
       lastAncestors = ancestorsOf(target)
     }
   }
 
+  // Si la persona mueve el foco por su cuenta y el elemento sigue ahi, no hay nada que
+  // recuperar: se olvida, para no tirar de una referencia vieja mas tarde.
+  function release(event: FocusEvent): void {
+    if (doc.querySelector(MODAL_SELECTOR) !== null) {
+      return
+    }
+
+    // Chromium dispara `focusout` al retirar el elemento enfocado y lo hace ANTES de
+    // desunirlo: se mira un instante despues, cuando ya esta fuera o sigue dentro de verdad.
+    const target = event.target
+
+    queueMicrotask(() => {
+      if (target === lastFocused && target instanceof Element && target.isConnected) {
+        forget()
+      }
+    })
+  }
+
   function recover(): void {
     const lost = lastFocused
 
-    // «Perdido» = ya no esta en el documento, o sigue pero lo han deshabilitado (el boton
-    // «Generar» mientras genera): el navegador lo suelta y el foco cae en `<body>`.
-    if (lost === null || (lost.isConnected && !lost.matches(':disabled'))) {
+    if (lost === null || options.suspended?.() === true) {
+      return
+    }
+
+    // Con un dialogo abierto el foco es suyo; se recupera al cerrarse.
+    if (doc.querySelector(MODAL_SELECTOR) !== null) {
+      return
+    }
+
+    if (lost.isConnected) {
+      // Sigue en el documento: no se ha perdido.
       return
     }
 
     // Solo si el foco se ha perdido de verdad: si otra cosa lo ha recogido, no se toca.
     if (doc.activeElement !== null && doc.activeElement !== doc.body) {
+      forget()
+
       return
     }
 
-    // Un control deshabilitado no puede recibir el foco: se sube a sus ancestros.
     const survivor = lastAncestors.find(
       (ancestor) =>
         ancestor.isConnected &&
@@ -78,8 +114,7 @@ export function installFocusRecovery(options: FocusRecoveryOptions): () => void 
     )
     const target = survivor instanceof HTMLElement ? survivor : options.fallback()
 
-    lastFocused = null
-    lastAncestors = []
+    forget()
 
     if (target === null) {
       return
@@ -94,16 +129,13 @@ export function installFocusRecovery(options: FocusRecoveryOptions): () => void 
 
   const observer = new MutationObserver(recover)
 
-  observer.observe(doc.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['disabled'],
-  })
+  observer.observe(doc.body, { childList: true, subtree: true })
   doc.addEventListener('focusin', remember)
+  doc.addEventListener('focusout', release)
 
   return () => {
     observer.disconnect()
     doc.removeEventListener('focusin', remember)
+    doc.removeEventListener('focusout', release)
   }
 }

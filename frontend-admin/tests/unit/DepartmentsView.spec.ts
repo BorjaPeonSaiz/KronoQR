@@ -123,7 +123,7 @@ describe('DepartmentsView', () => {
     const wrapper = await mountAs(['accounts:*', 'employees:*'])
 
     await settle()
-    expect(wrapper.find('[data-test="save-manager-3"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save-manager-3"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('#manager-3').setValue(OTHER.uuid)
     expect(wrapper.text()).toContain(es.departments.displaceNotice)
@@ -316,7 +316,7 @@ describe('DepartmentsView: crear, renombrar y centro', () => {
     const confirm = buttonWith(dialog, es.departments.rename.confirm)
 
     // Sin cambio no se puede confirmar.
-    expect(confirm.attributes('disabled')).toBeDefined()
+    expect(confirm.attributes('aria-disabled')).toBeDefined()
 
     await dialog.find('[data-test="rename-input"]').setValue('Cocina y office')
 

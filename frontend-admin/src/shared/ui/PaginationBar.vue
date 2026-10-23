@@ -56,9 +56,9 @@ function goToPage(next: number): void {
     </p>
     <div class="flex gap-2">
       <button
+        v-aria-disabled="page <= 1"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-        :disabled="page <= 1"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
         @click="goToPage(page - 1)"
       >
         {{ t('common.pagination.previous') }}
@@ -68,9 +68,9 @@ function goToPage(next: number): void {
         {{ t('common.pagination.page', { page, pages: totalPages }) }}
       </p>
       <button
+        v-aria-disabled="page >= totalPages"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-        :disabled="page >= totalPages"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
         @click="goToPage(page + 1)"
       >
         {{ t('common.pagination.next') }}

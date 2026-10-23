@@ -465,9 +465,9 @@ const selectClass =
         <button
           v-for="sheetLocale of availableSheetLocales"
           :key="sheetLocale"
+          v-aria-disabled.busy="instructionsSheetBusyLocale !== null"
           type="button"
-          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-          :disabled="instructionsSheetBusyLocale !== null"
+          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
           :aria-busy="instructionsSheetBusyLocale === sheetLocale"
           :data-test="`instructions-sheet-button-${sheetLocale}`"
           @click="downloadInstructionsSheet(sheetLocale)"

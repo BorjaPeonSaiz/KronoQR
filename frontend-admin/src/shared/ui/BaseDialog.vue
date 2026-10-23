@@ -162,6 +162,7 @@ onBeforeUnmount(() => {
       aria-modal="true"
       :aria-labelledby="titleId"
       tabindex="-1"
+      data-test="dialog-panel"
       class="relative max-h-full w-full overflow-y-auto rounded-kq bg-kq-surface-raised p-6 text-kq-text shadow-kq-raised"
       :class="size === 'wide' ? 'max-w-3xl' : 'max-w-xl'"
     >

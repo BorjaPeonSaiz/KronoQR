@@ -154,7 +154,7 @@ describe('ChangePasswordView', () => {
     await fill(wrapper, { confirm: 'otra-cosa' })
 
     expect(wrapper.text()).toContain(es.changePassword.mismatch)
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('no deja una contraseña nueva igual a la actual', async () => {
@@ -164,7 +164,7 @@ describe('ChangePasswordView', () => {
     await fill(wrapper, { current: 'misma-Clave-1!', next: 'misma-Clave-1!' })
 
     expect(wrapper.text()).toContain(es.changePassword.sameAsCurrent)
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('al cambiarla relee /auth/me, quita la marca y sale hacia el panel', async () => {
@@ -277,7 +277,7 @@ describe('ChangePasswordView: casos del servidor', () => {
     await wrapper.find('[data-test="confirm-password"]').setValue(long)
 
     expect(wrapper.text()).toContain(es.changePassword.tooLong)
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('un 409 (la contraseña cambio entretanto) tiene su propio mensaje', async () => {

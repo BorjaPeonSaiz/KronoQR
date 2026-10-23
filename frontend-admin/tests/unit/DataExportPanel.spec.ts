@@ -319,7 +319,7 @@ describe('DataExportPanel', () => {
     )
     expect(wrapper.find('[data-test="active-notice"]').exists()).toBe(true)
     // Y no se puede pedir otra mientras esta siga en curso.
-    expect(wrapper.find('[data-test="open-generate"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="open-generate"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('sondea la lista cada 5 s SOLO mientras hay una exportación pendiente o en curso', async () => {

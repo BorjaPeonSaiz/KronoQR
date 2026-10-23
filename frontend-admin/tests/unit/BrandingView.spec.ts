@@ -127,7 +127,7 @@ describe('BrandingView', () => {
     const wrapper = await mountView(BrandingView)
     await settle()
 
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('un color con contraste suficiente lo dice y no pide confirmacion', async () => {
@@ -142,7 +142,7 @@ describe('BrandingView', () => {
     expect(notice.attributes('data-meets')).toBe('true')
     expect(notice.text()).toContain('Cumple el mínimo')
     expect(wrapper.find('[data-test="accent-confirm"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('avisa en vivo del contraste de un color palido y no deja guardar sin confirmar (MB2)', async () => {
@@ -169,7 +169,7 @@ describe('BrandingView', () => {
     expect(notice.text()).toContain('No llega al mínimo de 4.5:1')
     expect(notice.text()).toMatch(/\d\.\d{2}:1/)
     expect(notice.text()).toContain('versión más oscura')
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
 
     // El envio del formulario tampoco guarda sin la casilla.
     await wrapper.find('form').trigger('submit')
@@ -179,7 +179,7 @@ describe('BrandingView', () => {
     )
 
     await wrapper.find('[data-test="accent-confirm"]').setValue(true)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeUndefined()
 
     await wrapper.find('[data-test="save"]').trigger('submit')
     await settle()
@@ -235,7 +235,7 @@ describe('BrandingView', () => {
     expect((wrapper.find('[data-test="accent-confirm"]').element as HTMLInputElement).checked).toBe(
       false,
     )
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('cambiar solo el nombre no pide confirmar un color que no se toca', async () => {
@@ -254,7 +254,7 @@ describe('BrandingView', () => {
     expect(wrapper.find('[data-test="accent-contrast"]').attributes('data-meets')).toBe('false')
     await wrapper.find('[data-test="app-name"]').setValue('Hotel Marina')
 
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('enseña bajo el campo del color el 422 del servidor, con su mensaje', async () => {
@@ -427,9 +427,9 @@ describe('BrandingView — marca propia licenciable (ADR-023)', () => {
 
     // Persistente, pero NO bloqueante: sin cambios el boton sigue deshabilitado
     // por la misma regla de siempre («nada que guardar»), no por la licencia.
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
     await wrapper.find('[data-test="app-name"]').setValue('Hotel Marina')
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('con la licencia caducada, cambia el motivo del aviso', async () => {

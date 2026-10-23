@@ -126,7 +126,7 @@ describe('BrandingView — aviso de privacidad del quiosco (RF-KI-09, RL-09, RF-
 
     expect(wrapper.find(URL_FIELD).attributes('aria-invalid')).toBe('true')
     expect(wrapper.text()).toContain(es.branding.errors.privacyUrl[issue])
-    expect(wrapper.find(SAVE).attributes('disabled')).toBeDefined()
+    expect(wrapper.find(SAVE).attributes('aria-disabled')).toBeDefined()
   })
 
   it('enseña el host al que apunta la URL antes de guardar, y nada si es invalida o vacia', async () => {
@@ -152,20 +152,20 @@ describe('BrandingView — aviso de privacidad del quiosco (RF-KI-09, RL-09, RF-
 
     await wrapper.find(CONTROLLER).setValue('x'.repeat(161))
     expect(wrapper.text()).toContain(es.branding.errors.privacyController.tooLong)
-    expect(wrapper.find(SAVE).attributes('disabled')).toBeDefined()
+    expect(wrapper.find(SAVE).attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find(CONTROLLER).setValue('Hotel\u0009Marina')
     expect(wrapper.text()).toContain(es.branding.errors.privacyController.controlChars)
-    expect(wrapper.find(SAVE).attributes('disabled')).toBeDefined()
+    expect(wrapper.find(SAVE).attributes('aria-disabled')).toBeDefined()
 
     // Caracteres Unicode de formato (Cf): inversion bidi y anchura cero.
     await wrapper.find(CONTROLLER).setValue('Hotel‮Marina')
     expect(wrapper.text()).toContain(es.branding.errors.privacyController.controlChars)
     await wrapper.find(CONTROLLER).setValue('Hotel​Marina')
-    expect(wrapper.find(SAVE).attributes('disabled')).toBeDefined()
+    expect(wrapper.find(SAVE).attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find(CONTROLLER).setValue('x'.repeat(160))
-    expect(wrapper.find(SAVE).attributes('disabled')).toBeUndefined()
+    expect(wrapper.find(SAVE).attributes('aria-disabled')).toBeUndefined()
   })
 
   it('pinta bajo cada campo el 422 del servidor, con el nombre del campo y no el de la columna', async () => {

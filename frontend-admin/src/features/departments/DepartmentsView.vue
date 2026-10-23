@@ -258,10 +258,10 @@ const selectClass =
         />
       </FormField>
       <button
+        v-aria-disabled.busy="creating"
         type="submit"
-        :disabled="creating"
         :aria-busy="creating"
-        class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         data-test="department-create-submit"
       >
         {{ creating ? t('common.saving') : t('departments.create.submit') }}
@@ -359,10 +359,10 @@ const selectClass =
                     </p>
                   </div>
                   <button
+                    v-aria-disabled.reason="!changed(department) || saving === department.id"
                     type="button"
-                    :disabled="!changed(department) || saving === department.id"
                     :aria-busy="saving === department.id"
-                    class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+                    class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
                     :data-test="`save-manager-${department.id}`"
                     @click="save(department)"
                   >

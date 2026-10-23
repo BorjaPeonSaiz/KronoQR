@@ -136,17 +136,66 @@ describe('focusRecovery', () => {
   })
 })
 
-describe('focusRecovery: un control que se deshabilita (V21-7-PA-1)', () => {
-  it('el foco no se queda en <body> cuando el boton enfocado pasa a deshabilitado', async () => {
-    main().innerHTML = '<form id="form"><button id="go" type="submit">Generar</button></form>'
-    const button = document.getElementById('go') as HTMLButtonElement
+describe('focusRecovery: reglas finas', () => {
+  it('con un dialogo modal abierto ni recuerda lo de dentro ni olvida el origen', async () => {
+    main().innerHTML = '<div id="region" tabindex="0"><button id="row">Resolver</button></div>'
+    ;(document.getElementById('row') as HTMLElement).focus()
+    main().insertAdjacentHTML(
+      'beforeend',
+      '<div aria-modal="true" role="dialog"><input id="note" /></div>',
+    )
+    ;(document.getElementById('note') as HTMLElement).focus()
 
-    button.focus()
-    // jsdom conserva el foco en un control deshabilitado; Chromium lo suelta en <body>.
-    button.blur()
-    button.disabled = true
+    document.getElementById('row')?.remove()
+    document.querySelector('[aria-modal]')?.remove()
     await settle()
 
-    expect(document.activeElement).toBe(main())
+    // Se recupero el origen (la fila), no el campo del dialogo que ya no existe.
+    expect(document.activeElement?.id).toBe('region')
+  })
+
+  it('olvida el elemento cuando la persona se lleva el foco y el elemento sigue ahi', async () => {
+    main().innerHTML = '<button id="a">A</button><button id="b">B</button>'
+    ;(document.getElementById('a') as HTMLElement).focus()
+    ;(document.getElementById('b') as HTMLElement).focus()
+    document.getElementById('b')?.blur()
+
+    // El foco esta en body y A sigue conectado: no hay nada que recuperar.
+    main().insertAdjacentHTML('beforeend', '<p>otra cosa</p>')
+    await settle()
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('no actua mientras hay un cambio de pantalla en curso', async () => {
+    uninstall?.()
+    let changing = true
+
+    uninstall = installFocusRecovery({
+      fallback: () => document.getElementById('main'),
+      suspended: () => changing,
+    })
+    main().innerHTML = '<button id="a">A</button>'
+    ;(document.getElementById('a') as HTMLElement).focus()
+    main().innerHTML = ''
+    await settle()
+
+    expect(document.activeElement).toBe(document.body)
+    changing = false
+  })
+})
+
+describe('focusRecovery: Chromium dispara focusout al retirar lo enfocado', () => {
+  it('un focusout previo a la retirada no hace olvidar el elemento', async () => {
+    main().innerHTML = '<div id="region" tabindex="0"><button id="csv">CSV</button></div>'
+    const button = document.getElementById('csv') as HTMLElement
+
+    button.focus()
+    // El navegador avisa ANTES de desunir el nodo, y luego lo retira.
+    button.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+    button.remove()
+    await settle()
+
+    expect(document.activeElement?.id).toBe('region')
   })
 })

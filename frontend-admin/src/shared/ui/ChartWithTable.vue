@@ -296,10 +296,10 @@ const tableRows = computed(() =>
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h3 class="font-heading text-base font-bold text-kq-text">{{ title }}</h3>
       <button
+        v-aria-disabled="chartFailed"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-sm text-kq-text hover:bg-kq-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-sm text-kq-text hover:bg-kq-surface-alt aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         :aria-controls="viewId"
-        :disabled="chartFailed"
         data-test="toggle-view"
         @click="toggleView"
       >

@@ -293,7 +293,7 @@ describe('pantalla de soporte', () => {
 
     const wrapper = await mountSupportView()
 
-    expect(wrapper.find('[data-test="grant-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="grant-submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('revocar pide confirmacion y deja la fila como revocada', async () => {

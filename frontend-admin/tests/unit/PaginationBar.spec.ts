@@ -39,8 +39,8 @@ describe('PaginationBar (RF-GP-01, RF-QR-08)', () => {
 
     const buttons = wrapper.findAll('button')
 
-    expect(buttons[0]?.attributes('disabled')).toBeDefined()
-    expect(buttons[1]?.attributes('disabled')).toBeDefined()
+    expect(buttons[0]?.attributes('aria-disabled')).toBeDefined()
+    expect(buttons[1]?.attributes('aria-disabled')).toBeDefined()
   })
 
   it('emite `update:page` acotado entre 1 y el total de páginas', async () => {

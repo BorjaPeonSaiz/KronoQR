@@ -39,7 +39,7 @@ describe('AbsenceCorrectDialog', () => {
 
     await wrapper.find('[data-test="correct-reason"]').setValue('El parte se prorrogó una semana.')
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
     expect(wrapper.find('[data-test="dialog-no-change"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="dialog-preview"]').exists()).toBe(false)
   })
@@ -60,11 +60,11 @@ describe('AbsenceCorrectDialog', () => {
     expect(preview.text()).toContain('13 mar 2026')
 
     // Sin motivo todavia, el envio sigue bloqueado.
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="correct-reason"]').setValue('El parte se prorrogó una semana.')
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('un motivo de menos de 3 caracteres no basta para confirmar', async () => {
@@ -73,6 +73,6 @@ describe('AbsenceCorrectDialog', () => {
     await wrapper.find('[data-test="correct-ends-on"]').setValue('2026-03-13')
     await wrapper.find('[data-test="correct-reason"]').setValue('Ok')
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
   })
 })

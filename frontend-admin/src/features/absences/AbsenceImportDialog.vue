@@ -112,22 +112,22 @@ async function apply(): Promise<void> {
 
     <div class="mt-4 flex gap-3">
       <button
+        v-aria-disabled.reason="!canValidate"
         type="button"
-        :disabled="!canValidate"
         :aria-busy="validating"
         data-test="import-validate"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
         @click="validate"
       >
         {{ validating ? t('absences.import.validating') : t('absences.import.validate') }}
       </button>
       <button
         v-if="report !== null && !applied"
+        v-aria-disabled.reason="!canApply"
         type="button"
-        :disabled="!canApply"
         :aria-busy="applying"
         data-test="import-apply"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         @click="apply"
       >
         {{ applying ? t('absences.import.applying') : t('absences.import.apply') }}

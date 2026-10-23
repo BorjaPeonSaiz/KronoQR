@@ -99,7 +99,7 @@ test(
 test('la ficha de una persona tampoco', { tag: ['@RF-GP-01'] }, async ({ page }) => {
   await logIn(page)
   await page.goto(`/employees/${EMPLOYEE_UUID}`)
-  await expect(page.getByRole('heading', { level: 1, name: 'Youssef Amrani' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ficha del empleado' })).toBeVisible()
 
   await expectNoBlockingViolations(page)
 })
@@ -279,7 +279,7 @@ test(
     // Con logotipo, la cabecera lo enseña con el nombre como alternativa
     // textual: no hay un segundo texto suelto que lo repita.
     await expect(page.getByRole('banner').locator('img')).toHaveAttribute('alt', 'Hotel Marina')
-    await expect(page).toHaveTitle(/ · Hotel Marina$/)
+    await expect(page).toHaveTitle(/ – Hotel Marina$/)
 
     await expectNoBlockingViolations(page)
   },
@@ -831,7 +831,8 @@ test(
       { inside: true, element: 'dialog-ends-in-break' },
       { inside: true, element: 'dialog-reason' },
       { inside: true, element: 'dialog-cancel' },
-      { inside: true, element: 'dialog-clock-in' },
+      // «Corregir» bloqueado sigue en el orden de tabulacion (aria-disabled, no disabled).
+      { inside: true, element: 'dialog-submit' },
     ])
     expect(backwards).toEqual([
       { inside: true, element: 'dialog-cancel' },

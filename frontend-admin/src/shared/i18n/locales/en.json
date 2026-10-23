@@ -248,7 +248,8 @@
       "clear": "Clear filters",
       "clearSearch": "Clear search"
     },
-    "loadingSlow": "This is taking longer than usual. If it does not finish, try again in a few minutes."
+    "loadingSlow": "This is taking longer than usual. You can keep waiting or try again.",
+    "blockedReason": "Something is still missing before you can continue."
   },
   "errors": {
     "retryAfter": "You can try again in {seconds} s.",
@@ -292,7 +293,11 @@
       "title": "Something went wrong",
       "advice": "Try again. If it happens again, tell whoever administers this installation, with the exact time and what you were doing."
     },
-    "retry": "Try again"
+    "retry": "Try again",
+    "timeout": {
+      "title": "The server is taking longer than usual",
+      "advice": "We did not get a reply in time. You can try again now or wait a little; nothing you have done has been lost."
+    }
   },
   "forbidden": {
     "heading": "No access to this section",
@@ -1285,7 +1290,7 @@
     "backToLive": "Back to live presence",
     "loading": "Loading the time record…",
     "zoneNotice": "Times are shown in the time zone of the site where the person clocked in, not in the one of the computer you are looking from.",
-    "auditNotice": "Reading someone else's time record is written to the audit log, with who looked, at whom and for what period.",
+    "auditNotice": "Looking up another person's record is logged in the audit trail: who looked, at whom and for what period.",
     "duration": "{hours} h {minutes} min",
     "filters": {
       "legend": "Period queried",
@@ -2009,7 +2014,7 @@
       "unverifiable": "The licence cannot be verified"
     },
     "detail": {
-      "valid": "Expires on {until}. We will warn you {warningDays} days in advance.",
+      "valid": "Expires on {until}. We will warn you {warningDays} day in advance. | Expires on {until}. We will warn you {warningDays} days in advance.",
       "expiring_soon": "Expires on {until}: {days} day left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives. | Expires on {until}: {days} days left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives.",
       "expired": "Expired on {until}, {elapsed} day ago. Since then, the accessory features below are unavailable. The time record keeps working in full. | Expired on {until}, {elapsed} days ago. Since then, the accessory features below are unavailable. The time record keeps working in full.",
       "absent": "No key has been activated yet. Activate it below; your provider gives it to you. In the meantime clocking and record lookups work normally.",
@@ -2661,6 +2666,8 @@
     }
   },
   "audit": {
-    "readNotice": "This lookup is recorded in the audit log: who made it, when and with what scope. The data you see is not copied into it."
+    "readNotice": "It records who made it, when and with what scope. The log does not store the data you see.",
+    "noticeShort": "This lookup is recorded in the audit log.",
+    "noticeMore": "What is recorded"
   }
 }

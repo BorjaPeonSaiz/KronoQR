@@ -53,7 +53,7 @@ export const AXE_ROUTE_PASSES: Readonly<Record<string, AxeRoutePass>> = {
   employee: {
     path: `/employees/${EMPLOYEE_UUID}`,
     access: 'admin',
-    heading: 'Youssef Amrani',
+    heading: 'Ficha del empleado',
     requirements: ['@RF-GP-01', '@RF-GP-02'],
   },
   absences: {

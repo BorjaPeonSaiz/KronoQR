@@ -19,6 +19,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { BLOCKED_REASON_ID } from '@/shared/ui/vAriaDisabled'
 import { useRoute, useRouter } from 'vue-router'
 import TotpCodeInput from '@/shared/ui/TotpCodeInput.vue'
 import type { Session, TwoFactorChallenge } from '@/shared/api/types'
@@ -172,6 +173,7 @@ function onChallengeInvalid(caught: unknown): void {
 
 <template>
   <main class="flex min-h-dvh items-center justify-center bg-kq-surface p-4">
+    <p :id="BLOCKED_REASON_ID" class="sr-only">{{ t('common.blockedReason') }}</p>
     <div
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
@@ -232,10 +234,10 @@ function onChallengeInvalid(caught: unknown): void {
           </FormField>
 
           <button
+            v-aria-disabled.busy="submitting"
             type="submit"
-            :disabled="submitting"
             :aria-busy="submitting"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
           >
             {{ submitting ? t('auth.submitting') : t('auth.submit') }}
           </button>
@@ -271,10 +273,10 @@ function onChallengeInvalid(caught: unknown): void {
           </FormField>
 
           <button
+            v-aria-disabled.reason="codeSubmitting || !codeIsValid"
             type="submit"
-            :disabled="codeSubmitting || !codeIsValid"
             :aria-busy="codeSubmitting"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
           >
             {{
               codeSubmitting ? t('auth.twoFactor.codeSubmitting') : t('auth.twoFactor.codeSubmit')

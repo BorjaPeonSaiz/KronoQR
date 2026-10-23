@@ -78,14 +78,14 @@ describe('CorrectionDialog, modo «add»', () => {
       },
     })
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-08-14')
     await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-08-14T06:00')
     await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('no deja guardar sin jornada aunque el resto este completo', async () => {
@@ -104,12 +104,12 @@ describe('CorrectionDialog, modo «add»', () => {
     await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-08-14')
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('una hora que no existio por el cambio de horario bloquea el envio y lo dice', async () => {
@@ -130,7 +130,7 @@ describe('CorrectionDialog, modo «add»', () => {
     await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
     expect(wrapper.text()).toContain(es.corrections.dialog.timeDoesNotExist)
   })
 
@@ -152,17 +152,17 @@ describe('CorrectionDialog, modo «add»', () => {
     await settle(1)
 
     expect(wrapper.find('[data-test="dialog-reason-text"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="dialog-reason-text"]').setValue('demasiado corto')
     await settle(1)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper
       .find('[data-test="dialog-reason-text"]')
       .setValue('Cambio de turno pactado con la compañera de tarde.')
     await settle(1)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('convierte la hora tecleada (zona del centro) a UTC al guardar', async () => {
@@ -233,7 +233,7 @@ describe('CorrectionDialog, modo «correct»', () => {
     await settle(1)
 
     expect(wrapper.find('[data-test="dialog-no-change"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('enseña que va a cambiar, desde que hora y hacia cual, antes de guardar', async () => {
@@ -561,7 +561,7 @@ describe('CorrectionDialog, modo «correct»', () => {
 
     // No es un cambio: sin otra hora tocada, sigue sin haber nada que guardar.
     expect(wrapper.find('[data-test="dialog-no-change"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
     expect(wrapper.text()).toContain(es.corrections.dialog.clockOutCannotBeCleared)
     // Y la previsualizacion no dice "→ Sin cerrar": no hay fila de cambio.
     expect(wrapper.find('[data-test="dialog-preview"]').exists()).toBe(false)
@@ -643,7 +643,7 @@ describe('CorrectionDialog, modo «correct»', () => {
     expect(clockOut.attributes('aria-invalid')).toBe('true')
     expect(wrapper.find(`#${errorId}`).text()).toBe('La salida no puede ser anterior a la entrada.')
     expect((clockOut.element as HTMLInputElement).value).toBe('2026-03-14T05:30')
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
     expect(wrapper.emitted('success')).toBeUndefined()
     expect(wrapper.emitted('cancel')).toBeUndefined()
     expect(wrapper.emitted('stale')).toBeUndefined()
@@ -838,12 +838,12 @@ describe('CorrectionDialog, «Este tramo terminó en pausa» (@RN-05 @RF-PA-04)'
     await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="dialog-ends-in-break"]').setValue(true)
     await settle(1)
 
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
 
     await wrapper.find('#correction-form').trigger('submit')
     await settle()
@@ -1035,7 +1035,7 @@ describe('CorrectionDialog, 403 (V2-PA-03, RF-ID-03, regla dura 18)', () => {
     expect(wrapper.emitted('cancel')).toBeUndefined()
     // Sigue pudiendose cancelar, y reintentar si el rol cambia.
     expect(wrapper.find('[data-test="dialog-cancel"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('anular siendo responsable (que no puede) deja el dialogo abierto y no da exito', async () => {

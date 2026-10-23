@@ -37,8 +37,11 @@ const INVARIANT: Readonly<Record<string, string>> = {
   'errorEvents.table.occurrencesValue': 'solo la cifra',
 }
 
-const countKeys = [...new Set([...ES.keys(), ...EN.keys()])].filter(
-  (key) => (ES.get(key) ?? '').includes('{count}') || (EN.get(key) ?? '').includes('{count}'),
+/** Toda clave con {count} o con formas plurales (« | »): ninguna se queda a medias en un idioma. */
+const countKeys = [...new Set([...ES.keys(), ...EN.keys()])].filter((key) =>
+  [ES.get(key) ?? '', EN.get(key) ?? ''].some(
+    (text) => text.includes('{count}') || text.includes(' | '),
+  ),
 )
 
 function forms(text: string | undefined): number {

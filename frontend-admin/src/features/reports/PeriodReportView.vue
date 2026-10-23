@@ -374,9 +374,9 @@ const fieldClass =
       </fieldset>
 
       <button
+        v-aria-disabled.reason="!canSubmit"
         type="submit"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-        :disabled="!canSubmit"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
         data-test="generate-report"
       >
         {{ t('reports.period.generate') }}
@@ -416,9 +416,9 @@ const fieldClass =
           </div>
 
           <button
+            v-aria-disabled.busy="backgroundRequesting || backgroundRequested !== null"
             type="button"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-            :disabled="backgroundRequesting || backgroundRequested !== null"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
             data-test="request-background"
             @click="requestBackgroundGeneration"
           >
@@ -475,9 +475,9 @@ const fieldClass =
         <button
           v-for="format of FORMATS"
           :key="format"
+          v-aria-disabled.busy="downloading !== null"
           type="button"
-          class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-          :disabled="downloading !== null"
+          class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
           :data-test="`export-${format}`"
           @click="download(format)"
         >
@@ -515,9 +515,9 @@ const fieldClass =
 
         <div>
           <button
+            v-aria-disabled.busy="backgroundRequesting || backgroundRequested !== null"
             type="button"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-            :disabled="backgroundRequesting || backgroundRequested !== null"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
             data-test="request-background"
             @click="requestBackgroundGeneration"
           >

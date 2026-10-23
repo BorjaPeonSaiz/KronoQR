@@ -73,11 +73,11 @@ async function finish(): Promise<void> {
 
     <div>
       <button
+        v-aria-disabled.busy="completing"
         type="button"
-        :disabled="completing"
         :aria-busy="completing"
         data-test="complete-setup"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         @click="finish"
       >
         {{ completing ? t('onboarding.review.completing') : t('onboarding.review.complete') }}

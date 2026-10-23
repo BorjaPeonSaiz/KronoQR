@@ -14,13 +14,13 @@ test('cada pantalla pone su titulo a la pestaña', async ({ page }) => {
   await logInAsAdmin(page)
   const nav = page.getByRole('navigation', { name: 'Secciones del panel' })
 
-  await expect(page).toHaveTitle(/^Plantilla · /)
+  await expect(page).toHaveTitle(/^Plantilla – /)
 
   await nav.getByRole('link', { name: 'Presencia' }).click()
-  await expect(page).toHaveTitle(/^Presencia en vivo · /)
+  await expect(page).toHaveTitle(/^Presencia en vivo – /)
 
   await nav.getByRole('link', { name: 'Incidencias' }).click()
-  await expect(page).toHaveTitle(/^Bandeja de incidencias · /)
+  await expect(page).toHaveTitle(/^Bandeja de incidencias – /)
 })
 
 test('al cambiar de pantalla con el menu el foco va al encabezado y el anuncio viejo se retira', async ({

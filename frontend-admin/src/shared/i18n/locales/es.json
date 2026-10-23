@@ -248,7 +248,8 @@
       "clear": "Limpiar filtros",
       "clearSearch": "Borrar búsqueda"
     },
-    "loadingSlow": "Esto tarda más de lo normal. Si no termina, vuelve a intentarlo en unos minutos."
+    "loadingSlow": "Esto tarda más de lo normal. Puedes seguir esperando o volver a intentarlo.",
+    "blockedReason": "Aún falta algo por completar para poder continuar."
   },
   "errors": {
     "retryAfter": "Puedes volver a intentarlo dentro de {seconds} s.",
@@ -292,7 +293,11 @@
       "title": "Ha ocurrido un error inesperado",
       "advice": "Vuelve a intentarlo. Si se repite, avisa a quien administra la instalación indicando la hora exacta y qué estabas haciendo."
     },
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "timeout": {
+      "title": "El servidor tarda más de lo normal",
+      "advice": "No hemos recibido respuesta a tiempo. Puedes volver a intentarlo ahora o esperar un poco; nada de lo que has hecho se ha perdido."
+    }
   },
   "forbidden": {
     "heading": "Sin permiso para esta sección",
@@ -1285,7 +1290,7 @@
     "backToLive": "Volver a la presencia",
     "loading": "Cargando el registro horario…",
     "zoneNotice": "Las horas se muestran en la zona horaria del centro donde se fichó, no en la del ordenador desde el que miras.",
-    "auditNotice": "Consultar el registro de otra persona queda anotado en la auditoría, con quién ha mirado, de quién y qué periodo.",
+    "auditNotice": "Consultar el registro de otra persona queda anotado en la auditoría: quién ha mirado, a quién y de qué periodo.",
     "duration": "{hours} h {minutes} min",
     "filters": {
       "legend": "Periodo consultado",
@@ -2009,7 +2014,7 @@
       "unverifiable": "La licencia no se puede verificar"
     },
     "detail": {
-      "valid": "Caduca el {until}. Te avisaremos {warningDays} días antes.",
+      "valid": "Caduca el {until}. Te avisaremos {warningDays} día antes. | Caduca el {until}. Te avisaremos {warningDays} días antes.",
       "expiring_soon": "Caduca el {until}: queda {days} día. Todavía no se ha degradado nada. Pide la renovación a tu proveedor y actívala aquí cuando te llegue. | Caduca el {until}: quedan {days} días. Todavía no se ha degradado nada. Pide la renovación a tu proveedor y actívala aquí cuando te llegue.",
       "expired": "Caducó el {until}, hace {elapsed} día. Desde entonces, las funcionalidades accesorias de abajo no están disponibles. El registro horario sigue funcionando por completo. | Caducó el {until}, hace {elapsed} días. Desde entonces, las funcionalidades accesorias de abajo no están disponibles. El registro horario sigue funcionando por completo.",
       "absent": "Todavía no se ha activado ninguna clave. Actívala abajo; te la entrega tu proveedor. Mientras tanto se ficha y se consulta el registro con normalidad.",
@@ -2661,6 +2666,8 @@
     }
   },
   "audit": {
-    "readNotice": "Esta consulta queda anotada en el registro de auditoría: quién la hace, cuándo y con qué alcance. Los datos que ves no se copian en él."
+    "readNotice": "Se anota quién la hace, cuándo y con qué alcance. El registro no guarda los datos que ves.",
+    "noticeShort": "Esta consulta queda anotada en la auditoría.",
+    "noticeMore": "Qué se anota"
   }
 }

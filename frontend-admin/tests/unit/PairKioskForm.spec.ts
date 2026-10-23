@@ -35,7 +35,7 @@ describe('PairKioskForm', () => {
     await wrapper.find('input[name="name"]').setValue('Recepción')
     await settle()
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('un codigo rechazado muestra el aviso generico, sin distinguir la causa', async () => {

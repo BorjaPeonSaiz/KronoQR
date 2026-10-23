@@ -217,9 +217,9 @@ const selectClass =
       </fieldset>
 
       <button
+        v-aria-disabled.busy="loading"
         type="submit"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-        :disabled="loading"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
         data-test="apply-filters"
       >
         {{ t('complianceSummary.filters.apply') }}

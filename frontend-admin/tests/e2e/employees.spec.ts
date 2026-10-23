@@ -431,7 +431,8 @@ test(
     await expect(page.getByRole('link', { name: 'Persona minimizada' })).toBeVisible()
 
     await page.getByRole('link', { name: 'Persona minimizada' }).click()
-    await expect(page.getByRole('heading', { name: 'Persona minimizada', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ficha del empleado', level: 1 })).toBeVisible()
+    await expect(page.getByTestId('employee-name')).toHaveText('Persona minimizada')
     await expect(page.getByTestId('employee-minimised')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Editar' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Contratos', level: 2 })).toHaveCount(0)

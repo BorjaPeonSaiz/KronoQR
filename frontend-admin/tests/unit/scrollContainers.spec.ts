@@ -15,18 +15,23 @@ import { parse } from 'vue/compiler-sfc'
 import { describe, expect, it } from 'vitest'
 
 const SOURCE_ROOT = resolve(process.cwd(), 'src')
-const SCROLL_CLASS = /(?:^|\s)(?:[a-z]+:)?overflow-(?:x-|y-)?(?:auto|scroll)(?:\s|$)/
+// Tambien dentro de un `:class` (comillas, llaves, ternarios), no solo en el `class` estatico.
+const SCROLL_CLASS = /(?:^|[^\w-])(?:[a-z]+:)?overflow-(?:x-|y-)?(?:auto|scroll)(?![\w-])/
 
-/** Contenedores que desplazan sin ser una tabla de datos, y por que no llevan region. */
+/**
+ * Contenedores que desplazan sin ser una tabla de datos, por su `data-test` (el NODO, no el
+ * fichero: un contenedor nuevo en el mismo fichero tiene que cumplir) y por que no llevan region.
+ */
 const EXEMPT: Readonly<Record<string, string>> = {
-  'shared/ui/AppShellView.vue':
+  'app-sidebar':
     'columna lateral del menu: desplaza solo en escritorio y todo su contenido son enlaces enfocables',
-  'shared/ui/BaseDialog.vue':
+  'dialog-panel':
     'el panel del dialogo: es role="dialog" con nombre y su foco lo gestiona la propia trampa de foco',
 }
 
 interface Found {
   readonly file: string
+  readonly dataTest: string
   readonly tag: string
   readonly attributes: ReadonlyMap<string, string>
 }
@@ -51,6 +56,7 @@ interface AstNode {
     name: string
     value?: { content: string }
     arg?: { content: string }
+    exp?: { loc: { source: string } }
   }>
   children?: AstNode[]
   branches?: AstNode[]
@@ -84,12 +90,15 @@ function scrollContainers(): Found[] {
         if (prop.type === 6) {
           attributes.set(prop.name, prop.value?.content ?? '')
         } else if (prop.type === 7 && prop.name === 'bind' && prop.arg?.content !== undefined) {
-          attributes.set(':' + prop.arg.content, '<dynamic>')
+          attributes.set(':' + prop.arg.content, prop.exp?.loc.source ?? '<dynamic>')
         }
       }
 
-      if (SCROLL_CLASS.test(attributes.get('class') ?? '')) {
+      const classes = `${attributes.get('class') ?? ''} ${attributes.get(':class') ?? ''}`
+
+      if (SCROLL_CLASS.test(classes)) {
         found.push({
+          dataTest: attributes.get('data-test') ?? '',
           file: relative(SOURCE_ROOT, path).split(sep).join('/'),
           tag: element.tag ?? '?',
           attributes,
@@ -102,7 +111,7 @@ function scrollContainers(): Found[] {
 }
 
 const CONTAINERS = scrollContainers()
-const TO_CHECK = CONTAINERS.filter((container) => EXEMPT[container.file] === undefined)
+const TO_CHECK = CONTAINERS.filter((container) => EXEMPT[container.dataTest] === undefined)
 
 describe('contenedores con desplazamiento (R7-PA-01)', () => {
   it('encuentra los contenedores del panel (la prueba no pasa en vacio)', () => {
@@ -110,10 +119,10 @@ describe('contenedores con desplazamiento (R7-PA-01)', () => {
   })
 
   it('las excepciones declaradas siguen existiendo', () => {
-    for (const file of Object.keys(EXEMPT)) {
+    for (const dataTest of Object.keys(EXEMPT)) {
       expect(
-        CONTAINERS.some((container) => container.file === file),
-        `${file} ya no tiene desplazamiento: quitalo de EXEMPT`,
+        CONTAINERS.some((container) => container.dataTest === dataTest),
+        `${dataTest} ya no tiene desplazamiento: quitalo de EXEMPT`,
       ).toBe(true)
     }
   })

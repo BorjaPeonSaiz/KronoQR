@@ -519,7 +519,7 @@ describe('cuadro de impacto y adopción', () => {
 
     expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(message)
     expect(wrapper.find('[data-test="pdf-busy-use-xlsx"]').exists()).toBe(true)
-    expect(announcement.value).toBe(message)
+    expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('group')
     expect(fetchSpy).toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
@@ -577,7 +577,7 @@ describe('cuadro de impacto y adopción', () => {
     expect(wrapper.find('[data-test="export-job"]').exists()).toBe(true)
 
     // Con una exportacion en curso no se pide otra.
-    expect(wrapper.find('[data-test="export-csv"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="export-csv"]').attributes('aria-disabled')).toBeDefined()
 
     vi.unstubAllGlobals()
   })

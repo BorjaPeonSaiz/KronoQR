@@ -187,10 +187,10 @@ onMounted(() => {
         </FormField>
 
         <button
+          v-aria-disabled.reason="codeSubmitting || !codeIsValid"
           type="submit"
-          :disabled="codeSubmitting || !codeIsValid"
           :aria-busy="codeSubmitting"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         >
           {{
             codeSubmitting ? t('auth.twoFactor.enrolSubmitting') : t('auth.twoFactor.enrolSubmit')

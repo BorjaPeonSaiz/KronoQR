@@ -225,9 +225,9 @@ async function download(row: DataExport): Promise<void> {
 
     <div>
       <button
+        v-aria-disabled.busy="activeExport !== null"
         type="button"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
-        :disabled="activeExport !== null"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         data-test="open-generate"
         @click="openConfirm"
       >
@@ -326,9 +326,9 @@ async function download(row: DataExport): Promise<void> {
             <td class="px-3 py-2">
               <button
                 v-if="row.status === 'completed'"
+                v-aria-disabled.busy="downloadingUuid === row.uuid"
                 type="button"
-                class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-                :disabled="downloadingUuid === row.uuid"
+                class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
                 :aria-busy="downloadingUuid === row.uuid"
                 :data-test="`download-${row.uuid}`"
                 @click="download(row)"

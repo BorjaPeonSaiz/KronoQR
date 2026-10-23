@@ -66,6 +66,9 @@ const profile = ref<ComplianceProfileBody | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const error = ref<unknown>(null)
+// El fallo de CARGA va aparte del de guardado: «Reintentar» solo tiene sentido en el primero
+// (volver a pedir el perfil borraria lo que se ha editado tras un guardado fallido).
+const loadError = ref<unknown>(null)
 const saved = ref(false)
 /** `ATTENDANCE_BREAK_CLOCKING === 'enabled'` (tarea 3.5, RF-AT-12): si RN-12 esta suspendida o no. */
 const breakClockingEnabled = ref(false)
@@ -155,7 +158,7 @@ function fill(loaded: ComplianceProfileBody): void {
 
 async function load(): Promise<void> {
   loading.value = true
-  error.value = null
+  loadError.value = null
 
   // `allSettled` y no `all`: el perfil legal es lo que esta pantalla edita, y
   // el ajuste de fichaje de pausa es solo el texto de un aviso. Un fallo en
@@ -168,7 +171,7 @@ async function load(): Promise<void> {
   if (profileResult.status === 'fulfilled') {
     fill(profileResult.value.data)
   } else {
-    error.value = profileResult.reason
+    loadError.value = profileResult.reason
   }
 
   // Si `GET /settings` falla, «desconocido» se trata como «desactivado»: es
@@ -546,7 +549,8 @@ async function save(): Promise<void> {
 
     <LoadingPanel v-if="loading" :label="t('compliance.loading')" data-test="loading" />
 
-    <ErrorNotice v-if="error !== null" :error="error" :field-labels="fieldLabels" @retry="load()" />
+    <ErrorNotice v-if="loadError !== null" :error="loadError" @retry="load()" />
+    <ErrorNotice v-else-if="error !== null" :error="error" :field-labels="fieldLabels" />
 
     <form
       v-if="profile !== null"
@@ -785,10 +789,10 @@ async function save(): Promise<void> {
 
       <div class="flex items-center gap-3">
         <button
+          v-aria-disabled.reason="!canSave"
           type="submit"
-          :disabled="!canSave"
           data-test="save"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
         >
           {{ t('compliance.save') }}
         </button>

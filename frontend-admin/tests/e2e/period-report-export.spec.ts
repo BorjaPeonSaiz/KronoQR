@@ -167,12 +167,9 @@ test(
 
     await page.keyboard.press('Enter')
 
+    // Una sola señal: el foco, con el mensaje como nombre accesible (sin alert ni region viva).
     await expect(notice).toBeFocused()
-    await expect(
-      page
-        .locator('[role="alert"], [role="status"], [aria-live]')
-        .filter({ hasText: 'Inténtalo de nuevo en 15 segundos' }),
-    ).not.toHaveCount(0)
+    await expect(notice).toHaveAccessibleName(/Inténtalo de nuevo en 15 segundos/)
     await page.keyboard.press('Tab')
     await expect(notice.getByTestId('pdf-busy-use-csv')).toBeFocused()
   },

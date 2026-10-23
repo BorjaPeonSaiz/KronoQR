@@ -377,9 +377,9 @@ const buttonClass =
 
       <div>
         <button
+          v-aria-disabled.busy="generating"
           type="button"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
-          :disabled="generating"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
           :aria-busy="generating"
           data-test="generate-bundle"
           @click="generateBundle"
@@ -463,9 +463,9 @@ const buttonClass =
 
         <div>
           <button
+            v-aria-disabled.reason="!canGrant"
             type="submit"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-50"
-            :disabled="!canGrant"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-50"
             :aria-busy="granting"
             data-test="grant-submit"
           >

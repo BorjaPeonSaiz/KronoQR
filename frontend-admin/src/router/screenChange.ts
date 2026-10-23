@@ -16,19 +16,41 @@ import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { nextTick } from 'vue'
 import { START_LOCATION, type Router } from 'vue-router'
 
+/** El `<h1>` del contenido (o el propio `<main>`): sirve al acceso y al asistente, que no tienen `#main`. */
+export function contentHeading(doc: Document = document): HTMLElement | null {
+  const main = doc.querySelector<HTMLElement>('main')
+
+  return main?.querySelector<HTMLElement>('h1') ?? main
+}
+
+let changing = false
+
+/** Hay un cambio de pantalla en curso: `focusRecovery` se aparta para no focar dos veces. */
+export function isScreenChanging(): boolean {
+  return changing
+}
+
 export function bindScreenChange(router: Router, doc: Document = document): () => void {
-  return router.afterEach((to, from, failure) => {
+  const stopBefore = router.beforeEach(() => {
+    changing = true
+  })
+  const stopError = router.onError(() => {
+    changing = false
+  })
+  const stopAfter = router.afterEach((to, from, failure) => {
     if (failure !== undefined || from === START_LOCATION || to.path === from.path) {
+      changing = false
+
       return
     }
 
     clearAnnouncement()
 
     void nextTick().then(() => {
-      const main = doc.getElementById('main')
-      const heading = main?.querySelector<HTMLElement>('h1') ?? main
+      changing = false
+      const heading = contentHeading(doc)
 
-      if (heading === null || heading === undefined) {
+      if (heading === null) {
         return
       }
 
@@ -39,4 +61,11 @@ export function bindScreenChange(router: Router, doc: Document = document): () =
       heading.focus({ preventScroll: false })
     })
   })
+
+  return () => {
+    stopBefore()
+    stopError()
+    stopAfter()
+    changing = false
+  }
 }
