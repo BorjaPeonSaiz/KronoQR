@@ -198,7 +198,29 @@ describe('cliente HTTP', () => {
       const error = await pending
 
       expect(isApiError(error)).toBe(true)
-      expect((error as ApiError).kind).toBe('network')
+      expect((error as ApiError).kind).toBe('timeout')
+      expect((error as ApiError).titleKey).toBe('errors.timeout.title')
+    })
+
+    it('el plazo cubre tambien la lectura del cuerpo', async () => {
+      vi.useFakeTimers()
+      stubFetch((_url, init) => {
+        const body = new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener('abort', () =>
+              controller.error(new DOMException('', 'AbortError')),
+            )
+          },
+        })
+
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } })
+      })
+
+      const pending = request('/api/v1/employees').catch((caught: unknown) => caught)
+
+      await vi.advanceTimersByTimeAsync(DEFAULT_READ_TIMEOUT_MS + 1)
+
+      expect(((await pending) as ApiError).kind).toBe('timeout')
     })
 
     it('una escritura no se corta: pudo aplicarse aunque no se vea la respuesta', async () => {

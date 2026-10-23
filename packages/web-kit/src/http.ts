@@ -49,6 +49,7 @@ export interface ValidationProblem extends Problem {
 /** Causa del fallo, ya normalizada. Es lo que elige el texto que se muestra. */
 export type ApiErrorKind =
   | 'network'
+  | 'timeout'
   | 'unauthenticated'
   | 'invalidCredentials'
   | 'forbidden'
@@ -95,18 +96,34 @@ export class ApiError extends Error {
 
   /** Clave de i18n del titulo. Los textos viven en `locales/*.json` de cada SPA. */
   get titleKey(): string {
-    return `errors.${this.kind}.title`
+    return this.isPortalNetworkRestricted
+      ? 'errors.portalNetworkRestricted.title'
+      : `errors.${this.kind}.title`
+  }
+
+  /** El `403` de «esta red no puede abrir el portal»: tiene su propio texto. */
+  get isPortalNetworkRestricted(): boolean {
+    return this.status === 403 && this.problem?.type === PORTAL_NETWORK_RESTRICTED_TYPE
   }
 
   /** Clave de i18n de la accion siguiente. Un error sin salida no es un error util. */
   get adviceKey(): string {
-    return `errors.${this.kind}.advice`
+    return this.isPortalNetworkRestricted
+      ? 'errors.portalNetworkRestricted.advice'
+      : `errors.${this.kind}.advice`
   }
 }
 
 export function isApiError(value: unknown): value is ApiError {
   return value instanceof ApiError
 }
+
+/**
+ * `type` del `403` del portal cuando la red de origen no esta permitida (RF-ID-08, RS-12): el
+ * servidor distingue el motivo y el portal solo aconseja «conectate a la red del hotel» con este
+ * tipo; un `403` cualquiera lleva el consejo general.
+ */
+export const PORTAL_NETWORK_RESTRICTED_TYPE = 'urn:kronoqr:problem:portal-network-restricted'
 
 /** `type` del `503` de las exportaciones en PDF cuando hay demasiados PDF simultaneos (con `Retry-After`). */
 export const PDF_RENDERING_BUSY_TYPE = 'urn:kronoqr:problem:pdf-rendering-busy'
@@ -312,7 +329,7 @@ async function send(
   path: string,
   options: RequestOptions,
   accept: string,
-  defaultTimeoutMs = 0,
+  deadline: Deadline | null = null,
 ): Promise<Response> {
   const headers = new Headers({ Accept: accept, traceparent: createTraceparent() })
   const token = options.token ?? (options.anonymous === true ? null : authTokenProvider())
@@ -338,22 +355,7 @@ async function send(
   }
 
   let response: Response
-  const timeoutMs = options.timeoutMs ?? defaultTimeoutMs
-  // Un controlador propio, encadenado al del llamante, y no `AbortSignal.any`: que
-  // tambien exista en el navegador de la tablet mas vieja de un cliente.
-  const timeout = timeoutMs > 0 ? new AbortController() : null
-  const timer = timeout === null ? null : setTimeout(() => timeout.abort(), timeoutMs)
-  const callerSignal = options.signal
-
-  if (timeout !== null && callerSignal !== undefined) {
-    if (callerSignal.aborted) {
-      timeout.abort()
-    } else {
-      callerSignal.addEventListener('abort', () => timeout.abort(), { once: true })
-    }
-  }
-
-  const signal = timeout?.signal ?? callerSignal
+  const signal = deadline?.signal ?? options.signal
 
   try {
     response = await fetch(buildUrl(path, options.query), {
@@ -370,11 +372,7 @@ async function send(
       ...(options.keepalive === true ? { keepalive: true } : {}),
     })
   } catch {
-    throw new ApiError({ kind: 'network', status: 0 })
-  } finally {
-    if (timer !== null) {
-      clearTimeout(timer)
-    }
+    throw new ApiError({ kind: deadline?.timedOut === true ? 'timeout' : 'network', status: 0 })
   }
 
   if (!response.ok) {
@@ -390,20 +388,81 @@ async function send(
   return response
 }
 
-/** El tiempo maximo por omision de una peticion JSON: solo las lecturas lo llevan. */
-function readTimeout(options: RequestOptions): number {
-  return (options.method ?? 'GET') === 'GET' ? DEFAULT_READ_TIMEOUT_MS : 0
+/**
+ * El plazo de una lectura: corta la peticion a los `timeoutMs` y cubre TAMBIEN la lectura del
+ * cuerpo, no solo la llegada de las cabeceras (un servidor que envia la mitad y se calla
+ * dejaba la pantalla en «Cargando…»). Un controlador propio encadenado al del llamante, y no
+ * `AbortSignal.any`: que tambien exista en el navegador de la tablet mas vieja de un cliente.
+ */
+interface Deadline {
+  readonly signal: AbortSignal
+  readonly timedOut: boolean
+  clear: () => void
+}
+
+function startDeadline(options: RequestOptions): Deadline | null {
+  const timeoutMs =
+    options.timeoutMs ?? ((options.method ?? 'GET') === 'GET' ? DEFAULT_READ_TIMEOUT_MS : 0)
+
+  if (timeoutMs <= 0) {
+    return null
+  }
+
+  const controller = new AbortController()
+  const caller = options.signal
+  let timedOut = false
+  const onCallerAbort = (): void => controller.abort()
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  if (caller?.aborted === true) {
+    controller.abort()
+  } else {
+    caller?.addEventListener('abort', onCallerAbort, { once: true })
+  }
+
+  return {
+    signal: controller.signal,
+    get timedOut() {
+      return timedOut
+    },
+    clear: () => {
+      clearTimeout(timer)
+      caller?.removeEventListener('abort', onCallerAbort)
+    },
+  }
+}
+
+/** Lee el cuerpo JSON dentro del plazo; si el plazo vence a medias, es un `timeout`. */
+async function readJson<T>(response: Response, deadline: Deadline | null): Promise<T> {
+  try {
+    return (await response.json()) as T
+  } catch (failure) {
+    if (deadline?.timedOut === true) {
+      throw new ApiError({ kind: 'timeout', status: 0 })
+    }
+
+    throw failure
+  }
 }
 
 /** Peticion JSON. `204` se representa como `null`. */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
-  const response = await send(path, options, 'application/json', readTimeout(options))
+  const deadline = startDeadline(options)
 
-  if (response.status === 204) {
-    return null
+  try {
+    const response = await send(path, options, 'application/json', deadline)
+
+    if (response.status === 204) {
+      return null
+    }
+
+    return await readJson<T>(response, deadline)
+  } finally {
+    deadline?.clear()
   }
-
-  return (await response.json()) as T
 }
 
 /**
@@ -415,13 +474,19 @@ export async function requestJsonWithHeaders<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<{ body: T; headers: Headers }> {
-  const response = await send(path, options, 'application/json', readTimeout(options))
+  const deadline = startDeadline(options)
 
-  if (response.status === 204) {
-    throw new ApiError({ kind: 'unexpected', status: 204 })
+  try {
+    const response = await send(path, options, 'application/json', deadline)
+
+    if (response.status === 204) {
+      throw new ApiError({ kind: 'unexpected', status: 204 })
+    }
+
+    return { body: await readJson<T>(response, deadline), headers: response.headers }
+  } finally {
+    deadline?.clear()
   }
-
-  return { body: (await response.json()) as T, headers: response.headers }
 }
 
 /** Igual que `request`, para respuestas que siempre traen cuerpo. */

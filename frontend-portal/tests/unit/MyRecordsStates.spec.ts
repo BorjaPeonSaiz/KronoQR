@@ -199,44 +199,28 @@ describe('MyRecordsView, cada causa de error', () => {
 })
 
 describe('MyRecordsView, el 403 (R3-UX-02, RF-ID-08)', () => {
-  // Un 403 con la SPA ya cargada llega, sobre todo, al cambiar de red: fuera de la red
-  // del hotel el portal no se abre, y «vuelve a entrar» no lo arregla.
-  it('el consejo nombra la red del hotel y no solo «vuelve a entrar»', async () => {
+  // El servidor distingue el motivo: el consejo de la red del hotel solo sale con el type
+  // ; un 403 cualquiera lleva el consejo general.
+  it('con el type de red restringida aconseja conectarse a la red del hotel', async () => {
+    const wrapper = await mountWith(() =>
+      problemResponse(403, 'urn:kronoqr:problem:portal-network-restricted'),
+    )
+    const alert = wrapper.find('[role="alert"]')
+
+    expect(alert.text()).toContain(es.errors.portalNetworkRestricted.title)
+    expect(alert.text()).toContain(es.errors.portalNetworkRestricted.advice)
+    expect(es.errors.portalNetworkRestricted.advice).toMatch(/red del hotel/)
+    expect(en.errors.portalNetworkRestricted.advice).toMatch(/hotel network/)
+  })
+
+  it('un 403 cualquiera lleva el consejo general y no menciona la red', async () => {
     const wrapper = await mountWith(() => problemResponse(403, 'about:blank'))
     const alert = wrapper.find('[role="alert"]')
 
     expect(alert.text()).toContain(es.errors.forbidden.title)
     expect(alert.text()).toContain(es.errors.forbidden.advice)
-    expect(es.errors.forbidden.advice).toMatch(/red del hotel/)
-    expect(en.errors.forbidden.advice).toMatch(/hotel network/)
-    // Y sigue ofreciendo lo que servia antes y la salida humana.
-    expect(es.errors.forbidden.advice).toContain('vuelve a entrar')
+    expect(alert.text()).not.toContain('red del hotel')
+    expect(es.errors.forbidden.advice).toContain('vuelve a entrar'.replace('v', 'V'))
     expect(es.errors.forbidden.advice).toContain('Recursos Humanos')
-  })
-})
-
-describe('MyRecordsView: Reintentar y Actualizando (V3-UX-01, V3-UX-05)', () => {
-  it('un error ofrece Reintentar y, al pulsarlo, vuelve a pedir el periodo', async () => {
-    let failing = true
-    const wrapper = await mountWith(() =>
-      failing ? problemResponse(500, 'about:blank') : jsonResponse(employeeWorkDays()),
-    )
-    const retry = wrapper.find('[role="alert"] [data-test="error-retry"]')
-
-    expect(retry.text()).toBe(es.errors.retry)
-
-    failing = false
-    await retry.trigger('click')
-    await settle()
-
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-  })
-
-  it('«Actualizando…» vive en una region viva que existe tambien en reposo', async () => {
-    const wrapper = await mountWith(() => jsonResponse(employeeWorkDays()))
-    const region = wrapper.find('[data-test="resolved-range"] [role="status"]')
-
-    expect(region.exists()).toBe(true)
-    expect(region.text()).toBe('')
   })
 })

@@ -81,17 +81,21 @@ input[type='week']:focus-within {
       flex con `min-width: auto`: no baja del ancho de su opcion mas larga.
    3. Un `<select>` mide lo que su opcion mas larga; con `max-width: 100%` encoge
       hasta el ancho de su contenedor. */
-fieldset {
-  min-width: 0;
-}
+/* En `@layer base`: son valores por omision y no pueden pisar `max-w-*`/`min-w-*` de una
+   utilidad (p. ej. un campo con `max-w-xs` dentro de un fieldset). */
+@layer base {
+  fieldset {
+    min-width: 0;
+  }
 
-fieldset > * {
-  min-width: 0;
-  max-width: 100%;
-}
+  fieldset > * {
+    min-width: 0;
+    max-width: 100%;
+  }
 
-select,
-input:not([type='checkbox']):not([type='radio']),
-textarea {
-  max-width: 100%;
+  select,
+  input:not([type='checkbox']):not([type='radio']),
+  textarea {
+    max-width: 100%;
+  }
 }

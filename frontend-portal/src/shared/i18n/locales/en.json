@@ -51,7 +51,7 @@
   },
   "common": {
     "updating": "Updating…",
-    "loadingSlow": "This is taking longer than usual. If it does not finish, try again in a few minutes."
+    "loadingSlow": "This is taking longer than usual. You can keep waiting or try again."
   },
   "errors": {
     "retryAfter": "You can try again in {seconds} s.",
@@ -69,7 +69,7 @@
     },
     "forbidden": {
       "title": "This information cannot be shown",
-      "advice": "You may be outside the hotel network, from where the portal does not open: connect to it and try again. If you are already on it, sign in again; and if the problem continues, tell Human Resources."
+      "advice": "Sign in again. If the problem continues, talk to Human Resources."
     },
     "notFound": {
       "title": "Not found",
@@ -95,7 +95,15 @@
       "title": "An unexpected error has occurred",
       "advice": "Try again. If it happens again, tell Human Resources with the time and what you were doing."
     },
-    "retry": "Try again"
+    "retry": "Try again",
+    "timeout": {
+      "title": "The server is taking longer than usual",
+      "advice": "We did not get a reply in time. You can try again now or wait a little; nothing you have done has been lost."
+    },
+    "portalNetworkRestricted": {
+      "title": "The portal does not open from this network",
+      "advice": "Connect to the hotel network and try again. If you are already on it, talk to Human Resources."
+    }
   },
   "notFound": {
     "heading": "This page does not exist",
