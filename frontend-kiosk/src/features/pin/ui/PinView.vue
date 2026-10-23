@@ -38,6 +38,7 @@ import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
+import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
@@ -139,6 +140,8 @@ const session = useScanSessionWithCleanup({
   pipeline: { handleDecoded: () => null },
   sound,
 })
+// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+useLocaleResetAfterScan(session.confirmation)
 
 type Step = 'code' | 'pin' | 'submitting'
 const step = ref<Step>('code')

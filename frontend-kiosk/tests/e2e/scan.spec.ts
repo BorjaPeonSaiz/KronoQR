@@ -284,7 +284,7 @@ test(
 )
 
 test(
-  'se cambia de idioma y la eleccion sobrevive a una recarga',
+  'se cambia de idioma y la eleccion NO se queda en la tablet: vuelve al de serie (D9)',
   { tag: ['@RF-KI-05'] },
   async ({ page }) => {
     await stubScanApi(page)
@@ -294,9 +294,10 @@ test(
     await page.getByRole('button', { name: 'English' }).click()
     await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
 
+    // La eleccion es de quien ficha: no se guarda, y una recarga arranca en el de serie.
     await page.reload()
-    await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(page.getByTestId('privacy-notice')).toContainText('Aviso de protección de datos')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   },
 )
 

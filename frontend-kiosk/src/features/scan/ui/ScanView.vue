@@ -24,6 +24,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { markInteraction } from '@/features/offline/application/interactionGuard'
 import { useBranding } from '@/shared/branding/useBranding'
+import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
   APP_VERSION,
@@ -169,6 +170,9 @@ const session = useScanSessionWithCleanup({
   sound,
   isOffline: () => connectivity.status.value === 'offline',
 })
+
+// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+useLocaleResetAfterScan(session.confirmation, () => branding.current.value.locales)
 
 const scanner = useQrScanner({
   video,
@@ -336,7 +340,7 @@ onUnmounted(() => {
     <p
       v-if="showClockSkewBanner"
       role="status"
-      class="mx-6 mb-2 flex items-center justify-center gap-2 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 py-2 text-center text-base font-medium text-kq-kiosk-text"
+      class="mx-6 mb-2 flex items-center justify-center gap-2 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 py-2 text-center text-confirm-sm font-medium text-kq-kiosk-text"
       data-testid="clock-skew-banner"
     >
       <span aria-hidden="true">⚠</span>

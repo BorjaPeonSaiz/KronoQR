@@ -5,7 +5,7 @@ import './assets/main.css'
 import { canUpdateNowGlobal, peekPersistedQueue } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
-import { createAppI18n, initialLocale } from './shared/i18n'
+import { clearStoredLocale, createAppI18n, initialLocale } from './shared/i18n'
 import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
 import {
   currentUrgentGiveUpMotive,
@@ -19,6 +19,7 @@ import { getErrorReporter } from './shared/telemetry/errorReporter'
 import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
 
+clearStoredLocale()
 const locale = initialLocale()
 document.documentElement.lang = locale
 

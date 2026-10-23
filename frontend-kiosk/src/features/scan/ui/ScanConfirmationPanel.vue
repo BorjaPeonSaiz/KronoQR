@@ -254,7 +254,7 @@ const clockSkewNotice = computed(() => {
          `<p>`, no un `<span>`: hay una prueba que comprueba que el desenlace
          `debounced` no lleva NINGUN `span[aria-hidden]` (el glifo grande de
          alarma que aqui no aplica), y esta linea no es ese glifo. -->
-    <p aria-hidden="true" class="mt-2 flex items-center gap-2 text-base font-medium">
+    <p aria-hidden="true" class="mt-2 flex items-center gap-2 text-lg font-medium">
       <img
         v-if="props.branding.logoUrl !== null"
         :src="props.branding.logoUrl"

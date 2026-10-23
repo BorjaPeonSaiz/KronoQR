@@ -235,7 +235,7 @@ watch(policyUrl, () => {
     <!-- Capa 1 del art. 13 RGPD en un unico parrafo: menos altura, ningun
          contenido escondido. El encabezado abre la frase, no ocupa su propia
          linea. -->
-    <p class="text-sm leading-snug">
+    <p class="text-lg leading-snug">
       <span class="font-semibold text-kq-kiosk-text">{{ t('privacy.heading') }}:</span>
       {{
         props.notice.controllerName === null
@@ -249,7 +249,7 @@ watch(policyUrl, () => {
     <!-- `kiosk-touch` fija el minimo de 48 px en el CONTROL, no en el texto:
          la fila se compacta pero el objetivo tactil no baja de tamano. -->
     <div class="mt-2 flex flex-wrap items-center gap-2">
-      <p v-if="policyUrl === null" class="text-sm">
+      <p v-if="policyUrl === null" class="text-lg">
         {{ t('privacy.policyPending') }}
       </p>
       <template v-else>
@@ -257,13 +257,13 @@ watch(policyUrl, () => {
              compartida y tocar un aviso legal no puede sacar al empleado del
              quiosco. La direccion va como TEXTO y como QR (RL-09 admite «enlace
              o QR»): quien la quiera la lee en su movil. -->
-        <p class="min-w-0 break-all text-sm" data-testid="privacy-policy-url">
+        <p class="min-w-0 break-all text-lg" data-testid="privacy-policy-url">
           {{ t('privacy.policyLink', { url: policyUrl }) }}
         </p>
         <button
           ref="showQrButton"
           type="button"
-          class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text"
+          class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border px-3 text-lg font-medium text-kq-kiosk-text"
           data-testid="privacy-show-qr"
           @click="openDialog"
         >

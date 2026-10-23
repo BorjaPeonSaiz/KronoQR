@@ -16,7 +16,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import type { AppLocale } from '@/shared/i18n'
-import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES, storeLocale } from '@/shared/i18n'
+import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES } from '@/shared/i18n'
 
 const props = defineProps<{ policy?: LocalePolicy }>()
 
@@ -33,9 +33,10 @@ function apply(next: AppLocale): void {
   if (typeof document !== 'undefined') document.documentElement.lang = next
 }
 
+// La eleccion es de QUIEN FICHA, no de la tablet (D9, V7-KI-05): no se guarda, y
+// `useLocaleResetAfterScan` devuelve el idioma de serie al terminar el fichaje.
 function select(next: AppLocale): void {
   apply(next)
-  storeLocale(next)
 }
 
 // La marca llega DESPUES del arranque y su politica de idiomas puede cambiar.

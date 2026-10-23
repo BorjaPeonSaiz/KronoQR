@@ -59,7 +59,7 @@ import type { ServiceCodeAttemptResult } from '../application/serviceCodeGate'
 import { createServiceCodeGate } from '../application/serviceCodeGate'
 import { buildDiagnosticsSnapshot } from '../application/diagnosticsSnapshot'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const router = useRouter()
 
 const MIN_CODE_LENGTH = 8
@@ -403,6 +403,16 @@ function formatInstant(iso: string | null): string {
   }).format(parsed)
 }
 
+/**
+ * Un valor tecnico del navegador (estado de la camara, orientacion, enfoque) en el
+ * idioma de la pantalla (V7-KI-04). Si llega uno que no conocemos se muestra tal cual:
+ * mejor el dato crudo que ocultarlo.
+ */
+function technicalValue(group: 'cameraState' | 'facing' | 'focus', raw: string): string {
+  const key = `diagnostics.values.${group}.${raw.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`
+  return te(key) ? t(key) : raw
+}
+
 function yesNo(value: boolean | null): string {
   if (value === null) return t('diagnostics.values.unknown')
   return value ? t('diagnostics.values.yes') : t('diagnostics.values.no')
@@ -567,7 +577,9 @@ onBeforeUnmount(() => {
         <h2 class="text-lg font-bold">{{ t('diagnostics.sections.camera') }}</h2>
         <dl class="text-confirm-sm grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
           <dt>{{ t('diagnostics.rows.camera.state') }}</dt>
-          <dd data-testid="diagnostics-camera-state">{{ snapshot.camera.state }}</dd>
+          <dd data-testid="diagnostics-camera-state">
+            {{ technicalValue('cameraState', snapshot.camera.state) }}
+          </dd>
           <template v-if="snapshot.camera.settings !== null">
             <dt>{{ t('diagnostics.rows.camera.label') }}</dt>
             <dd>{{ cameraLabel ?? t('diagnostics.values.notAvailable') }}</dd>
@@ -583,11 +595,19 @@ onBeforeUnmount(() => {
             </dd>
             <dt>{{ t('diagnostics.rows.camera.facingMode') }}</dt>
             <dd>
-              {{ snapshot.camera.settings.facingMode ?? t('diagnostics.values.notAvailable') }}
+              {{
+                snapshot.camera.settings.facingMode === undefined
+                  ? t('diagnostics.values.notAvailable')
+                  : technicalValue('facing', snapshot.camera.settings.facingMode)
+              }}
             </dd>
             <dt>{{ t('diagnostics.rows.camera.focusMode') }}</dt>
             <dd>
-              {{ snapshot.camera.settings.focusMode ?? t('diagnostics.values.notAvailable') }}
+              {{
+                snapshot.camera.settings.focusMode === undefined
+                  ? t('diagnostics.values.notAvailable')
+                  : technicalValue('focus', snapshot.camera.settings.focusMode)
+              }}
             </dd>
             <dt>{{ t('diagnostics.rows.camera.zoom') }}</dt>
             <dd>{{ snapshot.camera.settings.zoom ?? t('diagnostics.values.notAvailable') }}</dd>

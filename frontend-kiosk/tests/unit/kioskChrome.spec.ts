@@ -108,7 +108,7 @@ describe('selector de idioma', () => {
     }
   })
 
-  it('cambia el idioma y lo recuerda para la proxima vez', async () => {
+  it('cambia el idioma pero NO lo recuerda: la eleccion es de quien ficha (D9, V7-KI-05)', async () => {
     const i18n = createAppI18n('es')
     const wrapper = mount(LanguageSelector, {
       props: { policy: BILINGUAL },
@@ -118,7 +118,7 @@ describe('selector de idioma', () => {
     await wrapper.findAll('button')[1]?.trigger('click')
 
     expect(i18n.global.locale.value).toBe('en')
-    expect(readStoredLocale()).toBe('en')
+    expect(readStoredLocale()).toBeNull()
     expect(document.documentElement.lang).toBe('en')
   })
 
