@@ -22,8 +22,15 @@
 // «Fast 3G» de las DevTools (562,5 ms por peticion, solo informativo): 2184-2296 ms.
 // Antes de KP1 el mismo harness daba 1496-1500 ms (Lighthouse) y 2356 ms (DevTools).
 // Valores de la CI (job ⑦ del quiosco, run 38762123501): 1340 / 1352 / 1364 ms
-// (margen del 32 %) y 2132 ms con el perfil de las DevTools. Si el margen baja
-// del 25 % (LCP > 1500 ms), se revisa el umbral o el numero de muestras, no se ignora.
+// (margen del 32 %) y 2132 ms con el perfil de las DevTools.
+//
+// DOS UMBRALES DESDE LA 2.3.0 (V21-5-KI-2). Antes solo se juzgaba la mediana, y
+// una muestra de 1 544 ms en el host paso sin que nadie la viera. Ahora:
+//   - CADA muestra, no la mediana, cabe en los 2 000 ms del Anexo A: una sola
+//     carga en frio fuera de presupuesto ya es una tablet que tarda de mas.
+//   - Cualquier muestra por encima de 1 500 ms (margen < 25 %) AVISA sin fallar:
+//     anotacion y `::warning` en el resumen del job de la CI. Si avisa, se mira
+//     por que antes de tocar el umbral o el numero de muestras.
 //
 // LO QUE QUEDA ABIERTO: el LCP en la tablet real. Esto es la maquina de quien
 // ejecuta la prueba estrangulada, y se declara asi (mismo criterio que
@@ -32,9 +39,12 @@
 import { expect, test } from '@playwright/test'
 import type { Browser } from '@playwright/test'
 import { stubKioskApi } from './support/kiosk'
+import { median, warnAboutSlowSamples } from './support/perfReport'
 
 /** Presupuesto del Anexo A del doc 02. */
 const LCP_BUDGET_MS = 2000
+/** Margen del 25 % sobre el presupuesto: por encima, aviso (V21-5-KI-2). */
+const LCP_WARN_MS = 1500
 const CPU_SLOWDOWN = 4
 /**
  * «3G rapida» tal y como la define Lighthouse (preset movil): 150 ms de RTT,
@@ -141,7 +151,7 @@ async function measureColdLoad(
 }
 
 test(
-  'el LCP del quiosco en frio, con CPU x4 y 3G rapida, no pasa de 2 s',
+  'el LCP del quiosco en frio, con CPU x4 y 3G rapida, no pasa de 2 s en ninguna muestra',
   { tag: ['@RNF-P-07'] },
   async ({ browser, baseURL }) => {
     test.setTimeout(180_000)
@@ -153,14 +163,16 @@ test(
     }
 
     const lcp = samples.map((sample) => sample.lcpMs).sort((a, b) => a - b)
-    const median = lcp[Math.floor(lcp.length / 2)] ?? Number.POSITIVE_INFINITY
+    const lcpMedian = median(lcp)
+    const lcpWorst = lcp.at(-1) ?? Number.POSITIVE_INFINITY
     test.info().annotations.push({
       type: 'LCP (ms)',
-      description: `muestras ${lcp.map((v) => Math.round(v)).join(', ')}; mediana ${Math.round(median)}`,
+      description: `muestras ${lcp.map((v) => Math.round(v)).join(', ')}; mediana ${Math.round(lcpMedian)}`,
     })
     console.log(
       `[perf] LCP en frio (CPU x${CPU_SLOWDOWN}, Fast 3G): ${lcp.map(Math.round).join(' / ')} ms`,
     )
+    warnAboutSlowSamples('LCP en frio', lcp, LCP_WARN_MS)
 
     // Caso peor, solo informativo (ver `FAST_3G_DEVTOOLS`).
     const worst = await measureColdLoad(browser, baseURL ?? '', FAST_3G_DEVTOOLS)
@@ -170,10 +182,10 @@ test(
     })
     console.log(`[perf] LCP en frio, DevTools Fast 3G (informativo): ${Math.round(worst.lcpMs)} ms`)
 
-    expect(median, `LCP mediano ${Math.round(median)} ms`).toBeGreaterThan(0)
+    expect(lcp[0] ?? 0, `LCP de la mejor muestra ${Math.round(lcp[0] ?? 0)} ms`).toBeGreaterThan(0)
     expect(
-      median,
-      `LCP mediano ${Math.round(median)} ms (presupuesto ${LCP_BUDGET_MS} ms)`,
+      lcpWorst,
+      `LCP de la peor muestra ${Math.round(lcpWorst)} ms (presupuesto ${LCP_BUDGET_MS} ms)`,
     ).toBeLessThanOrEqual(LCP_BUDGET_MS)
 
     // El decodificador y libsodium no compiten con el primer pintado: sus
