@@ -396,7 +396,10 @@ main() {
   # la red permitida ni la IP del visitante.
   comprobar /portal/ 403 "Accede desde la red del hotel o consulta con RRHH"
   comprobar /portal/ 403 "Connect from the hotel network or contact HR"
-  comprobar /api/v1/me/workdays 403 "urn:kronoqr:problem:forbidden"
+  comprobar /api/v1/me/workdays 403 "urn:kronoqr:problem:portal-network-restricted"
+  # El type lo lee el portal; --http1.1 porque HTTP/2 corta algunos errores del borde.
+  problema /api/v1/me/workdays 403 portal-network-restricted --http1.1
+  problema /api/v1/me/login 403 portal-network-restricted --http1.1 -X POST
   cabecera /api/v1/me/workdays Content-Type "application/problem\+json"
   sin_cuerpo /portal/ "${CIDR_PORTAL%%/*}|127\.0\.0\.1"
   sin_cuerpo /api/v1/me/workdays "${CIDR_PORTAL%%/*}|127\.0\.0\.1"

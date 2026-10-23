@@ -494,12 +494,14 @@ server {
   }
 
   # Cuerpo del 403 del portal fuera de su red: bilingue, sin PII ni CIDR.
+  # El `type` (portal-network-restricted) lo lee el portal para distinguir este 403
+  # de un 403 de permisos; esta documentado en docs/api/openapi.yaml y doc 02 §7.5.
   # La plantilla se mantiene en ASCII: sin tildes en el cuerpo.
   location @kronoqr_me_forbidden {
     default_type application/problem+json;
     include /etc/nginx/snippets/security-headers.conf;
     add_header Cache-Control "no-store" always;
-    return 403 '{"type":"urn:kronoqr:problem:forbidden","title":"Acceso no permitido desde esta red / Access not allowed from this network","status":403,"detail":"Accede desde la red del hotel o consulta con RRHH. / Connect from the hotel network or contact HR."}';
+    return 403 '{"type":"urn:kronoqr:problem:portal-network-restricted","title":"Acceso no permitido desde esta red / Access not allowed from this network","status":403,"detail":"Accede desde la red del hotel o consulta con RRHH. / Connect from the hotel network or contact HR."}';
   }
 
   # Cuerpo del 403 del panel fuera de ADMIN_INTERNAL_CIDR (PP-10): el mismo
