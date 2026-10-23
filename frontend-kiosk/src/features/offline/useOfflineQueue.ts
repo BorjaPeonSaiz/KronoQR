@@ -38,6 +38,7 @@ import { createSyncRunner } from './application/syncRunner'
 import { canApplyUpdate } from './domain/updateWindow'
 import { holdInteraction, interactionInProgress } from './application/interactionGuard'
 import { createDexieQueueStorage, openKioskDatabase } from './infrastructure/dexieStorage'
+import { createDexieQueueKeyStore, createQueueCipher } from './infrastructure/queueCipher'
 
 export interface OfflineQueueController {
   readonly submission: ScanSubmissionPort
@@ -131,8 +132,33 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     for (const listener of rosterUpdateListeners) listener()
   }
 
+  // A1: la cola y los descartados se guardan CIFRADOS. Un solo cifrador (una clave) para
+  // todos los manejadores que abra la cola al reabrir IndexedDB. Sin cifrado disponible
+  // se guarda en claro y se avisa, sin datos personales (regla dura 19).
+  const cipher = createQueueCipher({
+    keyStore: createDexieQueueKeyStore(
+      options.databaseName === undefined ? undefined : `${options.databaseName}-key`,
+    ),
+    onUnavailable: (reason) =>
+      reporter.report('kiosk.offline.storage_unavailable', {
+        reason: `queue_cipher_${reason}`,
+        durable: true,
+        message: `queue_cipher_${reason}`,
+      }),
+  })
+
   const queue: ScanQueue = createScanQueue({
-    openStorage: () => createDexieQueueStorage(openKioskDatabase(options.databaseName)),
+    openStorage: () =>
+      createDexieQueueStorage(openKioskDatabase(options.databaseName), {
+        cipher,
+        onUnreadable: (count) =>
+          reporter.report('kiosk.offline.storage_unavailable', {
+            reason: 'queue_rows_unreadable',
+            count,
+            durable: true,
+            message: 'queue_rows_unreadable',
+          }),
+      }),
     onStorageFailure: (reason) =>
       reporter.report('kiosk.offline.storage_unavailable', {
         reason,
