@@ -87,13 +87,13 @@ final readonly class BrandingTelemetry
         $manifest = $read();
 
         SpanScope::annotateCurrent([
-            'branding.custom_accent' => $manifest->customThemeColor,
+            'branding.custom_accent' => $manifest->customAccent,
             'branding.branded_icons' => $manifest->brandedIcons,
         ]);
 
         $this->logger->info('product.branding_manifest_retrieved', [
             'trace_id' => SpanScope::currentTraceId(),
-            'custom_accent' => $manifest->customThemeColor,
+            'custom_accent' => $manifest->customAccent,
             'branded_icons' => $manifest->brandedIcons,
             'duration_seconds' => round(microtime(true) - $startedAt, 3),
         ]);

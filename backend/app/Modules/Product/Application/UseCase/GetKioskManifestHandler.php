@@ -49,7 +49,7 @@ final readonly class GetKioskManifestHandler
      * El color de serie del quiosco: el fondo real de su pantalla (token
      * `--kq-color-kiosk-surface` de `packages/web-kit/src/theme.css`; una prueba de
      * arquitectura ata los dos valores) y el que declara
-     * `frontend-kiosk/vite.config.ts`. Es `theme_color` SIEMPRE, con o sin marca: la
+     * `frontend-kiosk/vite.config.ts`. Es `theme_color` y `background_color` SIEMPRE, con o sin marca: la
      * barra del sistema y el arranque coinciden con el fondo oscuro, y el acento
      * del cliente no se calcula aqui. Es del producto, no de un
      * cliente.
@@ -90,7 +90,7 @@ final readonly class GetKioskManifestHandler
             applicationName: $branding->applicationName,
             locale: $branding->locales->default,
             themeColor: self::PRODUCT_THEME_COLOR,
-            customThemeColor: $branding->accentColor !== null,
+            customAccent: $branding->accentColor !== null,
             icons: $brandIcon instanceof KioskManifestIcon ? [$brandIcon] : self::productIcons(),
             brandedIcons: $brandIcon instanceof KioskManifestIcon,
         );

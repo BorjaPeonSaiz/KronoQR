@@ -60,16 +60,28 @@ const KIOSK_MANIFEST_PARITY_HANDLER = 'backend/app/Modules/Product/Application/U
 it('sirve el mismo color de fondo y el de serie que el manifiesto estatico', function (): void {
     $vite = kioskManifestParityViteString('background_color');
 
-    expect(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'BACKGROUND_COLOR'))->toBe($vite)
+    // Una sola constante para los dos colores: el recurso escribe
+    // `background_color` desde el manifiesto, no desde una copia propia.
+    expect(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_HANDLER, 'PRODUCT_THEME_COLOR'))->toBe($vite)
         ->and(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_HANDLER, 'PRODUCT_THEME_COLOR'))->toBe(kioskManifestParityViteString('theme_color'))
-        ->and($vite)->toBe(kioskManifestParityViteString('theme_color'));
+        ->and(Repo::contents(KIOSK_MANIFEST_PARITY_RESOURCE))->toContain("'background_color' => \$manifest->themeColor,")
+        ->and(Repo::contents(KIOSK_MANIFEST_PARITY_RESOURCE))->not->toContain('BACKGROUND_COLOR');
+})->group('RF-PD-08');
+
+it('exige en el panel el mismo lado minimo de icono que el servidor', function (): void {
+    // `frontend-admin/src/features/settings/logoIcon.ts` avisa en la pantalla
+    // «Marca» de un logotipo que no servira de icono; si su minimo y el del
+    // servidor se separan, el aviso miente en un sentido o en el otro.
+    $logoIcon = Repo::contents('frontend-admin/src/features/settings/logoIcon.ts');
+
+    expect(preg_match('/export const MINIMUM_ICON_SIDE\s*=\s*(\d+)/', $logoIcon, $match))->toBe(1)
+        ->and((int) ($match[1] ?? 0))->toBe(GetKioskManifestHandler::MINIMUM_ICON_SIDE);
 })->group('RF-PD-08');
 
 it('usa como color de fondo y de tema el token del fondo del quiosco', function (): void {
     $theme = Repo::contents('packages/web-kit/src/theme.css');
 
     expect(preg_match('/--kq-color-kiosk-surface:\s*(#[0-9a-fA-F]{6})\s*;/', $theme, $token))->toBe(1)
-        ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'BACKGROUND_COLOR'))
         ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_HANDLER, 'PRODUCT_THEME_COLOR'))
         ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityViteString('background_color'));
 })->group('RF-PD-08');

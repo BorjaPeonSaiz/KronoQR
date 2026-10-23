@@ -23,10 +23,10 @@ final readonly class KioskManifest
         public string $applicationName,
         /** El idioma por defecto de la instalacion. */
         public string $locale,
-        /** `#rrggbb`: el fondo del quiosco (no el acento de la marca). */
+        /** `#rrggbb`: el fondo del quiosco (no el acento de la marca); es `theme_color` y `background_color`. */
         public string $themeColor,
         /** Si la instalacion tiene un acento de marca propio (telemetria; no afecta al manifiesto). */
-        public bool $customThemeColor,
+        public bool $customAccent,
         public array $icons,
         /** Si los iconos son el logotipo de la marca y no los de serie. */
         public bool $brandedIcons,
