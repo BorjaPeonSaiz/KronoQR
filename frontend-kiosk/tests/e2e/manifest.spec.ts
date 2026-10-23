@@ -106,3 +106,16 @@ test(
     expect(versions[0]).not.toBe('0.0.0')
   },
 )
+
+test(
+  'el service worker precachea cada recurso UNA sola vez (iconos incluidos)',
+  { tag: ['@RF-KI-01'] },
+  async ({ request }) => {
+    const response = await request.get('/sw.js')
+    expect(response.ok()).toBe(true)
+    const urls = [...(await response.text()).matchAll(/url:"([^"]+)"/g)].map((match) => match[1])
+
+    expect(urls.length).toBeGreaterThan(0)
+    expect(urls.filter((url, index) => urls.indexOf(url) !== index)).toEqual([])
+  },
+)
