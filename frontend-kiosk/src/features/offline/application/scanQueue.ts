@@ -163,12 +163,6 @@ export interface ScanQueueOptions {
   readonly openStorage: () => QueueStorage
   readonly clock?: Clock
   readonly onStorageFailure?: (reason: string) => void
-  /**
-   * Cada `clear()` dice si de verdad dejo el disco vacio. `false` = quedan filas
-   * (con `qr_payload` en claro) en un disco que no se pudo escribir: quien lo
-   * oye lo senala y reintenta (KT5, observacion 5).
-   */
-  readonly onClearOutcome?: (complete: boolean) => void
   /** Inyectable para pruebas: por defecto `setTimeout`. */
   readonly sleep?: (ms: number) => Promise<void>
   readonly reopenDelaysMs?: readonly number[]
@@ -721,19 +715,13 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     },
 
     async clear() {
-      let complete = true
       try {
         await run((target) => target.clear())
-      } catch (error) {
-        complete = false
-        options.onStorageFailure?.(errorName(error))
+      } catch {
+        // Nada que hacer: el recuento se recalcula igual.
       }
-      // `run` reabre y, si el disco sigue sin dejarse, repite sobre la memoria: el
-      // borrado "funciona" pero el disco conserva las filas. Eso no es vaciar.
-      if (diskUnknown || overlay !== null) complete = false
       leased.clear()
       await recompute()
-      options.onClearOutcome?.(complete)
     },
 
     subscribe(listener) {

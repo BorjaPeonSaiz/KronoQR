@@ -245,34 +245,6 @@ export function storeUpdateQuietMinutes(minutes: number): void {
 }
 
 /**
- * El vaciado de la cola al desvincular no pudo completarse (KT5): quedan filas con
- * el `qr_payload` en claro en el disco. Se reintenta al arrancar mientras la tablet
- * siga sin emparejar. Solo un indicador, sin datos.
- */
-const QUEUE_CLEAR_PENDING_KEY = 'kronoqr.kiosk.queue_clear_pending'
-
-export function readQueueClearPending(): boolean {
-  const storage = deviceStorage()
-  if (storage === null) return false
-  try {
-    return storage.getItem(QUEUE_CLEAR_PENDING_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-export function storeQueueClearPending(pending: boolean): void {
-  const storage = deviceStorage()
-  if (storage === null) return
-  try {
-    if (pending) storage.setItem(QUEUE_CLEAR_PENDING_KEY, '1')
-    else storage.removeItem(QUEUE_CLEAR_PENDING_KEY)
-  } catch {
-    // Sin almacenamiento no hay indicador que guardar; el reintento queda para la proxima.
-  }
-}
-
-/**
  * Zona del centro cacheada, o `null` = usar la de la tablet: tablet que aun no
  * ha latido con una version que la trajera, servidor que la omite, o un nombre
  * que el navegador no reconoce (se descarta aqui, sin error: la hora se pinta
