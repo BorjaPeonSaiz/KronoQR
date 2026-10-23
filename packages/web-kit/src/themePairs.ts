@@ -71,18 +71,6 @@ function disabledPairs(
   )
 }
 
-/**
- * Los tokens con los que el grafico del panel pinta sus series (barras y
- * rosco). Cada uno se mide como componente grafico (>= 3:1, WCAG 1.4.11)
- * contra `surface-raised`, donde se dibuja el lienzo.
- */
-export const chartSeriesTokens: readonly string[] = [
-  '--kq-color-primary-strong',
-  '--kq-color-accent',
-  '--kq-color-warning',
-  '--kq-color-text-muted',
-]
-
 /** Parejas del panel y del portal (fondo claro). */
 export const lightPairs: readonly ThemePair[] = [
   // Texto sobre superficies.

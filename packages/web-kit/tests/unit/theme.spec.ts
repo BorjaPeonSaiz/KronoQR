@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { contrastRatio, WCAG_AA_MINIMUM } from '../../src/contrast'
 import { paintedColors } from '../../src/pairContrast'
-import { chartSeriesTokens, pairKey, themePairs } from '../../src/themePairs'
+import { chartSeriesTokens } from '../../src/chartSeries'
+import { pairKey, themePairs } from '../../src/themePairs'
 
 // Ruta por `node:path` y no por `new URL(..., import.meta.url)`: bajo jsdom el
 // `URL` global es el del navegador simulado y `readFileSync` no lo acepta.
