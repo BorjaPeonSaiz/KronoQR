@@ -2314,6 +2314,7 @@ final readonly class ErrorVocabulary
         'restore',
         'restored',
         'restrict',
+        'restricted',
         'resuelta',
         'resuelve',
         'result',

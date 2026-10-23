@@ -27,13 +27,13 @@ test(
 
     await page.goto('/login')
     await expect(page.locator(BRAND_MARK)).toHaveText('KronoQR')
-    await expect(page).toHaveTitle(/· KronoQR$/)
+    await expect(page).toHaveTitle(/– KronoQR$/)
     // Sin color de acento propio, ningun token se sobreescribe.
     await expect(page.locator('html')).toHaveAttribute('data-kq-branded', 'product')
 
     await logInToPortal(page)
     await expect(page.getByRole('banner').locator(BRAND_MARK)).toHaveText('KronoQR')
-    await expect(page).toHaveTitle(/· KronoQR$/)
+    await expect(page).toHaveTitle(/– KronoQR$/)
   },
 )
 
@@ -48,7 +48,7 @@ test(
     // hay un segundo texto suelto que lo repita (un solo significado para
     // quien usa lector de pantalla).
     await expect(page.locator(BRAND_MARK)).toHaveAttribute('alt', 'Hotel Marina')
-    await expect(page).toHaveTitle(/· Hotel Marina$/)
+    await expect(page).toHaveTitle(/– Hotel Marina$/)
     // Y el color de acento del cliente se aplica sobre los tokens `--kq-*`.
     await expect(page.locator('html')).toHaveAttribute('data-kq-branded', 'accent')
 
@@ -57,7 +57,7 @@ test(
       'alt',
       'Hotel Marina',
     )
-    await expect(page).toHaveTitle(/· Hotel Marina$/)
+    await expect(page).toHaveTitle(/– Hotel Marina$/)
   },
 )
 
@@ -75,7 +75,7 @@ test(
     await page.goto('/login')
 
     await expect(page.locator(BRAND_MARK)).toHaveText('KronoQR')
-    await expect(page).toHaveTitle(/· KronoQR$/)
+    await expect(page).toHaveTitle(/– KronoQR$/)
     await expect(page.getByRole('heading', { name: 'Acceso al portal' })).toBeVisible()
   },
 )
@@ -97,6 +97,6 @@ test(
     await page.goto('/login')
 
     await expect(page.locator(BRAND_MARK)).toHaveText('KronoQR')
-    await expect(page).toHaveTitle(/· KronoQR$/)
+    await expect(page).toHaveTitle(/– KronoQR$/)
   },
 )
