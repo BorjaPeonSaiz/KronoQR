@@ -9,8 +9,8 @@
 // A proposito, NO se llama a `pairDevice`/`stubKioskApi` (`support/kiosk.ts`):
 // esta prueba empieza justo donde esas dos dejan a las demas, sin token.
 
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { expectNoBlockingViolations } from './support/axe'
 import { DEVICE_UUID, stubPairing, TOKEN_VALUE } from './support/pairing'
 
 test.beforeEach(async ({ page }) => {
@@ -83,17 +83,6 @@ test(
     await page.goto('/')
     await expect(page.getByTestId('pairing-code')).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-      .analyze()
-
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )

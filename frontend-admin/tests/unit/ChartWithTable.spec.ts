@@ -6,6 +6,7 @@
 // (`support/harness.ts`). Lo que se comprueba aqui es el CONTRATO -las mismas
 // props, la misma tabla, el mismo conmutador- y no el dibujo del lienzo, que
 // es cosa de la libreria y no de este componente.
+import { announcement } from '@kronoqr/web-kit/announcer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChartWithTable from '@/shared/ui/ChartWithTable.vue'
 import { mountView, settle } from './support/harness'
@@ -47,7 +48,15 @@ describe('ChartWithTable', () => {
 
     expect(wrapper.find('[data-test="chart-canvas"]').isVisible()).toBe(true)
     expect(wrapper.find('[data-test="chart-table"]').exists()).toBe(false)
-    expect(wrapper.get('[data-test="toggle-view"]').attributes('aria-pressed')).toBe('false')
+    const toggle = wrapper.get('[data-test="toggle-view"]')
+
+    // Una sola señal (V7-PA-7): la etiqueta dice la accion; sin `aria-pressed`.
+    expect(toggle.attributes('aria-pressed')).toBeUndefined()
+    expect(toggle.text()).toBe('Ver como tabla')
+    // Gobierna un contenedor que existe siempre, con el lienzo y la tabla dentro.
+    expect(wrapper.find('#' + CSS.escape(toggle.attributes('aria-controls') ?? '')).exists()).toBe(
+      true,
+    )
   })
 
   it('el conmutador cambia a la tabla, con los MISMOS datos que la serie', async () => {
@@ -67,7 +76,10 @@ describe('ChartWithTable', () => {
 
     await wrapper.get('[data-test="toggle-view"]').trigger('click')
 
-    expect(wrapper.get('[data-test="toggle-view"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-test="toggle-view"]').attributes('aria-pressed')).toBeUndefined()
+    expect(wrapper.get('[data-test="toggle-view"]').text()).toBe('Ver como gráfico')
+    // El cambio de vista se anuncia (V7-PA-7).
+    expect(announcement.value).toContain('Se muestra la tabla de datos')
     expect(wrapper.find('[data-test="chart-canvas"]').isVisible()).toBe(false)
 
     const table = wrapper.get('[data-test="chart-table"]')
@@ -90,7 +102,8 @@ describe('ChartWithTable', () => {
 
     // Se puede volver al grafico: no es una vista de un solo sentido.
     await wrapper.get('[data-test="toggle-view"]').trigger('click')
-    expect(wrapper.get('[data-test="toggle-view"]').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.get('[data-test="toggle-view"]').text()).toBe('Ver como tabla')
+    expect(announcement.value).toContain('Se muestra el gráfico')
     expect(wrapper.find('[data-test="chart-table"]').exists()).toBe(false)
   })
 

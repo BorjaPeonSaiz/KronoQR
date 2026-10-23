@@ -61,6 +61,7 @@ const {
   data: departments,
   error,
   isPending,
+  refetch,
 } = useQuery({ queryKey: ['departments', 'all'], queryFn: () => listDepartments() })
 
 // Cuentas activas con rol de responsable, TODAS: el contrato pagina (100 como mucho por
@@ -257,10 +258,10 @@ const selectClass =
         />
       </FormField>
       <button
+        v-aria-disabled.busy="creating"
         type="submit"
-        :disabled="creating"
         :aria-busy="creating"
-        class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         data-test="department-create-submit"
       >
         {{ creating ? t('common.saving') : t('departments.create.submit') }}
@@ -269,7 +270,7 @@ const selectClass =
     </form>
 
     <LoadingPanel v-if="isPending" :label="t('departments.loading')" class="mt-4" />
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <template v-else>
       <EmptyState
@@ -281,7 +282,10 @@ const selectClass =
 
       <div
         v-else
-        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('departments.table.caption')"
+        class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="sr-only">
@@ -355,10 +359,10 @@ const selectClass =
                     </p>
                   </div>
                   <button
+                    v-aria-disabled.reason="!changed(department) || saving === department.id"
                     type="button"
-                    :disabled="!changed(department) || saving === department.id"
                     :aria-busy="saving === department.id"
-                    class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+                    class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
                     :data-test="`save-manager-${department.id}`"
                     @click="save(department)"
                   >

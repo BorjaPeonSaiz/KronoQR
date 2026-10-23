@@ -50,11 +50,13 @@ describe('AbsenceRegisterDialog', () => {
     await wrapper.find('[data-test="register-starts-on"]').setValue('2026-03-10')
     await wrapper.find('[data-test="register-ends-on"]').setValue('2026-03-10')
 
-    expect(wrapper.find('[data-test="register-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="register-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="register-note"]').setValue('Permiso por traslado de domicilio.')
 
-    expect(wrapper.find('[data-test="register-submit"]').attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.find('[data-test="register-submit"]').attributes('aria-disabled'),
+    ).toBeUndefined()
   })
 
   it('con vacaciones, no exige nota: el envío no depende de rellenarla', async () => {
@@ -67,6 +69,8 @@ describe('AbsenceRegisterDialog', () => {
     await wrapper.find('[data-test="register-starts-on"]').setValue('2026-03-10')
     await wrapper.find('[data-test="register-ends-on"]').setValue('2026-03-14')
 
-    expect(wrapper.find('[data-test="register-submit"]').attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.find('[data-test="register-submit"]').attributes('aria-disabled'),
+    ).toBeUndefined()
   })
 })

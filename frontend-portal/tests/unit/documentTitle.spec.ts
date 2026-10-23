@@ -2,7 +2,7 @@
 // (V7-PO-2).
 import { describe, expect, it } from 'vitest'
 import PeriodSummary from '@/features/my-records/PeriodSummary.vue'
-import { bindDocumentTitle } from '@/router/documentTitle'
+import { bindDocumentTitle } from '@kronoqr/web-kit/documentTitle'
 import { createAppI18n } from '@/shared/i18n'
 import { shiftEntry, workDay } from './support/fixtures'
 import { createTestPinia, createTestRouter, mountView } from './support/harness'
@@ -15,19 +15,19 @@ describe('titulo de la pestaña', () => {
     const binding = bindDocumentTitle({ router, i18n, applicationName: () => 'Hotel Marina' })
 
     await router.push('/login')
-    expect(document.title).toBe('Acceso al portal · Hotel Marina')
+    expect(document.title).toBe('Acceso al portal – Hotel Marina')
 
     await router.push('/records')
-    expect(document.title).toBe('Mi registro horario · Hotel Marina')
+    expect(document.title).toBe('Mi registro horario – Hotel Marina')
 
     await router.push('/export')
-    expect(document.title).toBe('Descargar mi historial · Hotel Marina')
+    expect(document.title).toBe('Descargar mi historial – Hotel Marina')
 
     await router.push('/no-existe')
-    expect(document.title).toBe('Esta página no existe · Hotel Marina')
+    expect(document.title).toBe('Esta página no existe – Hotel Marina')
 
     i18n.global.locale.value = 'en'
-    expect(document.title).toContain('· Hotel Marina')
+    expect(document.title).toContain('– Hotel Marina')
     expect(document.title).not.toContain('Descargar')
 
     binding.stop()
@@ -65,7 +65,7 @@ describe('titulo de la pestaña', () => {
     document.title = 'KronoQR'
     binding.refresh()
 
-    expect(document.title).toBe('Descargar mi historial · KronoQR')
+    expect(document.title).toBe('Descargar mi historial – KronoQR')
     binding.stop()
   })
 })

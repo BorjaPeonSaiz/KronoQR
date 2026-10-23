@@ -392,8 +392,16 @@ export default defineConfig(({ mode }) => ({
     // El cliente HTTP llama a /api/v1 en el MISMO origen (sin CORS, ADR-017);
     // en desarrollo ese origen es este servidor de Vite, que reenvia al Nginx
     // del entorno. secure:false por el certificado autofirmado de desarrollo.
+    // El destino depende de donde corre Vite (AX7-04): desde el host, el Nginx
+    // publicado en https://localhost; dentro de un contenedor node-*,
+    // `localhost` es el propio contenedor y el proxy daba 502, asi que
+    // infra/compose.dev.yaml fija KRONOQR_DEV_API_TARGET=https://nginx:8443.
     proxy: {
-      '/api': { target: 'https://localhost', changeOrigin: true, secure: false },
+      '/api': {
+        target: process.env['KRONOQR_DEV_API_TARGET'] ?? 'https://localhost',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 }))

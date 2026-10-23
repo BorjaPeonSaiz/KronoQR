@@ -73,7 +73,10 @@ info:
     `urn:kronoqr:problem:gateway-timeout`, y lo que corta antes de llegar a la
     aplicacion: `400` `urn:kronoqr:problem:bad-request` (cabeceras demasiado
     grandes o peticion que no es HTTP valido) y `414`
-    `urn:kronoqr:problem:uri-too-long`. El `500` **nunca** lleva el mensaje de la
+    `urn:kronoqr:problem:uri-too-long`. Y el borde corta con `403`
+    `urn:kronoqr:problem:portal-network-restricted` las rutas `/api/v1/me/*` cuando
+    el origen queda fuera de `PORTAL_INTERNAL_CIDR` (RF-ID-08): el cuerpo no
+    lleva la IP ni la red. El `500` **nunca** lleva el mensaje de la
     excepcion ni la traza, tampoco en desarrollo: la causa queda en el registro
     del servidor. Un `500` o un `503` no dicen nada del fichaje enviado: el
     quiosco lo conserva en su cola y lo reenvia con el mismo `scan_id`

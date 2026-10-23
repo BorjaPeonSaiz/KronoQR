@@ -15,8 +15,8 @@
 // y miran la pantalla de tarjeta. La convivencia del fichaje con la camara la
 // prueba `scan.spec.ts`, no este fichero.
 
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { expectNoBlockingViolations } from './support/axe'
 import { installAudioProbe } from './support/audio'
 import { blockCamera, readQueue } from './support/offlineQueue'
 import {
@@ -31,8 +31,6 @@ import { expectTouchTargets } from './support/touchTargets'
 
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const RAW_PIN = '483920'
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-const DISABLED_RULES = ['video-caption']
 
 test(
   'la instalacion sin PIN no ofrece el boton de respaldo (ADR-017)',
@@ -114,6 +112,8 @@ test(
 
     await pressPinDigits(page, '17')
     await expect(page.getByTestId('pin-confirm')).toBeEnabled()
+    // El teclado con las 8 cifras puestas, antes de enviar (V7-QA-1).
+    await expectNoBlockingViolations(page)
     await page.getByTestId('pin-confirm').click()
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
@@ -407,32 +407,12 @@ test(
     await stubKioskApiWithPin(page)
     await openPinScreen(page)
 
-    const codeResults = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-    const codeBlocking = codeResults.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-    expect(
-      codeBlocking,
-      codeBlocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
 
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await expect(page.getByTestId('pin-step-pin')).toBeVisible()
 
-    const pinResults = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-    const pinBlocking = pinResults.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-    expect(
-      pinBlocking,
-      pinBlocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -479,6 +459,7 @@ test(
     await page.goto('/pin')
     await expect(page.getByTestId('pin-unavailable')).toBeVisible()
     await expect(page.getByTestId('pin-unavailable')).toContainText('recepción')
+    await expectNoBlockingViolations(page)
     await expect(page.getByTestId('pin-step-code')).toHaveCount(0)
 
     // Y de vuelta a la tarjeta, con el padron ya cargado y el estado ya sabido,

@@ -65,7 +65,7 @@ describe('SiteSection: zona horaria', () => {
     const confirm = buttonWith(dialog, es.site.changeTimezone)
 
     // Sin cambio no se puede confirmar.
-    expect(confirm.attributes('disabled')).toBeDefined()
+    expect(confirm.attributes('aria-disabled')).toBeDefined()
 
     await dialog.find('[data-test="timezone-input"]').setValue('Atlantic/Canary')
 

@@ -1,4 +1,5 @@
 import { createQueryReloadMark, installChunkLoadRecovery } from '@kronoqr/web-kit/chunkLoadRecovery'
+import { bindDocumentTitle } from '@kronoqr/web-kit/documentTitle'
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
@@ -9,7 +10,6 @@ import App from './App.vue'
 import './assets/main.css'
 import { useSessionStore } from './features/login/session.store'
 import { createAppRouter } from './router'
-import { bindDocumentTitle } from './router/documentTitle'
 import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n } from './shared/i18n'
@@ -104,13 +104,14 @@ branding.apply()
 // Titulo de la pestaña por pantalla (WCAG 2.4.2): la marca escribe el nombre de
 // la instalacion, esto le antepone la pantalla. Se recompone tras cada vez que
 // la marca se aplica.
-const documentTitle = bindDocumentTitle({
+bindDocumentTitle({
   router,
   i18n,
   applicationName: () => branding.current.applicationName,
+  brandingVersion: () => branding.current,
 })
 
-void branding.load().then(documentTitle.refresh)
+void branding.load()
 
 app.use(router)
 app.use(i18n)

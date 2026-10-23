@@ -149,3 +149,47 @@ test(
     await expect(notice).toHaveCount(0)
   },
 )
+
+// El aviso de PDF ocupado con teclado (V21-1-UX-2, V21-7-PA-1): el boton «PDF» se
+// deshabilita mientras se pide y el navegador suelta el foco en `<body>`; el aviso
+// lo recoge para que el siguiente Tab lleve a las alternativas y no al enlace de
+// salto, ~30 paradas atras.
+
+test(
+  'con el PDF ocupado el aviso recoge el foco, se anuncia y el Tab lleva al CSV',
+  { tag: ['@RF-IN-04'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { exportOutcome: 'pdfBusy' })
+    await logIn(page)
+    await generateMarchReport(page)
+    const notice = page.getByTestId('pdf-busy')
+    await page.getByTestId('export-pdf').focus()
+
+    await page.keyboard.press('Enter')
+
+    // Una sola señal: el foco, con el mensaje como nombre accesible (sin alert ni region viva).
+    await expect(notice).toBeFocused()
+    await expect(notice).toHaveAccessibleName(/Inténtalo de nuevo en 15 segundos/)
+    await page.keyboard.press('Tab')
+    await expect(notice.getByTestId('pdf-busy-use-csv')).toBeFocused()
+  },
+)
+
+test(
+  'elegir el CSV desde el aviso con el teclado no deja el foco en body',
+  { tag: ['@RF-IN-04'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { exportOutcome: 'pdfBusy' })
+    await logIn(page)
+    await generateMarchReport(page)
+    await page.getByTestId('export-pdf').click()
+    await page.getByTestId('pdf-busy-use-csv').focus()
+    const download = page.waitForEvent('download')
+
+    await page.keyboard.press('Enter')
+    await download
+
+    await expect(page.getByTestId('pdf-busy')).toHaveCount(0)
+    await expect(page.locator('body')).not.toBeFocused()
+  },
+)

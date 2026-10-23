@@ -9,6 +9,7 @@ import { announcement } from '@kronoqr/web-kit/announcer'
 import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { BLOCKED_REASON_ID } from '@/shared/ui/vAriaDisabled'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { REPORTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -113,7 +114,10 @@ async function signOut(): Promise<void> {
          solo la cabecera de dentro. Un `<header>` dentro de un `<div>` sigue
          siendo `banner`: solo lo pierde bajo contenido seccionador. -->
     <div class="border-b border-kq-border bg-kq-surface-raised md:border-r md:border-b-0">
-      <header class="flex flex-col gap-4 p-4 md:sticky md:top-0 md:h-dvh md:overflow-y-auto">
+      <header
+        data-test="app-sidebar"
+        class="flex flex-col gap-4 p-4 md:sticky md:top-0 md:h-dvh md:overflow-y-auto"
+      >
         <!-- Marca de la instalacion (RF-PD-08, tarea 5.8; ADR-036): logotipo
            o nombre, resueltos por `BrandMark` (compartido con el portal,
            `@kronoqr/web-kit`). «Panel de gestion» se queda como subtitulo,
@@ -249,6 +253,7 @@ async function signOut(): Promise<void> {
       </div>
 
       <main id="main" class="mx-auto max-w-6xl p-4">
+        <p :id="BLOCKED_REASON_ID" class="sr-only">{{ t('common.blockedReason') }}</p>
         <RouterView />
       </main>
     </div>

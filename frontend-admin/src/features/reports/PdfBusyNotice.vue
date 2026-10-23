@@ -3,8 +3,7 @@
 // que no pasan por el motor (CSV, XLSX). No es un fallo del informe: hay un tope de
 // PDF simultaneos y basta esperar `Retry-After` o llevarse el mismo informe en otro
 // formato. Con el motor ausente (`service-unavailable`) NO se usa este aviso.
-import { announce } from '@kronoqr/web-kit/announcer'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
@@ -18,33 +17,42 @@ const props = defineProps<{
 const emit = defineEmits<{ use: [format: string] }>()
 
 const { t } = useI18n()
+const root = ref<HTMLElement | null>(null)
+const messageId = useId()
 
 const message = computed(() =>
   props.retryAfterSeconds === null
     ? t('reports.pdfBusy.messageNoWait')
     : t('reports.pdfBusy.message', { seconds: props.retryAfterSeconds }),
 )
-// Se anuncia al aparecer: el aviso llega tras una peticion y no hay foco que lo lea.
+// UNA sola señal (V21-3-PA-7): el aviso recibe el foco al aparecer y su nombre accesible
+// es el mensaje, asi que un lector de pantalla lo lee al llegar. Sin `role="alert"` ni
+// `announce()`, que lo hacian sonar dos veces. El boton «PDF» ya no pierde el foco al
+// bloquearse (`aria-disabled`), de modo que el aviso lo recoge siempre: el siguiente Tab
+// lleva a las alternativas y no al enlace de salto, ~30 paradas atras (V21-1-UX-2).
 onMounted(() => {
-  announce(message.value)
+  root.value?.focus()
 })
 </script>
 
 <template>
   <div
-    role="alert"
+    ref="root"
+    role="group"
+    :aria-labelledby="messageId"
+    tabindex="-1"
     data-test="pdf-busy"
     class="mt-3 max-w-prose rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
   >
-    <p class="font-semibold">{{ message }}</p>
+    <p :id="messageId" class="font-semibold">{{ message }}</p>
     <div class="mt-3 flex flex-wrap gap-3">
       <button
         v-for="format of formats"
         :key="format"
+        v-aria-disabled.busy="disabled"
         type="button"
-        :disabled="disabled"
         :data-test="`pdf-busy-use-${format}`"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 font-semibold text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 font-semibold text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
         @click="emit('use', format)"
       >
         {{ t('reports.pdfBusy.useFormat', { format: format.toUpperCase() }) }}

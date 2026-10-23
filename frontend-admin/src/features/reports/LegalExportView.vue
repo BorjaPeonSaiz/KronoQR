@@ -126,8 +126,12 @@ async function submit(): Promise<void> {
     lastTally.value = exported.tally
     announce(
       t('reports.legalExport.done', {
-        shiftEntries: exported.tally.shiftEntries ?? 0,
-        corrections: exported.tally.corrections ?? 0,
+        shiftEntries: t('reports.legalExport.doneShiftEntries', {
+          count: exported.tally.shiftEntries ?? 0,
+        }),
+        corrections: t('reports.legalExport.doneCorrections', {
+          count: exported.tally.corrections ?? 0,
+        }),
       }),
     )
   } catch (failure) {
@@ -217,9 +221,9 @@ async function submit(): Promise<void> {
 
       <div class="flex items-center gap-3">
         <button
+          v-aria-disabled.reason="!canSubmit"
           type="submit"
-          :disabled="!canSubmit"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
         >
           {{ t('reports.legalExport.submit') }}
         </button>
@@ -251,8 +255,12 @@ async function submit(): Promise<void> {
     >
       {{
         t('reports.legalExport.done', {
-          shiftEntries: lastTally.shiftEntries ?? 0,
-          corrections: lastTally.corrections ?? 0,
+          shiftEntries: t('reports.legalExport.doneShiftEntries', {
+            count: lastTally.shiftEntries ?? 0,
+          }),
+          corrections: t('reports.legalExport.doneCorrections', {
+            count: lastTally.corrections ?? 0,
+          }),
         })
       }}
     </p>

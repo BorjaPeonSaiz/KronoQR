@@ -45,6 +45,11 @@ declare module 'vue-router' {
      * exacta o sus hijas, y estas son hermanas a proposito (`props: true`).
      */
     section?: string
+    /**
+     * Clave i18n del titulo de la pestaña de la pantalla (WCAG 2.4.2, V7-PA-2).
+     * Generico a proposito: nunca el nombre de la persona cuya ficha se mira.
+     */
+    titleKey?: string
   }
 }
 
@@ -53,7 +58,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: LoginView,
-    meta: { public: true },
+    meta: { titleKey: 'auth.heading', public: true },
   },
   {
     // Asistente de puesta en marcha (RF-PD-03, tarea 5.5). Publico como
@@ -66,7 +71,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/setup',
     name: 'setup',
     component: () => import('@/features/onboarding/OnboardingView.vue'),
-    meta: { public: true },
+    meta: { titleKey: 'onboarding.heading', public: true },
   },
   {
     // El marco autenticado. Sin nombre a proposito: nombrar un padre que tiene
@@ -79,14 +84,14 @@ export const routes: RouteRecordRaw[] = [
         path: 'employees',
         name: 'employees',
         component: EmployeeListView,
-        meta: { ability: EMPLOYEES_MANAGE },
+        meta: { titleKey: 'employees.title', ability: EMPLOYEES_MANAGE },
       },
       {
         path: 'employees/:uuid',
         name: 'employee',
         component: () => import('@/features/employees/EmployeeDetailView.vue'),
         props: true,
-        meta: { ability: EMPLOYEES_MANAGE, section: 'employees' },
+        meta: { titleKey: 'app.titles.employee', ability: EMPLOYEES_MANAGE, section: 'employees' },
       },
       {
         // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
@@ -100,7 +105,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'absences',
         name: 'absences',
         component: () => import('@/features/absences/AbsenceListView.vue'),
-        meta: { ability: EMPLOYEES_READ },
+        meta: { titleKey: 'absences.title', ability: EMPLOYEES_READ },
       },
       {
         // El registro horario de una persona (RF-PA-03). Cuelga de la ficha y no
@@ -114,7 +119,7 @@ export const routes: RouteRecordRaw[] = [
         name: 'employee-workdays',
         component: () => import('@/features/workdays/EmployeeWorkDaysView.vue'),
         props: true,
-        meta: { ability: ATTENDANCE_READ, section: 'employees' },
+        meta: { titleKey: 'workdays.title', ability: ATTENDANCE_READ, section: 'employees' },
       },
       {
         // Presencia en tiempo real (RF-PA-01, RF-PA-02). Ambito `attendance:read`,
@@ -123,13 +128,13 @@ export const routes: RouteRecordRaw[] = [
         path: 'live',
         name: 'live',
         component: () => import('@/features/live/LivePresenceView.vue'),
-        meta: { ability: ATTENDANCE_READ },
+        meta: { titleKey: 'live.title', ability: ATTENDANCE_READ },
       },
       {
         path: 'credentials',
         name: 'credentials',
         component: () => import('@/features/credentials/CredentialBoardView.vue'),
-        meta: { ability: CREDENTIALS_MANAGE },
+        meta: { titleKey: 'credentials.title', ability: CREDENTIALS_MANAGE },
       },
       {
         // Bandeja de incidencias (RF-PA-05, RF-PR-01). Ambito `incidents:*`, el
@@ -138,7 +143,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'incidents',
         name: 'incidents',
         component: () => import('@/features/incidents/IncidentsView.vue'),
-        meta: { ability: INCIDENTS_MANAGE },
+        meta: { titleKey: 'incidents.title', ability: INCIDENTS_MANAGE },
       },
       {
         // Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente
@@ -153,7 +158,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'compliance',
         name: 'compliance',
         component: () => import('@/features/compliance/ComplianceView.vue'),
-        meta: { ability: ATTENDANCE_READ },
+        meta: { titleKey: 'complianceSummary.title', ability: ATTENDANCE_READ },
       },
       {
         // Informes de horas por periodo (RF-IN-01, RF-IN-02, RF-IN-03). Ambito
@@ -164,7 +169,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'reports',
         name: 'reports',
         component: () => import('@/features/reports/PeriodReportView.vue'),
-        meta: { ability: REPORTS_MANAGE },
+        meta: { titleKey: 'reports.period.title', ability: REPORTS_MANAGE },
       },
       {
         // Salida a nomina (RF-IN-07, tarea 3.9): horas por periodo y por
@@ -179,7 +184,7 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/features/reports/PayrollExportView.vue'),
         // Sin `meta.section`: tiene entrada propia en el menu y «Informes» no
         // debe quedar activa a la vez (la prueba de `router.spec.ts` lo exige).
-        meta: { ability: REPORTS_MANAGE },
+        meta: { titleKey: 'payrollExport.title', ability: REPORTS_MANAGE },
       },
       {
         // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): los seis
@@ -193,7 +198,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'reports/adoption',
         name: 'adoption-dashboard',
         component: () => import('@/features/reports/AdoptionDashboardView.vue'),
-        meta: { ability: REPORTS_MANAGE },
+        meta: { titleKey: 'reports.adoption.title', ability: REPORTS_MANAGE },
       },
       {
         // La exportacion para la Inspeccion (RF-IN-05). Ambito `reports:legal`:
@@ -202,7 +207,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'reports/legal-export',
         name: 'legal-export',
         component: () => import('@/features/reports/LegalExportView.vue'),
-        meta: { ability: REPORTS_LEGAL },
+        meta: { titleKey: 'reports.legalExport.heading', ability: REPORTS_LEGAL },
       },
       {
         // El perfil de cumplimiento (RF-PD-07, tarea 5.2). Ambito `settings:*`,
@@ -213,7 +218,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'compliance-profile',
         name: 'compliance-profile',
         component: () => import('@/features/settings/ComplianceProfileView.vue'),
-        meta: { ability: SETTINGS_MANAGE },
+        meta: { titleKey: 'compliance.heading', ability: SETTINGS_MANAGE },
       },
       {
         // Los umbrales operativos (`ATTENDANCE_*`) y los idiomas (`LOCALE_*`)
@@ -225,7 +230,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'operational-settings',
         component: () => import('@/features/settings/OperationalSettingsView.vue'),
-        meta: { ability: SETTINGS_MANAGE },
+        meta: { titleKey: 'operationalSettings.heading', ability: SETTINGS_MANAGE },
       },
       {
         // Vinculacion y flota de quioscos (RF-PA-07, RF-PD-06, tarea 5.6).
@@ -237,7 +242,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'devices',
         name: 'devices',
         component: () => import('@/features/devices/DevicesView.vue'),
-        meta: { ability: SETTINGS_MANAGE },
+        meta: { titleKey: 'devices.title', ability: SETTINGS_MANAGE },
       },
       {
         // La marca de la instalacion (RF-PD-08, tarea 5.8). Ambito
@@ -248,7 +253,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'branding',
         name: 'branding',
         component: () => import('@/features/settings/BrandingView.vue'),
-        meta: { ability: SETTINGS_MANAGE },
+        meta: { titleKey: 'branding.heading', ability: SETTINGS_MANAGE },
       },
       {
         // La licencia (RF-PD-04, tarea 5.3). Ambito propio `license:*`, el del
@@ -261,7 +266,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'license',
         name: 'license',
         component: () => import('@/features/settings/LicenseView.vue'),
-        meta: { ability: LICENSE_MANAGE },
+        meta: { titleKey: 'license.heading', ability: LICENSE_MANAGE },
       },
       {
         // El paquete de diagnostico y los accesos de soporte (RF-PD-09,
@@ -273,7 +278,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'support',
         name: 'support',
         component: () => import('@/features/support/SupportView.vue'),
-        meta: { abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
+        meta: { titleKey: 'support.heading', abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
       },
       {
         // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12).
@@ -286,7 +291,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'errors',
         name: 'errors',
         component: () => import('@/features/errors/ErrorsView.vue'),
-        meta: { ability: DIAGNOSTICS_MANAGE },
+        meta: { titleKey: 'errorEvents.heading', ability: DIAGNOSTICS_MANAGE },
       },
       {
         // Departamentos y su responsable (RF-ID-03). Lectura abierta a los cuatro roles
@@ -296,7 +301,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'departments',
         name: 'departments',
         component: () => import('@/features/departments/DepartmentsView.vue'),
-        meta: { ability: EMPLOYEES_READ },
+        meta: { titleKey: 'departments.title', ability: EMPLOYEES_READ },
       },
       {
         // Cuentas de gestion (RF-ID-10). Ambito `accounts:*`, solo `admin`. La
@@ -304,7 +309,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'accounts',
         name: 'accounts',
         component: () => import('@/features/accounts/AccountsView.vue'),
-        meta: { ability: ACCOUNTS_MANAGE },
+        meta: { titleKey: 'accounts.title', ability: ACCOUNTS_MANAGE },
       },
       {
         // Cambio de la contrasena PROPIA (RF-ID-10). Sin ambito: basta una sesion
@@ -313,8 +318,14 @@ export const routes: RouteRecordRaw[] = [
         path: 'account/password',
         name: 'change-password',
         component: () => import('@/features/auth/ChangePasswordView.vue'),
+        meta: { titleKey: 'changePassword.heading' },
       },
-      { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
+      {
+        path: 'forbidden',
+        name: 'forbidden',
+        component: ForbiddenView,
+        meta: { titleKey: 'forbidden.heading' },
+      },
       {
         path: ':pathMatch(.*)*',
         name: 'not-found',
@@ -322,6 +333,7 @@ export const routes: RouteRecordRaw[] = [
         // El panel es de gestion de plantilla: el rescate vuelve al listado de
         // empleados, que es la pantalla de partida (`@kronoqr/web-kit`, ADR-036).
         props: { backToRouteName: 'employees', backToLabelKey: 'notFound.backToEmployees' },
+        meta: { titleKey: 'notFound.heading' },
       },
     ],
   },

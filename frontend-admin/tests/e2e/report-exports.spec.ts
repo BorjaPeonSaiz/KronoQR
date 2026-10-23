@@ -8,6 +8,7 @@
 // (regla dura 18).
 import { expect, test } from '@playwright/test'
 import { logIn, stubManagementApi } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 test(
   'un informe demasiado grande se genera en segundo plano, se ve en curso, termina y se descarga; ' +
@@ -28,10 +29,12 @@ test(
     const offer = page.getByTestId('oversized-offer')
     await expect(offer).toBeVisible()
     await expect(offer).toContainText('segundo plano')
+    await expectNoBlockingViolations(page)
 
     await page.getByTestId('request-background').click()
 
     await expect(page.getByTestId('background-requested')).toBeVisible()
+    await expectNoBlockingViolations(page)
 
     // La fila creada aparece en el bloque de exportaciones EN EL ACTO -sin
     // esperar al primer sondeo- y termina sola, con la progresión real del
@@ -97,6 +100,7 @@ test(
 
     await expect(page.getByTestId('download-error')).toBeVisible()
     await expect(page.getByTestId(`download-${uuid}`)).toBeEnabled()
+    await expectNoBlockingViolations(page)
 
     // Y, sin la interceptación de arriba, volver a pulsar pide otro enlace y
     // funciona: "si el usuario vuelve a pulsar, se pide otro" (decisión 8).

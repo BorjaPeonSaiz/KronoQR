@@ -7,7 +7,6 @@
 // Hasta ahora el panel solo tenia una comprobacion estructural en Vitest; esto
 // es el analisis de verdad, sobre el DOM real del build.
 
-import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { Absence } from '@/shared/api/types'
@@ -48,30 +47,10 @@ const ABSENCE_EXAMPLE: Absence = {
   void_reason: null,
   created_at: '2026-02-20T09:14:02.118000Z',
 }
+import { expectNoBlockingViolations } from './support/axe'
+import { datetimeStops, focusTrail, ringTrail } from './support/focus'
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
-
-/** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoBlockingViolations(page: Page, exclude: string[] = []): Promise<void> {
-  const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS)
-
-  for (const selector of exclude) {
-    builder.exclude(selector)
-  }
-
-  const results = await builder.analyze()
-
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
-}
 
 test.beforeEach(async ({ page }) => {
   await stubManagementApi(page)
@@ -120,7 +99,7 @@ test(
 test('la ficha de una persona tampoco', { tag: ['@RF-GP-01'] }, async ({ page }) => {
   await logIn(page)
   await page.goto(`/employees/${EMPLOYEE_UUID}`)
-  await expect(page.getByRole('heading', { level: 1, name: 'Youssef Amrani' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ficha del empleado' })).toBeVisible()
 
   await expectNoBlockingViolations(page)
 })
@@ -300,7 +279,7 @@ test(
     // Con logotipo, la cabecera lo enseña con el nombre como alternativa
     // textual: no hay un segundo texto suelto que lo repita.
     await expect(page.getByRole('banner').locator('img')).toHaveAttribute('alt', 'Hotel Marina')
-    await expect(page).toHaveTitle('Hotel Marina')
+    await expect(page).toHaveTitle(/ – Hotel Marina$/)
 
     await expectNoBlockingViolations(page)
   },
@@ -816,40 +795,47 @@ test(
   },
 )
 
+// Las dos pruebas de foco siguientes recorren el dialogo de corregir un tramo con
+// un numero FIJO de pulsaciones (`support/focus.ts`, V21-7-QA-3) y comparan la
+// traza entera con la esperada. Chromium da SEIS paradas de Tab a un
+// `datetime-local` en español: dia, mes, año, hora, minuto y el selector.
+
 test(
   'el dialogo atrapa el foco en un ciclo de Tab y lo devuelve al boton que lo abrio (PA7-002)',
   { tag: ['@RF-PA-04'] },
   async ({ page }) => {
     await logIn(page)
     await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
-
     const opener = page.getByTestId('entry-correct')
-
+    const dialog = page.getByRole('dialog')
     await opener.focus()
     await page.keyboard.press('Enter')
+    await expect(page.getByTestId('dialog-clock-in')).toBeFocused()
 
-    // `document.activeElement` se retargetea al input aunque el foco este en un
-    // segmento interno de un campo de fecha, donde `:focus` no coincide.
-    const focusIsInsideDialog = (): Promise<boolean> =>
-      page.evaluate(
-        () => document.querySelector('[role="dialog"]')?.contains(document.activeElement) === true,
-      )
-    const dialog = page.getByRole('dialog')
+    const stops = await datetimeStops(page, page.getByTestId('dialog-clock-in'))
 
-    await expect(dialog).toBeVisible()
+    await page.getByTestId('dialog-clock-in').focus()
 
-    // Quince Tab hacia delante y cinco hacia atras: el foco nunca sale del dialogo.
-    for (let step = 0; step < 15; step += 1) {
-      await page.keyboard.press('Tab')
-      await expect.poll(focusIsInsideDialog).toBe(true)
-    }
-
-    for (let step = 0; step < 5; step += 1) {
-      await page.keyboard.press('Shift+Tab')
-      await expect.poll(focusIsInsideDialog).toBe(true)
-    }
-
+    // Tab desde el primer segmento de la entrada: las demas paradas de la entrada, todas las
+    // de la salida, y despues «termina en pausa», el motivo, «Cancelar» y «Corregir», que
+    // sigue en el orden de tabulacion aunque este bloqueado (aria-disabled, no disabled).
+    const forwards = await focusTrail(page, dialog, 'Tab', 2 * stops + 3)
+    const backwards = await focusTrail(page, dialog, 'Shift+Tab', 3)
     await page.keyboard.press('Escape')
+
+    expect(forwards).toEqual([
+      ...Array.from({ length: stops - 1 }, () => ({ inside: true, element: 'dialog-clock-in' })),
+      ...Array.from({ length: stops }, () => ({ inside: true, element: 'dialog-clock-out' })),
+      { inside: true, element: 'dialog-ends-in-break' },
+      { inside: true, element: 'dialog-reason' },
+      { inside: true, element: 'dialog-cancel' },
+      { inside: true, element: 'dialog-submit' },
+    ])
+    expect(backwards).toEqual([
+      { inside: true, element: 'dialog-cancel' },
+      { inside: true, element: 'dialog-reason' },
+      { inside: true, element: 'dialog-ends-in-break' },
+    ])
     await expect(dialog).toBeHidden()
     await expect(opener).toBeFocused()
   },
@@ -862,29 +848,21 @@ test(
     await logIn(page)
     await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
     await page.getByTestId('entry-correct').click()
+    const input = page.getByRole('dialog').locator('input[type="datetime-local"]').first()
+    await input.focus()
 
-    const dialog = page.getByRole('dialog')
-    const input = dialog.locator('input[type="datetime-local"]').first()
+    const stops = await datetimeStops(page, input)
 
     await input.focus()
 
-    // Se recorren los segmentos internos (dia, mes, año, hora, minuto) y en
-    // ninguno desaparece el anillo, que era lo que fallaba en el ultimo.
-    for (let segment = 0; segment < 6; segment += 1) {
-      const outline = await input.evaluate((element) => {
-        const style = getComputedStyle(element)
+    const trail = await ringTrail(page, input, 'Tab', stops)
 
-        return { style: style.outlineStyle, width: style.outlineWidth }
-      })
-
-      expect(outline.style, `segmento ${segment}`).not.toBe('none')
-      expect(outline.width, `segmento ${segment}`).not.toBe('0px')
-      await page.keyboard.press('Tab')
-
-      if (!(await input.evaluate((element) => element.matches(':focus-within')))) {
-        break
-      }
-    }
+    // Anillo en TODAS las paradas del campo, tambien en la ultima, que era la que lo perdia;
+    // la siguiente ya esta fuera del campo y sin anillo.
+    expect(trail).toEqual([
+      ...Array.from({ length: stops }, () => ({ inside: true, ring: true })),
+      { inside: false, ring: false },
+    ])
   },
 )
 
@@ -901,5 +879,19 @@ test(
     expect(box?.width ?? 0).toBeGreaterThan(0)
     expect(box?.width ?? 99).toBeLessThanOrEqual(24)
     expect(box?.height ?? 99).toBeLessThanOrEqual(24)
+  },
+)
+
+test(
+  'el informe con el aviso de PDF ocupado tampoco (V21-1-UX-2)',
+  { tag: ['@RF-IN-04'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { exportOutcome: 'pdfBusy' })
+    await logIn(page)
+    await generatePeriodReport(page)
+    await page.getByTestId('export-pdf').click()
+    await expect(page.getByTestId('pdf-busy')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
   },
 )

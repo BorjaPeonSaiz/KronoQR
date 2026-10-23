@@ -53,7 +53,7 @@ const rangeErrors = computed<string[]>(() => {
 // alli y hay que volver a preguntar que dia es hoy.
 const centerZone = computed(() => session.employee?.time_zone ?? null)
 
-const { data, error, isPending, isFetching, today } = useMyWorkDays(applied, {
+const { data, error, isPending, isFetching, today, reload } = useMyWorkDays(applied, {
   timeZone: centerZone,
 })
 
@@ -222,12 +222,14 @@ watch(data, (value) => {
       data-test="resolved-range"
     >
       {{ t('myRecords.filters.resolved', { from: data.from, to: data.to }) }}
-      <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
+      <span role="status" class="text-kq-text-muted">{{
+        isFetching ? t('common.updating') : ''
+      }}</span>
     </p>
 
     <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="reload()" />
 
     <EmptyState
       v-else-if="days.length === 0"

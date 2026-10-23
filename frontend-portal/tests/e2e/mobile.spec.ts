@@ -45,12 +45,12 @@ test(
     await stubPortalApi(page, { locale: 'es' })
 
     await page.goto('/login')
-    await expect(page).toHaveTitle('Acceso al portal · KronoQR')
+    await expect(page).toHaveTitle('Acceso al portal – KronoQR')
 
     await logInToPortal(page)
-    await expect(page).toHaveTitle('Mi registro horario · KronoQR')
+    await expect(page).toHaveTitle('Mi registro horario – KronoQR')
 
     await page.goto('/export')
-    await expect(page).toHaveTitle('Descargar mi historial · KronoQR')
+    await expect(page).toHaveTitle('Descargar mi historial – KronoQR')
   },
 )

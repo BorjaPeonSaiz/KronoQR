@@ -39,8 +39,8 @@ describe('PaginationBar (RF-GP-01, RF-QR-08)', () => {
 
     const buttons = wrapper.findAll('button')
 
-    expect(buttons[0]?.attributes('disabled')).toBeDefined()
-    expect(buttons[1]?.attributes('disabled')).toBeDefined()
+    expect(buttons[0]?.attributes('aria-disabled')).toBeDefined()
+    expect(buttons[1]?.attributes('aria-disabled')).toBeDefined()
   })
 
   it('emite `update:page` acotado entre 1 y el total de páginas', async () => {
@@ -75,5 +75,26 @@ describe('PaginationBar (RF-GP-01, RF-QR-08)', () => {
     await settle()
 
     expect(wrapper.text()).toContain('Actualizando…')
+  })
+})
+
+describe('PaginationBar: accesibilidad (V3-UX-05, V7-PA-10)', () => {
+  it('«Actualizando…» vive en una region viva que existe tambien en reposo', async () => {
+    const props = { page: 1, perPage: 25, total: 10, totalPages: 1, label: 'Paginación' }
+    const idle = await mountView(PaginationBar, { props: { ...props, fetching: false } })
+    const busy = await mountView(PaginationBar, { props: { ...props, fetching: true } })
+
+    expect(idle.find('[role="status"]').exists()).toBe(true)
+    expect(idle.find('[role="status"]').text()).toBe('')
+    expect(busy.find('[role="status"]').text()).toBe('Actualizando…')
+  })
+
+  it('«Página N de M» no es aria-current: no es un enlace de un conjunto', async () => {
+    const wrapper = await mountView(PaginationBar, {
+      props: { page: 2, perPage: 25, total: 80, totalPages: 4, label: 'Paginación' },
+    })
+
+    expect(wrapper.find('[aria-current]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Página 2 de 4')
   })
 })

@@ -91,10 +91,10 @@ async function registerDelivery(): Promise<void> {
         {{ t('pin.reveal.acknowledge') }}
       </button>
       <button
+        v-aria-disabled.reason="!handedOver || submitting"
         type="button"
-        :disabled="!handedOver || submitting"
         :aria-busy="submitting"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         @click="registerDelivery"
       >
         {{ submitting ? t('common.saving') : t('pin.reveal.registerDelivery') }}

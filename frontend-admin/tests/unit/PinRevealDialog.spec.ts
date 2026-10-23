@@ -74,11 +74,11 @@ describe('PinRevealDialog', () => {
 
     const deliver = wrapper.findAll('button')[1]
 
-    expect(deliver?.attributes('disabled')).toBeDefined()
+    expect(deliver?.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('input[type="checkbox"]').setValue(true)
 
-    expect(wrapper.findAll('button')[1]?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button')[1]?.attributes('aria-disabled')).toBeUndefined()
   })
 
   it('registra la entrega en el endpoint del contrato y avisa al padre', async () => {

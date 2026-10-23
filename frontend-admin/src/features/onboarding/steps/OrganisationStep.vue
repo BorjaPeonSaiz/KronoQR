@@ -221,10 +221,10 @@ async function submit(): Promise<void> {
 
       <div>
         <button
+          v-aria-disabled.reason="!canContinue || submitting"
           type="submit"
-          :disabled="!canContinue || submitting"
           :aria-busy="submitting"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         >
           {{ submitting ? t('onboarding.actions.saving') : t('onboarding.actions.continue') }}
         </button>

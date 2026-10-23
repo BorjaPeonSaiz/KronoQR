@@ -171,6 +171,38 @@ describe('pantalla de licencia', () => {
     expect(wrapper.find('[data-test="degraded-none"]').text()).toBe(es.license.degradedNone)
   })
 
+  it('«queda 1 día» y «hace 1 día» en singular, y la tabla de límites tiene nombre (V7-PA-6, V7-PA-8)', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        licenseBody({ state: 'expiring_soon', severity: 'warning', days_until_expiry: 1 }),
+      ),
+    )
+
+    const wrapper = await mountView(LicenseView)
+    await settle()
+
+    expect(wrapper.find('[data-test="state-detail"]').text()).toContain('queda 1 día.')
+    expect(wrapper.find('[data-test="limits"] table caption').text()).toBe(es.license.usageCaption)
+  })
+
+  it('«hace 1 día» y «Te avisaremos 1 día antes» en singular (V7-PA-6)', async () => {
+    stubFetch(() =>
+      jsonResponse(licenseBody({ state: 'expired', severity: 'critical', days_since_expiry: 1 })),
+    )
+
+    const expired = await mountView(LicenseView)
+    await settle()
+
+    expect(expired.find('[data-test="state-detail"]').text()).toContain('hace 1 día.')
+
+    stubFetch(() => jsonResponse(licenseBody({ state: 'valid' }, { expiry_warning_days: 1 })))
+
+    const valid = await mountView(LicenseView)
+    await settle()
+
+    expect(valid.find('[data-test="state-detail"]').text()).toContain('Te avisaremos 1 día antes.')
+  })
+
   it('enseña el exceso de plan y aclara que no ha bloqueado nada', async () => {
     stubFetch(() =>
       jsonResponse(
@@ -289,6 +321,6 @@ describe('pantalla de licencia', () => {
     const wrapper = await mountView(LicenseView)
     await settle()
 
-    expect(wrapper.find('[data-test="activate"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="activate"]').attributes('aria-disabled')).toBeDefined()
   })
 })

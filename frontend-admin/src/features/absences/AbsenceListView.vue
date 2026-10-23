@@ -31,6 +31,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -86,6 +87,7 @@ const {
   error,
   isPending,
   isFetching,
+  refetch,
 } = useQuery({
   queryKey: computed(() => ['absences', query.value] as const),
   queryFn: () => listAbsences(query.value),
@@ -217,6 +219,7 @@ const selectClass =
       <div>
         <h1 class="text-2xl font-bold">{{ t('absences.title') }}</h1>
         <p class="mt-1 text-kq-text-muted">{{ t('absences.subtitle') }}</p>
+        <AuditNotice />
       </div>
       <div v-if="canWrite" class="flex flex-wrap gap-3">
         <button
@@ -330,7 +333,7 @@ const selectClass =
 
     <LoadingPanel v-if="isPending" :label="t('absences.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <template v-else>
       <EmptyState
@@ -342,7 +345,10 @@ const selectClass =
 
       <div
         v-else
-        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('absences.table.caption')"
+        class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="sr-only">

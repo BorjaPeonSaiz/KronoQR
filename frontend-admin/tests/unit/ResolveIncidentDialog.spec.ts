@@ -46,7 +46,7 @@ describe('ResolveIncidentDialog', () => {
 
     const confirm = wrapper.findAll('button').find((button) => button.text().includes('Confirmar'))
 
-    expect(confirm?.attributes('disabled')).toBeDefined()
+    expect(confirm?.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.get('textarea').setValue('no')
     await settle()
@@ -55,7 +55,7 @@ describe('ResolveIncidentDialog', () => {
       wrapper
         .findAll('button')
         .find((button) => button.text().includes('Confirmar'))
-        ?.attributes('disabled'),
+        ?.attributes('aria-disabled'),
     ).toBeDefined()
     expect(wrapper.text()).toContain('Escribe al menos 3 caracteres.')
     expect(spy).not.toHaveBeenCalled()

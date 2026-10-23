@@ -17,11 +17,9 @@
 // no es un requisito con `id`) y el WCAG 2.2 AA general (doc 01 §6.5, sin
 // `id` propio en el catalogo). Inventar una etiqueta aqui falsearia la
 // matriz de trazabilidad.
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { EMPLOYEE_UUID, logInAsAdmin, stubManagementApi } from './support/admin'
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+import { expectNoBlockingViolations } from './support/axe'
 
 type BoundingBox = { x: number; y: number; width: number; height: number }
 
@@ -164,15 +162,7 @@ test('por debajo de md el menu se apila y las diecinueve secciones siguen visibl
   expect(header.x + header.width).toBeLessThanOrEqual(700)
   expect(main.x + main.width).toBeLessThanOrEqual(700)
 
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-  )
-
-  expect(
-    blocking,
-    blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-  ).toEqual([])
+  await expectNoBlockingViolations(page)
 })
 
 // Una instalacion solo en español no descarga el catalogo en ingles (V21-5-PA-4,

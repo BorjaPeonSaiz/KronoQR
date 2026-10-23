@@ -6,7 +6,6 @@
 // vigente el dia anterior al inicio del nuevo, como el servidor. La restriccion
 // de no solapar vigencias y la autorizacion real se prueban en el backend.
 import type { Page } from '@playwright/test'
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import type { Employee, EmploymentContract } from '@/shared/api/types'
 import {
@@ -17,6 +16,7 @@ import {
   logInAsManager,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 const CURRENT_CONTRACT: EmploymentContract = {
   id: 58,
@@ -130,6 +130,7 @@ test(
 
     // La serie de debajo se ha releido: ya trae el contrato que registro otra persona.
     await expect(page.getByTestId('contract-row')).toHaveCount(2)
+    await expectNoBlockingViolations(page)
 
     // Con la fecha corregida, el alta sale adelante.
     await dialog.getByLabel(/Vigente desde/).fill('2026-10-01')
@@ -392,18 +393,7 @@ test(
     await expect(dialog.getByText(/no puede ser posterior a hoy/).first()).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Confirmar la baja' })).toBeDisabled()
 
-    const results = await new AxeBuilder({ page })
-      .include('[role="dialog"]')
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-      .analyze()
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page, { include: '[role="dialog"]' })
 
     // Con la fecha de hoy (la del centro, que es el `max` del campo) la baja se confirma.
     const today = await date.getAttribute('max')
@@ -441,7 +431,8 @@ test(
     await expect(page.getByRole('link', { name: 'Persona minimizada' })).toBeVisible()
 
     await page.getByRole('link', { name: 'Persona minimizada' }).click()
-    await expect(page.getByRole('heading', { name: 'Persona minimizada', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ficha del empleado', level: 1 })).toBeVisible()
+    await expect(page.getByTestId('employee-name')).toHaveText('Persona minimizada')
     await expect(page.getByTestId('employee-minimised')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Editar' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Contratos', level: 2 })).toHaveCount(0)

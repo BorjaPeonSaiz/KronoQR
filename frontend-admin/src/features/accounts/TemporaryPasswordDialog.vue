@@ -77,9 +77,9 @@ const handedOver = ref(false)
 
     <template #actions>
       <button
+        v-aria-disabled.reason="!handedOver"
         type="button"
-        :disabled="!handedOver"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         data-test="acknowledge"
         @click="emit('acknowledged')"
       >

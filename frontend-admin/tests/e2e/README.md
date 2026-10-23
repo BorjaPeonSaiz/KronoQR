@@ -43,6 +43,7 @@ npx playwright test --ui                # para depurar
 | `data-export.spec.ts`                                                   | `@RF-PD-14`, `@RL-20` — exportación íntegra de datos                                                                                                                                                              |
 | `errors.spec.ts`                                                        | `@RF-PD-15` — histórico de errores                                                                                                                                                                                |
 | `accessibility.spec.ts`                                                 | `@axe-core/playwright` sobre las pantallas del panel, 0 violaciones críticas/graves                                                                                                                               |
+| `accessibility-routes.spec.ts`                                          | Una pasada de axe por cada ruta del router (`support/axeRoutes.ts`), 0 violaciones de cualquier impacto; `tests/unit/axeRouteCoverage.spec.ts` falla si una ruta no tiene la suya                                 |
 
 ### El segundo factor (`two-factor.spec.ts`, RS-06)
 
@@ -101,3 +102,17 @@ arranca ahí.
 
 - El recorrido de exportación legal («auditor entra → genera → descarga el CSV», deuda de la
   tarea 1.17): hoy solo se comprueba la navegación hasta `/reports/legal-export`.
+
+### axe (`support/axe.ts`)
+
+Toda pasada de axe sale de `expectNoBlockingViolations(page, { include?, failOn? })`: etiquetas
+WCAG A y AA hasta la 2.2 **más `best-practice`** (V7-QA-3). Por omisión bloquean las violaciones
+`critical` y `serious`; `failOn: 'any'` bloquea cualquiera. Ningún fichero importa
+`@axe-core/playwright` por su cuenta: lo comprueba `tests/unit/axeRouteCoverage.spec.ts`.
+
+Una pantalla nueva necesita su entrada en `support/axeRoutes.ts` (ruta, `h1` y requisitos); los
+estados que solo aparecen tras una acción —diálogos, avisos, informes generados— llevan además
+su pasada en la prueba del recorrido.
+
+Las pruebas de foco usan `support/focus.ts`: un número fijo de pulsaciones (tope de 30) y la
+traza entera comparada con la esperada, sin bucles ni `if` en el test (V21-7-QA-3).

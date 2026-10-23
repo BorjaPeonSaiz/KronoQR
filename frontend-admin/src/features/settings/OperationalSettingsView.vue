@@ -1484,15 +1484,15 @@ async function save(): Promise<void> {
 
       <div class="flex items-center gap-3">
         <button
+          v-aria-disabled.reason="!canSave"
           type="submit"
-          :disabled="!canSave"
           data-test="save"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
         >
           {{ t('operationalSettings.save') }}
         </button>
         <p v-if="saving" class="text-kq-text-muted">{{ t('operationalSettings.saving') }}</p>
-        <p v-else-if="saved && !hasChanges" class="text-kq-success" role="status" data-test="saved">
+        <p v-else-if="saved && !hasChanges" class="text-kq-success" data-test="saved">
           {{ t('operationalSettings.saved') }}
         </p>
       </div>

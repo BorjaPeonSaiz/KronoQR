@@ -207,14 +207,14 @@ describe('CredentialBoardView', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeDefined()
 
     await wrapper.find('#revocation-reason').setValue('lost')
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('disabled'),
+      buttonWith(wrapper, es.credentials.confirm.revoke.action).attributes('aria-disabled'),
     ).toBeUndefined()
   })
 
@@ -455,7 +455,7 @@ describe('CredentialBoardView', () => {
 
     // Ningun control queda deshabilitado ni con `title` como unico aviso: no
     // hay exclusion que anunciar, es una opcion mas.
-    expect(wrapper.find('#credentials-status-filter').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('#credentials-status-filter').attributes('aria-disabled')).toBeUndefined()
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
   })
 
@@ -534,9 +534,10 @@ describe('CredentialBoardView', () => {
     await settle()
 
     expect(urls.some((url) => url.includes('key_id=a2'))).toBe(true)
-    expect(buttonWith(wrapper, es.credentials.rotation.showAll).attributes('aria-pressed')).toBe(
-      'true',
-    )
+    // Una sola señal (V7-PA-7): la etiqueta cambia a «Ver toda la plantilla»; sin `aria-pressed`.
+    expect(
+      buttonWith(wrapper, es.credentials.rotation.showAll).attributes('aria-pressed'),
+    ).toBeUndefined()
   })
 
   it('avisa de las tarjetas firmadas con una clave que el servidor ya no reconoce', async () => {

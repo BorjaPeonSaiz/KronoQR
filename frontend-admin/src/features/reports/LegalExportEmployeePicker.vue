@@ -263,9 +263,9 @@ function change(): void {
           </FormField>
         </div>
         <button
+          v-aria-disabled.reason="!canSearch"
           type="button"
-          :disabled="!canSearch"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
           @click="search"
         >
           {{
@@ -309,9 +309,9 @@ function change(): void {
           </label>
           <div>
             <button
+              v-aria-disabled.reason="highlighted === ''"
               type="button"
-              :disabled="highlighted === ''"
-              class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
+              class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-50"
               @click="choose"
             >
               {{ t('reports.legalExport.picker.choose') }}

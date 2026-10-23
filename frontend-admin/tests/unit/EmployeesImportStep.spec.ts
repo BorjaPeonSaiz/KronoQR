@@ -102,7 +102,7 @@ describe('EmployeesImportStep', () => {
     expect(wrapper.find('[data-test="truncated"]').text()).toBe(
       es.onboarding.steps.employees.truncated,
     )
-    expect(wrapper.find('[data-test="apply"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="apply"]').attributes('aria-disabled')).toBeDefined()
   })
 
   describe('aviso de altas sin PIN', () => {

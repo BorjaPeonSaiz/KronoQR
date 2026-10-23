@@ -81,9 +81,9 @@ const failureText = computed(() => failureReasonLabel(t, props.job.failure_reaso
       <p class="mt-2 text-sm text-kq-text-muted">{{ t('reportExports.job.keepWorking') }}</p>
 
       <button
+        v-aria-disabled.busy="cancelling"
         type="button"
-        class="mt-3 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-        :disabled="cancelling"
+        class="mt-3 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
         :aria-busy="cancelling"
         data-test="export-job-cancel"
         @click="emit('cancel')"
@@ -98,9 +98,9 @@ const failureText = computed(() => failureReasonLabel(t, props.job.failure_reaso
       </p>
       <div class="mt-3 flex flex-wrap gap-2">
         <button
+          v-aria-disabled.busy="downloading"
           type="button"
-          class="rounded-kq-sm bg-kq-primary-strong px-3 py-1.5 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-          :disabled="downloading"
+          class="rounded-kq-sm bg-kq-primary-strong px-3 py-1.5 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
           :aria-busy="downloading"
           data-test="export-job-download"
           @click="emit('download')"

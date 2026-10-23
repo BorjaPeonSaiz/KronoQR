@@ -48,11 +48,11 @@ const { t } = useI18n()
         {{ t('common.cancel') }}
       </button>
       <button
+        v-aria-disabled.reason="busy || confirmDisabled"
         type="button"
         data-test="confirm-dialog-confirm"
-        :disabled="busy || confirmDisabled"
         :aria-busy="busy"
-        class="rounded-kq-sm px-4 py-2 font-semibold disabled:opacity-60"
+        class="rounded-kq-sm px-4 py-2 font-semibold aria-disabled:opacity-60"
         :class="
           tone === 'danger'
             ? 'bg-kq-danger text-kq-on-danger'

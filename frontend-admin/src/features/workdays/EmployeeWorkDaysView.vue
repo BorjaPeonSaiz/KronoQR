@@ -42,6 +42,7 @@ import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-k
 import { FALLBACK_TIMEZONE, todayInZone } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ATTENDANCE_CORRECT, EMPLOYEES_MANAGE } from '@/features/auth/abilities'
@@ -171,7 +172,11 @@ watch(
   { flush: 'sync' },
 )
 
-const { data, error, isPending, isFetching } = useEmployeeWorkDays(() => props.uuid, applied, page)
+const { data, error, isPending, isFetching, refetch } = useEmployeeWorkDays(
+  () => props.uuid,
+  applied,
+  page,
+)
 
 /**
  * La ficha, solo para poner un nombre en la cabecera. Es una consulta aparte y
@@ -312,9 +317,9 @@ watch(data, (value) => {
       </fieldset>
 
       <button
+        v-aria-disabled.reason="!canSubmit"
         type="submit"
-        :disabled="!canSubmit"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-50"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-50"
       >
         {{ t('workdays.filters.apply') }}
       </button>
@@ -322,14 +327,16 @@ watch(data, (value) => {
 
     <p v-if="data !== undefined" class="mt-3 text-kq-text-muted" data-test="resolved-range">
       {{ t('workdays.filters.resolved', { from: data.from, to: data.to, zone: data.time_zone }) }}
-      <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
+      <span role="status" class="text-kq-text-muted">{{
+        isFetching ? t('common.updating') : ''
+      }}</span>
     </p>
     <p class="mt-1 text-sm text-kq-text-muted">{{ t('workdays.zoneNotice') }}</p>
-    <p class="mt-1 text-sm text-kq-text-muted">{{ t('workdays.auditNotice') }}</p>
+    <AuditNotice message-key="workdays.auditNotice" />
 
     <LoadingPanel v-if="isPending" :label="t('workdays.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <EmptyState
       v-else-if="days.length === 0"

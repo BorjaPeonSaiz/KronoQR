@@ -125,7 +125,10 @@ function contextLines(entry: ErrorEvent): ContextLine[] {
 
 <template>
   <div
-    class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+    tabindex="0"
+    role="region"
+    :aria-label="t('errorEvents.table.caption', { zone: timeZone })"
+    class="relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     data-test="error-table"
   >
     <table class="w-full border-collapse text-left">

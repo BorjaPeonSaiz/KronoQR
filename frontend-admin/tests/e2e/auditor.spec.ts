@@ -3,7 +3,6 @@
 // Su sesion lleva unicamente `reports:legal`: ni presencia, ni cumplimiento, ni
 // plantilla, ni departamentos. La interfaz lo refleja (sin menu lateral, porque su
 // unico enlace llevaria a la pantalla en la que ya esta, y guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
   EMPLOYEE_UUID,
@@ -12,6 +11,7 @@ import {
   logInAsAuditor,
   stubManagementApi,
 } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 test.describe('auditor: solo la exportacion para la Inspeccion', () => {
   test.beforeEach(async ({ page }) => {
@@ -27,6 +27,18 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
 
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
       await expect(page.getByRole('banner').getByRole('navigation')).toHaveCount(0)
+    },
+  )
+
+  test(
+    'la Inspeccion del auditor, con el formulario vacio y sin menu, no tiene violaciones',
+    { tag: ['@RF-IN-05', '@RF-ID-02'] },
+    async ({ page }) => {
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Exportación para la Inspección de Trabajo' }),
+      ).toBeVisible()
+
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 
@@ -100,13 +112,7 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
       expect(searches).toBe(1)
 
       // Axe sobre la pantalla con resultados.
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-        .analyze()
-
-      expect(
-        results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious'),
-      ).toEqual([])
+      await expectNoBlockingViolations(page)
 
       await option.check()
       await page.getByRole('button', { name: 'Usar a esta persona' }).click()

@@ -7,9 +7,9 @@
 // no pueda anular aunque el panel se lo dejara pasar, que un `auditor` reciba
 // `403` si fuerza la peticion- se prueba en el backend. El auditor ya no llega a
 // esta pantalla (bloque 25): lo cubre `auditor.spec.ts`.
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { EMPLOYEE, EMPLOYEE_UUID, logIn, logInAsManager, stubManagementApi } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 
 const WORKDAYS_URL = `/employees/${EMPLOYEE_UUID}/workdays`
 
@@ -370,18 +370,7 @@ test.describe('Añadir un tramo a una persona dada de baja', () => {
       await expect(dialog.getByText(/solo se le pueden registrar horas/).first()).toBeVisible()
       await expect(dialog).toBeVisible()
 
-      const results = await new AxeBuilder({ page })
-        .include('[role="dialog"]')
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-        .analyze()
-      const blocking = results.violations.filter(
-        (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-      )
-
-      expect(
-        blocking,
-        blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-      ).toEqual([])
+      await expectNoBlockingViolations(page, { include: '[role="dialog"]' })
 
       // Un día anterior al cese: se confirma.
       await date.fill('2026-09-29')

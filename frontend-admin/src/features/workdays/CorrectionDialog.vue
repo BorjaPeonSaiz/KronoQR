@@ -813,11 +813,11 @@ const inputClass =
       </button>
       <button
         v-if="conflict === null || conflict.kind !== 'superseded'"
+        v-aria-disabled.reason="!canSubmit"
         type="submit"
         form="correction-form"
-        :disabled="!canSubmit"
         :aria-busy="submitting"
-        class="rounded-kq-sm px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         :class="mode === 'void' ? 'bg-kq-danger' : 'bg-kq-primary-strong'"
         data-test="dialog-submit"
       >

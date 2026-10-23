@@ -162,7 +162,7 @@ describe('buscador de la persona de la exportacion', () => {
     await wrapper.find('input[type="radio"][value="text"]').setValue(true)
     await typeTerm(wrapper, 'amrani')
 
-    expect(buttonWith(wrapper, picker.search).attributes('disabled')).toBeUndefined()
+    expect(buttonWith(wrapper, picker.search).attributes('aria-disabled')).toBeUndefined()
 
     release(jsonResponse({ data: [AMRANI], truncated: false }))
     await settle()

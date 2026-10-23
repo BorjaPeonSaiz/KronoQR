@@ -258,7 +258,7 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
 
     expect(wrapper.find('[data-test="kiosk-service-code"]').element).toHaveProperty('value', '')
     // El campo vacio, tal cual llego, no cuenta como cambio: no hay nada que guardar.
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('un codigo con letras o fuera de 8-12 cifras se rechaza en el propio panel, sin llegar al servidor', async () => {
@@ -271,7 +271,7 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
     await settle()
 
     expect(wrapper.text()).toContain(es.operationalSettings.errors.notAServiceCode)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('borrar un codigo existente es un cambio valido: manda cadena vacia', async () => {
@@ -383,7 +383,7 @@ describe('OperationalSettingsView — fichaje de pausa (RF-AT-12, tarea 3.5)', (
     await settle()
 
     expect(wrapper.find('[data-test="break-clocking"]').element).toHaveProperty('value', 'enabled')
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('el 422 del servidor se muestra bajo el campo, con el nombre traducido', async () => {
@@ -507,7 +507,7 @@ describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-K
     await settle()
 
     expect(wrapper.text()).toContain(es.operationalSettings.errors.invalidUpdateWindowFormat)
-    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="save"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('cambiar los minutos de silencio manda solo esa clave', async () => {

@@ -55,8 +55,8 @@
 // (`blockCamera`) y cada intento espera, ademas, al paso del codigo
 // (`openPinScreen`) antes de teclear.
 
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { expectNoBlockingViolations } from './support/axe'
 import { blockCamera } from './support/offlineQueue'
 import {
   consecutiveRejections,
@@ -67,9 +67,6 @@ import {
   stubPinScanApi,
 } from './support/pin'
 import { expectTouchTargets } from './support/touchTargets'
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-const DISABLED_RULES = ['video-caption']
 
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const PIN = '483920'
@@ -170,16 +167,6 @@ test(
 
     await consecutiveRejections(page, CONSECUTIVE_ATTEMPTS, EMPLOYEE_CODE, PIN)
 
-    const results = await new AxeBuilder({ page })
-      .withTags(WCAG_TAGS)
-      .disableRules(DISABLED_RULES)
-      .analyze()
-    const blocking = results.violations.filter(
-      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
-    )
-    expect(
-      blocking,
-      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
-    ).toEqual([])
+    await expectNoBlockingViolations(page)
   },
 )

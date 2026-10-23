@@ -13,6 +13,7 @@
 // `PinIssuanceEndpointsTest`).
 import { expect, type Page, test } from '@playwright/test'
 import { EMPLOYEE, EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
+import { expectNoBlockingViolations } from './support/axe'
 import { SITE, stubOnboardingApi, TOTP_CODE } from './support/setupWizard'
 
 async function reachImportStep(page: Page): Promise<void> {
@@ -78,6 +79,7 @@ test(
     await expect(page.getByTestId('no-pin-notice')).toContainText(
       'Se ha dado de alta 1 persona sin PIN.',
     )
+    await expectNoBlockingViolations(page)
   },
 )
 
@@ -121,6 +123,7 @@ test(
     await expect(page.getByLabel('Estado del PIN')).toHaveValue('pending')
     const row = page.getByRole('row', { name: /Youssef Amrani/ })
     await expect(row).toContainText('Sin emitir')
+    await expectNoBlockingViolations(page)
     expect(
       api.requests.some(
         (request) =>
@@ -142,6 +145,7 @@ test(
 
     const reveal = page.getByRole('dialog', { name: 'PIN emitido' })
     await expect(reveal.getByTestId('pin-value')).toHaveText('582913')
+    await expectNoBlockingViolations(page)
 
     await reveal.getByLabel('Confirmo que he entregado este PIN en mano a Youssef Amrani.').check()
     await reveal.getByRole('button', { name: 'Registrar la entrega ahora' }).click()

@@ -139,7 +139,8 @@ describe('EmployeeDetailView', () => {
       }),
     )
 
-    expect(wrapper.find('h1').text()).toBe(es.people.minimised)
+    expect(wrapper.find('h1').text()).toBe(es.app.titles.employee)
+    expect(wrapper.find('[data-test="employee-name"]').text()).toBe(es.people.minimised)
     expect(wrapper.find('[data-test="employee-minimised"]').text()).toContain(
       es.employees.detail.minimised,
     )
@@ -290,13 +291,13 @@ describe('EmployeeDetailView', () => {
 
     const confirm = buttonWith(wrapper, es.employees.offboard.confirmAction)
 
-    expect(confirm.attributes('disabled')).toBeDefined()
+    expect(confirm.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[role="dialog"] select').setValue('endOfContract')
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('disabled'),
+      buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
     ).toBeUndefined()
   })
 
@@ -349,7 +350,7 @@ describe('EmployeeDetailView', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.employees.detail.reviewChanges).attributes('disabled'),
+      buttonWith(wrapper, es.employees.detail.reviewChanges).attributes('aria-disabled'),
     ).toBeDefined()
   })
 
@@ -579,7 +580,7 @@ describe('EmployeeDetailView', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.employees.detail.reviewChanges).attributes('disabled'),
+      buttonWith(wrapper, es.employees.detail.reviewChanges).attributes('aria-disabled'),
     ).toBeDefined()
 
     await wrapper.find('[data-test="teleworking-checkbox"]').setValue(true)
@@ -671,7 +672,7 @@ describe('EmployeeDetailView', () => {
       await settle(1)
 
       expect(
-        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('disabled'),
+        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
       ).toBeDefined()
       expect(dateInput(wrapper).attributes('aria-invalid')).toBe('true')
     })
@@ -710,7 +711,7 @@ describe('EmployeeDetailView', () => {
       await settle(1)
 
       expect(
-        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('disabled'),
+        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
       ).toBeDefined()
     })
 

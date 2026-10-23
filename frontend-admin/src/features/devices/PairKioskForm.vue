@@ -260,10 +260,10 @@ function pairAnother(): void {
 
     <div>
       <button
+        v-aria-disabled.reason="submitting || !codeIsValid || !nameIsValid"
         type="submit"
-        :disabled="submitting || !codeIsValid || !nameIsValid"
         :aria-busy="submitting"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
       >
         {{ submitting ? t('devices.pair.submitting') : t('devices.pair.submit') }}
       </button>

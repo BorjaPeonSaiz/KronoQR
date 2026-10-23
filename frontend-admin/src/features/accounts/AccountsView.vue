@@ -24,6 +24,7 @@ import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datet
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -312,6 +313,7 @@ const actionClass =
       <div>
         <h1 class="text-2xl font-bold">{{ t('accounts.title') }}</h1>
         <p class="mt-1 text-kq-text-muted">{{ t('accounts.subtitle') }}</p>
+        <AuditNotice />
       </div>
       <button
         type="button"
@@ -401,7 +403,7 @@ const actionClass =
 
     <LoadingPanel v-if="isPending" :label="t('accounts.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
 
     <template v-else>
       <EmptyState
@@ -413,7 +415,10 @@ const actionClass =
 
       <div
         v-else
-        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('accounts.table.caption', { timezone })"
+        class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="sr-only">

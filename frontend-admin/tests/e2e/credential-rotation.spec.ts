@@ -58,10 +58,10 @@ test(
       .toBe(true)
 
     await expect(page.getByRole('table')).toContainText('Lucia Martinez Prieto')
-    await expect(rotation.getByRole('button', { name: 'Ver toda la plantilla' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    // Una sola señal (V7-PA-7): el boton ahora se llama «Ver toda la plantilla» y no lleva aria-pressed.
+    await expect(
+      rotation.getByRole('button', { name: 'Ver toda la plantilla' }),
+    ).not.toHaveAttribute('aria-pressed')
   },
 )
 

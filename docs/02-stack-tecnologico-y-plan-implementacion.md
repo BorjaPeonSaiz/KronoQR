@@ -785,7 +785,7 @@ El PIN sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acce
 - Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por canal (quiosco y portal llevan contadores distintos).
 - Rate limiting independiente por IP.
 - En el portal, **bloqueo por origen**: 20 fallos en 15 minutos desde una IP (o un `/64` de IPv6), con cualquier código, la bloquean 60 minutos (RS-12, ADR-050). No se aplica al quiosco.
-- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente, el instalador y `product:doctor` lo avisan y recomiendan el PIN de 8 cifras (RF-ID-08, ADR-050).
+- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente, el instalador y `product:doctor` lo avisan y recomiendan el PIN de 8 cifras (RF-ID-08, ADR-050). Fuera de `PORTAL_INTERNAL_CIDR`, nginx responde `403` `application/problem+json` con `type` `urn:kronoqr:problem:portal-network-restricted` en `/api/v1/me/*` (sin IP ni red en el cuerpo) y una página estática bilingüe en `/portal/`; así el portal distingue «red no permitida» de un 403 de permisos.
 - El ámbito de una sesión de portal alcanza **solo los datos del propio empleado**, así que un compromiso no escala.
 - En el quiosco, el fichaje por PIN queda **marcado para revisión del responsable**, lo que hace visible cualquier uso anómalo.
 

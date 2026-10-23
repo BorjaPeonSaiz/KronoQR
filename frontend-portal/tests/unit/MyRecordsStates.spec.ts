@@ -6,6 +6,7 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/login/session.store'
 import MyRecordsView from '@/features/my-records/MyRecordsView.vue'
+import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
 import { employeeWorkDays, portalEmployee } from './support/fixtures'
 import {
@@ -195,4 +196,31 @@ describe('MyRecordsView, cada causa de error', () => {
       expect(wrapper.find('[data-test="workday"]').exists()).toBe(false)
     })
   }
+})
+
+describe('MyRecordsView, el 403 (R3-UX-02, RF-ID-08)', () => {
+  // El servidor distingue el motivo: el consejo de la red del hotel solo sale con el type
+  // ; un 403 cualquiera lleva el consejo general.
+  it('con el type de red restringida aconseja conectarse a la red del hotel', async () => {
+    const wrapper = await mountWith(() =>
+      problemResponse(403, 'urn:kronoqr:problem:portal-network-restricted'),
+    )
+    const alert = wrapper.find('[role="alert"]')
+
+    expect(alert.text()).toContain(es.errors.portalNetworkRestricted.title)
+    expect(alert.text()).toContain(es.errors.portalNetworkRestricted.advice)
+    expect(es.errors.portalNetworkRestricted.advice).toMatch(/red del hotel/)
+    expect(en.errors.portalNetworkRestricted.advice).toMatch(/hotel network/)
+  })
+
+  it('un 403 cualquiera lleva el consejo general y no menciona la red', async () => {
+    const wrapper = await mountWith(() => problemResponse(403, 'about:blank'))
+    const alert = wrapper.find('[role="alert"]')
+
+    expect(alert.text()).toContain(es.errors.forbidden.title)
+    expect(alert.text()).toContain(es.errors.forbidden.advice)
+    expect(alert.text()).not.toContain('red del hotel')
+    expect(es.errors.forbidden.advice).toContain('vuelve a entrar'.replace('v', 'V'))
+    expect(es.errors.forbidden.advice).toContain('Recursos Humanos')
+  })
 })

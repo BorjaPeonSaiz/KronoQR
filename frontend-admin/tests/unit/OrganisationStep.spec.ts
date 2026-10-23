@@ -52,7 +52,7 @@ describe('OrganisationStep', () => {
     const wrapper = await mountView(OrganisationStep, { pinia: createTestPinia() })
     await settle()
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('guarda solo lo que cambia y marca el paso hecho', async () => {

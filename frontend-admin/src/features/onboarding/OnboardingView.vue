@@ -20,6 +20,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { BLOCKED_REASON_ID } from '@/shared/ui/vAriaDisabled'
 import { RouterLink } from 'vue-router'
 import type { SetupStep, SetupStepStatus } from '@/shared/api/types'
 import CompletionSummary from './CompletionSummary.vue'
@@ -129,6 +130,7 @@ watch(activeKey, (key) => {
 
 <template>
   <main class="flex min-h-dvh justify-center bg-kq-surface p-4">
+    <p :id="BLOCKED_REASON_ID" class="sr-only">{{ t('common.blockedReason') }}</p>
     <div class="w-full max-w-3xl py-8">
       <h1 class="text-2xl font-bold text-kq-text">{{ t('onboarding.heading') }}</h1>
       <p class="mt-1 text-kq-text-muted">{{ t('onboarding.intro') }}</p>

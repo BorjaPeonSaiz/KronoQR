@@ -19,6 +19,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { License } from '@/shared/api/types'
@@ -89,6 +90,18 @@ async function activate(): Promise<void> {
   }
 }
 
+/** La cifra que decide singular o plural: dias desde que caduco, dias de preaviso o dias que quedan. */
+function pluralCount(
+  data: { state: string; days_since_expiry?: number | null; days_until_expiry?: number | null },
+  warningDays: number,
+): number {
+  if (data.state === 'expired') {
+    return data.days_since_expiry ?? 0
+  }
+
+  return data.state === 'valid' ? warningDays : (data.days_until_expiry ?? 0)
+}
+
 onMounted(() => {
   void store.load()
 })
@@ -113,11 +126,9 @@ onMounted(() => {
       {{ t('license.neverDegraded') }}
     </p>
 
-    <p v-if="store.loading" class="text-kq-text-muted" data-test="loading">
-      {{ t('license.loading') }}
-    </p>
+    <LoadingPanel v-if="store.loading" :label="t('license.loading')" data-test="loading" />
 
-    <ErrorNotice v-if="store.error !== null" :error="store.error" />
+    <ErrorNotice v-if="store.error !== null" :error="store.error" @retry="store.load(true)" />
 
     <template v-if="license !== null">
       <!-- Estado -->
@@ -140,6 +151,8 @@ onMounted(() => {
               from: formatDay(license.data.valid_from),
               days: license.data.days_until_expiry ?? 0,
               elapsed: license.data.days_since_expiry ?? 0,
+              // El plural de «quedan N días» / «hace N días» se decide por la cifra que corresponde.
+              count: pluralCount(license.data, license.meta.expiry_warning_days),
               warningDays: license.meta.expiry_warning_days,
             })
           }}
@@ -180,6 +193,11 @@ onMounted(() => {
       <div class="flex max-w-3xl flex-col gap-2" data-test="limits">
         <h2 class="text-lg font-semibold">{{ t('license.usage') }}</h2>
         <table class="w-full border-collapse text-left">
+          <caption class="sr-only">
+            {{
+              t('license.usageCaption')
+            }}
+          </caption>
           <thead>
             <tr class="border-b border-kq-border">
               <th scope="col" class="py-2">{{ t('license.usageColumns.limit') }}</th>
@@ -245,7 +263,7 @@ onMounted(() => {
           :field-labels="fieldLabels"
         />
 
-        <p v-if="activated" class="text-kq-success" role="status" data-test="activated">
+        <p v-if="activated" class="text-kq-success" data-test="activated">
           {{ t('license.activated') }}
         </p>
 
@@ -266,9 +284,10 @@ onMounted(() => {
 
         <div>
           <button
+            v-aria-disabled.reason="activating || signedKey.trim() === ''"
             type="submit"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary disabled:opacity-60"
-            :disabled="activating || signedKey.trim() === ''"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary aria-disabled:opacity-60"
+            :aria-busy="activating"
             data-test="activate"
           >
             {{ activating ? t('license.activating') : t('license.activate') }}

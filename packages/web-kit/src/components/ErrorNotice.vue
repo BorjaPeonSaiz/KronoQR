@@ -9,6 +9,11 @@
 // declara su propio `locales/{es,en}.json` con el mismo catalogo de causas que
 // exporta `ApiErrorKind`.
 //
+// **«Reintentar».** Una lista que no carga y que dice «vuelve a intentarlo» sin un
+// boton obliga a recargar el navegador (V3-UX-01). Si quien lo usa pasa `@retry`,
+// aparece el boton y el evento vuelve a pedir lo que fallo. Se declara como prop
+// `onRetry` y no como evento para que su mera presencia decida si se pinta.
+//
 // Los errores por campo de un `422` llegan ya en el idioma de la persona (el
 // servidor los escribe en el que pide `Accept-Language`); lo que este
 // componente no puede saber es como se llama cada campo EN ESTA PANTALLA. Por
@@ -23,6 +28,8 @@ const props = defineProps<{
   error: unknown
   /** Etiqueta visible de cada campo del formulario, por su nombre en la API. */
   fieldLabels?: Readonly<Record<string, string>>
+  /** Vuelve a pedir lo que fallo. Si falta, no hay boton. */
+  onRetry?: () => void
 }>()
 
 const { t } = useI18n()
@@ -47,6 +54,15 @@ const fields = computed(() =>
     <p v-if="apiError.retryAfterSeconds !== null" class="mt-1">
       {{ t('errors.retryAfter', { seconds: apiError.retryAfterSeconds }) }}
     </p>
+    <button
+      v-if="onRetry !== undefined"
+      type="button"
+      class="mt-3 rounded-kq-sm border border-kq-danger bg-kq-surface-raised px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt"
+      data-test="error-retry"
+      @click="onRetry()"
+    >
+      {{ t('errors.retry') }}
+    </button>
     <ul v-if="fields.length > 0" class="mt-2 list-disc pl-5">
       <li v-for="{ field, label, messages } of fields" :key="field">
         {{ label }}: {{ messages.join(' ') }}

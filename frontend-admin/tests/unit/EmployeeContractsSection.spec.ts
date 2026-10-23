@@ -179,7 +179,7 @@ describe('EmployeeContractsSection (RF-GP-02)', () => {
     await wrapper.find('[data-test="contract-register-open"]').trigger('click')
     await settle(1)
 
-    expect(wrapper.find('[data-test="contract-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="contract-submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="contract-weekly-hours"]').setValue('37,5')
     await wrapper.find('[data-test="contract-annual-hours"]').setValue('1780')
@@ -230,7 +230,9 @@ describe('EmployeeContractsSection (RF-GP-02)', () => {
     ).toBe('30')
     // La vista previa ya parte del contrato vigente releido.
     expect(wrapper.find('[role="dialog"] table').text()).toContain('40')
-    expect(buttonWith(wrapper, es.contracts.register.submit).attributes('disabled')).toBeUndefined()
+    expect(
+      buttonWith(wrapper, es.contracts.register.submit).attributes('aria-disabled'),
+    ).toBeUndefined()
   })
 
   it('un 422 nombra el campo en el formulario y no relee', async () => {
@@ -261,7 +263,7 @@ describe('EmployeeContractsSection (RF-GP-02)', () => {
     await wrapper.find('[data-test="contract-schedule-type"]').setValue('continua')
     await wrapper.find('[data-test="contract-weekly-hours"]').setValue('169')
 
-    expect(wrapper.find('[data-test="contract-submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="contract-submit"]').attributes('aria-disabled')).toBeDefined()
     expect(wrapper.find('[role="dialog"]').text()).toContain(es.contracts.register.weeklyInvalid)
   })
 })

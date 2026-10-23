@@ -237,7 +237,7 @@ describe('EmployeeWorkDaysView', () => {
     await settle(1)
 
     expect(wrapper.text()).toContain(es.workdays.filters.inverted)
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('form').trigger('submit')
     await settle(1)
@@ -254,7 +254,7 @@ describe('EmployeeWorkDaysView', () => {
     await settle(1)
 
     expect(wrapper.text()).toContain('366')
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('aria-disabled')).toBeDefined()
   })
 
   it('un periodo sin jornadas se explica, en vez de parecer un fallo', async () => {

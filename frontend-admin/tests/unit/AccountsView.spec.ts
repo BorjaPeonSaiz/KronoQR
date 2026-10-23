@@ -343,10 +343,10 @@ describe('AccountsView', () => {
       .findAll('button')
       .find((b) => b.text() === es.accounts.actions.deactivate.confirm)
 
-    expect(confirm?.attributes('disabled')).toBeDefined()
+    expect(confirm?.attributes('aria-disabled')).toBeDefined()
 
     await dialog.find('[data-test="account-reason"]').setValue('Deja el hotel')
-    expect(confirm?.attributes('disabled')).toBeUndefined()
+    expect(confirm?.attributes('aria-disabled')).toBeUndefined()
     await confirm?.trigger('click')
     await settle()
 
@@ -465,7 +465,7 @@ describe('AccountsView', () => {
       .findAll('button')
       .find((b) => b.text() === es.accounts.actions.resetTwoFactor.confirm)
 
-    expect(confirm?.attributes('disabled')).toBeDefined()
+    expect(confirm?.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="account-reason"]').setValue('Teléfono extraviado')
     await wrapper.find('[data-test="actor-reauth"]').setValue('654321')
@@ -502,10 +502,10 @@ describe('AccountsView: reautenticacion de quien actua', () => {
     const wrapper = await mountAsAdmin()
 
     await openResetTwoFactor(wrapper)
-    expect(confirmButton(wrapper)?.attributes('disabled')).toBeDefined()
+    expect(confirmButton(wrapper)?.attributes('aria-disabled')).toBeDefined()
 
     await wrapper.find('[data-test="actor-reauth"]').setValue('12ab')
-    expect(confirmButton(wrapper)?.attributes('disabled')).toBeDefined()
+    expect(confirmButton(wrapper)?.attributes('aria-disabled')).toBeDefined()
   })
 
   it('si la cuenta de quien actua no tiene segundo factor, pide su contraseña actual', async () => {
@@ -594,7 +594,7 @@ describe('AccountsView: reautenticacion de quien actua', () => {
     await wrapper.find('[data-test="actor-reauth"]').setValue('654321')
 
     expect(wrapper.find('[data-test="retry-countdown"]').text()).toContain('90')
-    expect(confirmButton(wrapper)?.attributes('disabled')).toBeDefined()
+    expect(confirmButton(wrapper)?.attributes('aria-disabled')).toBeDefined()
   })
 
   it('la baja no pide reautenticacion', async () => {

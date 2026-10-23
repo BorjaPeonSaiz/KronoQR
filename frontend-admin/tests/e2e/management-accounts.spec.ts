@@ -9,8 +9,7 @@
 // El backend no participa: la API va simulada con las formas del contrato
 // (`support/admin.ts`). Que la baja cierre las sesiones, que la ultima admin no
 // pueda darse de baja o que la contrasena temporal caduque lo prueba el backend.
-import AxeBuilder from '@axe-core/playwright'
-import { expect, type Page, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import {
   ACCOUNT_COOK,
   ACCOUNT_COOK_UUID,
@@ -21,14 +20,7 @@ import {
   TEMPORARY_PASSWORD,
   TOTP_CODE,
 } from './support/admin'
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoAxeViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-
-  expect(results.violations).toEqual([])
-}
+import { expectNoBlockingViolations } from './support/axe'
 
 test.describe('administracion de cuentas', () => {
   test.beforeEach(async ({ page }) => {
@@ -62,7 +54,7 @@ test.describe('administracion de cuentas', () => {
       await expect(table.getByRole('rowheader')).toHaveCount(3)
       await expect(page.locator('main')).not.toContainText(TEMPORARY_PASSWORD)
 
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 
@@ -116,8 +108,9 @@ test.describe('administracion de cuentas', () => {
       const reveal = page.getByRole('dialog', { name: 'Contraseña temporal' })
 
       await expect(reveal.getByTestId('password-value')).toHaveText(TEMPORARY_PASSWORD)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await expect(reveal).toContainText('una sola vez')
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
 
       // No se cierra por descuido: ni con Escape ni sin la casilla.
       await page.keyboard.press('Escape')
@@ -157,6 +150,7 @@ test.describe('administracion de cuentas', () => {
       await dialog.getByRole('button', { name: 'Crear cuenta' }).click()
 
       await expect(dialog.getByText(/Ya hay una cuenta con este correo/)).toBeVisible()
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 
@@ -175,7 +169,7 @@ test.describe('administracion de cuentas', () => {
       await expect(change).toContainText('Activa')
       await expect(change).toContainText('De baja')
       await expect(confirm).toBeDisabled()
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
 
       await dialog.getByLabel('Motivo').fill('Deja el hotel al final de la temporada')
       await confirm.click()
@@ -222,6 +216,8 @@ test.describe('administracion de cuentas', () => {
 
       const dialog = page.getByRole('dialog', { name: 'Restablecer el segundo factor' })
 
+      await expect(dialog).toBeVisible()
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await dialog.getByLabel('Motivo').fill('Teléfono extraviado')
       await dialog.getByLabel(/Tu código del segundo factor/).fill(TOTP_CODE)
       await dialog.getByRole('button', { name: 'Retirar segundo factor' }).click()
@@ -298,7 +294,7 @@ test.describe('contraseña temporal', () => {
       await page.goto('/employees')
 
       await expect(page).toHaveURL(/\/account\/password$/)
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 

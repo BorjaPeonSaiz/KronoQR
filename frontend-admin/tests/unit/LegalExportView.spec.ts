@@ -193,7 +193,7 @@ describe('exportacion para la Inspeccion', () => {
     await wrapper.findAll('input[name="legal-export-scope"]')[1]?.setValue(true)
 
     expect(
-      wrapper.find<HTMLButtonElement>('button[type="submit"]').attributes('disabled'),
+      wrapper.find<HTMLButtonElement>('button[type="submit"]').attributes('aria-disabled'),
     ).toBeDefined()
   })
 
@@ -238,7 +238,7 @@ describe('exportacion para la Inspeccion', () => {
 
     const submit = wrapper.find<HTMLButtonElement>('button[type="submit"]')
 
-    expect(submit.attributes('disabled')).toBeDefined()
+    expect(submit.attributes('aria-disabled')).toBeDefined()
   })
 
   it('explica un 403 sin enseñar el detalle tecnico', async () => {

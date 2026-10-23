@@ -89,9 +89,22 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (22-10-2026):** bloques 0 a 13 integrados (#182 a #187, #189 a #191 y #193 a #197). **Bloque 14** (`fix/panel-datos-y-operaciones`): 14.1–14.8 ✅, revisiones de seguridad (servidor) y de código aplicadas; CI manual y PR en curso.
+**Estado de la 2.3.0 (23-10-2026):** bloques 0 a 14 integrados (#182 a #187, #189 a #191 y #193 a #198). **Bloque 15** (`fix/accesibilidad-panel`): 15.1–15.7 ✅, revisiones de código y de UI aplicadas; CI y PR en curso.
 
-Lo que conviene saber del bloque 14 (decisiones en Engram `2.3.0/b14-decisiones`):
+Lo que conviene saber del bloque 15 (decisiones en Engram `2.3.0/b15-decisiones`):
+
+- **Foco:** `BaseDialog` con trampa completa (Shift+Tab, Escape, `focusin`, controles de fecha por segmentos). Los botones en vuelo y bloqueados usan la directiva `v-aria-disabled` (`.busy`, `.reason` → `#kq-blocked-reason`), no `:disabled`, y conservan el foco. `focusRecovery` lleva el foco perdido al `h1` de `main`, ignora diálogos modales y cambios de pantalla. `screenChange` vacía la región viva y enfoca `main h1`; la ficha del empleado tiene `h1` fijo.
+- **Títulos:** «Pantalla – Instalación» (`documentTitle` en web-kit), sin datos personales.
+- **Estados:** «Reintentar» en `ErrorNotice`; corte de 30 s en lecturas GET como `kind: 'timeout'`, sin reintento automático; `LoadingPanel` con regiones vivas persistentes y aviso a los 10 s. El reflujo de `base.css` va en `@layer base`.
+- **Consulta anotada (decisión del propietario):** `AuditNotice` es una banda destacada breve con `<details>`; en el registro de una persona, encima de las jornadas. `auditNotice.spec` la cruza con los `DATASET` del backend.
+- **Portal 403 (decisión del propietario):** nginx responde `urn:kronoqr:problem:portal-network-restricted` fuera de `PORTAL_INTERNAL_CIDR`; el portal solo habla de la red del hotel con ese `type`.
+- **Pruebas:** `axePass` de web-kit (WCAG A/AA 2.2 + `best-practice`) en las tres SPA; `axeRouteCoverage.spec` exige una pasada por ruta; `reflow.spec` a 320 px por ruta; `pluralKeys.spec`, `scrollContainers.spec`; pruebas de foco sin bucles. El proxy de Vite en desarrollo usa `KRONOQR_DEV_API_TARGET` (sin 502).
+- **Pendiente:**
+  - `@axe-core/playwright` y `@playwright/test` resuelven en web-kit por el `node_modules` raíz; declararlos como dependencias de desarrollo de web-kit;
+  - axe del quiosco solo en inglés y de las incidencias `discarded_scan`/`scan_before_revocation` (sin dobles);
+  - posible doble `#kq-blocked-reason` si coinciden marco y diálogo (hoy no ocurre).
+
+Lo que conviene saber del bloque 14 (#198; decisiones en Engram `2.3.0/b14-decisiones`):
 
 - **Exportaciones en diferido (ADR-041 enmendado):** `report_exports` admite `kind` `legal` y `adoption`, avance (`progress` en caché) y cancelación (`cancelled_at`, `stopped_at`: una cancelada en marcha ocupa el turno hasta que el trabajador para). La legal nunca pide licencia, solo CSV, idéntica byte a byte a la síncrona. Las síncronas se mantienen (decisión del propietario); el panel difiere la plantilla entera o más de un mes (`deferral.ts`, ≥ 32 días). El soporte del fabricante no pide en diferido; el auditor solo ve y cancela `kind = legal`. Exportación íntegra en formato 6.
 - **Cola `reports`:** conexión propia con `retry_after` 1900 s > `TIMEOUT_SECONDS` (antes 90 s: otro proceso recogía el trabajo y `failed()` borraba el fichero) y `config/horizon.php` con `supervisor-reports` (2 procesos). Prueba `ReportExportQueueTest`.
@@ -200,7 +213,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 14 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 15 (accesibilidad del panel, rama `fix/accesibilidad-panel`), marcando ✅ el título del bloque 14 en su primer commit.
+**Siguiente acción:** si el bloque 15 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 16 (sistema visual y marca blanca, rama `fix/sistema-visual-y-marca`), marcando ✅ el título del bloque 15 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

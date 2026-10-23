@@ -335,6 +335,35 @@ describe('EmployeeListView', () => {
     expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.advice)
   })
 
+  it('ofrece «Reintentar» y, al pulsarlo, vuelve a pedir la lista (V3-UX-01)', async () => {
+    let failing = true
+    const handler = routes(employeeCollection([employee()]))
+
+    stubFetch((url) => {
+      if (failing && url.startsWith('/api/v1/employees')) {
+        throw new TypeError('Failed to fetch')
+      }
+
+      return handler(url)
+    })
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+
+    const retry = wrapper.find('[role="alert"] [data-test="error-retry"]')
+
+    expect(retry.exists()).toBe(true)
+    expect(retry.text()).toBe(es.errors.retry)
+
+    failing = false
+    await retry.trigger('click')
+    await settle()
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Youssef Amrani')
+  })
+
   it('tras el alta enseña el PIN una sola vez, en su dialogo', async () => {
     stubFetch((url, init) => {
       if (url.startsWith('/api/v1/site')) {

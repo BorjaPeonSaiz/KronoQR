@@ -1,6 +1,7 @@
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
+import { bindDocumentTitle } from '@kronoqr/web-kit/documentTitle'
 import {
   setAuthTokenProvider,
   setLocaleProvider,
@@ -15,13 +16,19 @@ import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
 import { installChunkLoadRecovery } from './router/chunkLoadRecovery'
 import { registerAuthGuard } from './router/guards'
+import { bindScreenChange, contentHeading, isScreenChanging } from './router/screenChange'
 import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, resolveAppLocale } from './shared/i18n'
 import { createLocaleController, renderBootFailure } from './shared/i18n/localeController'
+import { installFocusRecovery } from './shared/ui/focusRecovery'
+import { vAriaDisabled } from './shared/ui/vAriaDisabled'
 
 const app = createApp(App)
+
+// Botones bloqueados sin perder el foco (V21-7-PA-1).
+app.directive('aria-disabled', vAriaDisabled)
 
 // Antes que nada: un error durante el propio arranque tambien debe capturarse.
 // El buffer saneado (regla dura 21: sin PII) se vacia hacia `error_events`
@@ -134,6 +141,20 @@ registerAuthGuard(router)
 installChunkLoadRecovery(router, {
   reload: (target) => window.location.assign(router.resolve(target).href),
 })
+
+// Titulo de la pestaña por pantalla (WCAG 2.4.2): la marca escribe el nombre de la
+// instalacion, esto le antepone la pantalla; se recompone tras aplicar la marca.
+bindDocumentTitle({
+  router,
+  i18n,
+  applicationName: () => branding.current.applicationName,
+  brandingVersion: () => branding.current,
+})
+
+// El cambio de pantalla se anuncia llevando el foco al `<h1>`, y el foco que se
+// pierde porque lo retirado era su sitio vuelve al contenedor mas cercano.
+bindScreenChange(router)
+installFocusRecovery({ fallback: () => contentHeading(), suspended: isScreenChanging })
 
 app.use(router)
 app.use(i18n)

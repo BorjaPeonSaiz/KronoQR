@@ -25,6 +25,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { usePersonName } from '@/shared/people/personName'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
 import type { CredentialLifecycleStatus } from '@/shared/api/types'
@@ -154,6 +155,7 @@ const {
   data: board,
   error,
   isPending,
+  refetch,
 } = useQuery({
   queryKey: computed(() => ['credential-board', boardQuery.value] as const),
   queryFn: () => fetchCredentialBoard(boardQuery.value),
@@ -222,7 +224,8 @@ const unknownKeyCards = computed(() => summary.value?.active_unknown_key ?? 0)
  * No anuncia nada por su cuenta: el `watch` del recuento de filas ya lo hace
  * —«Resultados: 12»— y anunciar aqui tambien pisaria ese mensaje o quedaria
  * pisado por el, que es el mismo problema que ya documenta ese `watch`. El
- * estado del filtro lo dice el propio boton con `aria-pressed` y su etiqueta.
+ * estado del filtro lo dice la etiqueta del propio boton, que nombra la accion; sin
+ * `aria-pressed`, que con la etiqueta cambiante daba dos señales contradictorias (V7-PA-7).
  */
 function toggleReprintFilter(): void {
   const progress = reprintProgress.value
@@ -339,6 +342,7 @@ const selectClass =
       <div>
         <h1 class="text-2xl font-bold">{{ t('credentials.title') }}</h1>
         <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('credentials.subtitle') }}</p>
+        <AuditNotice />
       </div>
       <button
         type="button"
@@ -461,9 +465,9 @@ const selectClass =
         <button
           v-for="sheetLocale of availableSheetLocales"
           :key="sheetLocale"
+          v-aria-disabled.busy="instructionsSheetBusyLocale !== null"
           type="button"
-          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-          :disabled="instructionsSheetBusyLocale !== null"
+          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
           :aria-busy="instructionsSheetBusyLocale === sheetLocale"
           :data-test="`instructions-sheet-button-${sheetLocale}`"
           @click="downloadInstructionsSheet(sheetLocale)"
@@ -550,7 +554,6 @@ const selectClass =
         v-else
         type="button"
         class="mt-3 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
-        :aria-pressed="reprintKeyFilter !== null"
         @click="toggleReprintFilter"
       >
         {{
@@ -562,7 +565,7 @@ const selectClass =
     </section>
 
     <LoadingPanel v-if="isPending" :label="t('credentials.loading')" class="mt-4" />
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
     <EmptyState
       v-else-if="rows.length === 0 && !hasFilters"
       class="mt-4"
@@ -584,7 +587,10 @@ const selectClass =
 
     <template v-else>
       <div
-        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('credentials.table.caption')"
+        class="mt-4 relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="px-3 py-2 text-left text-sm text-kq-text-muted">

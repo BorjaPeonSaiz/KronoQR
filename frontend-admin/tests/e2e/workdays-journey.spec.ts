@@ -34,7 +34,8 @@ test(
 
     // Ficha: nombre, codigo y el enlace al registro horario.
     await expect(page).toHaveURL(new RegExp(`/employees/${EMPLOYEE_UUID}$`))
-    await expect(page.getByRole('heading', { level: 1, name: FULL_NAME })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Ficha del empleado' })).toBeVisible()
+    await expect(page.getByTestId('employee-name')).toHaveText(FULL_NAME)
     await expect(page.getByText(EMPLOYEE.employee_code).first()).toBeVisible()
     await page.getByRole('link', { name: 'Ver el registro horario de esta persona' }).click()
 
@@ -44,7 +45,7 @@ test(
     await expect(page.getByTestId('person')).toContainText(EMPLOYEE.employee_code)
     await expect(page.getByTestId('resolved-range')).toContainText('2026-03-01')
     await expect(page.getByTestId('resolved-range')).toContainText('2026-03-31')
-    await expect(page.getByText(/queda anotado en la auditoría/)).toBeVisible()
+    await expect(page.getByText(/queda anotada en la auditoría/)).toBeVisible()
 
     // La jornada del 14 de marzo: un tramo 06:00 → 14:05 hora del centro, y el
     // total declarado cuadra con la suma de los tramos.

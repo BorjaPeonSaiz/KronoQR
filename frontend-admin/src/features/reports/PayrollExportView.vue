@@ -30,6 +30,7 @@ import { isApiError } from '@kronoqr/web-kit/http'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { RouterLink } from 'vue-router'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
@@ -320,6 +321,7 @@ const fieldClass =
     <header class="flex flex-col gap-2">
       <h1 class="text-2xl font-semibold">{{ t('payrollExport.title') }}</h1>
       <p class="max-w-3xl text-kq-text-muted">{{ t('payrollExport.subtitle') }}</p>
+      <AuditNotice />
     </header>
 
     <p
@@ -405,18 +407,22 @@ const fieldClass =
 
       <div class="flex flex-wrap gap-3">
         <button
+          v-aria-disabled.reason="!canSubmit || downloading || backgroundRequesting"
           type="submit"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-          :disabled="!canSubmit || downloading || backgroundRequesting"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
+          :aria-busy="downloading || backgroundRequesting"
           data-test="payroll-download"
         >
           {{ downloading ? t('payrollExport.downloading') : t('payrollExport.download') }}
         </button>
 
         <button
+          v-aria-disabled.reason="
+            !canSubmit || backgroundRequesting || (job !== null && isActiveExport(job))
+          "
           type="button"
-          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-          :disabled="!canSubmit || backgroundRequesting || (job !== null && isActiveExport(job))"
+          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
+          :aria-busy="backgroundRequesting || (job !== null && isActiveExport(job))"
           data-test="payroll-background"
           @click="requestFromButton"
         >

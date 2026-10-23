@@ -70,22 +70,22 @@ async function continueStep(): Promise<void> {
     <div>
       <button
         v-if="paired"
+        v-aria-disabled.busy="completing"
         type="button"
-        :disabled="completing"
         :aria-busy="completing"
         data-test="continue"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         @click="continueStep"
       >
         {{ completing ? t('onboarding.actions.saving') : t('onboarding.actions.continue') }}
       </button>
       <button
         v-else
+        v-aria-disabled.busy="skipping"
         type="button"
-        :disabled="skipping"
         :aria-busy="skipping"
         data-test="skip"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
         @click="skip"
       >
         {{ skipping ? t('onboarding.actions.saving') : t('onboarding.steps.kiosk.skip') }}

@@ -50,7 +50,8 @@
     "en": "English"
   },
   "common": {
-    "updating": "Actualizando…"
+    "updating": "Actualizando…",
+    "loadingSlow": "Esto tarda más de lo normal. Puedes seguir esperando o volver a intentarlo."
   },
   "errors": {
     "retryAfter": "Puedes volver a intentarlo dentro de {seconds} s.",
@@ -68,7 +69,7 @@
     },
     "forbidden": {
       "title": "No se puede mostrar esta información",
-      "advice": "Vuelve a entrar. Si el problema continúa, avisa a Recursos Humanos."
+      "advice": "Vuelve a entrar. Si el problema continúa, habla con Recursos Humanos."
     },
     "notFound": {
       "title": "No se ha encontrado",
@@ -93,6 +94,15 @@
     "unexpected": {
       "title": "Ha ocurrido un error inesperado",
       "advice": "Vuelve a intentarlo. Si se repite, avisa a Recursos Humanos indicando la hora y qué estabas haciendo."
+    },
+    "retry": "Reintentar",
+    "timeout": {
+      "title": "El servidor tarda más de lo normal",
+      "advice": "No hemos recibido respuesta a tiempo. Puedes volver a intentarlo ahora o esperar un poco; nada de lo que has hecho se ha perdido."
+    },
+    "portalNetworkRestricted": {
+      "title": "El portal no se abre desde esta red",
+      "advice": "Conéctate a la red del hotel y vuelve a intentarlo. Si ya estás conectado a ella, habla con Recursos Humanos."
     }
   },
   "notFound": {

@@ -137,6 +137,35 @@ describe('aviso persistente de licencia', () => {
     expect(wrapper.findAll('button')).toHaveLength(0)
   })
 
+  it('«hace 1 día» y «dentro de 1 día» en singular (V7-PA-6)', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        licenseBody({
+          state: 'expired',
+          severity: 'critical',
+          days_until_expiry: 0,
+          days_since_expiry: 1,
+        }),
+      ),
+    )
+
+    const expired = await mountNotice(['license:*'])
+    await settle()
+
+    expect(expired.find('[data-test="license-notice"]').text()).toContain('hace 1 día.')
+
+    stubFetch(() =>
+      jsonResponse(
+        licenseBody({ state: 'expiring_soon', severity: 'warning', days_until_expiry: 1 }),
+      ),
+    )
+
+    const soon = await mountNotice(['license:*'])
+    await settle()
+
+    expect(soon.find('[data-test="license-notice"]').text()).toContain('dentro de 1 día')
+  })
+
   it('nunca dice que el sistema este parado, en ningun estado', async () => {
     for (const state of ['expiring_soon', 'expired', 'absent', 'not_yet_valid', 'unverifiable']) {
       const text = es.license.notice[state as keyof typeof es.license.notice]

@@ -357,7 +357,7 @@ describe('informe de horas por periodo', () => {
 
     const button = wrapper.find<HTMLButtonElement>('[data-test="generate-report"]')
 
-    expect(button.element.disabled).toBe(true)
+    expect(button.attributes('aria-disabled')).toBe('true')
 
     await fillPeriod(wrapper, '2026-03-01', '2026-03-31')
 
@@ -540,7 +540,7 @@ describe('descarga del informe por periodo', () => {
       expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(message)
       expect(wrapper.find('[data-test="pdf-busy-use-csv"]').exists()).toBe(true)
       expect(wrapper.find('[data-test="pdf-busy-use-xlsx"]').exists()).toBe(true)
-      expect(announcement.value).toBe(message)
+      expect(wrapper.find('[data-test="pdf-busy"]').attributes('role')).toBe('group')
 
       await wrapper.find('[data-test="pdf-busy-use-csv"]').trigger('click')
       await settle()

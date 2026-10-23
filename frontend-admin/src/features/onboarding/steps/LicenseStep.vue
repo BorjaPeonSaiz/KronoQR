@@ -48,20 +48,20 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
 
     <div class="flex gap-3">
       <button
+        v-aria-disabled.busy="finishing"
         type="button"
-        :disabled="finishing"
         :aria-busy="finishing"
         data-test="continue"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         @click="finish('completed')"
       >
         {{ t('onboarding.actions.continue') }}
       </button>
       <button
+        v-aria-disabled.busy="finishing"
         type="button"
-        :disabled="finishing"
         data-test="skip"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
         @click="finish('skipped')"
       >
         {{ t('onboarding.steps.license.skip') }}

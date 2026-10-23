@@ -25,6 +25,7 @@ import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
   ComplianceRuleName,
@@ -165,6 +166,7 @@ const selectClass =
     <div>
       <h1 class="text-2xl font-bold">{{ t('complianceSummary.title') }}</h1>
       <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('complianceSummary.subtitle') }}</p>
+      <AuditNotice />
     </div>
 
     <form class="mt-4 flex flex-wrap items-end gap-4" role="search" @submit.prevent="load">
@@ -215,9 +217,9 @@ const selectClass =
       </fieldset>
 
       <button
+        v-aria-disabled.busy="loading"
         type="submit"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
-        :disabled="loading"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 aria-disabled:opacity-60"
         data-test="apply-filters"
       >
         {{ t('complianceSummary.filters.apply') }}
@@ -231,6 +233,7 @@ const selectClass =
       :error="error"
       :field-labels="fieldLabels"
       class="mt-4"
+      @retry="load()"
     />
 
     <template v-else-if="summary !== null">

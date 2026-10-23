@@ -377,9 +377,9 @@ const buttonClass =
 
       <div>
         <button
+          v-aria-disabled.busy="generating"
           type="button"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
-          :disabled="generating"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
           :aria-busy="generating"
           data-test="generate-bundle"
           @click="generateBundle"
@@ -463,9 +463,9 @@ const buttonClass =
 
         <div>
           <button
+            v-aria-disabled.reason="!canGrant"
             type="submit"
-            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-50"
-            :disabled="!canGrant"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-50"
             :aria-busy="granting"
             data-test="grant-submit"
           >
@@ -497,7 +497,7 @@ const buttonClass =
       </div>
 
       <LoadingPanel v-if="grantsLoading" :label="t('support.grant.list.loading')" />
-      <ErrorNotice v-else-if="grantsError !== null" :error="grantsError" />
+      <ErrorNotice v-else-if="grantsError !== null" :error="grantsError" @retry="loadGrants()" />
       <EmptyState
         v-else-if="grants.length === 0"
         :title="t('support.grant.list.empty.title')"
@@ -506,7 +506,10 @@ const buttonClass =
 
       <div
         v-else
-        class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+        tabindex="0"
+        role="region"
+        :aria-label="t('support.grant.list.caption')"
+        class="relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
       >
         <table class="w-full border-collapse text-left">
           <caption class="px-3 py-2 text-left text-sm text-kq-text-muted">

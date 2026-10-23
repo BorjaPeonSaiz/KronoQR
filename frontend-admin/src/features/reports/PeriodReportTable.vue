@@ -124,7 +124,7 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
     tabindex="0"
     role="region"
     :aria-label="caption"
-    class="mt-4 max-h-[70vh] overflow-auto"
+    class="mt-4 max-h-[70vh] relative overflow-auto"
     data-test="period-report-table"
   >
     <div

@@ -12,17 +12,9 @@
 //
 // Con `data-test` y no con etiquetas exactas: las etiquetas de `FormField`
 // llevan un asterisco aria-hidden.
-import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page, test } from '@playwright/test'
 import { logInAsAdmin, SITE, stubManagementApi } from './support/admin'
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-async function expectNoAxeViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-
-  expect(results.violations).toEqual([])
-}
+import { expectNoBlockingViolations } from './support/axe'
 
 async function openDepartments(page: Page): Promise<void> {
   await page.getByRole('banner').getByRole('link', { name: 'Departamentos' }).click()
@@ -44,7 +36,7 @@ test.describe('departamentos y centro: administracion', () => {
       page.getByRole('table').getByRole('rowheader', { name: 'Mantenimiento' }),
     ).toBeVisible()
     await expect(page.locator('[data-test="department-create-name"]')).toHaveValue('')
-    await expectNoAxeViolations(page)
+    await expectNoBlockingViolations(page, { failOn: 'any' })
   })
 
   test(
@@ -61,6 +53,7 @@ test.describe('departamentos y centro: administracion', () => {
         'aria-invalid',
         'true',
       )
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await expect(page.locator('[data-test="department-4"]')).toHaveCount(1)
     },
   )
@@ -78,7 +71,7 @@ test.describe('departamentos y centro: administracion', () => {
       await expect(dialog.locator('[data-test="rename-preview"]')).toContainText(
         'Pisos y lavandería',
       )
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
 
       await dialog.getByRole('button', { name: 'Guardar nombre' }).click()
 
@@ -103,6 +96,7 @@ test.describe('departamentos y centro: administracion', () => {
       const dialog = page.getByRole('dialog')
 
       await dialog.locator('[data-test="rename-input"]').fill('Hotel Marina Playa')
+      await expectNoBlockingViolations(page, { failOn: 'any' })
       await dialog.getByRole('button', { name: 'Guardar nombre' }).click()
 
       await expect(dialog).toHaveCount(0)
@@ -135,7 +129,7 @@ test.describe('centro: zona horaria (RN-23)', () => {
       await expect(dialog.locator('[data-test="timezone-preview"]')).toContainText(
         'Atlantic/Canary',
       )
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
 
       await dialog.getByRole('button', { name: 'Cambiar zona' }).click()
 
@@ -205,7 +199,7 @@ test.describe('centro: zona horaria (RN-23)', () => {
       await expect(site.locator('[data-test="site-timezone-note"]')).toContainText(
         'ya no se puede cambiar',
       )
-      await expectNoAxeViolations(page)
+      await expectNoBlockingViolations(page, { failOn: 'any' })
     },
   )
 })

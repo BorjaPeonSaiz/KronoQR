@@ -60,6 +60,7 @@ const {
   error: listError,
   isPending: listPending,
   dataUpdatedAt,
+  refetch: refetchList,
 } = useQuery({
   queryKey: QUERY_KEY,
   queryFn: listDataExports,
@@ -224,9 +225,9 @@ async function download(row: DataExport): Promise<void> {
 
     <div>
       <button
+        v-aria-disabled.busy="activeExport !== null"
         type="button"
-        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
-        :disabled="activeExport !== null"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
         data-test="open-generate"
         @click="openConfirm"
       >
@@ -255,7 +256,12 @@ async function download(row: DataExport): Promise<void> {
     <ErrorNotice v-if="downloadError !== null" :error="downloadError" data-test="download-error" />
 
     <LoadingPanel v-if="listPending" :label="t('dataExport.list.loading')" />
-    <ErrorNotice v-else-if="listError !== null" :error="listError" data-test="list-error" />
+    <ErrorNotice
+      v-else-if="listError !== null"
+      :error="listError"
+      data-test="list-error"
+      @retry="refetchList()"
+    />
     <EmptyState
       v-else-if="exportsList.length === 0"
       :title="t('dataExport.list.empty.title')"
@@ -264,7 +270,10 @@ async function download(row: DataExport): Promise<void> {
 
     <div
       v-else
-      class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+      tabindex="0"
+      role="region"
+      :aria-label="t('dataExport.list.caption')"
+      class="relative overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     >
       <table class="w-full border-collapse text-left">
         <caption class="px-3 py-2 text-left text-sm text-kq-text-muted">
@@ -317,9 +326,9 @@ async function download(row: DataExport): Promise<void> {
             <td class="px-3 py-2">
               <button
                 v-if="row.status === 'completed'"
+                v-aria-disabled.busy="downloadingUuid === row.uuid"
                 type="button"
-                class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
-                :disabled="downloadingUuid === row.uuid"
+                class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-60"
                 :aria-busy="downloadingUuid === row.uuid"
                 :data-test="`download-${row.uuid}`"
                 @click="download(row)"

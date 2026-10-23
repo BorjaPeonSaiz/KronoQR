@@ -48,24 +48,29 @@ function goToPage(next: number): void {
   <nav :aria-label="label" class="mt-4 flex flex-wrap items-center justify-between gap-3">
     <p>
       {{ t('common.pagination.summary', { from: rangeStart, to: rangeEnd, total }) }}
-      <span v-if="fetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
+      <!-- Region viva SIEMPRE presente (V3-UX-05): una region que aparece ya con su texto
+           no se anuncia de forma fiable; esta existe vacia y se rellena. -->
+      <span role="status" class="text-kq-text-muted" data-test="pagination-updating">{{
+        fetching ? t('common.updating') : ''
+      }}</span>
     </p>
     <div class="flex gap-2">
       <button
+        v-aria-disabled="page <= 1"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-        :disabled="page <= 1"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
         @click="goToPage(page - 1)"
       >
         {{ t('common.pagination.previous') }}
       </button>
-      <p aria-current="page">
+      <!-- Sin `aria-current`: es un texto, no un enlace de un conjunto (V7-PA-10). -->
+      <p>
         {{ t('common.pagination.page', { page, pages: totalPages }) }}
       </p>
       <button
+        v-aria-disabled="page >= totalPages"
         type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
-        :disabled="page >= totalPages"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt aria-disabled:opacity-50"
         @click="goToPage(page + 1)"
       >
         {{ t('common.pagination.next') }}
