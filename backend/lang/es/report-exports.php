@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 return [
     'mail' => [
-        'subject' => 'Tu informe ya se puede descargar',
+        'subject' => ':app_name · tu informe ya se puede descargar',
         'greeting' => 'Hola, :name:',
         'intro' => 'El informe de horas del :from al :to ya esta generado, en formato :format.',
         'intro_legal' => 'La exportacion para la Inspeccion de Trabajo del :from al :to ya esta generada, en formato :format.',

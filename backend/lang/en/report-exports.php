@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 return [
     'mail' => [
-        'subject' => 'Your report is ready to download',
+        'subject' => ':app_name · your report is ready to download',
         'greeting' => 'Hello, :name:',
         'intro' => 'The hours report from :from to :to has been generated, in :format format.',
         'intro_legal' => 'The Labour Inspectorate export from :from to :to has been generated, in :format format.',

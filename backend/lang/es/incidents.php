@@ -41,7 +41,7 @@ return [
     ],
 
     'mail' => [
-        'subject' => 'KronoQR · incidencias del registro horario pendientes de revisar',
+        'subject' => ':app_name · incidencias del registro horario pendientes de revisar',
         'greeting' => 'Hola:',
         'intro' => 'La revisión automática del registro horario ha encontrado :count situación(es) en tu departamento que necesitan que las mire una persona.',
         'line' => ':date · :employee · :type (prioridad :severity)',

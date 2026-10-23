@@ -233,7 +233,7 @@ return [
      */
     'weekly_summary' => [
 
-        'subject' => 'KronoQR · summary for the week of :from to :to',
+        'subject' => ':app_name · summary for the week of :from to :to',
 
         'greeting' => 'Hello,',
 

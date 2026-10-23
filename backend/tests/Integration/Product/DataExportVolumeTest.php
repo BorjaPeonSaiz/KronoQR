@@ -473,7 +473,7 @@ it('lleva los datos del cliente, incluidas las versiones sustituidas y las corre
         ->and($contenido)->toContain('Hotel de ejemplo, S.L.')
         // Y el README, que es lo que hace la exportacion utilizable dentro de dos
         // años sin el producto delante.
-        ->and($contenido)->toContain('Exportacion integra de los datos de KronoQR')
+        ->and($contenido)->toContain('exportacion integra de los datos')
         ->and($contenido)->toContain('Europe/Madrid');
 })->group('RF-PD-14', 'RL-04', 'RL-20');
 

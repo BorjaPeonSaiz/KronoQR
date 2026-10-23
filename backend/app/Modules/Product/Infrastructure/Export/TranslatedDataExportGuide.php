@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DataExportGuide;
 use App\Modules\Product\Domain\ValueObject\DataExportCatalog;
 use App\Modules\Product\Domain\ValueObject\DataExportManifest;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Contracts\Translation\Translator;
@@ -42,12 +43,21 @@ use Illuminate\Contracts\Translation\Translator;
  */
 final readonly class TranslatedDataExportGuide implements DataExportGuide
 {
-    public function __construct(private Translator $translator) {}
+    /**
+     * La marca entra por el puerto (R6-PL-07): el titulo dice de QUE instalacion
+     * son los datos —«Hotel Marina», no el producto—, que es lo que busca quien
+     * abre el ZIP dentro de dos años. «KronoQR» solo aparece donde se habla del
+     * producto («no necesitas KronoQR para leerlo»).
+     */
+    public function __construct(
+        private Translator $translator,
+        private BrandingProvider $branding,
+    ) {}
 
     public function render(DataExportManifest $manifest, string $locale): string
     {
         $sections = [
-            '# '.$this->text('title', [], $locale),
+            '# '.$this->text('title', ['app_name' => $this->branding->current()->applicationName], $locale),
             $this->text('intro', [], $locale),
             $this->section('generated_heading', 'generated', $this->about($manifest, $locale), $locale),
             $this->section('timezone_heading', 'timezone_body', ['timezone' => $manifest->siteTimezone], $locale),

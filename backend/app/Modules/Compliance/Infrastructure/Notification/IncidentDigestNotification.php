@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Notification;
 use App\Modules\Compliance\Application\Port\IncidentDigest;
 use App\Modules\Compliance\Application\Port\IncidentNotice;
 use App\Modules\Compliance\Application\UseCase\NotifyPendingIncidents;
+use App\Modules\Shared\Infrastructure\Notification\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
@@ -68,7 +69,19 @@ final class IncidentDigestNotification extends Notification
      */
     private const int DETAILED_LINES = 20;
 
-    public function __construct(private readonly IncidentDigest $digest) {}
+    /**
+     * @param  string  $brandName  El nombre de la instalacion (R6-PL-07): va en el
+     *                             asunto, la cabecera, la despedida y el pie.
+     *                             Nunca `APP_NAME`.
+     */
+    public function __construct(
+        private readonly IncidentDigest $digest,
+        private readonly string $brandName,
+    ) {
+        // El idioma del destinatario tambien para lo que Laravel pinta al
+        // enviar, no solo para las lineas del cuerpo (V6-PL-05).
+        $this->locale = $digest->locale;
+    }
 
     /**
      * @return list<string>
@@ -82,8 +95,8 @@ final class IncidentDigestNotification extends Notification
     {
         $locale = $this->digest->locale;
 
-        $message = (new MailMessage)
-            ->subject(Lang::get('incidents.mail.subject', [], $locale))
+        $message = BrandedMailMessage::create($this->brandName, $locale)
+            ->subject(Lang::get('incidents.mail.subject', ['app_name' => $this->brandName], $locale))
             ->greeting(Lang::get('incidents.mail.greeting', [], $locale))
             ->line(Lang::get('incidents.mail.intro', ['count' => \count($this->digest->incidents)], $locale));
 

@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\WeeklySummaryRecipient;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WeeklySummary;
+use App\Modules\Shared\Infrastructure\Notification\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
@@ -57,10 +58,20 @@ use Illuminate\Support\Facades\Lang;
  */
 final class WeeklySummaryNotification extends Notification
 {
+    /**
+     * @param  string  $brandName  El nombre de la instalacion (R6-PL-07): va en el
+     *                             asunto, la cabecera, la despedida y el pie.
+     *                             Nunca `APP_NAME`.
+     */
     public function __construct(
         private readonly WeeklySummaryRecipient $recipient,
         private readonly WeeklySummary $summary,
-    ) {}
+        private readonly string $brandName,
+    ) {
+        // El idioma del destinatario tambien para lo que Laravel pinta al
+        // enviar, no solo para las lineas del cuerpo (V6-PL-05).
+        $this->locale = $recipient->locale;
+    }
 
     /**
      * @return list<string>
@@ -75,8 +86,9 @@ final class WeeklySummaryNotification extends Notification
         $locale = $this->recipient->locale;
         $week = $this->summary->week;
 
-        $message = (new MailMessage)
+        $message = BrandedMailMessage::create($this->brandName, $locale)
             ->subject(Lang::get('reports.weekly_summary.subject', [
+                'app_name' => $this->brandName,
                 'from' => $week->isoStart(),
                 'to' => $week->isoEnd(),
             ], $locale))
