@@ -65,13 +65,26 @@ it('sirve el mismo color de fondo y el de serie que el manifiesto estatico', fun
         ->and($vite)->toBe(kioskManifestParityViteString('theme_color'));
 })->group('RF-PD-08');
 
-it('declara el mismo display y la misma orientacion que el manifiesto estatico', function (): void {
+it('usa como color de fondo y de tema el token del fondo del quiosco', function (): void {
+    $theme = Repo::contents('packages/web-kit/src/theme.css');
+
+    expect(preg_match('/--kq-color-kiosk-surface:\s*(#[0-9a-fA-F]{6})\s*;/', $theme, $token))->toBe(1)
+        ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'BACKGROUND_COLOR'))
+        ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_HANDLER, 'PRODUCT_THEME_COLOR'))
+        ->and(strtolower($token[1] ?? ''))->toBe(kioskManifestParityViteString('background_color'));
+})->group('RF-PD-08');
+
+it('declara el mismo display y ninguno fija la orientacion que el manifiesto estatico', function (): void {
     $resource = Repo::contents(KIOSK_MANIFEST_PARITY_RESOURCE);
 
-    foreach (['display', 'orientation'] as $key) {
+    foreach (['display'] as $key) {
         expect(preg_match("/'{$key}'\\s*=>\\s*'([^']*)'/", $resource, $match))->toBe(1)
             ->and($match[1] ?? null)->toBe(kioskManifestParityViteString($key));
     }
+
+    // Sin orientacion en ninguno de los dos: la tablet se monta tambien en vertical (V6-KI-03).
+    expect($resource)->not->toContain("'orientation'")
+        ->and(kioskManifestParityViteManifest())->not->toContain('orientation:');
 
     expect(preg_match("/'display_override'\\s*=>\\s*\\[([^\\]]*)\\]/", $resource, $php))->toBe(1)
         ->and(preg_match('/display_override:\\s*\\[([^\\]]*)\\]/', kioskManifestParityViteManifest(), $vite))->toBe(1)

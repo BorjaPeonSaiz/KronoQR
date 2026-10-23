@@ -113,9 +113,8 @@ it('sirve el manifiesto de serie, sin autenticar, cuando no hay marca', function
         'scope' => '/kiosk/',
         'display' => 'fullscreen',
         'display_override' => ['fullscreen', 'standalone'],
-        'orientation' => 'landscape',
-        'theme_color' => '#0f172a',
-        'background_color' => '#0f172a',
+        'theme_color' => '#241a15',
+        'background_color' => '#241a15',
         'icons' => BRANDING_MANIFEST_PRODUCT_ICONS,
     ]);
 })->group('RF-PD-01', 'RF-PD-08');
@@ -133,10 +132,11 @@ it('publica el nombre, el color y el logotipo PNG cuadrado con su tamaño real',
 
     expect($response->json('name'))->toBe('Hotel Marina')
         ->and($response->json('short_name'))->toBe('Hotel Marina')
-        ->and($response->json('theme_color'))->toBe('#0f5c8c')
+        ->and($response->json('theme_color'))->toBe('#241a15')
         // Lo que es comportamiento del quiosco no se mueve con la marca.
         ->and($response->json('id'))->toBe('/kiosk/')
-        ->and($response->json('background_color'))->toBe('#0f172a')
+        ->and($response->json('background_color'))->toBe('#241a15')
+        ->and($response->json())->not->toHaveKey('orientation')
         // La misma URL con huella que publica `GET /api/v1/branding`, en una
         // sola entrada y con el tamaño que mide de verdad: declararla a 192 o a
         // 512 sin medirlo hace que Chromium avise de un manifiesto incoherente.
@@ -163,7 +163,7 @@ it('mantiene los iconos de serie si el logotipo no sirve de icono', function (st
 
     expect($response->json('icons'))->toBe(BRANDING_MANIFEST_PRODUCT_ICONS)
         ->and($response->json('name'))->toBe('Hotel Marina')
-        ->and($response->json('theme_color'))->toBe('#0f5c8c');
+        ->and($response->json('theme_color'))->toBe('#241a15');
 })->with([
     'SVG' => ['logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"></svg>'],
     'PNG de 1 px' => ['logo.png', FixedLogo::onePixelPng()],
@@ -188,7 +188,7 @@ it('sin la marca blanca en el plan, conserva el nombre pero no el color ni el lo
     // ADR-023: el mismo decorador que `GET /branding`. El nombre identifica al
     // obligado y no lo degrada la licencia (regla dura 15).
     expect($response->json('name'))->toBe('Hotel Marina')
-        ->and($response->json('theme_color'))->toBe('#0f172a')
+        ->and($response->json('theme_color'))->toBe('#241a15')
         ->and($response->json('icons'))->toBe(BRANDING_MANIFEST_PRODUCT_ICONS);
 })->group('RF-PD-08', 'RF-PD-05');
 
