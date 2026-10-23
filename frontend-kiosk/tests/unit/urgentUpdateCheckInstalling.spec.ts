@@ -43,7 +43,7 @@ function registrationWhoseUpdateFinds(found: ServiceWorker | null): FakeRegistra
 /** `registerSW` que entrega la `registration` y guarda las opciones para disparar `onNeedRefresh`. */
 function loaderFor(
   registration: FakeRegistration,
-  captured: { options?: RegisterSWOptions },
+  captured: { options: RegisterSWOptions | undefined },
 ): RegisterSWLoader {
   return () =>
     Promise.resolve({
@@ -70,7 +70,7 @@ describe('V21-3-KI-4 — comprobacion urgente con el precacheo en curso (RF-KI-0
     const registration = await registerServiceWorker({
       urgentState: () => 'urgent',
       onUrgentCheckEmpty,
-      loadRegisterSW: loaderFor(fake, {}),
+      loadRegisterSW: loaderFor(fake, { options: undefined }),
     })
     await Promise.all(fake.updates)
 
@@ -84,7 +84,7 @@ describe('V21-3-KI-4 — comprobacion urgente con el precacheo en curso (RF-KI-0
     const registration = await registerServiceWorker({
       urgentState: () => 'urgent',
       onUrgentCheckEmpty,
-      loadRegisterSW: loaderFor(registrationWhoseUpdateFinds(null), {}),
+      loadRegisterSW: loaderFor(registrationWhoseUpdateFinds(null), { options: undefined }),
     })
 
     await vi.waitFor(() => expect(onUrgentCheckEmpty).toHaveBeenCalledTimes(1))
@@ -92,7 +92,7 @@ describe('V21-3-KI-4 — comprobacion urgente con el precacheo en curso (RF-KI-0
   })
 
   it('cuando la instalacion acaba, la version queda pendiente y se intenta aplicar', async () => {
-    const captured: { options?: RegisterSWOptions } = {}
+    const captured: { options: RegisterSWOptions | undefined } = { options: undefined }
     const canApply = vi.fn(() => false)
     const registration = await registerServiceWorker({
       urgentState: () => 'urgent',
