@@ -61,7 +61,7 @@ describe('sesion de escaneo', () => {
     session.dismiss()
   })
 
-  it('mide la latencia del camino critico (RNF-P-03: < 300 ms)', () => {
+  it('mide la latencia del camino critico, la parte del quiosco de RNF-P-01 (< 300 ms, doc 02 §6)', () => {
     const { sound } = soundSpy()
     let clockMs = 1000
     const session = useScanSession({
@@ -131,7 +131,7 @@ describe('sesion de escaneo', () => {
   })
 })
 
-// RF-AT-05, RF-KI-06, RNF-P-03 (V7-KI-01): la pantalla es inmediata y muda; el
+// RF-AT-05, RF-KI-06, RNF-P-01 (V7-KI-01): la pantalla es inmediata y muda; el
 // tono es el del desenlace del servidor dentro de SCAN_SOUND_SERVER_WAIT_MS.
 describe('sonido de la sesion: tras la respuesta del servidor', () => {
   beforeEach(() => {

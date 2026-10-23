@@ -13,7 +13,7 @@ npx playwright test --grep @RF-KI-09   # por etiqueta de requisito (§9.6)
 
 | Fichero                    | Cubre                                                                                                                                                                  |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scan.spec.ts`             | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-01`, `@RF-AT-05`, `@RL-09`, `@RQ-04` — escaneo y confirmacion                                 |
+| `scan.spec.ts`             | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-01`, `@RF-AT-05`, `@RL-09`, `@RQ-04`, `@RNF-P-01` — escaneo y confirmacion                    |
 | `degraded.spec.ts`         | `@RF-KI-02`, `@RF-QR-05`, `@RF-AT-05`, `@RQ-04` — tarjeta deteriorada                                                                                                  |
 | `worn.spec.ts`             | `@RF-QR-05`, `@RQ-04` — tarjeta gastada, al limite de la correccion de errores                                                                                         |
 | `qr-decode-budget.spec.ts` | `@RF-QR-05`, `@RNF-P-03` — presupuesto de tiempo de la decodificacion                                                                                                  |

@@ -234,9 +234,10 @@ test(
     await expect.poll(() => heartbeatHeld).toBe(true)
 
     // Despues: la confirmacion y el envio del fichaje ocurren con el latido
-    // SIN resolver. El presupuesto de 300 ms (RNF-P-03) NO se afirma aqui: es
-    // de rendimiento y depende de la carga de la maquina; lo afirman
-    // `tests/unit/ScanView.spec.ts` (118) y `tests/e2e/scan.spec.ts` (111).
+    // SIN resolver. El presupuesto de 300 ms (la parte del quiosco de RNF-P-01,
+    // doc 02 §6) NO se afirma aqui: es de rendimiento y depende de la carga de
+    // la maquina; lo afirman `tests/unit/ScanView.spec.ts` y `tests/e2e/scan.spec.ts`
+    // («confirma en menos de 300 ms»).
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
 

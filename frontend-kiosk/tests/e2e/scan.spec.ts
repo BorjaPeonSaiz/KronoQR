@@ -123,8 +123,11 @@ test(
 
 test(
   'confirma en menos de 300 ms, antes de saber nada del servidor',
-  { tag: ['@RF-AT-05', '@RF-KI-02'] },
+  { tag: ['@RF-AT-05', '@RF-KI-02', '@RNF-P-01'] },
   async ({ page }) => {
+    // La sonda `scan-latency-ms` mide la parte del quiosco de RNF-P-01 (de la
+    // lectura a la confirmacion en pantalla, < 300 ms en el doc 02 §6), no la
+    // decodificacion de RNF-P-03, que mide `qr-decode-budget.spec.ts` (KP2).
     // El servidor tarda tres segundos: el empleado no puede esperarlo.
     await page.route('**/api/v1/scan', async (route) => {
       // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
@@ -543,7 +546,7 @@ test(
 
 test(
   'respuesta tardia: la pantalla confirma muda, a los 2 s suena «pendiente» y la respuesta posterior no vuelve a sonar (RF-AT-05)',
-  { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-03'] },
+  { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-01'] },
   async ({ page }) => {
     const { readTones } = await installAudioProbe(page)
     // El servidor contesta a los 3 s: despues del plazo del sonido (2 s) y con

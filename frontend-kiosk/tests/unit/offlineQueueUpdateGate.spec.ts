@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// @vitest-environment jsdom
 // Cableado de la puerta de actualizacion sobre la cola offline (RF-KI-07,
 // tarea 3.12): cada escaneo que pasa por `submission.submit` dice «hubo
 // alguien delante de la camara» (`storeLastScanAt`), y `canUpdateNow` lee esa
