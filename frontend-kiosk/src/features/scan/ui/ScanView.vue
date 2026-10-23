@@ -312,7 +312,7 @@ onUnmounted(() => {
          de la tolerancia de la instalacion. Nunca cambia el camino de
          fichaje: es informativo, igual que `ConnectionStatusBadge`.
 
-         `text-kiosk-notice` (#78350f) es SOLO para texto en blanco sobre ese
+         `text-kiosk-notice` (el marron del aviso) es SOLO para texto en blanco sobre ese
          fondo (ver `ScanConfirmationPanel`/`ConnectionStatusBadge`): usado
          como color de TEXTO sobre `bg-kq-kiosk-surface-raised` no llega a
          2:1 (fallo de la primera version de este aviso, revision de la
