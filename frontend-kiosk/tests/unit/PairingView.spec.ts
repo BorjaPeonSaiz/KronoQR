@@ -24,6 +24,8 @@ interface FetchScript {
   pairAtCall: number
   /** Cuantas veces se ha pedido un codigo (`/pair`), para comprobar «Generar otro». */
   pairRequests: number
+  /** Respuesta de `GET /api/v1/branding`: JSON, `fail` (sin red) o `hang` (no contesta). */
+  branding?: Record<string, unknown> | 'fail' | 'hang'
 }
 
 function installFetch(script: FetchScript): void {
@@ -31,6 +33,14 @@ function installFetch(script: FetchScript): void {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
+
+      if (url.endsWith('/api/v1/branding')) {
+        if (script.branding === undefined || script.branding === 'fail') {
+          throw new TypeError('Failed to fetch')
+        }
+        if (script.branding === 'hang') return new Promise<Response>(() => undefined)
+        return new Response(JSON.stringify(script.branding), { status: 200 })
+      }
 
       if (url.includes('/api/v1/kiosk/pair/claim')) {
         script.claimCalls += 1
@@ -77,6 +87,8 @@ async function render() {
 }
 
 afterEach(() => {
+  localStorage.removeItem('kronoqr.kiosk.branding')
+  document.documentElement.style.cssText = ''
   vi.unstubAllGlobals()
   localStorage.removeItem('kronoqr.kiosk.device_token')
   localStorage.removeItem('kronoqr.kiosk.device_id')
@@ -156,6 +168,86 @@ describe('pantalla de emparejamiento — RF-PD-06', () => {
     const status = wrapper.get('[data-testid="pairing-status"]')
     expect(status.attributes('role')).toBe('status')
     expect(status.attributes('aria-live')).toBe('polite')
+
+    wrapper.unmount()
+  })
+})
+
+describe('marca del cliente antes de vincular — RF-PD-08, DC11', () => {
+  const HOTEL = {
+    application_name: 'Hotel Marina',
+    accent_color: '#0B6E4F',
+    logo_url: null,
+    locales: { default: 'es', available: ['es', 'en'] },
+    privacy_notice: { controller_name: null, policy_url: null, retention_years: 4 },
+  }
+
+  it('pide la marca publica y muestra el nombre del cliente, sin esperar al emparejamiento', async () => {
+    installFetch({ claimCalls: 0, pairAtCall: 999, pairRequests: 0, branding: HOTEL })
+    const { wrapper } = await render()
+
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="brand-name"]').text()).toBe('Hotel Marina'),
+    )
+    expect(document.title).toContain('Hotel Marina')
+    // Se guarda la copia para el proximo arranque sin red.
+    expect(localStorage.getItem('kronoqr.kiosk.branding')).not.toBeNull()
+    // Y el codigo aparece igualmente.
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="pairing-code"]').text()).toBe('483 921'),
+    )
+
+    wrapper.unmount()
+  })
+
+  it('si la marca falla, sigue con la del producto y el emparejamiento no se detiene', async () => {
+    installFetch({ claimCalls: 0, pairAtCall: 999, pairRequests: 0, branding: 'fail' })
+    const { wrapper } = await render()
+
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="pairing-code"]').text()).toBe('483 921'),
+    )
+    expect(wrapper.get('[data-testid="brand-name"]').text()).toBe('KronoQR')
+    expect(localStorage.getItem('kronoqr.kiosk.branding')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('si la marca no contesta nunca, el codigo se muestra igual', async () => {
+    installFetch({ claimCalls: 0, pairAtCall: 999, pairRequests: 0, branding: 'hang' })
+    const { wrapper } = await render()
+
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="pairing-code"]').text()).toBe('483 921'),
+    )
+
+    wrapper.unmount()
+  })
+
+  it('una marca invalida se ignora y no se guarda', async () => {
+    installFetch({
+      claimCalls: 0,
+      pairAtCall: 999,
+      pairRequests: 0,
+      branding: { application_name: 42, accent_color: 'rojo' },
+    })
+    const { wrapper } = await render()
+
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="pairing-code"]').text()).toBe('483 921'),
+    )
+    expect(wrapper.get('[data-testid="brand-name"]').text()).toBe('KronoQR')
+    expect(localStorage.getItem('kronoqr.kiosk.branding')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('con copia guardada, la pinta de inmediato aunque la red falle', async () => {
+    localStorage.setItem('kronoqr.kiosk.branding', JSON.stringify(HOTEL))
+    installFetch({ claimCalls: 0, pairAtCall: 999, pairRequests: 0, branding: 'fail' })
+    const { wrapper } = await render()
+
+    expect(wrapper.get('[data-testid="brand-name"]').text()).toBe('Hotel Marina')
 
     wrapper.unmount()
   })

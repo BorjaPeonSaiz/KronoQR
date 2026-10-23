@@ -25,7 +25,8 @@ document.documentElement.lang = locale
 // Marca blanca (RF-PD-08): la copia guardada -o la del producto, si no hay
 // ninguna- ANTES de montar nada. Sin red, sin `await`: es lo que evita un
 // parpadeo del nombre en el primer fotograma. `ScanView.vue` pide la version
-// fresca al servidor en segundo plano (`shared/branding/useBranding.ts`).
+// fresca al servidor en segundo plano (`shared/branding/useBranding.ts`); la
+// pantalla de emparejamiento tambien (DC11), antes de vincular la tablet.
 applyCachedBranding()
 
 const app = createApp(App)
