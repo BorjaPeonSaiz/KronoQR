@@ -55,3 +55,11 @@ it('la historia incluye el intento actual y va en UTC', function (): void {
             new DateTimeImmutable('2026-10-23 09:00:00', new DateTimeZone('Europe/Madrid')),
         ))->toThrow(InstantIsNotUtc::class);
 })->group('RN-22');
+
+it('no admite un cupo diario por encima del techo de 20 y si el techo justo', function (): void {
+    // A6 (24-10-2026): un cupo de cientos anularia el freno ante un defecto
+    // general. El adaptador de la configuracion aplica el techo antes.
+    expect((new ScanDiscardThreshold(10, 60, ScanDiscardThreshold::BUDGET_CEILING))->dailyBudget)->toBe(20)
+        ->and(static fn (): ScanDiscardThreshold => new ScanDiscardThreshold(10, 60, 21))
+        ->toThrow(InvalidArgumentException::class, 'no pasa de 20');
+})->group('RN-22');

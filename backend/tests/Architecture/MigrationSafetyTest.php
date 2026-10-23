@@ -126,6 +126,26 @@ function declaredContractions(): array
     ];
 }
 
+/**
+ * **Los ensanches de `varchar` declarados.**
+ *
+ * `ALTER COLUMN TYPE` reescribe la tabla en general, y **no** en un caso que
+ * PostgreSQL garantiza desde la 9.2: ampliar la longitud de un `varchar` (o
+ * pasarlo a `text`) solo toca el catalogo. El detector no ve la longitud de
+ * antes, asi que el caso se declara aqui con el mismo trinquete: lista exacta y
+ * tamaño afirmado abajo.
+ *
+ * @return array<string, list<string>>
+ */
+function declaredVarcharWidenings(): array
+{
+    return [
+        // ADR-061, A2 (24-10-2026): `discarded_scan_reports.attribution` pasa de
+        // `varchar(16)` a `varchar(24)` para admitir `fingerprint_match` (17).
+        '2026_10_24_100000_allow_fingerprint_match_attribution.php' => ['ALTER COLUMN TYPE'],
+    ];
+}
+
 it('no aplica en up() ningun patron que exija parada de servicio', function (string $file): void {
     $up = MigrationSafety::upCodeOf((string) file_get_contents($file));
 
@@ -142,6 +162,7 @@ it('no aplica en up() ningun patron que exija parada de servicio', function (str
     // empeore —que añada un patron mas— falla igual.
     $esperado = knownMigrationDebt()[basename($file)]
         ?? declaredContractions()[basename($file)]
+        ?? declaredVarcharWidenings()[basename($file)]
         ?? [];
 
     expect($violaciones)->toBe($esperado, basename($file)."\n".implode("\n", $explicacion));
@@ -162,6 +183,15 @@ it('mantiene acotadas las contracciones declaradas', function (): void {
     // lista exige tocar esta cifra, y esa linea del diff es la que hace que
     // alguien pregunte si la version anterior de verdad dejo de usar la columna.
     expect(declaredContractions())->toHaveCount(1);
+})->group('RNF-D-04');
+
+it('mantiene acotados los ensanches de varchar declarados', function (): void {
+    // El mismo trinquete: ampliar la lista exige tocar esta cifra.
+    expect(declaredVarcharWidenings())->toHaveCount(1);
+
+    foreach (array_keys(declaredVarcharWidenings()) as $declarada) {
+        expect(array_keys(migrationFiles()))->toContain($declarada);
+    }
 })->group('RNF-D-04');
 
 it('no declara como contraccion ninguna migracion que no exista', function (): void {

@@ -244,7 +244,7 @@ it('lleva a la revision diaria el descarte del servidor con sus intentos aunque 
 
     expect($descartes)->toHaveCount(1)
         ->and($descartes[0]->scanId)->toBe($scanId)
-        ->and($descartes[0]->source())->toBe('server')
+        ->and($descartes[0]->source->value)->toBe('server')
         ->and($descartes[0]->serverAttempts)->toBe(12)
         ->and($descartes[0]->problem())->toBe('scan-discarded');
 })->group('RN-22', 'RF-PR-01');
@@ -268,6 +268,7 @@ it('lee el umbral de la configuracion y no corrige en silencio uno imposible', f
     'dos intentos' => [['min_attempts' => '2', 'min_minutes' => '60', 'daily_budget' => '3'], null],
     'diez minutos' => [['min_attempts' => '10', 'min_minutes' => '10', 'daily_budget' => '3'], null],
     'cupo negativo' => [['min_attempts' => '10', 'min_minutes' => '60', 'daily_budget' => '-1'], null],
+    'cupo por encima del techo: se aplica el techo' => [['min_attempts' => '10', 'min_minutes' => '60', 'daily_budget' => '25'], new ScanDiscardThreshold(10, 60, 20)],
     'texto' => [['min_attempts' => 'diez', 'min_minutes' => '60', 'daily_budget' => '3'], null],
     'vacio' => [['min_attempts' => '', 'min_minutes' => '60', 'daily_budget' => '3'], null],
 ])->group('RN-22');

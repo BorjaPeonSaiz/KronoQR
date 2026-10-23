@@ -784,7 +784,8 @@ ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
  *
  * QUE SE BORRA: las filas de `scan_processing_failures` de mas de 30 dias. Son
  * datos TECNICOS -la historia con la que el servidor decide descartar un
- * fichaje que no consigue procesar-, sin datos personales. Como la del
+ * fichaje que no consigue procesar- pero SEUDONIMIZADOS: la huella enlaza con la
+ * tarjeta y con su titular (ADR-061, A4), y por eso se purgan a los 30 dias. Como la del
  * historico de errores: sin confirmacion y sin asiento. El descarte en si, que
  * si es constancia, vive en `scan_events` y en `discarded_scan_reports`.
  *

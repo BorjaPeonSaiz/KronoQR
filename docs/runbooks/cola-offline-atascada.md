@@ -452,8 +452,11 @@ producto** que hay que reproducir; no es un problema de la instalación.
 - Si el servidor supo de quién era el fichaje, una incidencia **«Fichaje
   descartado»** (una por persona y jornada) con el origen `servidor` y el número
   de intentos. Es la misma incidencia de RN-22 que abre el aviso de un quiosco.
-- Si **no** se pudo atribuir, **no hay incidencia**: solo la alerta. Cruza la
-  hora y el quiosco (abajo) con RRHH para saber quién fichó entonces.
+- Si la tarjeta no se pudo atribuir por su firma, el servidor busca a su titular
+  por la **huella del contenido** en fichajes aceptados anteriores de esa misma
+  tarjeta (atribución `fingerprint_match`) y abre la misma incidencia.
+- Si tampoco así, una incidencia **sin persona** para el administrador, una por
+  quiosco y jornada, con el quiosco y la hora. Crúzala con el cuadrante.
 
 ### Cómo se corrige, con trazabilidad
 
@@ -499,6 +502,12 @@ perder nada.
    descartes, uno por hora. Los números (`SCAN_DISCARD_MIN_ATTEMPTS`,
    `SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`) viven en el `.env`.
 4. Nunca borres ni desvincules la tablet (§5): su cola es el registro.
+
+**Si aun así se reempareja la tablet como dispositivo nuevo** (avería, sustitución):
+un fichaje envenenado que quedara en su cola **deja de sumar intentos** a su
+historia, porque los intentos solo cuentan con el mismo quiosco que el primero
+(ADR-061 §1). Vuelve a empezar desde cero: más espera antes de un descarte, nunca
+un descarte de más. Falla hacia lo seguro; no hay que hacer nada.
 
 **Relacionados:** [`quiosco-no-responde.md`](quiosco-no-responde.md) ·
 [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) ·

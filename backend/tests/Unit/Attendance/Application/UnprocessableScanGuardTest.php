@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\Command\ScanBatch;
+use App\Modules\Attendance\Application\Port\CardFingerprintOwners;
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\DiscardedScanReportLog;
 use App\Modules\Attendance\Application\Port\DiscardedScanReportRecord;
@@ -27,11 +28,13 @@ use App\Modules\Attendance\Application\UseCase\ScanRegistration;
 use App\Modules\Attendance\Application\UseCase\UnprocessableScanGuard;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
+use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
 use App\Modules\Attendance\Domain\ValueObject\ScanDiscardThreshold;
 use App\Modules\Attendance\Domain\ValueObject\ScanFailureHistory;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use Illuminate\Database\ConnectionInterface;
@@ -154,7 +157,7 @@ final class EventosDelGuardian implements EventPublisher
 }
 
 /**
- * @param  array{clasifica?: bool, libro?: LibroDeFallosDePrueba, escaneos?: RegistroDeEscaneosDelGuardian, umbral?: ScanDiscardThreshold, resolutor?: CredentialResolver, metricas?: RecordingScanMetrics, avisos?: AvisosDelGuardian, eventos?: EventosDelGuardian}  $piezas
+ * @param  array{clasifica?: bool, libro?: LibroDeFallosDePrueba, escaneos?: RegistroDeEscaneosDelGuardian, umbral?: ScanDiscardThreshold, resolutor?: CredentialResolver, metricas?: RecordingScanMetrics, avisos?: AvisosDelGuardian, eventos?: EventosDelGuardian, huella?: string|null}  $piezas
  */
 function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
 {
@@ -212,6 +215,15 @@ function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
         connection: $conexion,
         logger: new NullLogger,
         floor: new ConstantTimeFloor(0),
+        fingerprints: new class($piezas['huella'] ?? null) implements CardFingerprintOwners
+        {
+            public function __construct(private readonly ?string $dueno) {}
+
+            public function latestAcceptedOwner(string $payloadFingerprint, DateTimeImmutable $notBefore, DateTimeImmutable $notAfter): ?string
+            {
+                return $this->dueno;
+            }
+        },
     );
 }
 
@@ -448,3 +460,57 @@ it('procesa en el lote lo que va detras de un elemento descartado', function ():
         // Un descarte no es un no procesado: no suma a la alerta del lote.
         ->and($metricas->notProcessed)->toBe([]);
 })->group('RN-22', 'RN-21', 'RF-KI-04');
+
+// --- A2: la huella del contenido, y nadie en scan_events salvo por tarjeta ----
+
+it('atribuye por la huella una tarjeta que no se atribuye por su firma, sin poner persona en scan_events', function (bool $resolutorLanza): void {
+    $escaneos = new RegistroDeEscaneosDelGuardian;
+    $avisos = new AvisosDelGuardian;
+    $eventos = new EventosDelGuardian;
+
+    $resultado = intentarConVeneno(guardianDePrueba([
+        'escaneos' => $escaneos,
+        'avisos' => $avisos,
+        'eventos' => $eventos,
+        'huella' => GUARDIAN_EMPLOYEE,
+        'resolutor' => new class($resolutorLanza) implements CredentialResolver
+        {
+            public function __construct(private readonly bool $lanza) {}
+
+            public function resolve(string $qrPayload): CredentialResolution
+            {
+                if ($this->lanza) {
+                    throw new RuntimeException('el resolutor era lo roto');
+                }
+
+                return CredentialResolution::rejected(CredentialRejectionReason::INVALID_SIGNATURE);
+            }
+        },
+    ]), new LogicException('veneno'));
+
+    /** @var UnprocessableScanDiscarded $evento */
+    $evento = $eventos->publicados[0];
+
+    expect($resultado)->toBeInstanceOf(RegisterScanResult::class)
+        ->and($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::FINGERPRINT_MATCH)
+        ->and($avisos->avisos[0]->attribution->ownerUuid)->toBe(GUARDIAN_EMPLOYEE)
+        ->and($escaneos->filas[0]->employeeUuid)->toBeNull()
+        ->and($evento->attribution)->toBe(DiscardedScanAttributionMethod::FINGERPRINT_MATCH);
+})->with(['el resolutor no atribuye' => [false], 'el resolutor lanza' => [true]])->group('RN-22');
+
+it('deja el descarte sin atribuir si la huella tampoco aparece', function (): void {
+    $avisos = new AvisosDelGuardian;
+
+    intentarConVeneno(guardianDePrueba([
+        'avisos' => $avisos,
+        'resolutor' => new class implements CredentialResolver
+        {
+            public function resolve(string $qrPayload): CredentialResolution
+            {
+                return CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN);
+            }
+        },
+    ]), new LogicException('veneno'));
+
+    expect($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::NONE);
+})->group('RN-22');

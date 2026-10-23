@@ -230,3 +230,18 @@ it('no repite la recogida de una solicitud consumida sin instante de recogida', 
         ->toBe(ClaimOutcome::Rejected)
         ->and($sinInstante->reclaims)->toBe(0);
 })->group('RF-PD-06');
+
+it('no repite la recogida si el token anterior ya se uso', function (): void {
+    expect(consumidaA()->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN, previousTokenUsed: true))
+        ->toBe(ClaimOutcome::Rejected)
+        ->and(consumidaA()->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN, previousTokenUsed: false))
+        ->toBe(ClaimOutcome::Reclaimed);
+})->group('RF-PD-06', 'RS-04');
+
+it('no repite la recogida mas de tres veces', function (): void {
+    expect(consumidaA(reclaims: PairingRequest::MAX_RECLAIMS - 1)->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Reclaimed)
+        ->and(consumidaA(reclaims: PairingRequest::MAX_RECLAIMS)->claim(instante('2026-09-07T10:00:20Z'), secretMatches: true, origin: RECOGIDA_REPETIDA_ORIGEN))
+        ->toBe(ClaimOutcome::Rejected)
+        ->and(PairingRequest::MAX_RECLAIMS)->toBe(3);
+})->group('RF-PD-06');

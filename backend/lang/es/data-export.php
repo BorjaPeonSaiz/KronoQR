@@ -432,6 +432,17 @@ return [
             ],
         ],
 
+        'scan_processing_failures' => [
+            'summary' => 'Los intentos de procesar un fichaje que fallaron en el servidor durante los ultimos 30 dias, uno por intento. Son datos tecnicos, pero **seudonimizados**: cada intento se refiere a un fichaje de una tarjeta o de un codigo concreto, asi que se tratan como datos personales. Sirven para saber por que el servidor acabo descartando un fichaje (ver `discarded_scan_reports.csv`). No incluyen el contenido del QR, el codigo tecleado ni la huella de la tarjeta.',
+            'columns' => [
+                'scan_id' => 'Identificador del fichaje, generado por la tablet. El mismo que en `discarded_scan_reports.csv` si acabo descartado.',
+                'device_uuid' => 'Quiosco desde el que llego el intento.',
+                'origin' => 'Por donde se ficho: tarjeta o PIN.',
+                'failed_at' => 'Cuando fallo el intento, con el reloj del servidor (UTC).',
+                'exception_class' => 'El tipo de error que se produjo, sin su mensaje. Es lo que necesita el soporte tecnico para reproducirlo.',
+            ],
+        ],
+
         'audit_log' => [
             'summary' => 'El registro de auditoria completo, con su cadena de huellas. Ver el apartado «Verificar la cadena de auditoria por tu cuenta» de este documento.',
             'columns' => [

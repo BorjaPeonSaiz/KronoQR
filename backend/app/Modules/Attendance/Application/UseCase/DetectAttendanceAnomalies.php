@@ -796,7 +796,7 @@ final readonly class DetectAttendanceAnomalies
                 'problem' => $first->problem(),
                 'attribution' => $first->attribution->value,
                 'reports' => $group['reports'],
-                'source' => $first->source(),
+                'source' => $first->source->value,
             ];
 
             // Solo si lo descarto el servidor: el `context` es de escalares y

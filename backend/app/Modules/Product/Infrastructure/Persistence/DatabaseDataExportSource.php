@@ -272,6 +272,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'incidents' => self::INCIDENTS,
         'scan_events' => self::SCAN_EVENTS,
         'discarded_scan_reports' => self::DISCARDED_SCAN_REPORTS,
+        'scan_processing_failures' => self::SCAN_PROCESSING_FAILURES,
         'audit_log' => self::AUDIT_LOG,
         'audit_chain_anchors' => self::AUDIT_CHAIN_ANCHORS,
         'users' => self::USERS,
@@ -549,6 +550,17 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           JOIN devices d         ON d.id = dr.device_id
           LEFT JOIN employees e  ON e.id = dr.owner_employee_id
          ORDER BY dr.id
+        SQL;
+
+    private const string SCAN_PROCESSING_FAILURES = <<<'SQL'
+        SELECT f.scan_id::text AS scan_id,
+               d.uuid::text    AS device_uuid,
+               f.origin,
+               to_char(f.failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS failed_at,
+               f.exception_class
+          FROM scan_processing_failures f
+          JOIN devices d ON d.id = f.device_id
+         ORDER BY f.id
         SQL;
 
     /*

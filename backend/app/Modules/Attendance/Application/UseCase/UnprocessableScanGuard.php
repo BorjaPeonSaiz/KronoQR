@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\UseCase;
 
+use App\Modules\Attendance\Application\Port\CardFingerprintOwners;
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\DiscardedScanReportLog;
 use App\Modules\Attendance\Application\Port\DiscardedScanReportRecord;
@@ -94,6 +95,13 @@ final readonly class UnprocessableScanGuard
     /** El codigo con el que se responde: el quiosco 2.2.x saca de la cola todo `200` o `422` (ADR-061 §4). */
     public const int HTTP_STATUS = 422;
 
+    /**
+     * Cuanto se mira hacia atras, desde el fichaje, para atribuir por la huella
+     * (ADR-061, A2). Acota una consulta sin indice propio; una tarjeta que no se
+     * ha usado en seis meses no da un titular fiable.
+     */
+    public const int FINGERPRINT_LOOKBACK_DAYS = 180;
+
     public function __construct(
         private ScanFailureClassifier $classifier,
         private ScanFailureLedger $ledger,
@@ -108,6 +116,7 @@ final readonly class UnprocessableScanGuard
         private ConnectionInterface $connection,
         private LoggerInterface $logger,
         private ConstantTimeFloor $floor,
+        private CardFingerprintOwners $fingerprints,
     ) {}
 
     /**
@@ -227,7 +236,11 @@ final readonly class UnprocessableScanGuard
             $recorded = $this->scans->record(new ScanRecord(
                 scanId: $scan->scanId,
                 deviceId: $scan->deviceId,
-                employeeUuid: $attribution->ownerUuid,
+                // Solo una tarjeta autentica pone persona en `scan_events`, como en
+                // RN-20 (ADR-061 §6). Por codigo o por huella, nadie: el codigo no
+                // autentica (ADR-043) y `claimed_employee_id` abriria la
+                // incidencia de RN-19; el dueño queda en `discarded_scan_reports`.
+                employeeUuid: $attribution->authenticates() ? $attribution->ownerUuid : null,
                 occurredAt: $scan->occurredAt,
                 recordedAt: $now,
                 origin: $scan->origin,
@@ -261,12 +274,11 @@ final readonly class UnprocessableScanGuard
                 scanId: $scan->scanId,
                 deviceId: $scan->deviceId,
                 deviceUuid: $scan->deviceUuid,
-                origin: $scan->origin->value,
+                origin: $scan->origin,
                 scannedAt: $scan->occurredAt,
                 discardedAt: $now,
-                firstFailedAt: $history->firstFailedAt,
-                attempts: $history->attempts,
-                attribution: $attribution->method->value,
+                history: $history,
+                attribution: $attribution->method,
                 employeeUuid: $attribution->ownerUuid,
             ));
 
@@ -328,19 +340,54 @@ final readonly class UnprocessableScanGuard
      * La atribucion del aviso del quiosco (ADR-047 §2): tarjeta autentica, o
      * codigo de una persona que puede fichar. Nunca el `token_hash` del padron.
      *
-     * Si lanza, `none`: atribuir es accesorio, registrar el descarte no. Sin
-     * atribucion no hay incidencia (RN-22); lo vera la alerta.
+     * **Una tarjeta que no se atribuye por su firma busca a su titular por la
+     * huella del contenido** (ADR-061, A2): el aceptado mas reciente con el mismo
+     * `payload_fingerprint`, dentro de {@see self::FINGERPRINT_LOOKBACK_DAYS}
+     * dias antes del fichaje. Tambien si el resolutor lanza, que puede ser
+     * justamente lo roto.
+     *
+     * Si todo lanza, `none`: atribuir es accesorio, registrar el descarte no.
      */
     private function attribute(GuardedScan $scan, DateTimeImmutable $now): DiscardedScanAttribution
     {
         $policy = new DiscardedScanAttributionPolicy;
 
         try {
-            if ($scan->origin === ScanOrigin::QR_KIOSK) {
-                return $policy->forCard($this->credentials->resolve($scan->qrPayload ?? ''), $scan->occurredAt, $now);
+            if ($scan->origin !== ScanOrigin::QR_KIOSK) {
+                return $policy->forEmployeeCode($this->employees->findByCode($scan->employeeCode ?? ''));
             }
 
-            return $policy->forEmployeeCode($this->employees->findByCode($scan->employeeCode ?? ''));
+            $byCard = $policy->forCard($this->credentials->resolve($scan->qrPayload ?? ''), $scan->occurredAt, $now);
+
+            if ($byCard->isAttributed()) {
+                return $byCard;
+            }
+        } catch (Throwable $failure) {
+            $this->logger->warning('attendance.scan_discard_unattributed', [
+                'scan_id' => $scan->scanId,
+                'device_id' => $scan->deviceUuid,
+                'failure' => $failure::class,
+            ]);
+
+            if ($scan->origin !== ScanOrigin::QR_KIOSK) {
+                return DiscardedScanAttribution::none();
+            }
+        }
+
+        return $this->attributeByFingerprint($scan, $now);
+    }
+
+    /**
+     * El titular por la huella del contenido, o `none` (ADR-061, A2).
+     */
+    private function attributeByFingerprint(GuardedScan $scan, DateTimeImmutable $now): DiscardedScanAttribution
+    {
+        try {
+            $owner = $this->fingerprints->latestAcceptedOwner(
+                $scan->contentFingerprint,
+                $scan->occurredAt->modify('-'.self::FINGERPRINT_LOOKBACK_DAYS.' days'),
+                $now,
+            );
         } catch (Throwable $failure) {
             $this->logger->warning('attendance.scan_discard_unattributed', [
                 'scan_id' => $scan->scanId,
@@ -350,5 +397,7 @@ final readonly class UnprocessableScanGuard
 
             return DiscardedScanAttribution::none();
         }
+
+        return $owner === null ? DiscardedScanAttribution::none() : DiscardedScanAttribution::fingerprintMatch($owner);
     }
 }

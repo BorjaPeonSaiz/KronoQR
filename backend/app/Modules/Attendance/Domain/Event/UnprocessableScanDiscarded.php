@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Event;
 
+use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
+use App\Modules\Attendance\Domain\ValueObject\ScanFailureHistory;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use DateTimeImmutable;
 
@@ -20,6 +24,10 @@ use DateTimeImmutable;
  * su UUID, el fichaje por su `scan_id`, la persona por su UUID y solo si se
  * atribuyo. Ni la clase de la excepcion —que es diagnostico y va al log— ni su
  * mensaje.
+ *
+ * Tipado con el vocabulario del dominio y validado: los dos instantes en UTC y
+ * la historia de fallos (al menos un intento, primer fallo en UTC) en su propio
+ * objeto de valor. Un asiento con valor legal no se escribe con cadenas sueltas.
  */
 final readonly class UnprocessableScanDiscarded implements DomainEvent
 {
@@ -29,21 +37,20 @@ final readonly class UnprocessableScanDiscarded implements DomainEvent
         /** `devices.id` del quiosco, para el sujeto del asiento. */
         public int $deviceId,
         public string $deviceUuid,
-        /** `qr_kiosk` o `pin_kiosk`. */
-        public string $origin,
+        public ScanOrigin $origin,
         /** Momento real del fichaje, segun la tablet (regla dura 9). */
         public DateTimeImmutable $scannedAt,
         /** Cuando lo descarto el servidor, con su reloj. */
         public DateTimeImmutable $discardedAt,
-        /** Reloj del servidor en el primer intento contado. */
-        public DateTimeImmutable $firstFailedAt,
-        /** Intentos fallidos contados, el ultimo incluido. */
-        public int $attempts,
-        /** `credential`, `employee_code` o `none`. */
-        public string $attribution,
+        /** Intentos contados y primer fallo, ya validados. */
+        public ScanFailureHistory $history,
+        public DiscardedScanAttributionMethod $attribution,
         /** Titular atribuido; nulo sin atribucion. */
         public ?string $employeeUuid,
-    ) {}
+    ) {
+        TimeRange::assertUtc('scannedAt', $scannedAt);
+        TimeRange::assertUtc('discardedAt', $discardedAt);
+    }
 
     #[\Override]
     public function eventName(): string

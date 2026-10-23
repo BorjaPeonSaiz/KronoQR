@@ -7,6 +7,7 @@ namespace App\Modules\Attendance;
 use App\Http\RateLimiting\KioskRateLimit;
 use App\Modules\Attendance\Application\Port\AnomalousPatternHistory;
 use App\Modules\Attendance\Application\Port\AnomalyMetrics;
+use App\Modules\Attendance\Application\Port\CardFingerprintOwners;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\Port\CredentialScans;
 use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
@@ -50,6 +51,7 @@ use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseCardFingerprintOwners;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScanReportLog;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseScanFailureLedger;
@@ -125,6 +127,8 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ScanFailureLedger::class, DatabaseScanFailureLedger::class);
         $this->app->bind(ScanFailureClassifier::class, ScanFailureTransience::class);
         $this->app->bind(ScanDiscardSettings::class, ConfiguredScanDiscardSettings::class);
+        // A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
+        $this->app->bind(CardFingerprintOwners::class, DatabaseCardFingerprintOwners::class);
 
         // RS-03: un descarte verifica la firma de la tarjeta para atribuirlo, y
         // se rellena hasta el MISMO suelo que el aviso del quiosco, que hace

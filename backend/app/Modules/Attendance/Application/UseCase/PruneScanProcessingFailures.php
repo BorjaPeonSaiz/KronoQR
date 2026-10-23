@@ -12,8 +12,10 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * **La purga tecnica de `scan_processing_failures`** (RN-22, ADR-061 §1, doc
  * 01 §5.5): los intentos fallidos de mas de 30 dias se borran.
  *
- * **No es la purga del registro legal** (RL-02): esta tabla no es evidencia, no
- * tiene datos personales y no pasa por la funcion de purga ni deja asiento. Lo
+ * **No es la purga del registro legal** (RL-02): esta tabla no es evidencia y no
+ * pasa por la funcion de purga ni deja asiento. **Si es dato seudonimizado**
+ * (ADR-061, A4): la huella enlaza con la tarjeta y con su titular, y por eso no
+ * se guarda mas de lo necesario. Lo
  * que si es constancia —el descarte— vive en `scan_events` y en
  * `discarded_scan_reports`, con la retencion del registro.
  *

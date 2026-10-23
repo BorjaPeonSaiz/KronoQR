@@ -66,20 +66,25 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
         $scans = [];
 
         foreach ($rows as $row) {
-            $scans[] = new DiscardedScan(
-                scanId: $row->scan_id,
-                ownerUuid: $row->owner_uuid,
-                deviceUuid: $row->device_uuid,
-                origin: ScanOrigin::from($row->origin),
-                occurredAt: $this->toUtc($row->occurred_at),
-                recordedAt: $this->toUtc($row->recorded_at),
-                httpStatus: (int) $row->http_status,
-                problemType: $row->problem_type,
-                attribution: DiscardedScanAttributionMethod::from($row->attribution),
-                credentialIssuedAt: $row->credential_issued_at === null ? null : $this->toUtc($row->credential_issued_at),
-                ownerHiredOn: substr($row->owner_hired_on, 0, 10),
-                serverAttempts: $row->failed_attempts === null ? null : (int) $row->failed_attempts,
-            );
+            $origin = ScanOrigin::from($row->origin);
+            $occurredAt = $this->toUtc($row->occurred_at);
+            $recordedAt = $this->toUtc($row->recorded_at);
+            $attribution = DiscardedScanAttributionMethod::from($row->attribution);
+            $issuedAt = $row->credential_issued_at === null ? null : $this->toUtc($row->credential_issued_at);
+            $hiredOn = substr($row->owner_hired_on, 0, 10);
+
+            // `discarded_scan_reports_chk_source` garantiza que solo la fila del
+            // servidor lleva intentos.
+            $scans[] = $row->failed_attempts === null
+                ? DiscardedScan::reportedByKiosk(
+                    $row->scan_id, $row->owner_uuid, $row->device_uuid, $origin, $occurredAt, $recordedAt,
+                    (int) $row->http_status, $row->problem_type, $attribution, $issuedAt, $hiredOn,
+                )
+                : DiscardedScan::discardedByServer(
+                    $row->scan_id, $row->owner_uuid, $row->device_uuid, $origin, $occurredAt, $recordedAt,
+                    (int) $row->http_status, $row->problem_type, $attribution, $issuedAt, $hiredOn,
+                    (int) $row->failed_attempts,
+                );
         }
 
         return $scans;

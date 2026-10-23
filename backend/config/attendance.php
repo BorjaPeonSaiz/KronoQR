@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Modules\Attendance\Domain\ValueObject\ScanDiscardThreshold;
 
 /*
  * El registro horario — lo que no es un umbral legal (perfil de cumplimiento,
@@ -56,6 +57,9 @@ return [
         'min_attempts' => (string) env('SCAN_DISCARD_MIN_ATTEMPTS', '10'),
         'min_minutes' => (string) env('SCAN_DISCARD_MIN_MINUTES', '60'),
         'daily_budget' => (string) env('SCAN_DISCARD_DAILY_BUDGET', '3'),
+        // Techo del cupo (A6): no se configura. Lo lee `product:doctor` para
+        // avisar de un `.env` por encima, que se aplica como 20.
+        'budget_ceiling' => ScanDiscardThreshold::BUDGET_CEILING,
     ],
 
 ];

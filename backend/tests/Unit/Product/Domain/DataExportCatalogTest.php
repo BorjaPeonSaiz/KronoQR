@@ -80,6 +80,7 @@ it('no saca ningun identificador interno salvo en la auditoria', function (): vo
         'credentials.key_id',
         'scan_events.scan_id',
         'discarded_scan_reports.scan_id',
+        'scan_processing_failures.scan_id',
         'license.license_id',
         'error_events.trace_id',
         'error_events.device_id',
@@ -202,6 +203,9 @@ it('declara los veintidos conjuntos del catalogo, sin efimeros ni fontaneria', f
         // RN-22 (ADR-047, 2.2.0): los avisos de fichaje descartado, sin el
         // contenido del QR ni el codigo, que no se guardan.
         'discarded_scan_reports',
+        // ADR-061 (2.3.0, A4): los intentos fallidos de procesar un fichaje,
+        // seudonimizados y sin la huella.
+        'scan_processing_failures',
         'audit_log',
         'audit_chain_anchors',
         'users',
@@ -495,3 +499,16 @@ it('saca las columnas de la minimizacion y de los plazos de la 2.3.0', function 
         ->and(DataExportCatalog::dataset('support_grants')?->columns())->toContain('reason_purged_at')
         ->and(DataExportCatalog::dataset('compliance_profiles')?->columns())->toContain('personnel_record_retention_years');
 })->group('RL-20', 'RL-11', 'RF-PD-14');
+
+it('exporta los intentos fallidos de procesar un fichaje, seudonimizados y sin la huella', function (): void {
+    // ADR-061, A4: `scan_processing_failures` es dato del cliente (RF-PD-14)
+    // aunque tecnico y de 30 dias. Sale sin `payload_fingerprint`, que es un
+    // derivado de un valor firmado.
+    $dataset = DataExportCatalog::dataset('scan_processing_failures');
+
+    expect($dataset)->not->toBeNull()
+        ->and($dataset?->columns())->toBe(['scan_id', 'device_uuid', 'origin', 'failed_at', 'exception_class'])
+        ->and($dataset?->columns())->not->toContain('payload_fingerprint')
+        ->and(DataExportCatalog::dataset('discarded_scan_reports')?->columns())->toContain('source')
+        ->and(DataExportCatalog::SCHEMA_VERSION)->toBe('7');
+})->group('RF-PD-14', 'RL-20', 'RN-22');

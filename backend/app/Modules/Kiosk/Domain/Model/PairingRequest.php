@@ -73,6 +73,10 @@ use DateTimeImmutable;
  *   del que procesara primero;
  * - y **menos de {@see self::RECLAIM_WINDOW_SECONDS}**, contados desde la
  *   primera recogida y no desde la ultima: repetir no alarga la ventana.
+ * - el token de la recogida anterior **nunca se ha usado**: la tablet que perdio
+ *   la respuesta no ha podido usarlo, y uno que ya autentico peticiones esta en
+ *   manos de alguien (el caso de uso resuelve el hecho por su puerto);
+ * - y no se ha repetido ya {@see self::MAX_RECLAIMS} veces.
  *
  * Fuera de eso, el `Rejected` de siempre. Es estructural, no se configura: una
  * ventana mas ancha seria un hueco mas ancho para quien tuviera el secreto.
@@ -84,6 +88,9 @@ final readonly class PairingRequest
 
     /** Segundos desde la primera recogida durante los cuales se puede repetir. */
     public const int RECLAIM_WINDOW_SECONDS = 60;
+
+    /** Recogidas repetidas como mucho por solicitud: una tablet que pierde mas respuestas no se recupera asi. */
+    public const int MAX_RECLAIMS = 3;
 
     private function __construct(
         /** Identificador **publico** (`device_pairing_requests.uuid`): el `pairing_id` del contrato. */
@@ -166,8 +173,11 @@ final readonly class PairingRequest
      *                               `pairing_id` son reales.
      * @param  string|null  $origin  Huella opaca del origen de esta peticion. Solo cuenta
      *                               para la recogida repetida: ver el docblock de la clase.
+     * @param  bool  $previousTokenUsed  Si el token de la recogida anterior ya autentico
+     *                                   alguna peticion. Solo cuenta para la recogida
+     *                                   repetida: un token usado no se reemite.
      */
-    public function claim(DateTimeImmutable $now, bool $secretMatches, ?string $origin = null): ClaimOutcome
+    public function claim(DateTimeImmutable $now, bool $secretMatches, ?string $origin = null, bool $previousTokenUsed = false): ClaimOutcome
     {
         // Primero y en todas las ramas. Ver el docblock de la clase.
         if (! $secretMatches) {
@@ -185,7 +195,9 @@ final readonly class PairingRequest
 
             // Un solo uso: el token se emitio y no se vuelve a emitir, salvo la
             // recogida repetida de la ventana corta (V6-KI-02).
-            PairingStatus::Claimed => $this->canBeReclaimedAt($now, $origin)
+            PairingStatus::Claimed => ! $previousTokenUsed
+                && $this->reclaims < self::MAX_RECLAIMS
+                && $this->canBeReclaimedAt($now, $origin)
                 ? ClaimOutcome::Reclaimed
                 : ClaimOutcome::Rejected,
         };

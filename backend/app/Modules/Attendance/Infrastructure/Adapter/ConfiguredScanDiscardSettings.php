@@ -28,7 +28,9 @@ final readonly class ConfiguredScanDiscardSettings implements ScanDiscardSetting
         return new ScanDiscardThreshold(
             minAttempts: $this->integer('min_attempts'),
             minSpanMinutes: $this->integer('min_minutes'),
-            dailyBudget: $this->integer('daily_budget'),
+            // A6: por encima del techo se aplica el techo y `product:doctor` lo
+            // avisa (`ScanDiscardBudgetProbe`). Nunca un error que impida arrancar.
+            dailyBudget: min($this->integer('daily_budget'), ScanDiscardThreshold::BUDGET_CEILING),
         );
     }
 

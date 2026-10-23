@@ -606,6 +606,11 @@ return [
 
         'kiosk' => [
             'probe' => $probe,
+            'scan_discard_budget' => [
+                'ok' => 'El cupo de descartes del servidor esta dentro de su techo (:ceiling por quiosco y dia).',
+                'warning' => 'SCAN_DISCARD_DAILY_BUDGET vale :configured, por encima del techo de :ceiling '
+                    .'descartes por quiosco y dia. El servidor aplica :ceiling. El fichaje no se ve afectado.',
+            ],
             'service_code' => [
                 'ok' => 'La pantalla de diagnostico de las tablets pide un codigo de servicio.',
                 'warning' => 'No hay codigo de servicio configurado, asi que cualquiera que tenga una tablet '
@@ -1241,6 +1246,10 @@ return [
 
         'kiosk' => [
             'probe' => $probeFix,
+            'scan_discard_budget' => [
+                'warning' => "Pon SCAN_DISCARD_DAILY_BUDGET a :ceiling o menos en el fichero .env y reinicia la\n"
+                    .'aplicacion. Hasta entonces el servidor aplica :ceiling, que es el maximo.',
+            ],
             'service_code' => [
                 'warning' => "Entra en el panel, en Ajustes operativos, y escribe un codigo de 8 a 12 cifras en\n"
                     ."«Codigo de servicio del quiosco». Las tablets lo reciben solas en menos de un minuto.\n"

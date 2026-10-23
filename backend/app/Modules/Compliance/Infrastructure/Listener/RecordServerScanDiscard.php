@@ -39,12 +39,14 @@ final readonly class RecordServerScanDiscard
         $payload = [
             'device_uuid' => $event->deviceUuid,
             'scan_id' => $event->scanId,
-            'origin' => $event->origin,
+            // `->value`: el vocabulario de la columna. `Compliance` no nombra los
+            // enums de `Attendance` (solo alcanza `Attendance\Domain\Event`).
+            'origin' => $event->origin->value,
             'occurred_at' => $event->scannedAt->format('Y-m-d\TH:i:s.u\Z'),
             'recorded_at' => $event->discardedAt->format('Y-m-d\TH:i:s.u\Z'),
-            'first_failed_at' => $event->firstFailedAt->format('Y-m-d\TH:i:s.u\Z'),
-            'attempts' => $event->attempts,
-            'attribution' => $event->attribution,
+            'first_failed_at' => $event->history->firstFailedAt->format('Y-m-d\TH:i:s.u\Z'),
+            'attempts' => $event->history->attempts,
+            'attribution' => $event->attribution->value,
         ];
 
         if ($event->employeeUuid !== null) {

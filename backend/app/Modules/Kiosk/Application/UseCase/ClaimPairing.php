@@ -131,7 +131,7 @@ final readonly class ClaimPairing
         // decida por el mismo camino en los tres rechazos.
         $request = $found['request'] ?? $this->missingRequest($now);
 
-        $outcome = $request->claim($now, $secretMatches, $command->origin);
+        $outcome = $request->claim($now, $secretMatches, $command->origin, $this->previousTokenUsed($secretMatches, $request));
 
         if ($outcome === ClaimOutcome::Pending) {
             return PairingClaimResult::pending();
@@ -199,10 +199,29 @@ final readonly class ClaimPairing
     }
 
     /**
+     * El hecho que necesita la recogida repetida: si el token de la recogida
+     * anterior ya se uso. La regla la aplica el agregado; aqui solo se resuelve el
+     * hecho, con el mismo trabajo en todos los caminos.
+     */
+    private function previousTokenUsed(bool $secretMatches, PairingRequest $request): bool
+    {
+        // La consulta va SIEMPRE, tambien con el secreto equivocado o sin fila
+        // (contra el dispositivo 0, que no existe), por lo mismo que el `hash_equals`
+        // contra el señuelo: los tres rechazos tienen que costar las mismas
+        // consultas (RS-03, `PairingRejectionTest`).
+        $used = $this->devices->hasUsedAccessToken($request->deviceId ?? 0);
+
+        return $secretMatches
+            && $request->status === PairingStatus::Claimed
+            && $request->deviceId !== null
+            && $used;
+    }
+
+    /**
      * La recogida repetida (V6-KI-02): la respuesta de la primera se perdio.
      *
-     * **Solo si el token anterior nunca se uso** (`last_used_at` nulo): la
-     * tablet que perdio la respuesta no ha podido usarlo.
+     * **Solo si el token anterior nunca se uso** (`last_used_at` nulo): lo
+     * decide el agregado con el hecho que se le pasa.
      *
      * **La escritura condicional va delante de la emision**, como en la
      * primera: dos recogidas repetidas simultaneas entran las dos y solo una
@@ -217,18 +236,11 @@ final readonly class ClaimPairing
      */
     private function reclaim(float|int $startedAt, ClaimPairingCommand $command, PairingRequest $request, DateTimeImmutable $now): PairingClaimResult
     {
-        // Solo si el token anterior NUNCA se uso: la tablet que perdio la
-        // respuesta no ha podido usarlo. Uno que ya autentico peticiones esta en
-        // manos de alguien, y reemitirlo se lo quitaria.
-        if ($request->deviceId === null || $this->devices->hasUsedAccessToken($request->deviceId)) {
-            return $this->rejected($startedAt, $command->pairingId, 'token_used');
-        }
-
         if (! $this->requests->markReclaimed($request->uuid, $request->reclaims, $now)) {
             return $this->rejected($startedAt, $command->pairingId, 'reclaim_race');
         }
 
-        $device = $this->devices->findById($request->deviceId);
+        $device = $request->deviceId === null ? null : $this->devices->findById($request->deviceId);
 
         if (! $device instanceof DeviceSummary) {
             return $this->rejected($startedAt, $command->pairingId, 'device_missing');

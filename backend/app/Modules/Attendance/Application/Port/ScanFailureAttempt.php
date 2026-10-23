@@ -11,10 +11,11 @@ use DateTimeImmutable;
  * **Un intento fallido** de procesar un fichaje, tal y como se apunta en
  * `scan_processing_failures` (RN-22, ADR-061 §1).
  *
- * Sin datos personales (regla dura 21): el `scan_id` lo genera la tablet y no
- * identifica a nadie, `payloadFingerprint` es una huella y no el contenido, y
- * de la excepcion solo viaja **el nombre de su clase**, nunca el mensaje
- * (ADR-048), que puede llevar el SQL con sus valores.
+ * **Dato seudonimizado** (ADR-061, A4): ni el contenido ni el codigo, pero
+ * `payloadFingerprint` enlaza con la tarjeta y, por ella, con su titular, asi que
+ * se trata como dato personal y nunca va a un log (regla dura 21). De la excepcion
+ * solo viaja **el nombre de su clase**, nunca el mensaje (ADR-048), que puede
+ * llevar el SQL con sus valores.
  */
 final readonly class ScanFailureAttempt
 {

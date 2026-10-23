@@ -9,7 +9,7 @@ use DateTimeImmutable;
 use InvalidArgumentException;
 
 /**
- * **Un aviso de fichaje descartado con dueño** (RN-22, ADR-047): la fila de
+ * **Un fichaje descartado con dueño** (RN-22, ADR-047): la fila de
  * `discarded_scan_reports` que la revision diaria puede convertir en incidencia.
  *
  * Es el hecho, no la conclusion: si cae dentro de la ventana de revision lo
@@ -20,14 +20,22 @@ use InvalidArgumentException;
  * el suyo, el escaneo por su `scan_id`. Ni el contenido del QR ni el codigo de
  * empleado llegan nunca aqui, porque no se guardan.
  *
- * **Desde la 2.3.0 tambien lo descarta el servidor** (ADR-061): `serverAttempts`
- * lleva cuantos intentos fallaron antes del descarte, y es nulo exactamente
- * cuando lo aviso el quiosco. La incidencia es la misma; su `context` dice de
- * donde vino.
+ * **Dos origenes, dos constructores con nombre** (2.3.0, ADR-061):
+ * {@see self::reportedByKiosk()} para el aviso del quiosco y
+ * {@see self::discardedByServer()} para el descarte del propio servidor, que
+ * exige ademas sus intentos, el `422` y el problema `scan-discarded`, y es el
+ * unico que admite la atribucion por la huella del contenido. La incidencia es
+ * la misma; su `context` dice de donde vino.
  */
 final readonly class DiscardedScan
 {
-    public function __construct(
+    /** El problema que responde el descarte del servidor (contrato, `ScanDiscarded`). */
+    public const string SERVER_PROBLEM_TYPE = 'urn:kronoqr:problem:scan-discarded';
+
+    /** El codigo con el que responde el descarte del servidor. */
+    public const int SERVER_HTTP_STATUS = 422;
+
+    private function __construct(
         public string $scanId,
         /** `employee_uuid` de a quien se atribuyo. */
         public string $ownerUuid,
@@ -46,8 +54,9 @@ final readonly class DiscardedScan
         public ?DateTimeImmutable $credentialIssuedAt,
         /** Fecha civil del alta del dueño (`YYYY-MM-DD`): la cota de un aviso por PIN. */
         public string $ownerHiredOn,
+        public DiscardedScanSource $source,
         /** Intentos del servidor antes de descartarlo (ADR-061); nulo si lo aviso el quiosco. */
-        public ?int $serverAttempts = null,
+        public ?int $serverAttempts,
     ) {
         if ($scanId === '' || $ownerUuid === '') {
             throw new InvalidArgumentException('Un aviso con dueño necesita su scan_id y su dueño.');
@@ -61,6 +70,10 @@ final readonly class DiscardedScan
             throw new InvalidArgumentException('Solo el aviso atribuido por tarjeta lleva la emision de la tarjeta.');
         }
 
+        if ($attribution === DiscardedScanAttributionMethod::FINGERPRINT_MATCH && $source !== DiscardedScanSource::Server) {
+            throw new InvalidArgumentException('Solo el descarte del servidor se atribuye por la huella del contenido.');
+        }
+
         if ($serverAttempts !== null && $serverAttempts < 1) {
             throw new InvalidArgumentException('Un descarte del servidor lleva al menos un intento fallido.');
         }
@@ -69,10 +82,55 @@ final readonly class DiscardedScan
         TimeRange::assertUtc('recordedAt', $recordedAt);
     }
 
-    /** `server` si lo descarto el servidor (ADR-061); `kiosk` si lo aviso el quiosco. */
-    public function source(): string
-    {
-        return $this->serverAttempts === null ? 'kiosk' : 'server';
+    /**
+     * El aviso de un quiosco que saco el fichaje de su cola (RN-22, ADR-047).
+     */
+    public static function reportedByKiosk(
+        string $scanId,
+        string $ownerUuid,
+        string $deviceUuid,
+        ScanOrigin $origin,
+        DateTimeImmutable $occurredAt,
+        DateTimeImmutable $recordedAt,
+        int $httpStatus,
+        ?string $problemType,
+        DiscardedScanAttributionMethod $attribution,
+        ?DateTimeImmutable $credentialIssuedAt,
+        string $ownerHiredOn,
+    ): self {
+        return new self(
+            $scanId, $ownerUuid, $deviceUuid, $origin, $occurredAt, $recordedAt, $httpStatus, $problemType,
+            $attribution, $credentialIssuedAt, $ownerHiredOn, DiscardedScanSource::Kiosk, null,
+        );
+    }
+
+    /**
+     * El descarte del propio servidor tras el umbral (ADR-061). Siempre con
+     * `422` y `scan-discarded`, que es lo que respondio: otro valor seria una
+     * fila que no describe lo que paso.
+     */
+    public static function discardedByServer(
+        string $scanId,
+        string $ownerUuid,
+        string $deviceUuid,
+        ScanOrigin $origin,
+        DateTimeImmutable $occurredAt,
+        DateTimeImmutable $recordedAt,
+        int $httpStatus,
+        ?string $problemType,
+        DiscardedScanAttributionMethod $attribution,
+        ?DateTimeImmutable $credentialIssuedAt,
+        string $ownerHiredOn,
+        int $attempts,
+    ): self {
+        if ($httpStatus !== self::SERVER_HTTP_STATUS || $problemType !== self::SERVER_PROBLEM_TYPE) {
+            throw new InvalidArgumentException('El descarte del servidor responde 422 scan-discarded (ADR-061).');
+        }
+
+        return new self(
+            $scanId, $ownerUuid, $deviceUuid, $origin, $occurredAt, $recordedAt, $httpStatus, $problemType,
+            $attribution, $credentialIssuedAt, $ownerHiredOn, DiscardedScanSource::Server, $attempts,
+        );
     }
 
     /**

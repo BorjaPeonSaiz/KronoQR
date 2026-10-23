@@ -23,6 +23,14 @@ use Illuminate\Support\Facades\Schema;
  * Con esto el servidor sabe si es el primer fallo de un fichaje o el decimo, que
  * es lo que antes de ADR-061 no sabia.
  *
+ * ## Es dato seudonimizado, no anonimo (ADR-061, A4)
+ *
+ * La huella del contenido es la misma que `scan_events.payload_fingerprint`: enlaza
+ * con la tarjeta y, por ella, con su titular. Se trata como dato personal —entra
+ * en el registro de actividades del cliente y en la exportacion integra
+ * (RF-PD-14), sin la huella; nunca en un log— y se purga a los 30 dias. El
+ * paquete de diagnostico solo lleva recuentos.
+ *
  * ## Por que una fila por intento y no un contador
  *
  * Solo-append: no necesita candado —dos fallos simultaneos del mismo `scan_id`
@@ -50,7 +58,8 @@ use Illuminate\Support\Facades\Schema;
  * ## `down()` verificado
  *
  * La borra **aunque tenga filas**, y es la unica tabla del bloque que puede: no
- * es evidencia legal, no tiene datos personales y su retencion es de 30 dias.
+ * es evidencia legal y su retencion es de 30 dias; sus datos seudonimizados se
+ * pierden con ella, que es lo que pide la minimizacion.
  * Lo que si es constancia —el descarte— vive en `scan_events` y en
  * `discarded_scan_reports`, cuyas migraciones se niegan a perderlo.
  */

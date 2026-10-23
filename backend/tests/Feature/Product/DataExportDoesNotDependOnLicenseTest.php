@@ -155,11 +155,12 @@ it('el comando genera la exportacion completa con la licencia caducada', functio
     /** @var array<string, int> $recuentos */
     $recuentos = json_decode((string) $fila?->row_counts, true, 512, JSON_THROW_ON_ERROR);
 
-    // Los veintitres conjuntos del catalogo (`absences` desde la tarea 3.10,
+    // Los veinticuatro conjuntos del catalogo (`absences` desde la tarea 3.10,
     // `report_exports` desde la 3.9, `weekly_summary_deliveries` desde la 3.12
-    // y `discarded_scan_reports` desde la 2.2.0, RN-22), no un subconjunto
+    // `discarded_scan_reports` desde la 2.2.0, RN-22, y
+    // `scan_processing_failures` desde la 2.3.0, ADR-061), no un subconjunto
     // degradado.
-    expect($recuentos)->toHaveCount(23)
+    expect($recuentos)->toHaveCount(24)
         ->and($recuentos)->toHaveKey('discarded_scan_reports')
         ->and($recuentos)->toHaveKey('employees')
         ->and($recuentos)->toHaveKey('audit_log')

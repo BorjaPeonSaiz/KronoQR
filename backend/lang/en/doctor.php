@@ -551,6 +551,11 @@ return [
 
         'kiosk' => [
             'probe' => $probe,
+            'scan_discard_budget' => [
+                'ok' => 'The server discard budget is within its ceiling (:ceiling per kiosk and day).',
+                'warning' => 'SCAN_DISCARD_DAILY_BUDGET is :configured, above the ceiling of :ceiling '
+                    .'discards per kiosk and day. The server applies :ceiling. Clocking in is unaffected.',
+            ],
             'service_code' => [
                 'ok' => 'The tablets ask for a service code before opening their diagnostics screen.',
                 'warning' => 'No service code is configured, so anyone standing in front of a tablet can open '
@@ -1176,6 +1181,10 @@ return [
 
         'kiosk' => [
             'probe' => $probeFix,
+            'scan_discard_budget' => [
+                'warning' => "Set SCAN_DISCARD_DAILY_BUDGET to :ceiling or less in the .env file and restart the\n"
+                    .'application. Until then the server applies :ceiling, which is the maximum.',
+            ],
             'service_code' => [
                 'warning' => "Go to the panel, under Operational settings, and type a code of 8 to 12 digits in\n"
                     ."«Kiosk service code». The tablets pick it up on their own in under a minute.\n"

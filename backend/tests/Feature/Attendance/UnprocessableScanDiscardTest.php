@@ -505,6 +505,10 @@ it('descarta por /scan/pin con la misma regla y el mismo cuerpo', function (): v
     expect($respuesta->json('type'))->toBe(DESCARTE_TIPO)
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('origin'))->toBe('pin_kiosk')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('payload_fingerprint'))->toBeNull()
+        // ADR-061 §6: un codigo no autentica; el dueño solo en el aviso.
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('employee_id'))->toBeNull()
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('claimed_employee_id'))->toBeNull()
+        ->and(DB::table('discarded_scan_reports')->where('scan_id', $scanId)->value('owner_employee_id'))->toBe(AttendanceFixtures::employeeIdOf($escenario['employee']))
         ->and(DB::table('discarded_scan_reports')->where('scan_id', $scanId)->value('attribution'))->toBe('employee_code');
 
     // El reenvio no vuelve a comprobar el PIN (PIN-02) y repite el descarte.
@@ -532,3 +536,48 @@ it('rellena el descarte hasta el doble del suelo de RS-03', function (): void {
 
     expect($milisegundos)->toBeGreaterThanOrEqual(80.0);
 })->group('RN-22', 'RS-03');
+
+// --- A2: atribucion por la huella del contenido ---------------------------------
+
+it('atribuye por la huella de fichajes aceptados anteriores una tarjeta que no se atribuye por su firma', function (): void {
+    $escenario = escenarioDeDescarte();
+    $empleado = AttendanceFixtures::employeeIdOf($escenario['employee']);
+
+    // Un fichaje aceptado de la misma tarjeta la semana anterior: es lo unico
+    // que dice de quien era.
+    DB::table('scan_events')->insert([
+        'scan_id' => Str::uuid7()->toString(),
+        'device_id' => $escenario['device'],
+        'employee_id' => $empleado,
+        'occurred_at' => '2026-03-07 07:00:00+00',
+        'recorded_at' => '2026-03-07 07:00:01+00',
+        'origin' => 'qr_kiosk',
+        'intent' => 'auto',
+        'result' => 'clock_in',
+        'worked_minutes' => 0,
+        'payload_fingerprint' => hash('sha256', DESCARTE_TARJETA),
+    ]);
+
+    // El veneno es el propio resolutor: revienta al registrar y otra vez al
+    // atribuir, asi que el descarte no puede atribuirse por la tarjeta.
+    app()->instance(CredentialResolver::class, new class implements CredentialResolver
+    {
+        public function resolve(string $qrPayload): CredentialResolution
+        {
+            throw new LogicException('Defecto reproducible al resolver la credencial.');
+        }
+    });
+
+    $escaneo = fichajeDeDescarte('2026-03-14T07:00:00Z');
+    sembrarFallos($escenario['device'], $escaneo['scan_id'], hash('sha256', DESCARTE_TARJETA), 9, 61);
+
+    escaneoSueltoDeDescarte($escenario, $escaneo)->assertStatus(422);
+
+    $aviso = DB::table('discarded_scan_reports')->where('scan_id', $escaneo['scan_id'])->first();
+
+    expect($aviso?->attribution)->toBe('fingerprint_match')
+        ->and($aviso?->owner_employee_id)->toBe($empleado)
+        ->and($aviso?->credential_issued_at)->toBeNull()
+        // No autentica: nadie en `scan_events`.
+        ->and(DB::table('scan_events')->where('scan_id', $escaneo['scan_id'])->value('employee_id'))->toBeNull();
+})->group('RN-22');

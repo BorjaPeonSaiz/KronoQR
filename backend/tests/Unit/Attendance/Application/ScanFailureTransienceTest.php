@@ -82,8 +82,8 @@ it('trae de serie 10 intentos, 60 minutos y un cupo de 3 en config/attendance.ph
         Env::getRepository()->clear($variable);
     }
 
-    /** @var array{scan_discard: array<string, string>} $config */
+    /** @var array{scan_discard: array<string, string|int>} $config */
     $config = require dirname(__DIR__, 4).'/config/attendance.php';
 
-    expect($config['scan_discard'])->toBe(['min_attempts' => '10', 'min_minutes' => '60', 'daily_budget' => '3']);
+    expect($config['scan_discard'])->toBe(['min_attempts' => '10', 'min_minutes' => '60', 'daily_budget' => '3', 'budget_ceiling' => 20]);
 })->group('RN-22');

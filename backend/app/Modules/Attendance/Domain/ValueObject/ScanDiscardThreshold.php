@@ -27,6 +27,9 @@ use InvalidArgumentException;
  *   quiosco reintenta a 1 s, 2 s, 4 s…: diez intentos llegan en 8,5 minutos, y
  *   sin ventana el numero de intentos no separa un fallo pasajero de uno
  *   permanente.
+ * - **El cupo no pasa de 20** en 24 h: por encima, el cupo dejaria de proteger
+ *   de un defecto general. El adaptador de la configuracion aplica el techo y
+ *   avisa en `product:doctor`, para que un `.env` alto nunca impida arrancar.
  * - **El cupo no es negativo.** El cero si vale y tiene significado propio:
  *   apaga la funcionalidad entera, y el servidor vuelve a conservar para
  *   siempre, como antes de ADR-061.
@@ -41,6 +44,13 @@ final readonly class ScanDiscardThreshold
 
     /** Suelo de {@see $minSpanMinutes}. Estructural, no se configura. */
     public const int SPAN_FLOOR_MINUTES = 15;
+
+    /**
+     * Techo de {@see $dailyBudget} (ADR-061, A6 del 24-10-2026). Estructural, no
+     * se configura: el cupo existe para que un defecto general no convierta todos
+     * los fichajes de un quiosco en descartes, y un cupo de cientos lo anularia.
+     */
+    public const int BUDGET_CEILING = 20;
 
     public function __construct(
         /** Intentos contados del mismo fichaje, el actual incluido, a partir de los cuales puede descartarse. */
@@ -68,6 +78,13 @@ final readonly class ScanDiscardThreshold
             throw new InvalidArgumentException(
                 'El cupo de descartes por quiosco no puede ser negativo, y la configuracion fija '.$dailyBudget
                 .'. Para apagar el descarte, ponlo a cero.'
+            );
+        }
+
+        if ($dailyBudget > self::BUDGET_CEILING) {
+            throw new InvalidArgumentException(
+                'El cupo de descartes por quiosco no pasa de '.self::BUDGET_CEILING.' en 24 h (RN-22), y la configuracion fija '
+                .$dailyBudget.'.'
             );
         }
     }
