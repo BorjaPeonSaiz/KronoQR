@@ -137,7 +137,10 @@ export interface ApiClient {
    * desconocida, secreto incorrecto, caducada o consumida— son indistinguibles
    * desde aqui a proposito.
    */
-  claimPairing(body: PairingClaimRequest): Promise<ApiResult<PairingClaim, PairingRejected>>
+  claimPairing(
+    body: PairingClaimRequest,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ApiResult<PairingClaim, PairingRejected>>
   /**
    * Marca de la instalacion (RF-PD-08, tarea 5.8). **Publica** (`authenticated:
    * false`): la pantalla de espera la necesita antes de que nadie se
@@ -300,6 +303,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
      * autenticado.
      */
     authenticated?: boolean
+    /** Cancela la peticion desde fuera (se resuelve como `timeout`). */
+    signal?: AbortSignal
   }
 
   type SendOutcome = { status: number; body: unknown } | { failure: ApiFailureCause }
@@ -379,6 +384,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const outer = init.signal
+    const onOuterAbort = (): void => controller.abort()
+    if (outer?.aborted === true) controller.abort()
+    else outer?.addEventListener('abort', onOuterAbort, { once: true })
 
     try {
       const response = await doFetch(`${baseUrl}${path}`, {
@@ -404,6 +413,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { failure: aborted ? 'timeout' : 'network' }
     } finally {
       clearTimeout(timer)
+      outer?.removeEventListener('abort', onOuterAbort)
     }
   }
 
@@ -534,11 +544,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
     },
 
-    async claimPairing(body) {
+    async claimPairing(body, claimOptions = {}) {
       const result = await send('/api/v1/kiosk/pair/claim', {
         method: 'POST',
         body,
         authenticated: false,
+        ...(claimOptions.signal === undefined ? {} : { signal: claimOptions.signal }),
       })
       if ('failure' in result) return { outcome: 'failed', cause: result.failure }
       if (result.status === 200) {

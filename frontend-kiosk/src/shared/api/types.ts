@@ -18,25 +18,12 @@ export type ScanAccepted = components['schemas']['ScanAccepted']
 export type ScanDebounced = components['schemas']['ScanDebounced']
 export type ScanRejected = components['schemas']['ScanRejected']
 
-/** `type` del problema de un fichaje que el servidor da por decidido tras fallar sin remedio (ADR-061). */
-export const SCAN_DISCARDED_PROBLEM = 'urn:kronoqr:problem:scan-discarded'
-export const SCAN_REJECTED_PROBLEM = 'urn:kronoqr:problem:scan-rejected'
+/** `422 scan-discarded` (ADR-061): desenlace terminal que NO es un rechazo y no se avisa. */
+export type ScanDiscarded = components['schemas']['ScanDiscarded']
 
-/**
- * `422 scan-discarded` (ADR-061): el servidor descarto el fichaje con incidencia tras
- * N fallos durante T minutos. Es un desenlace TERMINAL, como un rechazo, pero NO es
- * un rechazo y no se avisa (el servidor ya abrio la incidencia).
- *
- * A mano hasta que backend regenere el contrato (`components['schemas']['ScanDiscarded']`):
- * entonces se sustituye por el generado.
- */
-export interface ScanDiscarded {
-  readonly type: typeof SCAN_DISCARDED_PROBLEM
-  readonly title?: string
-  readonly status?: number
-  readonly detail?: string
-  readonly scan_id?: string
-}
+/** `type` de los dos problemas terminales de un fichaje, tomados del contrato. */
+export const SCAN_DISCARDED_PROBLEM: ScanDiscarded['type'] = 'urn:kronoqr:problem:scan-discarded'
+export const SCAN_REJECTED_PROBLEM: ScanRejected['type'] = 'urn:kronoqr:problem:scan-rejected'
 
 /** Las dos formas que puede tener un `200` de `POST /api/v1/scan` (ADR-031). */
 export type ScanOk = ScanAccepted | ScanDebounced

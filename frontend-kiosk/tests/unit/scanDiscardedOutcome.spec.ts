@@ -33,7 +33,7 @@ const DISCARDED = (scanId: string) =>
     type: 'urn:kronoqr:problem:scan-discarded',
     title: 'Escaneo descartado',
     status: 422,
-    detail: 'El escaneo se ha descartado.',
+    detail: 'El escaneo no se ha podido procesar y queda pendiente de revision.',
     scan_id: scanId,
   }) as const
 
