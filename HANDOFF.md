@@ -89,9 +89,22 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (23-10-2026):** bloques 0 a 14 integrados (#182 a #187, #189 a #191 y #193 a #198). **Bloque 15** (`fix/accesibilidad-panel`): 15.1–15.7 ✅, revisiones de código y de UI aplicadas; CI y PR en curso.
+**Estado de la 2.3.0 (23-10-2026):** bloques 0 a 15 integrados (#182 a #187, #189 a #191, #193 a #198 y #200). **Bloque 16** (`fix/sistema-visual-y-marca`): 16.1–16.6 ✅, revisión de código aplicada; CI y PR en curso.
 
-Lo que conviene saber del bloque 15 (decisiones en Engram `2.3.0/b15-decisiones`):
+Lo que conviene saber del bloque 16:
+
+- **Acento legible:** una sola regla de oscurecido (`HexColor::darkenedUntil` en PHP, `accentTextOn`/`adjustUntil` en web-kit, redondeando antes de medir) atada por `backend/tests/Fixtures/accent-text-on-white.json`. La tarjeta y la hoja pintan el texto con el acento oscurecido sobre blanco y la decoración con el acento tal cual; el nombre de la tarjeta va a 8 pt (caben ~18 mayúsculas). Marca enseña siempre el tono de pantalla y el de papel. `AccentContrastPolicy` (aviso y 422) sigue midiendo 2 superficies.
+- **Tema:** `primary-strong` por omisión `#b0502a` (el acento de serie del catálogo sigue siendo `#b8542a`); deshabilitados con suelo de 1,5:1. `usedPairs.spec` barre las plantillas de las tres SPA y web-kit y exige que cada pareja usada (con estados hover, active, disabled y `aria-disabled`) esté medida en `themePairs.ts` y docs/06 §2. `no-literal-colors` detecta nombres de color, `color-mix()`, `<style>` y hex en comentarios. Gráficos con colores del tema y patrones por serie.
+- **web-kit:** `BaseButton`, `NoticeWithActions` (nombre accesible fijo), `useCountdown`, `vAriaDisabled`. `applyBranding({ manageTitle })`: en panel y portal el título solo lo escribe `bindDocumentTitle`.
+- **Quiosco:** manifiesto con `background_color`/`theme_color` = `--kq-color-kiosk-surface` y sin `orientation` (`KioskManifestParityTest`); la tablet sin vincular pide la marca y la aplica sin bloquear.
+- **Correos:** `BrandedMailMessage` con el nombre de la instalación y el idioma del destinatario; `BrandedMailOnlyTest` prohíbe `new MailMessage` fuera de `Shared/Infrastructure/Notification`. El asunto empieza por el nombre de la instalación (los filtros por «KronoQR» cambian; está en la nota de actualización).
+- **Zonas:** `timezoneOptions.ts` traduce los alias de ICU a canónico; `php-timezones.json` vigilado por `PhpTimezonesFixtureTest`.
+- **Pendiente:**
+  - migrar los ~50 botones primarios sueltos del panel a `BaseButton`;
+  - ver un correo real en un cliente de correo y la tarjeta con un nombre largo;
+  - PR de Dependabot #199 (13 actualizaciones menores de npm) abierto, sin revisar.
+
+Lo que conviene saber del bloque 15 (#200; decisiones en Engram `2.3.0/b15-decisiones`):
 
 - **Foco:** `BaseDialog` con trampa completa (Shift+Tab, Escape, `focusin`, controles de fecha por segmentos). Los botones en vuelo y bloqueados usan la directiva `v-aria-disabled` (`.busy`, `.reason` → `#kq-blocked-reason`), no `:disabled`, y conservan el foco. `focusRecovery` lleva el foco perdido al `h1` de `main`, ignora diálogos modales y cambios de pantalla. `screenChange` vacía la región viva y enfoca `main h1`; la ficha del empleado tiene `h1` fijo.
 - **Títulos:** «Pantalla – Instalación» (`documentTitle` en web-kit), sin datos personales.
@@ -213,7 +226,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 15 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 16 (sistema visual y marca blanca, rama `fix/sistema-visual-y-marca`), marcando ✅ el título del bloque 15 en su primer commit.
+**Siguiente acción:** si el bloque 16 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 17 (quiosco, rama `fix/quiosco-2.3.0`), marcando ✅ el título del bloque 16 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
