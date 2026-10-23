@@ -45,7 +45,6 @@ $guiasSinPanel = [
     'generated_files_overdue',
     'generated_files_refused_total',
     'generated_files_remove_failed_total',
-    'kiosk_discarded_scans_total',
     'kiosk_token_rotations_total',
     'kronoqr_auth_attempts_total',
     'kronoqr_management_account_changes_total',

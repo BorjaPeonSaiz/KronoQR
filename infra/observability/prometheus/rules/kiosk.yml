@@ -200,7 +200,7 @@ groups:
       # Contador por dispositivo, sin PII.
       #------------------------------------------------------------------------
       - alert: KioskDiscardedScansAttributed
-        expr: sum by (device) (increase(kiosk_discarded_scans_total{attributed="true"}[1h])) > 0
+        expr: sum by (device) (increase(kiosk_discarded_scans_total{attributed="true",source!="server"}[1h])) > 0
         for: 0m
         labels:
           severity: warning
@@ -215,3 +215,65 @@ groups:
             aplicacion desfasada en esa tablet o de un token de dispositivo
             que no deberia estar enviando.
           runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed
+
+      #------------------------------------------------------------------------
+      # ADR-061 (17.9). El servidor descarta por su cuenta un fichaje que lleva
+      # fallando 10 intentos y 60 min por una causa que no es una dependencia
+      # caida. Es un defecto del producto que hay que reproducir.
+      #
+      # LA TRAMPA DEL CONTADOR QUE NACE EN 1 (la misma de api.yml): la serie
+      # `{device,attributed,source="server"}` no existe hasta el primer descarte
+      # y nace ya con valor 1, asi que `increase()` solo no cuenta el primero,
+      # que es justo el que importa. Dos mitades que no se solapan, a nivel de
+      # serie y antes de agregar: las que ya existian (`increase ... and ...
+      # offset`) y las nacidas dentro de la ventana (`unless ... offset`).
+      # `for: 0m`: la ventana de 15 min ya confirma.
+      #------------------------------------------------------------------------
+      - alert: ScanDiscardedByServer
+        expr: >-
+          sum by (device) (
+            (increase(kiosk_discarded_scans_total{source="server"}[15m]) and kiosk_discarded_scans_total{source="server"} offset 15m)
+            or
+            (kiosk_discarded_scans_total{source="server"} unless kiosk_discarded_scans_total{source="server"} offset 15m)
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El servidor ha descartado un fichaje del quiosco {{ $labels.device }} que no conseguia procesar"
+          description: >-
+            Un fichaje de {{ $labels.device }} fallo en el servidor durante al
+            menos 10 intentos y 60 minutos y se ha descartado para que la cola
+            siga (ADR-061). No esta en el registro: RRHH tiene una incidencia
+            si se pudo atribuir a una persona. Es un defecto del producto;
+            conserva el log attendance.scan_discarded_after_failures.
+          runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+
+      #------------------------------------------------------------------------
+      # ADR-061. El cupo de 24 h del quiosco esta agotado: el servidor habria
+      # descartado otro fichaje y NO lo ha hecho, asi que la cola vuelve a
+      # atascarse a proposito. Si el siguiente tambien falla, no es el fichaje,
+      # es el servidor. Misma trampa del contador que nace en 1.
+      #------------------------------------------------------------------------
+      - alert: ScanDiscardBudgetExhausted
+        expr: >-
+          sum by (device) (
+            (increase(kiosk_scan_discard_budget_exhausted_total[15m]) and kiosk_scan_discard_budget_exhausted_total offset 15m)
+            or
+            (kiosk_scan_discard_budget_exhausted_total unless kiosk_scan_discard_budget_exhausted_total offset 15m)
+          ) > 0
+        for: 0m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} ha agotado su cupo de descartes del servidor: su cola se atasca"
+          description: >-
+            El servidor ya descarto 3 fichajes de {{ $labels.device }} en 24
+            h y ha vuelto a encontrar uno que fallaria. No lo descarta: la
+            cola de esa tablet espera detras. Si el siguiente tambien falla,
+            el fallo es del servidor y no del fichaje (ADR-061).
+          runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted

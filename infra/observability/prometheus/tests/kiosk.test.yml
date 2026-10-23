@@ -428,6 +428,9 @@ tests:
         values: "0 0 0 1 1 1 1 1 1 1"
       - series: 'kiosk_discarded_scans_total{device="kiosk-spa",attributed="false"}'
         values: "0 0 0 5 5 5 5 5 5 5"
+      # Un descarte del servidor atribuido NO duplica el aviso del quiosco.
+      - series: 'kiosk_discarded_scans_total{device="kiosk-cocina",attributed="true",source="server"}'
+        values: "_ _ _ 1 1 1 1 1 1 1"
     alert_rule_test:
       - eval_time: 2m
         alertname: KioskDiscardedScansAttributed
@@ -449,3 +452,148 @@ tests:
                 aplicacion desfasada en esa tablet o de un token de
                 dispositivo que no deberia estar enviando.
               runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed
+
+  #-----------------------------------------------------------------------------
+  # ScanDiscardedByServer (ADR-061): el PRIMER descarte nace con valor 1 (serie
+  # que no existia) y debe disparar; uno antiguo que no crece, no; y un descarte
+  # del quiosco (source="quiosco") tampoco.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_discarded_scans_total{device="kiosk-recepcion",attributed="true",source="server"}'
+        values: "_ _ _ 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+      - series: 'kiosk_discarded_scans_total{device="kiosk-cocina",attributed="true",source="kiosk"}'
+        values: "_ _ _ 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ScanDiscardedByServer
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ScanDiscardedByServer
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El servidor ha descartado un fichaje del quiosco kiosk-recepcion que no conseguia procesar"
+              description: >-
+                Un fichaje de kiosk-recepcion fallo en el servidor durante al
+                menos 10 intentos y 60 minutos y se ha descartado para que la
+                cola siga (ADR-061). No esta en el registro: RRHH tiene una
+                incidencia si se pudo atribuir a una persona. Es un defecto
+                del producto; conserva el log
+                attendance.scan_discarded_after_failures.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+      # Pasados 15 min sin nuevo descarte, el aviso se apaga.
+      - eval_time: 30m
+        alertname: ScanDiscardedByServer
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ScanDiscardBudgetExhausted (ADR-061): critica; la serie nace en 1 y dispara,
+  # y un segundo incremento sobre una serie ya existente tambien.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_scan_discard_budget_exhausted_total{device="kiosk-recepcion"}'
+        values: "_ _ _ 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 2"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion ha agotado su cupo de descartes del servidor: su cola se atasca"
+              description: >-
+                El servidor ya descarto 3 fichajes de kiosk-recepcion en 24 h
+                y ha vuelto a encontrar uno que fallaria. No lo descarta: la
+                cola de esa tablet espera detras. Si el siguiente tambien
+                falla, el fallo es del servidor y no del fichaje (ADR-061).
+              runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+      - eval_time: 20m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion ha agotado su cupo de descartes del servidor: su cola se atasca"
+              description: >-
+                El servidor ya descarto 3 fichajes de kiosk-recepcion en 24 h
+                y ha vuelto a encontrar uno que fallaria. No lo descarta: la
+                cola de esa tablet espera detras. Si el siguiente tambien
+                falla, el fallo es del servidor y no del fichaje (ADR-061).
+              runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+
+  #-----------------------------------------------------------------------------
+  # Una serie que YA existia al empezar la ventana: no dispara mientras no
+  # crece (minuto 16) y dispara cuando crece (minuto 21). Se evalua tras los
+  # primeros 15 min para no medir el arranque de la prueba.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_discarded_scans_total{device="kiosk-spa",attributed="false",source="server"}'
+        values: "3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4"
+      - series: 'kiosk_scan_discard_budget_exhausted_total{device="kiosk-spa"}'
+        values: "4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ScanDiscardedByServer
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: ScanDiscardedByServer
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-spa
+            exp_annotations:
+              summary: "El servidor ha descartado un fichaje del quiosco kiosk-spa que no conseguia procesar"
+              description: >-
+                Un fichaje de kiosk-spa fallo en el servidor durante al menos
+                10 intentos y 60 minutos y se ha descartado para que la cola
+                siga (ADR-061). No esta en el registro: RRHH tiene una
+                incidencia si se pudo atribuir a una persona. Es un defecto
+                del producto; conserva el log
+                attendance.scan_discarded_after_failures.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+      - eval_time: 21m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-spa
+            exp_annotations:
+              summary: "El quiosco kiosk-spa ha agotado su cupo de descartes del servidor: su cola se atasca"
+              description: >-
+                El servidor ya descarto 3 fichajes de kiosk-spa en 24 h y ha
+                vuelto a encontrar uno que fallaria. No lo descarta: la cola
+                de esa tablet espera detras. Si el siguiente tambien falla,
+                el fallo es del servidor y no del fichaje (ADR-061).
+              runbook_url: docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted
+      - eval_time: 40m
+        alertname: ScanDiscardedByServer
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: ScanDiscardBudgetExhausted
+        exp_alerts: []

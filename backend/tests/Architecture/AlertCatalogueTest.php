@@ -192,6 +192,9 @@ it('declara cada alerta nueva con la severidad, el destinatario, la espera y el 
     'elemento del lote no procesado' => ['ScanBatchItemNotProcessed', 'warning', 'it-cliente', '5m', 'docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed'],
     // RN-22: un quiosco con descartes atribuidos a alguien.
     'descartes atribuidos' => ['KioskDiscardedScansAttributed', 'warning', 'it-cliente', '0m', 'docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed'],
+    // ADR-061: el servidor descarta un fichaje que no consigue procesar, y el cupo.
+    'descarte del servidor' => ['ScanDiscardedByServer', 'warning', 'it-cliente', '0m', 'docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted'],
+    'cupo de descartes agotado' => ['ScanDiscardBudgetExhausted', 'critical', 'it-cliente', '0m', 'docs/runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted'],
     // API (filas «Tasa de error 5xx» y «Latencia p95» del endpoint de fichaje).
     'errores 5xx en el fichaje' => ['ErroresDeServidorEnElFichaje', 'critical', 'it-cliente', '1m', 'docs/runbooks/errores-en-el-panel.md'],
     'latencia p95 del fichaje' => ['LatenciaDelFichajeAlta', 'high', 'it-cliente', '1m', 'docs/runbooks/errores-en-el-panel.md'],
@@ -276,7 +279,10 @@ it('escribe en cada alerta nueva el umbral literal que publica el catalogo', fun
     'cola en memoria: el gauge del almacenamiento' => ['KioskQueueStorageDegraded', 'kiosk_queue_storage_degraded == 1'],
     'descartes: el gauge de los no avisados' => ['KioskUnreportedDiscards', 'kiosk_unreported_discards > 0'],
     'lote: tres no procesados en media hora' => ['ScanBatchItemNotProcessed', 'increase(scan_batch_items_not_processed_total[30m]) >= 3'],
-    'descartes: los atribuidos de la ultima hora' => ['KioskDiscardedScansAttributed', 'kiosk_discarded_scans_total{attributed="true"}[1h]'],
+    'descartes: los atribuidos de la ultima hora' => ['KioskDiscardedScansAttributed', 'kiosk_discarded_scans_total{attributed="true",source!="server"}[1h]'],
+    'descartes del servidor: solo los source=server' => ['ScanDiscardedByServer', 'kiosk_discarded_scans_total{source="server"}'],
+    'cupo agotado: el contador del cupo' => ['ScanDiscardBudgetExhausted', 'kiosk_scan_discard_budget_exhausted_total'],
+    'cupo agotado: contempla el contador que nace en 1' => ['ScanDiscardBudgetExhausted', 'unless kiosk_scan_discard_budget_exhausted_total offset 15m'],
     'cola: la ventana de dos horas' => ['ColaOfflineSinVaciar', '[2h]'],
     'cola: sin vaciarse ni una vez' => ['ColaOfflineSinVaciar', 'min_over_time'],
     '5xx: acotada al endpoint de fichaje' => ['ErroresDeServidorEnElFichaje', 'family="fichaje"'],

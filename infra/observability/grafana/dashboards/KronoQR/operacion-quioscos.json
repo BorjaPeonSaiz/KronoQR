@@ -499,6 +499,58 @@
         "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Descartes del servidor y cupo agotado, por dispositivo",
+      "description": "kiosk_discarded_scans_total{source=\"server\"}: fichajes que el servidor descartó tras 10 intentos y 60 min (ADR-061); cada uno es un defecto del producto. kiosk_scan_discard_budget_exhausted_total: veces que habría descartado y el cupo de 24 h estaba agotado, de modo que la cola de la tablet vuelve a esperar. Coherente con ScanDiscardedByServer y ScanDiscardBudgetExhausted; cualquier valor por encima de cero es motivo de aviso.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (device) (kiosk_discarded_scans_total{source=\"server\",device=~\"$device\"})",
+          "legendFormat": "descartes del servidor {{device}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (device) (kiosk_scan_discard_budget_exhausted_total{device=~\"$device\"})",
+          "legendFormat": "cupo agotado {{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
     }
   ]
 }

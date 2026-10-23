@@ -41,6 +41,8 @@ ColaDeTrabajosSinProcesar	set	queue_jobs_waiting{queue="default"} 1
 ColaDeTrabajosAcumulada	set	queue_jobs_pending{queue="default"} 80
 
 KioskDiscardedScansAttributed	set	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 5
+ScanDiscardBudgetExhausted	add	kiosk_scan_discard_budget_exhausted_total{device="drill-kiosk-1"} 1
+ScanDiscardedByServer	add	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true",source="server"} 1
 KioskQueueStorageDegraded	set	kiosk_queue_storage_degraded{device="drill-kiosk-1"} 1
 KioskUnreportedDiscards	set	kiosk_unreported_discards{device="drill-kiosk-1"} 4
 KronoqrManagementAdminAccountCreated	set	kronoqr_management_account_changes_total{action="created",role="admin"} 3

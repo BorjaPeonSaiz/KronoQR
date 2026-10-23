@@ -51,7 +51,7 @@ persistencia la prueban los casos de `promtool test rules` de
 `infra/observability/prometheus/tests/`. Tampoco la entrega real al buzón de un
 cliente: eso es la prueba de entrega de `docs/runbooks/entrega-de-alertas.md` §4.2.
 
-## Las 45 alertas
+## Las 47 alertas
 
 La columna «Falla» es lo que cambia en `baseline.prom` (ver `faults.tsv`). La
 columna «Real» es cómo se produciría la misma condición en una instalación; en
@@ -102,6 +102,8 @@ simulacro evita.
 | `RoturaDeCadenaDeAuditoria` | `audit_chain_verification_failures_total` 1 | seguridad | `audit_log` alterado (no se fabrica: sería romper la cadena) |
 | `SaturacionDelBordeEnElFichaje` | `http_requests_total{route="attendance.scan",status="429"}` +60 | it-cliente | cuota del borde agotada en el fichaje |
 | `ScanBatchItemNotProcessed` | `scan_batch_items_not_processed_total` +12 | it-cliente | lote del quiosco con elementos sin procesar |
+| `ScanDiscardBudgetExhausted` | `kiosk_scan_discard_budget_exhausted_total{device="drill-kiosk-1"}` nace en 1 | it-cliente | cupo de descartes del servidor agotado |
+| `ScanDiscardedByServer` | `kiosk_discarded_scans_total{source="server"}` nace en 1 | it-cliente | el servidor descarto un fichaje que no conseguia procesar |
 | `SimulacroDeRestauracionCaducado` | `kronoqr_backup_restore_drill_last_result` 0 | it-cliente | último simulacro de restauración fallido |
 | `SimulacroDeRestauracionNuncaEjecutado` | retira `..._restore_drill_last_success_timestamp_seconds` | it-cliente | instalación sin simulacro trimestral |
 | `SlotDeReplicacionParado` | `kronoqr_wal_replication_slots_inactive` 1 | it-cliente | slot creado a mano que retiene WAL |
@@ -116,7 +118,7 @@ hasta el 1 de noviembre `month()` no llega a 11) la cubre
 
 1. La serie que lee la regla tiene que estar en `baseline.prom` con un valor sano.
 2. Una línea en `faults.tsv` (`ALERTA<TAB>set|add|del|none<TAB>argumento`; `add` crea una serie que el estado sano no publica (un contador que nace en su primer suceso)).
-3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 45).
+3. Una fila en la tabla de arriba (`AlertsDrillTest` lo exige para las 47).
 4. `make alerts-drill ALERT=NombreDeLaAlerta`.
 
 Si `alerts-drill.sh` dice «ESTADO SANO NO SILENCIOSO», la regla lee una serie que
