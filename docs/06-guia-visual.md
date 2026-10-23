@@ -139,6 +139,8 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 | `text` `#9d938b` | `surface` `#fff7ed` (apagado) | inactivo (suelo 1,5) | **2,83:1** | disabled text button on the page at 50 % opacity |
 | `text` `#9d938b` | `surface-raised` `#fffbf6` (apagado) | inactivo (suelo 1,5) | **2,92:1** | disabled outlined button on a card at 50 % opacity |
 | `on-primary` `#fffcf8` | `primary-strong` `#d09378` (apagado) | inactivo (suelo 1,5) | **2,53:1** | disabled solid primary button at 60 % opacity |
+| `on-danger` `#fffbf6` | `danger` `#d29186` (apagado) | inactivo (suelo 1,5) | **2,51:1** | disabled solid destructive button at 50 % opacity |
+| `on-danger` `#fffcf8` | `danger` `#c97c71` (apagado) | inactivo (suelo 1,5) | **3,11:1** | disabled solid destructive button at 60 % opacity |
 | `text` `#897e77` | `surface` `#fff7ed` (apagado) | inactivo (suelo 1,5) | **3,72:1** | disabled text button on the page at 60 % opacity |
 | `text` `#897e77` | `surface-raised` `#fffcf8` (apagado) | inactivo (suelo 1,5) | **3,86:1** | disabled outlined button on a card at 60 % opacity |
 | `kiosk-text` `#fff7ed` | `kiosk-surface` `#241a15` | texto (≥ 4,5) | **16,03:1** | kiosk text on wall screen |
@@ -191,7 +193,7 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 - **Hover.** `hover:bg-kq-surface-alt` pone el fondo de las filas alternas: el texto de la pareja ya está medido sobre `surface-alt` (incluidos `primary-strong`, `success`, `warning` y `danger`). `hover:brightness-95` del botón sólido oscurece fondo **y** texto (el filtro actúa sobre todo el control): `on-primary` `#f2f2f2` sobre `#a74c28`, 5,06:1.
 - **Activo / seleccionado.** `active:bg-kq-primary-soft active:text-kq-on-primary-soft` y la fila seleccionada con `text`, `text-muted` y `primary-strong` sobre `primary-soft`.
 - **Foco.** El anillo se mide también sobre los cuatro avisos tintados (`accent-soft`, `success-soft`, `warning-soft`, `danger-soft`) y `primary-soft`, y `border-strong` sobre los mismos: todos ≥ 3:1.
-- **Deshabilitado.** WCAG 1.4.3 y 1.4.11 **eximen** al control inactivo, así que no se le exige 4,5 ni 3. Decisión de producto: un suelo de **1,5:1** (`inactive`) para que un control apagado siga viéndose como control, medido sobre el color pintado (control entero con la opacidad de la plantilla sobre la página: 50 % o 60 % en el panel y el portal, 40 % en el quiosco). El botón sólido apagado queda en 2,1 a 2,5:1; el texto apagado, entre 2,8 y 3,9:1. Lo apagado **no es la única señal**: lleva `aria-disabled` y el cursor `not-allowed`, y lo que no se puede usar no se muestra (§6, regla 8).
+- **Deshabilitado.** WCAG 1.4.3 y 1.4.11 **eximen** al control inactivo, así que no se le exige 4,5 ni 3. Decisión de producto: un suelo de **1,5:1** (`inactive`) para que un control apagado siga viéndose como control, medido sobre el color pintado (control entero con la opacidad de la plantilla sobre la página: 50 % o 60 % en el panel y el portal, 40 % en el quiosco). El botón sólido apagado (primario o destructivo) queda en 2,1 a 3,1:1; el texto apagado, entre 2,8 y 3,9:1. Lo apagado **no es la única señal**: lleva `aria-disabled` y el cursor `not-allowed`, y lo que no se puede usar no se muestra (§6, regla 8).
 
 ### 2.4 Gráficos: series medidas y distinguibles sin el tono (R7-UX-02, V6-UX-3)
 
