@@ -20,15 +20,38 @@ export function errorTypeOf(error: unknown): string {
  * Mismo motivo de duck-typing que `errorTypeOf`: un `DOMException` lleva
  * `.message` igual que un `Error`, pero no siempre hereda de el. Si no hay
  * texto que sacar, cadena vacia -nunca `'unknown'`, que ya lo dice
- * `error_type` y repetirlo en `message` no anadiria nada-. El saneado final
- * (PII, longitud) lo hace el servidor (`ErrorMessageSanitizer`); aqui solo se
- * extrae el texto, sin decorar.
+ * `error_type` y repetirlo en `message` no anadiria nada-. Sale ya saneado
+ * (`scrubErrorMessage`); el servidor repite el saneado (`ErrorMessageSanitizer`).
  */
 export function errorMessageOf(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
     const { message } = error as { message: unknown }
-    if (typeof message === 'string' && message !== '') return message
+    if (typeof message === 'string' && message !== '') return scrubErrorMessage(message)
   }
-  if (typeof error === 'string' && error !== '') return error
+  if (typeof error === 'string' && error !== '') return scrubErrorMessage(error)
   return ''
+}
+
+/**
+ * Quita de un texto libre lo que puede llevar datos personales (R3-KI-02, regla
+ * dura 21). Es defensa en profundidad: ningun camino del cliente interpola hoy un
+ * nombre en un error, pero una excepcion de manana con texto libre viajaria tal
+ * cual a `error_events`, que acaba en el paquete de diagnostico del fabricante.
+ *
+ * Se sustituye: lo entrecomillado (donde los motores ponen los valores), correos,
+ * UUID, cargas de tarjeta (`FH1.…`), cadenas largas de aspecto de token (no los codigos tecnicos en snake_case
+ * que usa el propio cliente, como `confirm_not_persisted`) y las
+ * secuencias de cifras de un DNI o un telefono. Un NOMBRE suelto («Ana Ruiz»)
+ * ninguna regla lo atrapa: por eso los errores NO capturados no envian su texto
+ * (`main.ts` manda solo el tipo) y el servidor repite el saneado
+ * (`ErrorMessageSanitizer`).
+ */
+export function scrubErrorMessage(text: string): string {
+  return text
+    .replace(/"[^"]*"|'[^']*'|`[^`]*`|«[^»]*»|“[^”]*”|‘[^’]*’/g, '…')
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[email]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[id]')
+    .replace(/\bFH1\.\S+/g, '[token]')
+    .replace(/[A-Za-z0-9_-]{20,}/g, (run) => (/^[a-z_]+$/.test(run) ? run : '[token]'))
+    .replace(/\d[\d\s.-]{4,}\d/g, '[num]')
 }

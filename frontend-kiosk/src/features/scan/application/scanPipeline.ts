@@ -107,6 +107,11 @@ export interface ScanPipelineOptions {
    * dejarla abierta hasta los 10 s completos.
    */
   readonly onUnqueuedRead?: () => void
+  /**
+   * Una lectura que NO es una tarjeta KronoQR y no es una repeticion (R3-KI-04).
+   * Solo su longitud: el contenido jamas sale de aqui (reglas duras 17 y 21).
+   */
+  readonly onMalformedPayload?: (length: number) => void
   /** Llega cuando el servidor contesta. Puede no llegar nunca: es opcional por diseno. */
   readonly onSettled?: (confirmation: ScanConfirmation) => void
   /**
@@ -222,6 +227,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
         }
         markAccepted(rawText, nowMs)
         options.onUnqueuedRead?.()
+        options.onMalformedPayload?.(rawText.length)
         return { kind: 'unreadable', scanId: newScanId(), occurredAt }
       }
 

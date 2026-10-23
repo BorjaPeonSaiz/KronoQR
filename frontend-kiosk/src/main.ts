@@ -16,7 +16,7 @@ import {
   resetUrgentUpdateChecks,
 } from './shared/telemetry/urgentUpdate'
 import { getErrorReporter } from './shared/telemetry/errorReporter'
-import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
+import { errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
 
 clearStoredLocale()
@@ -51,15 +51,18 @@ app.config.errorHandler = (error: unknown) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(error),
     // Clave canonica del texto del error (RF-PD-15): el servidor la toma tal
-    // cual para la columna `message` de `error_events`.
-    message: errorMessageOf(error),
+    // cual para la columna `message` de `error_events`. En un error NO capturado
+    // el texto libre no viaja (R3-KI-02, regla dura 21): una excepcion con un
+    // nombre dentro llegaria al paquete de diagnostico. Va el tipo.
+    message: errorTypeOf(error),
     scope: 'vue',
   })
 }
 
 window.addEventListener('error', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
-    message: event.message,
+    error_type: errorTypeOf(event.error),
+    message: errorTypeOf(event.error),
     source: event.filename,
     line: event.lineno,
     scope: 'window',
@@ -69,9 +72,8 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(event.reason),
-    // Antes vacio: una promesa rechazada con un `Error` de verdad -el caso mas
-    // comun- se quedaba sin nada legible mas alla del codigo.
-    message: errorMessageOf(event.reason),
+    // Solo el tipo, como en el resto de errores no capturados.
+    message: errorTypeOf(event.reason),
     scope: 'promise',
   })
 })

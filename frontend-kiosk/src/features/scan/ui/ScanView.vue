@@ -42,6 +42,7 @@ import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
+import { createMalformedReadReporter } from '../application/malformedReadReporter'
 import { createScanPipeline } from '../application/scanPipeline'
 import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
 import { useQrScanner } from '../composables/useQrScanner'
@@ -143,6 +144,12 @@ const clockSkewBannerMessage = computed(() => {
   return t(`scan.clockSkew.${direction}`, { minutes })
 })
 
+// R3-KI-04: una lectura que no es tarjeta deja rastro tecnico (sin su contenido),
+// como mucho una vez por minuto.
+const reportMalformedRead = createMalformedReadReporter((context) =>
+  reporter.report('kiosk.scan.malformed_payload', { ...context }),
+)
+
 const pipeline = createScanPipeline({
   submission: offline.submission,
   deviceId,
@@ -158,6 +165,7 @@ const pipeline = createScanPipeline({
   // repetida que no llega a fichar nada desarma el boton, en vez de dejarlo
   // armado para una tarjeta que no es la que se esperaba.
   onUnqueuedRead: () => breakIntent.disarm(),
+  onMalformedPayload: reportMalformedRead,
   onSettled: (confirmation) => session.settle(confirmation),
   onDeferred: (scanId) => session.markPending(scanId),
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),

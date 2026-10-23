@@ -59,7 +59,7 @@ describe('reporte de errores del cliente', () => {
   })
 
   it('recorta los textos largos y descarta numeros no finitos', () => {
-    const sanitized = sanitizeContext({ message: 'x'.repeat(500), ratio: Number.NaN })
+    const sanitized = sanitizeContext({ message: 'ab '.repeat(200), ratio: Number.NaN })
     expect(String(sanitized['message']).length).toBe(200)
     expect(sanitized['ratio']).toBeUndefined()
   })

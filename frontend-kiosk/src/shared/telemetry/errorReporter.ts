@@ -28,6 +28,10 @@
 // -los mas graves, porque son los que impiden que nada mas funcione- se
 // quedaban en un buffer que ningun latido llegaba a leer nunca.
 
+import type { ErrorBufferStorage } from './errorBufferStorage'
+import { createDexieErrorBufferStorage } from './errorBufferStorage'
+import { scrubErrorMessage } from './errorType'
+
 const MAX_BUFFERED_ERRORS = 50
 const MAX_CONTEXT_KEYS = 12
 const MAX_STRING_LENGTH = 200
@@ -125,7 +129,10 @@ export function sanitizeContext(input: Readonly<Record<string, unknown>>): Error
     } else if (typeof value === 'boolean') {
       output[key] = value
     } else if (typeof value === 'string') {
-      output[key] = value.slice(0, MAX_STRING_LENGTH)
+      // `message` acaba en la columna de `error_events`: pasa siempre por el
+      // saneado, venga de donde venga (R3-KI-02).
+      const text = key === 'message' ? scrubErrorMessage(value) : value
+      output[key] = text.slice(0, MAX_STRING_LENGTH)
     } else {
       // Objetos, arrays, funciones y `null` no entran: son la via por la que se
       // cuela una estructura entera con datos dentro.
@@ -142,6 +149,11 @@ export interface ErrorReporterOptions {
   readonly deviceId: string
   readonly now?: () => Date
   readonly maxBuffered?: number
+  /**
+   * Donde sobrevive el buffer a un reinicio o a una recarga (R3-KI-03). Sin el,
+   * solo en memoria (pruebas).
+   */
+  readonly storage?: ErrorBufferStorage
 }
 
 export interface ErrorReporter {
@@ -153,10 +165,74 @@ export interface ErrorReporter {
   size(): number
 }
 
-export function createErrorReporter(options: ErrorReporterOptions): ErrorReporter {
+export interface PersistentErrorReporter extends ErrorReporter {
+  /**
+   * Recupera lo que quedo pendiente antes del ultimo reinicio o recarga y lo pone
+   * DELANTE de lo reportado desde entonces (son mas antiguos). Nunca lanza: un
+   * almacen que falla deja el buffer como estaba.
+   */
+  restore(): Promise<void>
+}
+
+function eventKey(event: ClientErrorEvent): string {
+  return `${event.code}|${event.occurred_at}|${JSON.stringify(event.context)}`
+}
+
+/** Una fila leida de disco no se da por buena: se vuelve a pasar por el saneado. */
+function revive(raw: unknown): ClientErrorEvent | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const { code, occurred_at, app_version, device_id, context } = raw as Record<string, unknown>
+  if (
+    typeof code !== 'string' ||
+    typeof occurred_at !== 'string' ||
+    typeof app_version !== 'string' ||
+    typeof device_id !== 'string'
+  ) {
+    return null
+  }
+  return {
+    code: code as ClientErrorCode,
+    occurred_at,
+    app_version,
+    device_id,
+    context:
+      typeof context === 'object' && context !== null
+        ? sanitizeContext(context as Record<string, unknown>)
+        : {},
+  }
+}
+
+export function createErrorReporter(options: ErrorReporterOptions): PersistentErrorReporter {
   const now = options.now ?? (() => new Date())
   const limit = options.maxBuffered ?? MAX_BUFFERED_ERRORS
   const buffer: ClientErrorEvent[] = []
+  const storage = options.storage ?? null
+  let writing = false
+  let dirty = false
+
+  /**
+   * Escribe el buffer entero (son <= 50 eventos pequenos). Una escritura a la vez;
+   * lo que llegue mientras tanto se escribe al terminar. Un fallo se ignora: el
+   * diagnostico nunca puede estorbar al fichaje (regla dura 19).
+   */
+  function persist(): void {
+    if (storage === null) return
+    if (writing) {
+      dirty = true
+      return
+    }
+    writing = true
+    void storage
+      .save([...buffer])
+      .catch(() => undefined)
+      .finally(() => {
+        writing = false
+        if (dirty) {
+          dirty = false
+          persist()
+        }
+      })
+  }
 
   return {
     report(code, context = {}) {
@@ -171,6 +247,7 @@ export function createErrorReporter(options: ErrorReporterOptions): ErrorReporte
       // fotograma fallido llenaria la memoria de la tablet en minutos, y ese
       // seria un fallo peor que el que se intentaba diagnosticar.
       while (buffer.length > limit) buffer.shift()
+      persist()
     },
 
     pending() {
@@ -179,10 +256,33 @@ export function createErrorReporter(options: ErrorReporterOptions): ErrorReporte
 
     acknowledge(count) {
       buffer.splice(0, Math.max(0, count))
+      persist()
     },
 
     size() {
       return buffer.length
+    },
+
+    async restore() {
+      if (storage === null) return
+      let stored: readonly unknown[]
+      try {
+        stored = await storage.load()
+      } catch {
+        return
+      }
+      const known = new Set(buffer.map(eventKey))
+      const older: ClientErrorEvent[] = []
+      for (const raw of stored) {
+        const event = revive(raw)
+        if (event === null || known.has(eventKey(event))) continue
+        known.add(eventKey(event))
+        older.push(event)
+      }
+      if (older.length === 0) return
+      buffer.unshift(...older)
+      while (buffer.length > limit) buffer.shift()
+      persist()
     },
   }
 }
@@ -198,6 +298,14 @@ let singleton: ErrorReporter | null = null
  * vez: quien llegue despues recibe el reporter ya creado.
  */
 export function getErrorReporter(options: ErrorReporterOptions): ErrorReporter {
-  singleton ??= createErrorReporter(options)
+  if (singleton === null) {
+    const storage =
+      options.storage ??
+      (typeof indexedDB === 'undefined' ? undefined : createDexieErrorBufferStorage())
+    const created = createErrorReporter(storage === undefined ? options : { ...options, storage })
+    // Lo pendiente de antes del ultimo reinicio vuelve al buffer y sale en el primer latido.
+    void created.restore()
+    singleton = created
+  }
   return singleton
 }
