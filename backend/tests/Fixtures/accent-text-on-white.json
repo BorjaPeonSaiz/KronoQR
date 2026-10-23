@@ -1,10 +1,10 @@
 {
-  "description": "Acento de marca oscurecido hasta 4,5:1 sobre blanco (WCAG 2.2 1.4.3), redondeado a enteros antes de medir. Fuente de verdad: Branding::accentForTextOnWhite() / HexColor::darkenedUntil(). La consumen tests/Unit/Shared/Domain/AccentTextOnWhiteFixtureTest.php (backend) y, cuando adjustUntil() de packages/web-kit/src/branding.ts redondee antes de medir (tarea 16.3), su prueba unitaria: los dos lados tienen que dar el mismo tono.",
+  "description": "Acento de marca oscurecido hasta 4,5:1 sobre blanco (WCAG 2.2 1.4.3), con cada candidato redondeado a enteros antes de medir. Fuente de verdad: Branding::accentForTextOnWhite() / HexColor::darkenedUntil(). La leen las dos pruebas que comparan el mismo tono: tests/Unit/Shared/Domain/AccentTextOnWhiteFixtureTest.php (backend) y la de accentTextOn() de packages/web-kit/src/branding.ts, que redondea igual desde la tarea 16.3.",
   "background": "#ffffff",
   "minimum": 4.5,
   "steps": 40,
   "cases": [
-    { "label": "acento de serie (ya llega)", "accent": "#b8542a", "text": "#b8542a" },
+    { "label": "acento de serie del catalogo, BRANDING_ACCENT_COLOR (ya llega; el primary-strong del tema es otro, #b0502a)", "accent": "#b8542a", "text": "#b8542a" },
     { "label": "azul oscuro (ya llega)", "accent": "#0f5c8c", "text": "#0f5c8c" },
     { "label": "justo en el minimo", "accent": "#767676", "text": "#767676" },
     { "label": "negro", "accent": "#000000", "text": "#000000" },
