@@ -1,6 +1,8 @@
 // Orquestacion de una sesion de escaneo: camara -> tuberia -> pantalla + sonido.
 //
-// Aqui es donde se mide y se cumple el presupuesto de los 300 ms (RNF-P-03).
+// Aqui es donde se mide y se cumple el presupuesto de los 300 ms del doc 02 §6:
+// la parte del quiosco de RNF-P-01 (de la lectura a la confirmacion en
+// pantalla), no la decodificacion de RNF-P-03 (KP2).
 // `handleDecoded` es sincrona y se pinta lo que devuelve en el mismo turno del
 // bucle de eventos. `lastLatencyMs` deja el numero medido a la vista del E2E y
 // de la pantalla de diagnostico, para que el presupuesto sea una comprobacion y

@@ -1,7 +1,7 @@
 // La tuberia del fichaje por PIN (RF-AT-11). Hermana de
 // `features/scan/application/scanPipeline.ts`, con una diferencia de fondo: el
 // escaneo de tarjeta decodifica y confirma en el MISMO turno del bucle de
-// eventos (sincrono, RNF-P-03); el PIN tiene un paso previo que es
+// eventos (sincrono, la parte del quiosco de RNF-P-01); el PIN tiene un paso previo que es
 // inevitablemente async — sellarlo — porque `crypto_box_seal` corre sobre
 // WebAssembly. No es red: es trabajo local, y `warmUpSealing()` (llamado al
 // montar la pantalla) hace que para cuando se pulsa «Aceptar» ya este

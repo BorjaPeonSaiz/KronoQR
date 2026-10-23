@@ -566,7 +566,8 @@ onUnmounted(() => {
     </footer>
 
     <!-- Sonda del presupuesto de rendimiento (Anexo A): el E2E lee de aqui los
-         milisegundos entre decodificar y confirmar. RNF-P-03 exige < 300 ms. -->
+         milisegundos entre decodificar y confirmar: la parte del quiosco de
+         RNF-P-01, < 300 ms en el doc 02 §6 (KP2; RNF-P-03 es la decodificacion). -->
     <span
       v-if="session.lastLatencyMs.value !== null"
       class="kiosk-sr-only"

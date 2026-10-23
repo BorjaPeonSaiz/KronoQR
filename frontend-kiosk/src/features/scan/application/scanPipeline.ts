@@ -2,7 +2,8 @@
 //
 // `handleDecoded` es SINCRONA y devuelve la confirmacion que hay que pintar.
 // Ni un `await`, ni una promesa, ni una consulta a red en el camino: eso es lo
-// que garantiza los 300 ms del §6 (RNF-P-03) por construccion y no por suerte.
+// que garantiza los 300 ms del §6 (la parte del quiosco de RNF-P-01) por
+// construccion y no por suerte.
 // El envio al servidor sale despues, en segundo plano, y su resultado llega por
 // `onSettled` para refrescar la pantalla con el total real del dia.
 //
