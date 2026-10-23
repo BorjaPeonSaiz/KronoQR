@@ -201,6 +201,9 @@ final readonly class ClaimPairing
     /**
      * La recogida repetida (V6-KI-02): la respuesta de la primera se perdio.
      *
+     * **Solo si el token anterior nunca se uso** (`last_used_at` nulo): la
+     * tablet que perdio la respuesta no ha podido usarlo.
+     *
      * **La escritura condicional va delante de la emision**, como en la
      * primera: dos recogidas repetidas simultaneas entran las dos y solo una
      * incrementa `reclaims`; la otra degrada a rechazo antes de pedir ningun
@@ -214,11 +217,18 @@ final readonly class ClaimPairing
      */
     private function reclaim(float|int $startedAt, ClaimPairingCommand $command, PairingRequest $request, DateTimeImmutable $now): PairingClaimResult
     {
+        // Solo si el token anterior NUNCA se uso: la tablet que perdio la
+        // respuesta no ha podido usarlo. Uno que ya autentico peticiones esta en
+        // manos de alguien, y reemitirlo se lo quitaria.
+        if ($request->deviceId === null || $this->devices->hasUsedAccessToken($request->deviceId)) {
+            return $this->rejected($startedAt, $command->pairingId, 'token_used');
+        }
+
         if (! $this->requests->markReclaimed($request->uuid, $request->reclaims, $now)) {
             return $this->rejected($startedAt, $command->pairingId, 'reclaim_race');
         }
 
-        $device = $request->deviceId === null ? null : $this->devices->findById($request->deviceId);
+        $device = $this->devices->findById($request->deviceId);
 
         if (! $device instanceof DeviceSummary) {
             return $this->rejected($startedAt, $command->pairingId, 'device_missing');

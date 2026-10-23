@@ -196,3 +196,24 @@ it('cuenta la ventana desde la primera recogida y no la alarga al repetir', func
         ->and(tokenVivo($ultimo))->toBeTrue()
         ->and(DB::table('devices')->count())->toBe(1);
 })->group('RF-PD-06');
+
+it('no repite la recogida si el token de la primera ya se ha usado', function (): void {
+    // Refuerzo de V6-KI-02: una tablet que perdio la respuesta no ha podido
+    // usar el token. Si ya autentico peticiones, esta en manos de alguien y
+    // reemitirlo se lo quitaria —o se lo daria a quien tuviera el secreto—.
+    $ticket = emparejadoUnaVez();
+
+    expect(tokenVivo($ticket['token']))->toBeTrue();
+    expect(DB::table('personal_access_tokens')->where('name', 'like', 'kiosk:%')->whereNotNull('last_used_at')->count())->toBe(1);
+
+    segundosDespues(15);
+
+    recogerDesde(RECOGIDA_IP, $ticket)
+        ->assertStatus(422)
+        ->assertValidResponse()
+        ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-rejected');
+
+    expect(tokenVivo($ticket['token']))->toBeTrue()
+        ->and(DB::table('device_pairing_requests')->value('reclaims'))->toBe(0)
+        ->and(DB::table('audit_log')->where('action', 'device.pairing_reclaimed')->count())->toBe(0);
+})->group('RF-PD-06', 'RS-04');

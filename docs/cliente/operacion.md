@@ -1975,7 +1975,8 @@ al final.** No tienes que hacer nada. Si la tablet pierde la respuesta en el
 mismo instante en que recoge su token, entre los 10 segundos y el minuto
 siguientes puede volver a pedirlo y recibe uno nuevo para el **mismo** quiosco —el anterior deja de
 valer en el acto—, en lugar de quedarse sin poder fichar hasta que alguien la
-desvincule. Solo desde la misma dirección de red; pasado ese minuto, la tablet
+desvincule. Solo desde la misma dirección de red y si la tablet no llegó a usar
+el primer token; pasado ese minuto, la tablet
 pide otro código como siempre.
 
 ### 11.1 La app de la tablet: cuándo cambia de versión

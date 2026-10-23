@@ -1625,9 +1625,11 @@ paths:
         segundo dispositivo— y **retira en el acto el anterior**: en cada momento
         hay un solo token vivo para esa tablet. Cada recogida repetida deja su
         asiento en `audit_log` (`device.pairing_reclaimed`, ademas del
-        `device.paired` de la emision). Dos recogidas repetidas simultaneas
-        producen tambien **un solo token**: la segunda se rechaza. Antes de los
-        10 segundos —dos sondeos que se solapan no son una respuesta perdida—,
+        `device.paired` de la emision). **Solo si el token de la recogida
+        anterior nunca se ha usado**: la tablet que perdio la respuesta no ha
+        podido usarlo, y un token que ya autentico peticiones esta en manos de
+        alguien. Dos recogidas repetidas simultaneas producen tambien **un solo
+        token**: la segunda se rechaza. Antes de los 10 segundos —dos sondeos que se solapan no son una respuesta perdida—,
         despues de los 60, o desde otra direccion, la respuesta es el rechazo
         generico de siempre. La ventana se cuenta desde la primera recogida, no
         desde la ultima: repetir no la alarga. **El cliente no debe tener dos
@@ -1728,7 +1730,8 @@ paths:
             coincide, y solicitud caducada o ya consumida— (regla dura 17, RS-03).
             «Ya consumida» incluye la recogida repetida fuera de su ventana (antes
             de 10 segundos o despues de 60 desde la primera), desde otra direccion
-            de origen o perdiendo la carrera con otra recogida repetida simultanea.
+            de origen, con el token anterior ya usado o perdiendo la carrera con
+            otra recogida repetida simultanea.
             El cuerpo esta fijado campo a campo en el esquema y no admite miembros
             adicionales: el contrato hace **imposible** describir cual de las tres
             fue.

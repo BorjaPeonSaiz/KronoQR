@@ -1995,7 +1995,8 @@ end.** You do not need to do anything. If the tablet loses the response at the
 very moment it collects its token, between 10 seconds and one minute later
 it can ask again and receives a new one for the **same** kiosk —the previous one stops
 working at once—, instead of being unable to clock until someone unpairs it.
-Only from the same network address; after that minute, the tablet asks for a
+Only from the same network address and if the tablet never used the first
+token; after that minute, the tablet asks for a
 new code as always.
 
 ### 11.1 The tablet app: when it changes version
