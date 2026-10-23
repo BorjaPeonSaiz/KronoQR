@@ -22,7 +22,7 @@ Deriva de la paleta del fabricante: clara, cálida, esquinas redondeadas, sombra
 | `border` | `#eaddcf` | Separadores y bordes **decorativos** |
 | `border-strong` | `#8f7b6d` | Bordes de **controles**: campos, botones con borde |
 | `primary` | `#d66c3a` | Terracota claro. **Solo acentos grandes y decorativos** (iconos, franjas, texto ≥ 24 px) |
-| `primary-strong` | `#b8542a` | Terracota oscuro. Botón sólido, enlaces, texto de marca |
+| `primary-strong` | `#b0502a` | Terracota oscuro. Botón sólido, enlaces, texto de marca. Llega a 4,5:1 como **texto** sobre las cuatro superficies donde se lee: `surface`, `surface-raised`, `surface-alt` y `primary-soft` |
 | `primary-soft` | `#fff0e5` | Fondo tintado: chip, fila seleccionada |
 | `on-primary` | `#ffffff` | Texto sobre `primary-strong` |
 | `on-primary-soft` | `#9a4520` | Texto sobre `primary-soft` |
@@ -61,34 +61,44 @@ Mínimos: **≥ 4,5:1** en texto normal (1.4.3); **≥ 3:1** en texto grande (�
 | Pareja | Contraste | Conclusión |
 |---|---|---|
 | Blanco sobre `#d66c3a` (terracota claro) | 3,46:1 | Falla AA en texto normal → `primary` es solo acento grande; los botones usan `primary-strong` |
-| Blanco sobre `#b8542a` (terracota oscuro) | 4,84:1 | Pasa → `primary-strong` + `on-primary` |
+| Blanco sobre `#b0502a` (terracota oscuro) | 5,21:1 | Pasa → `primary-strong` + `on-primary` |
 | Blanco sobre `#7a9b76` (salvia) | 3,10:1 | Falla → la salvia nunca lleva texto |
 | `#3a2e28` sobre `#7a9b76` | 4,23:1 | Falla por poco como texto normal → tampoco con texto oscuro |
 | `#7a9b76` sobre `#fff7ed` | 2,92:1 | Falla incluso como componente → sobre crema es solo decorativa |
-| `#b8542a` sobre `#fff0e5` / `#fbeee0` | 4,34:1 / 4,24:1 | Falla → sobre fondos tintados el texto de marca es `on-primary-soft` o `text` |
+| `#b8542a` (el acento de serie del catálogo, y el `primary-strong` hasta la 2.3.0) sobre `#fff0e5` / `#fbeee0` | 4,34:1 / 4,24:1 | Falla como texto (R7-UX-01) → `primary-strong` baja a `#b0502a`, que da 4,68:1 / 4,57:1 sobre esos dos fondos y 4,91:1 sobre `surface` |
 
-Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba falla si cualquiera baja del mínimo o si aparece un token de color que no está en ninguna pareja):
+Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba falla si cualquiera baja del mínimo, si aparece un token de color que no está en ninguna pareja **o si una plantilla usa una pareja que no está aquí**, §2.2). En las filas de estado, los colores son los **pintados** (con el filtro o la opacidad aplicados y cada canal redondeado a 8 bits), no los del token en reposo:
 
 | Primer plano | Fondo | Exigencia | Medido | Uso |
 |---|---|---|---|---|
 | `text` `#3a2e28` | `surface` `#fff7ed` | texto (≥ 4,5) | **12,35:1** | body text on page background |
 | `text` `#3a2e28` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **13,11:1** | body text on cards and dialogs |
-| `text` `#3a2e28` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **11,50:1** | body text on alternate rows |
+| `text` `#3a2e28` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **11,50:1** | body text on alternate rows and on a hovered nav link |
 | `text-muted` `#6b5d54` | `surface` `#fff7ed` | texto (≥ 4,5) | **5,96:1** | secondary text on page background |
 | `text-muted` `#6b5d54` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **6,33:1** | secondary text on cards |
 | `text-muted` `#6b5d54` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **5,55:1** | secondary text on alternate rows |
 | `border` `#eaddcf` | `surface` `#fff7ed` | decorativo (sin mínimo) | **1,26:1** | dividers on page background |
 | `border` `#eaddcf` | `surface-raised` `#ffffff` | decorativo (sin mínimo) | **1,33:1** | dividers on cards |
+| `border` `#eaddcf` | `surface-alt` `#fbeee0` | decorativo (sin mínimo) | **1,17:1** | dividers of table headers and framed sections |
+| `border` `#eaddcf` | `primary-soft` `#fff0e5` | decorativo (sin mínimo) | **1,20:1** | dividers of a selected row |
 | `border-strong` `#8f7b6d` | `surface` `#fff7ed` | grande/componente (≥ 3) | **3,79:1** | input and outlined-button borders on page |
 | `border-strong` `#8f7b6d` | `surface-raised` `#ffffff` | grande/componente (≥ 3) | **4,02:1** | input and outlined-button borders on cards |
 | `border-strong` `#8f7b6d` | `surface-alt` `#fbeee0` | grande/componente (≥ 3) | **3,53:1** | input borders on alternate rows |
+| `border-strong` `#8f7b6d` | `primary-soft` `#fff0e5` | grande/componente (≥ 3) | **3,61:1** | control borders on a selected row |
+| `border-strong` `#8f7b6d` | `accent-soft` `#edf2eb` | grande/componente (≥ 3) | **3,54:1** | control borders on an accent panel |
+| `border-strong` `#8f7b6d` | `success-soft` `#e8efe6` | grande/componente (≥ 3) | **3,43:1** | control borders on a success notice |
+| `border-strong` `#8f7b6d` | `warning-soft` `#fdf0d5` | grande/componente (≥ 3) | **3,56:1** | control borders on a warning notice |
+| `border-strong` `#8f7b6d` | `danger-soft` `#fbe5e2` | grande/componente (≥ 3) | **3,33:1** | control borders on an error notice |
 | `primary` `#d66c3a` | `surface` `#fff7ed` | grande/componente (≥ 3) | **3,26:1** | large accents and icons on page |
 | `primary` `#d66c3a` | `surface-raised` `#ffffff` | grande/componente (≥ 3) | **3,46:1** | large accents and icons on cards |
 | `primary` `#d66c3a` | `surface-alt` `#fbeee0` | grande/componente (≥ 3) | **3,03:1** | large accents on alternate rows |
-| `on-primary` `#ffffff` | `primary-strong` `#b8542a` | texto (≥ 4,5) | **4,84:1** | label of a solid primary button |
-| `primary-strong` `#b8542a` | `surface` `#fff7ed` | texto (≥ 4,5) | **4,56:1** | links and brand text on page |
-| `primary-strong` `#b8542a` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **4,84:1** | links and brand text on cards |
-| `on-primary-soft` `#9a4520` | `primary-soft` `#fff0e5` | texto (≥ 4,5) | **5,81:1** | label of a primary chip or selected row |
+| `on-primary` `#ffffff` | `primary-strong` `#b0502a` | texto (≥ 4,5) | **5,21:1** | label of a solid primary button and of the active nav link |
+| `primary-strong` `#b0502a` | `surface` `#fff7ed` | texto (≥ 4,5) | **4,91:1** | links and brand text on page |
+| `primary-strong` `#b0502a` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **5,21:1** | links and brand text on cards |
+| `primary-strong` `#b0502a` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **4,57:1** | links and brand text on table headers, alternate rows and a hovered link |
+| `primary-strong` `#b0502a` | `primary-soft` `#fff0e5` | texto (≥ 4,5) | **4,68:1** | links and brand text on a selected row |
+| `on-primary` `#f2f2f2` | `primary-strong` `#a74c28` (hover) | texto (≥ 4,5) | **5,06:1** | label of a hovered solid primary button (brightness 95 %) |
+| `on-primary-soft` `#9a4520` | `primary-soft` `#fff0e5` | texto (≥ 4,5) | **5,81:1** | label of a primary chip, selected row or pressed nav link |
 | `text` `#3a2e28` | `primary-soft` `#fff0e5` | texto (≥ 4,5) | **11,77:1** | body text on a selected row |
 | `text-muted` `#6b5d54` | `primary-soft` `#fff0e5` | texto (≥ 4,5) | **5,68:1** | secondary text on a selected row |
 | `accent` `#7a9b76` | `surface` `#fff7ed` | decorativo (sin mínimo) | **2,92:1** | illustrations and stripes on page |
@@ -98,18 +108,21 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 | `text-muted` `#6b5d54` | `accent-soft` `#edf2eb` | texto (≥ 4,5) | **5,57:1** | secondary text on an accent panel |
 | `success` `#3f6e3b` | `surface` `#fff7ed` | texto (≥ 4,5) | **5,64:1** | success text on page |
 | `success` `#3f6e3b` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **5,99:1** | success text on cards |
+| `success` `#3f6e3b` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **5,25:1** | success text on alternate rows |
 | `success` `#3f6e3b` | `success-soft` `#e8efe6` | texto (≥ 4,5) | **5,11:1** | label of a success badge |
 | `on-success` `#ffffff` | `success` `#3f6e3b` | texto (≥ 4,5) | **5,99:1** | label of a solid success control |
 | `text` `#3a2e28` | `success-soft` `#e8efe6` | texto (≥ 4,5) | **11,19:1** | body text on a success notice |
 | `text-muted` `#6b5d54` | `success-soft` `#e8efe6` | texto (≥ 4,5) | **5,40:1** | secondary text on a success notice |
 | `warning` `#8a5312` | `surface` `#fff7ed` | texto (≥ 4,5) | **5,95:1** | warning text on page |
 | `warning` `#8a5312` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **6,31:1** | warning text on cards |
+| `warning` `#8a5312` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **5,53:1** | warning text on alternate rows |
 | `warning` `#8a5312` | `warning-soft` `#fdf0d5` | texto (≥ 4,5) | **5,59:1** | label of a warning badge |
 | `on-warning` `#ffffff` | `warning` `#8a5312` | texto (≥ 4,5) | **6,31:1** | label of a solid warning control |
 | `text` `#3a2e28` | `warning-soft` `#fdf0d5` | texto (≥ 4,5) | **11,62:1** | body text on a warning notice |
 | `text-muted` `#6b5d54` | `warning-soft` `#fdf0d5` | texto (≥ 4,5) | **5,60:1** | secondary text on a warning notice |
 | `danger` `#a52a1f` | `surface` `#fff7ed` | texto (≥ 4,5) | **6,70:1** | error text on page |
 | `danger` `#a52a1f` | `surface-raised` `#ffffff` | texto (≥ 4,5) | **7,12:1** | error text on cards |
+| `danger` `#a52a1f` | `surface-alt` `#fbeee0` | texto (≥ 4,5) | **6,24:1** | error text on alternate rows |
 | `danger` `#a52a1f` | `danger-soft` `#fbe5e2` | texto (≥ 4,5) | **5,90:1** | label of an error badge |
 | `on-danger` `#ffffff` | `danger` `#a52a1f` | texto (≥ 4,5) | **7,12:1** | label of a solid destructive button |
 | `text` `#3a2e28` | `danger-soft` `#fbe5e2` | texto (≥ 4,5) | **10,87:1** | body text on an error notice |
@@ -117,6 +130,17 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 | `focus` `#b8542a` | `surface` `#fff7ed` | grande/componente (≥ 3) | **4,56:1** | focus ring on page |
 | `focus` `#b8542a` | `surface-raised` `#ffffff` | grande/componente (≥ 3) | **4,84:1** | focus ring on cards |
 | `focus` `#b8542a` | `surface-alt` `#fbeee0` | grande/componente (≥ 3) | **4,24:1** | focus ring on alternate rows |
+| `focus` `#b8542a` | `primary-soft` `#fff0e5` | grande/componente (≥ 3) | **4,34:1** | focus ring on a pressed nav link |
+| `focus` `#b8542a` | `accent-soft` `#edf2eb` | grande/componente (≥ 3) | **4,26:1** | focus ring on an accent panel |
+| `focus` `#b8542a` | `success-soft` `#e8efe6` | grande/componente (≥ 3) | **4,13:1** | focus ring on a success notice |
+| `focus` `#b8542a` | `warning-soft` `#fdf0d5` | grande/componente (≥ 3) | **4,29:1** | focus ring on a warning notice |
+| `focus` `#b8542a` | `danger-soft` `#fbe5e2` | grande/componente (≥ 3) | **4,01:1** | focus ring on an error notice |
+| `on-primary` `#fffbf6` | `primary-strong` `#d8a48c` (apagado) | inactivo (suelo 1,5) | **2,12:1** | disabled solid primary button at 50 % opacity |
+| `text` `#9d938b` | `surface` `#fff7ed` (apagado) | inactivo (suelo 1,5) | **2,83:1** | disabled text button on the page at 50 % opacity |
+| `text` `#9d938b` | `surface-raised` `#fffbf6` (apagado) | inactivo (suelo 1,5) | **2,92:1** | disabled outlined button on a card at 50 % opacity |
+| `on-primary` `#fffcf8` | `primary-strong` `#d09378` (apagado) | inactivo (suelo 1,5) | **2,53:1** | disabled solid primary button at 60 % opacity |
+| `text` `#897e77` | `surface` `#fff7ed` (apagado) | inactivo (suelo 1,5) | **3,72:1** | disabled text button on the page at 60 % opacity |
+| `text` `#897e77` | `surface-raised` `#fffcf8` (apagado) | inactivo (suelo 1,5) | **3,86:1** | disabled outlined button on a card at 60 % opacity |
 | `kiosk-text` `#fff7ed` | `kiosk-surface` `#241a15` | texto (≥ 4,5) | **16,03:1** | kiosk text on wall screen |
 | `kiosk-text` `#fff7ed` | `kiosk-surface-raised` `#3a2e28` | texto (≥ 4,5) | **12,35:1** | kiosk text on raised panels |
 | `kiosk-text-muted` `#d4c3b5` | `kiosk-surface` `#241a15` | texto (≥ 4,5) | **9,95:1** | kiosk secondary text |
@@ -130,8 +154,11 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 | `kiosk-on-primary` `#241a15` | `kiosk-primary-strong` `#f0a27a` | texto (≥ 4,5) | **8,23:1** | label of a solid kiosk button |
 | `kiosk-focus` `#fff7ed` | `kiosk-surface` `#241a15` | grande/componente (≥ 3) | **16,03:1** | kiosk focus ring |
 | `kiosk-focus` `#fff7ed` | `kiosk-surface-raised` `#3a2e28` | grande/componente (≥ 3) | **12,35:1** | kiosk focus ring on panels |
+| `kiosk-on-primary` `#241a15` | `kiosk-primary-strong` `#76503d` (apagado) | inactivo (suelo 1,5) | **2,42:1** | disabled solid kiosk button at 40 % opacity |
+| `kiosk-text` `#7c726b` | `kiosk-surface-raised` `#2d221d` (apagado) | inactivo (suelo 1,5) | **3,30:1** | disabled kiosk key at 40 % opacity |
+| `kiosk-text-muted` `#6a5e55` | `kiosk-surface-raised` `#2d221d` (apagado) | inactivo (suelo 1,5) | **2,46:1** | disabled kiosk secondary key at 40 % opacity |
 
-**Parejas que no existen a propósito** (y que la prueba obliga a añadir, y medir, antes de usarlas): `primary-strong` como texto sobre `surface-alt` o sobre `primary-soft` (4,24 y 4,34:1, ambas por debajo); `accent` como componente sobre `surface`; cualquier texto sobre `primary` o sobre `accent` sólidos.
+**Parejas que no existen a propósito** (y que la prueba obliga a añadir, y medir, antes de usarlas): `accent` como componente sobre `surface`; cualquier texto sobre `primary` o sobre `accent` sólidos. `primary-strong` como texto sobre `surface-alt` y sobre `primary-soft` **ya existe** desde la 2.3.0 (4,57 y 4,68:1): ya no hace falta evitarlo con `on-primary-soft` o `text`, aunque `on-primary-soft` sigue siendo el texto de las fichas.
 
 ### 2.1 Texto sobre el visor de cámara (caso especial, fuera de `themePairs.ts`)
 
@@ -151,6 +178,24 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 **Resultado: cumple ≥ 4,5:1 en los dos extremos, sin necesitar ninguna mitigación.** El caso más ajustado es `kiosk-text-muted` (el subtítulo) contra el peor fondo claro posible: 5,22:1, un 16 % por encima del mínimo exigido — no es un margen enorme, pero es real y está calculado contra el extremo matemático, no contra una muestra favorable.
 
 **Guardarraíl para no perder el margen sin darse cuenta.** El punto de ruptura de esta pareja (`kiosk-text-muted` sobre el fondo claro peor caso) está en **α ≈ 76 %**: por debajo de esa opacidad de banda, el subtítulo deja de cumplir 4,5:1 contra un fondo de cámara muy claro. El valor actual, **`/80` (80 %), es el mínimo de opacidad que `ScanView.vue` puede usar para esta banda sin recalcular este apartado.** Cambio propuesto para `frontend-quiosco`: no es necesario tocar `bg-kq-kiosk-surface/80` — el valor ya en producción es el correcto y el mínimo seguro es 80 %, no una cifra inferior; si en el futuro se pide "menos velo" sobre la cámara, cualquier valor por debajo de `/80` tiene que volver a pasar por este cálculo antes de aplicarse (no basta con mirarlo).
+
+### 2.2 Qué pareja se usa de verdad: la prueba lee las plantillas (V7-UX-02)
+
+`packages/web-kit/tests/unit/usedPairs.spec.ts` barre los `.vue` y `.ts` de las tres SPA y de web-kit y, de cada literal de clases con utilidades `*-kq-*`, saca las parejas que forma: texto con fondo, y borde, anillo o relleno con fondo, **en cada estado** (reposo, `hover:`, `active:`, `aria-disabled:`, `focus:`…). Si la pareja no está en `themePairs.ts` —y por tanto en la tabla de arriba—, la prueba falla con el fichero y las clases. Es lo que impide que un `hover:bg-kq-surface-alt` sobre un enlace de marca entre sin medir. Qué no ve: una pareja cuyas dos mitades están en literales distintos (un texto heredado de un contenedor lejano se cubre con el fondo implícito: página o tarjeta). axe en los E2E cierra ese resto.
+
+- **Velo del diálogo** (`bg-kq-text/60`): sin texto encima; las utilidades con transparencia solo se admiten ahí y en los dos velos del quiosco (§2.1).
+- **Relleno sin texto** (barra de progreso, punto del PIN): basta que el token esté medido.
+
+### 2.3 Estados: hover, activo y deshabilitado (R7-UX-03, V21-7-UX-2)
+
+- **Hover.** `hover:bg-kq-surface-alt` pone el fondo de las filas alternas: el texto de la pareja ya está medido sobre `surface-alt` (incluidos `primary-strong`, `success`, `warning` y `danger`). `hover:brightness-95` del botón sólido oscurece fondo **y** texto (el filtro actúa sobre todo el control): `on-primary` `#f2f2f2` sobre `#a74c28`, 5,06:1.
+- **Activo / seleccionado.** `active:bg-kq-primary-soft active:text-kq-on-primary-soft` y la fila seleccionada con `text`, `text-muted` y `primary-strong` sobre `primary-soft`.
+- **Foco.** El anillo se mide también sobre los cuatro avisos tintados (`accent-soft`, `success-soft`, `warning-soft`, `danger-soft`) y `primary-soft`, y `border-strong` sobre los mismos: todos ≥ 3:1.
+- **Deshabilitado.** WCAG 1.4.3 y 1.4.11 **eximen** al control inactivo, así que no se le exige 4,5 ni 3. Decisión de producto: un suelo de **1,5:1** (`inactive`) para que un control apagado siga viéndose como control, medido sobre el color pintado (control entero con la opacidad de la plantilla sobre la página: 50 % o 60 % en el panel y el portal, 40 % en el quiosco). El botón sólido apagado queda en 2,1 a 2,5:1; el texto apagado, entre 2,8 y 3,9:1. Lo apagado **no es la única señal**: lleva `aria-disabled` y el cursor `not-allowed`, y lo que no se puede usar no se muestra (§6, regla 8).
+
+### 2.4 Gráficos: series medidas y distinguibles sin el tono (R7-UX-02, V6-UX-3)
+
+Las cuatro series de `ChartWithTable` (`chartSeriesTokens` en `chartSeries.ts`: `primary-strong`, `accent`, `warning`, `text-muted`) se miden como **componente gráfico** contra `surface-raised` (≥ 3:1, WCAG 1.4.11) en `theme.spec.ts`: 5,21 · 3,10 · 6,31 · 6,33:1. El color **no es la única señal** (1.4.1): cada serie de barras y cada porción del rosco lleva un **patrón** (lisa, rayas diagonales, puntos, rayas en el otro sentido) que hereda la leyenda, y el rosco rotula cada porción con su nombre. Con un acento de marca verdoso la salvia fija deja de confundirse con el acento porque el patrón las separa. Los colores salen de los tokens leídos en tiempo de ejecución, **sin ningún respaldo literal** (`chartOption.ts`; `chartOption.spec.ts` lo compara con `theme.css`).
 
 ## 3. Tipografía
 
@@ -219,11 +264,11 @@ El fondo y el color de `body`, la tipografía de encabezados, `:focus-visible` y
 
 ### 5.2 «Ninguna SPA declara un color propio», verificado por ESLint (U1)
 
-La regla `kronoqr-colors/no-literal-colors` (`packages/web-kit/eslint/no-literal-colors.js`) está activa como error en `eslint.config.js` de `frontend-admin`, `frontend-portal`, `frontend-kiosk` y del propio `packages/web-kit`. Detecta hexadecimales de 3, 4, 6 u 8 cifras y funciones de color (`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`) en cadenas y plantillas de texto de los `.ts`, en el `<script>` de los `.vue` y en los atributos y expresiones de la `<template>`. Su prueba es `packages/web-kit/tests/unit/noLiteralColors.spec.ts`.
+La regla `kronoqr-colors/no-literal-colors` (`packages/web-kit/eslint/no-literal-colors.js`) está activa como error en `eslint.config.js` de `frontend-admin`, `frontend-portal`, `frontend-kiosk` y del propio `packages/web-kit`. Detecta hexadecimales de 3, 4, 6 u 8 cifras, funciones de color (`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()`, `color-mix()`, `light-dark()`) y **nombres de color CSS** (`red`, `rebeccapurple`…, pero solo donde son un color: valor de una propiedad de color en un texto de estilo, atributo `fill`/`stroke`/`color`…, o clave de objeto como `{ backgroundColor: 'gold' }`; `transparent`, `currentColor` e `inherit` no cuentan) en cadenas y plantillas de texto de los `.ts`, en el `<script>` de los `.vue` y en los atributos y expresiones de la `<template>`; en los bloques `<style>` de los `.vue`; y **un hexadecimal escrito en un comentario** (R1-UX-01: el valor duplicado se desfasa en silencio; se nombra el token, no su valor). Su prueba es `packages/web-kit/tests/unit/noLiteralColors.spec.ts`.
 
-- **Lo que no alcanza:** los bloques `<style>` de los `.vue` y los `.css`, porque ESLint no los analiza y no hay Stylelint. Los `main.css` los vigila `base.spec.ts` (§8); un `<style>` con color propio se vigila hoy solo en revisión.
+- **Lo que no alcanza:** los `.css`, porque ESLint no los analiza y no hay Stylelint. Los `main.css` los vigila `base.spec.ts` (§8); los cinco colores de confirmación del quiosco viven ahí y los mide `kioskConfirmation.spec.ts`.
 - **Excepciones por ruta**, solo en `packages/web-kit`: `src/branding.ts` y `src/themePairs.ts`, que fijan por contrato valores de color del producto (acento de serie, pares de contraste), y los `*.d.ts`.
-- **Excepciones puntuales**, con `eslint-disable` y el motivo escrito: el QR en negro puro sobre blanco de `frontend-admin/src/features/auth/TwoFactorEnrolPanel.vue` y de `frontend-kiosk/src/shared/ui/PrivacyNoticePanel.vue` (legibilidad del lector, no marca), y los colores de respaldo de `frontend-admin/src/shared/ui/ChartWithTable.vue` para cuando no hay navegador que resuelva el token (en el navegador mandan los tokens). Una excepción nueva necesita el mismo motivo escrito.
+- **Excepciones puntuales**, con `eslint-disable` y el motivo escrito: el QR en negro puro sobre blanco de `frontend-admin/src/features/auth/TwoFactorEnrolPanel.vue` y de `frontend-kiosk/src/shared/ui/PrivacyNoticePanel.vue` (legibilidad del lector, no marca). `ChartWithTable` ya no tiene excepción: sus colores son los tokens, sin respaldo (§2.4). Una excepción nueva necesita el mismo motivo escrito.
 
 ## 6. Reglas de uso
 
@@ -246,13 +291,13 @@ Lo diseñado aquí es **el valor por defecto**; la tarea 5.8 (07-09-2026) lo hiz
 
 - Las tres aplicaciones reciben la marca de `GET /api/v1/branding` (público: el quiosco y el portal la necesitan antes de identificar a nadie) y la aplican **en tiempo de ejecución** con `applyBranding`, que escribe *custom properties* `--kq-*` en `:root`. Como las utilidades son `@theme inline`, la sobreescritura llega a todas las clases `*-kq-*` sin más. No se recompila nada por cliente (ADR-017).
 - **El cliente elige un solo color de acento.** Mientras no elige ninguno, `accent_color` es `null` y no se toca ningún token: lo que se ve es exactamente este documento. Con un color, `accentOverrides` deriva **solo la familia primaria** de cada contexto:
-  - Claro (panel y portal): `primary` y `primary-strong` = el acento **oscurecido hasta 4,5:1** sobre `surface` y `surface-raised` (MB1; un acento que ya llega no cambia, el de serie sale idéntico); `on-primary` = blanco o `text`, el que más contraste; `primary-soft` = 10 % de acento sobre `surface-raised`; `on-primary-soft` = el acento oscurecido hasta 4,5:1 sobre `primary-soft`; `focus` = el acento oscurecido hasta 3:1 sobre las tres superficies claras (el anillo de foco no es marca, es saber dónde está el teclado, WCAG 2.4.11: con un acento casi blanco se oscurece solo).
+  - Claro (panel y portal): `primary` y `primary-strong` = el acento **oscurecido hasta 4,5:1** sobre `surface`, `surface-raised`, `surface-alt` y su propio `primary-soft`, las cuatro superficies donde `primary-strong` es texto (MB1, R7-UX-01; un acento que ya llega a todas no cambia). El acento de serie `#b8542a` llega a las dos primeras pero no a `surface-alt` (4,24:1), así que se aplica un punto más oscuro, `#af5028`, a un paso del `primary-strong` de `theme.css`; **cada candidato se redondea a 8 bits antes de medirlo** (R6-UX-02), de modo que el valor que se mide es el que se escribe en el token; `on-primary` = blanco o `text`, el que más contraste; `primary-soft` = 10 % de acento sobre `surface-raised`; `on-primary-soft` = el acento oscurecido hasta 4,5:1 sobre `primary-soft`; `focus` = el acento oscurecido hasta 3:1 sobre las tres superficies claras, `primary-soft` y los cuatro avisos tintados (el anillo de foco no es marca, es saber dónde está el teclado, WCAG 2.4.11: con un acento casi blanco se oscurece solo).
   - Quiosco (oscuro): igual que hace esta paleta con el naranja (§1.2, más claro en la tablet que en el panel), el acento **se aclara**: `kiosk-primary` hasta 3:1 y `kiosk-primary-strong` hasta 4,5:1 sobre `kiosk-surface-raised`; `kiosk-on-primary` = `kiosk-surface` o `kiosk-text`, el que más contraste.
-- **Contraste avisado y confirmado** (paso 9 de 5.8, MB1-MB2; la confirmación es de la 2.2.0, RF-PD-08): al pintar, el acento se oscurece solo (arriba), así que un amarillo o un verde lima ya no dejan el botón principal ilegible. La pantalla «Marca» del panel mide en vivo el acento elegido contra `surface` y `surface-raised` (`accentContrast`), dice el ratio, si llega a 4,5:1 y con qué tono se pintará, y **exige una casilla de confirmación explícita** para guardar uno que no llega; la validación final es del servidor con la misma regla y las mismas dos superficies (`AccentContrastPolicy`, atada a `theme.css` por `AccentContrastSurfacesTest`): sin `confirm_low_contrast: true`, `422` de tipo `urn:kronoqr:problem:low-contrast-accent` bajo `settings.BRANDING_ACCENT_COLOR`, y solo si el acento cambia. `contrastWarnings` sigue pasando el acento por las parejas de `themePairs.ts` y devuelve las que no alcanzan su mínimo, hoy solo con una paleta base que ni el negro salva. `branding.spec.ts` verifica con catorce acentos reales (amarillo, verde lima, blanco, negro, el de serie…) que **toda** pareja declarada que interviene cumple tras la derivación, contra los valores reales de `theme.css`.
+- **Contraste avisado y confirmado** (paso 9 de 5.8, MB1-MB2; la confirmación es de la 2.2.0, RF-PD-08): al pintar, el acento se oscurece solo (arriba), así que un amarillo o un verde lima ya no dejan el botón principal ilegible. La pantalla «Marca» del panel mide en vivo el acento elegido contra `surface` y `surface-raised` (`accentContrast`), dice el ratio, si llega a 4,5:1 y con qué tono se pintará, y **exige una casilla de confirmación explícita** para guardar uno que no llega; la validación final es del servidor con la misma regla y las mismas dos superficies (`AccentContrastPolicy`, atada a `theme.css` por `AccentContrastSurfacesTest`): sin `confirm_low_contrast: true`, `422` de tipo `urn:kronoqr:problem:low-contrast-accent` bajo `settings.BRANDING_ACCENT_COLOR`, y solo si el acento cambia. `contrastWarnings` sigue pasando el acento por las parejas de `themePairs.ts` y devuelve las que no alcanzan su mínimo, hoy solo con una paleta base que ni el negro salva. `branding.spec.ts` verifica con catorce acentos reales (amarillo, verde lima, blanco, negro, el de serie…), con los peores del barrido de R6-UX-02 y con una rejilla de 1 331 colores del espacio RGB que **toda** pareja declarada que interviene —incluidas las de hover y deshabilitado, medidas pintadas— cumple tras la derivación, contra los valores reales de `theme.css`. `accentContrast` y el servidor (`AccentContrastPolicy`) siguen midiendo el acento **tal cual** contra `surface` y `surface-raised`: avisan del mismo caso que antes; lo que cambia es el tono que se aplica.
 - **Caché de la marca** (MB4, 2.2.0): panel y portal guardan la última marca válida en `localStorage` (`kronoqr.branding`, forma del contrato, tope de 4 KiB; `createBrandingState` de `brandingState.ts`, verificado por `brandingState.spec.ts`) y la pintan al arrancar, sin parpadeo del producto; al llegar la respuesta se actualiza. Sin almacenamiento, con datos corruptos o con una copia desmesurada, se arranca con el producto. El quiosco ya tenía su propia copia (`kronoqr.kiosk.branding`, en `frontend-kiosk/src/shared/branding/useBranding.ts`), que se pinta antes de montar la aplicación y nunca bloquea el escaneo (regla dura 19).
 - **Qué no es marca y no se configura**: superficies, texto y bordes; los cinco colores de confirmación del quiosco (§1.2); los tokens de accesibilidad del quiosco (tamaños mínimos y objetivo táctil); la salvia decorativa; los colores de estado `success`/`warning`/`danger` en su papel semántico; y los identificadores técnicos (`FH1`, nombres de tabla, rutas, y el `name` del manifiesto PWA, que es de compilación).
 - El logotipo y el nombre de la aplicación no son parte de este documento: son la clave `BRANDING_APP_NAME` y el fichero de `BRANDING_LOGO_PATH` (validado al guardar: PNG o SVG por contenido, ≤ 512 KiB, ≤ 2048 px, dentro del directorio de marca del contenedor). `applyBranding` pone además el nombre en el título de la pestaña y el logotipo como favicon. Ningún componente lleva el nombre del producto escrito a mano: `PRODUCT_BRANDING` de `web-kit` es el único sitio del frontend donde vive el valor por defecto, y coincide con el catálogo de `installation_settings`.
-- **El papel sigue la misma regla.** El color de acento de serie del catálogo es `primary-strong` (`#b8542a`), así que la tarjeta de credencial y el informe sellado llevan de serie el filete del producto, y el del cliente cuando lo configura. En los PDF sellados el nombre de la instalación es texto de 10 pt sobre blanco: el escritor le pasa a la vista el acento **oscurecido hasta 4,5:1** (`Branding::accentForTextOnWhite()`, misma fórmula que `contrast.ts`, MB3), y el nombre sale **también junto al logotipo** (DC3), para que dos informes del mismo mes no cambien de encabezado si la licencia pierde la marca blanca. El filete decorativo de la tarjeta lleva el color tal cual. La marca **no desplaza ni encoge el QR** de la tarjeta (`CredentialCardLayoutTest`).
+- **El papel sigue la misma regla.** El color de acento de serie del catálogo es `#b8542a` (el `primary-strong` de la paleta hasta la 2.3.0; el token baja a `#b0502a` para leerse sobre `surface-alt`, y el catálogo no cambia), así que la tarjeta de credencial y el informe sellado llevan de serie el filete del producto, y el del cliente cuando lo configura. En los PDF sellados el nombre de la instalación es texto de 10 pt sobre blanco: el escritor le pasa a la vista el acento **oscurecido hasta 4,5:1** (`Branding::accentForTextOnWhite()`, misma fórmula que `contrast.ts`, MB3), y el nombre sale **también junto al logotipo** (DC3), para que dos informes del mismo mes no cambien de encabezado si la licencia pierde la marca blanca. La tarjeta de credencial (nombre de la instalación a 8 pt, el cuerpo más pequeño legible en papel a la distancia de la mano y por encima del departamento, a 7,5 pt) y la hoja de instrucciones (nombre, títulos y pictogramas) pintan el mismo acento oscurecido (V1-UX-1); lo que no se lee —el filete de la tarjeta, la línea de la cabecera y las viñetas de la hoja— lleva el color tal cual. Los casos de ese ajuste viven en `backend/tests/Fixtures/accent-text-on-white.json`, para que la prueba del backend y la de `web-kit` comparen el mismo tono. La marca **no desplaza ni encoge el QR** de la tarjeta (`CredentialCardLayoutTest`).
 
 ## 8. Verificación
 
