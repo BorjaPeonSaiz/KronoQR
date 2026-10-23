@@ -100,3 +100,21 @@ export async function ringTrail(
 
   return steps
 }
+
+/**
+ * Cuantas paradas de Tab da un campo de fecha y hora: el numero de segmentos internos
+ * (dia, mes, año, hora, minuto...) mas, segun el navegador y la plataforma, el selector. NO es
+ * una constante: Chromium de Windows y el de Linux de la CI no coinciden, y una prueba que
+ * escriba el numero a mano se rompe en una de las dos. Se mide en el propio navegador, con el
+ * foco ya en el campo, y se deja el foco fuera de el. Tope: `FOCUS_MAX_PRESSES`.
+ */
+export async function datetimeStops(page: Page, field: Locator): Promise<number> {
+  const trail = await ringTrail(page, field, 'Tab', FOCUS_MAX_PRESSES)
+  const stops = trail.findIndex((step) => !step.inside)
+
+  if (stops < 1) {
+    throw new Error('El foco no salio del campo de fecha y hora dentro del tope de pulsaciones.')
+  }
+
+  return stops
+}

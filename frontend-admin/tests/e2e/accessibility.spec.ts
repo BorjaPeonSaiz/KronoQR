@@ -48,7 +48,7 @@ const ABSENCE_EXAMPLE: Absence = {
   created_at: '2026-02-20T09:14:02.118000Z',
 }
 import { expectNoBlockingViolations } from './support/axe'
-import { focusTrail, ringTrail } from './support/focus'
+import { datetimeStops, focusTrail, ringTrail } from './support/focus'
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
 
@@ -812,26 +812,23 @@ test(
     await page.keyboard.press('Enter')
     await expect(page.getByTestId('dialog-clock-in')).toBeFocused()
 
-    const forwards = await focusTrail(page, dialog, 'Tab', 15)
+    const stops = await datetimeStops(page, page.getByTestId('dialog-clock-in'))
+
+    await page.getByTestId('dialog-clock-in').focus()
+
+    // Tab desde el primer segmento de la entrada: las demas paradas de la entrada, todas las
+    // de la salida, y despues «termina en pausa», el motivo, «Cancelar» y «Corregir», que
+    // sigue en el orden de tabulacion aunque este bloqueado (aria-disabled, no disabled).
+    const forwards = await focusTrail(page, dialog, 'Tab', 2 * stops + 3)
     const backwards = await focusTrail(page, dialog, 'Shift+Tab', 3)
     await page.keyboard.press('Escape')
 
     expect(forwards).toEqual([
-      { inside: true, element: 'dialog-clock-in' },
-      { inside: true, element: 'dialog-clock-in' },
-      { inside: true, element: 'dialog-clock-in' },
-      { inside: true, element: 'dialog-clock-in' },
-      { inside: true, element: 'dialog-clock-in' },
-      { inside: true, element: 'dialog-clock-out' },
-      { inside: true, element: 'dialog-clock-out' },
-      { inside: true, element: 'dialog-clock-out' },
-      { inside: true, element: 'dialog-clock-out' },
-      { inside: true, element: 'dialog-clock-out' },
-      { inside: true, element: 'dialog-clock-out' },
+      ...Array.from({ length: stops - 1 }, () => ({ inside: true, element: 'dialog-clock-in' })),
+      ...Array.from({ length: stops }, () => ({ inside: true, element: 'dialog-clock-out' })),
       { inside: true, element: 'dialog-ends-in-break' },
       { inside: true, element: 'dialog-reason' },
       { inside: true, element: 'dialog-cancel' },
-      // «Corregir» bloqueado sigue en el orden de tabulacion (aria-disabled, no disabled).
       { inside: true, element: 'dialog-submit' },
     ])
     expect(backwards).toEqual([
@@ -854,17 +851,16 @@ test(
     const input = page.getByRole('dialog').locator('input[type="datetime-local"]').first()
     await input.focus()
 
-    const trail = await ringTrail(page, input, 'Tab', 6)
+    const stops = await datetimeStops(page, input)
 
-    // Anillo en las seis paradas, tambien en la ultima, que era la que lo perdia;
-    // la septima ya esta fuera del campo y sin anillo.
+    await input.focus()
+
+    const trail = await ringTrail(page, input, 'Tab', stops)
+
+    // Anillo en TODAS las paradas del campo, tambien en la ultima, que era la que lo perdia;
+    // la siguiente ya esta fuera del campo y sin anillo.
     expect(trail).toEqual([
-      { inside: true, ring: true },
-      { inside: true, ring: true },
-      { inside: true, ring: true },
-      { inside: true, ring: true },
-      { inside: true, ring: true },
-      { inside: true, ring: true },
+      ...Array.from({ length: stops }, () => ({ inside: true, ring: true })),
       { inside: false, ring: false },
     ])
   },
