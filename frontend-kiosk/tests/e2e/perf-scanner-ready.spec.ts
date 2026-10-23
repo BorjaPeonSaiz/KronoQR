@@ -29,7 +29,7 @@
 // decodificador con la CPU x4. Si la mediana pasa de 4 s, se mira por que antes
 // de tocar el umbral.
 //
-// LO QUE QUEDA ABIERTO: la tablet real (guion de `docs/runbooks/quiosco-resistencia-12h.md`).
+// LO QUE QUEDA ABIERTO: la tablet real (`docs/runbooks/alta-nuevo-quiosco.md` §4.5).
 
 import { expect, test } from '@playwright/test'
 import type { Browser } from '@playwright/test'
