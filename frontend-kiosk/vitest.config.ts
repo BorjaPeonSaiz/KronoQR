@@ -12,7 +12,15 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      environment: 'jsdom',
+      // K1: `node` de serie y jsdom SOLO en el fichero que monta componentes o
+      // toca el DOM, con `// @vitest-environment jsdom` en su primera linea.
+      // Con jsdom global se creaba 63 veces y se llevaba el 72 % del tiempo de
+      // la suite, tambien en las pruebas de dominio que no lo usan. Un fichero
+      // nuevo que necesite `document`, `window` o `localStorage` falla en el
+      // acto con `ReferenceError` y se arregla con esa linea.
+      environment: 'node',
+      // V21-1-KI-1: un `[Vue warn]` hace fallar la prueba que lo emite.
+      setupFiles: ['tests/unit/support/failOnVueWarnings.ts'],
       include: ['tests/unit/**/*.spec.ts'],
       exclude: [...configDefaults.exclude, 'tests/e2e/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),

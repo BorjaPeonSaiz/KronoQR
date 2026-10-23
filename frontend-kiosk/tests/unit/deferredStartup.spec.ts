@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // KP1: el arranque prescindible espera al primer pintado y se cancela si la
 // pantalla se desmonta antes (nada de camara ni de libsodium huerfanos).
 
@@ -12,6 +13,7 @@ import {
 import ScanView from '@/features/scan/ui/ScanView.vue'
 import { FIRST_PAINT_FALLBACK_MS } from '@/shared/ui/afterFirstPaint'
 import { createAppI18n } from '@/shared/i18n'
+import { createTestRouter } from './support/testRouter'
 
 describe('arranque diferido tras el primer pintado', () => {
   beforeEach(() => {
@@ -42,7 +44,9 @@ describe('arranque diferido tras el primer pintado', () => {
       value: { getUserMedia },
     })
 
-    const wrapper = mount(ScanView, { global: { plugins: [createAppI18n('es')] } })
+    const wrapper = mount(ScanView, {
+      global: { plugins: [createAppI18n('es'), createTestRouter()] },
+    })
     expect(getUserMedia).not.toHaveBeenCalled()
     wrapper.unmount()
     await vi.advanceTimersByTimeAsync(FIRST_PAINT_FALLBACK_MS * 4)
@@ -59,7 +63,9 @@ describe('arranque diferido tras el primer pintado', () => {
       value: { getUserMedia },
     })
 
-    const wrapper = mount(ScanView, { global: { plugins: [createAppI18n('es')] } })
+    const wrapper = mount(ScanView, {
+      global: { plugins: [createAppI18n('es'), createTestRouter()] },
+    })
     expect(getUserMedia).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(FIRST_PAINT_FALLBACK_MS + 1)
 

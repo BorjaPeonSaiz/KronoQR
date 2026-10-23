@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'

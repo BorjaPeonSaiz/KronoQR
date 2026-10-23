@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Puerta de actualizacion con la cola en MEMORIA (ADR-047, RF-KI-07).
 //
 // Con IndexedDB roto la cola cae a memoria y lo que haya en disco no se ve. El

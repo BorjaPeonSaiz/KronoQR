@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useCamera } from '@/features/scan/composables/useCamera'
 import { withSetup } from './support/withSetup'

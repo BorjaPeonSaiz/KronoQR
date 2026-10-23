@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // La hora y la ventana de actualizacion se leen en el reloj de pared DEL CENTRO
 // (`site_time_zone` del latido), no en la zona de la tablet (V2-KI-01, RF-AT-05,
 // RF-KI-07). Todas las pruebas pasan la zona explicita para no depender de la

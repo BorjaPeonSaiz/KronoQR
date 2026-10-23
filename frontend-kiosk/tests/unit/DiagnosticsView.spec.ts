@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Pantalla de diagnostico (RF-KI-08, tarea 3.3).
 //
 // Mismo patron que `PairingView.spec.ts`/`ScanView.spec.ts`: se monta la

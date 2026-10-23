@@ -44,9 +44,21 @@ export function useWakeLock(options: UseWakeLockOptions = {}): WakeLockControlle
 
     requesting = true
     try {
-      sentinel = await navigator.wakeLock.request('screen')
+      const granted = await navigator.wakeLock.request('screen')
+      if (disposed) {
+        // Se desmonto mientras la peticion volaba (R2-KI-04, V21-2-KI-2): nadie
+        // llamara a `release()` por nosotros, asi que se suelta aqui y no se
+        // guarda. Si no, la pantalla se queda despierta sin dueno.
+        try {
+          await granted.release()
+        } catch {
+          // Ya liberado por el sistema.
+        }
+        return
+      }
+      sentinel = granted
       active.value = true
-      sentinel.addEventListener('release', () => {
+      granted.addEventListener('release', () => {
         active.value = false
       })
     } catch (error) {

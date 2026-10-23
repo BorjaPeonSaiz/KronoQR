@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Registro del service worker y su puerta de actualizacion (RF-KI-07, tarea
 // 3.12).
 //

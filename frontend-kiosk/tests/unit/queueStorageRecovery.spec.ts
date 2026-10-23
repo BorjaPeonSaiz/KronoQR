@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // ADR-047 sobre IndexedDB: REABRIR antes de degradar, y degradado no es «cola 0»
 // (RF-KI-03, RF-KI-04, RF-KI-08).
 //

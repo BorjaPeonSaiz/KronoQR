@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Revocacion del dispositivo entre pantallas (RF-PD-06, revision de la 3.3,
 // segunda vuelta).
 //

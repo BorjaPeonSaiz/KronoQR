@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // KT4 (RF-KI-02, RF-KI-01): parar o desmontar con `getUserMedia()` TODAVIA en
 // curso.
 //

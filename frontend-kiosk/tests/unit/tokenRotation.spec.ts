@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Relevo del token del quiosco (RF-ID-04, ADR-044, doc 02 §7.3).
 //
 // El servidor entrega el relevo en el latido. Lo que se prueba aqui es la mitad

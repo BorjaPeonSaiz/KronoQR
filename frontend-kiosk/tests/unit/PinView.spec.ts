@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Pantalla del fichaje de respaldo por PIN (tarea 1.12, RF-AT-11).
 //
 // Mismo patron que `ScanView.spec.ts`: se monta la pantalla de verdad, con

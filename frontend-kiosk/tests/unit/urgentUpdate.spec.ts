@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Registro de intentos del modo urgente (RF-KI-07): sobrevive a un disco que se niega a escribir.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

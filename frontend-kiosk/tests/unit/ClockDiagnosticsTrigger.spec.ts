@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Reloj de pared y disparador del diagnostico (RF-KI-08, tarea 3.3, decision 8).
 //
 // `useLongPress.spec.ts` ya prueba la maquina de tiempos en aislamiento; esto

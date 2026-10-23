@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // El aviso de privacidad lee el responsable y la politica de la MARCA de la
 // instalacion (`GET /api/v1/branding`, `privacy_notice`), que el quiosco ya
 // guarda en `localStorage` y por tanto sigue enseñando sin red (RF-KI-09,
