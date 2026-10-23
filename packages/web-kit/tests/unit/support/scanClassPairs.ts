@@ -41,7 +41,9 @@ export interface BrightnessUse {
 }
 
 const UTILITY =
-  /^((?:[A-Za-z0-9[\]=_-]+:)*)(bg|text|border|ring|outline|fill|stroke|decoration|divide|placeholder)-kq-([a-z-]+?)(\/\d+)?$/
+  /^((?:[A-Za-z0-9[\]=_-]+:)*)(bg|text|border|ring|outline|fill|stroke|decoration|divide|placeholder|accent)-kq-([a-z-]+?)(\/\d+)?$/
+// Opacidad de deshabilitado o brillo de hover: pueden vivir en un literal sin colores (la receta de un componente).
+const STATE_FILTER = /(?:^|\s)(?:[\w-]*:)*(?:(?:aria-)?disabled:opacity-\d+|hover:brightness-\d+)/
 const RESPONSIVE = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'print', 'motion-safe', 'motion-reduce'])
 const ROLE: Record<string, Role> = {
   bg: 'background',
@@ -53,6 +55,7 @@ const ROLE: Record<string, Role> = {
   fill: 'line',
   stroke: 'line',
   decoration: 'line',
+  accent: 'line',
   divide: 'line',
 }
 
@@ -75,10 +78,12 @@ export function classStrings(source: string): string[] {
   const found: string[] = []
   // Un literal que contiene OTRA comilla es una expresion (`cond ? 'a' : 'b'`): sus
   // literales internos se leen por separado, y mezclarlos inventaria parejas.
+  // Una interpolacion de plantilla (`${...}`) es un separador: lo que hay a cada lado se lee.
   for (const pattern of [/"([^"]*)"/g, /'([^']*)'/g, /`([^`]*)`/g]) {
     for (const match of source.matchAll(pattern)) {
-      const body = match[1] ?? ''
-      if (body.includes('-kq-') && !/["'`<>{}]/.test(body)) found.push(body)
+      const body = (match[1] ?? '').replace(/\$\{[^{}]*\}/g, ' ')
+      const usesClasses = body.includes('-kq-') || STATE_FILTER.test(body)
+      if (usesClasses && !/["'`<>{}]/.test(body)) found.push(body)
     }
   }
   return found
@@ -149,8 +154,31 @@ export function scanSource(file: string, source: string): Scan {
   const brightness: BrightnessUse[] = []
   const translucent: string[] = []
 
-  for (const classes of classStrings(source)) {
-    const { states, opacities, brightness: shades, translucent: alpha } = parse(classes)
+  // Los comentarios documentan clases (`hover:brightness-95`); no son uso.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+  const literals = classStrings(code).map((classes) => ({ classes, parsed: parse(classes) }))
+  // La receta de un componente reparte las clases en varios literales (los colores de cada
+  // variante en uno, la opacidad de «apagado» en otro): lo que un literal sin colores declara
+  // para el estado deshabilitado o el hover se aplica a los literales con color de ese fichero.
+  const sharedOpacities = literals
+    .filter((l) => l.parsed.states.size === 0)
+    .flatMap((l) => l.parsed.opacities)
+  const sharedShades = literals
+    .filter((l) => l.parsed.states.size === 0)
+    .flatMap((l) => l.parsed.brightness)
+
+  for (const { classes, parsed } of literals) {
+    const { states, translucent: alpha } = parsed
+    const colourless = states.size === 0 && literals.some((l) => l.parsed.states.size > 0)
+    const opacities = colourless
+      ? []
+      : [...parsed.opacities, ...(states.size > 0 ? sharedOpacities : [])]
+    const shades = colourless
+      ? []
+      : [...parsed.brightness, ...(states.size > 0 ? sharedShades : [])]
     translucent.push(...alpha.map((utility) => `${file}: ${utility}`))
     const rest = states.get('rest')
 

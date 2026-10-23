@@ -278,6 +278,7 @@ export const lightPairs: readonly ThemePair[] = [
   ...disabledPairs(
     [
       ['--kq-color-on-primary', '--kq-color-primary-strong', 'solid primary button'],
+      ['--kq-color-on-danger', '--kq-color-danger', 'solid destructive button'],
       ['--kq-color-text', '--kq-color-surface', 'text button on the page'],
       ['--kq-color-text', '--kq-color-surface-raised', 'outlined button on a card'],
     ],

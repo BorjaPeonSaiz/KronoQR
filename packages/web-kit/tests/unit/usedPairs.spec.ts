@@ -32,7 +32,23 @@ for (const root of roots) {
   scan.translucent.push(...part.translucent)
 }
 
-const measured = new Set(themePairs.map((p) => `${p.foreground}/${p.background}`))
+// Pareja en reposo -> las exigencias con las que esta medida. Un uso como TEXTO o como LINEA
+// necesita `text` o `large`: una fila decorativa o de control apagado no lo da por medido.
+// Unica excepcion: el divisor decorativo (`border`), que por definicion no transmite informacion.
+const measuredAs = new Map<string, Set<string>>()
+for (const item of themePairs) {
+  if (item.state !== undefined) continue
+  const key = `${item.foreground}/${item.background}`
+  measuredAs.set(key, (measuredAs.get(key) ?? new Set()).add(item.requirement))
+}
+const measured = {
+  has(key: string, role: 'text' | 'line' = 'text'): boolean {
+    const requirements = measuredAs.get(key)
+    if (requirements === undefined) return false
+    if (requirements.has('text') || requirements.has('large')) return true
+    return role === 'line' && key.startsWith('--kq-color-border/') && requirements.has('decorative')
+  },
+}
 const measuredAsBackground = new Set(themePairs.map((p) => p.background))
 const measuredAsForeground = new Set(themePairs.map((p) => p.foreground))
 const grounds = (token: string): readonly string[] =>
@@ -47,7 +63,9 @@ const where = (p: { file: string; state?: string; classes: string }): string =>
 function missingPair(p: ClassPair): string | null {
   const { foreground, background } = p
   if (foreground !== null && background !== null) {
-    return measured.has(`${foreground}/${background}`) ? null : `${foreground} sobre ${background}`
+    return measured.has(`${foreground}/${background}`, p.role)
+      ? null
+      : `${foreground} sobre ${background}`
   }
   if (foreground !== null) {
     // `on-*` es el texto de un relleno que pone otra clase (`:class`): basta que este medido.
@@ -55,7 +73,7 @@ function missingPair(p: ClassPair): string | null {
       return measuredAsForeground.has(foreground) ? null : `${foreground} sin ninguna pareja`
     }
     // Fondo implicito: cualquiera de las dos superficies donde se pinta.
-    return grounds(foreground).some((g) => measured.has(`${foreground}/${g}`))
+    return grounds(foreground).some((g) => measured.has(`${foreground}/${g}`, p.role))
       ? null
       : `${foreground} sobre su superficie`
   }
@@ -185,6 +203,19 @@ describe('scanSource: lo que entiende el barrido', () => {
     expect(run('border border-kq-border-strong bg-kq-surface-raised').pairs).toContainEqual(
       expect.objectContaining({ role: 'line', foreground: '--kq-color-border-strong' }),
     )
+  })
+
+  it('una receta repartida en literales e interpolaciones aplica el estado apagado a cada variante', () => {
+    const source = [
+      "const V = { primary: 'bg-kq-primary-strong text-kq-on-primary', danger: 'bg-kq-danger text-kq-on-danger' }",
+      'const c = `rounded aria-disabled:opacity-50 ${V[v]} ${S[s]}`',
+    ].join(' ')
+    const scanned = scanSource('x.ts', source)
+
+    expect(scanned.disabled.map((u) => [u.foreground, u.opacity])).toEqual([
+      ['--kq-color-on-primary', 0.5],
+      ['--kq-color-on-danger', 0.5],
+    ])
   })
 
   it('detecta opacidad de deshabilitado y brillo de hover', () => {
