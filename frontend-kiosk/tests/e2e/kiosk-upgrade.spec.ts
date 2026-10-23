@@ -24,6 +24,7 @@ import { Buffer } from 'node:buffer'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { DEFAULT_HEARTBEAT_INTERVAL_MS } from '@/shared/telemetry/heartbeatInterval'
 import {
@@ -34,7 +35,7 @@ import {
   startKioskReleaseServer,
   stubUpgradeHeartbeat,
 } from './support/kioskReleases'
-import type { KioskReleaseServer } from './support/kioskReleases'
+import type { KioskRelease, KioskReleaseServer } from './support/kioskReleases'
 import { enterEmployeeCode, pressPinDigits, stubPinScanApi } from './support/pin'
 import { readProductionSecurityHeaders, watchBrowserDiagnostics } from './support/securityHeaders'
 
@@ -149,3 +150,125 @@ test(
     )
   },
 )
+
+/**
+ * Una tablet en la version N, controlada por su service worker real, con el
+ * reloj de la pagina fuera de la ventana de actualizacion. Es el arranque de
+ * las pruebas de abajo; la de arriba lo escribe entero porque ademas cambia la
+ * CSP.
+ */
+async function openControlledKioskOn(
+  page: Page,
+  release: KioskRelease,
+): Promise<{
+  readonly server: KioskReleaseServer
+  readonly heartbeat: Awaited<ReturnType<typeof stubUpgradeHeartbeat>>
+  readonly documents: ReturnType<typeof recordLoadedDocuments>
+}> {
+  const started = await startKioskReleaseServer(release)
+  await page.clock.install({ time: KIOSK_UPGRADE_OUTSIDE_WINDOW })
+  const clockInstalledAt = Date.now()
+  const heartbeat = await stubUpgradeHeartbeat(page, () =>
+    new Date(
+      KIOSK_UPGRADE_OUTSIDE_WINDOW.getTime() + (Date.now() - clockInstalledAt),
+    ).toISOString(),
+  )
+  const documents = recordLoadedDocuments(page)
+  await page.goto(`${started.origin}${KIOSK_BASE_PATH}`)
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+  await page.reload()
+  await expect
+    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .toBe(true)
+  await expect.poll(() => heartbeat.appVersions.at(-1)).toBe(KIOSK_UPGRADE_FROM_VERSION)
+  return { server: started, heartbeat, documents }
+}
+
+test(
+  'el service worker real deja la version nueva esperando: sin minima y fuera de la ventana no se aplica sola',
+  { tag: ['@RF-KI-07', '@RF-KI-01'] },
+  async ({ page }) => {
+    // V6-KI-04: hasta la 2.3.0 la puerta solo se probaba con un doble de
+    // `update`. Aqui el ciclo es el de verdad: `registration.update()` descarga
+    // el `sw.js` nuevo, lo instala y lo deja en `waiting`. Un `clientsClaim` o un
+    // `skipWaiting` automatico lo activarian y la tablet recargaria sola.
+    const opened = await openControlledKioskOn(page, {
+      distDir: join(buildsDir, 'from'),
+      headers: productionHeaders,
+    })
+    server = opened.server
+    const documentsBefore = opened.documents.length
+
+    server.publish({ distDir: join(buildsDir, 'to'), headers: productionHeaders })
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration()
+      await registration?.update()
+    })
+
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const registration = await navigator.serviceWorker.getRegistration()
+          return registration?.waiting?.state ?? null
+        }),
+      )
+      .toBe('installed')
+    const heartbeatsBefore = opened.heartbeat.appVersions.length
+    await page.clock.runFor(DEFAULT_HEARTBEAT_INTERVAL_MS)
+    await expect.poll(() => opened.heartbeat.appVersions.length).toBeGreaterThan(heartbeatsBefore)
+
+    expect(opened.heartbeat.appVersions.at(-1)).toBe(KIOSK_UPGRADE_FROM_VERSION)
+    expect(opened.documents).toHaveLength(documentsBefore)
+  },
+)
+
+test(
+  'tras una actualizacion urgente y sin servidor, el PIN y el decodificador salen del precache',
+  { tag: ['@RF-KI-07', '@RF-KI-01', '@RF-AT-11'] },
+  async ({ page }) => {
+    // «Se paso por alto» de la tanda 3 de la 2.2.1: el quiosco carga sus vistas
+    // y el decodificador con `import()` y se apoya en el precache. Se confirma
+    // con la version que acaba de llegar por la via urgente y la tablet
+    // reiniciada sin servidor: si un trozo no estuviera en el precache nuevo,
+    // aqui no cargaria.
+    const opened = await openControlledKioskOn(page, {
+      distDir: join(buildsDir, 'from'),
+      headers: productionHeaders,
+    })
+    server = opened.server
+    server.publish({ distDir: join(buildsDir, 'to'), headers: productionHeaders })
+    opened.heartbeat.announceMinimumAppVersion(KIOSK_UPGRADE_TO_VERSION)
+    await page.clock.runFor(DEFAULT_HEARTBEAT_INTERVAL_MS)
+    await expect
+      .poll(() => opened.heartbeat.appVersions.at(-1), { timeout: 30_000 })
+      .toBe(KIOSK_UPGRADE_TO_VERSION)
+
+    await server.close()
+    server = null
+    const decoder = recordAssetResponses(page, /\/assets\/esm-/)
+    const pinView = recordAssetResponses(page, /\/assets\/PinView-/)
+    await page.reload()
+    await expect.poll(() => decoder.length).toBeGreaterThan(0)
+    await page.getByTestId('pin-entry-link').click()
+
+    await expect(page.getByTestId('pin-step-code')).toBeVisible()
+    await expect(page.getByTestId('camera-failure')).toHaveCount(0)
+    expect(decoder.map((asset) => asset.fromServiceWorker)).not.toContain(false)
+    expect(pinView.map((asset) => asset.fromServiceWorker)).toEqual([true])
+  },
+)
+
+/** Cada respuesta de un trozo cuyo URL casa con `pattern`, y si la sirvio el service worker. */
+function recordAssetResponses(
+  page: Page,
+  pattern: RegExp,
+): { readonly url: string; readonly fromServiceWorker: boolean }[] {
+  const seen: { url: string; fromServiceWorker: boolean }[] = []
+  page.on('response', (response) => {
+    if (!pattern.test(response.url())) return
+    seen.push({ url: response.url(), fromServiceWorker: response.fromServiceWorker() })
+  })
+  return seen
+}
