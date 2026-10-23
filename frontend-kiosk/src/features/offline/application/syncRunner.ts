@@ -66,6 +66,7 @@ import type {
   ScanOk,
   ScanRequest,
 } from '@/shared/api/types'
+import { SCAN_DISCARDED_PROBLEM, SCAN_REJECTED_PROBLEM } from '@/shared/api/types'
 import { uuidV7 } from '@/shared/ids/uuidV7'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
@@ -248,9 +249,31 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }, delay)
   }
 
-  /** Aplica el resultado de un elemento del 207 sobre la cola. */
-  function classify(entry: ScanBatchEntry): 'confirm' | 'retry' {
-    if (entry.status === 200 || entry.status === 422) return 'confirm'
+  /** El `type` del problema de un elemento del 207, o `null` si no trae ninguno. */
+  function problemTypeOf(entry: ScanBatchEntry): string | null {
+    const type: unknown = (entry.outcome as { readonly type?: unknown }).type
+    return typeof type === 'string' ? type : null
+  }
+
+  /**
+   * Aplica el resultado de un elemento del 207 sobre la cola.
+   *
+   * - `200`: registrado, se borra.
+   * - `422 scan-rejected` y `422 scan-discarded` (ADR-061): el servidor ya decidio y,
+   *   en el segundo caso, ya abrio la incidencia. Se borra, SIN aviso propio.
+   * - Cualquier OTRO `422` (P7): la peticion no vale y nunca valdra (RN-22). Va a
+   *   descartados con su aviso, igual que en las rutas individuales. Antes se
+   *   borraba en silencio y nadie lo revisaba.
+   * - `503` o ausente: se conserva.
+   */
+  function classify(entry: ScanBatchEntry): 'confirm' | 'discard' | 'retry' {
+    if (entry.status === 200) return 'confirm'
+    if (entry.status === 422) {
+      const type = problemTypeOf(entry)
+      return type === SCAN_REJECTED_PROBLEM || type === SCAN_DISCARDED_PROBLEM
+        ? 'confirm'
+        : 'discard'
+    }
     // `ScanHeldBack` es el servidor aplazando lo que venia DETRAS de un `503`
     // (RN-21): no es un fallo propio, y reportarlo por cada elemento del lote
     // inundaria el canal de errores con 49 copias de la misma causa.
@@ -350,6 +373,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     const byId = new Map(result.data.results.map((entry) => [entry.scan_id, entry]))
     const confirmed: string[] = []
     const retry: string[] = []
+    const discard: Array<{
+      readonly record: QueuedQrScanRecord
+      readonly problemType: string | null
+    }> = []
 
     for (const record of records) {
       const entry = byId.get(record.scan_id)
@@ -363,8 +390,21 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
         retry.push(record.scan_id)
         continue
       }
-      if (classify(entry) === 'confirm') confirmed.push(record.scan_id)
-      else retry.push(record.scan_id)
+      const verdict = classify(entry)
+      if (verdict === 'confirm') confirmed.push(record.scan_id)
+      else if (verdict === 'discard') {
+        discard.push({ record, problemType: problemTypeOf(entry) })
+      } else retry.push(record.scan_id)
+    }
+
+    // RN-22: los `422` no estandar se MUEVEN a descartados (no se borran). Si el
+    // movimiento no llega a escribirse, el elemento se conserva y el tramo se detiene.
+    for (const item of discard) {
+      const moved = await discardScan(item.record, {
+        httpStatus: 422,
+        problemType: item.problemType,
+      })
+      if (!moved) retry.push(item.record.scan_id)
     }
 
     const removed = await queue.confirm(confirmed)

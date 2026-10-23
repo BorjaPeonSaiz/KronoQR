@@ -77,6 +77,6 @@ test(
 
     await expect(page.getByTestId('scan-confirmation')).toBeVisible({ timeout: 20_000 })
 
-    expect(scans.recorded.length).toBeGreaterThan(0)
+    await expect.poll(() => scans.recorded.length).toBeGreaterThan(0)
   },
 )

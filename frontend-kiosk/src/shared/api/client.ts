@@ -32,9 +32,11 @@ import type {
   ScanBatchRequest,
   ScanBatchResponse,
   ScanOk,
+  ScanDiscarded,
   ScanRejected,
   ScanRequest,
 } from './types'
+import { SCAN_DISCARDED_PROBLEM, SCAN_REJECTED_PROBLEM } from './types'
 
 /** Motivo por el que una llamada no llego a obtener respuesta util del servidor. */
 export type ApiFailureCause =
@@ -57,7 +59,7 @@ export type ApiFailureCause =
  * `sendHeartbeat` o `fetchRoster` hoy). El emparejamiento SI tiene la suya
  * (`PairingRejected`, regla dura 17) y por eso `claimPairing` la sobrescribe.
  */
-export type ApiResult<TOk, TProblem = ScanRejected> =
+export type ApiResult<TOk, TProblem = ScanRejected | ScanDiscarded> =
   | { readonly outcome: 'ok'; readonly data: TOk }
   | { readonly outcome: 'rejected'; readonly problem: TProblem }
   | {
@@ -161,7 +163,16 @@ function isScanOk(value: unknown): value is ScanOk {
 }
 
 function isScanRejected(value: unknown): value is ScanRejected {
-  return isRecord(value) && value['type'] === 'urn:kronoqr:problem:scan-rejected'
+  return isRecord(value) && value['type'] === SCAN_REJECTED_PROBLEM
+}
+
+function isScanDiscarded(value: unknown): value is ScanDiscarded {
+  return isRecord(value) && value['type'] === SCAN_DISCARDED_PROBLEM
+}
+
+/** Un desenlace terminal del servidor para ese `scan_id`: rechazado o descartado (ADR-061). */
+function isTerminalScanProblem(value: unknown): value is ScanRejected | ScanDiscarded {
+  return isScanRejected(value) || isScanDiscarded(value)
 }
 
 function isScanBatchResponse(value: unknown): value is ScanBatchResponse {
@@ -411,7 +422,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
-      if (result.status === 422 && isScanRejected(result.body)) {
+      if (result.status === 422 && isTerminalScanProblem(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
       return scanFailureFor(result.status, result.body)
@@ -431,7 +442,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
-      if (result.status === 422 && isScanRejected(result.body)) {
+      if (result.status === 422 && isTerminalScanProblem(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
       return scanFailureFor(result.status, result.body)
