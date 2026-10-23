@@ -1337,6 +1337,7 @@ final readonly class ErrorVocabulary
         'hotfix',
         'hours',
         'housekeeping',
+        'hover',
         'how',
         'html',
         'http',
