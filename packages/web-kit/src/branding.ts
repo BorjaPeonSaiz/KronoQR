@@ -268,6 +268,22 @@ function adjustUntil(
   return target
 }
 
+/**
+ * El acento oscurecido hasta leerse como texto sobre UN fondo (por defecto, el
+ * blanco del papel): el mismo algoritmo que deriva `primary-strong`, con el
+ * candidato redondeado a 8 bits antes de medirlo. El backend lo replica en
+ * `Branding::accentForTextOnWhite()` y las dos pruebas comparten
+ * `backend/tests/Fixtures/accent-text-on-white.json`: si cambia el algoritmo,
+ * cambian los dos lados.
+ */
+export function accentTextOn(
+  accent: string,
+  background = '#ffffff',
+  minimum: number = WCAG_AA_MINIMUM.text,
+): string {
+  return toHex(adjustUntil(parseHexColor(accent), BLACK, parseHexColor(background), minimum))
+}
+
 /** De entre los candidatos, el que mas contrasta con `background`. */
 function bestOn(background: Rgb, candidates: readonly Rgb[]): Rgb {
   let best = candidates[0] ?? background

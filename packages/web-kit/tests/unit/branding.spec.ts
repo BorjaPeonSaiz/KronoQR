@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   accentContrast,
+  accentTextOn,
   accentOverrides,
   applyBranding,
   contrastWarnings,
@@ -342,6 +343,43 @@ describe('accentOverrides: el valor que se mide es el que se pinta (R6-UX-02)', 
     }
 
     expect(failures).toEqual([])
+  })
+})
+
+// Los mismos casos que el backend (`AccentTextOnWhiteFixtureTest`): los dos lados del
+// ajuste «acento oscurecido hasta 4,5:1 sobre blanco» tienen que dar el mismo tono.
+interface AccentTextCase {
+  readonly label: string
+  readonly accent: string
+  readonly text: string
+}
+const accentTextFixture = JSON.parse(
+  readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../../backend/tests/Fixtures/accent-text-on-white.json',
+    ),
+    'utf8',
+  ),
+) as { readonly background: string; readonly minimum: number; readonly cases: AccentTextCase[] }
+
+describe('accentTextOn: el mismo tono que el backend (accentForTextOnWhite)', () => {
+  it.each(accentTextFixture.cases.map((item) => [item.label, item.accent, item.text] as const))(
+    '%s: %s -> %s',
+    (_label, accent, expected) => {
+      expect(accentTextOn(accent, accentTextFixture.background, accentTextFixture.minimum)).toBe(
+        expected,
+      )
+    },
+  )
+
+  it('el tono resultante llega al minimo medido sobre el valor ya redondeado', () => {
+    for (const item of accentTextFixture.cases) {
+      expect(
+        contrastRatio(item.text, accentTextFixture.background),
+        item.label,
+      ).toBeGreaterThanOrEqual(accentTextFixture.minimum)
+    }
   })
 })
 
