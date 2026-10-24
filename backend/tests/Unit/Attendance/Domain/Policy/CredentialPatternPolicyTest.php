@@ -209,7 +209,7 @@ it('emite UNA incidencia por persona aunque coincida con varias, y dice con cuan
 
     $anomalies = coincidencesIn(patternPolicy(window: 10, repeats: 3), $scans);
 
-    $senaladas = array_map(static fn (DetectedAnomaly $a): string => $a->employeeUuid, $anomalies);
+    $senaladas = array_map(static fn (DetectedAnomaly $a): ?string => $a->employeeUuid, $anomalies);
     sort($senaladas);
 
     expect($anomalies)->toHaveCount(3)
