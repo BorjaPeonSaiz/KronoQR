@@ -134,6 +134,9 @@ final readonly class ErrorContextAllowlist
         'items',
         'missing',
         'purged',
+        // Quiosco: lecturas de QR mal formadas (solo longitud y recuento, nunca el contenido) y filas de cola ilegibles.
+        'count',
+        'length',
     ];
 
     /**
@@ -156,7 +159,8 @@ final readonly class ErrorContextAllowlist
      * @var list<string>
      */
     private const array NUMERIC_KEYS = [
-        'attempts', 'http_status', 'line', 'silence_ms', 'skew_seconds', 'entries', 'items', 'missing', 'purged',
+        'attempts', 'http_status', 'line', 'silence_ms', 'skew_seconds', 'entries', 'items', 'missing', 'purged', 'count',
+        'length',
     ];
 
     /** La clave que se normaliza a `pathname:linea` antes de sanear. */

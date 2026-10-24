@@ -131,7 +131,7 @@ it('declara exactamente las claves que el servidor y los clientes emiten', funct
         'component', 'hook', 'source', 'line',
         // Quiosco (`frontend-kiosk/src`).
         'scope', 'audio_state', 'silence_ms', 'skew_seconds', 'durable', 'kind', 'problem_type', 'outcome',
-        'entries', 'items', 'missing', 'purged',
+        'entries', 'items', 'missing', 'purged', 'count', 'length',
     ]);
 })->group('RF-PD-15');
 
