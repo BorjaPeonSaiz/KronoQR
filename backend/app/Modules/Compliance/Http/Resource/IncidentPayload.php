@@ -60,7 +60,15 @@ final readonly class IncidentPayload
             // Enteros y nada mas: minutos medidos y umbral aplicado. El adaptador
             // ya lo lee tipado, y de la tabla no puede salir otra cosa porque es
             // lo unico que la deteccion escribe.
-            'context' => $incident->context,
+            // En la `discarded_scan` sin persona (ADR-061 A2), ademas el NOMBRE del
+            // quiosco, leido al servirla —no se guarda: si se renombra el puesto,
+            // la bandeja dice el nombre de hoy—. Es el nombre de un sitio, no de
+            // nadie.
+            'context' => $row->subject->deviceName === null
+                ? $incident->context
+                // Recortado a los 64 de `IncidentContext` (`devices.name` admite
+                // 120), como el rotulo de quiosco de `anomalous_pattern`.
+                : [...$incident->context, 'device_name' => mb_substr($row->subject->deviceName, 0, 64)],
             'assigned_to' => self::actor($row->assignedTo),
             'resolved_at' => self::utcOrNull($incident->resolvedAt),
             'resolved_by' => self::actor($row->resolvedBy),

@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\DB;
  * - **La columna crece de `varchar(16)` a `varchar(24)`**: `fingerprint_match`
  *   tiene 17 letras. Ampliar un `varchar` en PostgreSQL solo toca el catalogo,
  *   sin reescribir la tabla.
- * - **El `CHECK`**: `DROP` + `ADD ... NOT VALID` en una transaccion con el
- *   `lock_timeout` del trait, y `VALIDATE` fuera, que no bloquea los avisos.
+ * - **El `CHECK`**: se suelta ANTES de ampliar el tipo —con una restriccion
+ *   sobre la columna, `ALTER COLUMN TYPE` la comprobaria fila a fila con `ACCESS
+ *   EXCLUSIVE`—, se vuelve a crear `NOT VALID` en la misma transaccion y se
+ *   valida fuera, que no bloquea los avisos.
  *
  * ## Patron `/migracion-segura`: expand puro
  *
@@ -48,8 +50,11 @@ return new class extends Migration
         DB::transaction(function (): void {
             $this->limitLockWait();
 
-            DB::statement('ALTER TABLE discarded_scan_reports ALTER COLUMN attribution TYPE varchar(24)');
+            // El CHECK fuera ANTES de ampliar el tipo: con una restriccion sobre la
+            // columna, `ALTER COLUMN TYPE` la vuelve a comprobar fila a fila con
+            // ACCESS EXCLUSIVE. Sin ella, ampliar un varchar solo toca el catalogo.
             DB::statement('ALTER TABLE discarded_scan_reports DROP CONSTRAINT IF EXISTS '.self::CHECK);
+            DB::statement('ALTER TABLE discarded_scan_reports ALTER COLUMN attribution TYPE varchar(24)');
             DB::statement(<<<'SQL'
                 ALTER TABLE discarded_scan_reports
                     ADD CONSTRAINT discarded_scan_reports_chk_attribution

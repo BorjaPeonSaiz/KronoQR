@@ -131,7 +131,11 @@ function declaredContractions(): array
  *
  * `ALTER COLUMN TYPE` reescribe la tabla en general, y **no** en un caso que
  * PostgreSQL garantiza desde la 9.2: ampliar la longitud de un `varchar` (o
- * pasarlo a `text`) solo toca el catalogo. El detector no ve la longitud de
+ * pasarlo a `text`) solo toca el catalogo **si no hay ninguna restriccion ni
+ * indice sobre la columna**. Con un `CHECK` sobre ella, PostgreSQL lo vuelve a
+ * comprobar recorriendo la tabla con `ACCESS EXCLUSIVE`: la migracion tiene que
+ * soltarlo antes y crearlo despues `NOT VALID` + `VALIDATE`, y quien revise la
+ * entrada lo comprueba. El detector no ve la longitud de
  * antes, asi que el caso se declara aqui con el mismo trinquete: lista exacta y
  * tamaño afirmado abajo.
  *

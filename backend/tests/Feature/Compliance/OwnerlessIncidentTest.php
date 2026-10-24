@@ -79,6 +79,8 @@ it('ensena al administrador la incidencia sin persona con employee nulo y el qui
     expect($respuesta->json('data.0.id'))->toBe($caso['id'])
         ->and($respuesta->json('data.0.employee'))->toBeNull()
         ->and($respuesta->json('data.0.context.device_uuid'))->toBe($caso['deviceUuid'])
+        // El nombre del puesto, leido al servirla (no se guarda en el context).
+        ->and($respuesta->json('data.0.context.device_name'))->toStartWith('Recepcion')
         ->and($respuesta->json('meta.total'))->toBe(1);
 })->group('RN-22', 'RF-PA-05');
 

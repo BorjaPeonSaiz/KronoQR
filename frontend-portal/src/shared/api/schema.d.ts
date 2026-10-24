@@ -10816,7 +10816,10 @@ export interface components {
          *     lo descarto el servidor, ADR-061) y, solo con `server`, `attempts` (los
          *     intentos fallidos). La incidencia sin persona (`employee` nulo) lleva
          *     `device_uuid`, `scan_id`, `occurred_at`, `origin`, `attribution` (`none`),
-         *     `reports`, `source` y `attempts`. **Nunca** el contenido del QR ni el
+         *     `reports`, `source`, `attempts` y, solo en ella y desde la 2.3.0,
+         *     `device_name`: el nombre del quiosco tal como esta hoy en el panel
+         *     (recortado a 64), para que quien la revisa no tenga que traducir el
+         *     `device_uuid`. Es el nombre de un puesto, no de una persona. **Nunca** el contenido del QR ni el
          *     codigo de empleado.
          * @example {
          *       "rest_minutes": 420,

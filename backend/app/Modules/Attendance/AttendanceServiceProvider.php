@@ -130,15 +130,6 @@ final class AttendanceServiceProvider extends ServiceProvider
         // A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
         $this->app->bind(CardFingerprintOwners::class, DatabaseCardFingerprintOwners::class);
 
-        // RS-03: un descarte verifica la firma de la tarjeta para atribuirlo, y
-        // se rellena hasta el MISMO suelo que el aviso del quiosco, que hace
-        // ese mismo trabajo (el doble del de RS-03, ver abajo).
-        $this->app->when(UnprocessableScanGuard::class)
-            ->needs(ConstantTimeFloor::class)
-            ->give(static fn (): ConstantTimeFloor => new ConstantTimeFloor(
-                2 * max(0, Config::integer('security.rejection_floor_ms', 25)),
-            ));
-
         // Correcciones (tarea 1.15). Las dos las sirve este mismo modulo:
         // `shift_corrections` es parte del registro horario —se consulta al
         // pintar una jornada y se exporta con el registro legal—, no auditoria
@@ -181,7 +172,9 @@ final class AttendanceServiceProvider extends ServiceProvider
         // aviso hasta el DOBLE del suelo de RS-03, despues del INSERT. El
         // resolutor ya rellena sus rechazos hasta el suelo sencillo; con el
         // mismo numero aqui una tarjeta vigente volvia antes que una retirada.
-        $this->app->when(ReportDiscardedScans::class)
+        // El descarte del servidor (ADR-061) hace ese mismo trabajo —verifica la
+        // firma para atribuir— y usa el MISMO suelo, de la misma fabrica.
+        $this->app->when([ReportDiscardedScans::class, UnprocessableScanGuard::class])
             ->needs(ConstantTimeFloor::class)
             ->give(static fn (): ConstantTimeFloor => new ConstantTimeFloor(
                 2 * max(0, Config::integer('security.rejection_floor_ms', 25)),

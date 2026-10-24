@@ -30,6 +30,7 @@ use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
+use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
@@ -1085,7 +1086,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         // Nulo en el fichaje por PIN: no hay tarjeta de la que tomar huella
         // (RF-AT-11). Inventar una a partir del codigo de empleado habria metido
         // dos cosas distintas en la misma columna.
-        return $qrPayload === null ? null : hash('sha256', $qrPayload);
+        return $qrPayload === null ? null : PayloadFingerprint::ofQrPayload($qrPayload);
     }
 
     /**

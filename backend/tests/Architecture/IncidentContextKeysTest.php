@@ -108,8 +108,12 @@ function incidentContextCatalogue(): array
             'origin' => ['type' => 'string', 'maxLength' => 16],
             'http_status' => $minutos,
             'problem' => ['type' => 'string', 'maxLength' => 64],
-            'attribution' => ['type' => 'string', 'maxLength' => 16],
+            'attribution' => ['type' => 'string', 'maxLength' => 32],
             'reports' => $minutos,
+            // ADR-061 (2.3.0): quien lo descarto, del catalogo cerrado `kiosk` o
+            // `server`, y los intentos del servidor. Ni uno identifica a nadie.
+            'source' => ['type' => 'string', 'maxLength' => 16],
+            'attempts' => $minutos,
         ],
         // RF-PR-06 y RN-16 (tarea 3.11). Un solo tipo de incidencia con DOS
         // formas, que `pattern` distingue, asi que esta entrada es la union de

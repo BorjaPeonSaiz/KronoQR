@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Application\UseCase;
 use App\Modules\Attendance\Application\Command\RegisterPinScanCommand;
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\Port\ScanIntent;
+use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use DateTimeImmutable;
 use SensitiveParameter;
@@ -50,7 +51,7 @@ final readonly class GuardedScan
             origin: $command->origin,
             intent: $command->intent,
             occurredAt: $command->occurredAt,
-            contentFingerprint: hash('sha256', $command->qrPayload ?? ''),
+            contentFingerprint: PayloadFingerprint::ofQrPayload($command->qrPayload ?? ''),
             qrPayload: $command->qrPayload,
             employeeCode: null,
         );

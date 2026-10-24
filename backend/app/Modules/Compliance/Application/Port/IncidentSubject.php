@@ -31,5 +31,7 @@ final readonly class IncidentSubject
         public ?string $fullName,
         public ?int $departmentId,
         public ?string $departmentName,
+        /** Nombre del quiosco de la `discarded_scan` sin persona (ADR-061 A2); nulo en todo lo demas. */
+        public ?string $deviceName = null,
     ) {}
 }

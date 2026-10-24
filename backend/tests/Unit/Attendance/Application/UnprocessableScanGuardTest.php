@@ -22,6 +22,7 @@ use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Application\UseCase\GuardedScan;
 use App\Modules\Attendance\Application\UseCase\RegisterScanBatchHandler;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
 use App\Modules\Attendance\Application\UseCase\ScanRegistration;
@@ -29,6 +30,7 @@ use App\Modules\Attendance\Application\UseCase\UnprocessableScanGuard;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
+use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanDiscardThreshold;
 use App\Modules\Attendance\Domain\ValueObject\ScanFailureHistory;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -514,3 +516,15 @@ it('deja el descarte sin atribuir si la huella tampoco aparece', function (): vo
 
     expect($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::NONE);
 })->group('RN-22');
+
+it('calcula la misma huella que el registro del fichaje, de una sola fuente', function (): void {
+    // ADR-061 A2: la atribucion por huella busca en `scan_events` lo que calcula
+    // el guardian. Si discreparan, no encontraria a nadie.
+    $clase = new ReflectionClass(RegisterScanHandler::class);
+    $delRegistro = $clase->getMethod('fingerprintOf')->invoke($clase->newInstanceWithoutConstructor(), GUARDIAN_PAYLOAD);
+
+    expect(escaneoGuardado()->contentFingerprint)->toBe(PayloadFingerprint::ofQrPayload(GUARDIAN_PAYLOAD))
+        ->and(escaneoGuardado()->scanEventFingerprint())->toBe(escaneoGuardado()->contentFingerprint)
+        ->and(PayloadFingerprint::ofQrPayload(GUARDIAN_PAYLOAD))->toBe(hash('sha256', GUARDIAN_PAYLOAD))
+        ->and($delRegistro)->toBe(escaneoGuardado()->contentFingerprint);
+})->group('RN-22', 'RS-03');
