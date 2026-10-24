@@ -22,6 +22,7 @@ import { RouterLink } from 'vue-router'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import { describeIncidentContext } from './incidentContext'
 import { useIncidentsStore } from './incidents.store'
+import { incidentSubject } from './incidentSubject'
 import type { Incident, IncidentOutcome } from '@/shared/api/types'
 
 const props = defineProps<{ incident: Incident; timeZone: string }>()
@@ -128,11 +129,17 @@ function conflictMoment(): string {
   <BaseDialog :title="t('incidents.dialog.title')" @close="close">
     <p class="text-kq-text-muted">
       {{
-        t('incidents.dialog.for', {
-          type: t(`incidents.types.${incident.type}`),
-          name: incident.employee.full_name,
-          date: incident.work_date,
-        })
+        incident.employee === null
+          ? t('incidents.dialog.forNoPerson', {
+              type: t(`incidents.types.${incident.type}`),
+              subject: incidentSubject(incident, t),
+              date: incident.work_date,
+            })
+          : t('incidents.dialog.for', {
+              type: t(`incidents.types.${incident.type}`),
+              name: incidentSubject(incident, t),
+              date: incident.work_date,
+            })
       }}
     </p>
 

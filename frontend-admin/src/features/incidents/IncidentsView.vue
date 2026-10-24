@@ -24,6 +24,7 @@ import type { Incident, IncidentSeverity, IncidentStatus, IncidentType } from '@
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import IncidentTable from './IncidentTable.vue'
 import { useIncidentsStore } from './incidents.store'
+import { incidentSubject } from './incidentSubject'
 import ResolveIncidentDialog from './ResolveIncidentDialog.vue'
 
 /** Cada cuanto se repinta la antiguedad. Un minuto de resolucion basta. */
@@ -108,8 +109,8 @@ const employeeFilterName = computed(() => {
   }
 
   return (
-    store.entries.find((entry) => entry.employee.uuid === employeeUuidFilter.value)?.employee
-      .full_name ?? null
+    store.entries.find((entry) => entry.employee?.uuid === employeeUuidFilter.value)?.employee
+      ?.full_name ?? null
   )
 })
 
@@ -177,7 +178,7 @@ function closeResolve(): void {
 function onResolved(incident: Incident): void {
   announce(
     t('incidents.announce.resolved', {
-      name: incident.employee.full_name,
+      name: incidentSubject(incident, t),
       outcome: t(`incidents.outcomes.${incident.status}`),
     }),
   )

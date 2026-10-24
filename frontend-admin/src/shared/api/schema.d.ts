@@ -10808,9 +10808,16 @@ export interface components {
          *     La incidencia `discarded_scan` (RN-22) lleva `scan_id` y `occurred_at`
          *     del primer aviso de la jornada, `device_uuid`, `origin`, `http_status`,
          *     `problem` (el final del `type` recibido, `invalid-request`, o vacio),
-         *     `attribution` (`credential` o `employee_code`) y `reports` (cuantos
-         *     avisos esa jornada). **Nunca** el contenido del QR ni el codigo de
-         *     empleado.
+         *     `attribution` (`credential`, `employee_code` o, desde la 2.3.0,
+         *     `fingerprint_match` —un descarte del servidor atribuido por la huella del
+         *     contenido en fichajes aceptados anteriores de esa tarjeta— o `none` en la
+         *     incidencia sin persona) y `reports` (cuantos esa jornada). Desde la
+         *     2.3.0 lleva ademas `source` (`kiosk` si lo aviso el quiosco, `server` si
+         *     lo descarto el servidor, ADR-061) y, solo con `server`, `attempts` (los
+         *     intentos fallidos). La incidencia sin persona (`employee` nulo) lleva
+         *     `device_uuid`, `scan_id`, `occurred_at`, `origin`, `attribution` (`none`),
+         *     `reports`, `source` y `attempts`. **Nunca** el contenido del QR ni el
+         *     codigo de empleado.
          * @example {
          *       "rest_minutes": 420,
          *       "threshold_minutes": 720
@@ -10866,7 +10873,17 @@ export interface components {
             type: components["schemas"]["IncidentType"];
             severity: components["schemas"]["IncidentSeverity"];
             status: components["schemas"]["IncidentStatus"];
-            employee: components["schemas"]["IncidentEmployee"];
+            /**
+             * @description La persona de la incidencia. **`null` solo en una `discarded_scan`
+             *     sin persona** (2.3.0, RN-22, ADR-061): un fichaje descartado por el
+             *     servidor que no se pudo atribuir ni por la firma de la tarjeta ni por
+             *     la huella de su contenido. Es una por quiosco y jornada, va al
+             *     administrador y su `context` lleva el quiosco (`device_uuid`), el
+             *     `scan_id` y el `occurred_at`, para cruzarlos con el cuadrante. Un
+             *     responsable de departamento no la ve: no es de ninguna persona de su
+             *     departamento.
+             */
+            employee: components["schemas"]["IncidentEmployee"] | null;
             /**
              * Format: date
              * @description Jornada a la que se refiere, en la zona del centro. Un turno

@@ -87,6 +87,15 @@ describe('describeIncidentContext — fichaje anterior a la retirada y fichaje d
     expect(lines.find((line) => line.key === 'problem')?.text).toBe('problema declarado: Sin valor')
   })
 
+  it.each([
+    ['fingerprint_match', 'atribuido por: identificada por la tarjeta en fichajes anteriores'],
+    ['none', 'atribuido por: sin identificar'],
+  ])('discarded_scan: la atribucion %s se traduce', (attribution, text) => {
+    const lines = describeIncidentContext({ attribution }, t, ZONE, LOCALE, 'discarded_scan')
+
+    expect(lines).toEqual([{ key: 'attribution', text }])
+  })
+
   it('un valor de retirada que el contrato aun no conoce se enseña en bruto', () => {
     const lines = describeIncidentContext({ withdrawal: 'otra-cosa' }, t, ZONE, LOCALE)
 

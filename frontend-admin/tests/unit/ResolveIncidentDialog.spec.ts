@@ -36,6 +36,25 @@ afterEach(() => {
 })
 
 describe('ResolveIncidentDialog', () => {
+  it('sin persona, el cuerpo nombra el quiosco en vez de una persona y se puede resolver', async () => {
+    const wrapper = await mountView(ResolveIncidentDialog, {
+      props: {
+        incident: incident({
+          type: 'discarded_scan',
+          employee: null,
+          context: { device_uuid: '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81', attribution: 'none' },
+        }),
+        timeZone: 'Europe/Madrid',
+      },
+      pinia: createTestPinia(),
+    })
+
+    expect(wrapper.text()).toContain('Fichaje sin persona en 0199f3c9…')
+    expect(wrapper.text()).toContain('atribuido por: sin identificar')
+
+    wrapper.unmount()
+  })
+
   it('no deja confirmar sin nota, y lo dice antes de gastar una peticion', async () => {
     const spy = stubFetch(() => jsonResponse({}))
     const wrapper = await mountDialog()

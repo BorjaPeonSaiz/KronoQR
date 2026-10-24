@@ -1459,6 +1459,11 @@
     }
   },
   "incidents": {
+    "noPerson": {
+      "label": "Fichaje sin persona en {device}",
+      "unknownDevice": "un quiosco desconocido",
+      "at": "Fichaje a las {moment}"
+    },
     "title": "Bandeja de incidencias",
     "subtitle": "Lo que del registro horario tiene que mirar una persona. Resolver una incidencia no cambia ninguna hora: si hay que rectificar un tramo, se hace desde el registro horario de la persona.",
     "loading": "Cargando la bandeja de incidencias…",
@@ -1590,7 +1595,9 @@
       },
       "attributionValues": {
         "credential": "la tarjeta",
-        "employee_code": "el código de empleado"
+        "employee_code": "el código de empleado",
+        "fingerprint_match": "identificada por la tarjeta en fichajes anteriores",
+        "none": "sin identificar"
       }
     },
     "employeeFilter": {
@@ -1603,6 +1610,7 @@
     "dialog": {
       "title": "Cerrar incidencia",
       "for": "{type}, de {name}, jornada del {date}.",
+      "forNoPerson": "{type}: {subject}, jornada del {date}.",
       "outcomeLegend": "Qué ha pasado",
       "outcome": {
         "resolved": "Se ha corregido",
