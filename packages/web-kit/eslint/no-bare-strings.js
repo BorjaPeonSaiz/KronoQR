@@ -1,4 +1,4 @@
-// «Sin literales fuera de i18n» (KI7-02, CLAUDE.md: los textos de usuario van en
+// «Sin literales fuera de i18n» (CLAUDE.md: los textos de usuario van en
 // `i18n`).
 //
 // POR QUE EXISTE. Era una convencion que no verificaba ninguna herramienta, y

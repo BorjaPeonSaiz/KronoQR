@@ -1,5 +1,5 @@
-// Cifrado en reposo de la cola de fichajes y de la lista de descartados (A1 de la
-// revision de seguridad; doc 05: «lo guardado en la tablet va cifrado»).
+// Cifrado en reposo de la cola de fichajes y de la lista de descartados (doc 05:
+// «lo guardado en la tablet va cifrado»).
 //
 // QUE SE CIFRA. Lo sensible de cada fila: el `qr_payload` (la credencial portadora de
 // la tarjeta), el `employee_code` y el `pin_sealed`. Lo que gobierna el orden y el

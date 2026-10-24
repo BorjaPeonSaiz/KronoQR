@@ -129,8 +129,8 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
 
   // Generacion de lanzamiento: `teardown()` la incrementa e invalida todo `launch()`
   // en vuelo. Tras cada `await`, un lanzamiento que ya no es el vigente suelta lo
-  // que obtuvo y sale (R2-KI-02). El lanzamiento en vuelo se comparte: un segundo
-  // `start()` se une a el en vez de abrir otra camara (R2-KI-01).
+  // que obtuvo y sale. El lanzamiento en vuelo se comparte: un segundo
+  // `start()` se une a el en vez de abrir otra camara.
   let generation = 0
   let inflight: { readonly generation: number; readonly promise: Promise<void> } | null = null
 
@@ -195,8 +195,8 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
 
     state.value = 'starting'
 
-    // El `import()` del decodificador va DESPUES de la camara a proposito (KP1 lo
-    // probo en paralelo y se revirtio): un lanzamiento invalidado no pide el trozo, y
+    // El `import()` del decodificador va DESPUES de la camara a proposito, no en
+    // paralelo: un lanzamiento invalidado no pide el trozo, y
     // el orden de las esperas es el que fija `cameraLifecycleRace.spec.ts`. Con el
     // `import()` adelantado, bajo carga y cobertura esa prueba fallaba de forma
     // intermitente (3 de 30). El trozo esta precacheado por el service worker.

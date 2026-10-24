@@ -29,7 +29,7 @@ const LOCALE_STORAGE_KEY = 'kronoqr.kiosk.locale'
 
 /**
  * Hasta la 2.2.x la eleccion de un empleado se guardaba aqui y se quedaba para toda
- * la tablet (V7-KI-05). Ya no se guarda (D9): se retira lo que dejaron versiones
+ * la tablet. Ya no se guarda: se retira lo que dejaron versiones
  * anteriores, o una tablet actualizada seguiria arrancando en el idioma de la
  * ultima persona que lo cambio.
  */

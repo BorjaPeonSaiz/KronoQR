@@ -15,14 +15,14 @@
 //  - **No hay retroactividad**: el valor nuevo rige desde el cambio y el
 //    historico no se reprocesa; ninguna incidencia se cierra ni se reabre.
 //  - **La jornada semanal y el dia de inicio de semana mueven la vista de
-//    cumplimiento (RF-PA-06, tarea 3.4), no la bandeja de incidencias**: RN-17
+//    cumplimiento (RF-PA-06), no la bandeja de incidencias**: RN-17
 //    es informativa (computo anual, art. 34.1 ET) y nunca abre incidencia. El
 //    calendario de festivos es el UNICO campo que sigue sin consumidor; se
 //    marca como tal junto al propio campo, para no mentir sobre el efecto.
 //  - **`retention_years` es el unico cuyo error se paga con datos que no
 //    vuelven**, y lleva su propio aviso al lado.
 //  - **El aviso de `break_required_after_hours` YA NO es un texto fijo**
-//    (tarea 3.5, RF-AT-12): esta pantalla lee `ATTENDANCE_BREAK_CLOCKING` de
+//    (RF-AT-12): esta pantalla lee `ATTENDANCE_BREAK_CLOCKING` de
 //    `GET /api/v1/settings` -misma potestad `settings:*`, mismo `settings.api.ts`
 //    que ya usa `OperationalSettingsView`- y dice si RN-12 esta suspendida
 //    (fichaje de pausa desactivado, con un enlace a donde se activa) o si ya
@@ -53,7 +53,7 @@ import { fetchComplianceProfile, updateComplianceProfile } from './compliancePro
 import { fetchInstallationSettings, stringValue } from './settings.api'
 
 /**
- * `headingLevel` existe por el asistente de puesta en marcha (tarea 5.5), que
+ * `headingLevel` existe por el asistente de puesta en marcha, que
  * incrusta esta MISMA pantalla como su paso de perfil de convenio bajo su
  * propio `h1`: un segundo `h1` competiria por el titulo de la pagina. La ruta
  * independiente `/compliance-profile` sigue siendo `h1`, que es lo que ya tenia.
@@ -70,7 +70,7 @@ const error = ref<unknown>(null)
 // (volver a pedir el perfil borraria lo que se ha editado tras un guardado fallido).
 const loadError = ref<unknown>(null)
 const saved = ref(false)
-/** `ATTENDANCE_BREAK_CLOCKING === 'enabled'` (tarea 3.5, RF-AT-12): si RN-12 esta suspendida o no. */
+/** `ATTENDANCE_BREAK_CLOCKING === 'enabled'` (RF-AT-12): si RN-12 esta suspendida o no. */
 const breakClockingEnabled = ref(false)
 
 /** Suelo legal de `retention_years` segun la jurisdiccion del perfil; viene SIEMPRE del servidor. */
@@ -394,7 +394,7 @@ const canSave = computed(
  * revisión diaria.
  *
  * `break_required_after_hours` solo entra en la lista **mientras el fichaje de
- * pausa esté activado** (`breakClockingEnabled`, tarea 3.5): con el ajuste
+ * pausa esté activado** (`breakClockingEnabled`): con el ajuste
  * desactivado, RN-12 sigue suspendida y cambiar ese umbral no altera ni una
  * incidencia -prometer lo contrario sería mentir en la pantalla, igual que lo
  * era en el asiento de auditoría-, y el campo lleva su propio aviso
@@ -419,7 +419,7 @@ const changesPersonnelRetention = computed(
   () => 'personnel_record_retention_years' in pendingChanges.value,
 )
 
-/** Se pide confirmacion con el antes y el despues de cada campo que cambia (R3-PA-09). */
+/** Se pide confirmacion con el antes y el despues de cada campo que cambia. */
 const confirming = ref(false)
 
 function askConfirmation(): void {
@@ -683,7 +683,7 @@ async function save(): Promise<void> {
       </FormField>
 
       <!-- La jornada semanal y el dia de inicio de semana (arriba) mueven la
-           VISTA DE CUMPLIMIENTO (RF-PA-06, tarea 3.4), no la bandeja: RN-17 es
+           VISTA DE CUMPLIMIENTO (RF-PA-06), no la bandeja: RN-17 es
            informativa (el computo del art. 34.1 ET es anual) y nunca abre
            incidencia, al contrario que el descanso minimo y la jornada diaria
            de mas arriba. Decirlo aqui evita que se lea como una quinta linea
@@ -709,10 +709,9 @@ async function save(): Promise<void> {
         </template>
       </FormField>
 
-      <!-- El unico campo que sigue sin consumidor (calendario de festivos,
-           tarea 3.10): se declara justo debajo, no antes de la jornada
-           semanal ni del dia de inicio, que SI tienen consumidor desde la
-           3.4. -->
+      <!-- El unico campo que sigue sin consumidor (calendario de festivos):
+           se declara justo debajo, no antes de la jornada semanal ni del dia
+           de inicio, que SI tienen consumidor. -->
       <p class="text-sm text-kq-text-muted" data-test="not-applied-yet">
         {{ t('compliance.notAppliedYet') }}
       </p>

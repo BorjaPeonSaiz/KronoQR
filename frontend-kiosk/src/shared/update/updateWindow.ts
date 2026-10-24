@@ -1,4 +1,4 @@
-// La PUERTA de la actualizacion del quiosco (RF-KI-07, tarea 3.12).
+// La PUERTA de la actualizacion del quiosco (RF-KI-07).
 //
 // Aplicar una version nueva del service worker recarga la pagina. Si eso
 // ocurre a las 06:00 con quince personas esperando, el quiosco esta muerto
@@ -8,18 +8,17 @@
 // arranque de la version nueva deja esos fichajes retenidos y sin nadie
 // mirandolos.
 //
-// YA NO HAY VENTANAS DE CAMBIO DE TURNO FIJAS EN CODIGO (revision de esta
-// tarea: la version anterior de este fichero traia tres franjas —05:30-06:30,
-// 13:30-14:30, 21:30-22:30— con nombre de constante, que contradecia RF-KI-07
-// («ventana configurable») y la regla dura 13 («nada de cliente en el
-// codigo»). La franja la declara el CENTRO en `installation_settings` y viaja
+// NO HAY VENTANAS DE CAMBIO DE TURNO FIJAS EN CODIGO: unas franjas con nombre
+// de constante contradirian RF-KI-07 («ventana configurable») y la regla dura
+// 13 («nada de cliente en el codigo»). La franja la declara el CENTRO en
+// `installation_settings` y viaja
 // en cada latido (`KioskHeartbeat.update_window`, cacheada por
 // `shared/telemetry/heartbeat.ts` en `shared/device/deviceSettings.ts`).
 // Sin configuracion recibida todavia (tablet que nunca ha latido en esta
 // sesion, o en ninguna anterior), la ventana DE SERIE es `03:00-05:00` con 10
 // minutos de silencio: el mismo valor por defecto que declara el ajuste
-// `KIOSK_UPDATE_WINDOW`/`KIOSK_UPDATE_QUIET_MINUTES` de la instalacion
-// (decision 9 de la tarea 3.12), nunca un valor inventado distinto.
+// `KIOSK_UPDATE_WINDOW`/`KIOSK_UPDATE_QUIET_MINUTES` de la instalacion,
+// nunca un valor inventado distinto.
 //
 // ESTA ES UNA VENTANA DE PERMISO, NO DE BLOQUEO: `canApplyUpdate` es
 // verdadero solo si las TRES condiciones se cumplen a la vez.
@@ -34,7 +33,7 @@
 //   3. La hora de PARED DEL CENTRO cae dentro de la ventana declarada, que
 //      puede cruzar la medianoche (`23:00-02:00`).
 //
-// HORA DEL CENTRO A PROPOSITO (V2-KI-01, RF-KI-07). El resto del sistema
+// HORA DEL CENTRO A PROPOSITO (RF-KI-07). El resto del sistema
 // trabaja en UTC (regla dura 3) porque son instantes con valor legal; esto no
 // es un instante, es «la hora del reloj de la pared del centro», que es la que
 // declaro quien configuro la ventana y la que decide cuando hay cola de gente.
@@ -59,10 +58,10 @@ export interface UpdateWindow {
   readonly end: string
 }
 
-/** `KIOSK_UPDATE_WINDOW` de serie (decision 9 de la tarea 3.12). */
+/** `KIOSK_UPDATE_WINDOW` de serie. */
 export const DEFAULT_UPDATE_WINDOW: UpdateWindow = { start: '03:00', end: '05:00' }
 
-/** `KIOSK_UPDATE_QUIET_MINUTES` de serie (decision 9 de la tarea 3.12). */
+/** `KIOSK_UPDATE_QUIET_MINUTES` de serie. */
 export const DEFAULT_UPDATE_QUIET_MINUTES = 10
 
 const HH_MM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/

@@ -28,7 +28,7 @@ import { formatLicenseDay } from './license.dates'
 import { useLicenseStore } from './license.store'
 
 /**
- * `headingLevel` existe por el asistente de puesta en marcha (tarea 5.5), que
+ * `headingLevel` existe por el asistente de puesta en marcha, que
  * incrusta esta MISMA pantalla como paso de licencia bajo su propio `h1`: un
  * segundo `h1` competiria por el titulo de la pagina. La ruta independiente
  * `/license` sigue siendo `h1`, que es lo que ya tenia.

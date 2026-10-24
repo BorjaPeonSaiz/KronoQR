@@ -16,7 +16,7 @@ const props = withDefaults(
     status: ConnectivityStatus
     /** `null` = no se sabe (cola en memoria, ADR-047): se dice, no se pinta un 0. */
     pendingCount?: number | null
-    /** Hay un drenaje de la cola en curso (tarea 1.9). */
+    /** Hay un drenaje de la cola en curso. */
     syncing?: boolean
   }>(),
   { pendingCount: 0, syncing: false },

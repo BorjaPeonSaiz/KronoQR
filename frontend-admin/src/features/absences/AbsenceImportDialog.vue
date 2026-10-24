@@ -7,7 +7,7 @@
 // asi que lo que se aplica es EXACTAMENTE lo que se reviso (regla dura 5).
 //
 // Una fila identica a una ausencia activa ya registrada sale `unchanged`, no
-// como rechazo (decision 5 de la ficha): reimportar el mismo fichero es
+// como rechazo: reimportar el mismo fichero es
 // seguro.
 //
 // Los textos de cada fila y los avisos del fichero entero llegan del servidor

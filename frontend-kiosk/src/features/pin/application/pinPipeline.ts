@@ -8,7 +8,7 @@
 // caliente y el sellado tarde microsegundos, no milisegundos.
 //
 // Fuera de eso, la disciplina es identica: `submit()` encola (via el mismo
-// `ScanSubmissionPort` de la 1.9) y confirma ANTES de saber que dira el
+// `ScanSubmissionPort` que la tarjeta) y confirma ANTES de saber que dira el
 // servidor; el envio real sigue en segundo plano y llega por `onSettled`.
 //
 // LA DIFERENCIA QUE SI IMPORTA: EL QR SE PUEDE VALIDAR EN LOCAL, EL PIN NO.
@@ -73,16 +73,16 @@ export interface PinPipelineOptions {
    */
   readonly isOffline?: () => boolean
   /**
-   * Misma semantica que en `scanPipeline.ts` (ADR-024, decision 5 de la
-   * tarea 3.5): se llama UNA vez, al construir el `QueuedPinScan`, tras
+   * Misma semantica que en `scanPipeline.ts` (ADR-024): se llama UNA vez, al
+   * construir el `QueuedPinScan`, tras
    * sellar el PIN. Por defecto `'auto'`.
    */
   readonly resolveIntent?: () => ScanIntent
-  /** Ver `scanPipeline.ts` (decision 6 de la tarea 3.5). `null` = sin umbral todavia. */
+  /** Ver `scanPipeline.ts`. `null` = sin umbral todavia. */
   readonly clockSkewToleranceSeconds?: () => number | null
   /**
-   * El PIN tecleado con la pausa armada resulto RECHAZADO (revision de la
-   * segunda vuelta, QA): la intencion ya se consumio al encolar (decision 5),
+   * El PIN tecleado con la pausa armada resulto RECHAZADO: la intencion ya se
+   * consumio al encolar,
    * asi que un reintento inmediato con el PIN correcto se iria como `auto` si
    * nadie la vuelve a armar. Se llama SOLO cuando la intencion que se uso era
    * `'break_start'` y el desenlace final es `rejected` -nunca con `auto`, que
@@ -101,7 +101,7 @@ export interface PinPipelineOptions {
 export interface PinPipeline {
   /**
    * @returns la confirmacion a pintar. Nunca lanza: un sellado que falla se
-   *          convierte en `unavailable` («PIN no disponible», PIN-03), un
+   *          convierte en `unavailable` («PIN no disponible»), un
    *          fallo tecnico local que NO es un rechazo del servidor, y nunca en
    *          una pantalla rota delante de una cola.
    *
@@ -217,7 +217,7 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
         // este codigo esta dispuesto a arriesgar.
         const reason = error instanceof Error ? error.name : 'unknown'
         options.onError?.('seal_failed', { reason, message: reason })
-        // PIN-03: un fallo tecnico LOCAL no es un rechazo. «Codigo no valido,
+        // Un fallo tecnico LOCAL no es un rechazo. «Codigo no valido,
         // intentalo de nuevo» culpaba al empleado de algo que reintentar no
         // arregla. No se ha encolado nada, asi que tampoco «pendiente»: se le
         // dice que esta via no esta disponible y que use la tarjeta o avise.
@@ -225,13 +225,13 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
       }
 
       // Se consume tras sellar, ya con un PIN que de verdad va a encolarse
-      // (ADR-024, decision 5 de la tarea 3.5): un sellado que falla no llega
+      // (ADR-024): un sellado que falla no llega
       // aqui y no desarma el boton por nada.
       const intent = options.resolveIntent?.() ?? 'auto'
 
       /**
-       * Un PIN rechazado con la pausa armada la vuelve a armar (revision de
-       * la segunda vuelta): la persona escribio mal el PIN, no cambio de
+       * Un PIN rechazado con la pausa armada la vuelve a armar: la persona
+       * escribio mal el PIN, no cambio de
        * intencion. Se comprueba en CADA salida que entrega un desenlace
        * final -offline, gracia o plazo vencido-, nunca en `pending` ni
        * `verifying`, que no son el desenlace definitivo.

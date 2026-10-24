@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Aviso de que la consulta queda anotada (R7-PA-02; RS-05, ADR-037).
+// Aviso de que la consulta queda anotada (RS-05, ADR-037).
 //
 // Quien abre una pantalla con datos de terceros tiene derecho a saber que su
 // consulta deja un asiento de lectura en `audit_log`: quien mira, cuando y con

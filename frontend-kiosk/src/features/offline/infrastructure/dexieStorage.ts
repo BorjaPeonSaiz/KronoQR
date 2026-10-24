@@ -9,7 +9,7 @@
 // cola cargada obliga a migrar peticiones de fichaje pendientes en tablets que
 // pueden estar sin red, y eso es exactamente lo que no queremos hacer nunca.
 //
-// EL PIN (tarea 1.12) NO SUBE LA VERSION DEL ESQUEMA. `kind`, `employee_code` y
+// EL PIN NO SUBE LA VERSION DEL ESQUEMA. `kind`, `employee_code` y
 // `pin_sealed` no son columnas indexadas: Dexie guarda el objeto completo tal
 // cual, y una fila QR escrita por una version anterior de la app simplemente no
 // tiene `kind`. `normalizeRecord()` la trata como `'qr'` al leerla: es la unica
@@ -42,7 +42,7 @@ import type { QueueCipher, SealedBlob } from './queueCipher'
 export const DATABASE_NAME = 'kronoqr-kiosk'
 
 /**
- * Una fila tal como esta en disco cuando se cifra (A1): lo que gobierna orden y
+ * Una fila tal como esta en disco cuando se cifra: lo que gobierna orden y
  * reintento sigue en claro e indexado; lo sensible va en `enc` (ver `queueCipher.ts`).
  * Las filas de antes del cifrado siguen siendo `QueuedScanRecord` en claro hasta que
  * la migracion de arranque las sustituye (misma clave primaria: no queda copia en claro).
@@ -113,7 +113,7 @@ interface RawQueuedScanRecord {
 }
 
 /**
- * Ver la cabecera: una fila sin `kind` es de antes de la tarea 1.12 y es QR.
+ * Ver la cabecera: una fila sin `kind` es de antes del fichaje por PIN y es QR.
  *
  * El tipo estatico de `QueuedScanRecord` dice que `kind` SIEMPRE existe, asi
  * que comprobarlo tal cual hace que TypeScript de por inalcanzable la rama que
@@ -256,7 +256,7 @@ export function createDexieQueueStorage(
   }
 
   /**
-   * Migracion de arranque (A1): las filas en claro de versiones anteriores se cifran y
+   * Migracion de arranque: las filas en claro de versiones anteriores se cifran y
    * la version en claro se SUSTITUYE (misma clave primaria). El cifrado va fuera de la
    * transaccion de IndexedDB (WebCrypto la cerraria); dentro solo se comprueba que la
    * fila siga siendo la misma y sin cifrar antes de escribir. Una fila que no se puede
@@ -348,7 +348,7 @@ export function createDexieQueueStorage(
     },
 
     async listMeta(limit) {
-      // Sin descifrar ni esperar a la migracion: solo campos en claro (A1).
+      // Sin descifrar ni esperar a la migracion: solo campos en claro.
       const rows = await db.scans.orderBy('occurred_at').limit(limit).toArray()
       return rows.map((row) => ({
         scan_id: row.scan_id,
@@ -472,7 +472,7 @@ export function createDexieQueueStorage(
     },
 
     async clear() {
-      // Desvinculacion (F10 del dictamen de seguridad): la lista de descartados
+      // Desvinculacion: la lista de descartados
       // guarda el `qr_payload` hasta que el servidor acusa el aviso, y una tablet que
       // se desvincula no puede conservar credenciales leidas. Se vacia JUNTO con la
       // cola, en la misma transaccion. Fuera de este camino solo `removeDiscarded`

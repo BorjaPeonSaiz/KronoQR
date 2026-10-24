@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Eleccion de la persona de la exportacion para la Inspeccion (RF-IN-05,
-// V21-3-PA-1). El `auditor` no puede leer la plantilla: esta es la unica via por
+// Eleccion de la persona de la exportacion para la Inspeccion (RF-IN-05). El
+// `auditor` no puede leer la plantilla: esta es la unica via por
 // la que llega a una persona sin pedir su UUID a RRHH.
 //
 // Tres decisiones que no son esteticas:

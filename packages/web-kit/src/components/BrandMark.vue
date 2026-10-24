@@ -13,7 +13,7 @@
 //
 // El logotipo tiene tope de ALTO y de ANCHO con `object-contain`: un banner
 // apaisado —el formato habitual de cabecera de hotel— escalaria a cientos de
-// pixeles y empujaria la navegacion (revision de UI/UX de la tarea 5.8).
+// pixeles y empujaria la navegacion.
 import { computed } from 'vue'
 import type { Branding } from '../branding'
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Cuadro de impacto y adopción (RF-IN-08, RNF-D-01, tarea 3.13): los doce
+// Cuadro de impacto y adopción (RF-IN-08, RNF-D-01): los doce
 // indicadores del contrato (`AdoptionIndicatorKey`), con objetivo y variación
 // contra el periodo anterior. «El cuadro que responde a "¿esto está
 // sirviendo?" con datos» (doc 05 §5.4).
@@ -61,7 +61,7 @@ const FORMATS: readonly AdoptionExportFormat[] = ['csv', 'xlsx', 'pdf']
 /**
  * Los seis indicadores con objetivo del doc 01 §1.3 (los seis que llevan
  * `target.comparison` distinto de `reduction`, más la línea base): una
- * tarjeta por cada uno (decisión 7 de la ficha), en este orden fijo. Los
+ * tarjeta por cada uno, en este orden fijo. Los
  * otros seis del contrato (`offline_resolved_ratio`,
  * `incident_resolution_median_minutes`, `open_incidents`,
  * `employees_without_credential`, `worked_minutes`, `contracted_minutes`) se
@@ -79,7 +79,7 @@ const PRIMARY_INDICATOR_KEYS: readonly AdoptionIndicatorKey[] = [
   'baseline_manual_minutes_per_month',
 ]
 
-/** Los cuatro indicadores porcentuales con comparación, para las barras «actual frente a anterior» (decisión 7 de la ficha). */
+/** Los cuatro indicadores porcentuales con comparación, para las barras «actual frente a anterior». */
 const COMPARISON_CHART_KEYS: readonly AdoptionIndicatorKey[] = [
   'workdays_complete_ratio',
   'qr_scans_ratio',
@@ -161,7 +161,7 @@ const generatedAtLabel = computed(() =>
 
 /**
  * Un porcentaje con DOS decimales, con el separador del idioma de la
- * interfaz («99,86 %» en es, «99.86 %» en en; segunda vuelta de la ficha,
+ * interfaz («99,86 %» en es, «99.86 %» en en,
  * bloqueante): un solo decimal colapsaba el margen de RNF-D-01 -99,86 % de
  * disponibilidad contra un objetivo de ≥ 99,9 % se leía «99.9 %» Y a la vez
  * «fuera del objetivo», una contradicción visible en pantalla-.
@@ -234,8 +234,7 @@ function isWithinTarget(indicator: AdoptionIndicator): boolean | null {
  * La variación, NUNCA en el mismo formato que el valor absoluto cuando la
  * unidad es `percent`: un `delta` de porcentaje es una diferencia en PUNTOS
  * PORCENTUALES, no un segundo porcentaje («ha subido 2,30 pp», no
- * «+2,30 %», que confundiría signo de magnitud con signo de porcentaje;
- * segunda vuelta de la ficha).
+ * «+2,30 %», que confundiría signo de magnitud con signo de porcentaje).
  */
 function formatDelta(indicator: AdoptionIndicator): string {
   if (indicator.delta === null) {
@@ -292,7 +291,7 @@ const indicatorCards = computed<readonly IndicatorCard[]>(() =>
 /**
  * Vacío de verdad: sin jornadas -el ratio de jornadas completas no tiene
  * denominador- Y sin ningún fichaje aceptado -las cuatro cuotas de origen
- * son `null`- (segunda vuelta de la ficha, hallazgo de revisión). Los otros
+ * son `null`-. Los otros
  * ocho indicadores del contrato que no son ratios (`worked_minutes`,
  * `contracted_minutes`, `open_incidents`, `employees_without_credential`)
  * son recuentos: NUNCA son `null` -cero fichajes es un recuento válido, no
@@ -338,9 +337,9 @@ const originCategories = computed<readonly string[]>(() =>
 
 /**
  * `share` viaja TAL CUAL desde el contrato, incluido `null` cuando el
- * periodo no tuvo ningún fichaje aceptado (segunda vuelta de la ficha,
- * hallazgo de revisión: la versión anterior lo convertía en `0`, y «nadie
- * fichó» y «nadie fichó por tarjeta» son afirmaciones distintas). ECharts
+ * periodo no tuvo ningún fichaje aceptado: convertirlo en `0` mentiria,
+ * porque «nadie fichó» y «nadie fichó por tarjeta» son afirmaciones
+ * distintas. ECharts
  * dibuja un hueco para el `null` -no una porción de valor cero- y la tabla
  * de datos alternativa lo dice con «sin datos» (`ChartWithTable.vue`), que es
  * lo que de verdad hace el gráfico accesible (doc 02 §3.3).
@@ -359,9 +358,9 @@ const comparisonCategories = computed<readonly string[]>(() =>
 /**
  * `null` cuando el indicador no existe (no debería pasar: el contrato
  * siempre trae los doce) O cuando existe pero su `previous` es `null`: las
- * dos situaciones son «no hay dato», nunca «cero» (segunda vuelta de la
- * ficha, hallazgo de revisión: `indicatorByKey(key)?.previous !== null` daba
- * `true` para un indicador inexistente, porque `undefined !== null`).
+ * dos situaciones son «no hay dato», nunca «cero» (ojo:
+ * `indicatorByKey(key)?.previous !== null` daria `true` para un indicador
+ * inexistente, porque `undefined !== null`).
  */
 function previousValueOf(key: AdoptionIndicatorKey): number | null {
   return indicatorByKey(key)?.previous ?? null
@@ -382,9 +381,8 @@ const comparisonSeries = computed<readonly ChartSeries[]>(() => {
 
   if (comparisonHasPrevious.value) {
     // Cada indicador SIN `previous` propio se queda en `null` -un hueco en
-    // su barra-, aunque otro de los tres sí tenga dato: antes, con que uno
-    // solo tuviera `previous`, los otros tres se dibujaban con una barra a
-    // cero fabricada (segunda vuelta de la ficha, hallazgo de revisión).
+    // su barra-, aunque otro de los tres sí tenga dato: una barra a cero
+    // seria un dato fabricado.
     series.push({
       name: t('reports.adoption.previousSeries'),
       values: COMPARISON_CHART_KEYS.map((key) => previousValueOf(key)),
@@ -407,7 +405,7 @@ const pdfBusy = ref(false)
 const pdfBusyRetryAfter = ref<number | null>(null)
 
 // Un periodo de mas de un mes se exporta en segundo plano, con barra de avance y
-// cancelacion (RC2, V5-PA-4); uno corto sigue siendo al momento. El cuadro
+// cancelacion; uno corto sigue siendo al momento. El cuadro
 // siempre es de toda la plantilla, asi que lo que decide es la duracion.
 const {
   job,
@@ -557,8 +555,8 @@ const fieldClass =
       />
 
       <template v-else>
-        <!-- Una tarjeta por indicador con objetivo del §1.3 (decision 7 de
-             la ficha): valor, objetivo, variacion contra el periodo anterior
+        <!-- Una tarjeta por indicador con objetivo del §1.3: valor, objetivo,
+             variacion contra el periodo anterior
              -vacia, nunca 0, cuando no hay anterior- y estado con texto e
              icono, no solo con color (doc 06 §6, regla 5). -->
         <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-test="indicator-cards">
@@ -610,7 +608,7 @@ const fieldClass =
             </p>
 
             <!-- Subindicador «resueltos sin servidor», junto a la
-                 disponibilidad (decision 7 de la ficha). -->
+                 disponibilidad. -->
             <p
               v-if="card.indicator.key === 'clocking_availability_ratio'"
               class="mt-2 text-sm text-kq-text-muted"
@@ -635,7 +633,7 @@ const fieldClass =
 
             <!-- La linea base declarada, o «no declarada»: el sistema no
                  puede medir el trabajo anterior a su instalacion, asi que sin
-                 dato el indicador queda VACIO (decision 2.h de la ficha). -->
+                 dato el indicador queda VACIO. -->
             <p
               v-if="card.indicator.key === 'baseline_manual_minutes_per_month' && card.hasValue"
               class="mt-2 text-sm text-kq-text-muted"
@@ -678,7 +676,7 @@ const fieldClass =
           </div>
         </div>
 
-        <!-- Incidencias, credenciales y horas (decision 7 de la ficha):
+        <!-- Incidencias, credenciales y horas:
              fotos de hoy sin comparacion (RF-IN-08) y horas frente a
              contratadas del periodo. -->
         <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

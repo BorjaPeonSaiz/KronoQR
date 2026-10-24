@@ -21,7 +21,7 @@
 // va por el lote ordenado. Es la garantia «Orden correcto» aplicada tambien al
 // camino rapido.
 //
-// RACHAS POR TIPO (tarea 1.12). Un drenaje puede tener QR y PIN entremezclados
+// RACHAS POR TIPO. Un drenaje puede tener QR y PIN entremezclados
 // por `occurred_at` — una entrada por tarjeta y una salida por PIN, o al reves.
 // `splitRuns()` los agrupa en rachas maximas de la misma via SIN reordenarlos,
 // y el drenaje procesa una racha entera (con su llamada de lote o su secuencia
@@ -121,7 +121,7 @@ export interface SyncRunnerOptions {
   readonly onSyncing?: (syncing: boolean) => void
   readonly onDiagnostic?: (code: SyncDiagnostic, context: Record<string, string | number>) => void
   /**
-   * Alimenta `deviceRevocation.ts` (RF-PD-06, tarea 5.6): `true` en cada
+   * Alimenta `deviceRevocation.ts` (RF-PD-06): `true` en cada
    * respuesta `401`/`403`, `false` en cada envio que SI llega a decidirse
    * (`ok` o `rejected`, ambos autenticados). Nunca se llama por un fallo de
    * red, tiempo agotado o `429`: son ambiguos y no deben ni sumar ni resetear
@@ -231,7 +231,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
 
     const nowMs = clock.now().getTime()
-    // G2: sin red, `drain()` suelta las filas sin tocarlas y su espera sigue
+    // Sin red, `drain()` suelta las filas sin tocarlas y su espera sigue
     // siendo 0: programar con esa espera giraba en vacio (miles de lecturas de
     // IndexedDB por segundo). El evento `online` despierta de verdad
     // (`wakeNow`); esto es solo la red de seguridad de cuando ese evento no llega.
@@ -261,7 +261,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
    * - `200`: registrado, se borra.
    * - `422 scan-rejected` y `422 scan-discarded` (ADR-061): el servidor ya decidio y,
    *   en el segundo caso, ya abrio la incidencia. Se borra, SIN aviso propio.
-   * - Cualquier OTRO `422` (P7): la peticion no vale y nunca valdra (RN-22). Va a
+   * - Cualquier OTRO `422`: la peticion no vale y nunca valdra (RN-22). Va a
    *   descartados con su aviso, igual que en las rutas individuales. Antes se
    *   borraba en silencio y nadie lo revisaba.
    * - `503` o ausente: se conserva.
@@ -328,7 +328,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (result.outcome === 'failed' && result.cause === 'invalid') {
       // El servidor ha rechazado el LOTE entero por mal formado, y no dice cual
       // de los elementos lo envenena. Reintentar el lote daria lo mismo para
-      // siempre y, al respetar el orden, pararia toda la cola (PIN-08). Se
+      // siempre y, al respetar el orden, pararia toda la cola. Se
       // reenvian de uno en uno, en orden y por el endpoint individual: el
       // envenenado se descarta y los demas se registran como siempre.
       return sendOneByOne(records, (record) => options.api.recordScan(toRequest(record)))
@@ -438,7 +438,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
    * todavia no ha tenido respuesta.
    *
    * Tambien es el plan B de un lote QR que el servidor rechaza entero por mal
-   * formado (PIN-08): de uno en uno se ve cual es el envenenado.
+   * formado: de uno en uno se ve cual es el envenenado.
    */
   async function sendOneByOne<TRecord extends QueuedQrScanRecord | QueuedPinScanRecord>(
     records: readonly TRecord[],
@@ -697,7 +697,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   async function drain(drainOptions: { readonly ignoreSchedule?: boolean } = {}): Promise<void> {
     if (draining) {
       rerun = true
-      // G1: el relanzamiento hereda `ignoreSchedule`. Sin esto, el `online`
+      // El relanzamiento hereda `ignoreSchedule`. Sin esto, el `online`
       // que llega mientras otro drenaje esta en curso se degrada a un drenaje
       // normal y la fila atascada espera su retroceso con la red ya de vuelta.
       rerunIgnoreSchedule ||= drainOptions.ignoreSchedule === true
@@ -728,7 +728,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   }
 
   /**
-   * El camino rapido tambien MIRA si el borrado llego a IndexedDB (V7-RV-4): el
+   * El camino rapido tambien MIRA si el borrado llego a IndexedDB: el
    * contrato del puerto lo exige a quien llama. Si no llego, la fila sigue
    * elegible AHORA MISMO y se reenviaria sin pausa; se aplaza con retroceso y se
    * dice. Reenviar es seguro: el `scan_id` es la clave de idempotencia (regla 8).
@@ -889,7 +889,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     stop() {
       running = false
       cancelTimer()
-      // R2-KI-06: un relanzamiento pedido durante el drenaje en vuelo (un
+      // Un relanzamiento pedido durante el drenaje en vuelo (un
       // `online`, un `wakeNow`) se anula. Sin esto, el `finally` del drenaje lo
       // lanzaba igual y un quiosco ya parado -o recien desvinculado- volvia a
       // enviar. El envio que ya esta en vuelo si termina: su desenlace se aplica.

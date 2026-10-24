@@ -1,5 +1,5 @@
 // Ejecuta `task` una sola vez cuando el navegador ya ha pintado el primer
-// fotograma (KP1, Anexo A del doc 02: LCP <= 2 s con CPU x4 y 3G rapida).
+// fotograma (Anexo A del doc 02: LCP <= 2 s con CPU x4 y 3G rapida).
 //
 // Todo lo que NO hace falta para que el empleado vea la pantalla (abrir la
 // camara, descargar y compilar el decodificador, arrancar libsodium) espera a

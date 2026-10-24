@@ -113,7 +113,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   /** Reintento de la foto tras un fallo con el canal vivo: en tiempo real nadie sondea, y sin esto el aviso se quedaria pegado. */
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let retryAttempts = 0
-  /** La primera foto fallo: en cuanto una posterior llegue hay que intentar el canal (R3-PA-03). */
+  /** La primera foto fallo: en cuanto una posterior llegue hay que intentar el canal. */
   let realtimePending = false
   /** Numero de la ultima peticion lanzada: una respuesta tardia de una anterior no pisa a la nueva. */
   let loadSequence = 0
@@ -373,7 +373,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
 
     if (meta.value === null) {
       // Sin foto (error de red): se sigue intentando por sondeo con el intervalo
-      // por omision, y en cuanto llegue una se intenta el canal (R3-PA-03).
+      // por omision, y en cuanto llegue una se intenta el canal.
       realtimePending = true
       startPolling()
 

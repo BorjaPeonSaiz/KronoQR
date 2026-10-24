@@ -1,4 +1,4 @@
-// El cambio de pantalla se anuncia (WCAG 2.4.3, 4.1.3; V7-PA-3).
+// El cambio de pantalla se anuncia (WCAG 2.4.3, 4.1.3).
 //
 // Un panel de una sola pagina no recarga: sin esto, quien usa un lector de
 // pantalla activa un enlace del menu y no oye nada, y la region viva global sigue

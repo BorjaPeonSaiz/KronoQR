@@ -3,8 +3,8 @@
 //
 // Lo usa la prueba `tests/unit/theme.spec.ts` para verificar cada pareja
 // texto/fondo declarada en `themePairs.ts` contra los tokens de `theme.css`, y
-// lo podra usar la tarea 5.8 (marca blanca) para avisar cuando los colores que
-// configure un cliente no alcancen el minimo (paso 9 de esa tarea).
+// lo usa la marca blanca (RF-PD-08, `branding.ts`) para avisar cuando los
+// colores que configure un cliente no alcancen el minimo.
 
 export interface Rgb {
   readonly r: number
@@ -42,7 +42,7 @@ function snapChannel(value: number): number {
 
 /**
  * El color tal como se pinta: cada canal a 8 bits. Todo candidato se redondea
- * ANTES de medirlo (R6-UX-02): el valor que se mide es el que se escribe. Es la
+ * ANTES de medirlo: el valor que se mide es el que se escribe. Es la
  * UNICA implementacion de «redondear, mezclar y pasar a hex»: la usan
  * `branding.ts`, `pairContrast.ts` y las pruebas.
  */

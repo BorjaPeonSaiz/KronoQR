@@ -1,4 +1,4 @@
-// Que pasa cuando la sesion termina sola (V3-PO-1, V2-PO-4).
+// Que pasa cuando la sesion termina sola.
 //
 // Tres caminos llevan al mismo sitio y los ata este fichero, que es el unico
 // que conoce a la vez la tienda, el router y el cliente HTTP (el cliente no

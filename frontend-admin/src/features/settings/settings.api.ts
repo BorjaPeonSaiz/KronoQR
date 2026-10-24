@@ -2,8 +2,8 @@
 // del contrato; aqui no se inventa ninguna.
 //
 // Vive en `settings/` y no en `onboarding/` aunque hoy solo lo consuma el paso
-// de organizacion del asistente (tarea 5.5): es el mismo catalogo que
-// gobernara la pantalla de marca de la tarea 5.8, y las dos deben leer y
+// de organizacion del asistente: es el mismo catalogo que
+// gobierna la pantalla de marca (RF-PD-08), y las dos deben leer y
 // escribir por el mismo sitio para no divergir.
 import { requestJson } from '@kronoqr/web-kit/http'
 import type {
@@ -22,7 +22,7 @@ export function updateInstallationSettings(
   options: { readonly confirmLowContrast?: boolean } = {},
 ): Promise<InstallationSettings> {
   // `confirm_low_contrast` solo viaja cuando es `true`: sin el, el servidor
-  // rechaza un acento que no llega a 4,5:1 (MB2). Nunca se manda `false`.
+  // rechaza un acento que no llega a 4,5:1. Nunca se manda `false`.
   const body: UpdateSettingsRequest =
     options.confirmLowContrast === true
       ? { settings: changes, confirm_low_contrast: true }
@@ -38,8 +38,8 @@ export function updateInstallationSettings(
  * El valor de una clave de tipo `text` dentro del catalogo ya cargado, o
  * cadena vacia si no esta o no es una cadena.
  *
- * Compartida por el paso de organizacion del asistente (tarea 5.5) y la
- * pantalla de marca (tarea 5.8): las dos leen el mismo catalogo por el mismo
+ * Compartida por el paso de organizacion del asistente y la
+ * pantalla de marca: las dos leen el mismo catalogo por el mismo
  * sitio para no divergir, como ya avisa la cabecera de este fichero.
  */
 export function stringValue(catalog: InstallationSettings, key: string): string {
@@ -50,8 +50,8 @@ export function stringValue(catalog: InstallationSettings, key: string): string 
 
 /**
  * El valor en bruto de una clave del catalogo ya cargado, sea cual sea su
- * tipo, o `null` si la clave no tiene fila o su valor esta redactado (tarea
- * 3.3).
+ * tipo, o `null` si la clave no tiene fila o su valor esta redactado
+ * (ADR-020).
  */
 export function settingValue(catalog: InstallationSettings, key: SettingKey): SettingValue | null {
   const found = catalog.data.find((entry) => entry.key === key)

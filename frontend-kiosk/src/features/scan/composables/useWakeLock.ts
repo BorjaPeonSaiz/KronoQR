@@ -46,7 +46,7 @@ export function useWakeLock(options: UseWakeLockOptions = {}): WakeLockControlle
     try {
       const granted = await navigator.wakeLock.request('screen')
       if (disposed) {
-        // Se desmonto mientras la peticion volaba (R2-KI-04, V21-2-KI-2): nadie
+        // Se desmonto mientras la peticion volaba: nadie
         // llamara a `release()` por nosotros, asi que se suelta aqui y no se
         // guarda. Si no, la pantalla se queda despierta sin dueno.
         try {

@@ -4,11 +4,10 @@
 // linea» cuando no lo esta es peor que no tener indicador: convierte un
 // problema visible en una reclamacion tres semanas despues.
 //
-// ALCANCE. Esta tarea (1.8) aporta la mitad honesta: en linea / sin conexion.
-// El CONTADOR DE PENDIENTES es de la tarea 1.9, que es quien tiene la cola; aqui
-// se deja el hueco (`pendingCount`) para que la 1.9 lo rellene sin rehacer la
-// pantalla. Mientras tanto lo alimenta el envio directo, que ya sabe cuantos
-// escaneos no ha podido resolver.
+// ALCANCE. Aqui vive la mitad honesta: en linea / sin conexion. El CONTADOR
+// DE PENDIENTES lo pone quien tiene la cola, por el hueco `pendingCount`, sin
+// rehacer la pantalla; sin cola lo alimenta el envio directo, que ya sabe
+// cuantos escaneos no ha podido resolver.
 //
 // `navigator.onLine` solo es fiable en `false`. En `true` significa «hay una
 // interfaz de red levantada», que en un hotel con el router caido es

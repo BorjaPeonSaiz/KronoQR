@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Historico de errores agrupado por huella (RF-PD-15, tarea 5.12).
+// Historico de errores agrupado por huella (RF-PD-15).
 //
 // Escrita para el IT del cliente, «que vea que esta fallando y desde cuando,
 // sin conocer el sistema» (doc 02 §8.2.1): filtros de origen, nivel, estado y
@@ -11,7 +11,7 @@
 // el ambito `support:*`. Un administrador de verdad lo lleva siempre
 // (abilities `['*']`, que `hasAbility` reconoce para cualquier ambito); un
 // acceso de soporte con alcance `diagnostics` o `read_only` NO lo lleva nunca
-// (decision 8 de la ficha: solo `admin` puede resolver), asi que ocultar el
+// (solo `admin` puede resolver), asi que ocultar el
 // boton en esos dos casos acierta. El unico caso sin señal es un acceso de
 // soporte con alcance `configuration`, que actua como administrador y por
 // tanto es indistinguible por ambito: el boton se enseña y, si se usa, el
@@ -68,7 +68,7 @@ let clockTimer: ReturnType<typeof setInterval> | undefined
 const serverNowMs = computed(() => store.serverNowMs(now.value))
 
 function currentQuery() {
-  // El reloj del SERVIDOR extrapolado, no `now.value` a secas (hallazgo I4):
+  // El reloj del SERVIDOR extrapolado, no `now.value` a secas:
   // con un PC atrasado, `periodBounds` calculado sobre el reloj local dejaba
   // fuera errores recien creados que el servidor ya conocia.
   const bounds = periodBounds(

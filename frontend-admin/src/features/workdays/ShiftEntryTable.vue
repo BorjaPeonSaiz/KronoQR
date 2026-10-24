@@ -16,17 +16,17 @@
 //    hora; un tramo nunca lleva sufijo de zona.
 //  - **La marca, el aviso de cola y el contraste de totales son los del
 //    portal**: viven en `@kronoqr/web-kit/workdayTotals` (`shiftMark`,
-//    `workDayTotals`, C1) para que las dos pantallas no vuelvan a divergir.
+//    `workDayTotals`) para que las dos pantallas no vuelvan a divergir.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca que
 //    la salida cae en el dia siguiente.
-//  - **Las marcas de pausa (tarea 3.5, ADR-024, RF-AT-12).** La pausa son dos
+//  - **Las marcas de pausa (ADR-024, RF-AT-12).** La pausa son dos
 //    tramos, no un hueco dentro de uno: cuando el tramo anterior lo cerro un
 //    `break_start` (`closed_by`) y el siguiente lo abrio un `break_end`
 //    (`opened_by`), se enseña «Pausa de HH:MM a HH:MM (N min)» entre las dos
 //    filas, y el tramo que cierra la pausa lleva una insignia «Pausa» -texto
 //    e icono, nunca solo color (WCAG 1.4.1)- junto a su salida. El predicado
 //    y la duracion (`breakBetween`) viven en `@kronoqr/web-kit/breaks`
-//    (ADR-036, segunda vuelta de la tarea 3.5): el portal necesita EXACTAMENTE
+//    (ADR-036): el portal necesita EXACTAMENTE
 //    la misma regla, y ya habia divergido una vez. Un tramo con
 //    `closed_by: null` sigue siendo «abierto» -no lleva insignia-, y un tramo
 //    cerrado o abierto a mano sin escaneo detras llega como

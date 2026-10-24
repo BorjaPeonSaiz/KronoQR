@@ -30,8 +30,8 @@ declare module 'vue-router' {
     /** Ambito del token que exige la pantalla (doc 02 §7.3). */
     ability?: string
     /**
-     * Varios ambitos posibles, en `O` (basta con uno). Existe por «Soporte»
-     * (tarea 5.9): la pantalla la alcanza quien lleva `support:*` **o**
+     * Varios ambitos posibles, en `O` (basta con uno). Existe por «Soporte»:
+     * la pantalla la alcanza quien lleva `support:*` **o**
      * `diagnostics:*`, y una sola clave `ability` no puede expresar esa
      * disyuncion. Con `ability` a secas se exige exactamente ese; con esta
      * lista, cualquiera de los que contiene.
@@ -46,7 +46,7 @@ declare module 'vue-router' {
      */
     section?: string
     /**
-     * Clave i18n del titulo de la pestaña de la pantalla (WCAG 2.4.2, V7-PA-2).
+     * Clave i18n del titulo de la pestaña de la pantalla (WCAG 2.4.2).
      * Generico a proposito: nunca el nombre de la persona cuya ficha se mira.
      */
     titleKey?: string
@@ -61,7 +61,7 @@ export const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'auth.heading', public: true },
   },
   {
-    // Asistente de puesta en marcha (RF-PD-03, tarea 5.5). Publico como
+    // Asistente de puesta en marcha (RF-PD-03). Publico como
     // `GET /setup/status` que lo abre: el primer paso crea la primera cuenta
     // de gestion, asi que todavia no hay sesion con la que exigirla. La
     // guarda (`router/guards.ts`) es quien decide de verdad si se puede
@@ -94,7 +94,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'app.titles.employee', ability: EMPLOYEES_MANAGE, section: 'employees' },
       },
       {
-        // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
+        // Ausencias (RF-GP-04): vacaciones, baja medica y permiso,
         // registradas como hecho y sin flujo de aprobacion (doc 05 §8, Fase
         // 4). Ambito `employees:read`, el mismo con el que se abre la
         // pantalla en `navigation.ts`: lo lleva tambien
@@ -146,7 +146,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'incidents.title', ability: INCIDENTS_MANAGE },
       },
       {
-        // Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente
+        // Vista de cumplimiento (RF-PA-06): descanso insuficiente
         // entre jornadas, jornada diaria excesiva, pausa en tramo continuado y
         // exceso semanal, con el umbral del perfil aplicado a la vista. Ambito
         // `attendance:read`, el mismo que la presencia y el registro horario:
@@ -172,7 +172,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'reports.period.title', ability: REPORTS_MANAGE },
       },
       {
-        // Salida a nomina (RF-IN-07, tarea 3.9): horas por periodo y por
+        // Salida a nomina (RF-IN-07): horas por periodo y por
         // empleado en el formato configurable de «Ajustes operativos».
         // Ambito `reports:*`, el mismo que «Informes»: hoy solo lo llevan
         // `admin` y `rrhh` (doc 02 §7.3), asi que exigirlo ya deja fuera al
@@ -187,7 +187,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'payrollExport.title', ability: REPORTS_MANAGE },
       },
       {
-        // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): los seis
+        // Cuadro de impacto y adopcion (RF-IN-08): los seis
         // indicadores del doc 01 §1.3, con objetivo y comparacion contra el
         // periodo anterior. Ambito `reports:*`, el mismo que «Informes» y
         // «Nomina»: solo `admin` y `rrhh` lo llevan (Anexo B: `admin|rrhh`),
@@ -210,7 +210,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'reports.legalExport.heading', ability: REPORTS_LEGAL },
       },
       {
-        // El perfil de cumplimiento (RF-PD-07, tarea 5.2). Ambito `settings:*`,
+        // El perfil de cumplimiento (RF-PD-07). Ambito `settings:*`,
         // el del administrador de instalacion: aqui se cambian los umbrales con
         // los que se decide si una jornada incumple el Estatuto y cuantos años
         // hay que conservar el registro. La policy del servidor es la que
@@ -222,8 +222,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         // Los umbrales operativos (`ATTENDANCE_*`) y los idiomas (`LOCALE_*`)
-        // de la instalacion (RF-PD-01, tarea 5.13, hallazgo B1 del cierre de
-        // la Fase 5). Ambito `settings:*`, el mismo del perfil de
+        // de la instalacion (RF-PD-01). Ambito `settings:*`, el mismo del perfil de
         // cumplimiento, la marca y los quioscos: cambiar estos umbrales es la
         // misma potestad que configurar la instalacion. La policy del
         // servidor es la que autoriza de verdad (regla dura 18).
@@ -233,7 +232,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'operationalSettings.heading', ability: SETTINGS_MANAGE },
       },
       {
-        // Vinculacion y flota de quioscos (RF-PA-07, RF-PD-06, tarea 5.6).
+        // Vinculacion y flota de quioscos (RF-PA-07, RF-PD-06).
         // Ambito `settings:*`, el mismo del perfil de cumplimiento: dar de
         // alta un quiosco es crear un origen de fichajes, la misma potestad
         // que configurar la instalacion. La policy del servidor
@@ -245,7 +244,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'devices.title', ability: SETTINGS_MANAGE },
       },
       {
-        // La marca de la instalacion (RF-PD-08, tarea 5.8). Ambito
+        // La marca de la instalacion (RF-PD-08). Ambito
         // `settings:*`, el mismo del perfil de cumplimiento y de los quioscos:
         // cambiar el nombre, el color o el logotipo con el que se presenta el
         // producto es la misma potestad que configurar la instalacion. La
@@ -256,7 +255,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'branding.heading', ability: SETTINGS_MANAGE },
       },
       {
-        // La licencia (RF-PD-04, tarea 5.3). Ambito propio `license:*`, el del
+        // La licencia (RF-PD-04). Ambito propio `license:*`, el del
         // administrador de instalacion: el §7.3 lo declara aparte de
         // `settings:*` porque lo que se contrato no es un ajuste operativo.
         //
@@ -270,7 +269,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         // El paquete de diagnostico y los accesos de soporte (RF-PD-09,
-        // RF-PD-11, tarea 5.9, ADR-020). `abilities` en `O`: la alcanza quien
+        // RF-PD-11, ADR-020). `abilities` en `O`: la alcanza quien
         // lleva `support:*` **o** `diagnostics:*` -las dos abren la pantalla,
         // aunque el bloque de accesos exija ademas `support:*` para su propio
         // formulario-. La policy del servidor de cada endpoint es la que
@@ -281,7 +280,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'support.heading', abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
       },
       {
-        // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12).
+        // Historico de errores agrupado por huella (RF-PD-15).
         // Ambito `diagnostics:*`, el mismo que exige el contrato para
         // `GET /diagnostics/errors`: quien puede generar el paquete de
         // diagnostico tambien puede leer este historico. La policy del
@@ -294,8 +293,8 @@ export const routes: RouteRecordRaw[] = [
         meta: { titleKey: 'errorEvents.heading', ability: DIAGNOSTICS_MANAGE },
       },
       {
-        // Departamentos y su responsable (RF-ID-03). Lectura abierta a los cuatro roles
-        // (R6-BD-01): `employees:read` (responsable, rrhh, admin); el auditor ya no entra. Crear y
+        // Departamentos y su responsable (RF-ID-03). Lectura abierta a los cuatro roles:
+        // `employees:read` (responsable, rrhh, admin); el auditor ya no entra. Crear y
         // renombrar exigen `employees:*` y el selector de responsable `accounts:*`; la
         // vista los oculta y el servidor los exige.
         path: 'departments',

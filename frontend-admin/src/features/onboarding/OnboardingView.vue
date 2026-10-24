@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5).
+// Asistente de puesta en marcha (RF-PD-03, RF-GP-05).
 //
 // REANUDABLE Y SIN CALLEJONES SIN SALIDA. El estado viene de `setup.store`
 // (`GET /setup/status`, publica, o `GET /setup/steps`, autenticada — ver el
@@ -12,8 +12,8 @@
 // UN PASO PENDIENTE A LA VEZ. El paso activo es el primero en `pending`, en el
 // orden del contrato (`STEP_ORDER`). Cuando ninguno queda pendiente —todos
 // `completed` o `skipped`— se enseña la revision final (`ReviewStep`); el
-// asistente NO se cierra solo, hace falta el «Finalizar» explicito (decision
-// de la 5.5): asi hay una unica oportunidad de ver los ocho pasos juntos antes
+// asistente NO se cierra solo, hace falta el «Finalizar» explicito: asi hay
+// una unica oportunidad de ver los ocho pasos juntos antes
 // de que `POST /setup/complete` los deje fuera de alcance para siempre.
 import { announce, announcement } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'

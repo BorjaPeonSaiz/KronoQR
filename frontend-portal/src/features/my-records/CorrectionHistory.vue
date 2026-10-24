@@ -32,7 +32,7 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-/** El instante en la zona del centro, en 24 h como el resto de la pantalla (V2-PO-2). */
+/** El instante en la zona del centro, en 24 h como el resto de la pantalla. */
 function instant(value: string): string {
   return formatInstant(value, props.timeZone, locale.value)
 }

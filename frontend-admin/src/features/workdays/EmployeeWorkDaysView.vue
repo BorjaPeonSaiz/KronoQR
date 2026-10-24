@@ -129,7 +129,7 @@ async function onDialogStale(): Promise<void> {
  * El rango que trae la URL (`?from=&to=`), si llega alguno de los dos.
  *
  * Es el enlace «al día del aviso» de la vista de cumplimiento (RF-PA-06,
- * tarea 3.4, `ComplianceFindingsTable.vue`): un hallazgo de hace dos meses
+ * `ComplianceFindingsTable.vue`): un hallazgo de hace dos meses
  * queda fuera del rango por omisión del servidor (los últimos 31 días), y sin
  * esto la persona que sigue el enlace vería «sin jornadas» en vez del día que
  * vino a mirar. Mismo patrón que `IncidentsView` con `?employee=`.

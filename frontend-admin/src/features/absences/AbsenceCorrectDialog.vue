@@ -7,7 +7,7 @@
 // DESDE que valor y HACIA cual (doc 03 §4.3): el mismo `ChangePreview` que usa
 // `CorrectionDialog.vue` del registro horario.
 //
-// EL MOTIVO ES TEXTO LIBRE DE 3 A 500 CARACTERES (decision 4 de la ficha): a
+// EL MOTIVO ES TEXTO LIBRE DE 3 A 500 CARACTERES: a
 // diferencia de las correcciones del registro horario, aqui no hay un
 // catalogo de nueve causas — no hay tantas razones tipificadas que defender
 // ante una inspeccion para corregir unas fechas de vacaciones.

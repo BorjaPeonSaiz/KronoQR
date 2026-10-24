@@ -18,12 +18,12 @@
 //    ADR-040, ADR-056): un tramo nunca lleva sufijo de zona.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca
 //    que la salida cae en el dia siguiente.
-//  - **La pausa son dos tramos, no un hueco mudo** (tarea 3.5, ADR-024). Un
+//  - **La pausa son dos tramos, no un hueco mudo** (ADR-024). Un
 //    tramo cerrado por `break_start` lleva una insignia «Pausa» en su salida
 //    (texto e icono, nunca solo color, WCAG 1.4.1), y si el tramo siguiente lo
 //    abrio un `break_end` se enseña ademas «Pausa de HH:MM a HH:MM (N min)»
 //    entre los dos. **El predicado y la duracion (`breakBetween`) viven en
-//    `@kronoqr/web-kit/breaks`** (ADR-036, segunda vuelta de la tarea 3.5): el
+//    `@kronoqr/web-kit/breaks`** (ADR-036): el
 //    panel necesita exactamente la misma regla -los mismos dos escaneos, la
 //    misma resta de instantes-, y una primera version de cada SPA ya habia
 //    divergido (aqui se enseñaba `0 min` con `?? 0` cuando el analisis
@@ -82,7 +82,7 @@ interface EntryRow {
 
 /**
  * La hora de recepcion en la zona del centro, en 24 h y con el orden de fecha
- * del idioma (el mismo formateador que el historial, V2-PO-2). Si cae en otro dia
+ * del idioma (el mismo formateador que el historial). Si cae en otro dia
  * que la marca lleva dia y mes: un fichaje que viaja en la cola puede llegar
  * pasada la medianoche. Sin una zona valida no se pinta nada: nunca la del
  * navegador (regla dura 3).

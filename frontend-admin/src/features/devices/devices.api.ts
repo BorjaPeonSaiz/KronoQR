@@ -1,5 +1,5 @@
 // Quioscos de la instalacion: la flota (RF-PA-07) y su vinculacion por codigo
-// de emparejamiento (RF-PD-06, tarea 5.6).
+// de emparejamiento (RF-PD-06).
 //
 // Las formas salen del contrato; aqui no se inventa ninguna. `PairingRequested`
 // y `PairingClaim*` son cosa de la tablet (`frontend-kiosk`) y no tienen

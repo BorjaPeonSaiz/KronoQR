@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Aviso con acciones (V21-7-UX-1): un mensaje que no es un fallo y lleva consigo las salidas
+// Aviso con acciones: un mensaje que no es un fallo y lleva consigo las salidas
 // (descargar en otro formato, reintentar). Antes el aviso de «motor de PDF ocupado» estaba escrito
 // a mano en el panel y otra vez en el portal; aqui hay una sola forma.
 //
@@ -8,7 +8,7 @@
 //
 // Una sola señal para un lector de pantalla: el aviso es un `group` cuyo nombre accesible es el
 // mensaje y, con `focusOnMount`, recibe el foco al aparecer. Sin `role="alert"` ni `announce()`,
-// que lo harian sonar dos veces (V21-3-PA-7). Las acciones van en el slot `actions`; el detalle
+// que lo harian sonar dos veces. Las acciones van en el slot `actions`; el detalle
 // opcional, en el slot por omision.
 import { onMounted, ref, useId } from 'vue'
 

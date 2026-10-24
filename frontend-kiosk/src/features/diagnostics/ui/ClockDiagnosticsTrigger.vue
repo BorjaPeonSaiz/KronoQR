@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // El reloj de pared de `ScanView`/`PairingView`, y la puerta de entrada a la
-// pantalla de diagnostico (RF-KI-08, tarea 3.3, decision 8).
+// pantalla de diagnostico (RF-KI-08).
 //
 // UN `<button>` REAL, no un `<div>` con `@click`: alcanzable con teclado (una
 // tablet con teclado USB de recepcion existe) y anunciado como boton por el

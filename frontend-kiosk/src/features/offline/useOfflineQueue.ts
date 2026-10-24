@@ -47,9 +47,9 @@ export interface OfflineQueueController {
   pinSealingPublicKey(): string | null
   /** Ver `CachedRoster.settled()`: si `pinSealingPublicKey()` en `null` es definitivo. */
   rosterSettled(): boolean
-  /** `generated_at` de la copia del padron en uso (RF-KI-08, tarea 3.3). `null` sin padron cargado. */
+  /** `generated_at` de la copia del padron en uso (RF-KI-08). `null` sin padron cargado. */
   rosterGeneratedAt(): string | null
-  /** Cuantas credenciales tiene indexadas el padron en uso (RF-KI-08, tarea 3.3). */
+  /** Cuantas credenciales tiene indexadas el padron en uso (RF-KI-08). */
   rosterEntryCount(): number
   stats(): QueueStats
   subscribe(listener: (stats: QueueStats) => void): () => void
@@ -63,15 +63,15 @@ export interface OfflineQueueController {
   onRosterUpdated(listener: () => void): () => void
   /**
    * Dos `401`/`403` seguidos, sin exito de por medio, en el latido, el padron
-   * o la sincronizacion (RF-PD-06, tarea 5.6, `deviceRevocation.ts`). Cuando
+   * o la sincronizacion (RF-PD-06, `deviceRevocation.ts`). Cuando
    * dispara, el padron YA esta purgado (`cachedRoster.purge()`, doc 01 §8.1);
    * quien escucha solo tiene que limpiar el token y navegar a `/pair`. La cola
    * offline de fichajes NUNCA se toca aqui.
    *
-   * SUSCRIPCION, no una opcion del constructor (revision de la 3.3, segunda
-   * vuelta): `getOfflineQueueController` congela sus opciones en la PRIMERA
+   * SUSCRIPCION, no una opcion del constructor: `getOfflineQueueController`
+   * congela sus opciones en la PRIMERA
    * llamada -es un singleton por tablet-, asi que un `onDeviceRevoked` pasado
-   * ahi solo ganaba si la pantalla que lo pasaba era la primera en montarse.
+   * ahi solo ganaria si la pantalla que lo pasaba era la primera en montarse.
    * `DiagnosticsView` puede llegar a montarse antes que `ScanView` (una tablet
    * emparejada recargada directamente sobre `/diagnostics`, que el guard del
    * router exceptua): con esto, el orden de montaje deja de importar, porque
@@ -81,7 +81,7 @@ export interface OfflineQueueController {
   /**
    * Lo que el LATIDO ha averiguado sobre su propia autenticacion, para que
    * alimente el mismo contador que ya llevan la sincronizacion y el padron
-   * (RF-PD-06, tarea 5.6). El latido no vive en este controlador —es un
+   * (RF-PD-06). El latido no vive en este controlador —es un
    * `setInterval` propio de cada pantalla, ver `ScanView.vue`— pero la
    * revocacion es una sola decision por tablet, no una por canal.
    */
@@ -132,7 +132,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     for (const listener of rosterUpdateListeners) listener()
   }
 
-  // A1: la cola y los descartados se guardan CIFRADOS. Un solo cifrador (una clave) para
+  // La cola y los descartados se guardan CIFRADOS. Un solo cifrador (una clave) para
   // todos los manejadores que abra la cola al reabrir IndexedDB. Sin cifrado disponible
   // se guarda en claro y se avisa, sin datos personales (regla dura 19).
   const cipher = createQueueCipher({
@@ -245,7 +245,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       // `storeLastScanAt` ANTES de someterlo al drenaje, y con el `occurred_at`
       // del propio escaneo -no un `Date.now()` aparte-: es el instante real de
       // «hubo alguien delante de la camara», que es lo unico que le importa a
-      // la puerta de actualizacion (RF-KI-07, tarea 3.12). Se anota pase lo
+      // la puerta de actualizacion (RF-KI-07). Se anota pase lo
       // que pase despues -exito, rechazo o encolado-: los tres son la MISMA
       // senal de «esta tablet esta en uso ahora mismo».
       submit: (scan) => {
@@ -359,8 +359,8 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
 let singleton: OfflineQueueController | null = null
 
 /**
- * Lo que hay en disco ANTES de que ninguna pantalla monte el controlador
- * (V6-KI-01, V21-6-KI-2). `null` = todavia no se ha mirado: la puerta de
+ * Lo que hay en disco ANTES de que ninguna pantalla monte el controlador.
+ * `null` = todavia no se ha mirado: la puerta de
  * actualizacion no lo da por vacio. Sin controlador la cola no existe en
  * memoria, y `pendingScanCount()`/`canUpdateNowGlobal()` devolvian 0 con
  * fichajes pendientes en disco (una tablet reiniciada dentro de la ventana, con

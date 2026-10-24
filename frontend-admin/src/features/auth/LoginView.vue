@@ -44,7 +44,7 @@ const error = ref<unknown>(null)
 
 // --- Segundo factor (pasos 2 y 3) -----------------------------------------
 // El alta del secreto TOTP (paso 3) vive en `TwoFactorEnrolPanel`, que ademas
-// usa el asistente de puesta en marcha (tarea 5.5) para el primer
+// usa el asistente de puesta en marcha para el primer
 // administrador: es la misma pantalla, no una copia.
 const step = ref<Step>('credentials')
 const challengeToken = ref<string | null>(null)
@@ -108,8 +108,8 @@ async function submitCredentials(): Promise<void> {
     const outcome = await session.logIn({
       email: email.value,
       password: password.value,
-      // Nombre con el que queda registrada la sesion: el del panel, en el idioma activo
-      // (R7-PA-03). Sin PII, como exige el contrato.
+      // Nombre con el que queda registrada la sesion: el del panel, en el idioma activo.
+      // Sin PII, como exige el contrato.
       device_name: t('app.title'),
     })
 
@@ -177,7 +177,7 @@ function onChallengeInvalid(caught: unknown): void {
     <div
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
-      <!-- Marca de la instalacion (RF-PD-08, tarea 5.8; ADR-036): logotipo o
+      <!-- Marca de la instalacion (RF-PD-08; ADR-036): logotipo o
            nombre, resueltos por `BrandMark` (compartido con el portal,
            `@kronoqr/web-kit`). -->
       <div class="mb-4 flex flex-col items-center gap-2 text-center">

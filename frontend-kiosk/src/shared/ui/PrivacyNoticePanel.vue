@@ -4,7 +4,7 @@
 // NO ES DECORATIVO: es un requisito legal, y por eso esta SIEMPRE en pantalla y
 // no detras de un boton. Lo que va detras de un boton es la capa 2 —la politica
 // completa— de la que se enseña la direccion como TEXTO y como QR. Nunca como
-// enlace navegable: una tablet compartida no puede salir del quiosco (F14).
+// enlace navegable: una tablet compartida no puede salir del quiosco.
 //
 // Lo que dice la capa 1: quien es el responsable, para que trata los datos, con
 // que base juridica, cuanto los conserva y como ejercer los derechos. Y una
@@ -34,14 +34,14 @@ const props = defineProps<{
    * La confirmacion de fichaje que haya en pantalla (cualquier tipo). Un fichaje
    * manda sobre el aviso: en cuanto se PINTA una confirmacion -tambien al
    * repintarse, p. ej. de «pendiente» a «aceptado»- el dialogo se cierra en el
-   * acto, sin mover el foco ni anunciar nada propio (V7-KI-02). Se compara por
+   * acto, sin mover el foco ni anunciar nada propio. Se compara por
    * identidad: cada pintado es un objeto nuevo.
    */
   confirmation?: object | null
 }>()
 
 /**
- * Solo https y ASCII imprimible (F15 del dictamen de seguridad): defensa en
+ * Solo https y ASCII imprimible: defensa en
  * profundidad sobre `parseBranding`, que ya lo exige.
  */
 const policyUrl = computed<string | null>(() => {
@@ -253,7 +253,7 @@ watch(policyUrl, () => {
         {{ t('privacy.policyPending') }}
       </p>
       <template v-else>
-        <!-- SIN ENLACE NAVEGABLE (F14 del dictamen de seguridad): la tablet es
+        <!-- SIN ENLACE NAVEGABLE: la tablet es
              compartida y tocar un aviso legal no puede sacar al empleado del
              quiosco. La direccion va como TEXTO y como QR (RL-09 admite «enlace
              o QR»): quien la quiera la lee en su movil. -->
@@ -296,7 +296,7 @@ watch(policyUrl, () => {
         :aria-label="t('privacy.qrDialogTitle')"
         shape-rendering="crispEdges"
       >
-        <!-- eslint-disable-next-line kronoqr-colors/no-literal-colors -- QR: negro puro sobre blanco por legibilidad del lector, no depende de la marca ni del tema (U1: excepcion cerrada) -->
+        <!-- eslint-disable-next-line kronoqr-colors/no-literal-colors -- QR: negro puro sobre blanco por legibilidad del lector, no depende de la marca ni del tema (docs/06: excepcion cerrada) -->
         <path :d="qr.path" fill="#000000" />
       </svg>
       <p v-else-if="qrFailed" class="mt-6 text-lg">{{ t('privacy.qrUnavailable') }}</p>

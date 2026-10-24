@@ -22,8 +22,8 @@
 // identicas para cualquier endpoint y mantenerlas locales evita que este
 // paquete dependa del `schema.d.ts` particular de una aplicacion.
 //
-// CADA PETICION LLEVA `traceparent` (tarea 3.1, decision 7: "la cabecera es
-// `traceparent`, en el borde, en la aplicacion y en los tres frontends"). Se
+// CADA PETICION LLEVA `traceparent` (doc 02 §8.1: la cabecera es
+// `traceparent`, en el borde, en la aplicacion y en los tres frontends). Se
 // genera aqui, en el unico punto de salida, para que el panel y el portal no
 // tengan que acordarse de hacerlo cada uno por su lado. El backend
 // (`PropagateTraceContext`) abre el span `SERVER` de la peticion a partir de
@@ -174,7 +174,7 @@ export interface RequestOptions {
   /**
    * `fetch(..., { keepalive: true })`: la peticion sigue viva aunque la
    * pagina se descargue mientras esta en vuelo. Existe para
-   * `clientErrorTransport.ts` (tarea 5.12), que vacia el buffer de errores en
+   * `clientErrorTransport.ts`, que vacia el buffer de errores en
    * `pagehide`/`visibilitychange: hidden` sin poder esperar a que termine.
    */
   keepalive?: boolean
@@ -184,7 +184,7 @@ export interface RequestOptions {
    * ninguno en lo demas: una escritura que se corta a los 30 s puede haberse
    * aplicado igualmente, y un documento binario puede tardar legitimamente. Una
    * lectura que se agota falla como `network` («no se ha podido contactar con el
-   * servidor… reintenta») en vez de dejar «Cargando…» para siempre (V3-UX-02).
+   * servidor… reintenta») en vez de dejar «Cargando…» para siempre.
    */
   timeoutMs?: number
 }

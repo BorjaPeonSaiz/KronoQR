@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Bloque «Exportaciones en segundo plano» (RF-IN-06, RF-IN-07, tarea 3.9):
+// Bloque «Exportaciones en segundo plano» (RF-IN-06, RF-IN-07):
 // las exportaciones de informes DEL SOLICITANTE -tanto el informe por periodo
 // como la salida a nomina, que comparten el mismo ciclo de vida
-// (`report_exports`, decision 1 de la ficha)-, con su estado, su descarga
+// (`report_exports`)-, con su estado, su descarga
 // caducable y sus criterios.
 //
 // **NO PIDE NINGUNA EXPORTACION.** Eso lo hacen `PeriodReportView` (cuando un
@@ -13,7 +13,7 @@
 // tuviera que repetir el formulario de periodo de las dos pantallas.
 //
 // **SONDEO SOLO MIENTRAS HAYA `pending`/`running`** (mismo criterio que
-// `DataExportPanel`, tarea 5.10): una instalacion sin ninguna exportacion en
+// `DataExportPanel`): una instalacion sin ninguna exportacion en
 // curso no golpea el servidor cada 3 s para nada, y `useQuery` para el
 // sondeo en cuanto se desmonta la pantalla -no hace falta un `onUnmounted`
 // propio, es lo que ya hace TanStack Query-.
@@ -21,11 +21,11 @@
 // **EL AVISO DE «LISTA PARA DESCARGAR» NO ES DE ESTE PANEL.** Lo da el marco de
 // la aplicacion (`useReportReadyNotices`, en `AppShellView`) en cualquier
 // pantalla y solo de lo que termina; aqui anunciarlo al montar repetia hasta 20
-// avisos de exportaciones de otros dias (R3-PA-08).
+// avisos de exportaciones de otros dias.
 //
 // **EL ENLACE DE DESCARGA NUNCA SE GUARDA.** Cada clic en «Descargar» pide el
 // estado de nuevo (`showReportExport`), que devuelve un enlace de un solo uso
-// recien emitido, y con ese se descarga en el acto (decision 3 de la ficha,
+// recien emitido, y con ese se descarga en el acto (
 // ADR-041). Volver a pulsar pide otro.
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
@@ -161,7 +161,7 @@ async function download(row: ReportExport): Promise<void> {
   try {
     // SIEMPRE se pide el estado justo antes de descargar: el enlace de la
     // lista puede llevar ya rato en pantalla, y cada peticion emite uno nuevo
-    // que invalida el anterior (decision 3 de la ficha). Nunca se reutiliza
+    // que invalida el anterior. Nunca se reutiliza
     // `row.download`.
     const fresh = await showReportExport(row.uuid)
     const link = fresh.data.download

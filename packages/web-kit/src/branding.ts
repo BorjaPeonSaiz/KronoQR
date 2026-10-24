@@ -1,4 +1,4 @@
-// Marca blanca en tiempo de ejecucion (RF-PD-08, tarea 5.8, regla dura 13).
+// Marca blanca en tiempo de ejecucion (RF-PD-08, regla dura 13).
 //
 // Las tres SPA reciben la marca de `GET /api/v1/branding` y la aplican aqui
 // SOBRE LOS TOKENS `--kq-*` DE `theme.css`, sin recompilar nada por cliente
@@ -15,7 +15,7 @@
 // el fondo oscuro del quiosco) se calculan buscando el primer tono que alcanza
 // el minimo WCAG 2.2 AA de la pareja, con la misma formula que mide la paleta
 // del producto (`contrast.ts`). En el panel y el portal el acento se OSCURECE
-// hasta 4,5:1 sobre las superficies claras (MB1); lo que no se puede garantizar
+// hasta 4,5:1 sobre las superficies claras; lo que no se puede garantizar
 // por calculo se AVISA (paso 9 de la tarea): `contrastWarnings` pasa el acento por las
 // parejas de `themePairs.ts` y devuelve las que no llegan.
 //
@@ -109,8 +109,8 @@ const ACCENT = /^#[0-9a-f]{6}$/i
 /** La URL que publica el contrato: relativa, del propio origen, con o sin huella. */
 const LOGO_URL = /^\/api\/v1\/branding\/logo(?:\?v=[0-9a-f]{12})?$/
 
-// Solo https y ASCII imprimible, como el contrato (F15 del dictamen de
-// seguridad): la URL acaba en un QR que se ensena en una tablet compartida.
+// Solo https y ASCII imprimible, como el contrato: la URL acaba en un QR que
+// se ensena en una tablet compartida.
 const POLICY_URL = /^https:\/\/[!-~]+$/
 const POLICY_URL_MAX = 512
 const CONTROLLER_MAX = 160
@@ -345,8 +345,8 @@ export function accentOverrides(
   // Fondo tintado: un 10 % de acento sobre la tarjeta blanca, redondeado a 8 bits.
   const soft = snap(mix(color, surfaceRaised, 0.1))
   // El acento como texto o boton de marca se OSCURECE hasta 4,5:1 frente a la
-  // peor de las superficies donde `primary-strong` es texto (MB1): pagina,
-  // tarjeta, filas alternas y fila seleccionada (doc 06 §2; R7-UX-01). Un
+  // peor de las superficies donde `primary-strong` es texto: pagina,
+  // tarjeta, filas alternas y fila seleccionada (doc 06 §2). Un
   // amarillo o un verde lima elegidos tal cual dejarian el boton principal y
   // los enlaces entre 1,02:1 y 3,95:1. Un acento que ya llega a todas no
   // cambia ni un canal (paso 0 = el propio color).
@@ -361,7 +361,7 @@ export function accentOverrides(
   // componente (3:1) sobre la tarjeta blanca, que es la superficie mas
   // exigente; un acento casi blanco dejaria sin foco al panel entero.
   // El anillo tambien se dibuja sobre los avisos tintados (exito, aviso, error,
-  // acento) y sobre la fila seleccionada: se mide contra todos (V7-UX-02).
+  // acento) y sobre la fila seleccionada: se mide contra todos.
   const tinted = ['accent-soft', 'success-soft', 'warning-soft', 'danger-soft'].map((name) =>
     parseHexColor(tokens(`--kq-color-${name}`)),
   )
@@ -401,7 +401,7 @@ export interface AccentContrast {
 }
 
 /**
- * Lo que el panel enseña mientras el cliente elige el color (MB2): cuanto
+ * Lo que el panel enseña mientras el cliente elige el color: cuanto
  * contrasta el acento TAL CUAL con las superficies claras, si llega a 4,5:1 y
  * en que tono se aplicara. Si no llega, la marca se pinta con `applied`.
  */

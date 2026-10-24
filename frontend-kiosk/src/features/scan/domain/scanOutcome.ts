@@ -45,7 +45,7 @@ export interface AcceptedConfirmation extends ScanConfirmationBase {
   /**
    * Desfase de reloj, en segundos, SOLO cuando `settleFrom` mide que
    * `|recorded_at - occurred_at|` supera la tolerancia de la instalacion
-   * (RF-AT-10, decision 6 de la tarea 3.5). Ausente -no `undefined`- en
+   * (RF-AT-10). Ausente -no `undefined`- en
    * cualquier otro caso: es un escaneo respondido en linea (nunca uno
    * consolidado de la cola offline, `settleFrom` no lo calcula alli) y sin
    * desfase que avisar. Mismo signo que `clockSkewSeconds` del latido:
@@ -86,7 +86,7 @@ export interface UnreadableConfirmation extends ScanConfirmationBase {
 }
 
 /**
- * Solo la via del PIN la produce (PIN-03): el quiosco no ha podido SELLAR el PIN
+ * Solo la via del PIN la produce: el quiosco no ha podido SELLAR el PIN
  * (WebAssembly bloqueado, libsodium sin cargar). Es un fallo tecnico LOCAL, no
  * una respuesta del servidor: no culpa al empleado («Codigo no valido») ni
  * promete nada («pendiente»), porque NO se ha encolado nada. Le dice que esta
@@ -157,7 +157,7 @@ export const PIN_VERIFY_TIMEOUT_MS = 2_500
 
 /**
  * Cuanto espera el sonido de un fichaje por tarjeta a que el servidor decida
- * (RF-AT-05, V7-KI-01). La confirmacion visual es inmediata y MUDA; el tono
+ * (RF-AT-05). La confirmacion visual es inmediata y MUDA; el tono
  * suena con el desenlace real si el servidor contesta dentro de este plazo
  * (`entry`/`exit`, `error`, `notice`) y, si no, suena `pending` y nada mas:
  * una respuesta posterior actualiza la pantalla pero no vuelve a sonar. Unica
@@ -196,6 +196,6 @@ export const CONFIRMATION_DISPLAY_MS: Readonly<Record<ScanConfirmation['kind'], 
   debounced: 3_500,
   rejected: 5_000,
   unreadable: 5_000,
-  // Mas que un rechazo: hay que leerlo entero y decidir que hacer (PIN-03).
+  // Mas que un rechazo: hay que leerlo entero y decidir que hacer.
   unavailable: 8_000,
 }

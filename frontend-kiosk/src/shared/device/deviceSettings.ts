@@ -1,7 +1,7 @@
 // Ajustes del quiosco que cachea el latido (RF-KI-07, RF-KI-08, RF-AT-10, RF-AT-12).
 //
 // Antes vivian en `shared/telemetry/deviceIdentity.ts` (hoy `shared/device/deviceIdentity.ts`) junto a la identidad y el
-// token (R1-RV-06). Son preferencias tecnicas de la instalacion: las escribe el
+// token. Son preferencias tecnicas de la instalacion: las escribe el
 // planificador del latido tras cada `200` y se leen en local para que el boton
 // «Pausa», el aviso de desfase, la puerta de actualizacion y el diagnostico
 // funcionen sin red.
@@ -22,15 +22,15 @@ import { isUrgentUpdateAttempts } from '@/shared/update/minimumVersion'
 import { deviceStorage } from './deviceStorage'
 
 /**
- * Huella del codigo de servicio (`KioskHeartbeat.service_code_hash`, RF-KI-08,
- * tarea 3.3). La escribe el planificador del latido (`heartbeat.ts`) tras cada
+ * Huella del codigo de servicio (`KioskHeartbeat.service_code_hash`,
+ * RF-KI-08). La escribe el planificador del latido (`heartbeat.ts`) tras cada
  * `200`, nunca el codigo en claro. `null` = la instalacion no tiene codigo
  * configurado; en ese caso la pantalla de diagnostico se abre sin pedirlo.
  */
 const SERVICE_CODE_HASH_KEY = 'kronoqr.kiosk.service_code_hash'
 
 /**
- * Los dos ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10), MISMO PATRON que
+ * Los ajustes de pausa y de desfase (RF-AT-12, RF-AT-10), MISMO PATRON que
  * `service_code_hash`: los escribe el planificador del latido tras cada
  * `200` y se leen en local para que el boton «Pausa» y el aviso de desfase
  * funcionen sin red. `KioskHeartbeat.break_clocking_enabled` y
@@ -44,7 +44,7 @@ const CLOCK_SKEW_TOLERANCE_SECONDS_KEY = 'kronoqr.kiosk.clock_skew_tolerance_sec
 
 /**
  * Ventana de actualizacion del quiosco (`KioskHeartbeat.update_window`,
- * RF-KI-07, tarea 3.12). MISMO PATRON que `service_code_hash` y los dos
+ * RF-KI-07). MISMO PATRON que `service_code_hash` y los dos
  * ajustes de arriba: el planificador del latido (`heartbeat.ts`) la cachea
  * tras cada `200` para que la puerta de `features/offline/domain/
  * updateWindow.ts` funcione sin red. `localStorage` y no Dexie: es
@@ -55,7 +55,7 @@ const UPDATE_WINDOW_KEY = 'kronoqr.kiosk.update_window'
 const UPDATE_QUIET_MINUTES_KEY = 'kronoqr.kiosk.update_quiet_minutes'
 
 /**
- * Zona horaria del centro (`KioskHeartbeat.site_time_zone`, IANA, V2-KI-01,
+ * Zona horaria del centro (`KioskHeartbeat.site_time_zone`, IANA,
  * RF-AT-05, RF-KI-07). MISMO PATRON que los ajustes de arriba: la cachea el
  * latido para que la hora de la confirmacion y la ventana de actualizacion se
  * lean en el reloj de pared del centro tambien sin red. Solo PRESENTACION: no
@@ -64,8 +64,8 @@ const UPDATE_QUIET_MINUTES_KEY = 'kronoqr.kiosk.update_quiet_minutes'
 const SITE_TIME_ZONE_KEY = 'kronoqr.kiosk.site_time_zone'
 
 /**
- * Instante del ULTIMO escaneo que ha pasado por esta tablet (RF-KI-07, tarea
- * 3.12): lo escribe `features/offline/useOfflineQueue.ts` en cuanto el
+ * Instante del ULTIMO escaneo que ha pasado por esta tablet (RF-KI-07): lo
+ * escribe `features/offline/useOfflineQueue.ts` en cuanto el
  * empleado ficha -exito, rechazo o encolado, da igual: lo que importa es que
  * hubo alguien delante de la camara-, y lo lee la puerta de actualizacion
  * para no aplicar nada dentro de los `quiet_minutes` siguientes.
@@ -90,9 +90,9 @@ const URGENT_UPDATE_ATTEMPTS_KEY = 'kronoqr.kiosk.urgent_update_attempts'
 
 /**
  * Huella del codigo de servicio cacheada por el ultimo latido con `200`
- * (RF-KI-08, tarea 3.3). `null` = sin codigo configurado en esta instalacion,
+ * (RF-KI-08). `null` = sin codigo configurado en esta instalacion,
  * O tablet que aun no ha latido nunca: los dos casos abren la pantalla de
- * diagnostico sin pedir codigo (decision 7 de la tarea 3.3), que es la
+ * diagnostico sin pedir codigo, que es la
  * respuesta correcta para los dos.
  */
 export function readServiceCodeHash(): string | null {
@@ -130,7 +130,7 @@ export function storeServiceCodeHash(hash: string | null): void {
 /**
  * `false` mientras esta tablet no haya completado ningun latido en NINGUNA
  * sesion (nunca escrito en disco): «sin latido previo, `break_clocking_enabled`
- * es `false`» (decision 1 de la tarea 3.5) — el boton «Pausa» se queda oculto
+ * es `false`» — el boton «Pausa» se queda oculto
  * hasta que el primer latido confirme que la instalacion lo tiene activado, en
  * vez de mostrarlo con un valor inventado.
  */
@@ -158,7 +158,7 @@ export function storeBreakClockingEnabled(enabled: boolean): void {
 /**
  * `null` = esta tablet no ha completado ningun latido todavia (en esta sesion
  * ni en ninguna anterior): «mientras no haya latido: sin banda, no un valor
- * inventado» (decision 6 de la tarea 3.5). El aviso de desfase se queda
+ * inventado». El aviso de desfase se queda
  * apagado hasta que exista un umbral de verdad, en vez de compararse contra
  * una constante que la instalacion podria haber cambiado.
  */
@@ -187,10 +187,10 @@ export function storeClockSkewToleranceSeconds(seconds: number): void {
 }
 
 /**
- * Ventana de actualizacion vigente (RF-KI-07, tarea 3.12). SIEMPRE devuelve
+ * Ventana de actualizacion vigente (RF-KI-07). SIEMPRE devuelve
  * una ventana valida: `DEFAULT_UPDATE_WINDOW` mientras esta tablet no haya
  * latido nunca con una version que la trajera -«sin configuracion recibida
- * todavia, la de serie», decision 9 de la tarea-, nunca `null`: a diferencia
+ * todavia, la de serie»-, nunca `null`: a diferencia
  * de `readClockSkewToleranceSeconds`, aqui no hay un estado «sin banda» que
  * pintar, hay una puerta que decidir, y decidirla exige una ventana con la
  * que comparar.
@@ -219,7 +219,7 @@ export function storeUpdateWindow(window: UpdateWindow): void {
   }
 }
 
-/** Minutos de silencio vigentes (RF-KI-07, tarea 3.12). Igual criterio que `readUpdateWindow`: nunca `null`. */
+/** Minutos de silencio vigentes (RF-KI-07). Igual criterio que `readUpdateWindow`: nunca `null`. */
 export function readUpdateQuietMinutes(): number {
   const storage = deviceStorage()
   if (storage === null) return DEFAULT_UPDATE_QUIET_MINUTES
@@ -282,7 +282,7 @@ export function storeSiteTimeZone(zone: string | undefined): void {
 }
 
 /**
- * Instante ISO del ultimo escaneo (RF-KI-07, tarea 3.12). Sobrevive al
+ * Instante ISO del ultimo escaneo (RF-KI-07). Sobrevive al
  * reinicio de la tablet (`localStorage`, ver `LAST_SCAN_AT_KEY`). `null` =
  * ningun escaneo conocido todavia -la puerta de actualizacion lo trata como
  * «sin escaneo», nunca como «hace mucho»-.

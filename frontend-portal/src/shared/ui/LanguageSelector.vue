@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Selector de idioma (D22, PO7-05, RF-PD-08).
+// Selector de idioma (RF-PD-08).
 //
 // SOLO con dos o mas idiomas ofrecidos por la instalacion, como en el quiosco y
 // el panel: `offeredLocales` (web-kit) cruza los idiomas de la instalacion con

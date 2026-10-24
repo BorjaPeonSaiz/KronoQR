@@ -1,5 +1,5 @@
 // Pulsacion larga sobre el reloj, para abrir la pantalla de diagnostico
-// (RF-KI-08, tarea 3.3, decision 8).
+// (RF-KI-08).
 //
 // PURO EN EL SENTIDO QUE IMPORTA AQUI: no toca el DOM ni monta nada, solo
 // decide CUANDO disparar a partir de eventos de puntero. El boton que lo usa

@@ -1,4 +1,4 @@
-// Donde sobreviven los errores pendientes de enviar (R3-KI-03).
+// Donde sobreviven los errores pendientes de enviar.
 //
 // POR QUE. El buffer de `errorReporter.ts` vive en memoria y sale con el latido
 // (cada 60 s). Si la tablet se reinicia o la pagina se recarga entre medias se

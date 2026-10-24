@@ -1,4 +1,4 @@
-// Marca blanca del quiosco en tiempo de ejecucion (RF-PD-08, tarea 5.8).
+// Marca blanca del quiosco en tiempo de ejecucion (RF-PD-08).
 //
 // LA PANTALLA NUNCA ESPERA A ESTO (regla dura 19). El nombre y el logotipo de
 // la instalacion son cosmeticos, no un fichaje: si la red esta caida, si el

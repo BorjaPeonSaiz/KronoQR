@@ -1,4 +1,4 @@
-// Estado del historico de errores (RF-PD-15, tarea 5.12).
+// Estado del historico de errores (RF-PD-15).
 //
 // Una pagina (`GET /diagnostics/errors`) con los filtros de origen, nivel,
 // estado y periodo, y una accion de resolucion que sustituye o retira la fila

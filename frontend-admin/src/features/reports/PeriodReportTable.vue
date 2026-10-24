@@ -4,20 +4,19 @@
 // AQUI NO SE CALCULA NINGUNA CIFRA. Los minutos y su `HH:MM` vienen los dos del
 // servidor, que es el unico que lee la proyeccion de jornadas (regla dura 7).
 // Sumar o formatear horas en el navegador seria una segunda forma de calcular lo
-// mismo, y el dia que discreparan la pantalla enseñaria una cosa y el CSV de la
-// tarea 2.9 otra.
+// mismo, y el dia que discreparan la pantalla enseñaria una cosa y el CSV otra.
 //
 // LAS HORAS SE ENSEÑAN EN `HH:MM` Y NUNCA EN DECIMAL. «7,75 h» obliga a
 // interpretar y ademas cambia de sentido segun el separador decimal de quien lo
 // lea. Los minutos enteros van en el `title` de cada celda, para quien necesite
 // el numero exacto.
 //
-// VIRTUALIZADA A PARTIR DE UN UMBRAL (V5-PA-1), con `useVirtualRows`, el mismo
+// VIRTUALIZADA A PARTIR DE UN UMBRAL, con `useVirtualRows`, el mismo
 // mecanismo de las demas tablas largas del panel: el
 // servidor admite hasta 20 000 filas por informe y pintarlas todas bloquea el
 // navegador. Solo se pinta la ventana visible; `aria-rowcount` declara el total
-// y `aria-rowindex` la posicion de cada fila (PA7-003). El contenedor con
-// desplazamiento es una region enfocable y con nombre (AX7-01).
+// y `aria-rowindex` la posicion de cada fila. El contenedor con
+// desplazamiento es una region enfocable y con nombre.
 //
 // COSTE: la virtualizacion rompe la impresion del navegador y el «buscar en la
 // pagina» (solo existe en el DOM lo que se ve). Para eso esta la exportacion
@@ -159,7 +158,7 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
           </span>
           <span role="columnheader" class="text-right">{{ t('reports.table.openShiftDays') }}</span>
           <span role="columnheader" class="text-right">{{ t('reports.table.incidentDays') }}</span>
-          <!-- RF-GP-04 (tarea 3.10): las ausencias registradas no cuentan como
+          <!-- RF-GP-04: las ausencias registradas no cuentan como
                absentismo no justificado, y el calendario de festivos del
                perfil de cumplimiento tampoco. `title` explica cada columna:
                son tres numeros que se prestan a confundirse entre si. -->

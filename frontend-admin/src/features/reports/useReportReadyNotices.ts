@@ -1,5 +1,4 @@
-// Aviso de «informe listo» en cualquier pantalla (RF-IN-06 «con notificacion»,
-// V21-5-PA-1, V5-PA-3, R3-PA-08).
+// Aviso de «informe listo» en cualquier pantalla (RF-IN-06 «con notificacion»).
 //
 // Antes solo `ReportExportsPanel` sondeaba, y solo existia en `/reports`: quien
 // pedia «Generar en segundo plano» desde Nomina, o salia de Informes, no se
@@ -13,7 +12,7 @@
 // otros dias): se recuerdan sin anunciar. Despues, cada fila `completed` que no
 // estaba entre las conocidas como completadas es un aviso nuevo. Esa regla
 // sustituye al `watch` con `immediate: true` del panel, que anunciaba las 20 al
-// montar (R3-PA-08).
+// montar.
 import { announce } from '@kronoqr/web-kit/announcer'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'

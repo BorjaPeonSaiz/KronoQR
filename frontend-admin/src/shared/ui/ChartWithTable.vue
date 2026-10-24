@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Primer uso de ECharts del proyecto (tarea 3.13, RF-IN-08).
+// Primer uso de ECharts del proyecto (RF-IN-08).
 //
 // **TABLA DE DATOS ALTERNATIVA, CONMUTABLE.** Es lo que hace el grafico
 // accesible (doc 02 §3.3): un boton cambia entre el lienzo
@@ -10,7 +10,7 @@
 //
 // El boton dice SIEMPRE la accion que hara («Ver como tabla» ⇄ «Ver como gráfico»)
 // y por eso NO lleva `aria-pressed`: con las dos señales a la vez se leia «Ver como
-// gráfico, botón de alternancia, pulsado», que se contradice (V7-PA-7). Apunta con
+// gráfico, botón de alternancia, pulsado», que se contradice. Apunta con
 // `aria-controls` a la vista que gobierna y el cambio se anuncia en la region viva.
 //
 // **ECHARTS SE CARGA EN DIFERIDO** (import dinamico de solo los modulos que
@@ -19,10 +19,11 @@
 // libreria que la mayoria de pantallas todavia no usa.
 //
 // **LOS COLORES SALEN DE LOS TOKENS `--kq-*` DEL `:root`, LEIDOS EN TIEMPO DE
-// EJECUCION** (doc 06) en `chartOption.ts`, sin ningun respaldo literal (U2):
-// ninguna SPA declara un color propio, y la marca blanca (tarea 5.8) cambia
+// EJECUCION** (doc 06) en `chartOption.ts`, sin ningun respaldo literal:
+// ninguna SPA declara un color propio, y la marca blanca cambia
 // esos tokens sin que este componente tenga que saber que existe. Las series
-// se distinguen ademas por un patron, no solo por el tono (V6-UX-3). Si el lienzo no llega a montarse -entorno sin lienzo, o
+// se distinguen ademas por un patron, no solo por el tono. Si el lienzo no llega a
+// montarse -entorno sin lienzo, o
 // un fallo de red al cargar el modulo-, el componente no se rompe: se queda
 // en la tabla, que es autosuficiente.
 //
@@ -36,8 +37,8 @@ import { buildChartOption } from './chartOption'
 /**
  * Una serie del grafico: una fila de barras, o el unico anillo de un rosco.
  *
- * `null` en `values` es un valor legitimo: «sin dato», nunca «cero» (segunda
- * vuelta de la tarea 3.13). ECharts dibuja un hueco en la barra o excluye la
+ * `null` en `values` es un valor legitimo: «sin dato», nunca «cero». ECharts
+ * dibuja un hueco en la barra o excluye la
  * porcion del rosco, y la tabla de datos alternativa escribe
  * `chartWithTable.noData` en esa celda -nunca `formatValue(0)`, que
  * convertiria «no se sabe» en una afirmacion («cero») que nadie midio-.
@@ -109,7 +110,7 @@ async function toggleView(): Promise<void> {
 /**
  * Un token `--kq-*` del `:root`, tal como lo pinta el navegador ahora (con la
  * marca del cliente aplicada). Sin hoja de estilos (jsdom, SSR) devuelve `''`:
- * no hay respaldo literal (U2), `chartOption.ts` omite esa propiedad.
+ * no hay respaldo literal, `chartOption.ts` omite esa propiedad.
  */
 function readToken(name: string): string {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -135,7 +136,7 @@ function formatTooltipValue(value: unknown): string {
 /**
  * La opcion de ECharts, construida SOLO con tokens `--kq-*` (doc 06) por
  * `buildChartOption`. `readToken` trae el valor vigente en cada llamada, asi
- * que un cambio de marca en caliente (tarea 5.8) se refleja en la proxima
+ * que un cambio de marca en caliente se refleja en la proxima
  * actualizacion.
  */
 function buildOption(): Record<string, unknown> {

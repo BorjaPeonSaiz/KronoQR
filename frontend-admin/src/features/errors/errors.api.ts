@@ -1,4 +1,4 @@
-// Historico de errores agrupado por huella (RF-PD-15, tarea 5.12): la consulta
+// Historico de errores agrupado por huella (RF-PD-15): la consulta
 // paginada y la resolucion de un grupo. Las formas salen del contrato; aqui no
 // se inventa ninguna.
 import { requestJson } from '@kronoqr/web-kit/http'
@@ -41,7 +41,7 @@ export function listErrorEvents(query: ErrorEventsQuery = {}): Promise<ErrorEven
  * fila, sin segundo efecto.
  *
  * Un acceso de soporte con alcance `diagnostics` o `read_only` recibe `403`
- * aunque pueda leer el historico (decision 8 de la ficha 5.12): dar un fallo
+ * aunque pueda leer el historico: dar un fallo
  * por resuelto en la instalacion de un cliente es decision del cliente. La
  * vista traduce ese `403` con `ErrorNotice`, como cualquier otro rechazo del
  * servidor.

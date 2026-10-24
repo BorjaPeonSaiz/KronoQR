@@ -7,7 +7,7 @@
 // consulta (RF-ID-03): esta pantalla no filtra nada por su cuenta.
 //
 // LA ANTIGUEDAD SE CALCULA CONTRA EL RELOJ DEL SERVIDOR (regla dura 3), igual
-// que la presencia en vivo de la 2.4: `meta.generated_at` mas lo transcurrido
+// que la presencia en vivo: `meta.generated_at` mas lo transcurrido
 // en el reloj local, nunca `Date.now()` a secas.
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'

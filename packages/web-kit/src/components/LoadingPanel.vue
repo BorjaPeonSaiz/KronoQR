@@ -4,7 +4,7 @@
 // Componente compartido por las SPA del panel y del portal (ADR-036).
 //
 // Si la espera pasa de `slowAfterMs` añade «esto tarda mas de lo normal»: sin
-// ello, un servidor lento es indistinguible de una pantalla colgada (V3-UX-02).
+// ello, un servidor lento es indistinguible de una pantalla colgada.
 // El aviso es un nodo aparte, con su propia region viva. La salida
 // definitiva es el tiempo maximo del cliente HTTP (`DEFAULT_READ_TIMEOUT_MS`),
 // que convierte la espera en un error con «Reintentar».

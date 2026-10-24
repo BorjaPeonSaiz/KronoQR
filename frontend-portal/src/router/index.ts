@@ -15,7 +15,7 @@ declare module 'vue-router' {
 }
 
 // Solo el acceso y el marco van en el chunk de entrada. Cada pantalla se baja
-// cuando se pide (8.8, V5-PO-1): se abre con datos moviles personales, y quien
+// cuando se pide (8.8): se abre con datos moviles personales, y quien
 // entra por el acceso no necesita todavia el codigo de las otras.
 export const routes: RouteRecordRaw[] = [
   {
@@ -32,7 +32,7 @@ export const routes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'home', redirect: { name: 'my-records' } },
       {
-        // Tres pantallas y ninguna mas (doc 02 §11, tarea 1.11). Esta es la que
+        // Tres pantallas y ninguna mas (doc 02 §11). Esta es la que
         // existe por obligacion legal: el registro de jornada propio (RL-05).
         path: 'records',
         name: 'my-records',

@@ -1,4 +1,4 @@
-// Plazos del dialogo del QR de la politica de privacidad (RF-KI-09, V7-KI-02).
+// Plazos del dialogo del QR de la politica de privacidad (RF-KI-09).
 //
 // El quiosco es de pared y compartido: un dialogo que alguien abrio y se
 // olvido no puede quedarse tapando la pantalla ni el siguiente fichaje.

@@ -1,4 +1,4 @@
-// El foco no se pierde cuando lo que lo tenia se retira (V7-PA-4, V21-7-PA-1).
+// El foco no se pierde cuando lo que lo tenia se retira.
 //
 // Convencion: lo que se retira devuelve el foco a su origen. Un boton que
 // desaparece al confirmar -resolver una incidencia retira su fila; el aviso de

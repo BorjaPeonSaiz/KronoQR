@@ -51,7 +51,7 @@ let readyPromise: Promise<typeof sodium> | null = null
  * que no llega a cargar) no se recuerda: con la promesa rechazada cacheada, el
  * quiosco quedaba sin poder sellar hasta la siguiente recarga aunque la causa
  * fuese pasajera, y cada fichaje por PIN se enseñaba como «codigo no valido»
- * (PIN-03).
+ *.
  */
 function whenReady(): Promise<typeof sodium> {
   if (readyPromise !== null) return readyPromise

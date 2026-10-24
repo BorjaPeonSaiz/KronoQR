@@ -83,8 +83,8 @@ export interface ScanPipelineOptions {
   readonly repeatWindowMs?: number
   readonly heldGapMs?: number
   /**
-   * La intencion para el PROXIMO fichaje que de verdad se encole (ADR-024,
-   * decision 5 de la tarea 3.5). Se llama UNA vez, justo al construir el
+   * La intencion para el PROXIMO fichaje que de verdad se encole (ADR-024).
+   * Se llama UNA vez, justo al construir el
    * `QueuedScan` -nunca en una lectura previa a saber si el payload es una
    * tarjeta valida, o el boton se desarmaria por una lectura ilegible que no
    * llego a fichar nada-. Por defecto `'auto'`, que es el comportamiento de
@@ -94,14 +94,14 @@ export interface ScanPipelineOptions {
   readonly resolveIntent?: () => ScanIntent
   /**
    * Tolerancia de desfase de la instalacion, para que `settleFrom` sepa
-   * cuando avisar en la confirmacion (RF-AT-10, decision 6 de la tarea 3.5).
+   * cuando avisar en la confirmacion (RF-AT-10).
    * `null` mientras esta tablet no haya latido: sin umbral, sin aviso.
    */
   readonly clockSkewToleranceSeconds?: () => number | null
   /**
    * Se llama en CADA lectura que NO llega a encolar un fichaje: un payload
    * ilegible, o una repeticion (tarjeta sostenida, o la misma tarjeta dentro
-   * de `repeatWindowMs`) -revision de la segunda vuelta, seguridad-. La
+   * de `repeatWindowMs`). La
    * pantalla lo usa para desarmar el boton «Pausa»: mientras esta armado, la
    * intencion es de la TABLET, no de quien la toco, y cualquier lectura que
    * no sea el fichaje esperado cierra la ventana de confusion en vez de
@@ -109,7 +109,7 @@ export interface ScanPipelineOptions {
    */
   readonly onUnqueuedRead?: () => void
   /**
-   * Una lectura que NO es una tarjeta KronoQR y no es una repeticion (R3-KI-04).
+   * Una lectura que NO es una tarjeta KronoQR y no es una repeticion.
    * Solo su longitud: el contenido jamas sale de aqui (reglas duras 17 y 21).
    */
   readonly onMalformedPayload?: (length: number) => void
@@ -117,8 +117,8 @@ export interface ScanPipelineOptions {
   readonly onSettled?: (confirmation: ScanConfirmation) => void
   /**
    * El envio ha vuelto SIN desenlace del servidor (`deferred`): fallo de red
-   * explicito aunque `navigator.onLine` siga en `true`, o cola por delante
-   * (V21-7-KI-1). No va a llegar ninguna respuesta dentro del plazo del tono, asi
+   * explicito aunque `navigator.onLine` siga en `true`, o cola por delante.
+   * No va a llegar ninguna respuesta dentro del plazo del tono, asi
    * que la sesion suena `pending` en el momento en vez de esperar a que venza.
    */
   readonly onDeferred?: (scanId: string) => void
@@ -199,7 +199,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
     if (confirmation === null) {
       // Sigue en la cola. La pantalla ya dice «pendiente»: no se toca, porque
       // corregir una confirmacion que era correcta solo confunde. `fallbackName`
-      // queda disponible para que la tarea 1.9 lo use al reintentar.
+      // queda disponible para el reintento de la cola.
       void fallbackName
       options.onDeferred?.(scan.scan_id)
       return
@@ -239,7 +239,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       markAccepted(payload.raw, nowMs)
 
       // Se consume AQUI, con la tarjeta ya reconocida como una lectura de
-      // verdad que va a encolarse (ADR-024, decision 5). Todo lo que no
+      // verdad que va a encolarse (ADR-024). Todo lo que no
       // llega hasta aqui (ilegible o repetido, arriba) desarma en vez de
       // dejar el boton armado para una lectura que no era la esperada.
       const intent = options.resolveIntent?.() ?? 'auto'

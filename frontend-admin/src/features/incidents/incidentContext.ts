@@ -7,7 +7,7 @@
 // `threshold_minutes`; `skew_seconds`, sin decir con que se empareja; desde
 // RN-18 el contexto de `out_of_order_scan` (`scan_id`, `occurred_at` del
 // primer escaneo que no cuadro, `scans`, el recuento); y desde RF-PR-06/RN-16
-// (tarea 3.11) los dos patrones anomalos de uso de credencial que distingue
+// los dos patrones anomalos de uso de credencial que distingue
 // `context.pattern`: `kiosk_coincidence` y `impossible_sequence`.
 //
 // NUNCA SE INVENTA UNA PAREJA QUE EL CONTRATO NO CONFIRMA. Adivinar que
@@ -88,8 +88,7 @@ function shortUuid(uuid: string): string {
 }
 
 /**
- * `kiosk_coincidence` (RF-PR-06, tarea 3.11; rediseño de la segunda vuelta,
- * decision 13): un hallazgo por PERSONA, no por par -de ahi que sea un
+ * `kiosk_coincidence` (RF-PR-06): un hallazgo por PERSONA, no por par -de ahi que sea un
  * `counterpart_employee_uuid` (la contraparte principal, con mas dias) y un
  * `counterpart_count` (cuantas personas distintas en total, ⩾ 1)-. El patron,
  * el quiosco por nombre, el enlace a la contraparte principal (nunca su
@@ -130,7 +129,7 @@ function describeKioskCoincidence(
     // `extra` es cuanta gente MAS, aparte de la contraparte principal ya
     // nombrada: `counterpart_count` cuenta a todo el mundo, incluida ella.
     // Sin `counterpart_count` (contexto antiguo o incompleto) se trata como
-    // una sola contraparte, igual que antes de la decision 13.
+    // una sola contraparte.
     const extra = typeof counterpartCount === 'number' ? Math.max(0, counterpartCount - 1) : 0
     const key =
       extra === 0
@@ -211,7 +210,7 @@ function describeKioskCoincidence(
 }
 
 /**
- * `impossible_sequence` (RN-16, tarea 3.11, decision 3): dos escaneos
+ * `impossible_sequence` (RN-16): dos escaneos
  * aceptados de la misma credencial en dispositivos distintos separados por
  * menos del tiempo minimo de transito. Un solo caso basta -no es una
  * frecuencia-, asi que no hay contrapartida que enlazar: es la misma persona.

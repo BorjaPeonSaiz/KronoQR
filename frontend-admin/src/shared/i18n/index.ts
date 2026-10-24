@@ -20,7 +20,7 @@ export type LocaleMessages = typeof es
 
 type LocaleLoader = () => Promise<{ default: LocaleMessages }>
 
-// CADA IDIOMA ES UN TROZO APARTE (V21-5-PA-4, V5-PA-5). Antes los dos catalogos
+// CADA IDIOMA ES UN TROZO APARTE. Antes los dos catalogos
 // entraban en el chunk de arranque -unos 70 KiB gzip- aunque cada persona usa
 // uno y una instalacion solo en espanol nunca ve el ingles. Ahora solo se
 // descarga el idioma que se va a pintar. `import()` con ruta literal por idioma:

@@ -25,7 +25,7 @@ const failed = ref(false)
  * Un trozo no carga y ya se recargo una vez (o no se puede garantizar la marca):
  * la pantalla pedida no se va a abrir. Lo pinta el marco de la aplicacion como aviso con
  * «Recargar»; sin el, el clic del menu no hacia nada y no se sabia por que
- * (V21-3-UX-1).
+ *.
  */
 export const chunkLoadFailed = readonly(failed)
 

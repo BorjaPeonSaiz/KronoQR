@@ -7,7 +7,7 @@
 // la otra siempre), asi que vive aqui una sola vez. Cada SPA lo envuelve en su
 // store de Pinia con dos lineas; Pinia no es dependencia de este paquete.
 //
-// Cache (MB4). Igual que el quiosco, se guarda la ultima marca valida en
+// Cache. Igual que el quiosco, se guarda la ultima marca valida en
 // `localStorage`: al crear el estado se lee y `apply()` pinta ESA marca en el
 // primer fotograma, sin parpadeo del producto; al llegar la respuesta se
 // actualiza y se vuelve a guardar. La copia es un estorbo prescindible, nunca

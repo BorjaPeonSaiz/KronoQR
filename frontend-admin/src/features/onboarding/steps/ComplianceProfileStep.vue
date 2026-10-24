@@ -3,8 +3,8 @@
 // hay que contrastarlos con el convenio aplicable, y eso es un acto de
 // alguien, no un valor por defecto que nadie miro (contrato, `SetupStepStatus`).
 //
-// Reutiliza la MISMA pantalla que la gestion del dia a dia (`/compliance-profile`,
-// tarea 5.2): mismos umbrales visibles, mismo aviso de RL-21, mismo `ES-hosteleria`
+// Reutiliza la MISMA pantalla que la gestion del dia a dia (`/compliance-profile`):
+// mismos umbrales visibles, mismo aviso de RL-21, mismo `ES-hosteleria`
 // preseleccionado por la migracion. El asistente solo añade el boton que
 // confirma que se ha revisado.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'

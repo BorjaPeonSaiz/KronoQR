@@ -1,4 +1,4 @@
-// El atributo `lang` del documento sigue al idioma activo (WCAG 3.1.1, PA7-001).
+// El atributo `lang` del documento sigue al idioma activo (WCAG 3.1.1).
 //
 // `index.html` declara `lang="es"` porque es el idioma por defecto, pero una
 // cuenta en ingles navega con el documento declarado en español: un lector de

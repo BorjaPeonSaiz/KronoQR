@@ -88,7 +88,7 @@ const variant = computed<ConfirmationVariant>(() => variantFor(props.confirmatio
  * `break_start`/`break_end` comparten variante -y por tanto color y flecha-
  * con `clock_out`/`clock_in` (mismo tono de salida/entrada, ADR-024): sin
  * nada mas, una pausa y un fin de jornada se verian identicos a dos metros.
- * El pictograma ⏸ (revision de la segunda vuelta, UI/UX: mismo icono que el
+ * El pictograma ⏸ (UI/UX: mismo icono que el
  * panel y el portal) sustituye a la flecha SOLO para las dos acciones de
  * pausa, para que se reconozcan sin leer la palabra.
  */
@@ -103,7 +103,7 @@ const symbol = computed<string>(() => {
   return SYMBOLS[variant.value]
 })
 
-// La hora de pared DEL CENTRO (V2-KI-01), no la de la tablet.
+// La hora de pared DEL CENTRO, no la de la tablet.
 const time = computed(() =>
   formatClockTime(props.confirmation.occurredAt, locale.value, readSiteTimeZone()),
 )
@@ -125,7 +125,7 @@ function headlineFor(confirmation: ScanConfirmation): string {
     case 'debounced':
       return t('scan.debounced.title')
     case 'unavailable':
-      // PIN-03: fallo tecnico local, no un rechazo. Texto propio.
+      // Fallo tecnico local, no un rechazo. Texto propio.
       return t('pin.unavailable.title')
     case 'rejected':
     case 'unreadable':
@@ -169,7 +169,7 @@ const total = computed(() => {
 })
 
 /**
- * Solo en `break_start` (ADR-024, decision 5 de la tarea 3.5): la pausa cierra
+ * Solo en `break_start` (ADR-024): la pausa cierra
  * un tramo, pero la JORNADA sigue abierta -no es un «Hasta luego» de verdad-,
  * y quien la ficha tiene que saber que falta pasar la tarjeta al volver.
  */
@@ -180,7 +180,7 @@ const breakOpenHint = computed(() =>
 )
 
 /**
- * Aviso de desfase en la confirmacion (RF-AT-10, decision 6 de la tarea 3.5).
+ * Aviso de desfase en la confirmacion (RF-AT-10).
  * `settleFrom` solo deja `clockSkewSeconds` cuando de verdad supera el umbral
  * de la instalacion: aqui solo queda traducirlo a la misma frase que la banda
  * persistente de `ScanView`.

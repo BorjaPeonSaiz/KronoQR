@@ -4,13 +4,12 @@
 // EL BUSCADOR DE PERSONA REUTILIZA `listEmployees` (la API de plantilla que
 // ya existe, `employees.api.ts`) por codigo o por nombre: no hay un segundo
 // endpoint para esto. Solo se buscan personas de alta -una ausencia de
-// alguien de baja no tiene sentido, y el servidor la rechazaria con `422`
-// (decision 2 de la ficha).
+// alguien de baja no tiene sentido, y el servidor la rechazaria con `422`.
 //
-// `OTHER` EXIGE NOTA (decision 2): es el permiso que no es ninguno de los
+// `OTHER` EXIGE NOTA: es el permiso que no es ninguno de los
 // otros tres, y sin una nota la fila no explica nada.
 //
-// SOLO DIAS COMPLETOS (decision 1): `starts_on`/`ends_on` son fechas civiles
+// SOLO DIAS COMPLETOS: `starts_on`/`ends_on` son fechas civiles
 // inclusivas, sin hora. Se puede registrar hacia atras -una baja se conoce
 // despues- y hacia delante -las vacaciones-, asi que no hay minimo respecto
 // de hoy.

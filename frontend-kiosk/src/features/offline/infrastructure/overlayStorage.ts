@@ -1,4 +1,4 @@
-// Disco que se lee pero ya no se escribe, mas un respaldo en memoria (V2-KI-02).
+// Disco que se lee pero ya no se escribe, mas un respaldo en memoria.
 //
 // EL CASO. IndexedDB sigue abriendose y respondiendo a lecturas, pero cada
 // escritura falla —cuota agotada, disco lleno— tras las reaperturas de ADR-047.
@@ -18,7 +18,7 @@
 //    fichajes nuevos vuelven a ser duraderos. Si falla, entra en memoria.
 //  - `remove`/`reschedule`/`discard`... van a la mitad donde vive la fila. Si la
 //    escritura en disco falla, la excepcion SUBE: quien llama (`confirm`,
-//    `retryLater`) ya sabe que el borrado no llego (V7-RV-4).
+//    `retryLater`) ya sabe que el borrado no llego.
 //  - No es duradero (`durable: false`): un reinicio perderia lo de memoria, y la
 //    puerta de actualizacion lo trata como cola en memoria.
 //

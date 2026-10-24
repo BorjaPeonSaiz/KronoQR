@@ -1,6 +1,6 @@
 // La forma del PIN que teclean el quiosco (fichaje de respaldo, RF-AT-11) y el
 // portal (acceso personal, ADR-015). Antes estaba copiada a mano en los dos,
-// y ademas la regex del quiosco no usaba sus propias constantes (V1-RV-02).
+// y ademas la regex del quiosco no usaba sus propias constantes.
 //
 // Sale del contrato: es `PortalLoginRequest.pin.pattern` de
 // `docs/api/openapi.yaml` (`^[0-9]{6,8}$`), y `pinShape.spec.ts` falla si el

@@ -1,4 +1,4 @@
-// El idioma que la persona elige a mano con el selector (D22, PO7-05).
+// El idioma que la persona elige a mano con el selector.
 //
 // Vive en memoria y no en el navegador: la regla de almacenamiento del portal
 // (`no-browser-storage`) reserva `sessionStorage` a la sesion de la propia

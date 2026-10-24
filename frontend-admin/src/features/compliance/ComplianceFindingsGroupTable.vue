@@ -1,15 +1,15 @@
 <script setup lang="ts">
 // Los hallazgos de UNA regla de la vista de cumplimiento (RF-PA-06).
 //
-// VIRTUALIZADA A PARTIR DE UN UMBRAL (RC1), con `useVirtualRows`, el mismo
+// VIRTUALIZADA A PARTIR DE UN UMBRAL, con `useVirtualRows`, el mismo
 // mecanismo de las demas tablas largas del panel.
 // El contrato no pagina esta vista y el rango admite meses de historico de toda
 // la plantilla: con miles de hallazgos, pintarlos todos —cada uno con tres
 // duraciones y un periodo formateados— bloquea el navegador. Solo se calculan y
 // se pintan las filas de la ventana visible (`rowOf` se invoca por fila visible,
 // no por hallazgo). `aria-rowcount` declara el total y `aria-rowindex` la
-// posicion de cada fila (PA7-003); el contenedor es una region enfocable y con
-// nombre (AX7-01).
+// posicion de cada fila; el contenedor es una region enfocable y con
+// nombre.
 //
 // NADA SE CALCULA AQUI (regla dura 7): `HH:MM` sale de `durationParts` sobre
 // los minutos que YA manda el servidor, y «faltan»/«sobran» es una etiqueta

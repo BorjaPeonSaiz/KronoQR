@@ -3,8 +3,7 @@
 //
 // PANTALLA MINIMA A PROPOSITO: formulario de periodo, granularidad y agrupacion,
 // tabla de resultados y criterios a la vista. El cuadro de impacto y las
-// comparaciones visuales son de la tarea 3.13, que tiene agente propio y depende
-// de indicadores que esta tarea todavia no calcula (plan de la 2.8, artefactos).
+// comparaciones visuales viven en `AdoptionDashboardView.vue` (RF-IN-08).
 //
 // LOS CRITERIOS DE INCLUSION SE ENSEÑAN TAL CUAL LOS DA EL SERVIDOR, sin
 // reordenarlos ni resumirlos. Son parte del informe: sin ellos, la tabla es un
@@ -174,9 +173,9 @@ async function requestBackgroundGeneration(): Promise<void> {
 
     // Se enseña en el bloque de exportaciones EN EL ACTO, sin esperar al
     // primer sondeo de `ReportExportsPanel` (mismo patron que
-    // `DataExportPanel.confirmRequest`, tarea 5.10): tanto si es la fila
-    // recien creada como si es la que ya estaba en curso (409, decision 2 de
-    // la ficha), es la misma forma y el mismo sitio en la lista.
+    // `DataExportPanel.confirmRequest`): tanto si es la fila
+    // recien creada como si es la que ya estaba en curso (409), es la misma
+    // forma y el mismo sitio en la lista.
     queryClient.setQueryData<ReportExportCollection>(REPORT_EXPORTS_QUERY_KEY, (previous) => {
       const rest = (previous?.data ?? []).filter((row) => row.uuid !== resource.data.uuid)
 
@@ -547,7 +546,7 @@ const fieldClass =
       />
 
       <!-- El contenedor con desplazamiento (region enfocable y con nombre) vive
-           en la tabla: es el que virtualiza las filas (V5-PA-1, AX7-01). -->
+           en la tabla: es el que virtualiza las filas. -->
       <PeriodReportTable v-else :rows="report.data" :time-zone="report.meta.time_zone" />
 
       <!-- Los criterios, tal cual los da el servidor. No se reordenan ni se
@@ -571,8 +570,7 @@ const fieldClass =
     <!-- Bloque «Exportaciones en segundo plano» (RF-IN-06, RF-IN-07): SIEMPRE
          visible en esta pantalla, no solo tras un `422` -tambien enseña las
          exportaciones de nomina que se pidieron desde `PayrollExportView`,
-         porque comparten el mismo ciclo de vida (`report_exports`, decision 1
-         de la ficha). -->
+         porque comparten el mismo ciclo de vida (`report_exports`). -->
     <ReportExportsPanel class="mt-8" />
   </section>
 </template>

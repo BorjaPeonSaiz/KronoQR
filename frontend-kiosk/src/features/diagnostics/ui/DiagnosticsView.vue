@@ -1,21 +1,21 @@
 <script setup lang="ts">
-// Pantalla de diagnostico del quiosco (RF-KI-08, tarea 3.3).
+// Pantalla de diagnostico del quiosco (RF-KI-08).
 //
 // SE ABRE CON UNA PULSACION LARGA sobre el reloj de `ScanView`/`PairingView`
 // (`ClockDiagnosticsTrigger.vue`) y NUNCA bloquea el fichaje (regla dura 19):
 // tiene su propio boton de vuelta y se cierra sola a los 120 s sin
-// interaccion. Ruta exceptuada del guard de emparejamiento (`router/index.ts`,
-// decision 7 de la tarea): una tablet sin vincular tambien se diagnostica.
+// interaccion. Ruta exceptuada del guard de emparejamiento (`router/index.ts`):
+// una tablet sin vincular tambien se diagnostica.
 //
-// CODIGO DE SERVICIO EN LOCAL, SIN RED (decision 6). Si no hay huella cacheada
+// CODIGO DE SERVICIO EN LOCAL, SIN RED. Si no hay huella cacheada
 // (`readServiceCodeHash`) la pantalla se abre directamente: o esta instalacion
 // no tiene codigo configurado, o esta tablet todavia no ha latido nunca -los
-// dos casos son «nada que proteger todavia» (decision 7)-.
+// dos casos son «nada que proteger todavia»-.
 //
 // NUNCA UN NOMBRE (regla dura 21). Todo lo de aqui se identifica por
 // `device_id`; el token nunca aparece en claro, solo sus ocho primeros hex.
 //
-// SIN TOKEN, SIN CONTROLADOR (revision de la 3.3, segunda vuelta). Una tablet
+// SIN TOKEN, SIN CONTROLADOR. Una tablet
 // vista desde `/pair` no tiene nada que sincronizar ni ningun padron que
 // pedir: llamar a `getOfflineQueueController` igualmente arrancaria el
 // `SyncRunner` y el refresco periodico del padron sin proposito. Con
@@ -66,12 +66,12 @@ const router = useRouter()
 
 const MIN_CODE_LENGTH = 8
 const MAX_CODE_LENGTH = 12
-/** Vuelve sola al fichaje si nadie toca nada (decision 8 de la tarea 3.3). */
+/** Vuelve sola al fichaje si nadie toca nada. */
 const AUTO_RETURN_MS = 120_000
 /**
- * Techo absoluto desde la APERTURA, interaccion o no (revision de la 3.3,
- * segunda vuelta): sin esto, alguien podria dejar la pantalla abierta
- * indefinidamente con solo tocar algo cada dos minutos. Cinco veces el
+ * Techo absoluto desde la APERTURA, interaccion o no: sin esto, alguien
+ * podria dejar la pantalla abierta indefinidamente con solo tocar algo cada dos
+ * minutos. Cinco veces el
  * intervalo de inactividad es margen de sobra para leer todas las secciones
  * con calma sin que la pantalla se convierta en algo que se pueda dejar
  * abierto para siempre.
@@ -100,7 +100,7 @@ const tokenExpiresAt = ref(readDeviceTokenExpiresAt())
 // `useOfflineQueue.ts`): si ya esta montado por la pantalla de la que se
 // vino, esto devuelve el mismo objeto -y esta pantalla se suscribe la suya a
 // `onDeviceRevoked`, sin importar si es la primera o la segunda en llegar
-// (revision de la 3.3, segunda vuelta)-. `null` si la tablet no esta
+//-. `null` si la tablet no esta
 // emparejada: ver la nota de cabecera.
 const offlineController = paired ? getOfflineQueueController({ api, reporter }) : null
 const queueStats = ref<QueueStats>(
@@ -112,9 +112,8 @@ const pinAvailable = ref(offlineController?.pinSealingPublicKey() !== null && pa
 const syncing = ref(false)
 /**
  * Senal VIVA del `SyncRunner` (`onReachability`), no una deduccion del ultimo
- * latido (fallo corregido en la revision de la 3.3: antes se congelaba en lo
- * que dijera `getLastHeartbeatResult()` en el instante de abrir la pantalla y
- * ya no se movia mientras estaba abierta).
+ * latido: esa se congelaria en lo que dijera `getLastHeartbeatResult()` en el
+ * instante de abrir la pantalla y ya no se moveria mientras estuviera abierta.
  */
 const reachable = ref<boolean | null>(null)
 
@@ -135,7 +134,7 @@ if (offlineController !== null) {
     offlineController.onReachability((value) => {
       reachable.value = value
     }),
-    // Dispositivo desvinculado desde el panel (RF-PD-06, tarea 5.6): mismo
+    // Dispositivo desvinculado desde el panel (RF-PD-06): mismo
     // listener que `ScanView.vue`/`PinView.vue`. Si esta pantalla es la que
     // esta viva cuando la revocacion dispare, es ella la que limpia el token
     // y vuelve a `/pair`.
@@ -146,7 +145,7 @@ if (offlineController !== null) {
   )
 }
 
-// --- Puerta del codigo de servicio (decision 6) -----------------------------
+// --- Puerta del codigo de servicio -----------------------------
 
 const expectedHash = readServiceCodeHash()
 type Phase = 'code' | 'locked' | 'content'
@@ -222,7 +221,7 @@ function submitCode(): void {
   applyGateResult(gate.attempt(attempted))
 }
 
-// --- Camara (decision 9): flujo PROPIO de esta pantalla, se abre y se cierra
+// --- Camara: flujo PROPIO de esta pantalla, se abre y se cierra
 // aqui (`ScanView` ya se desmonto al navegar). ------------------------------
 
 const camera = useCamera()
@@ -255,7 +254,7 @@ watch(
   { immediate: true },
 )
 
-// --- Latido PROPIO de esta pantalla (revision de la 3.3, segunda vuelta) ---
+// --- Latido PROPIO de esta pantalla ---
 //
 // Mientras el diagnostico esta abierto, el quiosco tiene que seguir
 // latiendo -si no, un empleado con la tablet colgada de la pared y alguien
@@ -306,7 +305,7 @@ const serviceWorkerActive =
     ? navigator.serviceWorker.controller !== null
     : null
 const privacyNotice = readPrivacyNotice()
-// Actualizacion del quiosco (RF-KI-07/RF-KI-08, tarea 3.12). `isUpdatePending`
+// Actualizacion del quiosco (RF-KI-07/RF-KI-08). `isUpdatePending`
 // es el singleton de `registerServiceWorker.ts` (mismo criterio que
 // `getLastHeartbeatResult`); la ventana viene de lo que cache el ultimo
 // latido, o la de serie si esta tablet nunca latio con una version que la
@@ -400,7 +399,7 @@ function instantLabel(iso: string | null): string {
 
 /**
  * Un valor tecnico del navegador (estado de la camara, orientacion, enfoque) en el
- * idioma de la pantalla (V7-KI-04). Si llega uno que no conocemos se muestra tal cual:
+ * idioma de la pantalla. Si llega uno que no conocemos se muestra tal cual:
  * mejor el dato crudo que ocultarlo.
  */
 function technicalValue(group: 'cameraState' | 'facing' | 'focus', raw: string): string {
@@ -413,13 +412,13 @@ function yesNo(value: boolean | null): string {
   return value ? t('diagnostics.values.yes') : t('diagnostics.values.no')
 }
 
-// --- Vuelta a fichar, sola o a mano (decision 8) ----------------------------
+// --- Vuelta a fichar, sola o a mano ----------------------------
 //
-// EL REINICIO DE LOS 120 s SOLO CUENTA COMO INTERACCION SOBRE UN CONTROL REAL
-// (revision de la 3.3, segunda vuelta): antes, un `@pointerdown.capture` en
-// `<main>` reiniciaba la cuenta con CUALQUIER toque -incluido arrastrar el
-// dedo por una zona vacia mientras se lee, que no es "seguir usando la
-// pantalla" en el sentido que RF-KI-08 quiere proteger-. Ahora `noteInteraction`
+// EL REINICIO DE LOS 120 s SOLO CUENTA COMO INTERACCION SOBRE UN CONTROL REAL:
+// un `@pointerdown.capture` en `<main>` reiniciaria la cuenta con CUALQUIER
+// toque -incluido arrastrar el dedo por una zona vacia mientras se lee, que
+// no es "seguir usando la pantalla" en el sentido que RF-KI-08 quiere
+// proteger-. Por eso `noteInteraction`
 // se llama solo desde el teclado numerico y los botones (`@click`), y el
 // selector de idioma cuenta tambien porque solo contiene botones (delegacion
 // por burbujeo desde el `<div>` que lo envuelve).
@@ -481,13 +480,13 @@ onBeforeUnmount(() => {
         {{ t('diagnostics.title') }}
       </p>
       <!-- El selector solo contiene botones: un click aqui SIEMPRE es un
-           control real burbujeando hasta este `div` (revision de la 3.3). -->
+           control real burbujeando hasta este `div`. -->
       <div @click="noteInteraction">
         <LanguageSelector />
       </div>
     </header>
 
-    <!-- Codigo de servicio (decision 6): en LOCAL, sin red. -->
+    <!-- Codigo de servicio: en LOCAL, sin red. -->
     <section
       v-if="phase === 'code' || phase === 'locked'"
       class="flex flex-1 flex-col items-center justify-center gap-6 px-10"
@@ -553,7 +552,7 @@ onBeforeUnmount(() => {
       </button>
     </section>
 
-    <!-- Contenido (decision 9): filas etiqueta -> valor, agrupadas por seccion. -->
+    <!-- Contenido: filas etiqueta -> valor, agrupadas por seccion. -->
     <section
       v-else
       class="flex flex-1 flex-col gap-6 overflow-y-auto px-6 py-4"

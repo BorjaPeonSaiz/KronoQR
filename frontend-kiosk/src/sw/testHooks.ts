@@ -13,8 +13,7 @@
 // requeriria un service worker de verdad esperando- por un marcador
 // observable desde Playwright.
 //
-// NUNCA EN PRODUCCION, con DOS guardas independientes (decision 16 de la
-// tarea 3.12):
+// NUNCA EN PRODUCCION, con DOS guardas independientes:
 //
 //   1. DE COMPILACION: `__KRONOQR_TEST_HOOKS__` (`vite.config.ts` -> `define`)
 //      es `false` en el build de produccion (`mode: 'production'`, el que se
@@ -50,7 +49,7 @@ export function testHooksEnabled(): boolean {
 
 /** No-op fuera de las pruebas: ver la cabecera de este fichero. */
 export function installTestHooks(hooks: KronoQrTestHooks): void {
-  // GUARDA DE COMPILACION (decision 16 de la tarea 3.12), ademas de la de
+  // GUARDA DE COMPILACION, ademas de la de
   // ejecucion de mas abajo: `__KRONOQR_TEST_HOOKS__` es `false` como LITERAL
   // en el build de produccion (`vite.config.ts` -> `define`), asi que este
   // `if` -y el codigo que protege- se convierte en muerto y el minificador lo

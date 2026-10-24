@@ -14,8 +14,8 @@
 //
 // ## Dos endpoints, una sola carga
 //
-// `GET /setup/status` es publico y nunca trae `steps` (revision de la 5.5: lo
-// que revela sin autenticar es solo si el asistente sigue abierto). El detalle
+// `GET /setup/status` es publico y nunca trae `steps`: lo que revela sin
+// autenticar es solo si el asistente sigue abierto. El detalle
 // —que paso toca, cual se omitio— vive en `GET /setup/steps`, que exige la
 // sesion del administrador. `load()` elige uno u otro segun haya o no un token
 // en `session.store`: **sin sesion, la unica pantalla que se puede resolver es

@@ -1,15 +1,15 @@
 // La opcion de ECharts de `ChartWithTable`, como funcion pura de los tokens.
 //
-// **LOS COLORES SALEN DE LOS TOKENS `--kq-*`, SIN RESPALDO LITERAL** (U2,
-// R7-UX-02, doc 06): este modulo no contiene ni un color. Quien lo llama pasa
+// **LOS COLORES SALEN DE LOS TOKENS `--kq-*`, SIN RESPALDO LITERAL** (doc 06):
+// este modulo no contiene ni un color. Quien lo llama pasa
 // un lector de tokens (`getComputedStyle` en el navegador; en las pruebas, el
-// propio `theme.css`), de modo que la marca blanca (tarea 5.8) y cualquier
+// propio `theme.css`), de modo que la marca blanca y cualquier
 // cambio del tema llegan al grafico, y una prueba compara lo que se pinta con
 // lo que dice el tema. Si el lector no devuelve un token (entorno sin hoja de
 // estilos), esa propiedad se omite y ECharts usa la suya: nunca un color
 // inventado aqui.
 //
-// **EL COLOR NO ES LA UNICA SEÑAL** (V6-UX-3, WCAG 1.4.1): cada serie lleva un
+// **EL COLOR NO ES LA UNICA SEÑAL** (WCAG 1.4.1): cada serie lleva un
 // patron propio ademas del tono (lisa, rayas, puntos, rayas cruzadas), y la
 // leyenda lo hereda. Con un acento de marca verdoso la salvia fija de la
 // segunda serie se parece al acento de la primera; el patron las separa sin

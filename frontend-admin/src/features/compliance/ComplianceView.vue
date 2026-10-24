@@ -1,10 +1,10 @@
 <script setup lang="ts">
-// Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente entre
+// Vista de cumplimiento (RF-PA-06): descanso insuficiente entre
 // jornadas (RN-10), jornada diaria excesiva (RN-11), tramo continuado sin
 // pausa (RN-12, suspendida) y exceso semanal informativo (RN-17), para el
 // alcance de quien pregunta.
 //
-// CARGA AL ABRIR, SIN PARAMETROS (decision 11 de la ficha de la tarea 3.4): al
+// CARGA AL ABRIR, SIN PARAMETROS: al
 // contrario que el informe por periodo (`reports/PeriodReportView.vue`), que
 // exige elegir fechas antes de gastar una consulta cara, aqui los hallazgos
 // son escasos -solo incumplimientos- y la ventana ya esta acotada por el
@@ -66,7 +66,7 @@ const to = ref('')
 const departmentFilter = ref<number | ''>('')
 const ruleFilter = ref<ComplianceRuleName | ''>('')
 
-// `shallowRef`: miles de hallazgos que nadie muta; el proxy profundo solo suma coste (RC1).
+// `shallowRef`: miles de hallazgos que nadie muta; el proxy profundo solo suma coste.
 const summary = shallowRef<ComplianceSummary | null>(null)
 const loading = ref(true)
 const error = ref<unknown>(null)
@@ -238,9 +238,9 @@ const selectClass =
 
     <template v-else-if="summary !== null">
       <!-- La zona horaria del centro, A LA VISTA junto a la cabecera y los
-           filtros (correccion de UI/UX, segunda vuelta de la tarea 3.4): antes
-           solo vivia en un `<caption>` invisible y al pie de la pantalla. Mismo
-           patron que `LivePresenceView.vue` con su «Foto de las …». -->
+           filtros, no solo en un `<caption>` invisible o al pie de la
+           pantalla. Mismo patron que `LivePresenceView.vue` con su «Foto de
+           las …». -->
       <p class="mt-4 text-sm text-kq-text-muted" data-test="generated-at">
         {{
           t('complianceSummary.generatedAt', {

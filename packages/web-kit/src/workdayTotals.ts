@@ -39,7 +39,7 @@ export interface WorkDayDurations {
   /**
    * El total que declara el servidor para el dia. Hoy sale de los mismos tramos
    * de la respuesta (`JournalWorkDay::totalMinutes()`), no de `daily_totals`: la
-   * divergencia con la proyeccion solo va al log del servidor (R1-RV-03). El
+   * divergencia con la proyeccion solo va al log del servidor. El
    * contraste de aqui es una defensa en profundidad, no una verificacion
    * contra otra fuente.
    */

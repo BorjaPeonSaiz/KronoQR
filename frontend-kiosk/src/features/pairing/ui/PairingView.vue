@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Pantalla de emparejamiento de la tablet (RF-PD-06, tarea 5.6).
+// Pantalla de emparejamiento de la tablet (RF-PD-06).
 //
 // A donde llega quien la ve: una tablet recien instalada, o una que el panel
 // acaba de desvincular (`deviceRevocation.ts`). Nunca un empleado en marcha
@@ -43,7 +43,7 @@ const api = createApiClient({
 
 const state = ref<PairingState>({ kind: 'idle' })
 
-// Marca blanca antes de vincular (RF-PD-08, DC11). `useBranding` aplica YA la
+// Marca blanca antes de vincular (RF-PD-08). `useBranding` aplica YA la
 // copia guardada -o la del producto- y pide `GET /api/v1/branding` (publica)
 // en segundo plano: la pantalla no espera (regla dura 19). Si falla o llega
 // algo invalido, se queda lo que habia; se reintenta con cada codigo nuevo.
@@ -53,7 +53,7 @@ let waitingEntries = 0
 function handlePaired(result: PairingCompleted): void {
   // El `device.uuid` sustituye al identificador local en la MISMA clave
   // (`deviceIdentity.ts`); el token es la unica vez que sale del servidor.
-  // `expires_at` y `device.name` (tarea 3.3) solo alimentan la pantalla de
+  // `expires_at` y `device.name` solo alimentan la pantalla de
   // diagnostico: no gobiernan nada del fichaje.
   persistPairedDevice(
     result.token.value,
@@ -182,7 +182,7 @@ onUnmounted(() => {
     </div>
 
     <div class="absolute top-6 left-6">
-      <!-- Reloj y puerta de diagnostico (RF-KI-08, tarea 3.3, decision 8):
+      <!-- Reloj y puerta de diagnostico (RF-KI-08):
            una tablet sin emparejar es justo la que hay que poder
            diagnosticar. -->
       <ClockDiagnosticsTrigger />

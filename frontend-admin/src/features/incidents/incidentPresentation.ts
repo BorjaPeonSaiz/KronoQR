@@ -1,7 +1,7 @@
 // Presentacion compartida de la severidad de una incidencia (RF-PA-05).
 //
 // La usan la bandeja (`IncidentTable.vue`) y la marca incrustada en el detalle
-// de jornada de la 1.16 (`workdays/WorkDayCard.vue`): el mismo hecho tiene que
+// de jornada (`workdays/WorkDayCard.vue`): el mismo hecho tiene que
 // verse igual en los dos sitios, y una paleta declarada dos veces es una que
 // diverge la primera vez que alguien retoca solo una.
 //

@@ -107,7 +107,7 @@ export function printCredentialBatch(
 
 /**
  * La hoja de instrucciones de fichaje que se entrega con la tarjeta y el PIN
- * (tarea 5.11b, RL-05): un PDF de una sola cara, sin datos de ninguna persona,
+ * (RL-05): un PDF de una sola cara, sin datos de ninguna persona,
  * en el idioma pedido. `GET`, no cambia nada: nunca responde `204` (a
  * diferencia del lote de impresion) y por eso no puede devolver `null`.
  */

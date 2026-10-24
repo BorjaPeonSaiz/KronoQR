@@ -1,8 +1,8 @@
 // Puertos del escaneo.
 //
-// Existen para que la tarea 1.9 pueda enchufar la cola de Dexie sin tocar ni la
-// tuberia ni la interfaz, y para que las pruebas unitarias de esta tarea no
-// necesiten IndexedDB ni un servidor.
+// Existen para que la cola de Dexie se enchufe sin tocar ni la tuberia ni la
+// interfaz, y para que las pruebas unitarias del escaneo no necesiten
+// IndexedDB ni un servidor.
 //
 // El reparto es el del diagrama del doc 02 §6:
 //   1.8 (esta tarea)  decodificar -> verificar FH1 -> resolver nombre -> ENCOLAR
@@ -23,8 +23,8 @@ interface QueuedScanBase {
   /**
    * Nace ya en el registro de la cola (ADR-024). Se escribia siempre `'auto'`
    * desde la v1 -para no tener que migrar una cola cargada de fichajes sin
-   * sincronizar en tablets que pueden estar sin red-, y desde la tarea 3.5
-   * vale `'break_start'` cuando el boton «Pausa» esta armado al encolar
+   * sincronizar en tablets que pueden estar sin red-, y vale `'break_start'`
+   * cuando el boton «Pausa» esta armado al encolar
    * (`scanPipeline.ts`/`pinPipeline.ts` -> `resolveIntent`). Se fija AL
    * ENCOLAR, no al enviar: un reintento reenvia la misma intencion.
    */
@@ -32,14 +32,14 @@ interface QueuedScanBase {
   readonly device_id: string
 }
 
-/** Fichaje por tarjeta QR (tarea 1.8/1.9). */
+/** Fichaje por tarjeta QR. */
 export interface QueuedQrScan extends QueuedScanBase {
   readonly kind: 'qr'
   readonly qr_payload: string
 }
 
 /**
- * Fichaje de respaldo por PIN (RF-AT-11, tarea 1.12). `pin_sealed` es el PIN
+ * Fichaje de respaldo por PIN (RF-AT-11). `pin_sealed` es el PIN
  * YA CERRADO con la clave publica de la instalacion (sobre de libsodium): el
  * PIN en claro no existe en ningun objeto que se serialice, ni de camino a la
  * cola ni de camino a la red. Ver `features/pin/infrastructure/pinSealing.ts`.
@@ -50,7 +50,7 @@ export interface QueuedPinScan extends QueuedScanBase {
   readonly pin_sealed: string
 }
 
-/** Un escaneo listo para viajar. Es tambien la fila de la cola de la tarea 1.9. */
+/** Un escaneo listo para viajar. Es tambien la fila de la cola offline. */
 export type QueuedScan = QueuedQrScan | QueuedPinScan
 
 export type ScanSubmissionResult =
@@ -72,7 +72,7 @@ export interface ScanSubmissionPort {
 
 /**
  * Resolucion del nombre contra el padron cacheado y cifrado (RF-KI-03, RL-12).
- * La implementacion real es de la tarea 1.9; aqui se consume.
+ * La implementacion real vive en `features/offline/`; aqui se consume.
  *
  * Sincrono a proposito: esta en el camino de los 300 ms. Un `await` contra
  * IndexedDB por cada escaneo es exactamente lo que no puede pasar.

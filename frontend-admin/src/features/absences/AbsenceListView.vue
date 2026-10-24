@@ -13,14 +13,14 @@
 // 18).
 //
 // LA NOTA NO SE PINTA SI NO VIENE. El servidor omite el campo entero para
-// quien no tiene `employees:*` (decision 5 de la ficha): no es que la nota
+// quien no tiene `employees:*`: no es que la nota
 // este vacia, es que no viaja. La columna se decide mirando los datos que han
 // llegado, nunca el rol de quien mira -asi la pantalla nunca inventa una nota
 // que el servidor no mando.
 //
 // PERIODO POR OMISION DEL SERVIDOR: si no se elige «desde»/«hasta», no se
 // manda el parametro y el servidor aplica el suyo (el mes en curso hasta un
-// año despues, decision 5). El listado no espera a que se elija un periodo
+// año despues). El listado no espera a que se elija un periodo
 // para cargar -al contrario que el informe por periodo, que es una consulta
 // cara-: leer las ausencias vigentes de la instalacion es barato y es lo que
 // se espera ver nada mas entrar, como la plantilla.
@@ -60,7 +60,7 @@ const fromFilter = ref('')
 const toFilter = ref('')
 const departmentFilter = ref<number | ''>('')
 const typeFilter = ref<AbsenceType | ''>('')
-/** «Incluir corregidas y anuladas» (decision 5: `status=all`, o nada para `active`). */
+/** «Incluir corregidas y anuladas» (`status=all`, o nada para `active`). */
 const includeAllStatuses = ref(false)
 
 const { data: departments } = useQuery({
@@ -97,7 +97,7 @@ const {
 const rows = computed(() => absences.value?.data ?? [])
 const meta = computed(() => absences.value?.meta ?? null)
 
-/** La nota no se pinta si no viene (regla dura 21, decision 5): dato de salud posible. */
+/** La nota no se pinta si no viene (regla dura 21): dato de salud posible. */
 const hasNoteColumn = computed(() => rows.value.some((row) => row.note !== undefined))
 
 const hasFilters = computed(

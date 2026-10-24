@@ -1,4 +1,4 @@
-// ¿Sirve el logotipo guardado como icono de la tablet? (V21-6-UX-3)
+// ¿Sirve el logotipo guardado como icono de la tablet?
 //
 // El manifiesto del quiosco publica el logotipo como icono SOLO si es un PNG cuadrado de al
 // menos 512 px de lado (`GetKioskManifestHandler`); en cualquier otro caso la tablet se instala

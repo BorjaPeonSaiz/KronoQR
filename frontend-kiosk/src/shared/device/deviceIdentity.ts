@@ -1,6 +1,6 @@
 // Identidad del dispositivo: quien es esta tablet y con que token firma.
 //
-// SE SEPARO DE `shared/telemetry/` (R1-RV-06): aqui no hay telemetria, hay
+// SE SEPARO DE `shared/telemetry/`: aqui no hay telemetria, hay
 // autenticacion. El `device_id`, el token, su caducidad y el respaldo del relevo
 // (RF-ID-04, ADR-044) viven aqui; los ajustes que cachea el latido (codigo de
 // servicio, pausas, desfase, ventana de actualizacion...) estan en
@@ -8,7 +8,7 @@
 //
 // EL `device_id` DEFINITIVO lo emite el servidor al confirmar el
 // emparejamiento (`POST /api/v1/kiosk/pair/confirm`, recogido por la tablet en
-// `POST /api/v1/kiosk/pair/claim`, tarea 5.6, `features/pairing/`).
+// `POST /api/v1/kiosk/pair/claim`, `features/pairing/`).
 // `persistPairedDevice()` (aqui abajo) escribe ese `device.uuid` en la MISMA
 // clave que este fichero ya sabia leer; `resolveDeviceId()` no necesita
 // distinguir entre los dos origenes, porque devuelve lo que haya en la clave,
@@ -47,7 +47,7 @@ const DEVICE_TOKEN_KEY = 'kronoqr.kiosk.device_token'
 
 /**
  * Caducidad del token y nombre del quiosco (`PairingCompleted.token.expires_at`
- * y `PairingCompleted.device.name`, tarea 3.3). Antes de esta tarea
+ * y `PairingCompleted.device.name`). Antes de esta tarea
  * `persistPairedDevice` los descartaba: la pantalla de diagnostico (RF-KI-08)
  * es la primera en necesitarlos, y solo para MOSTRARLOS — ninguna decision de
  * negocio depende de ellos, por eso viven en `localStorage` con el mismo
@@ -100,7 +100,7 @@ export function resolveDeviceId(): string {
 }
 
 /**
- * Caducidad del token guardada en el emparejamiento (tarea 3.3, solo lectura
+ * Caducidad del token guardada en el emparejamiento (solo lectura
  * para la pantalla de diagnostico). `null` si no hay token o si no se guardo
  * caducidad (tablets emparejadas antes de esta tarea).
  */
@@ -115,7 +115,7 @@ export function readDeviceTokenExpiresAt(): string | null {
   }
 }
 
-/** Nombre del quiosco tal como lo puso quien administra el panel (tarea 3.3). */
+/** Nombre del quiosco tal como lo puso quien administra el panel. */
 export function readDeviceName(): string | null {
   const storage = deviceStorage()
   if (storage === null) return null
@@ -128,7 +128,7 @@ export function readDeviceName(): string | null {
 }
 
 /**
- * Guarda el token emitido en `PairingCompleted` (tarea 5.6). Interno: quien
+ * Guarda el token emitido en `PairingCompleted`. Interno: quien
  * empareja llama a `persistPairedDevice`, no a esto directamente.
  */
 function storeDeviceToken(token: string): void {
@@ -150,7 +150,7 @@ function storeDeviceToken(token: string): void {
 
 /**
  * Sobrescribe el identificador local con el `device.uuid` que confirma el
- * servidor (tarea 5.6). Es la misma clave que `resolveDeviceId` ya sabia leer:
+ * servidor. Es la misma clave que `resolveDeviceId` ya sabia leer:
  * no hay una segunda clave para «el id de verdad» frente a «el id local».
  * Interno: quien empareja llama a `persistPairedDevice`, no a esto directamente.
  */
@@ -189,7 +189,7 @@ function storeDeviceName(name: string): void {
 }
 
 /**
- * Resultado de `PairingCompleted` (RF-PD-06, tarea 5.6): el token con el que
+ * Resultado de `PairingCompleted` (RF-PD-06): el token con el que
  * la tablet firma `/scan`, `/kiosk/roster` y `/kiosk/heartbeat`, y el
  * `device.uuid` que la identifica de aqui en adelante. Se escribe el TOKEN
  * primero: si el `device_id` fallara al guardarse justo despues (almacenamiento
@@ -197,7 +197,7 @@ function storeDeviceName(name: string): void {
  * token sin id de servidor —el quiosco sigue pudiendo fichar con el— que con
  * un id nuevo y sin token, que el guard del router manda directo a `/pair`.
  *
- * `expiresAt` y `deviceName` (tarea 3.3, RF-KI-08) van DESPUES de las dos
+ * `expiresAt` y `deviceName` (RF-KI-08) van DESPUES de las dos
  * escrituras que si importan para fichar: son solo para la pantalla de
  * diagnostico, y un fallo de almacenamiento a mitad de estas dos ultimas no
  * puede degradar nada de lo anterior.

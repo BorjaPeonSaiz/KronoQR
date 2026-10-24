@@ -1,6 +1,6 @@
 // Salida a nomina, sincrona (RF-IN-07): `GET /api/v1/reports/payroll-export`
 // (`operationId: exportPayroll`). Es el mismo informe por periodo agrupado
-// por empleado (`PeriodReportReader`, decision 5 de la ficha 3.9), pasado por
+// por empleado (`PeriodReportReader`), pasado por
 // la plantilla configurable de los seis ajustes `PAYROLL_EXPORT_*` -esta
 // pantalla no elige columnas ni separador: eso se configura en «Ajustes
 // operativos» y aqui solo se lee para la previsualizacion (`settings.api.ts`).

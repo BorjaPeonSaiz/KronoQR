@@ -1,4 +1,4 @@
-// La licencia de la instalacion (RF-PD-04, RF-PD-05, tarea 5.3).
+// La licencia de la instalacion (RF-PD-04, RF-PD-05).
 //
 // Las formas salen del contrato; aqui no se inventa ninguna. Y NO SE VALIDA EL
 // FORMATO DE LA CLAVE por cuenta propia: quien decide si vale es la firma

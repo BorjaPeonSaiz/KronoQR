@@ -1,6 +1,6 @@
 // Estado del sellado del PIN, compartido por la pantalla de tarjeta y la del PIN.
 //
-// Por que existe (PIN-03). Sin esto, la pantalla de tarjeta ofrecia el boton
+// Por que existe. Sin esto, la pantalla de tarjeta ofrecia el boton
 // «Ficha con tu codigo y PIN» en cuanto el padron traia la clave publica, aunque
 // libsodium no pudiera arrancar (WebAssembly bloqueado, modulo roto): el
 // empleado tecleaba codigo y su PIN (6 a 8 cifras) para acabar con un «codigo no valido»
@@ -48,7 +48,7 @@ export interface PinSealingStatusOptions {
   readonly onUnavailable?: () => void
   readonly warmUp?: () => Promise<SealingStatus>
   readonly retryMs?: number
-  /** KP1: la primera comprobacion espera a un hueco tras el primer pintado (pantalla de tarjeta). */
+  /** La primera comprobacion espera a un hueco tras el primer pintado (pantalla de tarjeta). */
   readonly deferFirstCheck?: boolean
 }
 

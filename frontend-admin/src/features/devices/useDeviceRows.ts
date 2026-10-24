@@ -13,10 +13,8 @@ import type { DurationParts } from '@kronoqr/web-kit/workdayTotals'
  *
  * **Se mide contra el reloj del SERVIDOR** (`serverNowMs`, extrapolado desde
  * `meta.generated_at` con el mismo patron que `incidents.store.ts` y
- * `errors.store.ts`: regla dura 3), nunca contra `Date.now()` del navegador
- * -a diferencia de la version anterior a la tarea 3.3, que medía contra el
- * navegador porque el contrato no publicaba un «ahora» de referencia para esta
- * lista sin paginar. Desde `DeviceListMeta` (tarea 3.3), sí lo publica.
+ * `errors.store.ts`: regla dura 3), nunca contra `Date.now()` del navegador:
+ * `DeviceListMeta` publica el «ahora» de referencia de esta lista sin paginar.
  *
  * **Clava a cero un instante «del futuro»**: un reloj de dispositivo mal
  * puesto (la tablet, no el panel) podria declarar un latido posterior al
@@ -49,7 +47,7 @@ export function elapsedSinceOldestPending(
   return elapsedSince(oldestPendingAt, serverNowMs)
 }
 
-// `sortDevices` se retiro (revision post-lanzamiento): el orden -activos
-// primero, luego por nombre- lo pone ahora el servidor en `GET /devices`, y
-// la regla no debe vivir en dos sitios a la vez (la de aqui podia divergir de
-// la del backend sin que ninguna prueba lo detectara).
+// Sin ordenacion local: el orden -activos primero, luego por nombre- lo pone
+// el servidor en `GET /devices`, y la regla no debe vivir en dos sitios a la
+// vez (una copia aqui podria divergir de la del backend sin que ninguna prueba
+// lo detectara).

@@ -2,7 +2,7 @@
 // Reactividad para la plantilla, nada mas: la logica de armar/desarmar vive
 // en el controlador (testeable sin Vue, sin IndexedDB, sin camara).
 //
-// SE DESARMA AL DESMONTAR (revision de la segunda vuelta, seguridad): la
+// SE DESARMA AL DESMONTAR (seguridad): la
 // intencion es de la TABLET, no de la persona, y en una cola de cambio de
 // turno otro empleado puede pasar su tarjeta dentro de los 10 s de armado.
 // Cambiar de pantalla -de `ScanView` a `PinView` o al diagnostico, o al
@@ -27,7 +27,7 @@ export interface UseBreakIntentOptions extends BreakIntentControllerOptions {
    */
   readonly armedAnnouncement?: () => string
   /**
-   * Texto al desarmar (revision de la segunda vuelta: hay que ANUNCIAR el
+   * Texto al desarmar (hay que ANUNCIAR el
    * desarme -uso, tiempo, escaneo no encolado o cambio de pantalla-, no solo
    * retirar el nodo de la region viva, que muchos lectores de pantalla no
    * anuncian).

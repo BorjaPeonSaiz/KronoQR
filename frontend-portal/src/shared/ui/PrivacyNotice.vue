@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Aviso de proteccion de datos del portal (D8, V3-PO-4, art. 13 RGPD).
+// Aviso de proteccion de datos del portal (art. 13 RGPD).
 //
 // Va en la pantalla de acceso, donde la persona teclea su codigo y su PIN. El
 // contenido viene de la marca de la instalacion (`privacy_notice` de

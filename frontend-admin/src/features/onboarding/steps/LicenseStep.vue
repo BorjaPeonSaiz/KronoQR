@@ -3,7 +3,7 @@
 // que exigiera licencia para terminar convertiria la licencia en requisito de
 // arranque, y eso es justo lo que la regla dura 15 prohibe.
 //
-// Reutiliza la MISMA pantalla de activacion que `/license` (tarea 5.3): mismo
+// Reutiliza la MISMA pantalla de activacion que `/license`: mismo
 // estado, mismo aviso de que el registro horario nunca depende de la
 // licencia, mismo formulario para pegar la clave. El asistente solo añade el
 // «continuar» / «omitir por ahora».

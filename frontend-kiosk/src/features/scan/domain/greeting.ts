@@ -11,7 +11,7 @@
 //   21:00–05:59  noche
 //
 // Se calcula sobre la hora de pared DEL CENTRO (`site_time_zone`, el mismo reloj
-// que la hora que se pinta al lado, V2-KI-01); sin zona conocida, la de la
+// que la hora que se pinta al lado); sin zona conocida, la de la
 // tablet. Es presentacion pura: el instante que viaja al servidor siempre es
 // UTC (regla dura 3).
 

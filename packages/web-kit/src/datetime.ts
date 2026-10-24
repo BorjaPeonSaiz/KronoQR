@@ -366,7 +366,7 @@ export function formatLocalTime(value: string): string {
  * 06:00`): se lee, no se convierte. Si no se puede leer, cae al instante UTC
  * convertido a la zona del centro con `formatInstant`. Es el momento de una
  * correccion en el historial del panel y del portal, que tienen que decir la
- * misma hora la noche que cambia la hora (C1).
+ * misma hora la noche que cambia la hora.
  */
 export function formatLocalDateTime(
   localValue: string,
@@ -401,7 +401,7 @@ export function formatUtcTime(value: string): string {
  * Minutos entre dos instantes UTC con la regla de `ElapsedMinutes` del servidor
  * (RN-09): cada marca se trunca a su segundo ANTES de restar y la diferencia se
  * divide entre sesenta truncando. Asi una pausa de 10:00:00.900 a 10:15:00.100
- * son 15 minutos aqui y en el servidor, no 14 (V21-1-RV-1). Los casos los fija
+ * son 15 minutos aqui y en el servidor, no 14. Los casos los fija
  * `backend/tests/Fixtures/elapsed-minutes.json`, que leen las dos pruebas.
  *
  * Es una DURACION, no una conversion de zona. Si `to` es anterior, el resultado

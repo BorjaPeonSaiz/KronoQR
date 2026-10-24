@@ -21,7 +21,7 @@
 // ya resolvió: no se convierte nada, se lee (mismo criterio que
 // `ShiftEntryTable`/`CorrectionHistory`).
 //
-// UN 409 NO PIERDE LO ESCRITO (segunda vuelta, hallazgo 2 de la revisión): el
+// UN 409 NO PIERDE LO ESCRITO: el
 // formulario NUNCA se desmonta, ni siquiera cuando el tramo ya no es la
 // versión vigente. El aviso se pinta ENCIMA, con los campos tal y como se
 // dejaron.
@@ -32,7 +32,7 @@
 // primera significa "recarga la jornada": las otras dos son un dato mal
 // escrito que se corrige sin perder nada ni pedirle a nadie que recargue.
 // Se distinguen por el `type` del `Problem` (`ProblemDetails` del contrato);
-// el backend (bloque A2, en paralelo a esta tarea) es quien le da a cada
+// el backend (en paralelo a esta tarea) es quien le da a cada
 // causa un `type` propio -antes, las tres compartían
 // `urn:kronoqr:problem:conflict`, indistinguible desde aquí-.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
@@ -59,7 +59,7 @@ import type {
 import { addShiftEntry, correctShiftEntry, voidShiftEntry } from './corrections.api'
 import { toLocalInputValue, zonedInputToUtcIso } from './zonedTime'
 
-/** Los `type` de `Problem` que ya distingue el `409` de un tramo (bloque A2, en paralelo). */
+/** Los `type` de `Problem` que ya distingue el `409` de un tramo (en paralelo). */
 const SHIFT_ENTRY_SUPERSEDED_TYPE = 'urn:kronoqr:problem:shift-entry-superseded'
 const SHIFT_ALREADY_OPEN_TYPE = 'urn:kronoqr:problem:shift-already-open'
 const OVERLAPPING_SHIFT_ENTRY_TYPE = 'urn:kronoqr:problem:overlapping-shift-entry'
@@ -255,7 +255,7 @@ const canSubmit = computed(() => {
   return props.entry !== undefined
 })
 
-// NADA EN EL FUTURO (F1, RL-01, RL-04). El servidor rechaza con `422` una jornada o
+// NADA EN EL FUTURO (RL-01, RL-04). El servidor rechaza con `422` una jornada o
 // una marca posteriores a su hora mas un margen de pocos minutos
 // (`ATTENDANCE_FUTURE_TOLERANCE_MINUTES`): un registro horario anota lo que ya
 // ha ocurrido. El `max` de los campos es AYUDA, no barrera: es la hora actual

@@ -5,7 +5,7 @@
 //  - **El total del periodo es la suma de los `total_minutes` que declara el
 //    servidor**, jornada a jornada, y se enseña en horas y minutos, nunca en
 //    decimal. No se recalcula desde los tramos. Ese `total_minutes` sale hoy de
-//    los mismos tramos de la respuesta, no de `daily_totals` (R1-RV-03): el
+//    los mismos tramos de la respuesta, no de `daily_totals`: el
 //    contraste de `workDayTotals` es una defensa en profundidad, no una
 //    verificacion contra la proyeccion.
 //  - **Si el numero puede cambiar, se dice aqui**, no solo en la tarjeta del

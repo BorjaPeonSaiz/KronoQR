@@ -2,13 +2,13 @@
 //
 // Aqui es donde se mide y se cumple el presupuesto de los 300 ms del doc 02 §6:
 // la parte del quiosco de RNF-P-01 (de la lectura a la confirmacion en
-// pantalla), no la decodificacion de RNF-P-03 (KP2).
+// pantalla), no la decodificacion de RNF-P-03.
 // `handleDecoded` es sincrona y se pinta lo que devuelve en el mismo turno del
 // bucle de eventos. `lastLatencyMs` deja el numero medido a la vista del E2E y
 // de la pantalla de diagnostico, para que el presupuesto sea una comprobacion y
 // no una promesa.
 //
-// PANTALLA INMEDIATA, SONIDO CON EL DESENLACE (RF-AT-05, V7-KI-01). La
+// PANTALLA INMEDIATA, SONIDO CON EL DESENLACE (RF-AT-05). La
 // confirmacion visual sale al instante y MUDA. El tono lo decide el servidor:
 //
 //   - `settle` aceptado dentro de `SCAN_SOUND_SERVER_WAIT_MS` -> entry / exit
@@ -58,7 +58,7 @@ export interface ScanSession {
   /** Punto de entrada del bucle de decodificacion. */
   accept(rawText: string): void
   /**
-   * Pinta una confirmacion NUEVA. La usa el fichaje por PIN (tarea 1.12), que
+   * Pinta una confirmacion NUEVA. La usa el fichaje por PIN, que
    * no decodifica una camara: teclea, sella y llama aqui directamente en vez de
    * pasar por `accept()`. La tuberia del PIN ya ha esperado al servidor, asi
    * que aqui suena el desenlace tal cual, salvo `verifying` («Comprobando…»),
@@ -69,7 +69,7 @@ export interface ScanSession {
   settle(confirmation: ScanConfirmation): void
   /**
    * El envio ha vuelto sin desenlace (fallo de red explicito, cola por delante):
-   * suena `pending` ya, sin esperar al plazo del servidor (V21-7-KI-1). No hace
+   * suena `pending` ya, sin esperar al plazo del servidor. No hace
    * nada si ese escaneo ya sono, o si su espera se cerro antes.
    */
   markPending(scanId: string): void

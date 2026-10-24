@@ -26,7 +26,7 @@ export async function logInToPortal(body: PortalLoginRequest): Promise<PortalLog
 }
 
 /**
- * Cierra en el servidor la sesion de portal (`POST /api/v1/me/logout`, PO1).
+ * Cierra en el servidor la sesion de portal (`POST /api/v1/me/logout`).
  *
  * El token se pasa explicito y la peticion es `anonymous`: un `401` aqui
  * significa «ya no habia sesion», que es justo lo que se quiere, y no debe

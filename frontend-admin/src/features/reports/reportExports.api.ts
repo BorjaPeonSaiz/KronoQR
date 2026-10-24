@@ -1,12 +1,12 @@
-// Exportaciones de informes en segundo plano (RF-IN-06, tarea 3.9): informes
+// Exportaciones de informes en segundo plano (RF-IN-06): informes
 // grandes que no caben en una respuesta sincrona, con notificacion en el panel
 // y enlace de descarga caducable y de un solo uso (ADR-041). Las formas salen
 // del contrato (`docs/api/openapi.yaml`, `operationId: requestReportExport`,
 // `listReportExports`, `showReportExport`, `downloadReportExport`); aqui no se
 // inventa ninguna.
 //
-// **EL ENLACE DE DESCARGA NUNCA SE GUARDA NI SE REUTILIZA** (decision 3 de la
-// ficha, ADR-041): cada `GET /reports/exports/{uuid}` de una fila `completed`
+// **EL ENLACE DE DESCARGA NUNCA SE GUARDA NI SE REUTILIZA** (ADR-041): cada `GET
+// /reports/exports/{uuid}` de una fila `completed`
 // emite un token nuevo que invalida el anterior, y la LISTA nunca lo trae. Por
 // eso `downloadReportExportFile` exige que quien la llama acabe de pedir el
 // estado: no hay ninguna funcion aqui que memorice un enlace entre una llamada
@@ -222,6 +222,6 @@ export async function downloadReportExportFile(url: string): Promise<BinaryDocum
  * y por `PeriodReportView`/`PayrollExportView` (que, tras pedir una
  * exportacion nueva, escriben la fila recien creada en la misma cache para que
  * el panel la enseñe en el acto, sin esperar al primer sondeo -mismo patron
- * que `dataExport.api.ts`/`DataExportPanel.vue`, tarea 5.10-).
+ * que `dataExport.api.ts`/`DataExportPanel.vue`-).
  */
 export const REPORT_EXPORTS_QUERY_KEY = ['report-exports'] as const

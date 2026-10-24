@@ -1,15 +1,15 @@
 <script setup lang="ts">
 // La marca de la instalacion: nombre, color de acento y logotipo (RF-PD-08,
-// tarea 5.8, regla dura 13).
+// regla dura 13).
 //
 // Tres decisiones que esta pantalla dice en voz alta, en vez de dejarlas
 // implicitas:
 //
 //  - **El color se avisa y se confirma.** Mientras se escribe, la pantalla dice
 //    cuanto contrasta el acento con las superficies claras y si llega a 4,5:1
-//    (WCAG 2.2 AA). Si no llega, `branding.ts` lo OSCURECE al pintarlo (MB1) y
+//    (WCAG 2.2 AA). Si no llega, `branding.ts` lo OSCURECE al pintarlo y
 //    aqui se dice con que tono, y guardarlo exige una casilla de confirmacion
-//    explicita (MB2): nunca se guarda un color ilegible por un clic de pasada.
+//    explicita: nunca se guarda un color ilegible por un clic de pasada.
 //    La validacion final es del servidor: su `422` sale bajo el campo.
 //  - **El logotipo es una RUTA, no una subida.** El fichero vive en el
 //    directorio de marca del servidor del cliente (`BRANDING_LOGO_ROOT`); esta
@@ -53,7 +53,7 @@ import {
 } from './logoIcon'
 
 // El color de acento del PRODUCTO (doc 06, `primary-strong`) vive en
-// `@kronoqr/web-kit/branding` (correccion de revision de UI/UX): una sola
+// `@kronoqr/web-kit/branding`: una sola
 // fuente de verdad para el valor que pinta `PRODUCT_BRANDING` y el que
 // escribe el boton «volver al color del producto» de mas abajo.
 
@@ -82,7 +82,7 @@ const logoIssues = ref<LogoIconIssue[] | null>(null)
 const logoAdvice = ref<LogoIconAdvice[]>([])
 let logoReadToken = 0
 
-// El logotipo se mide cuando cambia el guardado (V21-6-UX-3): el campo es una ruta del servidor,
+// El logotipo se mide cuando cambia el guardado: el campo es una ruta del servidor,
 // asi que lo que se puede medir en el navegador es lo que el servidor ya sirve.
 watch(
   () => branding.current.logoUrl,
@@ -334,8 +334,8 @@ const warnings = computed<ContrastWarning[]>(() => {
 
 /**
  * De token de `theme.css` a clave de i18n, para no interpolar nunca el
- * ingles tecnico de `pair.use` (`themePairs.ts`) en la pantalla (correccion
- * de revision de UI/UX). Solo cubre los tokens que `accentOverrides` puede
+ * ingles tecnico de `pair.use` (`themePairs.ts`) en la pantalla. Solo cubre los
+ * tokens que `accentOverrides` puede
  * llegar a sobreescribir -los unicos que `contrastWarnings` evalua-; un token
  * que no este aqui usa el respaldo generico de `foregroundLabel`/`backgroundLabel`.
  */
@@ -391,8 +391,7 @@ function warningMessage(warning: ContrastWarning): string {
  * tarjetas (`pair.foreground` es el acento fuerte, `pair.background` el
  * fondo de pagina o de tarjeta): es el aviso con mas consecuencia, porque el
  * MISMO tono pinta tambien el boton principal en solido. Se destaca aparte,
- * con mas peso (`role="alert"`) y una miniatura del boton al lado (correccion
- * de revision de UI/UX, punto 2).
+ * con mas peso (`role="alert"`) y una miniatura del boton al lado.
  */
 function isPrimaryTextInvisible(warning: ContrastWarning): boolean {
   return (
@@ -459,7 +458,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
 
 const hasChanges = computed(() => Object.keys(pendingChanges.value).length > 0)
 
-/** Guardar un acento que no llega al minimo pide confirmacion explicita (MB2). */
+/** Guardar un acento que no llega al minimo pide confirmacion explicita. */
 const needsAccentConfirmation = computed(
   () =>
     'BRANDING_ACCENT_COLOR' in pendingChanges.value &&
@@ -606,7 +605,7 @@ async function save(): Promise<void> {
         </template>
       </FormField>
 
-      <!-- Contraste del acento elegido, en vivo (MB2). `role="status"`: se lee
+      <!-- Contraste del acento elegido, en vivo. `role="status"`: se lee
            al cambiar sin quitar el foco del campo. Si no llega al minimo, la
            casilla de confirmacion es lo que desbloquea el guardado. -->
       <div
@@ -767,7 +766,7 @@ async function save(): Promise<void> {
              principal: el mismo tono los pinta a los tres. Mas peso que el
              resto de avisos (`role="alert"`, color de peligro) y una
              miniatura de como quedaria el boton, para verlo sin bajar a
-             buscar la previsualizacion (correccion de revision de UI/UX). -->
+             buscar la previsualizacion. -->
         <div
           v-if="criticalWarnings.length > 0"
           role="alert"

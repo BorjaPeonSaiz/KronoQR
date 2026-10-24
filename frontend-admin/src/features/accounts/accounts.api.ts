@@ -1,7 +1,7 @@
 // Cuentas de gestion (RF-ID-10). Todas las formas salen del contrato.
 //
-// Los campos `actor_*` (reautenticacion de quien actua, revision de seguridad del
-// 12c) y el `reason` de cada accion ya los declara el contrato.
+// Los campos `actor_*` (reautenticacion de quien actua) y el `reason` de cada
+// accion ya los declara el contrato.
 //
 // Las contrasenas temporales que devuelven `createManagementAccount` y
 // `resetManagementAccountPassword` existen en claro SOLO en esa respuesta: quien

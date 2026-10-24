@@ -11,10 +11,10 @@ export const EMPLOYEES_MANAGE = 'employees:*'
  * Lectura de plantilla: ver la plantilla y las fichas, con el alcance del rol
  * (RF-ID-03).
  *
- * Es el ambito ESTRECHO a proposito (tarea 2.1, migracion
+ * Es el ambito ESTRECHO a proposito (migracion
  * `2026_08_30_100100_grant_read_ability.php`): lo lleva tambien
  * `responsable_departamento`, que no lleva `employees:*`. `admin` y `rrhh`
- * llevan los dos. Gobierna la pantalla de ausencias (RF-GP-04, tarea 3.10):
+ * llevan los dos. Gobierna la pantalla de ausencias (RF-GP-04):
  * el responsable la ve, acotada a su departamento y sin nota; las acciones de
  * escritura de esa misma pantalla se ocultan aparte, con `EMPLOYEES_MANAGE`.
  */
