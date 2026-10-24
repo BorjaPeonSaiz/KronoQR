@@ -1,7 +1,8 @@
-// Cuando una exportacion se pide en diferido por omision (decision del propietario,
-// ADR-041): la plantilla entera, o un periodo de mas de un mes. Las consultas
-// cortas de una persona o un departamento siguen siendo sincronas. Los endpoints
-// sincronos se mantienen: esto solo decide cual se ofrece primero.
+// Cuando una exportacion se pide en diferido por omision (decision del
+// propietario del 22-10-2026, al enmendar ADR-041): la plantilla entera, o un
+// periodo de mas de un mes. Las consultas cortas de una persona o un
+// departamento siguen siendo sincronas. Los endpoints sincronos se mantienen:
+// esto solo decide cual se ofrece primero.
 
 /** Dias de un periodo `YYYY-MM-DD` a `YYYY-MM-DD`, ambos incluidos. `null` si falta alguno o esta invertido. */
 export function inclusiveDays(from: string, to: string): number | null {

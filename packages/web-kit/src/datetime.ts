@@ -267,9 +267,9 @@ export function formatDayMonthTime(
 }
 
 /**
- * La etiqueta corta de la zona (`CEST`, `WEST`) para acompañar a la hora. En un
- * listado o un historico que cruza centros, la hora sin zona es una hora
- * inventada.
+ * La etiqueta corta de la zona (`CEST`, `WEST`) para acompañar a la hora: la
+ * misma zona del centro escribe `CET` en invierno y `CEST` en verano, y una
+ * hora sin ella no dice a cual de los dos lados del cambio pertenece.
  */
 export function formatZoneLabel(value: string, timeZone: string, locale: string): string {
   const instant = parseInstant(value) ?? new Date()

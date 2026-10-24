@@ -3,7 +3,7 @@
 //
 // Del doc 01 §11, literal:
 //   «Buenos dias, Lucia — Entrada 07:02»
-//   «Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 0 min»
+//   «Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 00 min»
 //
 // Reglas que gobiernan esta plantilla:
 //

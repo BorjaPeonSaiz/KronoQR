@@ -1,7 +1,7 @@
 // Saludo del turno.
 //
 // Del doc 01 §11: «Buenos dias, Lucia — Entrada 07:02» y «Hasta luego, Lucia —
-// Salida 11:02 · Hoy: 6 h 0 min». El saludo solo acompana a una ENTRADA; una
+// Salida 11:02 · Hoy: 6 h 00 min». El saludo solo acompana a una ENTRADA; una
 // salida se despide.
 //
 // Los cortes estan pensados para los turnos de un hotel, no para el reloj:

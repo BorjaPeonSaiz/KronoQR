@@ -88,16 +88,6 @@ function shortUuid(uuid: string): string {
 }
 
 /**
- * Un instante UTC en la zona del centro, con SEGUNDOS (el resto de la bandeja
- * los omite). `impossible_sequence` (RN-16) los necesita: un salto de 45 s entre
- * dos fichajes se lee como la misma hora con precision de minuto, y sin segundos
- * la frase parece decir que los dos momentos son identicos cuando no lo son.
- */
-function formatInstantWithSeconds(value: string, timeZone: string, locale: string): string {
-  return formatInstant(value, timeZone, locale, { seconds: true })
-}
-
-/**
  * `kiosk_coincidence` (RF-PR-06, tarea 3.11; rediseño de la segunda vuelta,
  * decision 13): un hallazgo por PERSONA, no por par -de ahi que sea un
  * `counterpart_employee_uuid` (la contraparte principal, con mas dias) y un
@@ -258,13 +248,16 @@ function describeImpossibleSequence(
     consumed.add('to_device_id')
   }
 
+  // Con SEGUNDOS, a diferencia del resto de la bandeja: un salto de 45 s entre dos
+  // fichajes (RN-16) se lee como la misma hora con precision de minuto, y sin
+  // segundos la frase parece decir que los dos momentos son identicos.
   const firstOccurredAt = context['first_occurred_at']
 
   if (typeof firstOccurredAt === 'string') {
     lines.push(
       metricLine(
         'first_occurred_at',
-        formatInstantWithSeconds(firstOccurredAt, timeZone, locale),
+        formatInstant(firstOccurredAt, timeZone, locale, { seconds: true }),
         t,
       ),
     )
@@ -277,7 +270,7 @@ function describeImpossibleSequence(
     lines.push(
       metricLine(
         'second_occurred_at',
-        formatInstantWithSeconds(secondOccurredAt, timeZone, locale),
+        formatInstant(secondOccurredAt, timeZone, locale, { seconds: true }),
         t,
       ),
     )

@@ -100,7 +100,7 @@ export default defineConfigWithVueTs(
   noLiteralColors(),
   // Comentarios con el motivo, no con el numero de bloque del plan (V21-1-RV-5, C8).
   noPlanReferences(),
-  // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
+  // Datos del registro fuera del navegador (ADR-052). Regla y mensaje
   // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
   ...noBrowserStorage({
     exceptions: [

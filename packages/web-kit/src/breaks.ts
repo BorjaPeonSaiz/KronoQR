@@ -41,7 +41,10 @@ export interface BreakBetween {
  * nuevo-. `minutesBetween` puede devolver `null` si alguna marca no se puede
  * analizar (no deberia pasar con el contrato); entonces tampoco hay pausa
  * que enseñar, nunca un `NaN` ni un `0` que finja una duracion que no se
- * pudo calcular.
+ * pudo calcular. Si la vuelta es anterior a la salida (dos tramos solapados
+ * tras una correccion) tampoco: el servidor no ve hueco ahi
+ * (`ElapsedMinutes::gapBetween` da `null`, RN-02) y aqui no se pinta una
+ * pausa de «0 min».
  */
 export function breakBetween(
   previous: ShiftEntryClosingBreak,
@@ -58,7 +61,7 @@ export function breakBetween(
 
   const minutes = minutesBetween(previous.clocked_out_at, next.clocked_in_at)
 
-  if (minutes === null) {
+  if (minutes === null || isBefore(next.clocked_in_at, previous.clocked_out_at)) {
     return null
   }
 
@@ -67,4 +70,14 @@ export function breakBetween(
     to: formatLocalTime(next.clocked_in_at_local),
     minutes,
   }
+}
+
+/**
+ * `true` si `value` es anterior a `reference` contando segundos enteros, como
+ * `ElapsedMinutes::gapBetween`: dos marcas del mismo segundo no son un solape.
+ */
+function isBefore(value: string, reference: string): boolean {
+  return (
+    Math.floor(new Date(value).getTime() / 1000) < Math.floor(new Date(reference).getTime() / 1000)
+  )
 }

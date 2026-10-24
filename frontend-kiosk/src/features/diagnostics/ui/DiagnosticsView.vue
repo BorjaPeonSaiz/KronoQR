@@ -48,7 +48,6 @@ import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
-import { formatInstant, resolveTimeZone } from '@kronoqr/web-kit/datetime'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'
 import type { QueueStats } from '@/features/offline/application/scanQueue'
@@ -60,6 +59,7 @@ import { isUpdatePending } from '@/sw/registerServiceWorker'
 import type { ServiceCodeAttemptResult } from '../application/serviceCodeGate'
 import { createServiceCodeGate } from '../application/serviceCodeGate'
 import { buildDiagnosticsSnapshot } from '../application/diagnosticsSnapshot'
+import { formatDiagnosticInstant } from '../application/diagnosticInstant'
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
@@ -391,18 +391,11 @@ const updateStatusText = computed(() => {
     : t('diagnostics.values.updateUpToDate')
 })
 
-/**
- * Un instante con segundos y en 24 h, con el formateador de web-kit: el reloj de
- * esta pantalla ya era `07:14` y la fecha decia `7:14:03 AM` en ingles
- * (V21-1-RV-3). En la zona del CENTRO, la misma del reloj que abre esta
- * pantalla; sin zona conocida (aun sin latido), la de la tablet.
- */
 function instantLabel(iso: string | null): string {
-  if (iso === null) return t('diagnostics.values.notAvailable')
-  const timeZone =
-    resolveTimeZone(readSiteTimeZone()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone
-  const label = formatInstant(iso, timeZone, locale.value, { seconds: true })
-  return label === '' ? t('diagnostics.values.notAvailable') : label
+  return (
+    formatDiagnosticInstant(iso, readSiteTimeZone(), locale.value) ??
+    t('diagnostics.values.notAvailable')
+  )
 }
 
 /**

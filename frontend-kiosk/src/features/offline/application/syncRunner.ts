@@ -7,7 +7,7 @@
 //                   recien encolado es el UNICO pendiente. Su valor es la
 //                   respuesta: trae el `action` y el acumulado real del dia, y
 //                   con eso la pantalla pasa de «pendiente de validar» a
-//                   «Entrada 06:02 · Hoy: 0 h 0 min».
+//                   «Entrada 06:02 · Hoy: 0 h 00 min».
 // «Sin conexion»  → lotes ordenados por `occurred_at`. Para QR, `POST
 //                   /api/v1/scan/batch` (respuesta 207 elemento a elemento). El
 //                   PIN NO TIENE variante de lote (RF-AT-11, doc 02 §11): cada
