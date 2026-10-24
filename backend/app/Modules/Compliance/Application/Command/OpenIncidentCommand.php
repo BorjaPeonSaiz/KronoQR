@@ -22,11 +22,14 @@ final readonly class OpenIncidentCommand
      */
     public function __construct(
         public string $type,
-        public string $employeeUuid,
+        /** Nulo solo en la `discarded_scan` sin persona (ADR-061 A2). */
+        public ?string $employeeUuid,
         public int $siteId,
         public string $workDate,
         public ?string $shiftEntryUuid,
         public DateTimeImmutable $detectedAt,
         public array $context = [],
+        /** El quiosco de la `discarded_scan` sin persona; nulo en todo lo demas. */
+        public ?string $deviceUuid = null,
     ) {}
 }

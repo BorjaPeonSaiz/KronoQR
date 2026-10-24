@@ -296,6 +296,8 @@ final class DataExportCatalog
 
             ExportedDataset::csv('incidents', [
                 'employee_uuid',
+                // ADR-061 A2: el quiosco de la `discarded_scan` sin persona.
+                'device_uuid',
                 'work_date',
                 'shift_entry_uuid',
                 'type',

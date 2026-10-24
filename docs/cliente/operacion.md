@@ -1963,8 +1963,11 @@ ese dato), la cola de la tablet se quedaba detenida en él y los fichajes de
 detrás esperaban. Desde esta versión, si el servidor falla **el mismo fichaje**
 al menos **10 veces durante al menos 60 minutos** —sin contar una base de datos
 o un Redis caídos, que se siguen esperando como siempre—, lo **descarta**: la
-cola sigue, el fichaje **no se registra** y, si se sabe de quién era, abre la
-incidencia «Fichaje descartado» para que RRHH lo complete con una corrección.
+cola sigue, el fichaje **no se registra** y abre la incidencia «Fichaje
+descartado» para que RRHH lo complete con una corrección: la de su persona si
+se sabe de quién era (por la tarjeta, por el código o por la huella de fichajes
+anteriores de esa tarjeta) y, si no, una sin persona para el administrador, con
+el quiosco y la hora.
 Queda en el registro de auditoría (`scan.discarded`). Como mucho **3 descartes
 por quiosco en 24 horas**: si se agotan, la tablet vuelve a esperar y salta una
 alerta crítica, porque entonces el fallo es del servidor y no del fichaje. Los

@@ -484,6 +484,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
 
     private const string INCIDENTS = <<<'SQL'
         SELECT e.uuid::text  AS employee_uuid,
+               dv.uuid::text AS device_uuid,
                to_char(i.work_date, 'YYYY-MM-DD') AS work_date,
                se.uuid::text AS shift_entry_uuid,
                i.type,
@@ -499,7 +500,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
                to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
           FROM incidents i
-          JOIN employees e            ON e.id = i.employee_id
+          LEFT JOIN employees e       ON e.id = i.employee_id
+          LEFT JOIN devices dv        ON dv.id = i.device_id
           LEFT JOIN shift_entries se  ON se.id = i.shift_entry_id
           LEFT JOIN users au          ON au.id = i.assigned_to_user_id
           LEFT JOIN users ru          ON ru.id = i.resolved_by_user_id

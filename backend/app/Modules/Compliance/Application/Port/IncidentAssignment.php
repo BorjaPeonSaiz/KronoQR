@@ -21,4 +21,10 @@ interface IncidentAssignment
      * hay departamento, no hay responsable o la cuenta esta desactivada.
      */
     public function responsibleFor(string $employeeUuid): ?int;
+
+    /**
+     * El administrador al que va una incidencia sin persona (ADR-061 A2): la
+     * cuenta activa con rol `admin` mas antigua. `null` si no hay ninguna.
+     */
+    public function administrator(): ?int;
 }

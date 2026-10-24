@@ -372,7 +372,8 @@ return [
         'incidents' => [
             'summary' => 'Las incidencias detectadas sobre el registro horario: descanso insuficiente, jornada excesiva, turno sin cerrar, desfase de reloj. El sistema las abre y avisa; **nunca modifica un fichaje por su cuenta**.',
             'columns' => [
-                'employee_uuid' => 'Persona afectada.',
+                'employee_uuid' => 'Persona afectada. Vacio solo en un fichaje descartado por el servidor que no se pudo atribuir a nadie (desde la 2.3.0).',
+                'device_uuid' => 'Solo en ese caso: el quiosco del fichaje, para cruzarlo con la hora y el cuadrante.',
                 'work_date' => 'Jornada a la que se refiere.',
                 'shift_entry_uuid' => 'Tramo concreto, si la incidencia recae sobre uno.',
                 'type' => 'Tipo de incidencia.',

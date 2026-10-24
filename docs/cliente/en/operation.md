@@ -1983,8 +1983,11 @@ data), the tablet's queue stopped at it and the clock-ins behind it waited.
 From this version on, if the server fails **the same clock-in** at least **10
 times over at least 60 minutes** —not counting a database or Redis outage,
 which is still waited out as always—, it **discards** it: the queue moves on,
-the clock-in **is not recorded** and, if it is known whose it was, the
-"Discarded clock-in" incident opens so that HR completes it with a correction.
+the clock-in **is not recorded** and the "Discarded clock-in" incident opens so
+that HR completes it with a correction: that person's if it is known whose it
+was (by the card, the code or the fingerprint of earlier clock-ins of that card)
+and, if not, one without a person for the administrator, with the kiosk and the
+time.
 It is kept in the audit log (`scan.discarded`). At most **3 discards per kiosk
 in 24 hours**: once used up, the tablet waits again and a critical alert fires,
 because then the fault is the server's and not the clock-in's. The three

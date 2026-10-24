@@ -95,10 +95,11 @@ final readonly class NotifyPendingIncidents
      */
     private function recordDisclosure(IncidentDigest $digest): void
     {
-        $employeeUuids = array_values(array_unique(array_map(
-            static fn (IncidentNotice $notice): string => $notice->employeeUuid,
+        // Sin persona (ADR-061 A2) no se revela a nadie: no entra en la lista.
+        $employeeUuids = array_values(array_unique(array_filter(array_map(
+            static fn (IncidentNotice $notice): ?string => $notice->employeeUuid,
             $digest->incidents,
-        )));
+        ), static fn (?string $uuid): bool => $uuid !== null)));
 
         // Orden estable: dos asientos del mismo conjunto tienen que verse iguales
         // seis meses despues, y el orden de la bandeja depende de la severidad.

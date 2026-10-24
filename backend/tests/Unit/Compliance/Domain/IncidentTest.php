@@ -188,3 +188,63 @@ it('rechaza lo que nadie podria trabajar', function (callable $build, string $ex
         InvalidIncident::class,
     ],
 ])->group('RF-PR-01');
+
+// --- ADR-061 A2: la discarded_scan sin persona, por su quiosco -----------------
+
+it('abre una discarded_scan sin persona por su quiosco y la conserva al reasignarla y al resolverla', function (): void {
+    $incident = Incident::open(
+        type: IncidentType::DiscardedScan,
+        employeeUuid: null,
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 03:30'),
+        assignedToUserId: 1,
+        deviceUuid: 'device-1',
+    );
+
+    $resolved = $incident->assignedTo(2)->resolvedBy(IncidentStatus::Resolved, 2, 'Era la entrada de Juan; corregida.', Instants::utc('2026-03-15 09:00'));
+
+    expect($incident->employeeUuid)->toBeNull()
+        ->and($incident->deviceUuid)->toBe('device-1')
+        ->and($resolved->deviceUuid)->toBe('device-1')
+        ->and($resolved->employeeUuid)->toBeNull();
+})->group('RN-22', 'RF-PA-05');
+
+it('no deja sin persona ningun otro tipo, ni con persona y quiosco a la vez, ni sin ninguno', function (IncidentType $type, ?string $employee, ?string $device): void {
+    $abrir = static fn (): Incident => Incident::open(
+        type: $type,
+        employeeUuid: $employee,
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 03:30'),
+        deviceUuid: $device,
+    );
+
+    $reconstruir = static fn (): Incident => Incident::restore(
+        type: $type,
+        severity: IncidentSeverity::Medium,
+        status: IncidentStatus::Open,
+        employeeUuid: $employee,
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 03:30'),
+        assignedToUserId: null,
+        context: [],
+        resolvedAt: null,
+        resolvedByUserId: null,
+        resolutionNote: null,
+        deviceUuid: $device,
+    );
+
+    expect($abrir)->toThrow(InvalidIncident::class)
+        ->and($reconstruir)->toThrow(InvalidIncident::class);
+})->with([
+    'otro tipo sin persona' => [IncidentType::LongShift, null, 'device-1'],
+    'sin persona ni quiosco' => [IncidentType::DiscardedScan, null, null],
+    'sin persona y quiosco vacio' => [IncidentType::DiscardedScan, null, ' '],
+    'con persona y quiosco' => [IncidentType::DiscardedScan, 'employee-1', 'device-1'],
+    'persona vacia' => [IncidentType::DiscardedScan, ' ', null],
+])->group('RN-22');

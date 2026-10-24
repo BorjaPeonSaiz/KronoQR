@@ -42,7 +42,9 @@ final readonly class IncidentPayload
             'type' => $incident->type->value,
             'severity' => $incident->severity->value,
             'status' => $incident->status->value,
-            'employee' => [
+            // Nulo en la `discarded_scan` sin persona (ADR-061 A2): su quiosco va
+            // en `context.device_uuid`.
+            'employee' => $row->subject->employeeUuid === null ? null : [
                 'uuid' => $row->subject->employeeUuid,
                 'employee_code' => $row->subject->employeeCode,
                 // El nombre viaja a la pantalla del panel autorizado y jamas al

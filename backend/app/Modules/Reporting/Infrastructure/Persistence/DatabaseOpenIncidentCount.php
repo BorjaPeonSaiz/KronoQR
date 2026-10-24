@@ -38,7 +38,7 @@ final readonly class DatabaseOpenIncidentCount implements OpenIncidentCount
         }
 
         $query = $this->connection->table('incidents')
-            ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+            ->leftJoin('employees', 'employees.id', '=', 'incidents.employee_id')
             ->where('incidents.status', 'open');
 
         if (! $scope->isUnrestricted()) {

@@ -18,7 +18,7 @@ final class InvalidIncident extends ComplianceDomainException
 {
     public static function withoutEmployee(): self
     {
-        return new self('Una incidencia sin empleado no se puede asignar ni revisar.');
+        return new self('Una incidencia es de una persona o, solo un fichaje descartado sin atribuir, de un quiosco.');
     }
 
     public static function withoutSite(int $siteId): self

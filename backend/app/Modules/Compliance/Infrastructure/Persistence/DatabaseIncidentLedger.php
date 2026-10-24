@@ -58,9 +58,11 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
 
     public function openIfAbsent(Incident $incident): ?int
     {
-        $employeeId = $this->employeeIdOf($incident->employeeUuid);
+        // ADR-061 A2: la `discarded_scan` sin persona va por su quiosco.
+        $employeeId = $incident->employeeUuid === null ? null : $this->employeeIdOf($incident->employeeUuid);
+        $deviceId = $incident->deviceUuid === null ? null : $this->deviceIdOf($incident->deviceUuid);
 
-        if ($employeeId === null) {
+        if ($incident->employeeUuid !== null && $employeeId === null) {
             // El hallazgo salio de un tramo de esta misma base: si el empleado no
             // esta, algo se ha borrado por debajo. Fallar es preferible a abrir
             // una incidencia sobre nadie.
@@ -69,19 +71,24 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
             );
         }
 
+        if ($incident->deviceUuid !== null && $deviceId === null) {
+            throw new RuntimeException('No existe el quiosco '.$incident->deviceUuid.' al abrir una incidencia.');
+        }
+
         $now = $this->clock->now()->format('Y-m-d H:i:s.uP');
 
         /** @var list<object{id: int}> $inserted */
         $inserted = $this->connection->select(<<<'SQL'
             INSERT INTO incidents (
-                employee_id, work_date, shift_entry_id, type, severity, status,
+                employee_id, device_id, work_date, shift_entry_id, type, severity, status,
                 assigned_to_user_id, detected_at, context, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?::jsonb, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?::jsonb, ?, ?)
             ON CONFLICT ON CONSTRAINT one_incident_per_finding DO NOTHING
             RETURNING id
         SQL, [
             $employeeId,
+            $deviceId,
             $incident->workDate,
             $this->shiftEntryIdOf($incident->shiftEntryUuid),
             $incident->type->value,
@@ -97,7 +104,7 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
             return $inserted[0]->id;
         }
 
-        $this->assertItIsTheSameFinding($incident, $employeeId);
+        $this->assertItIsTheSameFinding($incident, $employeeId, $deviceId);
 
         return null;
     }
@@ -127,19 +134,21 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
      * seis de la revision nocturna comparan `NULL` con `NULL` y siguen en
      * silencio, sin un solo cambio de comportamiento.
      */
-    private function assertItIsTheSameFinding(Incident $incident, int $employeeId): void
+    private function assertItIsTheSameFinding(Incident $incident, ?int $employeeId, ?int $deviceId): void
     {
         /** @var list<object{pattern: string|null, counterpart: string|null}> $existing */
         $existing = $this->connection->select(<<<'SQL'
             SELECT context ->> 'pattern' AS pattern,
                    context ->> 'counterpart_employee_uuid' AS counterpart
               FROM incidents
-             WHERE employee_id = ?
+             WHERE employee_id IS NOT DISTINCT FROM ?
+               AND device_id IS NOT DISTINCT FROM ?
                AND work_date = ?
                AND type = ?
                AND shift_entry_id IS NOT DISTINCT FROM ?
         SQL, [
             $employeeId,
+            $deviceId,
             $incident->workDate,
             $incident->type->value,
             $this->shiftEntryIdOf($incident->shiftEntryUuid),
@@ -160,7 +169,7 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
         }
 
         throw ConflictingFinding::onTheSameFinding(
-            $incident->employeeUuid,
+            $incident->employeeUuid ?? (string) $incident->deviceUuid,
             $incident->workDate,
             $incident->type->value,
         );
@@ -236,6 +245,14 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
     private function employeeIdOf(string $employeeUuid): ?int
     {
         $id = $this->connection->table('employees')->where('uuid', $employeeUuid)->value('id');
+
+        return is_numeric($id) ? (int) $id : null;
+    }
+
+    /** El quiosco de una `discarded_scan` sin persona (ADR-061 A2). */
+    private function deviceIdOf(string $deviceUuid): ?int
+    {
+        $id = $this->connection->table('devices')->where('uuid', $deviceUuid)->value('id');
 
         return is_numeric($id) ? (int) $id : null;
     }

@@ -347,7 +347,8 @@ return [
         'incidents' => [
             'summary' => 'Incidents detected on the time record: insufficient rest, excessive working day, unclosed shift, clock skew. The system opens them and warns; **it never modifies a clock-in by itself**.',
             'columns' => [
-                'employee_uuid' => 'Person affected.',
+                'employee_uuid' => 'Person affected. Empty only for a clock-in discarded by the server that could not be attributed to anyone (since 2.3.0).',
+                'device_uuid' => 'Only in that case: the kiosk of the clock-in, to match it against the time and the rota.',
                 'work_date' => 'Working day it refers to.',
                 'shift_entry_uuid' => 'Specific entry, when the incident is about one.',
                 'type' => 'Incident type.',

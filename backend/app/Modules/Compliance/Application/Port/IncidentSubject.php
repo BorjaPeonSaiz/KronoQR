@@ -25,9 +25,10 @@ namespace App\Modules\Compliance\Application\Port;
 final readonly class IncidentSubject
 {
     public function __construct(
-        public string $employeeUuid,
-        public string $employeeCode,
-        public string $fullName,
+        /** Nulos los tres en la `discarded_scan` sin persona (ADR-061 A2). */
+        public ?string $employeeUuid,
+        public ?string $employeeCode,
+        public ?string $fullName,
         public ?int $departmentId,
         public ?string $departmentName,
     ) {}
