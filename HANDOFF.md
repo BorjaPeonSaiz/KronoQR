@@ -89,7 +89,7 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 16 integrados (#182 a #187, #189 a #191, #193 a #198, #200 y #201). **Bloque 17** (`fix/quiosco-2.3.0`): 17.1–17.10 ✅, revisiones de seguridad y de código aplicadas; CI y PR en curso.
+**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 17 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #202; el 17 es `main` `ffb1cab8`, CI de `main` en verde). **Bloque 18** en curso (`refactor/web-kit-una-sola-logica`).
 
 Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
 
@@ -237,7 +237,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 17 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 18 (una sola lógica en web-kit, rama `refactor/web-kit-una-sola-logica`), marcando ✅ el título del bloque 17 en su primer commit.
+**Siguiente acción:** cerrar el bloque 18 (18.1–18.5), CI manual, revisiones, PR y merge; después, sin preguntar, el bloque 19.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
