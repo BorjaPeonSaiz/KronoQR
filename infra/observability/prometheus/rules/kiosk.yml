@@ -200,7 +200,12 @@ groups:
       # Contador por dispositivo, sin PII.
       #------------------------------------------------------------------------
       - alert: KioskDiscardedScansAttributed
-        expr: sum by (device) (increase(kiosk_discarded_scans_total{attributed="true",source!="server"}[1h])) > 0
+        expr: >-
+          sum by (device) (
+            (increase(kiosk_discarded_scans_total{attributed="true",source!="server"}[1h]) and kiosk_discarded_scans_total{attributed="true",source!="server"} offset 1h)
+            or
+            (kiosk_discarded_scans_total{attributed="true",source!="server"} unless kiosk_discarded_scans_total{attributed="true",source!="server"} offset 1h)
+          ) > 0
         for: 0m
         labels:
           severity: warning

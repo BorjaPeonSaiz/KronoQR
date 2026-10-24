@@ -426,6 +426,8 @@ tests:
     input_series:
       - series: 'kiosk_discarded_scans_total{device="kiosk-recepcion",attributed="true"}'
         values: "0 0 0 1 1 1 1 1 1 1"
+      - series: 'kiosk_discarded_scans_total{device="kiosk-nuevo",attributed="true",source="kiosk"}'
+        values: "_ _ _ 1 1 1 1 1 1 1"
       - series: 'kiosk_discarded_scans_total{device="kiosk-spa",attributed="false"}'
         values: "0 0 0 5 5 5 5 5 5 5"
       # Un descarte del servidor atribuido NO duplica el aviso del quiosco.
@@ -447,6 +449,20 @@ tests:
               summary: "El quiosco kiosk-recepcion ha descartado fichajes atribuidos a personas en la ultima hora"
               description: >-
                 El quiosco kiosk-recepcion ha avisado de fichajes que descarto
+                y que el servidor ha atribuido a personas (RN-22). Si los
+                demas quioscos no lo hacen, sospecha de una version de la
+                aplicacion desfasada en esa tablet o de un token de
+                dispositivo que no deberia estar enviando.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-nuevo
+            exp_annotations:
+              summary: "El quiosco kiosk-nuevo ha descartado fichajes atribuidos a personas en la ultima hora"
+              description: >-
+                El quiosco kiosk-nuevo ha avisado de fichajes que descarto
                 y que el servidor ha atribuido a personas (RN-22). Si los
                 demas quioscos no lo hacen, sospecha de una version de la
                 aplicacion desfasada en esa tablet o de un token de
