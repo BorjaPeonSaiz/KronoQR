@@ -36,18 +36,22 @@ function apply(next: AppLocale): void {
 // La eleccion es de QUIEN FICHA, no de la tablet (D9, V7-KI-05): no se guarda, y
 // `useLocaleResetAfterScan` devuelve el idioma de serie al terminar el fichaje.
 function select(next: AppLocale): void {
+  chosenByPerson = true
   apply(next)
 }
 
-// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar. Solo se
-// recalcula el idioma si el ACTIVO deja de ofrecerse (con uno solo, ese). Una politica
-// nueva que sigue ofreciendo el idioma activo no lo toca: pisaria la eleccion que una
-// persona acaba de hacer a media confirmacion. La vuelta al idioma de serie la hace
-// `useLocaleResetAfterScan` al terminar el fichaje.
+// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar. El idioma se
+// recalcula si el ACTIVO deja de ofrecerse (con uno solo, ese) o si nadie ha elegido
+// nada todavia (primer arranque: sigue al navegador, RF-KI-05). Una politica nueva que
+// sigue ofreciendo el idioma que una PERSONA acaba de elegir no lo toca: lo pisaria a
+// media confirmacion. La vuelta al idioma de serie la hace `useLocaleResetAfterScan`.
+let chosenByPerson = false
+
 watch(
   options,
-  (next) => {
-    if (isSupportedLocale(locale.value) && next.includes(locale.value)) return
+  (next, previous) => {
+    const stillOffered = isSupportedLocale(locale.value) && next.includes(locale.value)
+    if (stillOffered && (chosenByPerson || previous === undefined)) return
     apply(
       resolveUiLocale<AppLocale>({
         policy: effectivePolicy.value,
