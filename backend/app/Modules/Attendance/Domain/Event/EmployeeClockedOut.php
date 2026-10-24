@@ -21,7 +21,7 @@ use DateTimeImmutable;
  * conclusion, no los ingredientes.
  *
  * Lleva tambien el total del dia ya recalculado porque el quiosco lo muestra en
- * la confirmacion —«Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 00 min»
+ * la confirmacion —«Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 0 min»
  * (RF-AT-05)— y porque es lo que evita que quien escuche este evento tenga que
  * sumar tramos por su cuenta y se invente una segunda forma de calcular RN-06.
  *

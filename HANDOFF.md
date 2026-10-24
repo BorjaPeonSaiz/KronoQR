@@ -100,6 +100,7 @@ Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`
 - **Comentarios (decisión del propietario, 24-10):** `kronoqr-comments/no-plan-references` prohíbe en `src/**` de las tres SPA y web-kit «bloque N», «tarea N.N», «hallazgo X», vueltas de revisión e ids de verificación (los cortos, solo cuando se citan); 627 comentarios limpiados. Los requisitos, ADR, reglas duras y versiones siguen permitidos (doc 02 §3.5). **Formato de instantes (decisión del 24-10):** `formatInstant` = «8 oct 2026, 07:14».
 - **Pendiente:**
   - las descripciones de `openapi.yaml` aún citan «bloque N» (llegan a los `schema.d.ts`, que la regla excluye);
+  - el docblock de `Attendance/Domain/Event/EmployeeClockedOut.php` aún dice «6 h 0 min»: cambiar solo un comentario de `Domain/` tumba `mutate-changed` (0 mutantes); va con el primer bloque que toque esa clase con lógica probada;
   - quedan ids en dos cadenas `message`/`reason` de los `eslint.config.js` (código, no comentarios); `H-07` (amenaza del doc 07) se permite.
 
 Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
