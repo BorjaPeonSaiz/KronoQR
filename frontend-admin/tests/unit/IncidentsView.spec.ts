@@ -46,6 +46,68 @@ describe('IncidentsView', () => {
     wrapper.unmount()
   })
 
+  it('una incidencia sin persona enseña el quiosco y la hora, sin nombre ni enlace a la jornada', async () => {
+    collection = incidentCollection([
+      incident({
+        id: 900,
+        type: 'discarded_scan',
+        employee: null,
+        shift_entry_uuid: null,
+        context: {
+          device_uuid: '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81',
+          occurred_at: '2026-03-14T13:50:00Z',
+          attribution: 'none',
+          source: 'server',
+        },
+      }),
+    ])
+    const wrapper = await mountView(IncidentsView)
+    await settle()
+
+    const cell = wrapper.find('[data-test="incident-employee"]')
+
+    expect(cell.text()).toContain('Fichaje sin persona en 0199f3c9…')
+    expect(cell.text()).toContain('Fichaje del')
+    expect(wrapper.find('[data-test="incident-row"] a').exists()).toBe(false)
+    expect(wrapper.find('[data-test="resolve-button"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('con context.device_name usa el nombre del quiosco; sin el, el uuid; sin ninguno, «desconocido»', async () => {
+    collection = incidentCollection([
+      incident({
+        id: 902,
+        employee: null,
+        context: { device_name: 'Recepción', device_uuid: '0199f3c9-1b7d' },
+      }),
+      incident({ id: 903, employee: null, context: { device_uuid: '0199f3c9-1b7d-7a44' } }),
+      incident({ id: 904, employee: null, context: {} }),
+    ])
+    const wrapper = await mountView(IncidentsView)
+    await settle()
+
+    const cells = wrapper.findAll('[data-test="incident-no-person"]').map((cell) => cell.text())
+
+    expect(cells).toEqual([
+      'Fichaje sin persona en Recepción',
+      'Fichaje sin persona en 0199f3c9…',
+      'Fichaje sin persona en un quiosco desconocido',
+    ])
+
+    wrapper.unmount()
+  })
+
+  it('el filtro por persona no se rompe con filas sin persona', async () => {
+    collection = incidentCollection([incident({ id: 901, employee: null })])
+    const wrapper = await mountView(IncidentsView)
+    await settle()
+
+    expect(wrapper.findAll('[data-test="incident-row"]')).toHaveLength(1)
+
+    wrapper.unmount()
+  })
+
   it('manda los filtros al servidor y vuelve a la primera pagina', async () => {
     const wrapper = await mountView(IncidentsView)
     await settle()

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // PIN-03 de cara al empleado: «no puedo sellar» y «codigo no valido» son
 // cosas distintas y se dicen distinto. Y el boton del PIN no se ofrece si no se
 // puede sellar.

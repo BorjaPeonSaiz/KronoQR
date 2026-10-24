@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
+use App\Modules\Attendance\Domain\ValueObject\UnattributedServerDiscard;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -47,6 +48,18 @@ final readonly class DiscardedScanReviewPolicy
         if ($windowDays < 1) {
             throw new InvalidArgumentException('La ventana de revision de los descartes es de al menos un dia.');
         }
+    }
+
+    /**
+     * Si un descarte del servidor sin atribuir abre su incidencia sin persona
+     * (ADR-061 A2). La misma ventana creible que el resto —ni posterior a la
+     * recepcion mas el desfase, ni mas antigua que la ventana de la instalacion—,
+     * sin cota inferior de emision ni de alta: no hay persona de la que tomarla.
+     */
+    public function opensOwnerlessIncident(UnattributedServerDiscard $discard): bool
+    {
+        return $discard->occurredAt <= $discard->recordedAt->modify('+'.$this->skewToleranceSeconds.' seconds')
+            && $discard->occurredAt >= $discard->recordedAt->modify('-'.$this->windowDays.' days');
     }
 
     public function opensIncident(DiscardedScan $scan, DateTimeZone $siteTimezone): bool

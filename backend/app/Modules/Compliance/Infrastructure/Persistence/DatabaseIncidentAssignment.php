@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Persistence;
 
 use App\Modules\Compliance\Application\Port\IncidentAssignment;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -37,5 +38,21 @@ final readonly class DatabaseIncidentAssignment implements IncidentAssignment
             ->value('users.id');
 
         return is_numeric($managerId) ? (int) $managerId : null;
+    }
+
+    public function administrator(): ?int
+    {
+        $adminId = $this->connection->table('users')
+            ->where('users.is_active', true)
+            ->whereExists(static function ($query): void {
+                $query->from('model_has_roles')
+                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                    ->whereColumn('model_has_roles.model_id', 'users.id')
+                    ->where('roles.name', UserRole::ADMIN->value);
+            })
+            ->orderBy('users.id')
+            ->value('users.id');
+
+        return is_numeric($adminId) ? (int) $adminId : null;
     }
 }

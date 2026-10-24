@@ -173,6 +173,21 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
         return $row === null ? null : $this->hydrate($row);
     }
 
+    public function hasUsedAccessToken(int $deviceId): bool
+    {
+        // Por el nombre con el que `Identity` emite el token del quiosco
+        // (`kiosk:<uuid>`), como el colector del paquete de diagnostico: sin
+        // nombrar el modelo de otro modulo ni su `tokenable_type`.
+        return DB::table('personal_access_tokens as t')
+            ->join('devices as d', static function ($join): void {
+                $join->on('d.id', '=', 't.tokenable_id')
+                    ->whereRaw("t.name = 'kiosk:' || d.uuid::text");
+            })
+            ->where('d.id', $deviceId)
+            ->whereNotNull('t.last_used_at')
+            ->exists();
+    }
+
     /**
      * Si el fallo es el nombre duplicado dentro del centro.
      *

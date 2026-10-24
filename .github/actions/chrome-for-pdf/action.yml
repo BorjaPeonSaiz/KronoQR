@@ -29,7 +29,7 @@ inputs:
   puppeteer-version:
     description: Version de puppeteer. Fuente de verdad, la imagen del producto.
     required: false
-    default: "25.12.0"
+    default: "25.13.0"
 
 runs:
   using: composite

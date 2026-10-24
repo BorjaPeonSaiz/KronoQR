@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application\Port;
 
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
+use App\Modules\Attendance\Domain\ValueObject\UnattributedServerDiscard;
 use DateTimeImmutable;
 
 /**
@@ -28,4 +29,13 @@ interface DiscardedScans
      * @return list<DiscardedScan>
      */
     public function attributedBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array;
+
+    /**
+     * Descartes **del servidor** sin atribuir (ADR-061 A2) cuyo `recorded_at` ∈
+     * [from, to], ordenados por `occurred_at` ASC y `scan_id` ASC. Los que ya
+     * estaban registrados no salen.
+     *
+     * @return list<UnattributedServerDiscard>
+     */
+    public function unattributedServerDiscardsBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array;
 }

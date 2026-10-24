@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // La hora y la ventana de actualizacion se leen en el reloj de pared DEL CENTRO
 // (`site_time_zone` del latido), no en la zona de la tablet (V2-KI-01, RF-AT-05,
 // RF-KI-07). Todas las pruebas pasan la zona explicita para no depender de la
@@ -8,10 +9,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
 import type { KioskHeartbeat } from '@/shared/api/types'
-import { isWithinUpdateWindow, canApplyUpdate } from '@/features/offline/domain/updateWindow'
+import { isWithinUpdateWindow, canApplyUpdate } from '@/shared/update/updateWindow'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
 import { greetingSlotFor } from '@/features/scan/domain/greeting'
-import { readSiteTimeZone, storeSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
+import { readSiteTimeZone, storeSiteTimeZone } from '@/shared/device/deviceSettings'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import { fixedClock } from '@/shared/time/clock'

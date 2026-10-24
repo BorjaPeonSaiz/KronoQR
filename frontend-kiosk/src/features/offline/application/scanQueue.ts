@@ -15,6 +15,10 @@
 //     entro DESPUES, no lo que hay en disco: `stats().size` es `null`
 //     («desconocido») y el latido lo dice con `queue_storage`. En cada drenaje se
 //     intenta volver al disco, y al volver se migra lo de memoria.
+//     EXCEPCION (V2-KI-02): si el disco sigue LEYENDOSE y solo falla escribir
+//     (cuota agotada), no se da por perdido: forma con la memoria un almacen
+//     compuesto (`overlayStorage.ts`) y el recuento SI se sabe. Las filas del disco
+//     se envian y se borran, que es lo que libera el sitio.
 //  4. **El contador que se ve en pantalla no espera a IndexedDB.** Se mantiene
 //     un espejo en memoria que se actualiza tras cada mutacion y se publica a
 //     los suscriptores. El indicador de RF-KI-04 se pinta de ahi.
@@ -25,17 +29,29 @@
 // viene detras no puede adelantar a un envio que todavia no ha tenido desenlace.
 
 import type { QueuedScan } from '@/features/scan/application/ports'
+import type { QueueStorageKind } from '@/shared/telemetry/queueStorageKind'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { nextAttemptAt } from '../domain/backoff'
 import { orderForSync } from '../domain/queueOrder'
 import type {
+  DiscardedScanMeta,
+  QueuedScanMeta,
   DiscardedScanRecord,
   QueuedScanRecord,
   QueueStorage,
   RetrySchedule,
 } from '../infrastructure/queueStorage'
 import { createMemoryQueueStorage } from '../infrastructure/queueStorage'
+import type { OverlayQueueStorage } from '../infrastructure/overlayStorage'
+import {
+  createOverlayQueueStorage,
+  discardedMetaOf,
+  fetchDiscarded,
+  fetchMany,
+  metaOf,
+  OverlayDiskWriteError,
+} from '../infrastructure/overlayStorage'
 
 /**
  * Techo de filas que se leen de una vez. Con 50 por lote, 500 son diez envios
@@ -51,8 +67,7 @@ export const REOPEN_DELAYS_MS: readonly number[] = [0, 250]
 /** Como mucho una vez por minuto se intenta volver al disco desde memoria. */
 export const RECOVERY_INTERVAL_MS = 60_000
 
-/** Donde esta guardando la tablet su cola ahora mismo (`queue_storage` del latido). */
-export type QueueStorageKind = 'durable' | 'memory' | 'unavailable'
+export type { QueueStorageKind }
 
 export interface QueueStats {
   /**
@@ -157,6 +172,12 @@ export interface ScanQueueOptions {
   readonly openStorage: () => QueueStorage
   readonly clock?: Clock
   readonly onStorageFailure?: (reason: string) => void
+  /**
+   * Hay filas cifradas que no se abren (clave perdida, fila danada). UNA vez por sesion,
+   * con cuantas son. Se conservan en disco y se saltan al formar el lote: no bloquean a
+   * las legibles que tienen detras.
+   */
+  readonly onUnreadable?: (count: number) => void
   /** Inyectable para pruebas: por defecto `setTimeout`. */
   readonly sleep?: (ms: number) => Promise<void>
   readonly reopenDelaysMs?: readonly number[]
@@ -179,6 +200,8 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
   const leased = new Set<string>()
 
   let store: QueueStorage
+  /** Disco que se lee pero no se escribe + memoria (V2-KI-02). `store` es esto mientras no sea `null`. */
+  let overlay: OverlayQueueStorage | null = null
   /** `true` si el disco existe pero no se ve: lo que haya en el es desconocido. */
   let diskUnknown = false
   /** `true` si la ultima operacion sobre el respaldo en memoria fallo: ni eso acepta. */
@@ -192,6 +215,33 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
    */
   let lastDiskCount: number | null = null
   let lastReopenAt: number | null = null
+  /** Filas cifradas que no se abren. Se saltan; se conservan. Vive lo que la sesion. */
+  const unreadable = new Set<string>()
+  let unreadableReported = false
+
+  /**
+   * Cuantas filas se leen: el techo MAS las ilegibles ya conocidas, que ocupan sitio
+   * en el orden pero no cuentan para el lote. Sin esto, 500 ilegibles delante dejarian
+   * fuera de la ventana a los fichajes nuevos.
+   */
+  function readWindow(): number {
+    return MAX_ROWS_PER_READ + unreadable.size
+  }
+
+  function markUnreadable(ids: readonly string[]): boolean {
+    let added = false
+    for (const id of ids) {
+      if (!unreadable.has(id)) {
+        unreadable.add(id)
+        added = true
+      }
+    }
+    if (added && !unreadableReported) {
+      unreadableReported = true
+      options.onUnreadable?.(unreadable.size)
+    }
+    return added
+  }
   /** Mientras se migra de memoria a disco, ninguna otra operacion toca el almacen. */
   let gate: Promise<void> | null = null
   /** Cola de turnos de reapertura: nunca dos reaperturas a la vez sobre el mismo almacen. */
@@ -230,10 +280,50 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     }
   }
 
-  /** Degradacion a memoria en marcha. Nunca se propaga el fallo al empleado. */
-  function fallBackToMemory(reason: unknown, current: QueueStorage): void {
+  /** El disco responde a las TRES lecturas que hace `recompute()`: se ve aunque no se pueda escribir. */
+  async function isReadable(target: QueueStorage): Promise<boolean> {
+    try {
+      await target.count()
+      await target.list(1)
+      await target.listDiscarded(1)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Degradacion en marcha. Nunca se propaga el fallo al empleado.
+   *
+   * Si el disco todavia se LEE (cuota agotada: lo que falla es escribir), no se da
+   * por perdido: queda como mitad de lectura de un almacen compuesto, y lo que no
+   * admite entra en memoria (V2-KI-02). Asi las filas que ya estan en disco se
+   * siguen enviando y borrando, que es justo lo que libera el sitio. Solo si el
+   * disco tampoco se lee se cae a memoria pura, con el disco «desconocido».
+   */
+  async function degrade(reason: unknown, current: QueueStorage): Promise<void> {
     options.onStorageFailure?.(errorName(reason))
+    if (await isReadable(current)) {
+      const memory = createMemoryQueueStorage()
+      overlay = createOverlayQueueStorage(current, memory, {
+        onDiskLost: (lost) => {
+          // El disco dejo de leerse tambien: memoria pura y disco desconocido.
+          options.onStorageFailure?.(errorName(lost))
+          if (store === overlay) {
+            store = memory
+            overlay = null
+            diskUnknown = true
+            lastDiskCount = null
+          }
+        },
+      })
+      store = overlay
+      diskUnknown = false
+      memoryBroken = false
+      return
+    }
     closeQuietly(current)
+    overlay = null
     store = createMemoryQueueStorage()
     diskUnknown = true
     memoryBroken = false
@@ -259,7 +349,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
           if (!current.durable) memoryBroken = false
           return value
         } catch (error) {
-          if (!current.durable) memoryBroken = true
+          if (!current.durable && !(error instanceof OverlayDiskWriteError)) memoryBroken = true
           throw error
         }
       }
@@ -285,7 +375,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         }
       }
 
-      fallBackToMemory(last, current)
+      await degrade(last, current)
       try {
         const value = await operation(store)
         memoryBroken = false
@@ -312,7 +402,8 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       return value
     } catch (error) {
       if (!target.durable) {
-        memoryBroken = true
+        // Una escritura que el DISCO rechaza (cuota) no estropea la memoria.
+        if (!(error instanceof OverlayDiskWriteError)) memoryBroken = true
         throw error
       }
       return reopenAndRepeat(target, operation, error)
@@ -321,9 +412,12 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
   async function recompute(): Promise<QueueStats> {
     try {
-      const rows = await run((target) => target.list(MAX_ROWS_PER_READ))
+      // Solo metadatos: no descifra nada (A1). Una fila ilegible no cuenta como cabeza.
+      const rows = (await run((target) => metaOf(target, readWindow()))).filter(
+        (row) => !unreadable.has(row.scan_id),
+      )
       const count = await run((target) => target.count())
-      const discarded = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+      const discarded = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
       const ordered = orderForSync(rows)
       const oldest = ordered[0]
       headId = oldest?.scan_id ?? null
@@ -438,13 +532,6 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       // siga en un disco que no se ve. Sale tras `tryReopen()`, mezclado y en orden.
       if (diskUnknown && !store.durable && lastDiskCount !== 0) return []
       const nowMs = clock.now().getTime()
-      let rows: QueuedScanRecord[]
-      try {
-        rows = await run((target) => target.list(MAX_ROWS_PER_READ))
-      } catch {
-        await recompute()
-        return []
-      }
 
       // G1: el PREFIJO de la cola ordenada, no un filtro. Una fila que espera su
       // reintento (`next_attempt_at` futuro) detiene la lectura: lo que viene
@@ -455,15 +542,53 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       // RN-21: una fila arrendada (la tiene un envio en vuelo) corta el prefijo
       // igual. Saltarla dejaba que un drenaje enviara B mientras A viajaba, y si
       // A acababa en `503`, B ya la habia adelantado.
-      const claimed: QueuedScanRecord[] = []
-      for (const row of orderForSync(rows)) {
-        if (claimed.length >= limit) break
-        if (leased.has(row.scan_id)) break
-        if (claimOptions.ignoreSchedule !== true && row.next_attempt_at > nowMs) break
-        claimed.push(row)
+      //
+      // A1: se ordena y se elige por METADATOS y solo se descifran las filas elegidas. Las
+      // ilegibles se saltan (no cortan el prefijo: no se pueden enviar) y se vuelve a
+      // elegir hasta llenar el lote, de modo que 500 ilegibles delante no bloquean a los
+      // fichajes nuevos. Se recuerdan, asi que solo se intentan abrir una vez.
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        let metas
+        try {
+          metas = await run((target) => metaOf(target, readWindow()))
+        } catch {
+          await recompute()
+          return []
+        }
+
+        const chosen: string[] = []
+        for (const row of orderForSync(metas)) {
+          if (chosen.length >= limit) break
+          if (unreadable.has(row.scan_id)) continue
+          if (leased.has(row.scan_id)) break
+          if (claimOptions.ignoreSchedule !== true && row.next_attempt_at > nowMs) break
+          chosen.push(row.scan_id)
+        }
+        if (chosen.length === 0) return []
+
+        let fetched
+        try {
+          fetched = await run((target) => fetchMany(target, chosen))
+        } catch {
+          await recompute()
+          return []
+        }
+
+        if (markUnreadable(fetched.unreadable)) {
+          // Hay que reelegir sin ellas; y la cabeza publicada ya no puede ser una de ellas.
+          await recompute()
+          continue
+        }
+
+        const byId = new Map(fetched.records.map((record) => [record.scan_id, record]))
+        const claimed = chosen.flatMap((id) => {
+          const record = byId.get(id)
+          return record === undefined ? [] : [record]
+        })
+        for (const row of claimed) leased.add(row.scan_id)
+        return claimed
       }
-      for (const row of claimed) leased.add(row.scan_id)
-      return claimed
+      return []
     },
 
     async confirm(scanIds) {
@@ -499,15 +624,21 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
     async discarded(discardedOptions = {}) {
       const nowMs = clock.now().getTime()
-      let rows: DiscardedScanRecord[]
       try {
-        rows = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+        const metas = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
+        const due = metas
+          .filter(
+            (row) =>
+              !unreadable.has(row.scan_id) &&
+              (discardedOptions.ignoreSchedule === true || row.next_attempt_at <= nowMs),
+          )
+          .map((row) => row.scan_id)
+        const fetched = await run((target) => fetchDiscarded(target, due))
+        markUnreadable(fetched.unreadable)
+        return fetched.records
       } catch {
         return []
       }
-      return discardedOptions.ignoreSchedule === true
-        ? rows
-        : rows.filter((row) => row.next_attempt_at <= nowMs)
     },
 
     async acknowledgeDiscarded(scanIds) {
@@ -527,9 +658,9 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (scanIds.length === 0) return
       const nowMs = (now ?? clock.now()).getTime()
 
-      let rows: DiscardedScanRecord[] = []
+      let rows: DiscardedScanMeta[] = []
       try {
-        rows = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+        rows = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
       } catch {
         rows = []
       }
@@ -558,9 +689,9 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (scanIds.length === 0) return
       const nowMs = (now ?? clock.now()).getTime()
 
-      let rows: QueuedScanRecord[] = []
+      let rows: QueuedScanMeta[] = []
       try {
-        rows = await run((target) => target.list(MAX_ROWS_PER_READ))
+        rows = await run((target) => metaOf(target, readWindow()))
       } catch {
         rows = []
       }
@@ -600,9 +731,10 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     },
 
     async tryReopen() {
-      // Solo tiene sentido si hubo un disco que se perdio: una cola que nacio
-      // sobre un almacen no duradero (pruebas) no tiene a donde volver.
-      if (store.durable || !diskUnknown) return false
+      // Solo tiene sentido si hubo un disco que se perdio (o que ya no admite
+      // escrituras): una cola que nacio sobre un almacen no duradero (pruebas) no
+      // tiene a donde volver.
+      if (store.durable || (!diskUnknown && overlay === null)) return false
       const nowMs = clock.now().getTime()
       if (lastReopenAt !== null && nowMs - lastReopenAt < recoveryIntervalMs) return false
       lastReopenAt = nowMs
@@ -618,22 +750,42 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       let candidate: QueueStorage | null = null
       let recovered = false
       try {
-        candidate = options.openStorage()
-        const memory = store
+        const current = overlay
+        // La mitad de memoria es lo que un reinicio perderia y hay que llevar al disco.
+        const memory = current === null ? store : current.memoryPart
         const rows = await memory.list(Number.MAX_SAFE_INTEGER)
         const discarded = await memory.listDiscarded(Number.MAX_SAFE_INTEGER)
-        // Sondeo explicito: abrir es perezoso y un disco que sigue roto solo se
-        // nota al tocarlo.
-        await candidate.count()
-        // Clave primaria `scan_id`: `add` de una fila que ya esta no duplica, asi
-        // que repetir la migracion tras un fallo a medias es seguro.
-        for (const row of rows) await candidate.add(row)
-        for (const entry of discarded) await candidate.putDiscarded(entry)
-        store = candidate
-        diskUnknown = false
-        memoryBroken = false
-        closeQuietly(memory)
-        recovered = true
+
+        if (current !== null && rows.length === 0 && discarded.length === 0) {
+          // Disco que se lee y nada en memoria: se vuelve a el solo si la ultima
+          // escritura funciono (el drenaje libero sitio). Sin esa prueba se
+          // degradaria otra vez en el siguiente fichaje, avisando cada minuto.
+          if (current.diskWritable()) {
+            store = current.diskPart
+            overlay = null
+            diskUnknown = false
+            memoryBroken = false
+            closeQuietly(memory)
+            recovered = true
+          }
+        } else {
+          candidate = options.openStorage()
+          // Sondeo explicito: abrir es perezoso y un disco que sigue roto solo se
+          // nota al tocarlo.
+          await candidate.count()
+          // Clave primaria `scan_id`: `add` de una fila que ya esta no duplica, asi
+          // que repetir la migracion tras un fallo a medias es seguro.
+          for (const row of rows) await candidate.add(row)
+          for (const entry of discarded) await candidate.putDiscarded(entry)
+          const previous = store
+          store = candidate
+          overlay = null
+          diskUnknown = false
+          memoryBroken = false
+          closeQuietly(previous)
+          if (current !== null) closeQuietly(current.diskPart)
+          recovered = true
+        }
       } catch {
         if (candidate !== null) closeQuietly(candidate)
       } finally {
@@ -651,6 +803,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         // Nada que hacer: el recuento se recalcula igual.
       }
       leased.clear()
+      unreadable.clear()
       await recompute()
     },
 

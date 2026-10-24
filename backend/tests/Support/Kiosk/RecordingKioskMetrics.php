@@ -69,6 +69,13 @@ final class RecordingKioskMetrics implements KioskMetrics
         $this->claimed++;
     }
 
+    public int $reclaimed = 0;
+
+    public function pairingReclaimed(): void
+    {
+        $this->reclaimed++;
+    }
+
     public function pairingRejected(string $reason): void
     {
         $this->rejected[] = $reason;

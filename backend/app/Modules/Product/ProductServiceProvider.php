@@ -142,6 +142,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PendingDiagnosticsAuditProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScanDiscardBudgetProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
@@ -2074,6 +2075,14 @@ final class ProductServiceProvider extends ServiceProvider
                     new KioskVersionProbe(
                         $app->make(KioskAppVersions::class),
                         Config::string('app.env'),
+                    ),
+                    /*
+                     * El cupo de descartes del servidor por encima de su techo
+                     * (ADR-061, A6). Aviso: el servidor aplica el techo.
+                     */
+                    new ScanDiscardBudgetProbe(
+                        Config::get('attendance.scan_discard.daily_budget'),
+                        Config::integer('attendance.scan_discard.budget_ceiling', 20),
                     ),
                     $app->make(LicenseProbe::class),
                 ],

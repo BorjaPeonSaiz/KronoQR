@@ -871,6 +871,8 @@ stopped running):
 | `KioskUnreportedDiscards` | Discarded clock-ins not yet reported to the server, `for: 30m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards) (in Spanish) | Check that tablet's network and its app version. Until it reports them, HR does not see the "Clocking discarded by the kiosk" incident ([`hr-guide.md`](hr-guide.md) §4.7) |
 | `ScanBatchItemNotProcessed` | 3 or more batch items not processed in 30 min on the same kiosk, `for: 5m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) (in Spanish) | One clock-in from that tablet has gone several syncs without the server managing to process it, and **the others from that kiosk wait behind it**: they are not lost, but they do not reach the record. Fix the cause on the server (look for `attendance.batch_scan_failed` in the `app` log). **Never clear the tablet's queue or unpair it** (§16.3 bis) |
 | `KioskDiscardedScansAttributed` | Discarded clock-in reports attributed to people from the same kiosk in the last hour, `for: 0m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) (in Spanish) | That tablet is sending clock-ins the server does not accept, and they belong to real people: usually an outdated app after an update (reload it with the queue empty); if the kiosk should not be sending anything, unpair it. HR will see that day's "Clocking discarded by the kiosk" incidents |
+| `ScanDiscardedByServer` | The server discarded a clock-in from a kiosk that it could not process (10 attempts and 60 min), `for: 0m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) (in Spanish) | A product defect: the clock-in is not in the record. HR gets the "Clocking discarded" incident if the person was identified, and fixes it with a traced correction. Keep the evidence and tell the manufacturer |
+| `ScanDiscardBudgetExhausted` | A kiosk used up its quota of 3 server discards in 24 h and another clock-in that would fail appeared, `for: 0m` | Critical | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) (in Spanish) | That tablet's queue waits again on purpose: the server is at fault, not the clock-in. Check the latest deployment or migration and escalate to the manufacturer. **Do not raise the quota or delete the tablet's queue** |
 | `ErroresDeServidorEnElFichaje` | > 1 % of `5xx` on `/api/v1/scan*`, 5 min | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor` first: the database and disk are the most frequent cause |
 | `LatenciaDelFichajeAlta` | p95 of card clock-ins > 500 ms, 10 min (at least 20 requests) | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Check whether it coincides with the shift change or with a recent update |
 | `LatenciaDelFichajePorPinAlta` | More than 5% of PIN clock-ins take over 2 s in 10 min (at least 20), `for: 5m` | Medium | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Compare with the card one: if only PIN is slow it is usually CPU. Card clock-ins are not affected |
@@ -1929,9 +1931,13 @@ API users.** None of this changes the record or prevents clocking:
   default (`page`, `per_page` up to 100, and `meta.total`); the `summary` count is
   still the whole workforce. And `GET /api/v1/employees/{uuid}/workdays` returns
   31 work days per page.
-- **The full data export moves to format version 6**: `report_exports.csv`
-  gains the `cancelled_at` column. If you compare exports from before and after,
-  that column is the difference (`manifest.json` says so).
+- **The full data export moves to format version 7**: `report_exports.csv`
+  gains the `cancelled_at` column; `discarded_scan_reports.csv` gains `source`,
+  `failed_attempts` and `first_failed_at`; and `scan_processing_failures.csv`
+  appears, the failed attempts to process a clock-in over the last 30 days
+  (pseudonymised technical data, without the card fingerprint). If you compare
+  exports from before and after, those are the differences (`manifest.json` says
+  so).
 
 **When updating to 2.3.0: large exports are generated in the background, with
 progress and cancellation.** None of this changes what each file contains:
@@ -1969,6 +1975,36 @@ too.** You do not need to do anything:
   the colour as it is. On the card, the installation name grows from 6 to 8 pt:
   a name longer than about 18 letters is cut earlier with an ellipsis. Cards
   already printed remain valid; there is no need to reprint.
+
+**When updating to 2.3.0: a clock-in the server cannot process no longer jams
+the tablet forever.** You do not need to do anything. Until now, if one
+particular clock-in always failed on the server (a product defect with that
+data), the tablet's queue stopped at it and the clock-ins behind it waited.
+From this version on, if the server fails **the same clock-in** at least **10
+times over at least 60 minutes** —not counting a database or Redis outage,
+which is still waited out as always—, it **discards** it: the queue moves on,
+the clock-in **is not recorded** and the "Discarded clock-in" incident opens so
+that HR completes it with a correction: that person's if it is known whose it
+was (by the card, the code or the fingerprint of earlier clock-ins of that card)
+and, if not, one without a person for the administrator, with the kiosk and the
+time.
+It is kept in the audit log (`scan.discarded`). At most **3 discards per kiosk
+in 24 hours**: once used up, the tablet waits again and a critical alert fires,
+because then the fault is the server's and not the clock-in's. The three
+numbers are changed in `.env` (`SCAN_DISCARD_MIN_ATTEMPTS`,
+`SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`; with the budget at `0`
+discarding is switched off), and they are best left alone unless technical
+support asks. Every discard is a defect the vendor needs to reproduce: let them
+know. The technical table of failed attempts purges itself after 30 days.
+
+**When updating to 2.3.0: pairing a tablet survives a network cut right at the
+end.** You do not need to do anything. If the tablet loses the response at the
+very moment it collects its token, between 10 seconds and one minute later
+it can ask again and receives a new one for the **same** kiosk —the previous one stops
+working at once—, instead of being unable to clock until someone unpairs it.
+Only from the same network address and if the tablet never used the first
+token; after that minute, the tablet asks for a
+new code as always.
 
 ### 11.1 The tablet app: when it changes version
 

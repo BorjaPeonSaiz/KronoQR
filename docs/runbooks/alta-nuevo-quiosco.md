@@ -350,6 +350,75 @@ Si el punto de montaje falla justo aquí —la cámara enfoca mal por la luz, o 
 wifi llega débil—, es mucho más barato moverlo ahora que cuando haya cien
 fichajes al día pasando por él.
 
+### 4.5 Prueba de resistencia de 12 h (una vez por modelo de tablet)
+
+**No forma parte del alta de cada quiosco.** Se hace **una vez por modelo de
+tablet**, antes de darlo por bueno, y la hace el **fabricante** (o el IT del
+cliente con soporte del fabricante): necesita un portátil con el repositorio de
+KronoQR y Node 24. Existe porque el escaneo continuo durante un turno entero es
+un uso poco habitual de una tablet y las fugas del bucle de la cámara **no
+aparecen en pruebas de cinco minutos**: aparecen a media tarde, con la tablet
+caliente y sin escanear (doc 02, Anexo A).
+
+**Qué se exige** (lo juzga `frontend-kiosk/scripts/soak/verdict.mjs`, probado en
+`tests/unit/soakVerdict.spec.ts`):
+
+| Criterio | Umbral |
+| --- | --- |
+| Memoria | Ninguna muestra por encima de **250 MB** (la del proceso de la pestaña si se lee con `adb`; si no, el montón de JavaScript) |
+| Sin crecimiento sostenido | Tras la primera hora, la memoria no crece más de **2 MB/h** y los nodos del DOM, más de **100/h** |
+| Escuchas de eventos | Tras la primera hora, no varían en más de **20** |
+| Cámara | Nunca más de **una** pista de vídeo viva; con la pantalla visible, siempre una, **sin aviso de cámara** y con el vídeo **avanzando** entre muestras |
+| Recargas | Como mucho **3** en 12 h (una actualización urgente recarga una vez) |
+
+**Preparación (10 minutos):**
+
+1. La tablet, **emparejada** (§3), montada en su sitio, con corriente
+   permanente y las §2.1-2.5 hechas: es la prueba del aparato tal y como va a
+   trabajar.
+2. En la tablet: Ajustes → Opciones de desarrollador → **Depuración USB**
+   activada. Cable USB al portátil.
+3. En el portátil, desde la raíz del repositorio:
+
+   ```bash
+   adb devices                                             # la tablet aparece como «device»
+   adb forward tcp:9222 localabstract:chrome_devtools_remote
+   adb shell ps -A | grep sandboxed_process                # anota el nombre del proceso de la pestaña
+   ```
+
+**Arranque:**
+
+```bash
+cd frontend-kiosk
+node scripts/soak-monitor.mjs --hours 12 --interval-min 5 \
+  --out soak-<modelo>-<AAAAMMDD>.jsonl \
+  --adb-pid-of com.android.chrome:sandboxed_process0     # el nombre que anotaste
+```
+
+El guion **recarga la pestaña una vez** al empezar —para contar la cámara desde
+su primer `getUserMedia`— y a partir de ahí **solo observa**: no ficha, no toca
+la cola ni cambia nada del quiosco. Cada 5 minutos escribe una línea en la
+consola y otra en el `.jsonl`. **Ctrl+C** lo para antes de tiempo y da el
+veredicto de lo medido. Sin `--adb-pid-of` juzga la memoria por el montón de
+JavaScript, que es una cota por debajo de la real: sirve para ver una fuga, no
+para certificar los 250 MB.
+
+**Durante las 12 h**, simula un día normal sin forzar nada: fichajes con
+tarjeta cada cierto tiempo (al menos uno por hora, y una tanda de 20-30 seguidos
+en algún momento, como un cambio de turno), un par de fichajes por PIN, la red
+cortada unos minutos una vez (el quiosco encola y sincroniza al volver) y la
+pantalla apagada y encendida una vez (la cámara se suelta y se recupera). Deja
+la tablet sin tocar al menos 4 h seguidas: es ahí donde aparecen las fugas.
+
+**Resultado:** el guion termina con `[soak] PASA` (código 0) o `[soak] NO
+PASA` y la lista de criterios incumplidos (código 1); el código 2 es que no
+pudo conectar con la tablet. Guarda el `.jsonl` y el `.verdict.json` junto con
+el modelo, la versión de Android y la de Chrome de la tablet, y adjúntalos a la
+verificación de la versión. **Un `NO PASA` no se repite hasta que se sepa por
+qué**: con el `.jsonl` se ve a qué hora empezó a crecer la memoria o se congeló
+la cámara, y eso va al fabricante como defecto del quiosco, no como fallo del
+aparato, hasta que se demuestre lo contrario.
+
 ---
 
 ## 5. Sustituir un quiosco averiado
@@ -426,6 +495,23 @@ Hay **un quiosco activo** con ese nombre. Dos salidas, según lo que esté pasan
 - **Es un puesto nuevo de verdad**: elige otro nombre. `Recepción` y `Recepción
   noche` son quioscos distintos; `Recepción` y `Recepcion` también, y eso último
   es fuente segura de confusión — sé consistente con los acentos.
+
+### …la tablet muestra un código nuevo justo después de confirmar el anterior
+
+Se perdió la respuesta con el token: el servidor ya dio la solicitud por recogida
+(el código vale una sola vez) y la tablet nunca llegó a recibirla. **Desde la
+2.3.0 esto es raro**: entre los 10 y los 60 segundos siguientes a esa primera
+recogida, la tablet puede repetirla desde la misma red y recibe otro token para el
+mismo quiosco —si no llegó a usar el primero—, que deja constancia en la auditoría (`device.pairing_reclaimed`).
+Si llegas aquí es porque la tablet no repitió a tiempo o cambió de red. El quiosco
+**ya existe y está activo**, sin tablet; si confirmas el código nuevo con el mismo
+nombre, el panel dirá «ese nombre ya está en uso».
+
+1. En el panel: **Quioscos** › el quiosco con ese nombre, que no ha latido nunca ›
+   **Desvincular** (§5.2). El nombre queda libre al instante.
+2. En la tablet, confirma el código nuevo con el mismo nombre (§3.2).
+
+No se pierde ningún fichaje: la tablet no había llegado a fichar.
 
 ### …la tablet vuelve sola a la pantalla de emparejamiento
 

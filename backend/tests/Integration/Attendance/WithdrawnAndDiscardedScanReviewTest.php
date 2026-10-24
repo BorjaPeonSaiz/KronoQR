@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -244,6 +246,9 @@ it('abre una sola discarded_scan por persona y jornada con los avisos atribuidos
             'problem' => 'invalid-request',
             'attribution' => 'employee_code',
             'reports' => 1,
+            // ADR-061 (2.3.0): de donde vino. Un aviso del quiosco no lleva
+            // `attempts`: no hubo intentos del servidor que contar.
+            'source' => 'kiosk',
         ]);
 })->group('RN-22', 'RF-PR-01');
 
@@ -342,3 +347,130 @@ it('no abre scan_before_revocation con un escaneo mas antiguo que la ventana de 
     expect(DB::table('scan_events')->where('flagged_for_review', true)->count())->toBe(1)
         ->and(incidenciasDe('scan_before_revocation'))->toBe([]);
 })->group('RN-20', 'RF-PR-01');
+
+it('abre una sola discarded_scan con source server y los intentos para el descarte del servidor', function (): void {
+    // ADR-061 §6: el descarte del servidor deja su fila en `scan_events`
+    // (`discarded_unprocessable`) Y en `discarded_scan_reports`. La revision
+    // tiene que abrir la incidencia igual: esa fila de `scan_events` dice que el
+    // fichaje NO se registro.
+    $escenario = escenarioDeRevision();
+    $titularId = AttendanceFixtures::employeeIdOf($escenario['employee']);
+    $scanId = Str::uuid7()->toString();
+
+    DB::table('scan_events')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $escenario['device'],
+        'employee_id' => $titularId,
+        'occurred_at' => '2026-08-15 09:50:00+00',
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'origin' => 'pin_kiosk',
+        'intent' => 'auto',
+        'result' => 'discarded_unprocessable',
+    ]);
+    DB::table('discarded_scan_reports')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $escenario['device'],
+        'origin' => 'pin_kiosk',
+        'occurred_at' => '2026-08-15 09:50:00+00',
+        'discarded_at' => '2026-08-15 10:00:00+00',
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'http_status' => 422,
+        'problem_type' => 'urn:kronoqr:problem:scan-discarded',
+        'owner_employee_id' => $titularId,
+        'attribution' => 'employee_code',
+        'credential_issued_at' => null,
+        'already_recorded' => false,
+        'source' => 'server',
+        'failed_attempts' => 11,
+        'first_failed_at' => '2026-08-15 08:55:00+00',
+    ]);
+
+    revisionDiaria();
+    revisionDiaria();
+
+    $incidencias = incidenciasDe('discarded_scan');
+
+    expect($incidencias)->toHaveCount(1)
+        ->and($incidencias[0]->employee_id)->toBe($titularId)
+        ->and(contextoDe($incidencias[0]))->toMatchArray([
+            'scan_id' => $scanId,
+            'http_status' => 422,
+            'problem' => 'scan-discarded',
+            'source' => 'server',
+            'attempts' => 11,
+        ]);
+})->group('RN-22', 'RF-PR-01');
+
+/**
+ * Un descarte del servidor sin atribuir de ese quiosco, recibido a las 10:00.
+ */
+function descarteSinAtribuir(int $deviceId, string $occurredAt): string
+{
+    $scanId = Str::uuid7()->toString();
+
+    DB::table('scan_events')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $deviceId,
+        'occurred_at' => $occurredAt,
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'origin' => 'qr_kiosk',
+        'intent' => 'auto',
+        'result' => 'discarded_unprocessable',
+    ]);
+    DB::table('discarded_scan_reports')->insert([
+        'scan_id' => $scanId,
+        'device_id' => $deviceId,
+        'origin' => 'qr_kiosk',
+        'occurred_at' => $occurredAt,
+        'discarded_at' => '2026-08-15 10:00:00+00',
+        'recorded_at' => '2026-08-15 10:00:00+00',
+        'http_status' => 422,
+        'problem_type' => 'urn:kronoqr:problem:scan-discarded',
+        'owner_employee_id' => null,
+        'attribution' => 'none',
+        'credential_issued_at' => null,
+        'already_recorded' => false,
+        'source' => 'server',
+        'failed_attempts' => 10,
+        'first_failed_at' => '2026-08-15 08:55:00+00',
+    ]);
+
+    return $scanId;
+}
+
+it('abre una discarded_scan sin persona por quiosco y jornada para el administrador', function (): void {
+    // ADR-061 A2: ni la firma ni la huella atribuyen. La incidencia va por el
+    // quiosco, al administrador, con el quiosco y la hora en el `context`.
+    $escenario = escenarioDeRevision();
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $otro = AttendanceFixtures::device($escenario['site'], 'Spa');
+
+    $primero = descarteSinAtribuir($escenario['device'], '2026-08-15 07:00:00+00');
+    descarteSinAtribuir($escenario['device'], '2026-08-15 09:00:00+00');
+    descarteSinAtribuir($otro['id'], '2026-08-15 08:00:00+00');
+
+    revisionDiaria();
+    revisionDiaria();
+
+    /** @var list<object{employee_id: int|null, device_id: int|null, assigned_to_user_id: int|null, work_date: string, context: string}> $incidencias */
+    $incidencias = DB::table('incidents')->where('type', 'discarded_scan')->orderBy('device_id')->get()->all();
+
+    expect($incidencias)->toHaveCount(2)
+        ->and(array_map(static fn (object $i): ?int => $i->employee_id, $incidencias))->toBe([null, null])
+        ->and(array_map(static fn (object $i): ?int => $i->device_id, $incidencias))->toEqualCanonicalizing([$escenario['device'], $otro['id']])
+        ->and(array_map(static fn (object $i): ?int => $i->assigned_to_user_id, $incidencias))->toBe([$admin->id, $admin->id]);
+
+    $delPrimerQuiosco = collect($incidencias)->firstWhere('device_id', $escenario['device']);
+
+    expect($delPrimerQuiosco)->not->toBeNull();
+    /** @var object{context: string} $delPrimerQuiosco */
+    expect(contextoDe($delPrimerQuiosco))->toMatchArray([
+        'scan_id' => $primero,
+        'device_uuid' => $escenario['deviceUuid'],
+        'occurred_at' => '2026-08-15T07:00:00.000000Z',
+        'attribution' => 'none',
+        'source' => 'server',
+        'reports' => 2,
+        'attempts' => 10,
+    ]);
+})->group('RN-22', 'RF-PR-01');

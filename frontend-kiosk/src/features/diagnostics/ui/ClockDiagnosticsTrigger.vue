@@ -26,7 +26,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
-import { readSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
+import { readSiteTimeZone } from '@/shared/device/deviceSettings'
 import { useLongPress } from '../composables/useLongPress'
 
 const { t, locale } = useI18n()

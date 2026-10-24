@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // ADR-047 sobre IndexedDB: REABRIR antes de degradar, y degradado no es «cola 0»
 // (RF-KI-03, RF-KI-04, RF-KI-08).
 //
@@ -122,6 +123,13 @@ describe('ADR-047 — un fallo puntual de IndexedDB se arregla reabriendo, sin d
               throw new Error('InvalidStateError')
             }
             return real.list(limit)
+          },
+          listMeta: async (limit) => {
+            if (!broke) {
+              broke = true
+              throw new Error('InvalidStateError')
+            }
+            return (await real.listMeta?.(limit)) ?? []
           },
         }
       },

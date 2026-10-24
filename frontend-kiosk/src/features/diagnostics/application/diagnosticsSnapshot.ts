@@ -12,8 +12,8 @@
 
 import type { CameraState } from '@/features/scan/composables/useCamera'
 import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
-import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
-import type { UrgentGiveUpMotive, UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
+import type { UpdateWindow } from '@/shared/update/updateWindow'
+import type { UrgentGiveUpMotive, UrgentUpdateMode } from '@/shared/update/minimumVersion'
 
 /**
  * Umbral del paso 4 de la tarea (doc 02, decision de la 3.3): por debajo de

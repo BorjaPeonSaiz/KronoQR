@@ -37,6 +37,11 @@ use InvalidArgumentException;
  * la persona es un UUID— y en la prueba de la deteccion, que afirma clave por
  * clave lo que lleva cada tipo de hallazgo. Sigue siendo **escalar**: ni objetos
  * ni listas, de modo que no hay donde alojar una estructura con un nombre dentro.
+ *
+ * **Sin persona, solo un descarte del servidor** (2.3.0, ADR-061 A2): un
+ * `discarded_scan` que no se pudo atribuir ni por la firma ni por la huella se
+ * entrega **por su quiosco** (`deviceUuid`), una por quiosco y jornada. Es el
+ * unico hallazgo que puede no tener persona; cualquier otro la exige.
  */
 final readonly class DetectedAnomaly
 {
@@ -46,17 +51,32 @@ final readonly class DetectedAnomaly
      */
     public function __construct(
         public AnomalyType $type,
-        public string $employeeUuid,
+        /** Nulo solo en el `discarded_scan` sin atribuir, que va por su quiosco. */
+        public ?string $employeeUuid,
         public int $siteId,
         public WorkDate $workDate,
         public ?string $shiftEntryUuid,
         public DateTimeImmutable $detectedAt,
         public array $context = [],
+        /** `devices.uuid` del quiosco de un `discarded_scan` sin persona; nulo en todo lo demas. */
+        public ?string $deviceUuid = null,
     ) {
         TimeRange::assertUtc('detectedAt', $detectedAt);
 
+        if ($employeeUuid === null) {
+            if ($type !== AnomalyType::DISCARDED_SCAN || $deviceUuid === null || trim($deviceUuid) === '') {
+                throw new InvalidArgumentException('Solo un descarte del servidor sin atribuir va sin persona, y entonces por su quiosco.');
+            }
+
+            return;
+        }
+
         if (trim($employeeUuid) === '') {
             throw new InvalidArgumentException('Un hallazgo sin empleado no se puede asignar a nadie.');
+        }
+
+        if ($deviceUuid !== null) {
+            throw new InvalidArgumentException('Un hallazgo con persona no va por su quiosco.');
         }
     }
 }

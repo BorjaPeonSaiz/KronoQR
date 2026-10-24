@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Marca blanca del quiosco (RF-PD-08, tarea 5.8): nunca espera a la red
 // (regla dura 19), aplica lo cacheado antes que nada y se guarda solo cuando
 // el servidor contesta algo valido.

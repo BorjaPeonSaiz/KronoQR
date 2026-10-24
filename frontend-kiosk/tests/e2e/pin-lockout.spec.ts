@@ -66,7 +66,7 @@ import {
   stubKioskApiWithPin,
   stubPinScanApi,
 } from './support/pin'
-import { expectTouchTargets } from './support/touchTargets'
+import { expectTouchTargets, TABLET_VIEWPORTS } from './support/touchTargets'
 
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const PIN = '483920'
@@ -145,18 +145,25 @@ test(
   },
 )
 
-test(
-  'los objetivos tactiles de la pantalla de rechazo del PIN miden al menos 48 px',
-  { tag: ['@RF-KI-06'] },
-  async ({ page }) => {
-    await stubKioskApiWithPin(page)
-    await stubPinScanApi(page, 'rejected')
+// KI7-03: en las tres orientaciones, no solo en la apaisada de la configuracion.
+for (const { name, viewport } of TABLET_VIEWPORTS) {
+  test.describe(`rechazo del PIN en ${name}`, () => {
+    test.use({ viewport })
 
-    await consecutiveRejections(page, 1, EMPLOYEE_CODE, PIN)
+    test(
+      'los objetivos tactiles de la pantalla de rechazo del PIN miden al menos 48 px',
+      { tag: ['@RF-KI-06'] },
+      async ({ page }) => {
+        await stubKioskApiWithPin(page)
+        await stubPinScanApi(page, 'rejected')
 
-    await expectTouchTargets(page.locator('button:visible, a[href]:visible'))
-  },
-)
+        await consecutiveRejections(page, 1, EMPLOYEE_CODE, PIN)
+
+        await expectTouchTargets(page.locator('button:visible, a[href]:visible'))
+      },
+    )
+  })
+}
 
 test(
   'la pantalla de rechazo del PIN, con varios fallos acumulados, no tiene violaciones criticas ni graves',

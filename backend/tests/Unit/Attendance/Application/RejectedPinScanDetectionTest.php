@@ -181,6 +181,11 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
             {
                 return [];
             }
+
+            public function unattributedServerDiscardsBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
+            {
+                return [];
+            }
         },
         sites: new class implements InstallationSiteProvider
         {
@@ -309,7 +314,7 @@ it('abre una por persona', function (): void {
         rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_BEA, '2026-03-14 07:00:05'),
     ]));
 
-    expect(array_map(static fn (DetectedAnomaly $a): string => $a->employeeUuid, $run['anomalies']))
+    expect(array_map(static fn (DetectedAnomaly $a): ?string => $a->employeeUuid, $run['anomalies']))
         ->toBe([REJECTED_PIN_DETECTION_ANA, REJECTED_PIN_DETECTION_BEA]);
 })->group('RN-19');
 

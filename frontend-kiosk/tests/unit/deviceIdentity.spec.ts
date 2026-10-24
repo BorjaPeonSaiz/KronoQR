@@ -1,27 +1,27 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  DEFAULT_UPDATE_QUIET_MINUTES,
-  DEFAULT_UPDATE_WINDOW,
-} from '@/features/offline/domain/updateWindow'
+import { DEFAULT_UPDATE_QUIET_MINUTES, DEFAULT_UPDATE_WINDOW } from '@/shared/update/updateWindow'
 import {
   persistPairedDevice,
-  readBreakClockingEnabled,
-  readClockSkewToleranceSeconds,
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
+  resolveDeviceId,
+} from '@/shared/device/deviceIdentity'
+import {
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
   readLastScanAt,
   readServiceCodeHash,
   readUpdateQuietMinutes,
   readUpdateWindow,
-  resolveDeviceId,
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,
   storeLastScanAt,
   storeServiceCodeHash,
   storeUpdateQuietMinutes,
   storeUpdateWindow,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 
 const KEYS = [
   'kronoqr.kiosk.device_token',

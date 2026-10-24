@@ -129,7 +129,22 @@ interface ScanMetrics
      * alguien. Se cuenta al insertar, no al reenviar: un quiosco que repite su
      * lista no infla la serie. Sin `scan_id` ni empleado: un quiosco que
      * descarta cuando los demas no, es la firma de una PWA desfasada —o de un
-     * token robado sembrando avisos—.
+     * token robado sembrando avisos—. Lleva `source="kiosk"` desde la 2.3.0.
      */
     public function discardedScanReported(string $deviceUuid, bool $attributed): void;
+
+    /**
+     * La misma serie con `source="server"` (RN-22, ADR-061): un fichaje que el
+     * **servidor** descarto tras fallarlo durante el umbral. Cada uno es un
+     * defecto del producto que hay que reproducir (`ScanDiscardedByServer`).
+     */
+    public function serverDiscardedScan(string $deviceUuid, bool $attributed): void;
+
+    /**
+     * `kiosk_scan_discard_budget_exhausted_total{device}` (ADR-061 §3): se
+     * habria descartado, pero el quiosco ya agoto su cupo de descartes del
+     * servidor en 24 h. La cola vuelve a atascarse a proposito; es la senal de
+     * la alerta critica `ScanDiscardBudgetExhausted`.
+     */
+    public function scanDiscardBudgetExhausted(string $deviceUuid): void;
 }

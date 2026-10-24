@@ -13,6 +13,7 @@ import { expect, test } from '@playwright/test'
 import { expectNoBlockingViolations } from './support/axe'
 import { stubBrandingApi } from './support/kiosk'
 import { DEVICE_UUID, stubPairing, TOKEN_VALUE } from './support/pairing'
+import { expectTouchTargets, TABLET_VIEWPORTS } from './support/touchTargets'
 
 test.beforeEach(async ({ page }) => {
   await stubPairing(page)
@@ -112,3 +113,26 @@ test(
     await expect(page.getByTestId('brand-name')).toHaveText('KronoQR')
   },
 )
+
+// KI7-01: los controles del emparejamiento (codigo nuevo, idioma, reloj del
+// diagnostico) median 48 px a mano y ninguna prueba lo vigilaba. Se comprueban en
+// las tres orientaciones, con el sondeo en «pendiente» para que la pantalla no
+// se vaya a la de fichaje a mitad de medicion.
+for (const { name, viewport } of TABLET_VIEWPORTS) {
+  test.describe(`emparejamiento en ${name}`, () => {
+    test.use({ viewport })
+
+    test(
+      'los objetivos tactiles del emparejamiento miden al menos 48 px',
+      { tag: ['@RF-PD-06', '@RF-KI-06'] },
+      async ({ page }) => {
+        await page.unrouteAll({ behavior: 'ignoreErrors' })
+        await stubPairing(page, { pendingPolls: Number.MAX_SAFE_INTEGER })
+        await page.goto('/')
+        await expect(page.getByTestId('pairing-code')).toBeVisible()
+
+        await expectTouchTargets(page.locator('button:visible, a[href]:visible'))
+      },
+    )
+  })
+}

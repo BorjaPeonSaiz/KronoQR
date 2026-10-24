@@ -12,7 +12,7 @@ import {
   parseMinimumVersionFromHeartbeatData,
   urgentUpdateState,
   versionCore,
-} from '@/features/offline/domain/minimumVersion'
+} from '@/shared/update/minimumVersion'
 
 describe('nucleo X.Y.Z (RF-KI-07)', () => {
   it('extrae el nucleo e ignora el sufijo', () => {

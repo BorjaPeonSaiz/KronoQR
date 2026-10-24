@@ -18,7 +18,7 @@ tiene token ni padron que proteger.
 ## Codigo de servicio, sin red
 
 `application/serviceCodeGate.ts` compara `sha256Hex("{device_id}:{codigo}")`
-contra la huella cacheada en `localStorage` (`shared/telemetry/deviceIdentity.ts`
+contra la huella cacheada en `localStorage` (`shared/device/deviceSettings.ts`
 -> `readServiceCodeHash`), que el planificador del latido
 (`shared/telemetry/heartbeat.ts`) guarda de cada `200` de
 `POST /kiosk/heartbeat` (`KioskHeartbeat.service_code_hash`). Sin huella
@@ -42,5 +42,5 @@ pantalla (regla dura 19).
 Junto a la version, la seccion `version` enseña si hay una actualizacion pendiente -y en que
 ventana se aplicara- o «al dia», y la ventana de actualizacion vigente. `isUpdatePending()`
 (`src/sw/registerServiceWorker.ts`, singleton de modulo, mismo patron que
-`getLastHeartbeatResult`) y `readUpdateWindow()` (`shared/telemetry/deviceIdentity.ts`,
+`getLastHeartbeatResult`) y `readUpdateWindow()` (`shared/device/deviceSettings.ts`,
 cacheada del ultimo latido) se leen UNA VEZ al abrir, como `serviceWorkerActive`.

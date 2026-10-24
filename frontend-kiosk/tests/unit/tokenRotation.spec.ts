@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Relevo del token del quiosco (RF-ID-04, ADR-044, doc 02 §7.3).
 //
 // El servidor entrega el relevo en el latido. Lo que se prueba aqui es la mitad
@@ -25,7 +26,7 @@ import {
   readDeviceTokenExpiresAt,
   readPreviousDeviceToken,
   storeRotatedDeviceToken,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceIdentity'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import {
@@ -35,7 +36,7 @@ import {
   parseRotatedToken,
   registerRosterKeyRotator,
   revertToPreviousToken,
-} from '@/shared/telemetry/tokenRotation'
+} from '@/shared/device/tokenRotation'
 import { fixedClock } from '@/shared/time/clock'
 
 const TOKEN_KEY = 'kronoqr.kiosk.device_token'

@@ -52,7 +52,8 @@ final readonly class Incident
         public IncidentType $type,
         public IncidentSeverity $severity,
         public IncidentStatus $status,
-        public string $employeeUuid,
+        /** Nulo solo en la `discarded_scan` sin persona (ADR-061 A2), que va por su quiosco. */
+        public ?string $employeeUuid,
         public int $siteId,
         public string $workDate,
         public ?string $shiftEntryUuid,
@@ -71,6 +72,8 @@ final readonly class Incident
         public ?DateTimeImmutable $resolvedAt = null,
         public ?int $resolvedByUserId = null,
         public ?string $resolutionNote = null,
+        /** `devices.uuid` de la `discarded_scan` sin persona; nulo en todo lo demas. */
+        public ?string $deviceUuid = null,
     ) {}
 
     /**
@@ -86,17 +89,16 @@ final readonly class Incident
      */
     public static function open(
         IncidentType $type,
-        string $employeeUuid,
+        ?string $employeeUuid,
         int $siteId,
         string $workDate,
         ?string $shiftEntryUuid,
         DateTimeImmutable $detectedAt,
         ?int $assignedToUserId = null,
         array $context = [],
+        ?string $deviceUuid = null,
     ): self {
-        if (trim($employeeUuid) === '') {
-            throw InvalidIncident::withoutEmployee();
-        }
+        self::guardSubject($type, $employeeUuid, $deviceUuid);
 
         if ($siteId < 1) {
             throw InvalidIncident::withoutSite($siteId);
@@ -123,6 +125,7 @@ final readonly class Incident
             detectedAt: $detectedAt,
             assignedToUserId: $assignedToUserId,
             context: $context,
+            deviceUuid: $deviceUuid,
         );
     }
 
@@ -153,6 +156,7 @@ final readonly class Incident
             resolvedAt: $this->resolvedAt,
             resolvedByUserId: $this->resolvedByUserId,
             resolutionNote: $this->resolutionNote,
+            deviceUuid: $this->deviceUuid,
         );
     }
 
@@ -175,7 +179,7 @@ final readonly class Incident
         IncidentType $type,
         IncidentSeverity $severity,
         IncidentStatus $status,
-        string $employeeUuid,
+        ?string $employeeUuid,
         int $siteId,
         string $workDate,
         ?string $shiftEntryUuid,
@@ -185,10 +189,9 @@ final readonly class Incident
         ?DateTimeImmutable $resolvedAt,
         ?int $resolvedByUserId,
         ?string $resolutionNote,
+        ?string $deviceUuid = null,
     ): self {
-        if (trim($employeeUuid) === '') {
-            throw InvalidIncident::withoutEmployee();
-        }
+        self::guardSubject($type, $employeeUuid, $deviceUuid);
 
         if ($siteId < 1) {
             throw InvalidIncident::withoutSite($siteId);
@@ -215,6 +218,7 @@ final readonly class Incident
             resolvedAt: $resolvedAt,
             resolvedByUserId: $resolvedByUserId,
             resolutionNote: $resolutionNote,
+            deviceUuid: $deviceUuid,
         );
     }
 
@@ -291,6 +295,7 @@ final readonly class Incident
             resolvedAt: $at,
             resolvedByUserId: $userId,
             resolutionNote: $trimmed,
+            deviceUuid: $this->deviceUuid,
         );
     }
 
@@ -342,6 +347,26 @@ final readonly class Incident
     {
         if ($detectedAt->getOffset() !== 0) {
             throw InvalidIncident::withNonUtcDetectionInstant($detectedAt->format(DATE_ATOM));
+        }
+    }
+
+    /**
+     * **De quien es la incidencia**: de una persona, o —solo una `discarded_scan`
+     * de un descarte del servidor sin atribuir (ADR-061 A2)— de un quiosco. Nunca
+     * de los dos ni de ninguno: lo mismo que afirma `incidents_chk_subject`.
+     */
+    private static function guardSubject(IncidentType $type, ?string $employeeUuid, ?string $deviceUuid): void
+    {
+        if ($employeeUuid === null) {
+            if ($type !== IncidentType::DiscardedScan || $deviceUuid === null || trim($deviceUuid) === '') {
+                throw InvalidIncident::withoutEmployee();
+            }
+
+            return;
+        }
+
+        if (trim($employeeUuid) === '' || $deviceUuid !== null) {
+            throw InvalidIncident::withoutEmployee();
         }
     }
 }

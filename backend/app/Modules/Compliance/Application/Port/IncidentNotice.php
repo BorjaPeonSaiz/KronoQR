@@ -25,10 +25,10 @@ final readonly class IncidentNotice
         public int $incidentId,
         public IncidentType $type,
         public IncidentSeverity $severity,
-        /** Identificador publico del empleado: es el que la bandeja usa en su URL. */
-        public string $employeeUuid,
+        /** Identificador publico del empleado: es el que la bandeja usa en su URL. Nulo, como el nombre, en la `discarded_scan` sin persona (ADR-061 A2). */
+        public ?string $employeeUuid,
         /** Nombre completo, solo para el correo al responsable autorizado. */
-        public string $employeeName,
+        public ?string $employeeName,
         /** Jornada afectada, en `Y-m-d`. */
         public string $workDate,
     ) {}

@@ -555,6 +555,15 @@ parameters:
       - Eloquent
       - ExternalCode
       - AttendancePersistence
+      # ADR-061 §2 (2.3.0, tarea 17.9). `ScanFailureTransience` decide que fallo
+      # de un fichaje cuenta para descartarlo, y la dependencia caida es la de
+      # ADR-059 §1: `App\Support\Resilience\DependencyFailure`, el mismo
+      # predicado que pone el `503 service-unavailable` de toda la instalacion.
+      # ADR-061 exige reutilizarlo y no copiarlo —si ADR-059 aprende un SQLSTATE,
+      # este adaptador tambien—, y vive en el armazon porque lo usan el manejador
+      # de excepciones y el middleware. Misma direccion que ya usan `ProductHttp`
+      # y `ProductInfrastructure`: un modulo que alcanza el armazon, nunca al reves.
+      - AppFramework
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca

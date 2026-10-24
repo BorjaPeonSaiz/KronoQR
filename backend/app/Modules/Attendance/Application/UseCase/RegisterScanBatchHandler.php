@@ -66,6 +66,16 @@ use Throwable;
  * era. El coste —los fichajes de otros esperan al siguiente reintento— esta
  * aceptado en ADR-047: se retrasan, no se pierden.
  *
+ * ## Hasta un umbral (RN-22, ADR-061)
+ *
+ * `ScanRegistration` es {@see GuardedScanRegistration}: cada elemento pasa por
+ * {@see UnprocessableScanGuard}, que cuenta los fallos de cada fichaje y,
+ * cumplido el umbral, lo **descarta** con incidencia en lugar de relanzar. Un
+ * descarte vuelve como resultado —`422 scan-discarded`—, es un desenlace como
+ * cualquier rechazo y **no detiene el lote**: lo que viene detras se procesa.
+ * Lo que el guardian relanza —dentro del umbral, con el cupo agotado o una
+ * dependencia caida— llega a este `catch` como antes y sale no procesado.
+ *
  * **El fallo no se silencia**: sube a `error` con `scan_id` y `device_id` —jamas
  * el nombre de nadie (regla dura 21)— porque un lote con elementos no procesados
  * de forma repetida es una averia, no una incidencia de negocio.

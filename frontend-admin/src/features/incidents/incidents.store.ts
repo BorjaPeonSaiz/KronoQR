@@ -152,9 +152,10 @@ export const useIncidentsStore = defineStore('incidents', () => {
    * cuando de verdad hay un conflicto que explicar.
    */
   async function lookupConflict(row: Incident): Promise<Incident | null> {
+    // Sin persona (`employee` nulo) no hay ficha donde buscar: se relee la bandeja sin filtro de persona.
     for (const status of ['resolved', 'dismissed'] as const) {
       const page = await listIncidents({
-        employeeUuid: row.employee.uuid,
+        ...(row.employee === null ? {} : { employeeUuid: row.employee.uuid }),
         status,
         perPage: 100,
       })

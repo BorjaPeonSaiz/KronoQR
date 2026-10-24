@@ -25,7 +25,7 @@ resuelve el nombre en el padron cacheado, **resuelve la intencion armada** (`res
 `useScanSession` la pinta y hace sonar el tono → el envio al servidor sale despues, en
 segundo plano.
 
-`handleDecoded` no tiene ni un `await`: eso es lo que garantiza los 300 ms de RNF-P-03 por
+`handleDecoded` no tiene ni un `await`: eso es lo que garantiza los 300 ms del doc 02 §6 (la parte del quiosco de RNF-P-01) por
 construccion y no por suerte. El empleado nunca espera a la red.
 
 ## Fichaje de pausa (tarea 3.5, ADR-024)

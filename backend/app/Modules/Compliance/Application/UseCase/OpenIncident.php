@@ -80,12 +80,16 @@ final readonly class OpenIncident
             workDate: $command->workDate,
             shiftEntryUuid: $command->shiftEntryUuid,
             detectedAt: $command->detectedAt,
-            // El responsable del departamento (doc 01 §5.5). Si no lo hay, la
-            // incidencia se abre igual y queda sin asignar: perder un hallazgo
-            // por un hueco de configuracion seria lo contrario de lo que la
-            // deteccion existe para hacer.
-            assignedToUserId: $this->assignment->responsibleFor($command->employeeUuid),
+            // El responsable del departamento (doc 01 §5.5) y, sin persona, el
+            // administrador (ADR-061 A2). Si no lo hay, la incidencia se abre
+            // igual y queda sin asignar: perder un hallazgo por un hueco de
+            // configuracion seria lo contrario de lo que la deteccion existe
+            // para hacer.
+            assignedToUserId: $command->employeeUuid === null
+                ? $this->assignment->administrator()
+                : $this->assignment->responsibleFor($command->employeeUuid),
             context: $command->context,
+            deviceUuid: $command->deviceUuid,
         );
 
         return $this->connection->transaction(function () use ($incident): ?int {
@@ -104,6 +108,8 @@ final readonly class OpenIncident
                     // (regla dura 21): el trail viaja entero en la exportacion
                     // legal y su payload se revisa entero.
                     'employee_uuid' => $incident->employeeUuid,
+                    // Solo en la `discarded_scan` sin persona: su quiosco.
+                    'device_uuid' => $incident->deviceUuid,
                     'shift_entry_uuid' => $incident->shiftEntryUuid,
                     'site_id' => $incident->siteId,
                     'work_date' => $incident->workDate,

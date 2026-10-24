@@ -230,3 +230,50 @@ it('deja un solo quiosco aunque dos personas confirmen a la vez con el MISMO nom
     // adivinanza.
     expect(DB::table('devices')->count())->toBe(1);
 })->group('RF-PD-06', 'RQ-03');
+
+it('entrega un solo token nuevo aunque la tablet repita la recogida dos veces a la vez', function (): void {
+    // V6-KI-02: la respuesta de la primera recogida se perdio y la tablet repite
+    // —dos veces a la vez, por una red intermitente— dentro de la ventana. Una
+    // gana el `UPDATE ... WHERE reclaims = 0` y emite; la otra recibe el rechazo
+    // generico. Al final: un dispositivo y UN token vivo, el de la ganadora.
+    WorkforceFixtures::site();
+    FrozenTime::at('2026-09-07 10:00:00');
+
+    /** @var array{pairing_id: string, pairing_secret: string, code: string} $ticket */
+    $ticket = Api::guest()->fromIp('192.0.2.10')->post('/api/v1/kiosk/pair', ['app_version' => '2.3.0'])->json();
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->post('/api/v1/kiosk/pair/confirm', ['code' => $ticket['code'], 'name' => 'Recepcion'])
+        ->assertOk();
+
+    Api::guest()->fromIp('192.0.2.10')->post('/api/v1/kiosk/pair/claim', [
+        'pairing_id' => $ticket['pairing_id'],
+        'pairing_secret' => $ticket['pairing_secret'],
+    ])->assertOk();
+
+    FrozenTime::at('2026-09-07 10:00:15');
+
+    $respuestas = ParallelRequests::run(
+        2,
+        static fn (): mixed => Api::guest()->fromIp('192.0.2.10')->post('/api/v1/kiosk/pair/claim', [
+            'pairing_id' => $ticket['pairing_id'],
+            'pairing_secret' => $ticket['pairing_secret'],
+        ]),
+    );
+
+    $codigos = array_map(static fn (array $r): int => $r['status'], $respuestas);
+    sort($codigos);
+
+    $ganadora = array_values(array_filter($respuestas, static fn (array $r): bool => $r['status'] === 200));
+
+    /** @var array{token: array{value: string}} $cuerpo */
+    $cuerpo = $ganadora[0]['body'];
+    [$id] = explode('|', $cuerpo['token']['value'], 2);
+
+    expect($codigos)->toBe([200, 422])
+        ->and(DB::table('devices')->count())->toBe(1)
+        ->and(DB::table('device_pairing_requests')->value('reclaims'))->toBe(1)
+        // Un solo token vivo para la tablet, y es el que recibio la ganadora.
+        ->and(DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->pluck('id')->all())->toBe([(int) $id])
+        ->and(DB::table('audit_log')->where('action', 'device.pairing_reclaimed')->count())->toBe(1);
+})->group('RF-PD-06', 'RQ-03');

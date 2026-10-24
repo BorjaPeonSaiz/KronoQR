@@ -27,7 +27,7 @@ import { parseCredentialPayload } from '@/features/scan/domain/credentialPayload
 import type { ApiClient } from '@/shared/api/client'
 import type { KioskRosterEntry } from '@/shared/api/types'
 import { sha256Hex } from '@/shared/crypto/sha256'
-import type { RosterKeyRotator, RosterRotationResult } from '@/shared/telemetry/tokenRotation'
+import type { RosterKeyRotator, RosterRotationResult } from '@/shared/device/tokenRotation'
 import type { QueueStorage } from '../infrastructure/queueStorage'
 import type { RosterCryptoDeps } from '../infrastructure/rosterCipher'
 import { openRoster, sealRoster } from '../infrastructure/rosterCipher'

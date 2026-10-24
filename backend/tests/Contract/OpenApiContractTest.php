@@ -1013,12 +1013,20 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
     // Doc 02 §5.2, punto 6: todos los rechazos devuelven la misma respuesta.
     // Prefijo que no es FH1, clave desconocida, firma que no valida, credencial
     // revocada, empleado de baja: una sola forma para las cinco.
+    // El 422 admite ademas el descarte del servidor (ADR-061), que no es un rechazo:
+    // solo llega a un fichaje ya reintentado y su cuerpo es fijo; el rechazo sigue
+    // teniendo una unica forma, `ScanRejected`.
     expect(Contract::keys('paths', '/api/v1/scan', 'post', 'responses'))
         ->toBe(['200', '400', '401', '403', '415', '422', '429', '503'])
         ->and(Contract::value(
             'paths', '/api/v1/scan', 'post', 'responses', '422',
             'content', 'application/problem+json', 'schema',
-        ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
+        ))->toBe([
+            'oneOf' => [
+                ['$ref' => '#/components/schemas/ScanRejected'],
+                ['$ref' => '#/components/schemas/ScanDiscarded'],
+            ],
+        ]);
 })->group('RS-03', 'RF-QR-02');
 
 it('describe como respuesta global el 503 de una dependencia caida, con Retry-After y reenvio idempotente (R3-CH-02, ADR-059)', function (): void {
@@ -1125,11 +1133,16 @@ it('expresa el anti-rebote como desenlace aceptado y no como rechazo', function 
         ->and(Contract::value(...[...$schema, 'discriminator', 'mapping', 'debounced']))
         ->toBe('#/components/schemas/ScanDebounced');
 
-    // Y NO aparece entre los rechazos: el 422 sigue teniendo una sola forma.
+    // Y NO aparece entre los rechazos: el 422 solo tiene el rechazo y el descarte del servidor (ADR-061).
     expect(Contract::value(
         'paths', '/api/v1/scan', 'post', 'responses', '422',
         'content', 'application/problem+json', 'schema',
-    ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
+    ))->toBe([
+        'oneOf' => [
+            ['$ref' => '#/components/schemas/ScanRejected'],
+            ['$ref' => '#/components/schemas/ScanDiscarded'],
+        ],
+    ]);
 })->group('RF-AT-06');
 
 it('no deja que el anti-rebote afirme un tramo que no se creo', function (): void {

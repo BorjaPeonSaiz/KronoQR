@@ -122,7 +122,9 @@ final class IncidentDigestNotification extends Notification
     {
         return Lang::get('incidents.mail.line', [
             'date' => $notice->workDate,
-            'employee' => $notice->employeeName,
+            // Sin persona (ADR-061 A2): el correo no dice de quien; la bandeja
+            // ensena el quiosco y la hora.
+            'employee' => $notice->employeeName ?? Lang::get('incidents.mail.no_employee', [], $locale),
             'type' => Lang::get('incidents.types.'.$notice->type->value, [], $locale),
             'severity' => Lang::get('incidents.severities.'.$notice->severity->value, [], $locale),
         ], $locale);

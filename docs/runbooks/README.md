@@ -74,7 +74,7 @@ paquete: es de la integración continua del fabricante.
 | Runbook | Alertas |
 | --- | --- |
 | [`quiosco-no-responde.md`](quiosco-no-responde.md) | `QuioscoSinLatido` |
-| [`cola-offline-atascada.md`](cola-offline-atascada.md) | `ColaOfflineAtascada` · `ColaOfflineSinVaciar` · `KioskQueueStorageDegraded` (§7) · `KioskUnreportedDiscards` (§8) · `ScanBatchItemNotProcessed` (§9) · `KioskDiscardedScansAttributed` (§10) |
+| [`cola-offline-atascada.md`](cola-offline-atascada.md) | `ColaOfflineAtascada` · `ColaOfflineSinVaciar` · `KioskQueueStorageDegraded` (§7) · `KioskUnreportedDiscards` (§8) · `ScanBatchItemNotProcessed` (§9) · `KioskDiscardedScansAttributed` (§10) · `ScanDiscardedByServer` (§11) · `ScanDiscardBudgetExhausted` (§11) |
 | [`restaurar-backup.md`](restaurar-backup.md) | `CopiaDeSeguridadFallida` · `CopiaDeSeguridadSinVerificar` · `CopiaDeSeguridadAusente` · `ArchivadoDeWalDetenido` · `ArchivadoDeWalFallando` · `MedicionDeWalAusente` · `ArchiveTimeoutFueraDeRango` · `DiscoDeCopiasCasiLleno` · `SimulacroDeRestauracionNuncaEjecutado` · `SimulacroDeRestauracionCaducado` |
 | [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | `SlotDeReplicacionParado` |
 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | `RoturaDeCadenaDeAuditoria` · `VerificacionDeAuditoriaAusente` · `ParticionDeAuditoriaAusente` · `ParticionDeAuditoriaDelProximoAnoSinPreparar` |

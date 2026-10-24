@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Enchufe de Vue sobre `application/breakIntent.ts`. La logica de armar,
 // desarmar por uso y desarmar por tiempo ya esta probada en
 // `breakIntent.spec.ts` sobre el controlador puro; aqui solo lo que anade

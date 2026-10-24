@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useWakeLock } from '@/features/scan/composables/useWakeLock'
 import { withSetup } from './support/withSetup'

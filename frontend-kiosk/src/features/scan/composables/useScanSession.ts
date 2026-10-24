@@ -1,6 +1,8 @@
 // Orquestacion de una sesion de escaneo: camara -> tuberia -> pantalla + sonido.
 //
-// Aqui es donde se mide y se cumple el presupuesto de los 300 ms (RNF-P-03).
+// Aqui es donde se mide y se cumple el presupuesto de los 300 ms del doc 02 §6:
+// la parte del quiosco de RNF-P-01 (de la lectura a la confirmacion en
+// pantalla), no la decodificacion de RNF-P-03 (KP2).
 // `handleDecoded` es sincrona y se pinta lo que devuelve en el mismo turno del
 // bucle de eventos. `lastLatencyMs` deja el numero medido a la vista del E2E y
 // de la pantalla de diagnostico, para que el presupuesto sea una comprobacion y
@@ -65,6 +67,12 @@ export interface ScanSession {
   present(confirmation: ScanConfirmation): void
   /** Aplica el desenlace real del servidor sobre la confirmacion en pantalla. */
   settle(confirmation: ScanConfirmation): void
+  /**
+   * El envio ha vuelto sin desenlace (fallo de red explicito, cola por delante):
+   * suena `pending` ya, sin esperar al plazo del servidor (V21-7-KI-1). No hace
+   * nada si ese escaneo ya sono, o si su espera se cerro antes.
+   */
+  markPending(scanId: string): void
   dismiss(): void
 }
 
@@ -198,6 +206,11 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
       show(next)
       if (next.kind === 'verifying') return
       playOnce(next.scanId, toneFor(next))
+    },
+
+    markPending(scanId) {
+      if (soundWait?.scanId !== scanId) return
+      playOnce(scanId, 'pending')
     },
 
     dismiss() {

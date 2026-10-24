@@ -16,7 +16,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import type { AppLocale } from '@/shared/i18n'
-import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES, storeLocale } from '@/shared/i18n'
+import { isSupportedLocale, SUPPORTED_LOCALES } from '@/shared/i18n'
 
 const props = defineProps<{ policy?: LocalePolicy }>()
 
@@ -33,28 +33,30 @@ function apply(next: AppLocale): void {
   if (typeof document !== 'undefined') document.documentElement.lang = next
 }
 
+// La eleccion es de QUIEN FICHA, no de la tablet (D9, V7-KI-05): no se guarda, y
+// `useLocaleResetAfterScan` devuelve el idioma de serie al terminar el fichaje.
 function select(next: AppLocale): void {
+  chosenByPerson = true
   apply(next)
-  storeLocale(next)
 }
 
-// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar.
-// Dos casos, ninguno guarda nada (no es una eleccion de nadie):
-//   - el idioma activo ya no se ofrece: se recalcula (con uno solo, ese);
-//   - la politica cambia y no hay eleccion guardada: se recalcula con el
-//     navegador, como en el arranque.
-// Una eleccion guardada que sigue ofrecida no se toca.
+// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar. El idioma se
+// recalcula si el ACTIVO deja de ofrecerse (con uno solo, ese) o si nadie ha elegido
+// nada todavia (primer arranque: sigue al navegador, RF-KI-05). Una politica nueva que
+// sigue ofreciendo el idioma que una PERSONA acaba de elegir no lo toca: lo pisaria a
+// media confirmacion. La vuelta al idioma de serie la hace `useLocaleResetAfterScan`.
+let chosenByPerson = false
+
 watch(
   options,
   (next, previous) => {
-    const current = isSupportedLocale(locale.value) && next.includes(locale.value)
-    const changed = previous !== undefined
-    if (current && !(changed && readStoredLocale() === null)) return
+    const stillOffered = isSupportedLocale(locale.value) && next.includes(locale.value)
+    if (stillOffered && (chosenByPerson || previous === undefined)) return
     apply(
       resolveUiLocale<AppLocale>({
         policy: effectivePolicy.value,
         shipped: SUPPORTED_LOCALES,
-        stored: readStoredLocale(),
+        stored: null,
         browser: typeof navigator === 'undefined' ? [] : navigator.languages,
       }),
     )

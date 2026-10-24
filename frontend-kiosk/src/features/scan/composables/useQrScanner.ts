@@ -54,6 +54,15 @@ const DELAY_BETWEEN_ATTEMPTS_MS = 100
 /** Tras acertar, ZXing espera esto antes de volver a intentarlo. */
 const DELAY_BETWEEN_SUCCESS_MS = 800
 
+/**
+ * Reintento tras un fallo de ARRANQUE del escaner (el trozo del decodificador no
+ * carga, o ZXing no arranca): 5, 15, 30 y despues cada 60 s, sin parar. Una tablet
+ * de pared no se oculta nunca, asi que sin esto `unavailable` duraba hasta
+ * recargarla y solo quedaba el PIN. El techo de 60 s es el perro guardian: ni un
+ * bucle apretado contra una red caida, ni un escaner que se rinde.
+ */
+export const SCANNER_RETRY_DELAYS_MS: readonly number[] = [5_000, 15_000, 30_000, 60_000]
+
 // DOS COSAS QUE SE EVALUARON Y SE DESCARTARON A PROPOSITO (tarea de revision
 // del visor, RF-KI-02):
 //
@@ -115,6 +124,8 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
   let lastAttemptAtMs = 0
   let restarting = false
   let disposed = false
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryAttempt = 0
 
   // Generacion de lanzamiento: `teardown()` la incrementa e invalida todo `launch()`
   // en vuelo. Tras cada `await`, un lanzamiento que ya no es el vigente suelta lo
@@ -123,7 +134,28 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
   let generation = 0
   let inflight: { readonly generation: number; readonly promise: Promise<void> } | null = null
 
+  function clearRetry(): void {
+    if (retryTimer === null) return
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
+
+  /** Programa el siguiente intento de arranque; lo cancela `teardown()`. */
+  function scheduleRetry(): void {
+    clearRetry()
+    const index = Math.min(retryAttempt, SCANNER_RETRY_DELAYS_MS.length - 1)
+    const delay = SCANNER_RETRY_DELAYS_MS[index] ?? 60_000
+    retryAttempt += 1
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      if (disposed) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      void start()
+    }, delay)
+  }
+
   function teardown(): void {
+    clearRetry()
     generation += 1
     if (watchdog !== null) {
       clearInterval(watchdog)
@@ -185,6 +217,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
         error_type: errorTypeOf(error),
         message: errorMessageOf(error),
       })
+      scheduleRetry()
       return
     }
 
@@ -217,6 +250,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       }
 
       controls = started
+      retryAttempt = 0
       state.value = 'scanning'
       startWatchdog()
     } catch (error) {
@@ -227,6 +261,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
         error_type: errorTypeOf(error),
         message: errorMessageOf(error),
       })
+      scheduleRetry()
     }
   }
 

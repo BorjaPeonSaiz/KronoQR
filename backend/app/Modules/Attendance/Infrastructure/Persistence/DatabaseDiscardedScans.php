@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\Policy\DiscardedScanReviewPolicy;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Attendance\Domain\ValueObject\UnattributedServerDiscard;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
@@ -27,6 +28,11 @@ use Illuminate\Database\ConnectionInterface;
  * las filas con dueño y sin registrar. Se une con `employees` para el UUID y la
  * fecha del alta, y con `devices` para el UUID del quiosco. Ni un nombre ni un
  * codigo de empleado salen de aqui (regla dura 21).
+ *
+ * **El descarte del servidor entra igual** (ADR-061): su fila de `scan_events`
+ * (`discarded_unprocessable`) dice que el fichaje NO se registro, asi que no
+ * cuenta como «ya esta en el registro». Lleva sus intentos (`failed_attempts`)
+ * para el `context` de la incidencia.
  */
 final readonly class DatabaseDiscardedScans implements DiscardedScans
 {
@@ -34,7 +40,7 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
 
     public function attributedBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
     {
-        /** @var list<object{scan_id: string, owner_uuid: string, owner_hired_on: string, device_uuid: string, origin: string, occurred_at: string, recorded_at: string, http_status: int|string, problem_type: string|null, attribution: string, credential_issued_at: string|null}> $rows */
+        /** @var list<object{scan_id: string, owner_uuid: string, owner_hired_on: string, device_uuid: string, origin: string, occurred_at: string, recorded_at: string, http_status: int|string, problem_type: string|null, attribution: string, credential_issued_at: string|null, failed_attempts: int|string|null}> $rows */
         $rows = $this->connection->select(
             <<<'SQL'
                 SELECT d.scan_id::text AS scan_id,
@@ -42,14 +48,17 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
                        e.hired_at::text AS owner_hired_on,
                        dv.uuid::text AS device_uuid,
                        d.origin, d.occurred_at, d.recorded_at, d.http_status, d.problem_type,
-                       d.attribution, d.credential_issued_at
+                       d.attribution, d.credential_issued_at, d.failed_attempts
                   FROM discarded_scan_reports d
                   JOIN employees e ON e.id = d.owner_employee_id
                   JOIN devices dv ON dv.id = d.device_id
                  WHERE d.owner_employee_id IS NOT NULL
                    AND NOT d.already_recorded
                    AND d.recorded_at BETWEEN ? AND ?
-                   AND NOT EXISTS (SELECT 1 FROM scan_events s WHERE s.scan_id = d.scan_id)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM scan_events s
+                        WHERE s.scan_id = d.scan_id AND s.result <> 'discarded_unprocessable'
+                   )
                  ORDER BY d.occurred_at, d.scan_id
             SQL,
             [$this->toTimestamp($fromRecordedAt), $this->toTimestamp($toRecordedAt)],
@@ -58,22 +67,64 @@ final readonly class DatabaseDiscardedScans implements DiscardedScans
         $scans = [];
 
         foreach ($rows as $row) {
-            $scans[] = new DiscardedScan(
-                scanId: $row->scan_id,
-                ownerUuid: $row->owner_uuid,
-                deviceUuid: $row->device_uuid,
-                origin: ScanOrigin::from($row->origin),
-                occurredAt: $this->toUtc($row->occurred_at),
-                recordedAt: $this->toUtc($row->recorded_at),
-                httpStatus: (int) $row->http_status,
-                problemType: $row->problem_type,
-                attribution: DiscardedScanAttributionMethod::from($row->attribution),
-                credentialIssuedAt: $row->credential_issued_at === null ? null : $this->toUtc($row->credential_issued_at),
-                ownerHiredOn: substr($row->owner_hired_on, 0, 10),
-            );
+            $origin = ScanOrigin::from($row->origin);
+            $occurredAt = $this->toUtc($row->occurred_at);
+            $recordedAt = $this->toUtc($row->recorded_at);
+            $attribution = DiscardedScanAttributionMethod::from($row->attribution);
+            $issuedAt = $row->credential_issued_at === null ? null : $this->toUtc($row->credential_issued_at);
+            $hiredOn = substr($row->owner_hired_on, 0, 10);
+
+            // `discarded_scan_reports_chk_source` garantiza que solo la fila del
+            // servidor lleva intentos.
+            $scans[] = $row->failed_attempts === null
+                ? DiscardedScan::reportedByKiosk(
+                    $row->scan_id, $row->owner_uuid, $row->device_uuid, $origin, $occurredAt, $recordedAt,
+                    (int) $row->http_status, $row->problem_type, $attribution, $issuedAt, $hiredOn,
+                )
+                : DiscardedScan::discardedByServer(
+                    $row->scan_id, $row->owner_uuid, $row->device_uuid, $origin, $occurredAt, $recordedAt,
+                    (int) $row->http_status, $row->problem_type, $attribution, $issuedAt, $hiredOn,
+                    (int) $row->failed_attempts,
+                );
         }
 
         return $scans;
+    }
+
+    public function unattributedServerDiscardsBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
+    {
+        // ADR-061 A2: solo el servidor descarta sin atribuir con incidencia. Sin
+        // indice propio: son, como mucho, el cupo por quiosco y dia, y la
+        // ventana por `recorded_at` la acota la revision.
+        /** @var list<object{scan_id: string, device_uuid: string, origin: string, occurred_at: string, recorded_at: string, failed_attempts: int|string}> $rows */
+        $rows = $this->connection->select(
+            <<<'SQL'
+                SELECT d.scan_id::text AS scan_id,
+                       dv.uuid::text AS device_uuid,
+                       d.origin, d.occurred_at, d.recorded_at, d.failed_attempts
+                  FROM discarded_scan_reports d
+                  JOIN devices dv ON dv.id = d.device_id
+                 WHERE d.source = 'server'
+                   AND d.attribution = 'none'
+                   AND NOT d.already_recorded
+                   AND d.recorded_at BETWEEN ? AND ?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM scan_events s
+                        WHERE s.scan_id = d.scan_id AND s.result <> 'discarded_unprocessable'
+                   )
+                 ORDER BY d.occurred_at, d.scan_id
+            SQL,
+            [$this->toTimestamp($fromRecordedAt), $this->toTimestamp($toRecordedAt)],
+        );
+
+        return array_map(fn (object $row): UnattributedServerDiscard => new UnattributedServerDiscard(
+            scanId: $row->scan_id,
+            deviceUuid: $row->device_uuid,
+            origin: ScanOrigin::from($row->origin),
+            occurredAt: $this->toUtc($row->occurred_at),
+            recordedAt: $this->toUtc($row->recorded_at),
+            attempts: (int) $row->failed_attempts,
+        ), $rows);
     }
 
     /** La misma conversion que {@see EloquentScanLog}: hacia arriba solo sale UTC (regla dura 3). */

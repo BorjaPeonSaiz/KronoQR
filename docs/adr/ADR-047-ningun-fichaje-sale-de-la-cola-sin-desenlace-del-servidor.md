@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` (Bloque 18 de la 2.2.0, hallazgos R3-QA-02, R3-BE-03, R4-SC-03, R3-KI-01, R3-QA-05, R2-KI-05 y R17-SC-R2) |
 | **Afecta a** | Precisa [ADR-008](ADR-008-offline-first-con-idempotencia-por-scan-id.md) (punto 3: el borrado tras confirmación explícita vale también para lo que el servidor declara inválido) · Complementa [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) (no lo cambia) · `RegisterScanBatchHandler`, `ScanBatchOutcome`, `CredentialResolution`, `HmacSignatureVerifier`, `RegisterScanHandler`, `DetectAttendanceAnomalies` · `syncRunner.ts`, `scanQueue.ts` · tabla nueva `discarded_scan_reports` · `POST /api/v1/scan/discarded` |
 | **Requisitos** | RN-20, RN-21 y RN-22 (nuevas), RN-14, RN-15, RF-KI-04, RF-AT-07, RS-03, reglas duras 8, 9, 17 y 19 |
+| **Enmiendas** | [Enmienda del 23-10-2026](#enmienda-del-23-10-2026-adr-061): un fichaje que el servidor no consigue procesar se descarta tras un umbral y deja de atascar la cola ([ADR-061](ADR-061-un-fichaje-que-el-servidor-no-consigue-procesar-se-descarta-tras-un-umbral.md)) |
 
 ## Contexto
 
@@ -98,7 +99,7 @@ incidencia. Nunca en ningún otro.**
 ## Consecuencias
 
 - Un `503` que no se cura **atasca toda la cola** del quiosco, no solo la de una persona. Se ve en
-  `oldest_pending_at` y en la salud `queue_pending`; es una avería que se arregla en el servidor.
+  `oldest_pending_at` y en la salud `queue_pending`; es una avería que se arregla en el servidor. **Enmendado por ADR-061**: solo hasta el umbral; ver la enmienda al final.
 - `scan_events.employee_id` deja de ser nulo en los rechazos de tarjeta auténtica retirada: toda
   consulta por `employee_id` que quiera solo lo aceptado tiene que filtrar por `result`.
 - Aparecen dos tipos de incidencia (`scan_before_revocation`, `discarded_scan`) y una tabla con dato
@@ -124,3 +125,24 @@ incidencia. Nunca en ningún otro.**
 - Quiosco: la cola no adelanta un PIN posterior a un QR atascado; un `400` deja el fichaje en la lista
   de descartados hasta el acuse. E2E de 40 fichajes con `400`: la cola de envío se vacía y el servidor
   tiene los 40 avisos.
+
+## Enmienda del 23-10-2026 (ADR-061)
+
+> **Enmendado por [ADR-061](ADR-061-un-fichaje-que-el-servidor-no-consigue-procesar-se-descarta-tras-un-umbral.md)**
+> (2.3.0, bloque 17, tarea 17.9, aprobado por el propietario). La primera consecuencia de esta
+> decisión, «un `503` que no se cura atasca toda la cola», vale **solo hasta un umbral**.
+>
+> - **El umbral.** Un mismo fichaje que falla en el servidor al menos 10 veces, durante al menos
+>   60 minutos y por una causa que no es una dependencia caída (ADR-059 §1) ni una contención
+>   transitoria se **descarta**. El quiosco no tiene que haber agotado su cupo de 3 descartes en
+>   24 h. Los tres valores se configuran en el servidor.
+> - **El desenlace.** Responde `422 scan-discarded`, terminal e idempotente, y el resto del lote se
+>   sigue procesando.
+> - **El registro.** El descarte queda en `scan_events` y en `discarded_scan_reports` con
+>   `source = server`, y abre la incidencia `discarded_scan` de RN-22. Lleva el asiento
+>   `scan.discarded`. Nunca registra el fichaje.
+> - **Las rutas.** Vale para las tres rutas de escritura del fichaje, `/scan/pin` incluida.
+>
+> El principio de esta decisión no cambia: el descarte **es** un desenlace del servidor, y el quiosco
+> sigue sin abandonar nada por su cuenta. El orden por quiosco (RN-21) tampoco cambia: un fichaje
+> sin decidir sigue aplazando lo que va detrás.

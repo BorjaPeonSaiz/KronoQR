@@ -80,7 +80,7 @@ export default defineConfig({
     {
       name: 'kiosk-qr',
       testIgnore:
-        /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$|perf-lcp\.spec\.ts$/,
+        /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$|perf-lcp\.spec\.ts$|perf-scanner-ready\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -134,6 +134,19 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
         launchOptions: { args: chromiumArgs(fixture('qr-video-blank.y4m')) },
+      },
+    },
+    {
+      // `perf-scanner-ready.spec.ts` (tarea 17.10): cuando esta listo el escaner
+      // en frio. Camara CON la tarjeta delante (la del video de siempre): lo que
+      // se mide es el primer fichaje posible. Proyecto propio para que la medida
+      // no comparta navegador con las pruebas funcionales.
+      name: 'kiosk-perf-scanner',
+      testMatch: /perf-scanner-ready\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions: { args: chromiumArgs(fixture('qr-video.y4m')) },
       },
     },
     {

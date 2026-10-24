@@ -218,7 +218,7 @@ fichaje-hotel/
 │   ├── 07-seguridad-madurez-y-amenazas.md  # SAMM, SDL, ATT&CK y riesgos aceptados
 │   ├── requisitos.yaml              # Anexo A del doc 01 legible por máquina (generado)
 │   ├── trazabilidad-pruebas.md      # Matriz requisito ↔ prueba (generada, §9.6)
-│   ├── adr/                         # ADR-001 … ADR-060
+│   ├── adr/                         # ADR-001 … ADR-061
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente (ES y en/)
 │   │   ├── instalacion.md, operacion.md, configuracion.md, endurecimiento.md
@@ -564,6 +564,7 @@ Los cuarenta siguientes **no proceden de esta tabla**: nacieron al desarrollar e
 | **058** | **Cómo terminó un tramo es un hecho del registro, y una jornada no pasa del día siguiente** *(aceptada por el propietario el 18-10-2026; implementada en la 2.3.0, bloque 1; enmienda ADR-024)* | ADR-024 distinguía la pausa solo por el motivo del escaneo. Un tramo escrito a mano no podía decir que terminó en pausa, y el alta manual encadenaba los turnos de días seguidos en una jornada, escondiendo un descanso insuficiente (RN-10) | `shift_entries.closed_by` persistido y declarable (`ends_in_break`); un tramo de otro día civil solo continúa una pausa, dentro de `min_rest_hours` y como mucho en `work_date + 1`, también en el quiosco, que abre jornada nueva sin rechazar. Fase *expand* con un *trigger* por defecto que se retira en la fase *contract* |
 | **059** | **Con una dependencia caída, el fichaje se encola y el resto responde 503 con rastro** *(aceptado por el propietario el 21-10-2026, con el portal abierto tras la revisión de `seguridad-cumplimiento`; lo implementan las tareas 10.2, 10.5 y 10.6 de la 2.3.0 y la zona de nginx de `/scan/pin`; matiza ADR-038 y precisa ADR-011)* | La degradación con Redis caído (CH1) y con PostgreSQL caído (bloque 22 de la 2.2.0) se decidió sin ADR (V6-AR-1, R6-AR-04). RNF-D-03 prometía una cola de respaldo en base de datos que no existe. Con Redis caído, las rutas que fallan cerradas daban `500` sin rastro, y PostgreSQL parado a mitad de transacción también daba `500` | Fallo abierto solo en el límite de Laravel de `scan`, `scan-batch`, `scan-pin` y `portal`, con nginx y los bloqueos en disco en pie; `/scan/pin` gana zona propia en nginx. Todo lo demás responde `503 service-unavailable` con `Retry-After`, con un cuerpo que no nombra la dependencia. Cada `503` deja una línea `warning` `http.dependency_unavailable` y su *span* en error, sin fila en `error_events` por petición. Sin cola en base de datos. `BroadcastPresenceChange` se reintenta 60 s si falta PostgreSQL. Cortacircuitos compartido por contenedor. Una sola réplica de `app` |
 | **060** | **Al vencer su plazo, la ficha y la cuenta de gestión se minimizan en sitio, con asiento** *(aceptado por el propietario el 21-10-2026; lo implementa la tarea 11.3 de la 2.3.0; nota en ADR-020, ADR-051 y ADR-057)* | RL-11 solo tenía plazo para cuatro tipos de dato. La ficha de quien se fue, sus contratos y ausencias (con dato de salud), las cuentas de gestión dadas de baja, el motivo de soporte y los tokens caducados se conservaban para siempre, contra el art. 5.1.e RGPD, y no se podían borrar: las claves hacia `employees` y `users` son `RESTRICT` (ADR-057) | Dos ámbitos nuevos de `RetentionScope` en `compliance:apply-retention`, con firma y un asiento por fila. Funciones `SECURITY DEFINER` que comprueban la elegibilidad (plazo del perfil, sin registro horario ni auditoría viva que cite la fila) y *triggers* que congelan la fila minimizada. Contratos y ausencias se borran con la ficha. Campo nuevo `personnel_record_retention_years` en el perfil. Quedan fechas, centro y departamento como cuasi-identificadores, que valida el DPO del cliente (doc 07 §6) |
+| **061** | **Un fichaje que el servidor no consigue procesar se descarta tras un umbral, y la cola sigue** *(aceptado por el propietario el 23-10-2026; lo implementa la tarea 17.9 de la 2.3.0; enmienda ADR-047)* | ADR-047 aceptó que un `503` que no se cura atasca la cola entera del quiosco (RN-21), y doc 07 §6 lo dejó con destino a la 2.3.0. El servidor no guardaba rastro de que un `scan_id` ya había fallado, `/scan` y `/scan/pin` respondían `500` a un defecto y el tramo de PIN de la cola sale siempre por `/scan/pin` | Cuenta el servidor, por `scan_id`, quiosco y contenido, en `scan_processing_failures` (solo-append, solo en el camino del fallo). No cuentan las dependencias caídas de ADR-059 ni la contención. Se descarta con 10 intentos, 60 min y menos de 3 descartes del quiosco en 24 h (configurable; cupo `0` apaga; suelos de 3 intentos y 15 min). `422 scan-discarded` terminal e idempotente en las tres rutas, el lote sigue, fila en `scan_events` y en `discarded_scan_reports` (`source = server`), incidencia `discarded_scan`, asiento `scan.discarded`, alertas `ScanDiscardedByServer` y `ScanDiscardBudgetExhausted`. El fichaje nunca se registra; lo decide RRHH con una corrección. Riesgo residual: un veneno que mata el proceso no se cuenta |
 
 ---
 
@@ -835,7 +836,8 @@ kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
 kiosk_queue_storage_degraded{device}                     gauge
 kiosk_unreported_discards{device}                        gauge
-kiosk_discarded_scans_total{device,attributed}           counter
+kiosk_discarded_scans_total{device,attributed,source}    counter
+kiosk_scan_discard_budget_exhausted_total{device}        counter
 scan_batch_items_not_processed_total{device}             counter
 kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
@@ -1707,6 +1709,9 @@ ATTENDANCE_FUTURE_TOLERANCE_MINUTES=5  # F1, RF-PA-04 · margen sobre la hora de
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos
+SCAN_DISCARD_MIN_ATTEMPTS=10           # RN-22, ADR-061 · fallos del mismo fichaje antes de que el
+SCAN_DISCARD_MIN_MINUTES=60            # servidor lo descarte (suelos: 3 intentos y 15 min), y cupo
+SCAN_DISCARD_DAILY_BUDGET=3            # de descartes por quiosco y 24 h; 0 apaga el descarte (techo 20)
 IDENTITY_PIN_MAX_ATTEMPTS=3            # RS-12 · primer escalón de bloqueo
 IDENTITY_PIN_LOCKOUT_SECONDS=300       # RS-12 · 5 min tras IDENTITY_PIN_MAX_ATTEMPTS fallos
 IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS=5  # RS-12 · §7.5 exige bloqueo creciente

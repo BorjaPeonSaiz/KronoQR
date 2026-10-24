@@ -31,7 +31,7 @@ describe('useIncidentsStore', () => {
     await store.load()
 
     expect(store.entries).toHaveLength(1)
-    expect(store.entries[0]?.employee.full_name).toBe('Youssef Amrani')
+    expect(store.entries[0]?.employee?.full_name).toBe('Youssef Amrani')
     expect(store.meta?.time_zone).toBe('Europe/Madrid')
     expect(spy).toHaveBeenCalledTimes(1)
   })

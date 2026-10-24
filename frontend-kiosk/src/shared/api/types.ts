@@ -18,6 +18,13 @@ export type ScanAccepted = components['schemas']['ScanAccepted']
 export type ScanDebounced = components['schemas']['ScanDebounced']
 export type ScanRejected = components['schemas']['ScanRejected']
 
+/** `422 scan-discarded` (ADR-061): desenlace terminal que NO es un rechazo y no se avisa. */
+export type ScanDiscarded = components['schemas']['ScanDiscarded']
+
+/** `type` de los dos problemas terminales de un fichaje, tomados del contrato. */
+export const SCAN_DISCARDED_PROBLEM: ScanDiscarded['type'] = 'urn:kronoqr:problem:scan-discarded'
+export const SCAN_REJECTED_PROBLEM: ScanRejected['type'] = 'urn:kronoqr:problem:scan-rejected'
+
 /** Las dos formas que puede tener un `200` de `POST /api/v1/scan` (ADR-031). */
 export type ScanOk = ScanAccepted | ScanDebounced
 

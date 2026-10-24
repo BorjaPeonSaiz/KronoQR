@@ -8,7 +8,7 @@ namespace App\Modules\Kiosk\Domain\ValueObject;
  * Lo que puede pasar cuando la tablet sondea `POST /api/v1/kiosk/pair/claim`
  * (**RF-PD-06**).
  *
- * ## Tres casos, y `Rejected` NO se subdivide
+ * ## Cuatro casos, y `Rejected` NO se subdivide
  *
  * Y no puede subdividirse. La regla dura 17 —los rechazos son genericos e
  * indistinguibles— es **estructural** en este producto: si existieran
@@ -40,6 +40,15 @@ enum ClaimOutcome
 
     /** Confirmada: hay dispositivo y toca emitir su token. **Una sola vez.** */
     case Paired;
+
+    /**
+     * Ya consumida, pero la tablet repite la recogida dentro de la ventana corta
+     * y desde el mismo origen (V6-KI-02, 2.3.0): se reemite el token del MISMO
+     * dispositivo y se retira el anterior. Hacia fuera es un `paired` como el
+     * primero; el caso de uso es quien lo distingue, para el asiento y la
+     * metrica.
+     */
+    case Reclaimed;
 
     /**
      * No se puede completar. **Un solo caso para las tres causas**: solicitud

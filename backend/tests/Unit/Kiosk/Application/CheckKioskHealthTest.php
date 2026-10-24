@@ -111,6 +111,11 @@ function saludDeLaFlota(
         {
             return null;
         }
+
+        public function hasUsedAccessToken(int $deviceId): bool
+        {
+            return false;
+        }
     };
 
     return new CheckKioskHealth($registry, FixedClock::at($now), umbralesDeSalud(), new FixedDeployedVersion($deployed));

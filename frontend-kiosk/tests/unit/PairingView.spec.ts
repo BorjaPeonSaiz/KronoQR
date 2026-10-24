@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Pantalla de emparejamiento (tarea 5.6, RF-PD-06).
 //
 // Mismo patron que `PinView.spec.ts`: se monta la pantalla de verdad, con

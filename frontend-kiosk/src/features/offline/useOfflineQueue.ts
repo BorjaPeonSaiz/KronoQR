@@ -14,20 +14,20 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, ref } from 'vue'
-import { registerRosterKeyRotator } from '@/shared/telemetry/tokenRotation'
+import { registerRosterKeyRotator } from '@/shared/device/tokenRotation'
 import { createDeviceRevocationWatcher } from '@/features/pairing/application/deviceRevocation'
 import type { RosterLookupPort, ScanSubmissionPort } from '@/features/scan/application/ports'
 import type { ApiClient } from '@/shared/api/client'
 import type { ConnectivityController } from '@/shared/connectivity/useConnectivity'
 import type { ClientErrorCode, ErrorReporter } from '@/shared/telemetry/errorReporter'
+import { readDeviceToken } from '@/shared/device/deviceIdentity'
 import {
-  readDeviceToken,
   readLastScanAt,
   readSiteTimeZone,
   readUpdateQuietMinutes,
   readUpdateWindow,
   storeLastScanAt,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import type { KioskTelemetrySnapshot } from '@/shared/telemetry/heartbeat'
 import type { CachedRoster, RosterDiagnostic } from './application/cachedRoster'
 import { createCachedRoster, ROSTER_REFRESH_MS } from './application/cachedRoster'
@@ -35,9 +35,10 @@ import type { QueueStats, ScanQueue } from './application/scanQueue'
 import { createScanQueue } from './application/scanQueue'
 import type { SyncDiagnostic, SyncRunner } from './application/syncRunner'
 import { createSyncRunner } from './application/syncRunner'
-import { canApplyUpdate } from './domain/updateWindow'
+import { canApplyUpdate } from '@/shared/update/updateWindow'
 import { holdInteraction, interactionInProgress } from './application/interactionGuard'
 import { createDexieQueueStorage, openKioskDatabase } from './infrastructure/dexieStorage'
+import { createDexieQueueKeyStore, createQueueCipher } from './infrastructure/queueCipher'
 
 export interface OfflineQueueController {
   readonly submission: ScanSubmissionPort
@@ -131,13 +132,39 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     for (const listener of rosterUpdateListeners) listener()
   }
 
+  // A1: la cola y los descartados se guardan CIFRADOS. Un solo cifrador (una clave) para
+  // todos los manejadores que abra la cola al reabrir IndexedDB. Sin cifrado disponible
+  // se guarda en claro y se avisa, sin datos personales (regla dura 19).
+  const cipher = createQueueCipher({
+    keyStore: createDexieQueueKeyStore(
+      options.databaseName === undefined ? undefined : `${options.databaseName}-key`,
+    ),
+    onUnavailable: (reason) =>
+      reporter.report('kiosk.offline.storage_unavailable', {
+        reason: `queue_cipher_${reason}`,
+        durable: true,
+        message: `queue_cipher_${reason}`,
+      }),
+  })
+
   const queue: ScanQueue = createScanQueue({
-    openStorage: () => createDexieQueueStorage(openKioskDatabase(options.databaseName)),
+    openStorage: () =>
+      createDexieQueueStorage(openKioskDatabase(options.databaseName), {
+        cipher,
+      }),
     onStorageFailure: (reason) =>
       reporter.report('kiosk.offline.storage_unavailable', {
         reason,
         durable: false,
         message: reason,
+      }),
+    // Filas cifradas que no se abren: se conservan, se saltan y se avisa UNA vez por sesion.
+    onUnreadable: (count) =>
+      reporter.report('kiosk.offline.storage_unavailable', {
+        reason: 'queue_rows_unreadable',
+        count,
+        durable: true,
+        message: 'queue_rows_unreadable',
       }),
   })
 
@@ -331,6 +358,42 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
 
 let singleton: OfflineQueueController | null = null
 
+/**
+ * Lo que hay en disco ANTES de que ninguna pantalla monte el controlador
+ * (V6-KI-01, V21-6-KI-2). `null` = todavia no se ha mirado: la puerta de
+ * actualizacion no lo da por vacio. Sin controlador la cola no existe en
+ * memoria, y `pendingScanCount()`/`canUpdateNowGlobal()` devolvian 0 con
+ * fichajes pendientes en disco (una tablet reiniciada dentro de la ventana, con
+ * una version esperando).
+ */
+let bootQueueCount: number | null = null
+
+/**
+ * Cuenta las filas pendientes en IndexedDB sin crear el controlador ni drenar
+ * nada. Si IndexedDB no abre no hay nada duradero que perder: se da por vacia
+ * (la cola en memoria nace vacia tras un arranque).
+ */
+export async function peekPersistedQueue(databaseName?: string): Promise<number> {
+  let count = 0
+  try {
+    const storage = createDexieQueueStorage(openKioskDatabase(databaseName))
+    try {
+      count = await storage.count()
+    } finally {
+      storage.close()
+    }
+  } catch {
+    count = 0
+  }
+  bootQueueCount = count
+  return count
+}
+
+/** Solo pruebas. */
+export function resetPersistedQueuePeek(): void {
+  bootQueueCount = null
+}
+
 /** Una tablet, una cola. Ver la cabecera de este fichero. */
 export function getOfflineQueueController(options: OfflineQueueOptions): OfflineQueueController {
   singleton ??= createOfflineQueueController(options)
@@ -350,7 +413,9 @@ export function canUpdateNowGlobal(urgent: boolean, now: Date = new Date()): boo
     const lastScanAtIso = readLastScanAt()
     return canApplyUpdate({
       now,
-      pendingScans: 0,
+      pendingScans: bootQueueCount ?? 0,
+      // Hasta que `peekPersistedQueue()` responda no se sabe si hay filas: no se aplica.
+      queueKnown: bootQueueCount !== null,
       interactionInProgress: interactionInProgress(),
       lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
       window: readUpdateWindow(),
@@ -369,7 +434,7 @@ export function canUpdateNowGlobal(urgent: boolean, now: Date = new Date()): boo
  */
 export function pendingScanCount(): number {
   const stats = singleton?.stats()
-  return stats === undefined ? 0 : pendingOf(stats)
+  return stats === undefined ? (bootQueueCount ?? 0) : pendingOf(stats)
 }
 
 /** Pendientes para la puerta de actualizacion: el recuento si se sabe, o lo que hay en el almacen activo. */
@@ -383,6 +448,10 @@ export async function disposeOfflineQueue(): Promise<void> {
   const current = singleton
   singleton = null
   await current.dispose()
+  // Sin controlador, la puerta vuelve a depender de lo que haya en disco; el
+  // recuento de antes del arranque ya no vale.
+  bootQueueCount = null
+  void peekPersistedQueue()
 }
 
 export interface UseOfflineQueueOptions extends OfflineQueueOptions {

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServiceCodeGate } from '@/features/diagnostics/application/serviceCodeGate'
 import { sha256Hex } from '@/shared/crypto/sha256'

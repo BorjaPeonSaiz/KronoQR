@@ -114,7 +114,7 @@ final readonly class DbPairingRequests implements PairingRequests
     {
         $row = DB::table('device_pairing_requests')
             ->where('uuid', $pairingId)
-            ->first(['uuid', 'status', 'expires_at', 'device_id', 'secret_hash']);
+            ->first(['uuid', 'status', 'expires_at', 'device_id', 'secret_hash', 'claimed_at', 'claimed_origin', 'reclaims']);
 
         if ($row === null) {
             return null;
@@ -145,7 +145,7 @@ final readonly class DbPairingRequests implements PairingRequests
             ]) === 1;
     }
 
-    public function markClaimed(string $pairingId, DateTimeImmutable $now): bool
+    public function markClaimed(string $pairingId, DateTimeImmutable $now, ?string $origin = null): bool
     {
         return DB::table('device_pairing_requests')
             ->where('uuid', $pairingId)
@@ -153,6 +153,21 @@ final readonly class DbPairingRequests implements PairingRequests
             ->update([
                 'status' => PairingStatus::Claimed->value,
                 'claimed_at' => $this->timestamp($now),
+                'claimed_origin' => $origin,
+                'updated_at' => $this->timestamp($now),
+            ]) === 1;
+    }
+
+    public function markReclaimed(string $pairingId, int $expectedReclaims, DateTimeImmutable $now): bool
+    {
+        // El contador esperado va en el WHERE, como el estado en `markClaimed()`:
+        // la escritura condicional es la que deja una sola recogida ganadora.
+        return DB::table('device_pairing_requests')
+            ->where('uuid', $pairingId)
+            ->where('status', PairingStatus::Claimed->value)
+            ->where('reclaims', $expectedReclaims)
+            ->update([
+                'reclaims' => $expectedReclaims + 1,
                 'updated_at' => $this->timestamp($now),
             ]) === 1;
     }
@@ -200,12 +215,17 @@ final readonly class DbPairingRequests implements PairingRequests
 
     private function hydrate(object $row): PairingRequest
     {
-        /** @var object{uuid: string, status: string, expires_at: string, device_id: int|string|null} $row */
+        /** @var object{uuid: string, status: string, expires_at: string, device_id: int|string|null, claimed_at?: string|null, claimed_origin?: string|null, reclaims?: int|string|null} $row */
+        $claimedAt = $row->claimed_at ?? null;
+
         return PairingRequest::reconstitute(
             uuid: $row->uuid,
             status: PairingStatus::from($row->status),
             expiresAt: new DateTimeImmutable($row->expires_at, new DateTimeZone('UTC')),
             deviceId: $row->device_id === null ? null : (int) $row->device_id,
+            claimedAt: $claimedAt === null ? null : (new DateTimeImmutable($claimedAt))->setTimezone(new DateTimeZone('UTC')),
+            claimedOrigin: $row->claimed_origin ?? null,
+            reclaims: (int) ($row->reclaims ?? 0),
         );
     }
 

@@ -2,11 +2,11 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
-import { canUpdateNowGlobal } from './features/offline/useOfflineQueue'
+import { canUpdateNowGlobal, peekPersistedQueue } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
-import { createAppI18n, initialLocale } from './shared/i18n'
-import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
+import { clearStoredLocale, createAppI18n, initialLocale } from './shared/i18n'
+import { APP_VERSION, resolveDeviceId } from './shared/device/deviceIdentity'
 import {
   currentUrgentGiveUpMotive,
   currentUrgentUpdateMode,
@@ -16,9 +16,10 @@ import {
   resetUrgentUpdateChecks,
 } from './shared/telemetry/urgentUpdate'
 import { getErrorReporter } from './shared/telemetry/errorReporter'
-import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
+import { errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
 
+clearStoredLocale()
 const locale = initialLocale()
 document.documentElement.lang = locale
 
@@ -50,15 +51,18 @@ app.config.errorHandler = (error: unknown) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(error),
     // Clave canonica del texto del error (RF-PD-15): el servidor la toma tal
-    // cual para la columna `message` de `error_events`.
-    message: errorMessageOf(error),
+    // cual para la columna `message` de `error_events`. En un error NO capturado
+    // el texto libre no viaja (R3-KI-02, regla dura 21): una excepcion con un
+    // nombre dentro llegaria al paquete de diagnostico. Va el tipo.
+    message: errorTypeOf(error),
     scope: 'vue',
   })
 }
 
 window.addEventListener('error', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
-    message: event.message,
+    error_type: errorTypeOf(event.error),
+    message: errorTypeOf(event.error),
     source: event.filename,
     line: event.lineno,
     scope: 'window',
@@ -68,9 +72,8 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(event.reason),
-    // Antes vacio: una promesa rechazada con un `Error` de verdad -el caso mas
-    // comun- se quedaba sin nada legible mas alla del codigo.
-    message: errorMessageOf(event.reason),
+    // Solo el tipo, como en el resto de errores no capturados.
+    message: errorTypeOf(event.reason),
     scope: 'promise',
   })
 })
@@ -91,6 +94,10 @@ app.mount('#app')
 // `registerServiceWorker` la reevalua cada minuto mientras haya una version
 // pendiente (decision 10 de la tarea 3.12): si la ventana esta cerrada ahora,
 // puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
+// V6-KI-01: lo que hay en disco se cuenta ya, sin esperar a que una pantalla monte
+// la cola. Hasta que responde, la puerta de actualizacion no se abre.
+void peekPersistedQueue()
+
 void registerServiceWorker({
   onError: (context) => bootReporter.report('kiosk.service_worker.failed', context),
   // Modo urgente (version minima del servidor por encima de esta PWA): se

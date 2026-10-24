@@ -23,7 +23,7 @@ function avisoRevisable(
 ): DiscardedScan {
     $utc = new DateTimeZone('UTC');
 
-    return new DiscardedScan(
+    return DiscardedScan::reportedByKiosk(
         scanId: '0199f0c2-0000-7000-8000-0000000000cc',
         ownerUuid: '0199f0c2-0000-7000-8000-0000000000bb',
         deviceUuid: '0199f0c2-0000-7000-8000-0000000000dd',

@@ -136,6 +136,32 @@ final readonly class RegisterScanResult
         );
     }
 
+    /**
+     * RN-22, ADR-061: el servidor fallo este fichaje durante el umbral y lo
+     * descarto sin registrarlo. Lo mismo para el descarte recien decidido que
+     * para su reenvio, que lo reconstruye de la fila de `scan_events`.
+     *
+     * `employeeUuid` es el titular **atribuido** (tarjeta autentica o codigo de
+     * quien puede fichar), solo para el log y la fila; jamas para la respuesta,
+     * que es el `422 scan-discarded` de texto fijo.
+     */
+    public static function discarded(
+        string $scanId,
+        DateTimeImmutable $occurredAt,
+        DateTimeImmutable $recordedAt,
+        ?string $employeeUuid = null,
+        bool $isReplay = false,
+    ): self {
+        return new self(
+            scanId: $scanId,
+            result: ScanResult::DISCARDED_UNPROCESSABLE,
+            occurredAt: $occurredAt,
+            recordedAt: $recordedAt,
+            employeeUuid: $employeeUuid,
+            isReplay: $isReplay,
+        );
+    }
+
     public function isAccepted(): bool
     {
         return $this->result->isAccepted();
@@ -154,9 +180,21 @@ final readonly class RegisterScanResult
      * (ADR-031). Preguntarlo por este metodo, y no comparando enums en el
      * controlador, es lo que impide que los dos conceptos se confundan en el
      * unico sitio donde confundirlos rompe la cola offline.
+     *
+     * **El descarte del servidor tampoco** (RN-22, ADR-061): no es un rechazo
+     * y responde `scan-discarded`. Ver {@see isDiscarded()}.
      */
     public function isRejected(): bool
     {
-        return $this->result->isRejection() && ! $this->result->isDebounce();
+        return $this->result->isRejection() && ! $this->result->isDebounce() && ! $this->result->isDiscard();
+    }
+
+    /**
+     * Si el endpoint tiene que responder el `422 scan-discarded` (RN-22,
+     * ADR-061): un desenlace terminal que **no** es un rechazo.
+     */
+    public function isDiscarded(): bool
+    {
+        return $this->result->isDiscard();
     }
 }

@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Controller;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Attendance\Application\UseCase\RegisterPinScanHandler;
+use App\Modules\Attendance\Application\UseCase\GuardedPinScanRegistration;
 use App\Modules\Attendance\Http\Request\PinScanRequest;
 use App\Modules\Attendance\Http\Resource\ScanResource;
+use App\Modules\Attendance\Http\Response\ScanDiscardedResponse;
 use App\Modules\Attendance\Http\Response\ScanRejectedResponse;
 use App\Modules\Attendance\Http\Support\ScanTelemetry;
 use Illuminate\Http\JsonResponse;
@@ -39,12 +40,18 @@ use Illuminate\Http\JsonResponse;
  * en la peticion cualquier portador podria atribuir un fichaje a otro quiosco.
  * Y **no declara su ruta ni su limite de tasa**, que se declaran donde se
  * declaran los de sus hermanos.
+ *
+ * ## Por el guardian del descarte (RN-22, ADR-061)
+ *
+ * Pide {@see GuardedPinScanRegistration} y no el caso de uso: un PIN que el
+ * servidor falla una y otra vez se descarta tras el umbral, como en `/scan` y
+ * en el lote (`UnprocessableScanGuardCoverageTest`).
  */
 final class PinScanController extends Controller
 {
     public function __invoke(
         PinScanRequest $request,
-        RegisterPinScanHandler $handler,
+        GuardedPinScanRegistration $handler,
         ScanTelemetry $telemetry,
     ): JsonResponse {
         $command = $request->toCommand();
@@ -54,6 +61,11 @@ final class PinScanController extends Controller
             $command->deviceUuid,
             static fn () => $handler->handle($command),
         );
+
+        // RN-22, ADR-061: el mismo descarte, y el mismo cuerpo, que en `/scan`.
+        if ($result->isDiscarded()) {
+            return ScanDiscardedResponse::for($result->scanId);
+        }
 
         if ($result->isRejected()) {
             return ScanRejectedResponse::for($result->scanId);

@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Http\Resource;
 
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
+use App\Modules\Attendance\Http\Response\ScanDiscardedResponse;
 use App\Modules\Attendance\Http\Response\ScanHeldBackResponse;
 use App\Modules\Attendance\Http\Response\ScanNotProcessedResponse;
 use App\Modules\Attendance\Http\Response\ScanRejectedResponse;
@@ -86,6 +87,16 @@ final class ScanBatchResource extends JsonResource
                 'scan_id' => $outcome->scanId,
                 'status' => JsonResponse::HTTP_SERVICE_UNAVAILABLE,
                 'outcome' => ScanNotProcessedResponse::body($outcome->scanId),
+            ];
+        }
+
+        // RN-22, ADR-061: el servidor lo descarto tras el umbral. Es un desenlace
+        // (`422`): el quiosco lo saca de la cola y el lote siguio detras.
+        if ($result->isDiscarded()) {
+            return [
+                'scan_id' => $outcome->scanId,
+                'status' => JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
+                'outcome' => ScanDiscardedResponse::body($outcome->scanId),
             ];
         }
 

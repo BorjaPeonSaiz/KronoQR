@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // PIN-03: el estado del sellado que decide si se ofrece el boton del PIN.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

@@ -388,7 +388,12 @@ function describeRejectedPinScan(
 }
 
 const WITHDRAWAL_VALUES: readonly string[] = ['offboarding', 'credential']
-const ATTRIBUTION_VALUES: readonly string[] = ['credential', 'employee_code']
+const ATTRIBUTION_VALUES: readonly string[] = [
+  'credential',
+  'employee_code',
+  'fingerprint_match',
+  'none',
+]
 
 /**
  * RN-20 (`scan_before_revocation`) y RN-22 (`discarded_scan`): las claves de

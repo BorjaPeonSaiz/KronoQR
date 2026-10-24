@@ -1459,6 +1459,11 @@
     }
   },
   "incidents": {
+    "noPerson": {
+      "label": "Scan without a person at {device}",
+      "unknownDevice": "an unknown kiosk",
+      "at": "Scan on {moment}"
+    },
     "title": "Incident inbox",
     "subtitle": "What in the time record needs a person to look at it. Resolving an incident does not change any hour: if a shift entry needs correcting, that is done from the person's time record.",
     "loading": "Loading the incident inbox…",
@@ -1590,7 +1595,9 @@
       },
       "attributionValues": {
         "credential": "the card",
-        "employee_code": "the employee code"
+        "employee_code": "the employee code",
+        "fingerprint_match": "identified by the card in earlier scans",
+        "none": "not identified"
       }
     },
     "employeeFilter": {
@@ -1603,6 +1610,7 @@
     "dialog": {
       "title": "Close incident",
       "for": "{type}, for {name}, work day of {date}.",
+      "forNoPerson": "{type}: {subject}, work day of {date}.",
       "outcomeLegend": "What happened",
       "outcome": {
         "resolved": "It has been corrected",

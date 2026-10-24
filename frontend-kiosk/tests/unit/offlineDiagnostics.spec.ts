@@ -160,6 +160,9 @@ describe('diagnosticos de la cola (RN-22, RN-21, regla dura 21)', () => {
     controller = createOfflineQueueController({
       reporter,
       api: api({
+        // El primero puede salir por el camino rapido o por el lote, segun quien llegue
+        // antes (el cifrado de la fila lo retrasa unos ms): sin red por el rapido.
+        recordScan: vi.fn(async () => ({ outcome: 'failed' as const, cause: 'network' as const })),
         // Hay otro delante: el camino es el del lote.
         syncScanBatch: vi.fn(async (request: ScanBatchRequest) => ({
           outcome: 'ok' as const,
@@ -191,6 +194,8 @@ describe('diagnosticos de la cola (RN-22, RN-21, regla dura 21)', () => {
       })
     }
 
+    // El primero se aplazo con retroceso por el camino rapido: se despierta el lote.
+    controller.wakeNow()
     await vi.waitFor(() =>
       expect(reporter.pending().map((event) => event.code)).toContain(
         'kiosk.offline.item_not_processed',

@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import { useQrScanner } from '@/features/scan/composables/useQrScanner'
+import { SCANNER_RETRY_DELAYS_MS, useQrScanner } from '@/features/scan/composables/useQrScanner'
 import { withSetup } from './support/withSetup'
 
 type DecodeCallback = (result: { getText: () => string } | undefined, error?: unknown) => void
@@ -264,5 +265,49 @@ describe('bucle de decodificacion continuo', () => {
       message: 'no_video_element',
     })
     wrapper.unmount()
+  })
+})
+
+describe('reintento del arranque del escaner (tablet de pared que no se oculta)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('un arranque fallido se reintenta solo, con retroceso, y al acertar vuelve a escanear', async () => {
+    decodeFromStreamRejects = true
+    const scanner = mountScanner()
+    await scanner.result.start()
+    expect(scanner.result.state.value).toBe('unavailable')
+
+    // Sigue roto: el segundo intento (a los 5 s) tambien falla y espera 15 s.
+    await vi.advanceTimersByTimeAsync(SCANNER_RETRY_DELAYS_MS[0] ?? 0)
+    expect(scanner.result.state.value).toBe('unavailable')
+    const camerasAfterSecond = trackStops.length
+    await vi.advanceTimersByTimeAsync((SCANNER_RETRY_DELAYS_MS[1] ?? 0) - 1)
+    expect(trackStops.length).toBe(camerasAfterSecond)
+
+    decodeFromStreamRejects = false
+    await vi.advanceTimersByTimeAsync(1)
+    expect(scanner.result.state.value).toBe('scanning')
+    scanner.wrapper.unmount()
+  })
+
+  it('el techo del retroceso es el ultimo valor y desmontar cancela el reintento', async () => {
+    decodeFromStreamRejects = true
+    const scanner = mountScanner()
+    await scanner.result.start()
+    for (const delay of SCANNER_RETRY_DELAYS_MS) await vi.advanceTimersByTimeAsync(delay)
+    const camerasBefore = trackStops.length
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(trackStops.length).toBeGreaterThan(camerasBefore)
+
+    scanner.wrapper.unmount()
+    const camerasAtUnmount = trackStops.length
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(trackStops.length).toBe(camerasAtUnmount)
   })
 })

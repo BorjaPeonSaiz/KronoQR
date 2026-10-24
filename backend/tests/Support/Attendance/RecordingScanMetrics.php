@@ -108,4 +108,20 @@ final class RecordingScanMetrics implements ScanMetrics
     {
         $this->discarded[] = ['device' => $deviceUuid, 'attributed' => $attributed];
     }
+
+    /** @var list<array{device: string, attributed: bool}> */
+    public array $serverDiscarded = [];
+
+    public function serverDiscardedScan(string $deviceUuid, bool $attributed): void
+    {
+        $this->serverDiscarded[] = ['device' => $deviceUuid, 'attributed' => $attributed];
+    }
+
+    /** @var list<string> */
+    public array $budgetExhausted = [];
+
+    public function scanDiscardBudgetExhausted(string $deviceUuid): void
+    {
+        $this->budgetExhausted[] = $deviceUuid;
+    }
 }

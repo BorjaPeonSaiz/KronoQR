@@ -9,6 +9,7 @@ use App\Modules\Attendance\Application\Exception\ScanAlreadyRecorded;
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\EventPublisher;
+use App\Modules\Attendance\Application\Port\RecordedScan;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanRecord;
@@ -29,6 +30,7 @@ use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
+use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
@@ -924,21 +926,12 @@ final readonly class RegisterScanHandler implements ScanRegistration
             return null;
         }
 
-        // Un rechazo de verdad se reconstruye SIN buscar a nadie (RS-03, regla
-        // dura 17). Desde RN-20 la fila de una
-        // tarjeta autentica retirada lleva a su titular; buscarlo aqui costaria
-        // dos consultas que el reenvio de una firma falsa no paga, despues del
-        // suelo y sin relleno: un oraculo de «esta tarjeta era de alguien». El
-        // anti-rebote no entra: es un desenlace aceptado y necesita a la persona.
-        if ($this->replaysWithoutLookup($recorded->result)) {
-            return RegisterScanResult::rejected(
-                scanId: $scanId,
-                result: $recorded->result,
-                occurredAt: $recorded->occurredAt,
-                recordedAt: $recorded->recordedAt,
-                employeeUuid: $recorded->employeeUuid,
-                isReplay: true,
-            );
+        // El descarte del servidor y los rechazos de verdad se reconstruyen SIN
+        // buscar a nadie. Ver el metodo.
+        $withoutLookup = $this->replayWithoutLookup($recorded);
+
+        if ($withoutLookup instanceof RegisterScanResult) {
+            return $withoutLookup;
         }
 
         $employee = $recorded->employeeUuid === null ? null : $this->employees->find($recorded->employeeUuid);
@@ -986,6 +979,46 @@ final readonly class RegisterScanHandler implements ScanRegistration
             // El numero que se guardo con este escaneo, no el que tenga la
             // jornada hoy (regla dura 8): ver el docblock de {@see ScanRecord}.
             workedMinutes: $recorded->workedMinutes ?? 0,
+            isReplay: true,
+        );
+    }
+
+    /**
+     * Lo que se reconstruye **sin buscar a nadie**, o `null` si hace falta la
+     * persona.
+     *
+     * - **El descarte del servidor** (RN-22, ADR-061): se repite tal cual, sin
+     *   volver a intentarlo. Si RRHH ya creo el tramo con una correccion,
+     *   procesarlo ahora seria un fichaje doble.
+     * - **Un rechazo de verdad** (RS-03, regla dura 17). Desde RN-20 la fila de
+     *   una tarjeta autentica retirada lleva a su titular; buscarlo aqui
+     *   costaria dos consultas que el reenvio de una firma falsa no paga,
+     *   despues del suelo y sin relleno: un oraculo de «esta tarjeta era de
+     *   alguien». El anti-rebote no entra: es un desenlace aceptado y necesita
+     *   a la persona.
+     */
+    private function replayWithoutLookup(RecordedScan $recorded): ?RegisterScanResult
+    {
+        if ($recorded->result->isDiscard()) {
+            return RegisterScanResult::discarded(
+                scanId: $recorded->scanId,
+                occurredAt: $recorded->occurredAt,
+                recordedAt: $recorded->recordedAt,
+                employeeUuid: $recorded->employeeUuid,
+                isReplay: true,
+            );
+        }
+
+        if (! $this->replaysWithoutLookup($recorded->result)) {
+            return null;
+        }
+
+        return RegisterScanResult::rejected(
+            scanId: $recorded->scanId,
+            result: $recorded->result,
+            occurredAt: $recorded->occurredAt,
+            recordedAt: $recorded->recordedAt,
+            employeeUuid: $recorded->employeeUuid,
             isReplay: true,
         );
     }
@@ -1053,7 +1086,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         // Nulo en el fichaje por PIN: no hay tarjeta de la que tomar huella
         // (RF-AT-11). Inventar una a partir del codigo de empleado habria metido
         // dos cosas distintas en la misma columna.
-        return $qrPayload === null ? null : hash('sha256', $qrPayload);
+        return $qrPayload === null ? null : PayloadFingerprint::ofQrPayload($qrPayload);
     }
 
     /**

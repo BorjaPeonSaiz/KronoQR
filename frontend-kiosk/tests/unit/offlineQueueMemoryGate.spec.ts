@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Puerta de actualizacion con la cola en MEMORIA (ADR-047, RF-KI-07).
 //
 // Con IndexedDB roto la cola cae a memoria y lo que haya en disco no se ve. El
@@ -8,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
 import { createOfflineQueueController } from '@/features/offline/useOfflineQueue'
-import { storeUpdateQuietMinutes } from '@/shared/telemetry/deviceIdentity'
+import { storeUpdateQuietMinutes } from '@/shared/device/deviceSettings'
 import type { ErrorReporter } from '@/shared/telemetry/errorReporter'
 
 vi.mock('@/features/offline/infrastructure/dexieStorage', () => ({

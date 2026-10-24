@@ -21,6 +21,7 @@ import { useSessionStore } from '@/features/auth/session.store'
 import type { Incident } from '@/shared/api/types'
 import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
 import { severityBadgeClass } from './incidentPresentation'
+import { incidentScanMoment, incidentSubject } from './incidentSubject'
 
 const props = defineProps<{
   entries: readonly Incident[]
@@ -133,20 +134,38 @@ function detectedAtLabel(incident: Incident): string {
           </span>
 
           <span role="cell" class="truncate" data-test="incident-employee">
-            <span class="block font-medium">
-              {{ row.item.employee.full_name }}
-              <span class="font-mono text-sm text-kq-text-muted">
-                {{ row.item.employee.employee_code }}
+            <template v-if="row.item.employee !== null">
+              <span class="block font-medium">
+                {{ row.item.employee.full_name }}
+                <span class="font-mono text-sm text-kq-text-muted">
+                  {{ row.item.employee.employee_code }}
+                </span>
               </span>
-            </span>
-            <span class="block text-sm text-kq-text-muted">
-              {{ row.item.employee.department?.name ?? t('incidents.table.noDepartment') }}
-            </span>
+              <span class="block text-sm text-kq-text-muted">
+                {{ row.item.employee.department?.name ?? t('incidents.table.noDepartment') }}
+              </span>
+            </template>
+            <!-- Incidencia sin persona (ADR-061): el quiosco y la hora del fichaje, no un nombre. -->
+            <template v-else>
+              <span class="block font-medium" data-test="incident-no-person">
+                {{ incidentSubject(row.item, t) }}
+              </span>
+              <span
+                v-if="incidentScanMoment(row.item, timeZone, locale) !== null"
+                class="block text-sm text-kq-text-muted"
+              >
+                {{
+                  t('incidents.noPerson.at', {
+                    moment: incidentScanMoment(row.item, timeZone, locale),
+                  })
+                }}
+              </span>
+            </template>
           </span>
 
           <span role="cell">
             <RouterLink
-              v-if="canViewWorkday"
+              v-if="canViewWorkday && row.item.employee !== null"
               :to="{ name: 'employee-workdays', params: { uuid: row.item.employee.uuid } }"
               class="text-kq-primary-strong underline"
             >

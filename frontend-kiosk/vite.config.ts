@@ -241,6 +241,9 @@ export default defineConfig(({ mode }) => ({
       // las 06:00. La ventana controlada de actualizacion es RF-KI-07 (tarea
       // 3.12); hasta entonces, nada se actualiza sin que alguien lo acepte.
       registerType: 'prompt',
+      // Los iconos del manifiesto ya entran por el glob `**/*.png` de `workbox`: sin
+      // esto el plugin los anadia otra vez y `sw.js` los precacheaba DOS veces.
+      includeManifestIcons: false,
       // El registro lo hace `src/sw/registerServiceWorker.ts`, para que la
       // decision de cuando aplicar una version nueva viva en codigo nuestro y no
       // en un guion inyectado.

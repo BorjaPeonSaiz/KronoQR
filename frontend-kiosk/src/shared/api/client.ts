@@ -32,9 +32,11 @@ import type {
   ScanBatchRequest,
   ScanBatchResponse,
   ScanOk,
+  ScanDiscarded,
   ScanRejected,
   ScanRequest,
 } from './types'
+import { SCAN_DISCARDED_PROBLEM, SCAN_REJECTED_PROBLEM } from './types'
 
 /** Motivo por el que una llamada no llego a obtener respuesta util del servidor. */
 export type ApiFailureCause =
@@ -57,7 +59,7 @@ export type ApiFailureCause =
  * `sendHeartbeat` o `fetchRoster` hoy). El emparejamiento SI tiene la suya
  * (`PairingRejected`, regla dura 17) y por eso `claimPairing` la sobrescribe.
  */
-export type ApiResult<TOk, TProblem = ScanRejected> =
+export type ApiResult<TOk, TProblem = ScanRejected | ScanDiscarded> =
   | { readonly outcome: 'ok'; readonly data: TOk }
   | { readonly outcome: 'rejected'; readonly problem: TProblem }
   | {
@@ -135,7 +137,10 @@ export interface ApiClient {
    * desconocida, secreto incorrecto, caducada o consumida— son indistinguibles
    * desde aqui a proposito.
    */
-  claimPairing(body: PairingClaimRequest): Promise<ApiResult<PairingClaim, PairingRejected>>
+  claimPairing(
+    body: PairingClaimRequest,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ApiResult<PairingClaim, PairingRejected>>
   /**
    * Marca de la instalacion (RF-PD-08, tarea 5.8). **Publica** (`authenticated:
    * false`): la pantalla de espera la necesita antes de que nadie se
@@ -161,7 +166,16 @@ function isScanOk(value: unknown): value is ScanOk {
 }
 
 function isScanRejected(value: unknown): value is ScanRejected {
-  return isRecord(value) && value['type'] === 'urn:kronoqr:problem:scan-rejected'
+  return isRecord(value) && value['type'] === SCAN_REJECTED_PROBLEM
+}
+
+function isScanDiscarded(value: unknown): value is ScanDiscarded {
+  return isRecord(value) && value['type'] === SCAN_DISCARDED_PROBLEM
+}
+
+/** Un desenlace terminal del servidor para ese `scan_id`: rechazado o descartado (ADR-061). */
+function isTerminalScanProblem(value: unknown): value is ScanRejected | ScanDiscarded {
+  return isScanRejected(value) || isScanDiscarded(value)
 }
 
 function isScanBatchResponse(value: unknown): value is ScanBatchResponse {
@@ -289,6 +303,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
      * autenticado.
      */
     authenticated?: boolean
+    /** Cancela la peticion desde fuera (se resuelve como `timeout`). */
+    signal?: AbortSignal
   }
 
   type SendOutcome = { status: number; body: unknown } | { failure: ApiFailureCause }
@@ -368,6 +384,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const outer = init.signal
+    const onOuterAbort = (): void => controller.abort()
+    if (outer?.aborted === true) controller.abort()
+    else outer?.addEventListener('abort', onOuterAbort, { once: true })
 
     try {
       const response = await doFetch(`${baseUrl}${path}`, {
@@ -393,6 +413,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { failure: aborted ? 'timeout' : 'network' }
     } finally {
       clearTimeout(timer)
+      outer?.removeEventListener('abort', onOuterAbort)
     }
   }
 
@@ -411,7 +432,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
-      if (result.status === 422 && isScanRejected(result.body)) {
+      if (result.status === 422 && isTerminalScanProblem(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
       return scanFailureFor(result.status, result.body)
@@ -431,7 +452,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
-      if (result.status === 422 && isScanRejected(result.body)) {
+      if (result.status === 422 && isTerminalScanProblem(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
       return scanFailureFor(result.status, result.body)
@@ -523,11 +544,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
     },
 
-    async claimPairing(body) {
+    async claimPairing(body, claimOptions = {}) {
       const result = await send('/api/v1/kiosk/pair/claim', {
         method: 'POST',
         body,
         authenticated: false,
+        ...(claimOptions.signal === undefined ? {} : { signal: claimOptions.signal }),
       })
       if ('failure' in result) return { outcome: 'failed', cause: result.failure }
       if (result.status === 200) {

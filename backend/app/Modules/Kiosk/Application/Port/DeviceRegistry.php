@@ -74,4 +74,15 @@ interface DeviceRegistry
      * mano: no viene de fuera, viene de una fila que este mismo modulo escribio.
      */
     public function findById(int $deviceId): ?DeviceSummary;
+
+    /**
+     * Si algun token vivo del quiosco **ya se ha usado** (`last_used_at`).
+     *
+     * Lo necesita la recogida repetida del emparejamiento (V6-KI-02): solo se
+     * reemite el token si el anterior **nunca se uso**. Una tablet que perdio la
+     * respuesta no ha podido usarlo; un token que ya autentico peticiones esta
+     * en manos de alguien, y reemitirlo se lo quitaria —o se lo daria a quien
+     * tuviera el secreto—.
+     */
+    public function hasUsedAccessToken(int $deviceId): bool;
 }

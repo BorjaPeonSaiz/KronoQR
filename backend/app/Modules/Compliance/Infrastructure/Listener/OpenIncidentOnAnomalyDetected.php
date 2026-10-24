@@ -52,6 +52,7 @@ final readonly class OpenIncidentOnAnomalyDetected
             shiftEntryUuid: $event->shiftEntryUuid(),
             detectedAt: $event->occurredAt(),
             context: $event->context(),
+            deviceUuid: $event->deviceUuid(),
         ));
     }
 }

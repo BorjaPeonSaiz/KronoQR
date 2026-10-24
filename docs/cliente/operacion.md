@@ -854,6 +854,8 @@ la alimenta dejó de ejecutarse):
 | `KioskUnreportedDiscards` | Fichajes descartados sin avisar al servidor, `for: 30m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards) | Comprueba la red de esa tablet y su versión de la aplicación. Hasta que avise, RRHH no ve la incidencia «Fichaje descartado por el quiosco» ([`guia-rrhh.md`](guia-rrhh.md) §4.7) |
 | `ScanBatchItemNotProcessed` | 3 o más elementos de lote sin procesar en 30 min en un mismo quiosco, `for: 5m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) | Un mismo fichaje de esa tablet lleva varias sincronizaciones sin que el servidor consiga procesarlo, y **los demás de ese quiosco esperan detrás**: no se pierden, pero no llegan al registro. Corrige la causa en el servidor (busca `attendance.batch_scan_failed` en el registro de `app`). **Nunca borres la cola de la tablet ni la desvincules** (§16.3 bis) |
 | `KioskDiscardedScansAttributed` | Avisos de fichaje descartado atribuidos a personas desde un mismo quiosco en la última hora, `for: 0m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) | Esa tablet está enviando fichajes que el servidor no acepta y que son de personas reales: lo normal es una aplicación desfasada tras una actualización (recárgala con la cola vacía); si el quiosco no debería estar enviando nada, desvincúlalo. RRHH verá las incidencias «Fichaje descartado por el quiosco» de ese día |
+| `ScanDiscardedByServer` | El servidor ha descartado un fichaje de un quiosco que no conseguía procesar (10 intentos y 60 min), `for: 0m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) | Es un defecto del producto: el fichaje no está en el registro. RRHH tendrá la incidencia «Fichaje descartado» si se supo de quién era, y la corrige con una corrección trazada. Conserva la evidencia y avisa al fabricante |
+| `ScanDiscardBudgetExhausted` | Un quiosco ha agotado su cupo de 3 descartes del servidor en 24 h y ha aparecido otro fichaje que fallaría, `for: 0m` | Crítica | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) | La cola de esa tablet vuelve a esperar a propósito: el fallo es del servidor, no del fichaje. Revisa el último despliegue o migración y escala al fabricante. **No subas el cupo ni borres la cola de la tablet** |
 | `ErroresDeServidorEnElFichaje` | > 1 % de `5xx` en `/api/v1/scan*`, 5 min | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor` primero: base de datos y disco son la causa más frecuente |
 | `LatenciaDelFichajeAlta` | p95 del fichaje con tarjeta > 500 ms, 10 min (al menos 20 peticiones) | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Mira si coincide con el cambio de turno o con una actualización reciente |
 | `LatenciaDelFichajePorPinAlta` | Más del 5 % de los fichajes por PIN tardan más de 2 s en 10 min (al menos 20), `for: 5m` | Media | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Compara con la de tarjeta: si solo va lento el PIN suele ser CPU. El fichaje con tarjeta no se ve afectado |
@@ -1906,9 +1908,13 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   omisión (`page`, `per_page` hasta 100, y `meta.total`); el recuento de
   `summary` sigue siendo el de toda la plantilla. Y
   `GET /api/v1/employees/{uuid}/workdays` devuelve 31 jornadas por página.
-- **La exportación íntegra pasa a la versión 6 del formato**:
-  `report_exports.csv` gana la columna `cancelled_at`. Si comparas exportaciones
-  de antes y de después, esa columna es la diferencia (`manifest.json` lo dice).
+- **La exportación íntegra pasa a la versión 7 del formato**:
+  `report_exports.csv` gana la columna `cancelled_at`; `discarded_scan_reports.csv`
+  gana `source`, `failed_attempts` y `first_failed_at`, y aparece
+  `scan_processing_failures.csv`, los intentos fallidos de procesar un fichaje de
+  los últimos 30 días (datos técnicos seudonimizados, sin la huella de la
+  tarjeta). Si comparas exportaciones de antes y de después, esas son las
+  diferencias (`manifest.json` lo dice).
 
 **Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
 plano, con avance y cancelación.** Nada de esto cambia lo que contiene cada
@@ -1949,6 +1955,36 @@ en lo impreso.** No tienes que hacer nada:
   color tal cual. En la tarjeta, el nombre de la instalación pasa de 6 a 8 pt: un
   nombre de más de unas 18 letras se corta antes con puntos suspensivos. Las
   tarjetas ya impresas siguen valiendo; no hace falta reimprimir.
+
+**Al actualizar a la 2.3.0: un fichaje que el servidor no consigue procesar ya
+no atasca la tablet para siempre.** No tienes que hacer nada. Hasta ahora, si un
+fichaje concreto fallaba siempre en el servidor (un defecto del producto con
+ese dato), la cola de la tablet se quedaba detenida en él y los fichajes de
+detrás esperaban. Desde esta versión, si el servidor falla **el mismo fichaje**
+al menos **10 veces durante al menos 60 minutos** —sin contar una base de datos
+o un Redis caídos, que se siguen esperando como siempre—, lo **descarta**: la
+cola sigue, el fichaje **no se registra** y abre la incidencia «Fichaje
+descartado» para que RRHH lo complete con una corrección: la de su persona si
+se sabe de quién era (por la tarjeta, por el código o por la huella de fichajes
+anteriores de esa tarjeta) y, si no, una sin persona para el administrador, con
+el quiosco y la hora.
+Queda en el registro de auditoría (`scan.discarded`). Como mucho **3 descartes
+por quiosco en 24 horas**: si se agotan, la tablet vuelve a esperar y salta una
+alerta crítica, porque entonces el fallo es del servidor y no del fichaje. Los
+tres números se cambian en el `.env` (`SCAN_DISCARD_MIN_ATTEMPTS`,
+`SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`; con el cupo a `0` el
+descarte queda apagado), y no conviene tocarlos salvo que lo pida soporte
+técnico. Cada descarte es un defecto que el fabricante tiene que reproducir:
+avísale. La tabla técnica de intentos fallidos se purga sola a los 30 días.
+
+**Al actualizar a la 2.3.0: emparejar una tablet aguanta un corte de red justo
+al final.** No tienes que hacer nada. Si la tablet pierde la respuesta en el
+mismo instante en que recoge su token, entre los 10 segundos y el minuto
+siguientes puede volver a pedirlo y recibe uno nuevo para el **mismo** quiosco —el anterior deja de
+valer en el acto—, en lugar de quedarse sin poder fichar hasta que alguien la
+desvincule. Solo desde la misma dirección de red y si la tablet no llegó a usar
+el primer token; pasado ese minuto, la tablet
+pide otro código como siempre.
 
 ### 11.1 La app de la tablet: cuándo cambia de versión
 

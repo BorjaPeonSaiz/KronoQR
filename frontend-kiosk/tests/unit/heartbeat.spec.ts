@@ -1,10 +1,8 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
 import type { KioskHeartbeat } from '@/shared/api/types'
-import {
-  DEFAULT_UPDATE_QUIET_MINUTES,
-  DEFAULT_UPDATE_WINDOW,
-} from '@/features/offline/domain/updateWindow'
+import { DEFAULT_UPDATE_QUIET_MINUTES, DEFAULT_UPDATE_WINDOW } from '@/shared/update/updateWindow'
 import {
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
@@ -13,8 +11,8 @@ import {
   readServiceCodeHash,
   readUpdateQuietMinutes,
   readUpdateWindow,
-} from '@/shared/telemetry/deviceIdentity'
-import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/features/offline/domain/minimumVersion'
+} from '@/shared/device/deviceSettings'
+import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/shared/update/minimumVersion'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
 import {
   currentUrgentUpdateMode,

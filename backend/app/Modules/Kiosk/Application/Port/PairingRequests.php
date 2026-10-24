@@ -120,9 +120,22 @@ interface PairingRequests
      * Es la escritura que garantiza el «un solo uso» del token: dos sondeos
      * simultaneos entran los dos, y solo uno cambia una fila.
      *
+     * Guarda ademas la huella opaca del origen (`$origin`) para la recogida
+     * repetida (V6-KI-02); nula si no se conoce.
+     *
      * @return bool `false` si otro sondeo llego antes. El caso de uso degrada a rechazo.
      */
-    public function markClaimed(string $pairingId, DateTimeImmutable $now): bool;
+    public function markClaimed(string $pairingId, DateTimeImmutable $now, ?string $origin = null): bool;
+
+    /**
+     * Cuenta una recogida repetida, **solo si nadie se adelanto**: el contador
+     * tiene que seguir en `$expectedReclaims`, el valor que se leyo. Dos
+     * recogidas repetidas simultaneas entran las dos y solo una cambia la fila,
+     * asi que solo una emite token (V6-KI-02).
+     *
+     * @return bool `false` si otra recogida llego antes. El caso de uso degrada a rechazo.
+     */
+    public function markReclaimed(string $pairingId, int $expectedReclaims, DateTimeImmutable $now): bool;
 
     /**
      * Borra las solicitudes creadas hace mas de `$olderThan`.

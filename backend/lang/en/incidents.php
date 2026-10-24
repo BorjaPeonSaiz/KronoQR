@@ -43,6 +43,7 @@ return [
         'intro' => 'The automatic review of the attendance record found :count situation(s) in your department that need a person to look at them.',
         'line' => ':date · :employee · :type (:severity priority)',
         'more' => 'And :count more, waiting in the incident tray.',
+        'no_employee' => 'No person: see the kiosk and time in the tray',
         'no_auto_close' => 'The system has not closed any shift nor changed any time. Corrections are made by a person and are recorded with their reason.',
         'action' => 'Open the incident tray',
         'footer' => 'You get this message once per review. Incidents you have already handled will not show up again.',

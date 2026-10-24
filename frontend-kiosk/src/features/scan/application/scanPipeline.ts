@@ -2,7 +2,8 @@
 //
 // `handleDecoded` es SINCRONA y devuelve la confirmacion que hay que pintar.
 // Ni un `await`, ni una promesa, ni una consulta a red en el camino: eso es lo
-// que garantiza los 300 ms del §6 (RNF-P-03) por construccion y no por suerte.
+// que garantiza los 300 ms del §6 (la parte del quiosco de RNF-P-01) por
+// construccion y no por suerte.
 // El envio al servidor sale despues, en segundo plano, y su resultado llega por
 // `onSettled` para refrescar la pantalla con el total real del dia.
 //
@@ -107,8 +108,20 @@ export interface ScanPipelineOptions {
    * dejarla abierta hasta los 10 s completos.
    */
   readonly onUnqueuedRead?: () => void
+  /**
+   * Una lectura que NO es una tarjeta KronoQR y no es una repeticion (R3-KI-04).
+   * Solo su longitud: el contenido jamas sale de aqui (reglas duras 17 y 21).
+   */
+  readonly onMalformedPayload?: (length: number) => void
   /** Llega cuando el servidor contesta. Puede no llegar nunca: es opcional por diseno. */
   readonly onSettled?: (confirmation: ScanConfirmation) => void
+  /**
+   * El envio ha vuelto SIN desenlace del servidor (`deferred`): fallo de red
+   * explicito aunque `navigator.onLine` siga en `true`, o cola por delante
+   * (V21-7-KI-1). No va a llegar ninguna respuesta dentro del plazo del tono, asi
+   * que la sesion suena `pending` en el momento en vez de esperar a que venza.
+   */
+  readonly onDeferred?: (scanId: string) => void
   readonly onError?: (
     code: 'submit_failed',
     context: Record<string, string | number | boolean>,
@@ -188,6 +201,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       // corregir una confirmacion que era correcta solo confunde. `fallbackName`
       // queda disponible para que la tarea 1.9 lo use al reintentar.
       void fallbackName
+      options.onDeferred?.(scan.scan_id)
       return
     }
     settle(confirmation)
@@ -214,6 +228,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
         }
         markAccepted(rawText, nowMs)
         options.onUnqueuedRead?.()
+        options.onMalformedPayload?.(rawText.length)
         return { kind: 'unreadable', scanId: newScanId(), occurredAt }
       }
 

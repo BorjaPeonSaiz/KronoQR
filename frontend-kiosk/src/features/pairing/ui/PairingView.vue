@@ -26,7 +26,7 @@ import type { PairingState } from '../application/pairingFlow'
 import { createApiClient } from '@/shared/api/client'
 import { useBranding } from '@/shared/branding/useBranding'
 import type { PairingCompleted } from '@/shared/api/types'
-import { APP_VERSION, persistPairedDevice } from '@/shared/telemetry/deviceIdentity'
+import { APP_VERSION, persistPairedDevice } from '@/shared/device/deviceIdentity'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 

@@ -34,11 +34,11 @@ test(
 
     const row = page
       .getByTestId('incident-row')
-      .filter({ hasText: OPEN_INCIDENT.employee.full_name })
+      .filter({ hasText: OPEN_INCIDENT.employee?.full_name ?? '' })
     await expect(row).toBeVisible()
     await expect(row).toContainText('Alta')
     await expect(row).toContainText('Descanso insuficiente')
-    await expect(row).toContainText(OPEN_INCIDENT.employee.employee_code)
+    await expect(row).toContainText(OPEN_INCIDENT.employee?.employee_code ?? '')
     await expect(row).toContainText('Recepción')
 
     await page.getByLabel('Tipo').selectOption('insufficient_rest')
@@ -169,7 +169,7 @@ test(
     // segundo filtro para distinguirlas.
     const row = page
       .getByTestId('incident-row')
-      .filter({ hasText: OUT_OF_ORDER_INCIDENT.employee.full_name })
+      .filter({ hasText: OUT_OF_ORDER_INCIDENT.employee?.full_name ?? '' })
       .filter({ hasText: 'Fichaje fuera de orden' })
     await expect(row).toBeVisible()
     await expect(row).toContainText('Media')
@@ -178,7 +178,7 @@ test(
     // tramo): enlaza a la jornada del dia igual que los demas.
     await expect(row.getByRole('link', { name: OUT_OF_ORDER_INCIDENT.work_date })).toHaveAttribute(
       'href',
-      `/employees/${OUT_OF_ORDER_INCIDENT.employee.uuid}/workdays`,
+      `/employees/${OUT_OF_ORDER_INCIDENT.employee?.uuid}/workdays`,
     )
 
     // Aparece en el filtro por tipo, y elegirlo manda el parametro al servidor.

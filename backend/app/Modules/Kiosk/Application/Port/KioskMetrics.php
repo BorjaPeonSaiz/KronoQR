@@ -88,6 +88,14 @@ interface KioskMetrics
     public function pairingClaimed(): void;
 
     /**
+     * Una tablet ha repetido la recogida dentro de la ventana corta y ha
+     * recibido otro token para el mismo quiosco (V6-KI-02). `result=reclaimed`:
+     * un quiosco que lo hace a menudo pierde respuestas, y uno que lo hace sin
+     * haberlas perdido es la firma de alguien con el secreto.
+     */
+    public function pairingReclaimed(): void;
+
+    /**
      * Un intento de emparejamiento no ha prosperado.
      *
      * **`reason` es la unica etiqueta, y es lo contrario de lo que la respuesta

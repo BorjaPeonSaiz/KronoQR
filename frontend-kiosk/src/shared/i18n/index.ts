@@ -27,6 +27,20 @@ export const DEFAULT_LOCALE: AppLocale = 'es'
 
 const LOCALE_STORAGE_KEY = 'kronoqr.kiosk.locale'
 
+/**
+ * Hasta la 2.2.x la eleccion de un empleado se guardaba aqui y se quedaba para toda
+ * la tablet (V7-KI-05). Ya no se guarda (D9): se retira lo que dejaron versiones
+ * anteriores, o una tablet actualizada seguiria arrancando en el idioma de la
+ * ultima persona que lo cambio.
+ */
+export function clearStoredLocale(storage: Storage | null = safeStorage()): void {
+  try {
+    storage?.removeItem(LOCALE_STORAGE_KEY)
+  } catch {
+    // Sin almacenamiento no hay nada que retirar.
+  }
+}
+
 export function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === 'string' && SUPPORTED_LOCALES.some((locale) => locale === value)
 }
@@ -38,16 +52,6 @@ export function readStoredLocale(storage: Storage | null = safeStorage()): AppLo
     return isSupportedLocale(stored) ? stored : null
   } catch {
     return null
-  }
-}
-
-export function storeLocale(locale: AppLocale, storage: Storage | null = safeStorage()): void {
-  if (storage === null) return
-  try {
-    storage.setItem(LOCALE_STORAGE_KEY, locale)
-  } catch {
-    // Almacenamiento lleno o deshabilitado: se pierde la preferencia, no el
-    // idioma. Nada que un empleado delante de la tablet tenga que sufrir.
   }
 }
 

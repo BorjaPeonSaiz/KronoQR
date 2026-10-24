@@ -61,7 +61,7 @@ describe('sesion de escaneo', () => {
     session.dismiss()
   })
 
-  it('mide la latencia del camino critico (RNF-P-03: < 300 ms)', () => {
+  it('mide la latencia del camino critico, la parte del quiosco de RNF-P-01 (< 300 ms, doc 02 §6)', () => {
     const { sound } = soundSpy()
     let clockMs = 1000
     const session = useScanSession({
@@ -131,7 +131,7 @@ describe('sesion de escaneo', () => {
   })
 })
 
-// RF-AT-05, RF-KI-06, RNF-P-03 (V7-KI-01): la pantalla es inmediata y muda; el
+// RF-AT-05, RF-KI-06, RNF-P-01 (V7-KI-01): la pantalla es inmediata y muda; el
 // tono es el del desenlace del servidor dentro de SCAN_SOUND_SERVER_WAIT_MS.
 describe('sonido de la sesion: tras la respuesta del servidor', () => {
   beforeEach(() => {
@@ -270,6 +270,28 @@ describe('sonido de la sesion: tras la respuesta del servidor', () => {
     session.settle(accepted('s1'))
     expect(played).toEqual(['pending'])
     session.dismiss()
+  })
+
+  it('fallo de red explicito con `onLine` en true (V21-7-KI-1): `pending` en el momento, sin esperar al plazo', () => {
+    const { session, played } = scanned()
+
+    expect(played).toEqual([])
+    session.markPending('s1')
+    expect(played).toEqual(['pending'])
+
+    vi.advanceTimersByTime(SCAN_SOUND_SERVER_WAIT_MS * 2)
+    session.markPending('s1')
+    expect(played).toEqual(['pending'])
+    session.dismiss()
+  })
+
+  it('`markPending` de otro escaneo, o ya retirada la espera, no suena', () => {
+    const { session, played } = scanned()
+
+    session.markPending('otro')
+    session.dismiss()
+    session.markPending('s1')
+    expect(played).toEqual([])
   })
 
   it('rechazo dentro del plazo: `error`, una sola vez', () => {

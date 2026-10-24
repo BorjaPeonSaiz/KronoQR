@@ -25,9 +25,9 @@
 import { PRODUCT_BRANDING, type Branding } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { readSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
+import { readSiteTimeZone } from '@/shared/device/deviceSettings'
 import { formatClockTime } from '../domain/clockTime'
-import { clockSkewMinutesFrom } from '../domain/clockSkewMessage'
+import { clockSkewMinutesFrom } from '@/shared/time/clockSkewMessage'
 import { greetingSlotFor } from '../domain/greeting'
 import type { ConfirmationVariant, ScanConfirmation } from '../domain/scanOutcome'
 import { isArrival, variantFor } from '../domain/scanOutcome'
@@ -254,7 +254,7 @@ const clockSkewNotice = computed(() => {
          `<p>`, no un `<span>`: hay una prueba que comprueba que el desenlace
          `debounced` no lleva NINGUN `span[aria-hidden]` (el glifo grande de
          alarma que aqui no aplica), y esta linea no es ese glifo. -->
-    <p aria-hidden="true" class="mt-2 flex items-center gap-2 text-base font-medium">
+    <p aria-hidden="true" class="mt-2 flex items-center gap-2 text-lg font-medium">
       <img
         v-if="props.branding.logoUrl !== null"
         :src="props.branding.logoUrl"

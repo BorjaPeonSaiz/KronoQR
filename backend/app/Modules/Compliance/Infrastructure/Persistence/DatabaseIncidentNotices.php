@@ -36,9 +36,9 @@ final readonly class DatabaseIncidentNotices implements IncidentNotices
 
     public function pendingByManager(): array
     {
-        /** @var list<object{id: int, type: string, severity: string, work_date: string, employee_uuid: string, first_name: string, last_name: string, manager_user_id: int, email: string, locale: string}> $rows */
+        /** @var list<object{id: int, type: string, severity: string, work_date: string, employee_uuid: string|null, first_name: string|null, last_name: string|null, manager_user_id: int, email: string, locale: string}> $rows */
         $rows = $this->connection->table('incidents')
-            ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+            ->leftJoin('employees', 'employees.id', '=', 'incidents.employee_id')
             ->join('users', 'users.id', '=', 'incidents.assigned_to_user_id')
             ->where('incidents.status', 'open')
             ->whereNull('incidents.notified_at')
@@ -80,7 +80,7 @@ final readonly class DatabaseIncidentNotices implements IncidentNotices
                 type: IncidentType::from($row->type),
                 severity: IncidentSeverity::from($row->severity),
                 employeeUuid: $row->employee_uuid,
-                employeeName: trim($row->first_name.' '.$row->last_name),
+                employeeName: $row->employee_uuid === null ? null : trim($row->first_name.' '.$row->last_name),
                 // `work_date` es DATE y PostgreSQL la devuelve ya como
                 // `YYYY-MM-DD`: es una fecha civil, no un instante (RN-05).
                 workDate: $row->work_date,

@@ -48,6 +48,24 @@ final readonly class DiscardedScanAttribution
         return new self(DiscardedScanAttributionMethod::EMPLOYEE_CODE, $ownerUuid, null);
     }
 
+    /**
+     * Por la huella del contenido (ADR-061, A2): el titular del fichaje aceptado
+     * mas reciente de esa misma tarjeta. Sin emision: la cota inferior de la
+     * revision es el alta, como por codigo.
+     */
+    public static function fingerprintMatch(string $ownerUuid): self
+    {
+        self::assertOwner($ownerUuid);
+
+        return new self(DiscardedScanAttributionMethod::FINGERPRINT_MATCH, $ownerUuid, null);
+    }
+
+    /** Si la atribucion autentica al titular: solo la tarjeta firmada. */
+    public function authenticates(): bool
+    {
+        return $this->method === DiscardedScanAttributionMethod::CREDENTIAL;
+    }
+
     public static function none(): self
     {
         return new self(DiscardedScanAttributionMethod::NONE, null, null);

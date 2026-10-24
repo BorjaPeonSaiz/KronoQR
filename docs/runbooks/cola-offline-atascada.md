@@ -11,7 +11,9 @@
 | `KioskQueueStorageDegraded` | `kiosk_queue_storage_degraded == 1`, `for: 10m` | Alta | IT del cliente | [§7](#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) |
 | `KioskUnreportedDiscards` | `kiosk_unreported_discards > 0`, `for: 30m` | Aviso | IT del cliente | [§8](#8-descartes-sin-avisar-kioskunreporteddiscards) |
 | `ScanBatchItemNotProcessed` | `increase(scan_batch_items_not_processed_total[30m]) >= 3`, `for: 5m` | Aviso | IT del cliente | [§9](#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) |
-| `KioskDiscardedScansAttributed` | `increase(kiosk_discarded_scans_total{attributed="true"}[1h]) > 0`, `for: 0m` | Aviso | IT del cliente | [§10](#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) |
+| `KioskDiscardedScansAttributed` | `increase(kiosk_discarded_scans_total{attributed="true",source!="server"}[1h]) > 0`, `for: 0m` | Aviso | IT del cliente | [§10](#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) |
+| `ScanDiscardedByServer` | `increase(kiosk_discarded_scans_total{source="server"}[15m]) > 0`, `for: 0m` | Aviso | IT del cliente | [§11](#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) |
+| `ScanDiscardBudgetExhausted` | `increase(kiosk_scan_discard_budget_exhausted_total[15m]) > 0`, `for: 0m` | Crítica | IT del cliente | [§11](#11-descartes-del-servidor-scandiscardedbyserver-y-scandiscardbudgetexhausted) |
 
 **A las 06:30, quien la reciba hace esto:** mira `kiosk:health` para ver de
 qué quiosco es y cuánto lleva creciendo; si el resto de la instalación
@@ -428,6 +430,84 @@ RRHH, así que no es ruido.
   no la tienes, no esperes. Avisa a RRHH de que las incidencias de ese
   dispositivo pueden ser falsas, y escala al responsable de seguridad.
 - Nunca borres datos de una tablet real con pendientes (§5).
+
+## 11. Descartes del servidor (`ScanDiscardedByServer` y `ScanDiscardBudgetExhausted`)
+
+### Qué significa
+
+Desde la 2.3.0 (ADR-061, RN-22), si el servidor falla **el mismo fichaje** al
+menos 10 veces durante al menos 60 minutos, por una causa que no es una base
+de datos o un Redis caídos, lo **descarta** para que la cola de esa tablet
+siga. El fichaje **no entra en el registro**; el empleado no notó nada, porque
+la tablet se lo confirmó al fichar (regla 19). Cada descarte es **un defecto del
+producto** que hay que reproducir; no es un problema de la instalación.
+
+| Alerta | Qué dice | Qué hacer primero |
+| --- | --- | --- |
+| `ScanDiscardedByServer` (aviso) | Hubo un descarte en los últimos 15 min | Conservar la evidencia (abajo), avisar a RRHH y abrir caso con el fabricante. Nada urgente en la cola |
+| `ScanDiscardBudgetExhausted` (crítica) | El quiosco ya tiene 3 descartes del servidor en 24 h y ha aparecido otro fichaje que fallaría: **no se descarta y la cola vuelve a atascarse a propósito** | Tratarlo como una avería del servidor, no del fichaje: ver «Cupo agotado» |
+
+### Qué ve RRHH
+
+- Si el servidor supo de quién era el fichaje, una incidencia **«Fichaje
+  descartado»** (una por persona y jornada) con el origen `servidor` y el número
+  de intentos. Es la misma incidencia de RN-22 que abre el aviso de un quiosco.
+- Si la tarjeta no se pudo atribuir por su firma, el servidor busca a su titular
+  por la **huella del contenido** en fichajes aceptados anteriores de esa misma
+  tarjeta (atribución `fingerprint_match`) y abre la misma incidencia.
+- Si tampoco así, una incidencia **sin persona** para el administrador, una por
+  quiosco y jornada, con el quiosco y la hora. Crúzala con el cuadrante.
+
+### Cómo se corrige, con trazabilidad
+
+El descarte nunca crea, cierra ni toca un tramo (regla 5). Si la persona
+trabajó, RRHH crea el tramo desde la incidencia con una **corrección con motivo**
+(RN-13): queda la versión nueva con autor, momento y motivo. **No se reprocesa
+el fichaje original** ni se edita nada en la base de datos: el servidor no
+guarda su contenido a propósito, y reenviarlo tras arreglar el defecto daría un
+fichaje doble con la corrección. El descarte queda en `audit_log` como
+`scan.discarded` (actor `system`) y en `scan_events` con
+`result = discarded_unprocessable`. Cualquier reenvío del mismo `scan_id`
+devuelve el mismo `422 scan-discarded`.
+
+### Evidencia que hay que conservar antes de abrir el caso
+
+```bash
+docker compose -f infra/compose.prod.yaml logs --since 2h app | grep attendance.scan_discarded_after_failures
+docker compose -f infra/compose.prod.yaml exec postgres psql -U kronoqr -c \
+  "SELECT scan_id, device_id, origin, exception_class, failed_at FROM scan_processing_failures ORDER BY failed_at DESC LIMIT 30;"
+```
+
+Trae el `scan_id`, el quiosco, los intentos, el primer fallo y la **clase** de
+la excepción, sin mensaje ni nombres. `scan_processing_failures` es una tabla
+técnica (se purga sola a los 30 días); sale en el paquete de diagnóstico solo
+como recuentos.
+
+### Cupo agotado (`ScanDiscardBudgetExhausted`)
+
+Si ya hubo 3 descartes en 24 h en ese quiosco y sigue apareciendo uno más, lo
+probable es que **el servidor esté roto para todos** (una actualización, una
+migración, un esquema), no que lo estén esos fichajes. Por eso el servidor
+deja de descartar y la cola de esa tablet **espera**, igual que en §9, sin
+perder nada.
+
+1. Comprueba si ha habido un despliegue o una migración en las últimas horas
+   (`docker compose -f infra/compose.prod.yaml logs --since 24h migrate`) y el
+   `ScanBatchItemNotProcessed` de §9 en los demás quioscos.
+2. Si hay una versión anterior buena, **vuelve atrás**
+   ([`actualizacion-cliente.md`](actualizacion-cliente.md)); si no, escala al
+   fabricante con el paquete de diagnóstico y los `scan_id` de arriba.
+3. **No subas `SCAN_DISCARD_DAILY_BUDGET` ni lo pongas a 0 para «desatascar»** sin
+   que lo pida el fabricante: es el freno que evita vaciar el registro en
+   descartes, uno por hora. Los números (`SCAN_DISCARD_MIN_ATTEMPTS`,
+   `SCAN_DISCARD_MIN_MINUTES`, `SCAN_DISCARD_DAILY_BUDGET`) viven en el `.env`.
+4. Nunca borres ni desvincules la tablet (§5): su cola es el registro.
+
+**Si aun así se reempareja la tablet como dispositivo nuevo** (avería, sustitución):
+un fichaje envenenado que quedara en su cola **deja de sumar intentos** a su
+historia, porque los intentos solo cuentan con el mismo quiosco que el primero
+(ADR-061 §1). Vuelve a empezar desde cero: más espera antes de un descarte, nunca
+un descarte de más. Falla hacia lo seguro; no hay que hacer nada.
 
 **Relacionados:** [`quiosco-no-responde.md`](quiosco-no-responde.md) ·
 [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) ·

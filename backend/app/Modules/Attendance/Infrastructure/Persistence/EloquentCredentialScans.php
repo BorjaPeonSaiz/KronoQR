@@ -79,8 +79,10 @@ final readonly class EloquentCredentialScans implements CredentialScans
             ->whereIn('scan_events.origin', ['qr_kiosk', 'pin_kiosk'])
             // La lista de lo que NO entra, escrita entera: con un `NOT LIKE
             // 'rejected%'` el anti-rebote se caia dentro sin que nadie lo
-            // decidiera, y ahi estaba el agujero de RN-16 (decision 15).
-            ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature'])
+            // decidiera, y ahi estaba el agujero de RN-16 (decision 15). El
+            // descarte del servidor (ADR-061) tampoco es un uso de la credencial
+            // que el servidor decidiera: no entra.
+            ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'discarded_unprocessable'])
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),
                 $to->format('Y-m-d H:i:s.uP'),

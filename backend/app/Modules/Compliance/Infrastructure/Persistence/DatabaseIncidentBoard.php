@@ -75,11 +75,11 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
     /**
      * Lo que compone una fila, en una sola consulta.
      *
-     * El `JOIN` a `employees` es interno y los cuatro restantes son `LEFT`, y la
-     * diferencia no es de estilo: una incidencia sin empleado no puede existir
-     * —la clave ajena es obligatoria— pero si puede no tener departamento, ni
-     * tramo, ni responsable, ni resolutor, y cada uno de esos nulos significa
-     * algo distinto y visible.
+     * Todos los `JOIN` son `LEFT` desde la 2.3.0 (ADR-061 A2): la `discarded_scan`
+     * de un descarte del servidor sin atribuir no tiene persona y va por su
+     * quiosco (`device_id`); el centro sale entonces del quiosco. Cada nulo
+     * —sin persona, sin departamento, sin tramo, sin responsable, sin resolutor—
+     * significa algo distinto y visible.
      */
     private const string SELECT_ROW = <<<'SQL'
         SELECT i.id,
@@ -94,10 +94,12 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
                i.resolved_by_user_id,
                i.resolution_note,
                e.uuid AS employee_uuid,
+               dv.uuid AS device_uuid,
+               dv.name AS device_name,
                e.employee_code,
                e.first_name,
                e.last_name,
-               e.site_id,
+               COALESCE(e.site_id, dv.site_id) AS site_id,
                e.department_id,
                d.name AS department_name,
                se.uuid AS shift_entry_uuid,
@@ -106,7 +108,8 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
                ru.uuid AS resolver_uuid,
                ru.name AS resolver_name
           FROM incidents i
-          JOIN employees e ON e.id = i.employee_id
+          LEFT JOIN employees e ON e.id = i.employee_id
+          LEFT JOIN devices dv ON dv.id = i.device_id
           LEFT JOIN departments d ON d.id = e.department_id
           LEFT JOIN shift_entries se ON se.id = i.shift_entry_id
           LEFT JOIN users au ON au.id = i.assigned_to_user_id
@@ -146,7 +149,7 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
         /** @var list<object> $counted */
         $counted = $this->connection->select(
             'SELECT count(*) AS total FROM incidents i'
-            .($this->filtersOnEmployee($query) ? ' JOIN employees e ON e.id = i.employee_id' : '')
+            .($this->filtersOnEmployee($query) ? ' LEFT JOIN employees e ON e.id = i.employee_id' : '')
             ."\n".$where,
             $bindings,
         );
@@ -179,9 +182,8 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
     /**
      * Si algun predicado de {@see filters()} mira la ficha (`e.*`).
      *
-     * Sin ninguno, el recuento no necesita `employees`: toda incidencia tiene
-     * persona —la clave ajena es obligatoria—, asi que el `JOIN` no quita ni
-     * pone filas, y sin el, el recuento sale solo de
+     * Sin ninguno, el recuento no necesita `employees`: el `LEFT JOIN` no quita
+     * ni pone filas —tampoco la incidencia sin persona de ADR-061 A2—, y sin el, el recuento sale solo de
      * `incidents_status_urgency_index` (`Index Only Scan`) en vez de leer cada
      * incidencia del estado para cruzarla. Con `resolved`, que es casi todo el
      * historico, es la diferencia entre el indice y la tabla.
@@ -274,7 +276,7 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
                 type: IncidentType::from($row->string('type')),
                 severity: IncidentSeverity::from($row->string('severity')),
                 status: IncidentStatus::from($row->string('status')),
-                employeeUuid: $row->string('employee_uuid'),
+                employeeUuid: $row->nullableString('employee_uuid'),
                 siteId: $row->int('site_id'),
                 workDate: $this->isoDate($row->string('work_date')),
                 shiftEntryUuid: $row->nullableString('shift_entry_uuid'),
@@ -284,13 +286,17 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
                 resolvedAt: $row->nullableInstant('resolved_at'),
                 resolvedByUserId: $row->nullableInt('resolved_by_user_id'),
                 resolutionNote: $row->nullableString('resolution_note'),
+                deviceUuid: $row->nullableString('device_uuid'),
             ),
             subject: new IncidentSubject(
-                employeeUuid: $row->string('employee_uuid'),
-                employeeCode: $row->string('employee_code'),
-                fullName: trim($row->string('first_name').' '.$row->string('last_name')),
+                employeeUuid: $row->nullableString('employee_uuid'),
+                employeeCode: $row->nullableString('employee_code'),
+                fullName: $row->nullableString('employee_uuid') === null
+                    ? null
+                    : trim($row->string('first_name').' '.$row->string('last_name')),
                 departmentId: $row->nullableInt('department_id'),
                 departmentName: $row->nullableString('department_name'),
+                deviceName: $row->nullableString('device_name'),
             ),
             assignedTo: $this->actor($row, 'assignee'),
             resolvedBy: $this->actor($row, 'resolver'),

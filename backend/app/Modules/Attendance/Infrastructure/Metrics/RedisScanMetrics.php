@@ -61,6 +61,9 @@ final readonly class RedisScanMetrics implements ScanMetrics
 
     public const string DISCARDED_SCANS = self::KEY_PREFIX.'kiosk_discarded_scans_total';
 
+    /** ADR-061 §3: el cupo de descartes del servidor agotado (alerta critica). */
+    public const string DISCARD_BUDGET_EXHAUSTED = self::KEY_PREFIX.'kiosk_scan_discard_budget_exhausted_total';
+
     /**
      * Cubos en segundos, del contrato de Prometheus: cada uno cuenta las
      * observaciones **menores o iguales** que su limite.
@@ -232,11 +235,37 @@ final readonly class RedisScanMetrics implements ScanMetrics
         try {
             $this->redis->connection()->command('HINCRBY', [
                 self::DISCARDED_SCANS,
-                'device='.$deviceUuid.',attributed='.($attributed ? 'true' : 'false'),
+                'device='.$deviceUuid.',attributed='.($attributed ? 'true' : 'false').',source=kiosk',
                 1,
             ]);
         } catch (Throwable) {
             // Medir no puede tumbar un aviso que ya esta guardado.
+        }
+    }
+
+    public function serverDiscardedScan(string $deviceUuid, bool $attributed): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::DISCARDED_SCANS,
+                'device='.$deviceUuid.',attributed='.($attributed ? 'true' : 'false').',source=server',
+                1,
+            ]);
+        } catch (Throwable) {
+            // Medir no puede deshacer un descarte que ya esta escrito.
+        }
+    }
+
+    public function scanDiscardBudgetExhausted(string $deviceUuid): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::DISCARD_BUDGET_EXHAUSTED,
+                'device='.$deviceUuid,
+                1,
+            ]);
+        } catch (Throwable) {
+            // Ver `scanProcessed()`: medir no puede cambiar el desenlace.
         }
     }
 }

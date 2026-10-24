@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
@@ -107,7 +108,7 @@ describe('selector de idioma', () => {
     }
   })
 
-  it('cambia el idioma y lo recuerda para la proxima vez', async () => {
+  it('cambia el idioma pero NO lo recuerda: la eleccion es de quien ficha (D9, V7-KI-05)', async () => {
     const i18n = createAppI18n('es')
     const wrapper = mount(LanguageSelector, {
       props: { policy: BILINGUAL },
@@ -117,7 +118,7 @@ describe('selector de idioma', () => {
     await wrapper.findAll('button')[1]?.trigger('click')
 
     expect(i18n.global.locale.value).toBe('en')
-    expect(readStoredLocale()).toBe('en')
+    expect(readStoredLocale()).toBeNull()
     expect(document.documentElement.lang).toBe('en')
   })
 
@@ -190,7 +191,7 @@ describe('selector de idioma', () => {
     expect(wrapper.findAll('button')).toHaveLength(2)
   })
 
-  it('cuando la marca abre un segundo idioma sin eleccion guardada, vuelve a seguir al navegador (RF-KI-05)', async () => {
+  it('cuando la marca abre un segundo idioma y nadie ha elegido, vuelve a seguir al navegador (RF-KI-05)', async () => {
     const i18n = createAppI18n('es')
     const wrapper = mount(LanguageSelector, {
       props: { policy: SPANISH_ONLY },
@@ -206,19 +207,18 @@ describe('selector de idioma', () => {
     vi.restoreAllMocks()
   })
 
-  it('con una eleccion guardada, abrir un segundo idioma no la pisa (RF-KI-05)', async () => {
-    localStorage.setItem('kronoqr.kiosk.locale', 'es')
+  it('una politica nueva que sigue ofreciendo el idioma que una persona ha elegido no lo pisa a media confirmacion', async () => {
     const i18n = createAppI18n('es')
     const wrapper = mount(LanguageSelector, {
-      props: { policy: SPANISH_ONLY },
+      props: { policy: BILINGUAL },
       global: { plugins: [i18n] },
     })
+    await wrapper.findAll('button')[1]?.trigger('click')
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['es-ES'])
 
-    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
-    await wrapper.setProps({ policy: BILINGUAL })
+    await wrapper.setProps({ policy: { default: 'es', available: ['en', 'es'] } })
 
-    expect(i18n.global.locale.value).toBe('es')
-    vi.restoreAllMocks()
+    expect(i18n.global.locale.value).toBe('en')
   })
 })
 

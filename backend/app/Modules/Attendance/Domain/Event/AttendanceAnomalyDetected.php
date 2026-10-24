@@ -39,9 +39,16 @@ final readonly class AttendanceAnomalyDetected implements DomainEvent
     }
 
     /** Identificador publico del empleado. **Nunca su nombre** (regla dura 21). */
-    public function employeeUuid(): string
+    /** Nulo solo en el `discarded_scan` sin atribuir (ADR-061 A2). */
+    public function employeeUuid(): ?string
     {
         return $this->anomaly->employeeUuid;
+    }
+
+    /** El quiosco del `discarded_scan` sin persona; nulo en todo lo demas. */
+    public function deviceUuid(): ?string
+    {
+        return $this->anomaly->deviceUuid;
     }
 
     public function siteId(): int

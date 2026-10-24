@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ScanView from '@/features/scan/ui/ScanView.vue'
 import { createAppI18n } from '@/shared/i18n'
+import { createTestRouter } from './support/testRouter'
 
 type DecodeCallback = (result: { getText: () => string } | undefined, error?: unknown) => void
 
@@ -46,7 +48,7 @@ function installCamera(available = true): void {
 }
 
 function render() {
-  return mount(ScanView, { global: { plugins: [createAppI18n('es')] } })
+  return mount(ScanView, { global: { plugins: [createAppI18n('es'), createTestRouter()] } })
 }
 
 beforeEach(() => {
@@ -132,7 +134,7 @@ describe('pantalla del quiosco', () => {
     wrapper.unmount()
   })
 
-  it('confirma en menos de 300 ms (RNF-P-03)', async () => {
+  it('confirma en menos de 300 ms, la parte del quiosco de RNF-P-01 (doc 02 §6)', async () => {
     const wrapper = render()
     await vi.waitFor(() => expect(decodeCallbacks).toHaveLength(1))
 

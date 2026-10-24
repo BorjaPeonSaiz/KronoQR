@@ -123,8 +123,11 @@ test(
 
 test(
   'confirma en menos de 300 ms, antes de saber nada del servidor',
-  { tag: ['@RF-AT-05', '@RF-KI-02'] },
+  { tag: ['@RF-AT-05', '@RF-KI-02', '@RNF-P-01'] },
   async ({ page }) => {
+    // La sonda `scan-latency-ms` mide la parte del quiosco de RNF-P-01 (de la
+    // lectura a la confirmacion en pantalla, < 300 ms en el doc 02 §6), no la
+    // decodificacion de RNF-P-03, que mide `qr-decode-budget.spec.ts` (KP2).
     // El servidor tarda tres segundos: el empleado no puede esperarlo.
     await page.route('**/api/v1/scan', async (route) => {
       // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
@@ -281,7 +284,7 @@ test(
 )
 
 test(
-  'se cambia de idioma y la eleccion sobrevive a una recarga',
+  'se cambia de idioma y la eleccion NO se queda en la tablet: vuelve al de serie (D9)',
   { tag: ['@RF-KI-05'] },
   async ({ page }) => {
     await stubScanApi(page)
@@ -291,9 +294,10 @@ test(
     await page.getByRole('button', { name: 'English' }).click()
     await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
 
+    // La eleccion es de quien ficha: no se guarda, y una recarga arranca en el de serie.
     await page.reload()
-    await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(page.getByTestId('privacy-notice')).toContainText('Aviso de protección de datos')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   },
 )
 
@@ -543,7 +547,7 @@ test(
 
 test(
   'respuesta tardia: la pantalla confirma muda, a los 2 s suena «pendiente» y la respuesta posterior no vuelve a sonar (RF-AT-05)',
-  { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-03'] },
+  { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-01'] },
   async ({ page }) => {
     const { readTones } = await installAudioProbe(page)
     // El servidor contesta a los 3 s: despues del plazo del sonido (2 s) y con

@@ -26,18 +26,18 @@ import { createApiClient } from '@/shared/api/client'
 import { markInteraction } from '@/features/offline/application/interactionGuard'
 import { readPrivacyNotice } from '@/shared/branding/useBranding'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
+import { APP_VERSION, clearDeviceToken, resolveDeviceId } from '@/shared/device/deviceIdentity'
 import {
-  APP_VERSION,
-  clearDeviceToken,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
-  resolveDeviceId,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
-import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
+import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
+import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
+import { useLocalePolicy } from '@/shared/branding/useBranding'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
@@ -139,6 +139,9 @@ const session = useScanSessionWithCleanup({
   pipeline: { handleDecoded: () => null },
   sound,
 })
+// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+const localePolicy = useLocalePolicy()
+useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
 type Step = 'code' | 'pin' | 'submitting'
 const step = ref<Step>('code')
@@ -356,7 +359,7 @@ onUnmounted(() => {
         :pending-count="connectivity.pendingCount.value"
         :syncing="offline.syncing.value"
       />
-      <LanguageSelector />
+      <LanguageSelector :policy="localePolicy" />
     </header>
 
     <section class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-10">

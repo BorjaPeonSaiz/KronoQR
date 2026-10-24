@@ -272,6 +272,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'incidents' => self::INCIDENTS,
         'scan_events' => self::SCAN_EVENTS,
         'discarded_scan_reports' => self::DISCARDED_SCAN_REPORTS,
+        'scan_processing_failures' => self::SCAN_PROCESSING_FAILURES,
         'audit_log' => self::AUDIT_LOG,
         'audit_chain_anchors' => self::AUDIT_CHAIN_ANCHORS,
         'users' => self::USERS,
@@ -483,6 +484,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
 
     private const string INCIDENTS = <<<'SQL'
         SELECT e.uuid::text  AS employee_uuid,
+               dv.uuid::text AS device_uuid,
                to_char(i.work_date, 'YYYY-MM-DD') AS work_date,
                se.uuid::text AS shift_entry_uuid,
                i.type,
@@ -498,7 +500,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
                to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
           FROM incidents i
-          JOIN employees e            ON e.id = i.employee_id
+          LEFT JOIN employees e       ON e.id = i.employee_id
+          LEFT JOIN devices dv        ON dv.id = i.device_id
           LEFT JOIN shift_entries se  ON se.id = i.shift_entry_id
           LEFT JOIN users au          ON au.id = i.assigned_to_user_id
           LEFT JOIN users ru          ON ru.id = i.resolved_by_user_id
@@ -541,11 +544,25 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                e.uuid::text      AS owner_employee_uuid,
                dr.attribution,
                to_char(dr.credential_issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS credential_issued_at,
-               dr.already_recorded::text AS already_recorded
+               dr.already_recorded::text AS already_recorded,
+               dr.source,
+               dr.failed_attempts::text AS failed_attempts,
+               to_char(dr.first_failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS first_failed_at
           FROM discarded_scan_reports dr
           JOIN devices d         ON d.id = dr.device_id
           LEFT JOIN employees e  ON e.id = dr.owner_employee_id
          ORDER BY dr.id
+        SQL;
+
+    private const string SCAN_PROCESSING_FAILURES = <<<'SQL'
+        SELECT f.scan_id::text AS scan_id,
+               d.uuid::text    AS device_uuid,
+               f.origin,
+               to_char(f.failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS failed_at,
+               f.exception_class
+          FROM scan_processing_failures f
+          JOIN devices d ON d.id = f.device_id
+         ORDER BY f.id
         SQL;
 
     /*

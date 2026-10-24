@@ -134,6 +134,11 @@ final readonly class RedisKioskMetrics implements KioskMetrics
         $this->increment(self::PAIRING_TOTAL, 'result=claimed');
     }
 
+    public function pairingReclaimed(): void
+    {
+        $this->increment(self::PAIRING_TOTAL, 'result=reclaimed');
+    }
+
     public function pairingRejected(string $reason): void
     {
         $this->increment(self::PAIRING_TOTAL, 'result=rejected,reason='.$reason);

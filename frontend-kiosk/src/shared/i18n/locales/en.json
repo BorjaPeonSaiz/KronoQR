@@ -70,8 +70,7 @@
     "rejected": {
       "title": "Invalid code",
       "body": "You may have mistyped it. Try again; if it keeps happening, tell the front desk."
-    },
-    "srAnnouncement": "Scan result"
+    }
   },
   "pin": {
     "entryButton": "Clock in with your code and PIN",
@@ -219,7 +218,26 @@
       "updateUrgent": "Urgent update pending: the server needs version {version}. It will be applied as soon as there are no pending clockings and nobody is clocking in, at any time of day; the screen will reload for a few seconds.",
       "updateUrgentGaveUp": "The tablet has tried several times to update to version {version} and is still on another one. The kiosk keeps clocking normally; contact support.",
       "updateUrgentUnavailable": "The server asks for version {version}, but that version is not available to this tablet: no newer version was found. The kiosk keeps clocking normally; contact support.",
-      "updateUpToDate": "Up to date."
+      "updateUpToDate": "Up to date.",
+      "cameraState": {
+        "idle": "Stopped",
+        "starting": "Starting",
+        "running": "Running",
+        "denied": "Permission denied",
+        "unavailable": "Unavailable"
+      },
+      "facing": {
+        "user": "Front",
+        "environment": "Rear",
+        "left": "Left",
+        "right": "Right"
+      },
+      "focus": {
+        "continuous": "Continuous",
+        "manual": "Manual",
+        "singleShot": "Single shot",
+        "none": "No focus"
+      }
     },
     "warnings": {
       "background_blur": "The system is blurring the video background. Turn off the operating system's camera effects.",

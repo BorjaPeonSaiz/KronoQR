@@ -76,6 +76,15 @@ export interface PairingFlow {
 
 const DEFAULT_REQUEST_RETRY_DELAY_MS = 5_000
 
+/**
+ * Tras un `claim` cuya respuesta pudo perderse, el servidor admite repetirlo entre
+ * 10 y 60 s despues de la primera recogida, con el mismo secreto y desde la misma
+ * direccion (V6-KI-02). Antes de 10 s contesta el mismo rechazo de siempre, asi que
+ * un rechazo DENTRO de esta ventana no significa «solicitud perdida»: se sigue
+ * sondeando. El margen de mas cubre el reloj entre cliente y servidor.
+ */
+export const CLAIM_RECOVERY_WINDOW_MS = 70_000
+
 export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
   const clock = options.clock ?? systemClock
   const setTimer =
@@ -100,6 +109,14 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
    * instalada) se cae al valor por defecto.
    */
   let lastKnownPollIntervalSeconds: number | null = null
+  /**
+   * Instante del primer `claim` cuyo resultado se desconoce (red, tiempo agotado,
+   * 5xx): el servidor pudo recogerlo y la respuesta perderse. Mientras dure la
+   * ventana de recuperacion un rechazo no descarta la solicitud.
+   */
+  let uncertainSinceMs: number | null = null
+  /** El `claim` en vuelo, para no tener nunca dos a la vez. */
+  let inflightClaim: AbortController | null = null
 
   function setState(next: PairingState): void {
     state = next
@@ -125,6 +142,7 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
   }
 
   async function requestCode(myGeneration: number, reason: PairingRequestReason): Promise<void> {
+    uncertainSinceMs = null
     setState({ kind: 'requesting', reason })
 
     const result = await options.api.requestPairing({ app_version: options.appVersion })
@@ -170,18 +188,25 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
     // vigila igual (`PairingRejected` si se sondeara de todos modos), pero
     // esperar a esa respuesta seria un viaje de red de mas para algo que la
     // propia tablet ya sabe.
-    if (clock.now().getTime() >= Date.parse(expiresAt)) {
+    // (Salvo con un `claim` perdido: la recuperacion vale aunque el codigo ya caducara.)
+    if (uncertainSinceMs === null && clock.now().getTime() >= Date.parse(expiresAt)) {
       void requestCode(myGeneration, 'expired')
       return
     }
 
-    const result: ApiResult<PairingClaim, PairingRejected> = await options.api.claimPairing({
-      pairing_id: pairingId,
-      pairing_secret: pairingSecret,
-    })
+    // Nunca dos `claim` en vuelo: si el anterior sigue colgado, se aborta.
+    inflightClaim?.abort()
+    const controller = new AbortController()
+    inflightClaim = controller
+    const result: ApiResult<PairingClaim, PairingRejected> = await options.api.claimPairing(
+      { pairing_id: pairingId, pairing_secret: pairingSecret },
+      { signal: controller.signal },
+    )
+    if (inflightClaim === controller) inflightClaim = null
     if (myGeneration !== generation || state.kind !== 'waiting') return
 
     if (result.outcome === 'ok') {
+      uncertainSinceMs = null
       if (result.data.status === 'paired') {
         const { device, token } = result.data
         setState({ kind: 'paired', device, token })
@@ -195,12 +220,28 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
     }
 
     if (result.outcome === 'rejected') {
+      // Un rechazo tras un `claim` perdido puede ser el «demasiado pronto» de la
+      // recuperacion (V6-KI-02): se sigue sondeando la MISMA solicitud hasta que
+      // la ventana se cierra.
+      if (
+        uncertainSinceMs !== null &&
+        clock.now().getTime() - uncertainSinceMs < CLAIM_RECOVERY_WINDOW_MS
+      ) {
+        schedulePoll(myGeneration, pollIntervalSeconds)
+        return
+      }
+      uncertainSinceMs = null
       // Unica respuesta de rechazo posible (regla dura 17): la solicitud ya no
       // sirve, sea cual sea la causa real. Se pide una nueva sola.
       void requestCode(myGeneration, 'rejected')
       return
     }
 
+    // Un fallo de transporte con el navegador en linea puede haber llegado al
+    // servidor: desde aqui un rechazo ya no es concluyente (ver arriba).
+    if (result.cause !== 'offline' && result.cause !== 'throttled') {
+      uncertainSinceMs ??= clock.now().getTime()
+    }
     // 'failed': red, tiempo agotado, `429`, `503` (mismo `ServiceUnavailable`
     // del contrato que `/kiosk/pair`), cualquier otro `5xx` o cuerpo mal
     // formado. Nada de esto es un rechazo: se sigue sondeando la MISMA
@@ -221,12 +262,17 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
     stop() {
       running = false
       generation += 1
+      inflightClaim?.abort()
+      inflightClaim = null
       clearTimers()
     },
 
     requestNewCode() {
       if (!running) return
       generation += 1
+      inflightClaim?.abort()
+      inflightClaim = null
+      uncertainSinceMs = null
       clearTimers()
       void requestCode(generation, 'manual')
     },

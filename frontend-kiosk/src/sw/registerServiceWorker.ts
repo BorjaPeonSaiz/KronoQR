@@ -11,7 +11,7 @@
 // justo en el minuto que existe para cubrir.
 //
 // LA PUERTA (RF-KI-07, tarea 3.12). `applyUpdate` consulta un guardian
-// (`canApply`, normalmente `features/offline/domain/updateWindow.ts` ->
+// (`canApply`, normalmente `shared/update/updateWindow.ts` ->
 // `canApplyUpdate`, cableado desde `main.ts`) antes de recargar: cola vacia,
 // sin escaneo reciente y dentro de la ventana que declaro el centro.
 //
@@ -39,8 +39,8 @@
 
 import type { RegisterSWOptions } from 'virtual:pwa-register'
 import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
-import type { UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
-import { URGENT_CHECK_MIN_INTERVAL_MS } from '@/features/offline/domain/minimumVersion'
+import type { UrgentUpdateMode } from '@/shared/update/minimumVersion'
+import { URGENT_CHECK_MIN_INTERVAL_MS } from '@/shared/update/minimumVersion'
 import { installTestHooks } from './testHooks'
 
 /** Forma minima que necesita este fichero de `registerSW`, para poder inyectarla en pruebas. */
@@ -234,10 +234,16 @@ export async function registerServiceWorker(
     // Solo cuenta una comprobacion que SE RESUELVE (una tablet sin red no se rinde
     // por no poder preguntar). Si tras ella no hay version pendiente, es un
     // intento en vacio; al acumular varios, la minima se da por inalcanzable.
-    void registration
+    const checked = registration
+    void checked
       .update()
       .then(() => {
         if (pending) return
+        // V21-3-KI-4: `update()` resuelve al EMPEZAR a instalar la version
+        // nueva, no al acabar de precachearla (~1 460 KiB). Con un trabajador
+        // instalandose o esperando, la version existe: no es una comprobacion
+        // en vacio, y contarla como tal acercaba la rendicion (`gave_up`).
+        if ((checked.installing ?? null) !== null || (checked.waiting ?? null) !== null) return
         options.onUrgentCheckEmpty?.()
         handleUrgentSignal()
       })

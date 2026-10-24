@@ -23,26 +23,26 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { markInteraction } from '@/features/offline/application/interactionGuard'
-import { useBranding } from '@/shared/branding/useBranding'
+import { useBranding, useLocalePolicy } from '@/shared/branding/useBranding'
+import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
+import { APP_VERSION, clearDeviceToken, resolveDeviceId } from '@/shared/device/deviceIdentity'
 import {
-  APP_VERSION,
-  clearDeviceToken,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
-  resolveDeviceId,
-} from '@/shared/telemetry/deviceIdentity'
+} from '@/shared/device/deviceSettings'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
-import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
+import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
+import { createMalformedReadReporter } from '../application/malformedReadReporter'
 import { createScanPipeline } from '../application/scanPipeline'
-import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
+import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '@/shared/time/clockSkewMessage'
 import { useQrScanner } from '../composables/useQrScanner'
 import { useBreakIntent } from '../composables/useBreakIntent'
 import { usePinSealingStatus } from '@/features/pin/composables/usePinSealingStatus'
@@ -142,6 +142,12 @@ const clockSkewBannerMessage = computed(() => {
   return t(`scan.clockSkew.${direction}`, { minutes })
 })
 
+// R3-KI-04: una lectura que no es tarjeta deja rastro tecnico (sin su contenido),
+// como mucho una vez por minuto.
+const reportMalformedRead = createMalformedReadReporter((context) =>
+  reporter.report('kiosk.scan.malformed_payload', { ...context }),
+)
+
 const pipeline = createScanPipeline({
   submission: offline.submission,
   deviceId,
@@ -157,7 +163,9 @@ const pipeline = createScanPipeline({
   // repetida que no llega a fichar nada desarma el boton, en vez de dejarlo
   // armado para una tarjeta que no es la que se esperaba.
   onUnqueuedRead: () => breakIntent.disarm(),
+  onMalformedPayload: reportMalformedRead,
   onSettled: (confirmation) => session.settle(confirmation),
+  onDeferred: (scanId) => session.markPending(scanId),
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),
 })
 
@@ -168,6 +176,10 @@ const session = useScanSessionWithCleanup({
   sound,
   isOffline: () => connectivity.status.value === 'offline',
 })
+
+// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+const localePolicy = useLocalePolicy()
+useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
 const scanner = useQrScanner({
   video,
@@ -242,6 +254,11 @@ onMounted(() => {
   cancelDeferredStart = afterFirstPaint(() => {
     void scanner.start()
     void wakeLock.request()
+    // V21-5-KI-1 / R5-KI-01: el `AudioContext` cuesta ~520 ms en construirse y,
+    // creado en el primer `play()`, entra en la latencia del primer fichaje de
+    // cada arranque (el de las 06:00 si la tablet se reinicia antes). Se crea aqui,
+    // en reposo; sin gesto previo queda suspendido y `play()` lo reanuda.
+    sound.unlock()
   })
   heartbeat.start()
 })
@@ -303,7 +320,7 @@ onUnmounted(() => {
              pulsacion larga de 3 s (RF-KI-08, tarea 3.3, decision 8). Nunca
              compite con el fichaje: una pulsacion corta no hace nada. -->
         <ClockDiagnosticsTrigger />
-        <LanguageSelector :policy="branding.current.value.locales" />
+        <LanguageSelector :policy="localePolicy" />
       </div>
     </header>
 
@@ -330,7 +347,7 @@ onUnmounted(() => {
     <p
       v-if="showClockSkewBanner"
       role="status"
-      class="mx-6 mb-2 flex items-center justify-center gap-2 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 py-2 text-center text-base font-medium text-kq-kiosk-text"
+      class="mx-6 mb-2 flex items-center justify-center gap-2 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 py-2 text-center text-confirm-sm font-medium text-kq-kiosk-text"
       data-testid="clock-skew-banner"
     >
       <span aria-hidden="true">⚠</span>
@@ -550,7 +567,8 @@ onUnmounted(() => {
     </footer>
 
     <!-- Sonda del presupuesto de rendimiento (Anexo A): el E2E lee de aqui los
-         milisegundos entre decodificar y confirmar. RNF-P-03 exige < 300 ms. -->
+         milisegundos entre decodificar y confirmar: la parte del quiosco de
+         RNF-P-01, < 300 ms en el doc 02 §6 (KP2; RNF-P-03 es la decodificacion). -->
     <span
       v-if="session.lastLatencyMs.value !== null"
       class="kiosk-sr-only"

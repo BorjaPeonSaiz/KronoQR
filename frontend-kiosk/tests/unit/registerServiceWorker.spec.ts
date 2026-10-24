@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Registro del service worker y su puerta de actualizacion (RF-KI-07, tarea
 // 3.12).
 //
@@ -15,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterSWLoader } from '@/sw/registerServiceWorker'
 import { isUpdatePending, registerServiceWorker } from '@/sw/registerServiceWorker'
-import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/features/offline/domain/minimumVersion'
+import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/shared/update/minimumVersion'
 import {
   currentUrgentGiveUpMotive,
   currentUrgentUpdateMode,

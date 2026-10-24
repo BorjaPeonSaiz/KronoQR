@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // El dialogo del QR de la politica de privacidad (RF-KI-09, V7-KI-02): se cierra
 // solo, cede ante cualquier confirmacion de fichaje y es un dialogo modal de
 // verdad (foco, Escape, resto inerte). Sin depender de transiciones.

@@ -121,6 +121,9 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'kiosk_offline_queue_size',
         'kiosk_pairing_total',
         'kiosk_queue_storage_degraded',
+        // ADR-061 (2.3.0): el cupo de descartes del servidor agotado. Solo un
+        // recuento por dispositivo.
+        'kiosk_scan_discard_budget_exhausted_total',
         'kiosk_token_rotations_total',
         'kiosk_unreported_discards',
         'kronoqr_auth_attempts_total',

@@ -59,7 +59,9 @@ test(
     const queued = await readQueue(page)
     const first = queued[0]
 
-    expect(first?.qr_payload).toBe(FIXTURE_PAYLOAD)
+    // A1: la tarjeta NO esta en claro en disco (AES-GCM); el lote la llevara descifrada.
+    expect(first?.qr_payload).toBeUndefined()
+    expect(JSON.stringify(queued)).not.toContain(FIXTURE_PAYLOAD)
     expect(first?.intent).toBe('auto')
     expect(first?.scan_id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,

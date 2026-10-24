@@ -261,9 +261,13 @@ describe('cola sin almacenamiento utilizable', () => {
     )
 
     expect(outcome.stored).toBe(true)
-    expect(queue.stats().size).toBeNull()
+    // V2-KI-02: el disco sigue LEYENDOSE (solo falla escribir), asi que se ve y el
+    // total es un hecho: disco (vacio) + memoria. Si tambien dejara de leerse seria
+    // `null` (ver `queueQuotaExhausted.spec.ts`).
+    expect(queue.stats().size).toBe(1)
     expect(queue.stats().inStore).toBe(1)
     expect(queue.stats().durable).toBe(false)
+    expect(queue.stats().storage).toBe('memory')
   })
 })
 

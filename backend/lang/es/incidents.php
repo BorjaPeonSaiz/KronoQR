@@ -46,6 +46,9 @@ return [
         'intro' => 'La revisión automática del registro horario ha encontrado :count situación(es) en tu departamento que necesitan que las mire una persona.',
         'line' => ':date · :employee · :type (prioridad :severity)',
         'more' => 'Y :count más, que puedes ver en la bandeja de incidencias del panel.',
+        // ADR-061 A2: la incidencia de un fichaje descartado que no se pudo
+        // atribuir no tiene persona; se nombra por su quiosco.
+        'no_employee' => 'Sin persona: ver el quiosco y la hora en la bandeja',
         'no_auto_close' => 'El sistema no ha cerrado ningún turno ni ha cambiado ninguna hora. Las correcciones las hace una persona y quedan registradas con su motivo.',
         'action' => 'Abrir la bandeja de incidencias',
         'footer' => 'Recibes este aviso una vez por cada revisión. Las incidencias que ya has trabajado no vuelven a aparecer.',

@@ -133,7 +133,7 @@ final class DataExportCatalog
      * `cancelled_at`, cuando quien pidio un informe en diferido lo detuvo. Una
      * columna mas es un cambio de forma.
      */
-    public const string SCHEMA_VERSION = '6';
+    public const string SCHEMA_VERSION = '7';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -296,6 +296,8 @@ final class DataExportCatalog
 
             ExportedDataset::csv('incidents', [
                 'employee_uuid',
+                // ADR-061 A2: el quiosco de la `discarded_scan` sin persona.
+                'device_uuid',
                 'work_date',
                 'shift_entry_uuid',
                 'type',
@@ -347,6 +349,23 @@ final class DataExportCatalog
                 'attribution',
                 'credential_issued_at',
                 'already_recorded',
+                // ADR-061 (2.3.0): quien lo descarto, y si fue el servidor,
+                // cuantos intentos fallaron y cuando fallo el primero.
+                'source',
+                'failed_attempts',
+                'first_failed_at',
+            ]),
+
+            // ADR-061 (2.3.0, A4): los intentos fallidos de procesar un fichaje.
+            // Tecnicos y de 30 dias, pero seudonimizados —enlazan con la tarjeta
+            // por la huella— y por eso del cliente (RF-PD-14). **Sin la huella**:
+            // es un derivado de un valor firmado y esta en `forbiddenColumns()`.
+            ExportedDataset::csv('scan_processing_failures', [
+                'scan_id',
+                'device_uuid',
+                'origin',
+                'failed_at',
+                'exception_class',
             ]),
 
             // --- Las evidencias -----------------------------------------------

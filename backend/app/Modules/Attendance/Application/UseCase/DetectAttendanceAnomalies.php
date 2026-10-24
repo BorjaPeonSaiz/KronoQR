@@ -27,6 +27,9 @@ use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
+use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
+use App\Modules\Attendance\Domain\ValueObject\DiscardedScanSource;
+use App\Modules\Attendance\Domain\ValueObject\UnattributedServerDiscard;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
@@ -141,6 +144,7 @@ final readonly class DetectAttendanceAnomalies
             ...$this->inspectRejectedPinScans($command, $site->id, $timezone, $now),
             ...$this->inspectWithdrawnCredentialScans($command, $site->id, $timezone, $now),
             ...$this->inspectDiscardedScans($command, $site->id, $timezone, $now),
+            ...$this->inspectUnattributedServerDiscards($command, $site->id, $timezone, $now),
         ];
 
         $failures = $this->publishEach($anomalies);
@@ -743,6 +747,11 @@ final readonly class DetectAttendanceAnomalies
      * catalogo cerrado de este producto o `other` (F9): nunca el texto que trajo
      * la tablet. **Nunca el contenido del QR ni el codigo**, que no se guardan.
      *
+     * **Desde la 2.3.0 tambien los que descarto el propio servidor** (ADR-061),
+     * en la misma incidencia: el `context` dice de donde vino el primero
+     * (`source`: `kiosk` o `server`) y cuantos intentos fallaron en el servidor
+     * (`attempts`, nulo si lo aviso el quiosco).
+     *
      * @return list<DetectedAnomaly>
      */
     private function inspectDiscardedScans(
@@ -789,7 +798,9 @@ final readonly class DetectAttendanceAnomalies
                 workDate: $group['workDate'],
                 shiftEntryUuid: null,
                 detectedAt: $now,
-                context: [
+                // `attempts` solo si lo descarto el servidor: el `context` es de
+                // escalares y un aviso del quiosco no tiene intentos (ADR-061).
+                context: array_filter([
                     'scan_id' => $first->scanId,
                     'occurred_at' => UtcInstant::of($first->occurredAt),
                     'device_uuid' => $first->deviceUuid,
@@ -798,7 +809,82 @@ final readonly class DetectAttendanceAnomalies
                     'problem' => $first->problem(),
                     'attribution' => $first->attribution->value,
                     'reports' => $group['reports'],
+                    'source' => $first->source->value,
+                    'attempts' => $first->serverAttempts,
+                ], static fn (int|string|null $value): bool => $value !== null),
+            );
+        }
+
+        return $anomalies;
+    }
+
+    /**
+     * RN-22, ADR-061 A2: los descartes **del servidor** que no se pudieron
+     * atribuir a nadie —ni por la firma, ni por la huella, ni por el codigo—.
+     *
+     * Una `discarded_scan` **sin persona** por quiosco y jornada (la fecha civil
+     * del `occurred_at` del primero en la zona del centro), dentro de la misma
+     * ventana creible que las demas. `Compliance` la asigna al administrador. El
+     * `context` lleva el quiosco, el `scan_id` y el `occurred_at` del primero,
+     * cuantos fueron, el origen y sus intentos: con eso quien la revisa cruza el
+     * quiosco y la hora con el cuadrante. Ni un nombre ni el contenido del QR.
+     *
+     * @return list<DetectedAnomaly>
+     */
+    private function inspectUnattributedServerDiscards(
+        DetectAnomaliesCommand $command,
+        int $siteId,
+        DateTimeZone $timezone,
+        DateTimeImmutable $now,
+    ): array {
+        $policy = new DiscardedScanReviewPolicy(
+            $this->settings->forSite($siteId)->maximumClockSkewMinutes * 60,
+            $command->discardReviewWindowDays,
+        );
+
+        /** @var array<string, array{first: UnattributedServerDiscard, workDate: WorkDate, reports: int}> $groups */
+        $groups = [];
+
+        foreach ($this->discardedScans->unattributedServerDiscardsBetween($now->modify('-'.$command->lookbackDays.' days'), $now) as $discard) {
+            if (! $policy->opensOwnerlessIncident($discard)) {
+                continue;
+            }
+
+            $workDate = WorkDate::fromInstant($discard->occurredAt, $timezone);
+            $key = $discard->deviceUuid.'|'.$workDate->isoDate;
+
+            if (isset($groups[$key])) {
+                $groups[$key]['reports']++;
+
+                continue;
+            }
+
+            $groups[$key] = ['first' => $discard, 'workDate' => $workDate, 'reports' => 1];
+        }
+
+        $anomalies = [];
+
+        foreach ($groups as $group) {
+            $first = $group['first'];
+
+            $anomalies[] = new DetectedAnomaly(
+                type: AnomalyType::DISCARDED_SCAN,
+                employeeUuid: null,
+                siteId: $siteId,
+                workDate: $group['workDate'],
+                shiftEntryUuid: null,
+                detectedAt: $now,
+                context: [
+                    'scan_id' => $first->scanId,
+                    'occurred_at' => UtcInstant::of($first->occurredAt),
+                    'device_uuid' => $first->deviceUuid,
+                    'origin' => $first->origin->value,
+                    'attribution' => DiscardedScanAttributionMethod::NONE->value,
+                    'reports' => $group['reports'],
+                    'source' => DiscardedScanSource::Server->value,
+                    'attempts' => $first->attempts,
                 ],
+                deviceUuid: $first->deviceUuid,
             );
         }
 
