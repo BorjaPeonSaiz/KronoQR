@@ -27,7 +27,7 @@ const props = defineProps<{
   timeZone: string
   /** El «ahora» del servidor, en milisegundos desde la epoca. */
   serverNowMs: number
-  /** Oculto/deshabilitado para un actor de soporte (decision 8 de la ficha). */
+  /** Oculto/deshabilitado para un actor de soporte. */
   canResolve: boolean
 }>()
 

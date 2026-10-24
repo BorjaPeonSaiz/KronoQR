@@ -1,6 +1,6 @@
 // Generador del encabezado `traceparent` (W3C Trace Context), compartido por
-// las tres SPA (tarea 3.1, decision 7 de la ficha: "la cabecera es
-// `traceparent`, en el borde, en la aplicacion y en los tres frontends").
+// las tres SPA (doc 02 §8.1: la cabecera es `traceparent`, en el borde, en la
+// aplicacion y en los tres frontends).
 //
 // POR QUE NO ES EL SDK WEB DE OPENTELEMETRY. El presupuesto del quiosco es
 // 250 KB gzip de JS critico (Anexo A del doc 02) y el SDK completo no cabe en

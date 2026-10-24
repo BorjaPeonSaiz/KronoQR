@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Icono y texto de pausa (tarea 3.5, ADR-024), compartido por panel y portal
+// Icono y texto de pausa (ADR-024), compartido por panel y portal
 // (ADR-036). Antes cada SPA llevaba su propio SVG y su propia pareja de
 // tokens -`kq-primary-soft` en el panel, `kq-accent-soft` en el portal- y ya
 // habian divergido: `kq-accent` es decorativo (doc 06 S6.5), nunca debe

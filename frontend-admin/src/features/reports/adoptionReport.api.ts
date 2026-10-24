@@ -1,4 +1,4 @@
-// Cuadro de impacto y adopción (RF-IN-08, RNF-D-01, tarea 3.13): los doce
+// Cuadro de impacto y adopción (RF-IN-08, RNF-D-01): los doce
 // indicadores del doc 01 §1.3, por periodo y con comparación contra el
 // periodo anterior. Las formas salen del contrato (`schema.d.ts`, regenerado
 // desde `docs/api/openapi.yaml` por `backend-laravel`); aquí no se inventa

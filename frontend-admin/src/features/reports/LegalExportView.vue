@@ -40,7 +40,7 @@ const { t } = useI18n()
 const session = useSessionStore()
 
 // Toda la plantilla, o mas de un mes, se genera en segundo plano con barra de
-// avance y cancelacion (RC2, V5-PA-4); una persona en un periodo corto sigue siendo
+// avance y cancelacion; una persona en un periodo corto sigue siendo
 // al momento. El endpoint sincrono se mantiene para ese caso.
 const {
   job,

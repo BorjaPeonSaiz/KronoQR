@@ -1,4 +1,4 @@
-// Zonas horarias IANA que ofrece el campo de zona del centro (V21-1-UX-1).
+// Zonas horarias IANA que ofrece el campo de zona del centro.
 //
 // `Intl.supportedValuesOf('timeZone')` da la lista del navegador. Sin esa funcion (navegadores
 // antiguos) o si lanza, se cae a las zonas de los mercados del producto: un campo de texto libre

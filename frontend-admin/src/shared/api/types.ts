@@ -14,7 +14,7 @@ export type UserRole = Schemas['UserRole']
 export type Session = Schemas['Session']
 export type LoginRequest = Schemas['LoginRequest']
 
-// Segundo factor obligatorio de las cuentas de gestion (RS-06, tarea 2.1).
+// Segundo factor obligatorio de las cuentas de gestion (RS-06).
 export type TwoFactorChallenge = Schemas['TwoFactorChallenge']
 export type TwoFactorCode = Schemas['TwoFactorCode']
 export type TwoFactorEnrolment = Schemas['TwoFactorEnrolment']
@@ -34,12 +34,12 @@ export type PinDeliveryReceipt = Schemas['PinDeliveryReceipt']
 
 export type Site = Schemas['Site']
 
-// Perfil de cumplimiento: los umbrales LEGALES del centro (RF-PD-07, tarea 5.2).
+// Perfil de cumplimiento: los umbrales LEGALES del centro (RF-PD-07).
 export type ComplianceProfile = Schemas['ComplianceProfile']
 export type ComplianceProfileBody = Schemas['ComplianceProfileBody']
 export type UpdateComplianceProfileRequest = Schemas['UpdateComplianceProfileRequest']
 
-// Licencia (RF-PD-04, RF-PD-05, tarea 5.3). `LicenseFeature` son las
+// Licencia (RF-PD-04, RF-PD-05). `LicenseFeature` son las
 // funcionalidades ACCESORIAS de ADR-023 y ninguna otra: el registro legal no es
 // licenciable y no tiene valor en ese enum.
 export type License = Schemas['License']
@@ -52,10 +52,10 @@ export type CreateDepartmentRequest = Schemas['CreateDepartmentRequest']
 export type UpdateSiteRequest = Schemas['UpdateSiteRequest']
 export type UpdateDepartmentRequest = Schemas['UpdateDepartmentRequest']
 
-// Configuracion de la instalacion (RF-PD-01, tarea 5.1). El paso de
-// organizacion del asistente (tarea 5.5) escribe `BRANDING_APP_NAME` y las
-// claves `LOCALE_*`; la tarea 5.8 leera y escribira el resto del catalogo por
-// el mismo sitio.
+// Configuracion de la instalacion (RF-PD-01). El paso de
+// organizacion del asistente escribe `BRANDING_APP_NAME` y las
+// claves `LOCALE_*`; la pantalla de marca (RF-PD-08) lee y escribe el resto
+// del catalogo por el mismo sitio.
 export type SettingKey = Schemas['SettingKey']
 export type SettingValue = Schemas['SettingValue']
 export type SettingType = Schemas['SettingType']
@@ -66,7 +66,7 @@ export type InstallationSetting = Schemas['InstallationSetting']
 export type InstallationSettings = Schemas['InstallationSettings']
 export type UpdateSettingsRequest = Schemas['UpdateSettingsRequest']
 
-// Marca de la instalacion (RF-PD-08, tarea 5.8): la proyeccion PUBLICA de cinco
+// Marca de la instalacion (RF-PD-08): la proyeccion PUBLICA de cinco
 // claves del catalogo de arriba, tal como la sirve `GET /api/v1/branding` (sin
 // sesion). Esta es la forma en bruto del contrato, en snake_case; el estado
 // reactivo que consume la aplicacion es el `Branding` en camelCase de
@@ -74,7 +74,7 @@ export type UpdateSettingsRequest = Schemas['UpdateSettingsRequest']
 // lanza ante una respuesta con otra forma).
 export type Branding = Schemas['Branding']
 
-// Asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5).
+// Asistente de puesta en marcha (RF-PD-03, RF-GP-05).
 export type SetupStep = Schemas['SetupStep']
 export type SetupStepState = Schemas['SetupStepState']
 export type SetupStepStatus = Schemas['SetupStepStatus']
@@ -130,7 +130,7 @@ export type WorkDateChangeCause = NonNullable<Schemas['ValidationProblem']['caus
 // forma estructural para no depender del `schema.d.ts` de ninguna SPA
 // (ADR-036).
 
-// Presencia en vivo (RF-PA-01, RF-PA-02, tarea 2.4). `PresenceUpdatedMessage`
+// Presencia en vivo (RF-PA-01, RF-PA-02). `PresenceUpdatedMessage`
 // es el cuerpo del mensaje del WebSocket, descrito como webhook en el contrato.
 export type LivePresenceBoard = Schemas['LivePresenceBoard']
 export type LivePresenceEntry = Schemas['LivePresenceEntry']
@@ -139,7 +139,7 @@ export type LivePresenceStatus = Schemas['LivePresenceStatus']
 export type RealtimeSubscription = Schemas['RealtimeSubscription']
 export type PresenceUpdatedMessage = Schemas['PresenceUpdatedMessage']
 
-// Bandeja de incidencias (RF-PA-05, RF-PR-01, tarea 2.5).
+// Bandeja de incidencias (RF-PA-05, RF-PR-01).
 export type Incident = Schemas['Incident']
 export type IncidentCollection = Schemas['IncidentCollection']
 export type IncidentPageMeta = Schemas['IncidentPageMeta']
@@ -154,7 +154,7 @@ export type ResolveIncidentRequest = Schemas['ResolveIncidentRequest']
 export type WorkDayIncident = Schemas['WorkDayIncident']
 
 // Informe de horas por periodo y contratos historizados (RF-IN-01..03,
-// RF-GP-02, tarea 2.8).
+// RF-GP-02).
 export type PeriodReport = Schemas['PeriodReport']
 export type PeriodReportRow = Schemas['PeriodReportRow']
 export type PeriodReportSubject = Schemas['PeriodReportSubject']
@@ -167,7 +167,7 @@ export type EmploymentContractCollection = Schemas['EmploymentContractCollection
 export type CreateEmploymentContractRequest = Schemas['CreateEmploymentContractRequest']
 export type ScheduleType = Schemas['ScheduleType']
 
-// Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso, sin
+// Ausencias (RF-GP-04): vacaciones, baja medica y permiso, sin
 // flujo de aprobacion (doc 05 §8). `AbsenceDetail` envuelve la vigente
 // (`absence`) y sus versiones anteriores (`history`, de la mas antigua a la
 // mas reciente, sin incluir la propia).
@@ -184,7 +184,7 @@ export type AbsenceImportMessage = Schemas['AbsenceImportMessage']
 export type AbsenceImportRow = Schemas['AbsenceImportRow']
 export type AbsenceImportReport = Schemas['AbsenceImportReport']
 
-// Emparejamiento de quiosco por codigo (RF-PD-06, tarea 5.6). El panel solo
+// Emparejamiento de quiosco por codigo (RF-PD-06). El panel solo
 // confirma: `PairingRequested`/`PairingClaim*` son cosa de la tablet
 // (frontend-kiosk) y no se alias aqui.
 export type PairingConfirmRequest = Schemas['PairingConfirmRequest']
@@ -192,14 +192,14 @@ export type PairingConfirmed = Schemas['PairingConfirmed']
 export type PairingCodeRejected = Schemas['PairingCodeRejected']
 export type Device = Schemas['Device']
 export type DeviceList = Schemas['DeviceList']
-// Salud del quiosco y reloj/umbrales del servidor (RF-PA-07, tarea 3.3): el
+// Salud del quiosco y reloj/umbrales del servidor (RF-PA-07): el
 // veredicto lo calcula el servidor con la misma regla que `kiosk:health`, y
 // `meta` es lo que el panel necesita para no adivinar ni la hora ni el umbral.
 export type DeviceHealth = Schemas['DeviceHealth']
 export type DeviceListMeta = Schemas['DeviceListMeta']
 export type KioskHealthThresholds = Schemas['KioskHealthThresholds']
 
-// Diagnostico y accesos de soporte (RF-PD-09, RF-PD-11, RF-PD-13, tarea 5.9,
+// Diagnostico y accesos de soporte (RF-PD-09, RF-PD-11, RF-PD-13,
 // ADR-020). El paquete se descarga tal cual llega: el panel no lo interpreta,
 // solo lo guarda, y por eso el unico tipo que lee de el es el `manifest`.
 export type DiagnosticsBundleRequest = Schemas['DiagnosticsBundleRequest']
@@ -220,10 +220,10 @@ export type DataExport = Schemas['DataExport']
 export type DataExportResource = Schemas['DataExportResource']
 export type DataExportCollection = Schemas['DataExportCollection']
 
-// Informes generados en diferido (RF-IN-06, RF-IN-07, ADR-041, tarea 3.9): el
+// Informes generados en diferido (RF-IN-06, RF-IN-07, ADR-041): el
 // informe por periodo y la salida a nomina comparten el mismo ciclo de vida.
-// `download` solo lo emite `GET /reports/exports/{uuid}` (`ShowReportExport`,
-// decision 3 de la ficha): nunca la lista ni el `202` de la peticion.
+// `download` solo lo emite `GET /reports/exports/{uuid}` (`ShowReportExport`):
+// nunca la lista ni el `202` de la peticion.
 export type ReportExportRequest = Schemas['ReportExportRequest']
 export type ReportExportDownload = Schemas['ReportExportDownload']
 export type ReportExport = Schemas['ReportExport']
@@ -238,7 +238,7 @@ export type ReportExportCollection = Schemas['ReportExportCollection']
 export type PayrollExportFormat = Parameters_['PayrollExportFormat']
 export type PayrollExportGranularity = Parameters_['PayrollGranularity']
 
-// Historico de errores agrupado por huella (RF-PD-15, tarea 5.12). El envio de
+// Historico de errores agrupado por huella (RF-PD-15). El envio de
 // los tres clientes (`ClientErrorReport`/`ClientErrorBatch`/
 // `ClientErrorsAccepted`) lo consume `@kronoqr/web-kit/clientErrorTransport`,
 // que define su propio cuerpo local y no importa estos tipos (ADR-036: el
@@ -252,7 +252,7 @@ export type ClientErrorReport = Schemas['ClientErrorReport']
 export type ClientErrorBatch = Schemas['ClientErrorBatch']
 export type ClientErrorsAccepted = Schemas['ClientErrorsAccepted']
 
-// Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente entre
+// Vista de cumplimiento (RF-PA-06): descanso insuficiente entre
 // jornadas (RN-10), jornada diaria excesiva (RN-11), tramo continuado sin
 // pausa (RN-12, suspendida) y exceso semanal informativo (RN-17). El umbral de
 // cada regla y el perfil que lo fija viajan siempre en `meta` (regla dura 14):
@@ -267,7 +267,7 @@ export type ComplianceIncidentLink = Schemas['ComplianceIncidentLink']
 export type ComplianceProfileRef = Schemas['ComplianceProfileRef']
 export type ComplianceTotals = Schemas['ComplianceTotals']
 
-// Cuadro de impacto y adopcion (RF-IN-08, RNF-D-01, tarea 3.13): los doce
+// Cuadro de impacto y adopcion (RF-IN-08, RNF-D-01): los doce
 // indicadores del doc 01 §1.3, con objetivo y comparacion contra el periodo
 // anterior. Agregado de la instalacion entera, sin identificadores de persona
 // (regla dura 21): `GET /reports/adoption`.
@@ -283,7 +283,7 @@ export type AdoptionOriginShare = Schemas['AdoptionOriginShare']
 // quien pulsa un boton de descarga ya ha elegido uno).
 export type AdoptionExportFormat = Parameters_['AdoptionExportFormat']
 
-// Cuentas de gestion administradas desde el panel (RF-ID-10, bloque 12c).
+// Cuentas de gestion administradas desde el panel (RF-ID-10, ADR-051).
 export type ManagementAccount = Schemas['ManagementAccount']
 export type ManagementAccountCollection = Schemas['ManagementAccountCollection']
 export type ManagementAccountProvisioned = Schemas['ManagementAccountProvisioned']
@@ -297,7 +297,7 @@ export type ResetManagementPasswordRequest = Schemas['ResetManagementPasswordReq
 export type ResetManagementTwoFactorRequest = Schemas['ResetManagementTwoFactorRequest']
 export type ChangeOwnPasswordRequest = Schemas['ChangeOwnPasswordRequest']
 
-// Busqueda de la persona de la exportacion para la Inspeccion (RF-IN-05, V21-3-PA-1).
+// Busqueda de la persona de la exportacion para la Inspeccion (RF-IN-05).
 export type LegalExportEmployeeSearch = Schemas['LegalExportEmployeeSearch']
 export type LegalExportEmployeeMatches = Schemas['LegalExportEmployeeMatches']
 export type LegalExportEmployeeMatch = Schemas['LegalExportEmployeeMatch']

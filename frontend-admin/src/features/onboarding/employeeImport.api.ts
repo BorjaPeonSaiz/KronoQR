@@ -1,5 +1,4 @@
-// Importacion masiva de plantilla (RF-GP-05), paso «employees» del asistente
-// (contradiccion C-1 resuelta: el requisito se movio aqui desde la tarea 3.10).
+// Importacion masiva de plantilla (RF-GP-05), paso «employees» del asistente.
 //
 // Multipart y no JSON con el fichero en base64: se lee en streaming en el
 // servidor y nunca se carga entero en memoria (§3.1). Dos fases: `validate` no

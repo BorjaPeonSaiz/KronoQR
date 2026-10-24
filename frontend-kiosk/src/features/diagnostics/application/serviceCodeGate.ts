@@ -1,4 +1,4 @@
-// Puerta del codigo de servicio (RF-KI-08, tarea 3.3, decision 6).
+// Puerta del codigo de servicio (RF-KI-08).
 //
 // SE COMPRUEBA EN LOCAL, SIN RED. El servidor nunca ve el codigo que se teclea
 // aqui: la tablet lo compara contra la huella que ya trae cacheada del ultimo
@@ -6,8 +6,8 @@
 // misma primitiva sincrona que usa el padron (`shared/crypto/sha256.ts`), por
 // el mismo motivo -esto va en una pantalla que tiene que abrirse SIN red-.
 //
-// CINCO INTENTOS, SESENTA SEGUNDOS, Y PERSISTENTE (revision de la 3.3,
-// segunda vuelta). No es una defensa fuerte -es una huella SHA-256 de un
+// CINCO INTENTOS, SESENTA SEGUNDOS, Y PERSISTENTE. No es una defensa fuerte -es una
+// huella SHA-256 de un
 // codigo de 8 a 12 cifras, forzable con acceso fisico al almacenamiento
 // (riesgo aceptado, doc 07 §6)-, pero impide un bucle de prueba y error a
 // mano delante de la tablet. `failures`/`lockedUntil` viven en

@@ -180,7 +180,7 @@ it('enseña el ultimo contacto en relativo y en la hora del centro', function ()
 
     expect($resultado['output'])->toContain('hace 30 s')
         ->and($resultado['output'])->toContain('09/09/2026 13:59:30')
-        ->and($resultado['output'])->toContain('hace 3 h 0 min')
+        ->and($resultado['output'])->toContain('hace 3 h 00 min')
         ->and($resultado['output'])->toContain('Europe/Madrid');
 })->group('RF-PA-07');
 

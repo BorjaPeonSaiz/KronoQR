@@ -13,8 +13,8 @@
 //    a la que protege minimizar es la misma que ya los tiene delante.
 //  - **El PIN nunca llega a este fichero.** Vive en el estado efimero del
 //    formulario de acceso y se descarta en cuanto se envia (regla dura 21).
-//  - **Salir cierra la sesion tambien en el servidor** (`POST /api/v1/me/logout`,
-//    PO1): el ordenador compartido del centro no puede dejar un token vivo hasta
+//  - **Salir cierra la sesion tambien en el servidor** (`POST /api/v1/me/logout`):
+//    el ordenador compartido del centro no puede dejar un token vivo hasta
 //    su caducidad. La llamada lleva un tiempo maximo corto y NUNCA bloquea la
 //    salida: la sesion local se borra siempre, salga lo que salga (204, 401, 403,
 //    429, error de red o tiempo agotado).

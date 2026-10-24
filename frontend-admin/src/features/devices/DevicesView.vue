@@ -16,7 +16,7 @@
 // presencia en vivo cuando el canal cae) y enseñar siempre la marca de la
 // ultima actualizacion.
 //
-// EL VEREDICTO DE SALUD LO CALCULA EL SERVIDOR (tarea 3.3): `health.verdict` y
+// EL VEREDICTO DE SALUD LO CALCULA EL SERVIDOR: `health.verdict` y
 // `health.reason` vienen ya resueltos por `KioskHealthRow`, la misma regla que
 // `php artisan kiosk:health` y que la alerta «Quiosco sin latido» de
 // Prometheus (§9.3), asi que panel, consola y alerta cuentan siempre lo mismo.
@@ -80,8 +80,8 @@ const {
 // aqui, para no tener dos sitios que puedan divergir sobre el mismo criterio.
 const devices = computed(() => list.value?.devices ?? [])
 
-// La zona del centro viaja en `meta.timezone` desde la tarea 3.3 (antes se
-// pedia aparte con `GET /site`): una sola respuesta, un solo «ahora».
+// La zona del centro viaja en `meta.timezone`, no en una peticion aparte a
+// `GET /site`: una sola respuesta, un solo «ahora».
 const timezone = computed(() => list.value?.meta.timezone ?? FALLBACK_TIMEZONE)
 
 const now = ref(Date.now())
@@ -162,7 +162,7 @@ function pairedAtLabel(device: Device): string {
 
 /**
  * La leyenda de umbrales, con los valores REALES de la instalacion
- * (`meta.thresholds`, tarea 3.3): un aviso cuyo criterio no se ve es un aviso
+ * (`meta.thresholds`): un aviso cuyo criterio no se ve es un aviso
  * que nadie puede defender ante quien pregunta por que un quiosco esta en
  * fallo.
  */
@@ -423,13 +423,13 @@ const buttonClass =
             </tr>
             <!-- «Que hacer», SIEMPRE visible mientras haya algo que decir y no
                  un desplegable (a diferencia de `ErrorTable`): con unos pocos
-                 quioscos por instalacion (ADR-040, decision 11 de la ficha
-                 3.3), esconder la guia operativa detras de un clic no ahorra
+                 quioscos por instalacion (ADR-040), esconder la guia operativa
+                 detras de un clic no ahorra
                  espacio de verdad y cuesta un paso a quien ya esta mirando un
                  quiosco en fallo. El runbook NO viaja al navegador (regla
                  dura 16): solo se nombra.
 
-                 OMITIDO para `ok` (correccion de `ui-ux`, segunda vuelta): un
+                 OMITIDO para `ok`: un
                  quiosco que late con normalidad no tiene ninguna accion que
                  ofrecer, y repetir «no hace falta ninguna accion» en cada
                  fila sana es ruido que entierra el aviso de las filas que si
@@ -448,8 +448,8 @@ const buttonClass =
       </table>
     </div>
 
-    <!-- Leyenda con los umbrales REALES de la instalacion (`meta.thresholds`,
-         tarea 3.3): un aviso cuyo criterio no se ve es un aviso que nadie
+    <!-- Leyenda con los umbrales REALES de la instalacion (`meta.thresholds`): un
+         aviso cuyo criterio no se ve es un aviso que nadie
          puede defender. -->
     <p v-if="legend !== ''" class="mt-2 text-sm text-kq-text-muted" data-test="thresholds-legend">
       {{ legend }}

@@ -1,4 +1,4 @@
-// El idioma que elige una persona es SUYO, no de la tablet (D9, V7-KI-05).
+// El idioma que elige una persona es SUYO, no de la tablet.
 //
 // La tablet es compartida: quien pulsa «English» lo hace para fichar el, y el
 // siguiente empleado no tiene por que encontrarsela en ingles. Cuando la

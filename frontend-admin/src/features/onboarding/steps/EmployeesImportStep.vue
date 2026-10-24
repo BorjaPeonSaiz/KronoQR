@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// Paso 6 (RF-GP-05, contradiccion C-1 resuelta: el requisito se movio aqui
-// desde la tarea 3.10). Omitible: se puede terminar la puesta en marcha y
+// Paso 6 (RF-GP-05). Omitible: se puede terminar la puesta en marcha y
 // dar de alta la plantilla despues, uno a uno o con una importacion posterior.
 //
 // DOS FASES, LA SEGUNDA NUNCA SIN LA PRIMERA. `validate` no escribe nada y

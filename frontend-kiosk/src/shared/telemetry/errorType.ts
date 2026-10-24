@@ -33,7 +33,7 @@ export function errorMessageOf(error: unknown): string {
 }
 
 /**
- * Quita de un texto libre lo que puede llevar datos personales (R3-KI-02, regla
+ * Quita de un texto libre lo que puede llevar datos personales (regla
  * dura 21). Es defensa en profundidad: ningun camino del cliente interpola hoy un
  * nombre en un error, pero una excepcion de manana con texto libre viajaria tal
  * cual a `error_events`, que acaba en el paquete de diagnostico del fabricante.

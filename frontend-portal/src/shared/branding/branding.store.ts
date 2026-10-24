@@ -1,4 +1,4 @@
-// Estado de la marca en tiempo de ejecucion (RF-PD-08, tarea 5.8, regla dura 13).
+// Estado de la marca en tiempo de ejecucion (RF-PD-08, regla dura 13).
 //
 // La logica -empezar en `PRODUCT_BRANDING`, pintar de inmediato sin esperar a
 // la red, pedir `GET /api/v1/branding` sin bloquear la primera pantalla y

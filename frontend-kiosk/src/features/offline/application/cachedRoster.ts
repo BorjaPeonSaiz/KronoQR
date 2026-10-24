@@ -19,7 +19,7 @@
 // PURGA AL DESVINCULAR (doc 01 §8.1). No hace falta que nadie llame a nada: si
 // el token del dispositivo desaparece o cambia, la copia no se puede descifrar
 // —la clave se deriva de el— y se borra en el arranque siguiente. Tambien se
-// purga explicitamente con `purge()` cuando el emparejamiento (tarea 1.11) lo
+// purga explicitamente con `purge()` cuando el emparejamiento lo
 // pida.
 
 import type { RosterLookupPort } from '@/features/scan/application/ports'
@@ -46,7 +46,7 @@ export interface CachedRosterOptions {
   readonly crypto?: RosterCryptoDeps
   readonly onDiagnostic?: (code: RosterDiagnostic, context: Record<string, string | number>) => void
   /**
-   * Alimenta `deviceRevocation.ts` (RF-PD-06, tarea 5.6). Ver el mismo campo en
+   * Alimenta `deviceRevocation.ts` (RF-PD-06). Ver el mismo campo en
    * `SyncRunnerOptions`: `true` solo en un `401`/`403` real, `false` en un
    * `refresh()` que sí llega a traer padrón, nunca por un fallo de red.
    */

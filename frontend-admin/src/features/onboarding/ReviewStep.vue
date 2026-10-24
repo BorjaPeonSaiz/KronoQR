@@ -2,7 +2,7 @@
 // Revision final antes de cerrar el asistente (RF-PD-03).
 //
 // El asistente NO se cierra solo al resolver el ultimo paso: `available` sigue
-// en `true` hasta este `POST /setup/complete` explicito (decision de la 5.5).
+// en `true` hasta este `POST /setup/complete` explicito.
 // Es la unica oportunidad de mirar los ocho pasos juntos antes de que el
 // asistente deje de estar accesible para siempre.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'

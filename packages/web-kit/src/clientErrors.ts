@@ -1,24 +1,24 @@
 // Captura de errores de las SPA de gestion y del portal (regla dura 21).
 //
-// POR QUE EXISTE. El quiosco tiene su propio canal desde la 1.8
-// (frontend-kiosk/src/shared/telemetry/errorReporter.ts); el panel y el portal
-// no tenian NINGUNO: ni `app.config.errorHandler`, ni `window.onerror` — un
-// error de produccion solo existia si la persona lo contaba. La auditoria de
-// cierre de la Fase 1 lo señalo como el hueco real que un error tracking
-// externo habria tapado, y este modulo lo cierra dentro del modelo del
-// producto (ADR-016/020: los datos no salen de la instalacion).
+// POR QUE EXISTE. El quiosco tiene su propio canal
+// (frontend-kiosk/src/shared/telemetry/errorReporter.ts); sin este modulo el
+// panel y el portal no tendrian NINGUNO: ni `app.config.errorHandler`, ni
+// `window.onerror` — un error de produccion solo existiria si la persona lo
+// contaba. Es el hueco que un error tracking externo taparia, y este modulo
+// lo cierra dentro del modelo del producto (RF-PD-15, ADR-016/020: los datos
+// no salen de la instalacion).
 //
 // QUE HACE HOY. Un unico punto de paso: sanea el contexto, agrupa en un buffer
 // acotado y deja el error tambien en la consola (capturar jamas significa
-// silenciar). El TRANSPORTE hacia `error_events` es `clientErrorTransport.ts`
-// (tarea 5.12): drena este buffer con `pending()`/`acknowledge()`, la misma
+// silenciar). El TRANSPORTE hacia `error_events` es `clientErrorTransport.ts`:
+// drena este buffer con `pending()`/`acknowledge()`, la misma
 // pareja que ya usaba el reporter del quiosco por el latido.
 //
 // `message` ES LA CLAVE QUE EL SERVIDOR ELEVA A COLUMNA. El contrato
 // (`ClientErrorReport`) no tiene un campo `message` propio a proposito: viaja
 // dentro de `context`, y es el servidor quien la saca de ahi para la columna
 // `error_events.message` antes de aplicar su propia lista de claves
-// permitidas al resto del contexto (decision 5 de la ficha 5.12). Las otras
+// permitidas al resto del contexto. Las otras
 // tres claves que emite este fichero -`component`, `hook` (del arbol de
 // componentes de Vue) y `source` (`fichero:linea` de un error global de
 // `window`)- son las unicas, y no hay ninguna mas: quien añada una cuarta

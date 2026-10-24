@@ -1,4 +1,4 @@
-// Cuenta atras real (V21-3-UX-2). El `Retry-After` de un 503 se mostraba como un texto fijo
+// Cuenta atras real. El `Retry-After` de un 503 se mostraba como un texto fijo
 // («en 30 segundos») que no cambiaba nunca. Aqui el valor baja de verdad, medido contra el reloj
 // y no contando ticks (una pestaña en segundo plano frena los temporizadores y la cuenta se
 // desviaria), y se detiene al llegar a 0 o al salir del ambito del componente.

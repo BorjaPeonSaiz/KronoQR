@@ -1,7 +1,7 @@
 // Saludo del turno.
 //
 // Del doc 01 §11: «Buenos dias, Lucia — Entrada 07:02» y «Hasta luego, Lucia —
-// Salida 11:02 · Hoy: 6 h 0 min». El saludo solo acompana a una ENTRADA; una
+// Salida 11:02 · Hoy: 6 h 00 min». El saludo solo acompana a una ENTRADA; una
 // salida se despide.
 //
 // Los cortes estan pensados para los turnos de un hotel, no para el reloj:
@@ -11,7 +11,7 @@
 //   21:00–05:59  noche
 //
 // Se calcula sobre la hora de pared DEL CENTRO (`site_time_zone`, el mismo reloj
-// que la hora que se pinta al lado, V2-KI-01); sin zona conocida, la de la
+// que la hora que se pinta al lado); sin zona conocida, la de la
 // tablet. Es presentacion pura: el instante que viaja al servidor siempre es
 // UTC (regla dura 3).
 

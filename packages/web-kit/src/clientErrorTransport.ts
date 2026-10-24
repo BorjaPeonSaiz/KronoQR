@@ -1,5 +1,5 @@
-// Transporte del buffer de `clientErrors.ts` hacia `error_events` (tarea 5.12,
-// RF-PD-15, decision 7 de la ficha).
+// Transporte del buffer de `clientErrors.ts` hacia `error_events` (
+// RF-PD-15).
 //
 // SIN CANAL ANONIMO. El servidor decide `source` por el TIPO DE TOKEN de la
 // sesion (gestion -> `admin`, portal -> `portal`), nunca por lo que diga el
@@ -22,7 +22,7 @@
 //     `fetch(..., { keepalive: true })`: la peticion sigue viva aunque la
 //     pagina se descargue, pero la respuesta puede no llegar a leerse, asi
 //     que ese envio NO confirma (`acknowledge`) nada. El servidor agrupa por
-//     huella (decision 4 de la ficha): un reenvio en el peor caso duplica un
+//     huella: un reenvio en el peor caso duplica un
 //     `occurrences`, nunca una fila.
 //
 // UN FALLO DEL TRANSPORTE NO SE REPORTA A SI MISMO (evitaria un bucle

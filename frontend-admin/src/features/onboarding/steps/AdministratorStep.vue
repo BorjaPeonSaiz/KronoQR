@@ -4,7 +4,7 @@
 // Va PRIMERO y no quinto, aunque el requisito lo enumere en quinto lugar: el
 // centro, los departamentos y todo lo demas quedan en `audit_log`, y un
 // asiento sin actor no responde a la pregunta para la que existe el rastro
-// (decision de la 5.5, ver HANDOFF). Es tambien la UNICA escritura publica de
+// (regla dura 6). Es tambien la UNICA escritura publica de
 // todo el producto: `POST /setup/administrator` deja de aceptar peticiones en
 // cuanto existe una cuenta, y a partir de ahi la recuperacion es `/auth/login`.
 //
@@ -79,7 +79,7 @@ async function onEnrolled(issued: Session): Promise<void> {
 /**
  * El reto ha caducado o no vale mientras se daba de alta el TOTP. No hay
  * callejon sin salida: la cuenta ya existe, asi que se explica el camino de
- * vuelta por `/auth/login`, que emite el mismo reto (decision de la 5.5).
+ * vuelta por `/auth/login`, que emite el mismo reto.
  */
 function onChallengeInvalid(): void {
   challengeToken.value = null

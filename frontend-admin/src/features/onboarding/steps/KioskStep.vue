@@ -2,7 +2,7 @@
 // Paso 7 (ultimo, ademas del cierre): el primer quiosco (RF-PD-03, RF-PD-06).
 // Omitible: puede que la tablet todavia no haya llegado al hotel.
 //
-// Reutiliza el MISMO formulario que la pantalla «Quioscos» (tarea 5.6,
+// Reutiliza el MISMO formulario que la pantalla «Quioscos» (
 // `PairKioskForm`): el codigo de seis digitos que muestra la tablet y el
 // nombre del quiosco. `PairKioskForm` ya enseña su propio resumen tras
 // confirmar (version de la app, hora en que la tablet pidio el codigo) para

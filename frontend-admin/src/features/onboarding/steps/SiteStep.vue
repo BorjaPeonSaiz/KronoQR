@@ -4,7 +4,7 @@
 // Hay exactamente un centro por instalacion: este alta es IRREPETIBLE
 // (`sites_single_row_uidx`). El perfil de cumplimiento NO se elige aqui —nace
 // sin asignar, y `GET /compliance-profile` resuelve el vigente— porque con un
-// solo centro hay exactamente un perfil en juego (decision de la 5.5).
+// solo centro hay exactamente un perfil en juego.
 //
 // `timezone` es el dato del que depende RN-05: la jornada de un tramo es la
 // fecha civil de su hora de inicio EN ESTA ZONA, nunca en UTC ni en la del

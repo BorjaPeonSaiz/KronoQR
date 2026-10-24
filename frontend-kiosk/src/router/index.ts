@@ -5,8 +5,8 @@ import ScanView from '@/features/scan/ui/ScanView.vue'
 
 // La pantalla de escaneo se importa de forma ESTATICA a proposito: es la unica
 // que ve un empleado y la que decide el LCP del Anexo A. Todo lo demas que
-// llegue —diagnostico (RF-KI-08), PIN de respaldo (tarea 1.12), emparejamiento
-// (RF-PD-06, tarea 5.6)— va con `import()` para que no compita con ella por el
+// llegue —diagnostico (RF-KI-08), PIN de respaldo, emparejamiento
+// (RF-PD-06)— va con `import()` para que no compita con ella por el
 // arranque.
 export const routes: RouteRecordRaw[] = [
   {
@@ -17,7 +17,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/pin',
     name: 'pin',
-    // Cargado bajo demanda (tarea 1.12): solo lo pide quien pulsa «¿Sin
+    // Cargado bajo demanda: solo lo pide quien pulsa «¿Sin
     // tarjeta?», y ese boton solo existe si la instalacion ofrece esta via.
     component: () => import('@/features/pin/ui/PinView.vue'),
   },
@@ -26,13 +26,13 @@ export const routes: RouteRecordRaw[] = [
     name: 'pair',
     // Solo la ve una tablet sin vincular (o recien desvinculada, ver
     // `deviceRevocation.ts`): cargarla siempre penalizaria el LCP de la
-    // pantalla que SI ve un empleado cada vez (tarea 5.6, Anexo A).
+    // pantalla que SI ve un empleado cada vez (Anexo A).
     component: () => import('@/features/pairing/ui/PairingView.vue'),
   },
   {
     path: '/diagnostics',
     name: 'diagnostics',
-    // RF-KI-08, tarea 3.3: se abre con una pulsacion larga sobre el reloj de
+    // RF-KI-08: se abre con una pulsacion larga sobre el reloj de
     // `ScanView`/`PairingView`, nunca en el arranque. `import()` para que no
     // compita con el LCP de la pantalla que SI ve un empleado cada vez, mismo
     // criterio que `/pair` y `/pin`.
@@ -58,8 +58,8 @@ export function createAppRouter(): ReturnType<typeof createRouter> {
   // navega aqui ella misma), cualquier intento posterior de volver a `/` se
   // quede en `/pair` hasta que se complete un emparejamiento nuevo.
   router.beforeEach((to) => {
-    // `/diagnostics` es la UNICA ruta exceptuada de este guard (decision 7 de
-    // la tarea 3.3): una tablet sin emparejar no tiene token, ni padron, ni
+    // `/diagnostics` es la UNICA ruta exceptuada de este guard: una tablet sin
+    // emparejar no tiene token, ni padron, ni
     // cola con jornadas -nada que proteger-, y es justo la que hay que poder
     // diagnosticar desde `/pair`. La propia pantalla decide si pide codigo de
     // servicio, con la huella cacheada del ultimo latido; el router no sabe

@@ -7,7 +7,7 @@
 // `threshold_minutes`; `skew_seconds`, sin decir con que se empareja; desde
 // RN-18 el contexto de `out_of_order_scan` (`scan_id`, `occurred_at` del
 // primer escaneo que no cuadro, `scans`, el recuento); y desde RF-PR-06/RN-16
-// (tarea 3.11) los dos patrones anomalos de uso de credencial que distingue
+// los dos patrones anomalos de uso de credencial que distingue
 // `context.pattern`: `kiosk_coincidence` y `impossible_sequence`.
 //
 // NUNCA SE INVENTA UNA PAREJA QUE EL CONTRATO NO CONFIRMA. Adivinar que
@@ -88,33 +88,7 @@ function shortUuid(uuid: string): string {
 }
 
 /**
- * Un instante UTC en la zona del centro, con SEGUNDOS (a diferencia de
- * `formatInstant`, que los omite a proposito para el resto de la bandeja).
- * `impossible_sequence` (RN-16) los necesita: un salto de 45 s entre dos
- * fichajes se lee como la misma hora con precision de minuto, y sin segundos
- * la frase parece decir que los dos momentos son identicos cuando no lo son.
- */
-function formatInstantWithSeconds(value: string, timeZone: string, locale: string): string {
-  const instant = new Date(value)
-
-  if (Number.isNaN(instant.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    year: '2-digit',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(instant)
-}
-
-/**
- * `kiosk_coincidence` (RF-PR-06, tarea 3.11; rediseño de la segunda vuelta,
- * decision 13): un hallazgo por PERSONA, no por par -de ahi que sea un
+ * `kiosk_coincidence` (RF-PR-06): un hallazgo por PERSONA, no por par -de ahi que sea un
  * `counterpart_employee_uuid` (la contraparte principal, con mas dias) y un
  * `counterpart_count` (cuantas personas distintas en total, ⩾ 1)-. El patron,
  * el quiosco por nombre, el enlace a la contraparte principal (nunca su
@@ -155,7 +129,7 @@ function describeKioskCoincidence(
     // `extra` es cuanta gente MAS, aparte de la contraparte principal ya
     // nombrada: `counterpart_count` cuenta a todo el mundo, incluida ella.
     // Sin `counterpart_count` (contexto antiguo o incompleto) se trata como
-    // una sola contraparte, igual que antes de la decision 13.
+    // una sola contraparte.
     const extra = typeof counterpartCount === 'number' ? Math.max(0, counterpartCount - 1) : 0
     const key =
       extra === 0
@@ -236,7 +210,7 @@ function describeKioskCoincidence(
 }
 
 /**
- * `impossible_sequence` (RN-16, tarea 3.11, decision 3): dos escaneos
+ * `impossible_sequence` (RN-16): dos escaneos
  * aceptados de la misma credencial en dispositivos distintos separados por
  * menos del tiempo minimo de transito. Un solo caso basta -no es una
  * frecuencia-, asi que no hay contrapartida que enlazar: es la misma persona.
@@ -273,13 +247,16 @@ function describeImpossibleSequence(
     consumed.add('to_device_id')
   }
 
+  // Con SEGUNDOS, a diferencia del resto de la bandeja: un salto de 45 s entre dos
+  // fichajes (RN-16) se lee como la misma hora con precision de minuto, y sin
+  // segundos la frase parece decir que los dos momentos son identicos.
   const firstOccurredAt = context['first_occurred_at']
 
   if (typeof firstOccurredAt === 'string') {
     lines.push(
       metricLine(
         'first_occurred_at',
-        formatInstantWithSeconds(firstOccurredAt, timeZone, locale),
+        formatInstant(firstOccurredAt, timeZone, locale, { seconds: true }),
         t,
       ),
     )
@@ -292,7 +269,7 @@ function describeImpossibleSequence(
     lines.push(
       metricLine(
         'second_occurred_at',
-        formatInstantWithSeconds(secondOccurredAt, timeZone, locale),
+        formatInstant(secondOccurredAt, timeZone, locale, { seconds: true }),
         t,
       ),
     )

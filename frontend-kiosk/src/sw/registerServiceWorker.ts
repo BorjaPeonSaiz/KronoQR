@@ -10,12 +10,12 @@
 // eso pasa a las 06:00 con quince personas en la cola, el quiosco esta muerto
 // justo en el minuto que existe para cubrir.
 //
-// LA PUERTA (RF-KI-07, tarea 3.12). `applyUpdate` consulta un guardian
+// LA PUERTA (RF-KI-07). `applyUpdate` consulta un guardian
 // (`canApply`, normalmente `shared/update/updateWindow.ts` ->
 // `canApplyUpdate`, cableado desde `main.ts`) antes de recargar: cola vacia,
 // sin escaneo reciente y dentro de la ventana que declaro el centro.
 //
-// COMO SE ENTERA Y CUANDO APLICA (decision 10 de la tarea 3.12). La pagina de
+// COMO SE ENTERA Y CUANDO APLICA. La pagina de
 // un quiosco vive dias sin volver a navegar, asi que dos temporizadores
 // propios, no la deteccion por defecto del navegador (que solo comprueba en
 // cada navegacion, y esta SPA no vuelve a navegar nunca):
@@ -110,8 +110,8 @@ const DEFAULT_RETRY_INTERVAL_MS = 60_000
 let sharedPendingState: (() => boolean) | null = null
 
 /**
- * Estado de la actualizacion para la pantalla de diagnostico (RF-KI-08, tarea
- * 3.12). MISMO PATRON que `getLastHeartbeatResult` en `heartbeat.ts`: un
+ * Estado de la actualizacion para la pantalla de diagnostico (RF-KI-08).
+ * MISMO PATRON que `getLastHeartbeatResult` en `heartbeat.ts`: un
  * singleton de modulo, porque solo hay UN registro de service worker por
  * tablet y la pantalla de diagnostico no es quien lo crea.
  */
@@ -239,7 +239,7 @@ export async function registerServiceWorker(
       .update()
       .then(() => {
         if (pending) return
-        // V21-3-KI-4: `update()` resuelve al EMPEZAR a instalar la version
+        // `update()` resuelve al EMPEZAR a instalar la version
         // nueva, no al acabar de precachearla (~1 460 KiB). Con un trabajador
         // instalandose o esperando, la version existe: no es una comprobacion
         // en vacio, y contarla como tal acercaba la rendicion (`gave_up`).
@@ -277,7 +277,7 @@ export async function registerServiceWorker(
     return noop
   }
 
-  // Comprobacion periodica de version (decision 10 de la tarea 3.12): sin
+  // Comprobacion periodica de version: sin
   // esto, una tablet que nunca vuelve a navegar solo se enteraria de una
   // version nueva si alguien la reinicia a mano. Un fallo al comprobar no es
   // una averia (regla dura 19, al reves): la tablet sigue con la version que

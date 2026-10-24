@@ -1,7 +1,7 @@
 // Descarga de mi propio historico (RF-ID-05, RL-05, art. 20 RGPD).
 //
 // **CSV o PDF** (`format`, ADR-012: el PDF, sellado, llego como un valor mas
-// del mismo enumerado, PR19). El formato se envia siempre explicito. El nombre
+// del mismo enumerado). El formato se envia siempre explicito. El nombre
 // del fichero es el que manda el servidor en `Content-Disposition`
 // (`mi-registro-horario-{from}_{to}.{csv|pdf}`, sin nombre ni codigo de nadie):
 // aqui solo hay un nombre de reserva por si faltara la cabecera.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // El estado de UNA exportacion en diferido que se acaba de pedir: fase, barra de
-// avance, cancelar y descargar (RC2, V5-PA-4, V21-5-PA-2, V3-UX-04).
+// avance, cancelar y descargar.
 //
 // **No anuncia nada**: la region viva la maneja `useReportExportJob` (inicio, fase,
 // fallo, cancelacion y final), y esta pieza solo pinta. Un `aria-live` aqui repetiria

@@ -7,9 +7,9 @@
 //  - Atrapa el foco y lo devuelve al elemento que la abrio al cerrarse. Sin esto
 //    quien navega con teclado se queda tabulando por detras del velo. La trampa
 //    vale tambien cuando el foco esta en el propio panel (tras un clic en su
-//    texto) y si algo lo lleva fuera (`focusin` en el documento): V7-PA-1.
+//    texto) y si algo lo lleva fuera (`focusin` en el documento).
 //  - Si al cerrarse el elemento de origen ya no esta (la fila se ha retirado), el
-//    foco no se pierde: lo recoge `focusRecovery` del marco (V7-PA-4).
+//    foco no se pierde: lo recoge `focusRecovery` del marco.
 //  - `dismissible: false` para los dialogos que NO se pueden cerrar sin una
 //    accion explicita — el del PIN, que solo se enseña una vez.
 //

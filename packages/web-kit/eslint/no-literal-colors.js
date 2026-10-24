@@ -1,9 +1,9 @@
-// «Ninguna SPA declara un color propio» (docs/06-guia-visual.md, hallazgos U1 y V1-UX-2).
+// «Ninguna SPA declara un color propio» (docs/06-guia-visual.md).
 //
 // POR QUE EXISTE. La regla estaba escrita y no la vigilaba ninguna herramienta:
 // una convencion que no verifica una herramienta es una sugerencia. Un color
 // suelto en una plantilla o en un `.ts` es un color que la marca configurable
-// (tarea 5.8) no alcanza: el cliente cambia el acento y ese elemento se queda
+// no alcanza: el cliente cambia el acento y ese elemento se queda
 // con el color del fabricante, sin que nadie lo vea hasta que lo mira el
 // cliente. Todo color sale de un token `--kq-*` de `theme.css`.
 //
@@ -19,7 +19,7 @@
 //     (`{ color: 'red', backgroundColor: 'blue' }`). `transparent`, `currentColor`
 //     e `inherit` no son un color propio y se admiten;
 //   - un bloque `<style>` de un `.vue` que declare cualquiera de los anteriores;
-//   - un HEXADECIMAL escrito en un comentario (R1-UX-01): el valor duplicado en un
+//   - un HEXADECIMAL escrito en un comentario: el valor duplicado en un
 //     comentario se desfasa en silencio cuando el token cambia. Se dice «el
 //     token `--kq-color-x`», no su valor.
 //

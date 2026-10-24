@@ -3,7 +3,7 @@
 //
 // El filtrado y la paginacion YA NO viven aqui: desde la 2.3.0 los hace el servidor
 // (q, department_id, without_department, status, page, per_page), porque con toda la
-// plantilla en memoria el tablero no escalaba (V5-PA-2, HC1).
+// plantilla en memoria el tablero no escalaba.
 import type { CredentialCoverage } from '@/shared/api/types'
 
 /** Avance de la reimpresion durante una rotacion de clave (RF-QR-07). */

@@ -1,5 +1,5 @@
 // Estado de la marca de la instalacion, compartido por toda la aplicacion
-// (RF-PD-08, tarea 5.8, regla dura 13; ADR-036).
+// (RF-PD-08, regla dura 13; ADR-036).
 //
 // La logica de verdad vive en `@kronoqr/web-kit/brandingState`
 // (`createBrandingState`), compartida con el portal del empleado: arranca en

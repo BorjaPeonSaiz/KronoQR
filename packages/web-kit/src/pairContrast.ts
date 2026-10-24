@@ -6,7 +6,7 @@
 //     la pagina, asi que texto y fondo se acercan al `ground`).
 //
 // El navegador compone en 8 bits por canal: cada color se redondea ANTES de
-// medir, igual que `branding.ts` redondea el acento antes de medirlo (R6-UX-02):
+// medir, igual que `branding.ts` redondea el acento antes de medirlo:
 // el valor que se mide es el que se pinta.
 import { mix, parseHexColor, toHex, type Rgb } from './contrast'
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Boton comun de las tres SPA (V7-UX-03). Una sola receta para el primario, el secundario y el
+// Boton comun de las tres SPA. Una sola receta para el primario, el secundario y el
 // destructivo, con tres tamaños; el que antes eran cadenas de utilidades repetidas que divergian
 // (`font-semibold` en unos y no en otros, `min-h-12` solo en el portal).
 //

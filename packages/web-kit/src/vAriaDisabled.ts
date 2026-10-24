@@ -1,4 +1,4 @@
-// Boton «deshabilitado» que NO pierde el foco (V21-7-PA-1; precedente: AccountsView).
+// Boton «deshabilitado» que NO pierde el foco (precedente: AccountsView).
 //
 // `disabled` hace que el navegador suelte el foco en `<body>` en cuanto el boton se
 // deshabilita —justo al pulsar «Guardar»: durante el envio—, y quien navega con

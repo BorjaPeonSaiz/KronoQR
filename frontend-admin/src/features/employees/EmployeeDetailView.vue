@@ -590,7 +590,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
     <!-- El h1 es SIEMPRE el mismo y esta siempre: el cambio de pantalla lleva el foco aqui
          y el titulo de la pestaña dice lo mismo. El nombre es un dato de la persona y va debajo
-         (V7-PA-2: nunca en el titulo ni en el encabezado de la pantalla). -->
+         (nunca en el titulo ni en el encabezado de la pantalla). -->
     <h1 class="mt-4 text-2xl font-bold">{{ t('app.titles.employee') }}</h1>
 
     <LoadingPanel v-if="isPending" :label="t('employees.detail.loading')" class="mt-4" />

@@ -27,7 +27,7 @@ document.documentElement.lang = locale
 // ninguna- ANTES de montar nada. Sin red, sin `await`: es lo que evita un
 // parpadeo del nombre en el primer fotograma. `ScanView.vue` pide la version
 // fresca al servidor en segundo plano (`shared/branding/useBranding.ts`); la
-// pantalla de emparejamiento tambien (DC11), antes de vincular la tablet.
+// pantalla de emparejamiento tambien, antes de vincular la tablet.
 applyCachedBranding()
 
 const app = createApp(App)
@@ -52,7 +52,7 @@ app.config.errorHandler = (error: unknown) => {
     error_type: errorTypeOf(error),
     // Clave canonica del texto del error (RF-PD-15): el servidor la toma tal
     // cual para la columna `message` de `error_events`. En un error NO capturado
-    // el texto libre no viaja (R3-KI-02, regla dura 21): una excepcion con un
+    // el texto libre no viaja (regla dura 21): una excepcion con un
     // nombre dentro llegaria al paquete de diagnostico. Va el tipo.
     message: errorTypeOf(error),
     scope: 'vue',
@@ -87,14 +87,14 @@ app.mount('#app')
 // Fuera del camino de montaje: que el service worker tarde en registrarse no
 // puede retrasar la primera pantalla.
 //
-// `canApply` es la puerta de la actualizacion (RF-KI-07, tarea 3.12): no se
+// `canApply` es la puerta de la actualizacion (RF-KI-07): no se
 // recarga con fichajes sin sincronizar, ni dentro de los minutos de silencio
 // tras el ultimo escaneo, ni fuera de la ventana que declaro el centro (o la
 // de serie, si esta tablet nunca ha latido con una version que trajera otra).
 // `registerServiceWorker` la reevalua cada minuto mientras haya una version
-// pendiente (decision 10 de la tarea 3.12): si la ventana esta cerrada ahora,
+// pendiente: si la ventana esta cerrada ahora,
 // puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
-// V6-KI-01: lo que hay en disco se cuenta ya, sin esperar a que una pantalla monte
+// Lo que hay en disco se cuenta ya, sin esperar a que una pantalla monte
 // la cola. Hasta que responde, la puerta de actualizacion no se abre.
 void peekPersistedQueue()
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Fichaje de respaldo por PIN (RF-AT-11, RS-12, tarea 1.12).
+// Fichaje de respaldo por PIN (RF-AT-11, RS-12).
 //
 // Cuando existe: solo si `pin_sealing_public_key` del padron no es `null`
 // (ADR-017). El boton que trae aqui, en `ScanView.vue`, ya comprueba eso; esta
@@ -16,7 +16,7 @@
 // EL PIN NUNCA SE VE EN PANTALLA. El paso 2 muestra puntos, no cifras: quien
 // mira por encima del hombro en una recepcion no lee el PIN de otra persona.
 //
-// FEEDBACK REUTILIZADO de la 1.8: mismo `ScanConfirmationPanel`, mismo sonido,
+// FEEDBACK REUTILIZADO de la tarjeta: mismo `ScanConfirmationPanel`, mismo sonido,
 // mismo mensaje generico de rechazo (regla dura 17) — el empleado no deberia
 // notar que esta via es distinta de la tarjeta.
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
@@ -80,10 +80,10 @@ const api = createApiClient({
   ...deviceTokenApiOptions,
 })
 
-// Mismo controlador de cola UNICO que la pantalla de escaneo (tarea 1.9): el
+// Mismo controlador de cola UNICO que la pantalla de escaneo: el
 // fichaje por PIN se encola exactamente igual, con el mismo drenaje.
-// `onDeviceRevoked` es una SUSCRIPCION (RF-PD-06, tarea 5.6, revision de la
-// 3.3): el controlador es un singleton por tablet, pero cada pantalla que se
+// `onDeviceRevoked` es una SUSCRIPCION (RF-PD-06): el controlador es un singleton
+// por tablet, pero cada pantalla que se
 // monta se suscribe la suya -esta, `ScanView.vue` y `DiagnosticsView.vue`-,
 // asi que el orden de montaje no importe: la que este viva cuando la
 // revocacion dispare es la que limpia el token y navega.
@@ -108,7 +108,7 @@ watchEffect(() => {
   }
 })
 
-// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y PIN,
+// Si libsodium no arranca, se dice AQUI, antes de pedir codigo y PIN,
 // y no con un «codigo no valido» al final. La comprobacion tambien
 // precalienta WASM para que el sellado al pulsar «Aceptar» sea casi sincrono.
 const sealing = usePinSealingStatus({
@@ -120,11 +120,10 @@ const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
 })
 
-// Ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10). Mismo controlador SINGLETON
+// Pausa y desfase de reloj (RF-AT-12, RF-AT-10). Mismo controlador SINGLETON
 // que `ScanView.vue` (`useBreakIntent`, `application/breakIntent.ts`), pero
-// el arme NO sobrevive a la navegacion desde `ScanView` (revision de la
-// segunda vuelta, seguridad: la intencion es de la tablet, no de la
-// persona). Quien llega aqui con la tarjeta olvidada tiene que volver a
+// el arme NO sobrevive a la navegacion desde `ScanView`: armado, es de la
+// tablet y no de la persona. Quien llega aqui con la tarjeta olvidada tiene que volver a
 // armar el boton, ya en esta pantalla.
 const breakClockingEnabled = ref(readBreakClockingEnabled())
 const clockSkewToleranceSeconds = ref(readClockSkewToleranceSeconds())
@@ -139,7 +138,7 @@ const session = useScanSessionWithCleanup({
   pipeline: { handleDecoded: () => null },
   sound,
 })
-// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+// El idioma elegido vale para ese fichaje, no para la tablet.
 const localePolicy = useLocalePolicy()
 useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
@@ -212,10 +211,10 @@ async function confirm(): Promise<void> {
     deviceId,
     publicKey,
     isOffline: () => connectivity.status.value === 'offline',
-    // ADR-024, decision 5 de la tarea 3.5.
+    // ADR-024.
     resolveIntent: () => breakIntent.consumeIntent(),
     clockSkewToleranceSeconds: () => clockSkewToleranceSeconds.value,
-    // Revision de la segunda vuelta (QA): un PIN mal tecleado con la pausa
+    // Un PIN mal tecleado con la pausa
     // armada no debe hacer perder la intencion. `breakIntent` es el MISMO
     // controlador singleton de `ScanView.vue`: volver a armar aqui es seguro
     // aunque esta pantalla ya se haya desmontado cuando el rechazo llega.
@@ -268,7 +267,7 @@ const wakeLock = useWakeLock({
   onDenied: (context) => reporter.report('kiosk.wake_lock.denied', context),
 })
 
-// Bateria (RF-PA-07, tarea 3.3): misma lectura que ScanView, aqui alimenta el
+// Bateria (RF-PA-07): misma lectura que ScanView, aqui alimenta el
 // latido de esta pantalla mientras el fichaje por PIN esta en marcha.
 const battery = useBatteryStatus()
 
@@ -416,9 +415,9 @@ onUnmounted(() => {
             {{ t('pin.code.continue') }}
           </button>
 
-          <!-- Boton «Pausa» (RF-AT-12, ADR-024, decision 5 de la tarea 3.5):
-               mismo criterio visual que en `ScanView.vue` (revision de la
-               segunda vuelta): acento en el borde incluso en reposo, relleno
+          <!-- Boton «Pausa» (RF-AT-12, ADR-024):
+               mismo criterio visual que en `ScanView.vue`: acento en el borde
+               incluso en reposo, relleno
                solido cuando esta armado, y el pictograma ⏸ para reconocerlo
                sin leer la palabra. -->
           <button
@@ -438,7 +437,7 @@ onUnmounted(() => {
             {{ breakIntent.armed.value ? t('scan.break.toggleOn') : t('scan.break.toggleOff') }}
           </button>
 
-          <!-- Region viva SIEMPRE montada (revision de la segunda vuelta):
+          <!-- Region viva SIEMPRE montada:
                anuncia tanto el armado como el desarme. Ver `ScanView.vue`. -->
           <p
             role="status"

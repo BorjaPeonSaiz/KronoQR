@@ -3,7 +3,7 @@
  * rosco), en orden. Cada uno se mide como componente grafico (>= 3:1, WCAG
  * 1.4.11) contra `surface-raised`, donde se dibuja el lienzo
  * (`tests/unit/theme.spec.ts`). El color solo NO identifica la serie: cada una
- * lleva ademas un patron (`ChartWithTable`, V6-UX-3), porque con un acento de
+ * lleva ademas un patron (`ChartWithTable`), porque con un acento de
  * marca verdoso la salvia fija se confunde con el acento.
  *
  * Modulo aparte y minimo para que el bundle del panel no cargue la tabla de

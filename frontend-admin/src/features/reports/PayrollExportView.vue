@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Salida a nomina (RF-IN-07, tarea 3.9): horas por periodo y por empleado, en
+// Salida a nomina (RF-IN-07): horas por periodo y por empleado, en
 // el formato que configura «Ajustes operativos» (`PAYROLL_EXPORT_*`).
 //
 // **AQUI NO SE CALCULA NI SE MAPEA NINGUNA COLUMNA.** El fichero lo escribe el
@@ -9,16 +9,16 @@
 // descargar sepa que va a recibir antes de pulsar, con un enlace a donde se
 // cambia si no es lo que espera.
 //
-// **DOS CAMINOS DE SALIDA, LOS DOS DEL MISMO INFORME** (decision 5 de la
-// ficha): «Descargar» es sincrono (`GET /reports/payroll-export`, como
+// **DOS CAMINOS DE SALIDA, LOS DOS DEL MISMO INFORME**: «Descargar» es sincrono
+// (`GET /reports/payroll-export`, como
 // `periodReportExport.api.ts`); «Generar en segundo plano» pide la MISMA
 // consulta a `POST /reports/exports` con `kind: payroll` y aparece en el
 // bloque de exportaciones de «Informes» (`ReportExportsPanel`, no duplicado
 // aqui: las dos pantallas comparten el mismo ciclo de vida de exportacion).
 //
 // **LICENCIA ACCESORIA (regla dura 15, ADR-019).** `payroll_export` es la
-// primera funcionalidad que consume `Feature::PayrollExport` (decision 6 de
-// la ficha): un `402` de cualquiera de los dos caminos se explica en la propia
+// primera funcionalidad que consume `Feature::PayrollExport`: un `402` de
+// cualquiera de los dos caminos se explica en la propia
 // pantalla, sin necesidad del ambito `license:*` que exige `LicenseNotice` -
 // RRHH normalmente no lo lleva (doc 02 §7.3) y aun asi tiene que enterarse de
 // por que no puede exportar.
@@ -50,7 +50,7 @@ const GRANULARITIES: readonly PayrollExportGranularity[] = ['range', 'month', 'd
 const FORMATS: readonly PayrollExportFormat[] = ['csv', 'xlsx']
 
 /**
- * El catalogo cerrado de columnas (decision 5 de la ficha): identico al que
+ * El catalogo cerrado de columnas: identico al que
  * declara `PAYROLL_EXPORT_COLUMNS` en el backend. Vive aqui SOLO para poner
  * una etiqueta legible por omision a cada `id` en la previsualizacion —el
  * backend es quien de verdad valida que un `id` desconocido es `422`, esta
@@ -148,8 +148,8 @@ function parseColumnEntry(entry: string): PreviewColumn {
 /**
  * Las columnas TAL CUAL las publica `GET /api/v1/settings` en
  * `PAYROLL_EXPORT_COLUMNS.value`: el catalogo siempre trae una fila para esta
- * clave -con `source: product_default` y la plantilla de serie de la
- * decision 5 de la ficha cuando la instalacion no ha guardado la suya-, asi
+ * clave -con `source: product_default` y la plantilla de serie cuando la
+ * instalacion no ha guardado la suya-, asi
  * que no hace falta duplicar aqui esos diez valores de fabrica. Antes de que
  * la consulta resuelva (`catalog === undefined`) no hay nada que previsualizar
  * todavia; `settingsLoading`/`LoadingPanel` ya cubren ese hueco en la plantilla.
@@ -226,7 +226,7 @@ watch([from, to, granularity, departmentFilter, employeeUuid, format], () => {
 
 /**
  * Toda la plantilla, o mas de un mes, se genera en segundo plano por omision
- * (decision del propietario, 14.4); una persona o un departamento en un periodo
+ * (decision del propietario del 18-10-2026); una persona o un departamento en un periodo
  * corto sigue siendo al momento. Los dos caminos se mantienen.
  */
 async function submit(): Promise<void> {

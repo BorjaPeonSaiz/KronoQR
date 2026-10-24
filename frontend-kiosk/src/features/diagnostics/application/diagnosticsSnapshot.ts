@@ -1,5 +1,5 @@
-// Ensamblado PURO de lo que muestra la pantalla de diagnostico (RF-KI-08,
-// tarea 3.3, decision 9). Ninguna funcion de aqui toca el DOM, `vue-i18n` ni
+// Ensamblado PURO de lo que muestra la pantalla de diagnostico (RF-KI-08).
+// Ninguna funcion de aqui toca el DOM, `vue-i18n` ni
 // `Intl`: recibe lo que las distintas fuentes (camara, latido, cola, padron,
 // token, bateria, wake lock, reporter, aviso de privacidad) ya saben en el
 // instante en que se abre la pantalla, y decide QUE filas existen y QUE avisos
@@ -16,7 +16,7 @@ import type { UpdateWindow } from '@/shared/update/updateWindow'
 import type { UrgentGiveUpMotive, UrgentUpdateMode } from '@/shared/update/minimumVersion'
 
 /**
- * Umbral del paso 4 de la tarea (doc 02, decision de la 3.3): por debajo de
+ * Resolucion minima de la camara (RF-KI-08): por debajo de
  * esto, un fotograma recortado por el sistema operativo (encuadre automatico,
  * Windows Studio Effects) puede leer peor una tarjeta gastada, y conviene
  * saberlo sin que nadie tenga que abrir la consola del navegador.
@@ -60,9 +60,9 @@ export interface DiagnosticsSources {
   readonly network: {
     readonly online: boolean
     /**
-     * Señal VIVA de `OfflineQueueController.onReachability` (el `SyncRunner`,
-     * revision de la 3.3: antes se deducia del ultimo latido y se quedaba
-     * congelada mientras la pantalla estaba abierta). `null` = todavia no se
+     * Señal VIVA de `OfflineQueueController.onReachability` (el `SyncRunner`),
+     * no una deduccion del ultimo latido, que se quedaria congelada mientras
+     * la pantalla esta abierta. `null` = todavia no se
      * sabe (sin token, o ningun intento de red completado en esta sesion).
      */
     readonly reachable: boolean | null
@@ -101,7 +101,7 @@ export interface DiagnosticsSources {
   readonly wakeLock: { readonly supported: boolean; readonly active: boolean }
   readonly pendingErrors: number
   readonly privacyControllerConfigured: boolean
-  /** Estado de la actualizacion del quiosco (RF-KI-07/RF-KI-08, tarea 3.12). */
+  /** Estado de la actualizacion del quiosco (RF-KI-07/RF-KI-08). */
   readonly update: {
     readonly pending: boolean
     /** Ventana vigente (cacheada del ultimo latido, o la de serie si ninguno la trajo todavia). */

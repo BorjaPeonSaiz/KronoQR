@@ -1,4 +1,4 @@
-// Titulo de la pestaña por pantalla (WCAG 2.4.2 «Página titulada», V7-PA-2, R7-PO-03).
+// Titulo de la pestaña por pantalla (WCAG 2.4.2 «Página titulada»).
 //
 // El panel y el portal crean su estado de marca con `manageTitle: false`: `applyBranding` no
 // toca `<title>`, asi que este modulo es su UNICO dueño. Compone `pantalla – nombre`, en el

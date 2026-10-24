@@ -2,7 +2,7 @@
 // Alta del segundo factor (RS-06): secreto TOTP y QR, mostrados UNA sola vez.
 //
 // Extraido de `LoginView` para que exista un unico sitio que pinta un secreto
-// TOTP en pantalla. El asistente de puesta en marcha (tarea 5.5) lo reutiliza
+// TOTP en pantalla. El asistente de puesta en marcha lo reutiliza
 // para el primer administrador: `POST /api/v1/setup/administrator` devuelve el
 // mismo `TwoFactorChallenge` que el `202` de `/auth/login`, asi que el mismo
 // `challenge_token` abre exactamente este mismo paso — no hay una segunda
@@ -150,7 +150,7 @@ onMounted(() => {
         :aria-label="t('auth.twoFactor.enrolQrAlt')"
         shape-rendering="crispEdges"
       >
-        <!-- eslint-disable-next-line kronoqr-colors/no-literal-colors -- QR: negro puro sobre blanco por legibilidad del lector, no depende de la marca ni del tema (U1: excepcion cerrada) -->
+        <!-- eslint-disable-next-line kronoqr-colors/no-literal-colors -- QR: negro puro sobre blanco por legibilidad del lector, no depende de la marca ni del tema (docs/06: excepcion cerrada) -->
         <path :d="qr.path" fill="#000000" />
       </svg>
       <p v-else-if="qrFailed" class="mt-4 text-sm text-kq-text-muted">

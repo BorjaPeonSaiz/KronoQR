@@ -1,5 +1,5 @@
-// Presentacion pura (sin Vue) de la salud de la flota de quioscos (RF-PA-07,
-// tarea 3.3): el color y el glifo del veredicto, la clave i18n de la razon y
+// Presentacion pura (sin Vue) de la salud de la flota de quioscos (RF-PA-07):
+// el color y el glifo del veredicto, la clave i18n de la razon y
 // del bloque «que hacer», y la lectura de la bateria. Se prueba sin montar
 // `DevicesView`, igual que `errorPresentation.ts` hace para el historico de
 // errores -es el mismo patron, deliberadamente.
@@ -73,8 +73,8 @@ export function reasonKey(reason: Reason): string {
 }
 
 /**
- * Clave i18n del bloque «que hacer», UNA POR RAZON y no por veredicto: es la
- * granularidad que pide la ficha -`battery_low` y `queue_pending` comparten
+ * Clave i18n del bloque «que hacer», UNA POR RAZON y no por veredicto (RF-PA-07):
+ * `battery_low` y `queue_pending` comparten
  * veredicto `warning` con `late`/`awaiting_first_heartbeat`, pero cada una
  * necesita su propio texto (revisar el cargador no es lo mismo que esperar un
  * latido). `locales/{es,en}.json`, `devices.health.whatToDo.<razon>`.
@@ -112,7 +112,7 @@ export function hasBatteryWarning(device: Pick<Device, 'health'>): boolean {
  * Si el bloque «que hacer» tiene sentido para este veredicto. `ok` -late con
  * normalidad- no tiene nada que hacer, y enseñar un bloque que dice «no hace
  * falta ninguna accion» en CADA fila sana es ruido, no ayuda (correccion de
- * `ui-ux`, segunda vuelta de la tarea 3.3). `warning`, `failure` y `revoked`
+ * `ui-ux`). `warning`, `failure` y `revoked`
  * si lo llevan: los tres tienen una accion o una explicacion que dar.
  */
 export function showsWhatToDo(verdict: Verdict): boolean {
@@ -126,10 +126,10 @@ export function showsWhatToDo(verdict: Verdict): boolean {
  * dato con valor legal: es la configuracion operativa de la instalacion
  * (`KIOSK_HEALTH_FRESH_WITHIN_SECONDS`, `KIOSK_HEALTH_SILENT_AFTER_SECONDS`).
  *
- * **Nunca redondea a un minuto que no es** (correccion de `revisor-codigo`,
- * segunda vuelta: `Math.round(seconds / 60)` convertia un umbral afinado de
- * 90 s en «2 min» y uno de 20 s en «0 min», los dos mintiendo sobre el umbral
- * real de la instalacion). Por debajo del minuto se muestran los segundos
+ * **Nunca redondea a un minuto que no es**: `Math.round(seconds / 60)`
+ * convertiria un umbral afinado de 90 s en «2 min» y uno de 20 s en «0 min»,
+ * los dos mintiendo sobre el umbral real de la instalacion. Por debajo del minuto
+ * se muestran los segundos
  * («20 s»); a partir de un minuto, minutos y -si sobran- los segundos que no
  * llegan a completar otro minuto («1 min 30 s»); un multiplo exacto no lleva
  * segundos de mas («10 min», no «10 min 0 s»).

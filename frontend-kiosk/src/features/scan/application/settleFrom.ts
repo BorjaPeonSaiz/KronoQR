@@ -13,7 +13,7 @@
 // disponible quando el escaneo viajo en la cola offline y el servidor tardo en
 // contestar.
 //
-// DESFASE DE RELOJ EN LA CONFIRMACION (RF-AT-10, decision 6 de la tarea 3.5).
+// DESFASE DE RELOJ EN LA CONFIRMACION (RF-AT-10).
 // `settleFrom` SOLO se llama con un desenlace que llego DENTRO del propio
 // envio -nunca con el de un lote que el drenaje de la cola confirmo en
 // segundo plano, ver `syncRunner.submit()`-, asi que cualquier `accepted` que
@@ -35,7 +35,7 @@ import type { ScanSubmissionResult } from './ports'
  * @param occurredAt el instante del intento, para la rama `rejected`.
  * @param clockSkewToleranceSeconds tolerancia de la instalacion
  *        (`KioskHeartbeat.clock_skew_tolerance_seconds`), o `null` si esta
- *        tablet no ha latido todavia: sin umbral, sin aviso (decision 6).
+ *        tablet no ha latido todavia: sin umbral, sin aviso.
  * @returns la confirmacion a pintar, o `null` si sigue «pendiente» en cola
  *          (`deferred`): la pantalla ya dice eso y no hay que tocarla.
  */
@@ -56,10 +56,10 @@ export function settleFrom(
         new Date(result.response.occurred_at),
         result.response.recorded_at,
       )
-      // Un solo operador para "supera el umbral" (revision de la segunda
-      // vuelta): `exceedsClockSkewTolerance` es tambien quien decide en
-      // `heartbeat.ts`, con el mismo `>` estricto que `ReviewPolicy` en el
-      // servidor. Antes esta comparacion se repetia a mano aqui.
+      // Un solo operador para "supera el umbral": `exceedsClockSkewTolerance`
+      // es tambien quien decide en `heartbeat.ts`, con el mismo `>` estricto
+      // que `ReviewPolicy` en el servidor. Una comparacion repetida a mano
+      // aqui podria discrepar.
       const exceeds = skew !== null && exceedsClockSkewTolerance(skew, clockSkewToleranceSeconds)
 
       return {

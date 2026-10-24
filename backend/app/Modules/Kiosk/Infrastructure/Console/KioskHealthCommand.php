@@ -307,7 +307,8 @@ final class KioskHealthCommand extends Command
         if ($seconds < 86400) {
             return $this->say($translator, 'duration.hours', [
                 'hours' => intdiv($seconds, 3600),
-                'minutes' => intdiv($seconds % 3600, 60),
+                // Dos cifras, como en las tres SPA: «3 h 05 min» (decision del 24-10-2026).
+                'minutes' => sprintf('%02d', intdiv($seconds % 3600, 60)),
             ]);
         }
 

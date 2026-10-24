@@ -1,5 +1,5 @@
 // Una exportacion larga en diferido, de punta a punta, para las pantallas que la
-// piden (Inspeccion, nomina, cuadro de impacto: RC2, V5-PA-4, V21-5-PA-2, V3-UX-04).
+// piden (Inspeccion, nomina, cuadro de impacto).
 //
 // Reutiliza la cola de informes (`report_exports`) y su cache de consultas: pedir,
 // sondear cada 3 s mientras haya algo `pending`/`running` (no hay tiempo real para

@@ -4,7 +4,7 @@
 // sin pedirselo a nadie ni esperar a que RRHH lo genere.
 //
 // **CSV o PDF.** El CSV cubre la portabilidad del articulo 20 del RGPD; el PDF
-// -sellado- es lo que una persona presenta ante un tercero (PR19). Si el
+// -sellado- es lo que una persona presenta ante un tercero. Si el
 // servidor no puede generar el PDF (`503`, sin Chromium), se avisa y se ofrece
 // el CSV, que no depende de nada.
 import { announce } from '@kronoqr/web-kit/announcer'
@@ -41,7 +41,7 @@ const pdfUnavailable = ref(false)
 const pdfBusy = ref(false)
 const retryAfterSeconds = ref<number | null>(null)
 
-// Cuenta atras real (V21-3-UX-2): baja cada segundo y, a 0, dice que ya se puede reintentar.
+// Cuenta atras real: baja cada segundo y, a 0, dice que ya se puede reintentar.
 const remaining = useCountdown(() => retryAfterSeconds.value)
 const busyDetail = computed(() => {
   if (remaining.value === null) return t('myExport.pdfBusy.messageNoWait')
@@ -51,7 +51,7 @@ const busyDetail = computed(() => {
     : t('myExport.pdfBusy.message', { seconds: remaining.value })
 })
 
-// Los avisos de PDF solo tienen sentido con el PDF elegido (V21-3-UX-2): al pasar a CSV se retiran.
+// Los avisos de PDF solo tienen sentido con el PDF elegido: al pasar a CSV se retiran.
 watch(format, (chosen) => {
   if (chosen !== 'pdf') {
     pdfBusy.value = false

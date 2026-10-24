@@ -52,7 +52,7 @@ function isActive(name: string): boolean {
   return route.name === name || route.meta.section === name
 }
 
-// «Informe listo» en cualquier pantalla (V21-5-PA-1): el marco esta siempre
+// «Informe listo» en cualquier pantalla: el marco esta siempre
 // montado, asi que es quien observa las exportaciones en segundo plano de quien
 // puede pedirlas. En «Informes» la lista ya esta a la vista y el aviso se retira.
 const reportsEnabled = computed(
@@ -74,7 +74,7 @@ function reloadPage(): void {
 }
 
 // Un menu de UN solo enlace a la pantalla en la que ya se esta no ayuda a nadie
-// (el auditor, cuya unica pantalla es la Inspeccion; V21-3-UX-3): se retira. Si la
+// (el auditor, cuya unica pantalla es la Inspeccion): se retira. Si la
 // persona esta en otra pantalla -cambiar la contrasena-, el enlace sigue ahi para volver.
 const showNavigation = computed(
   () =>
@@ -99,7 +99,7 @@ async function signOut(): Promise<void> {
        no los buscan tras un boton).
 
        Sigue siendo un `<header>` de primer nivel, y por tanto el landmark
-       `banner`, aunque se pinte en vertical: la marca (RF-PD-08, tarea 5.8)
+       `banner`, aunque se pinte en vertical: la marca (RF-PD-08)
        «va en la cabecera» y las pruebas la localizan ahi. -->
   <div class="min-h-dvh bg-kq-surface text-kq-text md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
     <a
@@ -118,7 +118,7 @@ async function signOut(): Promise<void> {
         data-test="app-sidebar"
         class="flex flex-col gap-4 p-4 md:sticky md:top-0 md:h-dvh md:overflow-y-auto"
       >
-        <!-- Marca de la instalacion (RF-PD-08, tarea 5.8; ADR-036): logotipo
+        <!-- Marca de la instalacion (RF-PD-08; ADR-036): logotipo
            o nombre, resueltos por `BrandMark` (compartido con el portal,
            `@kronoqr/web-kit`). «Panel de gestion» se queda como subtitulo,
            siempre visible: dice que aplicacion es esta dentro del
@@ -132,7 +132,7 @@ async function signOut(): Promise<void> {
           <!-- Hueco de 6 px entre secciones: el anillo de foco (3 px, a 2 px
                de la caja) tiene que caber sin tocar a la vecina, porque
                `--kq-color-focus` es el mismo tono que el fondo de la activa
-               y sobre ella desapareceria (revision de UI/UX, WCAG 2.4.11).
+               y sobre ella desapareceria (WCAG 2.4.11).
 
                El activo se calcula aqui y no con `active-class`: la ficha de
                un empleado no es hija de «Plantilla» en el router y RouterLink
@@ -223,7 +223,7 @@ async function signOut(): Promise<void> {
 
       <!-- Un trozo de la aplicacion no carga y ya se recargo una vez (tras una
            actualizacion del servidor, o sin red): el clic no abre nada y sin
-           este aviso no se sabria por que (V21-3-UX-1). -->
+           este aviso no se sabria por que. -->
       <div
         v-if="chunkLoadFailed"
         role="alert"

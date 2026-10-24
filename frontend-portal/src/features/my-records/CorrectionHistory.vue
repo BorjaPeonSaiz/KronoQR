@@ -18,12 +18,7 @@
 // calculo que ya se hizo con la zona buena, y en una noche de cambio de hora
 // las dos cuentas no tienen por que dar lo mismo — que es exactamente el
 // defecto que esta migracion corrige.
-import {
-  formatCivilDate,
-  formatInstant,
-  formatZoneLabel,
-  readLocalTimestamp,
-} from '@kronoqr/web-kit/datetime'
+import { formatInstant, formatLocalDateTime, formatZoneLabel } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -37,7 +32,7 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-/** El instante en la zona del centro, en 24 h como el resto de la pantalla (V2-PO-2). */
+/** El instante en la zona del centro, en 24 h como el resto de la pantalla. */
 function instant(value: string): string {
   return formatInstant(value, props.timeZone, locale.value)
 }
@@ -56,11 +51,12 @@ function duration(minutes: number): string {
  * portal digan la misma hora.
  */
 function performedAt(correction: WorkDayCorrection): string {
-  const parts = readLocalTimestamp(correction.performed_at_local)
-
-  return parts === null
-    ? instant(correction.performed_at)
-    : `${formatCivilDate(parts.date, locale.value)}, ${parts.time}`
+  return formatLocalDateTime(
+    correction.performed_at_local,
+    correction.performed_at,
+    props.timeZone,
+    locale.value,
+  )
 }
 
 interface MarksView {

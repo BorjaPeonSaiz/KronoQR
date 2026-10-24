@@ -6,14 +6,13 @@
 // - @typescript-eslint en modo estricto, con no-explicit-any como error: lo
 //   desconocido es unknown y se estrecha.
 // - Prettier al final, para que no discuta con nadie sobre formato.
-//
-// La configuracion definitiva de convenciones es de la tarea 0.7.
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
+import { noPlanReferences } from '@kronoqr/web-kit/eslint/no-plan-references'
 
 const MOVED_FROM_TELEMETRY = {
   group: [
@@ -102,8 +101,9 @@ export default defineConfigWithVueTs(
       ],
     },
   },
-  // R1-RV-06 y limites entre capas. `no-restricted-imports` no se acumula entre bloques
-  // que casan el mismo fichero (gana el ultimo), asi que cada bloque repite lo anterior.
+  // Limites entre capas (`shared/device/` aparte de `shared/telemetry/`).
+  // `no-restricted-imports` no se acumula entre bloques que casan el mismo
+  // fichero (gana el ultimo), asi que cada bloque repite lo anterior.
   {
     // Nadie importa los modulos que se sacaron de `shared/telemetry/`: la identidad y los
     // ajustes del dispositivo viven en `shared/device/`.
@@ -145,9 +145,11 @@ export default defineConfigWithVueTs(
   // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
   // La lista de palabras y el motivo viven en web-kit, una sola vez.
   identifierLanguage(),
-  // KI7-02: sin literales en las plantillas; los textos van en i18n.
+  // Sin literales en las plantillas; los textos van en i18n.
   noBareStrings(),
-  // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
+  // Sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
+  // Comentarios con el motivo, no con la historia del plan ni de las revisiones (doc 02 §3.5).
+  noPlanReferences(),
   skipFormatting,
 )

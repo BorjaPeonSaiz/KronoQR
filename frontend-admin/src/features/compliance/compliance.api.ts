@@ -1,4 +1,4 @@
-// Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente entre
+// Vista de cumplimiento (RF-PA-06): descanso insuficiente entre
 // jornadas (RN-10), jornada diaria excesiva (RN-11), tramo continuado sin
 // pausa (RN-12, suspendida) y exceso semanal informativo (RN-17). La forma
 // sale del contrato; aqui no se inventa ninguna.

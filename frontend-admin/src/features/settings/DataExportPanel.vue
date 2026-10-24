@@ -4,7 +4,7 @@
 // abierto, que el cliente puede pedir cuando quiera y sin pedir permiso a
 // nadie. Vive dentro de `LicenseView.vue` porque es la pantalla a la que se
 // llega cuando se teme perder el producto, y RL-20 es la respuesta a ese
-// temor (ficha de la tarea 5.10, decision 10).
+// temor.
 //
 // NUNCA depende de la licencia (regla dura 15): esta seccion se enseña igual
 // con la licencia caducada, ausente o ilegible, y por eso no lee nada de
@@ -65,7 +65,7 @@ const {
   queryKey: QUERY_KEY,
   queryFn: listDataExports,
   enabled: canManage,
-  // Sondeo SOLO mientras algo sigue en curso (ficha 5.10, decision 6): una
+  // Sondeo SOLO mientras algo sigue en curso: una
   // instalacion sin ninguna exportacion pendiente no golpea el servidor cada
   // 5 s para nada.
   refetchInterval: (query) => {
@@ -177,8 +177,8 @@ async function confirmRequest(): Promise<void> {
     const resource = await requestDataExport()
 
     // Se enseña en el acto, sin esperar al primer sondeo: tanto si es la fila
-    // recien creada como si es la que ya estaba en curso (409, ficha 5.10,
-    // decision 4), es la misma forma y el mismo sitio en la lista.
+    // recien creada como si es la que ya estaba en curso (409), es la misma
+    // forma y el mismo sitio en la lista.
     queryClient.setQueryData<DataExportCollection>(QUERY_KEY, (previous) => {
       const rest = (previous?.data ?? []).filter((row) => row.uuid !== resource.data.uuid)
 

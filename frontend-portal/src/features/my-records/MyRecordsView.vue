@@ -138,7 +138,7 @@ watch(data, (value) => {
 
     <!--
       El resumen va justo debajo del titulo, ANTES del formulario de fechas y del
-      detalle (R7-PO-01): en un movil de 360 px lo primero que se lee es cuanto
+      detalle: en un movil de 360 px lo primero que se lee es cuanto
       lleva el periodo y como va hoy, sin bajar. No se reordena el listado: el
       contrato fija las jornadas de la mas antigua a la mas reciente (la lectura
       cronologica es la que se contrasta con una nomina) y el servidor no las

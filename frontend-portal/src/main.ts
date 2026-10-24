@@ -21,7 +21,7 @@ const app = createApp(App)
 
 // Antes que nada: un error durante el propio arranque tambien debe capturarse.
 // El buffer saneado (regla dura 21: sin PII) se vacia hacia `error_events`
-// por `installClientErrorTransport` en cuanto hay sesion (tarea 5.12).
+// por `installClientErrorTransport` en cuanto hay sesion.
 const errorReporter = createWebErrorReporter({
   app: 'portal',
   appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev',
@@ -44,7 +44,7 @@ const i18n = createAppI18n()
 setAuthTokenProvider(() => session.token)
 bindSessionLifecycle({ router, session })
 
-// Vacia el buffer de errores del portal hacia `error_events` (tarea 5.12,
+// Vacia el buffer de errores del portal hacia `error_events` (
 // RF-PD-15): al pasar a autenticado, cada 60 s si hay pendientes y al
 // ocultarse o cerrar la pestaña. Sin sesion, no manda nada -no hay canal
 // anonimo-. El propio modulo NO sondea la sesion: se avisa de forma reactiva
@@ -71,7 +71,7 @@ watch(
 // persona (ver el `watch` de abajo).
 setLocaleProvider(() => i18n.global.locale.value)
 
-// El documento declara el idioma que se esta mostrando (WCAG 3.1.1, PA7-001).
+// El documento declara el idioma que se esta mostrando (WCAG 3.1.1).
 syncDocumentLang(() => i18n.global.locale.value)
 
 // El idioma lo decide la politica de la marca (`branding.locales`): con un

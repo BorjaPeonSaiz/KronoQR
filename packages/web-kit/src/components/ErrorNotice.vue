@@ -10,7 +10,7 @@
 // exporta `ApiErrorKind`.
 //
 // **«Reintentar».** Una lista que no carga y que dice «vuelve a intentarlo» sin un
-// boton obliga a recargar el navegador (V3-UX-01). Si quien lo usa pasa `@retry`,
+// boton obliga a recargar el navegador. Si quien lo usa pasa `@retry`,
 // aparece el boton y el evento vuelve a pedir lo que fallo. Se declara como prop
 // `onRetry` y no como evento para que su mera presencia decida si se pinta.
 //

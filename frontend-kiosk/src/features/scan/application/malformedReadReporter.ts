@@ -1,5 +1,4 @@
-// Cuenta las lecturas que no son una tarjeta KronoQR y las reporta con freno
-// (R3-KI-04).
+// Cuenta las lecturas que no son una tarjeta KronoQR y las reporta con freno.
 //
 // Un QR ajeno repetido o una tarjeta dañada no dejaba rastro tecnico: el lector
 // descartaba lo ilegible en silencio. Ahora cada lectura ilegible cuenta, pero

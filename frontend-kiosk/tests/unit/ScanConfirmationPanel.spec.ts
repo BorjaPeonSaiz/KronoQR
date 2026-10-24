@@ -35,7 +35,7 @@ describe('pantalla de confirmacion', () => {
     expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toBe('Entrada 07:02')
   })
 
-  it('reproduce el segundo: «Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 0 min»', () => {
+  it('reproduce el segundo: «Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 00 min»', () => {
     const wrapper = render({
       kind: 'accepted',
       scanId: 's2',
@@ -50,7 +50,7 @@ describe('pantalla de confirmacion', () => {
       'Hasta luego, Lucia G.',
     )
     expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toBe('Salida 11:02')
-    expect(wrapper.get('[data-testid="confirmation-total"]').text()).toBe('Hoy: 6 h 0 min')
+    expect(wrapper.get('[data-testid="confirmation-total"]').text()).toBe('Hoy: 6 h 00 min')
   })
 
   it('nunca muestra decimales en el acumulado', () => {
@@ -124,7 +124,7 @@ describe('pantalla de confirmacion', () => {
     expect(wrapper.get('[data-testid="confirmation-headline"]').text()).toBe(
       'Ya has fichado hace unos segundos',
     )
-    expect(wrapper.get('[data-testid="confirmation-total"]').text()).toBe('Hoy: 4 h 0 min')
+    expect(wrapper.get('[data-testid="confirmation-total"]').text()).toBe('Hoy: 4 h 00 min')
     // Sin el glifo grande de exclamacion: no es un error, no debe parecerlo.
     expect(wrapper.find('span[aria-hidden="true"]').exists()).toBe(false)
   })

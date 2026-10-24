@@ -38,7 +38,7 @@ export interface CameraController {
   stop(): void
   toggleTorch(): Promise<void>
   /**
-   * Ajustes REALES de la pista en marcha (RF-KI-08, tarea 3.3): resolucion,
+   * Ajustes REALES de la pista en marcha (RF-KI-08): resolucion,
    * `frameRate`, `facingMode`, `focusMode`, `zoom`, `backgroundBlur`. `null`
    * sin camara abierta o si el navegador no expone `getSettings()`. Sincrono
    * y de solo lectura: no pide nada al aparato, lee lo que ya negocio
@@ -121,7 +121,7 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
 
   // Arranque en vuelo compartido: dos `start()` concurrentes de la misma generacion
   // esperan al mismo `getUserMedia` en vez de abrir un segundo `MediaStream` que
-  // pisaria `stream.value` y dejaria el primero vivo sin dueno (R2-KI-01).
+  // pisaria `stream.value` y dejaria el primero vivo sin dueno.
   let pendingStart: {
     readonly generation: number
     readonly promise: Promise<MediaStream | null>

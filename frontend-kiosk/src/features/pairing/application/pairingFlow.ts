@@ -1,4 +1,4 @@
-// Maquina de estados del emparejamiento (RF-PD-06, tarea 5.6).
+// Maquina de estados del emparejamiento (RF-PD-06).
 //
 // idle -> requesting -> waiting(code, expiresAt) -> paired
 //                             |            ^
@@ -79,7 +79,7 @@ const DEFAULT_REQUEST_RETRY_DELAY_MS = 5_000
 /**
  * Tras un `claim` cuya respuesta pudo perderse, el servidor admite repetirlo entre
  * 10 y 60 s despues de la primera recogida, con el mismo secreto y desde la misma
- * direccion (V6-KI-02). Antes de 10 s contesta el mismo rechazo de siempre, asi que
+ * direccion. Antes de 10 s contesta el mismo rechazo de siempre, asi que
  * un rechazo DENTRO de esta ventana no significa «solicitud perdida»: se sigue
  * sondeando. El margen de mas cubre el reloj entre cliente y servidor.
  */
@@ -221,7 +221,7 @@ export function createPairingFlow(options: PairingFlowOptions): PairingFlow {
 
     if (result.outcome === 'rejected') {
       // Un rechazo tras un `claim` perdido puede ser el «demasiado pronto» de la
-      // recuperacion (V6-KI-02): se sigue sondeando la MISMA solicitud hasta que
+      // recuperacion: se sigue sondeando la MISMA solicitud hasta que
       // la ventana se cierra.
       if (
         uncertainSinceMs !== null &&

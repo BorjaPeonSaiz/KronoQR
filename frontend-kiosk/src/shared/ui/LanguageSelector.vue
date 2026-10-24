@@ -5,7 +5,7 @@
 // modal que tapa la camara y exige dos toques precisos. Con guantes, eso son dos
 // toques fallidos. Los botones cumplen los 48 px y se aciertan de un manotazo.
 //
-// FILTRADO POR LA MARCA (RF-PD-08, tarea 5.8). `policy` es la que trae
+// FILTRADO POR LA MARCA (RF-PD-08). `policy` es la que trae
 // `GET /api/v1/branding`: los idiomas que la INSTALACION ofrece, no los que
 // esta version de la aplicacion trae traducidos. `offeredLocales` (web-kit)
 // cruza las dos listas y nunca deja el selector vacio. Sin `policy` se usa la
@@ -33,7 +33,7 @@ function apply(next: AppLocale): void {
   if (typeof document !== 'undefined') document.documentElement.lang = next
 }
 
-// La eleccion es de QUIEN FICHA, no de la tablet (D9, V7-KI-05): no se guarda, y
+// La eleccion es de QUIEN FICHA, no de la tablet: no se guarda, y
 // `useLocaleResetAfterScan` devuelve el idioma de serie al terminar el fichaje.
 function select(next: AppLocale): void {
   chosenByPerson = true

@@ -27,12 +27,12 @@ import { vAriaDisabled } from '@kronoqr/web-kit/vAriaDisabled'
 
 const app = createApp(App)
 
-// Botones bloqueados sin perder el foco (V21-7-PA-1).
+// Botones bloqueados sin perder el foco.
 app.directive('aria-disabled', vAriaDisabled)
 
 // Antes que nada: un error durante el propio arranque tambien debe capturarse.
 // El buffer saneado (regla dura 21: sin PII) se vacia hacia `error_events`
-// por `installClientErrorTransport` en cuanto hay sesion (tarea 5.12).
+// por `installClientErrorTransport` en cuanto hay sesion.
 const errorReporter = createWebErrorReporter({
   app: 'admin',
   appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev',
@@ -46,7 +46,7 @@ app.use(pinia)
 const router = createAppRouter()
 const session = useSessionStore(pinia)
 
-// La marca de la instalacion (RF-PD-08, tarea 5.8): se pinta lo que ya haya
+// La marca de la instalacion (RF-PD-08): se pinta lo que ya haya
 // —el producto, siempre la primera vez— sin esperar a la red, y se pide al
 // servidor SIN bloquear el primer pintado. Un fallo de red se ignora en
 // silencio dentro del propio store: el panel arranca con el producto.
@@ -54,7 +54,7 @@ const branding = useBrandingStore(pinia)
 branding.apply()
 void branding.load()
 
-// Idioma de la interfaz (bloque 26): con un solo idioma ofrecido, ese; con varios,
+// Idioma de la interfaz (`resolveUiLocale`): con un solo idioma ofrecido, ese; con varios,
 // el de la persona, el del navegador o el por defecto de la instalacion. Se
 // calcula con la marca que ya haya (la cacheada o la del producto) y se
 // recalcula al llegar la del servidor y al entrar o salir una persona.
@@ -93,7 +93,7 @@ setUnauthenticatedHandler(() => {
   void router.push({ name: 'login' })
 })
 
-// Vacia el buffer de errores del panel hacia `error_events` (tarea 5.12,
+// Vacia el buffer de errores del panel hacia `error_events` (
 // RF-PD-15): al pasar a autenticado, cada 60 s si hay pendientes y al
 // ocultarse o cerrar la pestaña. Sin sesion, no manda nada -no hay canal
 // anonimo-. El propio modulo NO sondea la sesion: se avisa de forma reactiva
@@ -120,7 +120,7 @@ watch(
 // entrar: pasa a ser el de la persona (ver el `watch` de abajo).
 setLocaleProvider(() => i18n.global.locale.value)
 
-// El documento declara el idioma que se esta mostrando (WCAG 3.1.1, PA7-001).
+// El documento declara el idioma que se esta mostrando (WCAG 3.1.1).
 syncDocumentLang(() => i18n.global.locale.value)
 
 // `403 password-change-required` (RF-ID-10): la cuenta entra con una contrasena

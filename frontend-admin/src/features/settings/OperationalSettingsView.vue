@@ -1,17 +1,17 @@
 <script setup lang="ts">
 // Ajustes operativos de la instalacion: los umbrales `ATTENDANCE_*` y los dos
-// idiomas `LOCALE_*` (RF-PD-01, tarea 5.13, hallazgo B1 del cierre de la
-// Fase 5). Hasta ahora estas seis claves solo se podian cambiar por
-// `PATCH /api/v1/settings` a mano o por el asistente de puesta en marcha (una
-// sola vez, solo tres de las seis): ninguna pantalla del panel las volvia a
+// idiomas `LOCALE_*` (RF-PD-01). Sin esta pantalla, estas seis claves solo se
+// podrian cambiar por `PATCH /api/v1/settings` a mano o por el asistente de
+// puesta en marcha (una sola vez, solo tres de las seis): ninguna pantalla del
+// panel las volvia a
 // enseñar, y `docs/cliente/configuracion.md` §6.0 y §2.1 prometian «se editan
 // desde el panel» sin que hubiera panel.
 //
 // `ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`
-// (RF-PR-06, RN-16, tarea 3.11, decision 7 de la ficha) se suman a las cuatro
+// (RF-PR-06, RN-16) se suman a las cuatro
 // de siempre por el MISMO camino generico -`FormField` mas `errorsFor`,
 // rango tomado de `constraints`, nunca copiado-. Las dos YA estan en el enum
-// `SettingKey` del contrato (segunda vuelta de la tarea 3.11, decision 17):
+// `SettingKey` del contrato:
 // `ATTENDANCE_FIELDS` tipa `key` contra ese enum con `satisfies`, igual que
 // `BREAK_CLOCKING_KEY` mas abajo, para que un cambio de nombre en el contrato
 // falle aqui.
@@ -32,17 +32,16 @@
 //    divergir). Las casillas de disponibles reutilizan el patron ya probado de
 //    `onboarding/steps/OrganisationStep.vue`: no se puede desmarcar el idioma
 //    que esta activo por defecto.
-//  - **`KIOSK_SERVICE_CODE` (RF-KI-08, tarea 3.3) es texto OPCIONAL, con la
+//  - **`KIOSK_SERVICE_CODE` (RF-KI-08) es texto OPCIONAL, con la
 //    forma fija en el propio panel** (`^[0-9]{8,12}$`), igual que
 //    `BrandingView` fija `HEX_COLOR` para `BRANDING_ACCENT_COLOR`: no es un
 //    umbral con rango que copiar del contrato, es una forma. Vacio es SIEMPRE
 //    valido -«sin codigo, la pantalla se abre sin el»-, y por eso su error
 //    local no se dispara con el campo en blanco (a diferencia de los cuatro
 //    `ATTENDANCE_*`, que exigen `required`). El valor nunca se audita ni sale
-//    de esta pantalla en claro (decision 6 de la ficha 3.3): el servidor solo
+//    de esta pantalla en claro: el servidor solo
 //    envia su huella SHA-256 al quiosco por el latido.
-//  - **Guardado DEFENSIVO ante `KIOSK_SERVICE_CODE` redactada** (segunda
-//    vuelta de la tarea 3.3, hallazgo de `revisor-codigo`): si el backend
+//  - **Guardado DEFENSIVO ante `KIOSK_SERVICE_CODE` redactada**: si el backend
 //    empieza a servir esta clave con `value: null` para un actor de SOPORTE
 //    que no debe leerla (ADR-020), el campo se deshabilita, se vacia y enseña
 //    una nota en vez del hint normal, y la clave NUNCA entra en lo que se
@@ -50,7 +49,7 @@
 //    no declara ese `null` (`SettingValue` es `number | string | string[]`);
 //    la comprobacion pasa por `unknown` a proposito, para no dar por hecho el
 //    tipo de una respuesta que `schema.d.ts` todavia no describe.
-//  - **`ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, tarea 3.5) es de tipo `text`
+//  - **`ATTENDANCE_BREAK_CLOCKING` (RF-AT-12) es de tipo `text`
 //    con un conjunto cerrado de dos valores** (`enabled`/`disabled`), igual
 //    que `LOCALE_DEFAULT`: un desplegable sobre `constraints.allowed`, nunca
 //    un catalogo propio. Ya esta en el enum `SettingKey` del contrato
@@ -83,36 +82,36 @@ const { t } = useI18n()
 /** La forma que exige el panel para `KIOSK_SERVICE_CODE` (RF-KI-08): 8 a 12 cifras. Vacio siempre vale. */
 const SERVICE_CODE_PATTERN = /^[0-9]{8,12}$/
 
-/** Tipada con el enum del contrato (RF-AT-12, tarea 3.5): un cambio de nombre en `SettingKey` falla aqui. */
+/** Tipada con el enum del contrato (RF-AT-12): un cambio de nombre en `SettingKey` falla aqui. */
 const BREAK_CLOCKING_KEY: SettingKey = 'ATTENDANCE_BREAK_CLOCKING'
 
 // --- Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
-// (RF-KI-07), tarea 3.12 --------------------------------------------------
+// (RF-KI-07) --------------------------------------------------------------
 //
-// Las tres claves ya estan en el enum `SettingKey` del contrato (segunda
-// vuelta de la tarea 3.12): `satisfies SettingKey` hace que un cambio de
+// Las tres claves ya estan en el enum `SettingKey` del contrato:
+// `satisfies SettingKey` hace que un cambio de
 // nombre ahi falle aqui, mismo criterio que `BREAK_CLOCKING_KEY`.
 const WEEKLY_SUMMARY_EMAIL_KEY = 'WEEKLY_SUMMARY_EMAIL' satisfies SettingKey
 const KIOSK_UPDATE_WINDOW_KEY = 'KIOSK_UPDATE_WINDOW' satisfies SettingKey
 const KIOSK_UPDATE_QUIET_MINUTES_KEY = 'KIOSK_UPDATE_QUIET_MINUTES' satisfies SettingKey
 
-// --- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13) ---------------------
+// --- Cuadro de impacto y adopcion (RF-IN-08) ---------------------
 //
 // `BASELINE_MANUAL_HOURS_PER_MONTH` ya esta en el enum `SettingKey` del
-// contrato (segunda vuelta de la tarea 3.13): `satisfies SettingKey` hace que
+// contrato: `satisfies SettingKey` hace que
 // un cambio de nombre ahi falle aqui, mismo criterio que
 // `KIOSK_UPDATE_QUIET_MINUTES_KEY`.
 // Longitud del PIN (RF-ID-09, ADR-050): eleccion `"6"`/`"8"`, string segun el contrato.
 const PIN_LENGTH_KEY = 'IDENTITY_PIN_LENGTH' satisfies SettingKey
 const BASELINE_MANUAL_HOURS_KEY = 'BASELINE_MANUAL_HOURS_PER_MONTH' satisfies SettingKey
 
-/** `HH:MM-HH:MM`, la misma forma que valida el servidor (decision 9 de la ficha 3.12): puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
+/** `HH:MM-HH:MM`, la misma forma que valida el servidor: puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
 const UPDATE_WINDOW_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/
 
-// --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
+// --- Salida a nomina (RF-IN-07) -----------------------------------
 //
 // Las seis claves `PAYROLL_EXPORT_*` ya estan en el enum `SettingKey` del
-// contrato (segunda vuelta de la tarea 3.9): `satisfies SettingKey` hace que
+// contrato: `satisfies SettingKey` hace que
 // un cambio de nombre ahi falle aqui, mismo criterio que
 // `BASELINE_MANUAL_HOURS_KEY`.
 const PAYROLL_COLUMNS_KEY = 'PAYROLL_EXPORT_COLUMNS' satisfies SettingKey
@@ -135,7 +134,7 @@ const DEFAULTS = {
   payrollHeaderRow: 'enabled',
 } as const
 
-/** El catalogo cerrado de columnas (decision 5 de la ficha): el mismo que valida el servidor. Un `id` fuera de esta lista es `422` al guardar, aqui y en el backend. */
+/** El catalogo cerrado de columnas: el mismo que valida el servidor. Un `id` fuera de esta lista es `422` al guardar, aqui y en el backend. */
 const PAYROLL_COLUMN_IDS = [
   'employee_code',
   'employee_uuid',
@@ -159,7 +158,7 @@ const PAYROLL_COLUMN_IDS = [
   'time_zone',
 ] as const
 
-/** Las columnas de serie (decision 5 de la ficha), para cuando el catalogo todavia no trae fila propia. */
+/** Las columnas de serie, para cuando el catalogo todavia no trae fila propia. */
 const DEFAULT_PAYROLL_COLUMNS: readonly string[] = [
   'employee_code',
   'last_name',
@@ -175,9 +174,9 @@ const DEFAULT_PAYROLL_COLUMNS: readonly string[] = [
 
 /**
  * Las siete claves numericas `ATTENDANCE_*` (la septima, el margen de futuro
- * del alta manual de F1, se anadio al final del catalogo).
- * `key` se tipa contra `SettingKey` con `satisfies` (segunda vuelta de la
- * tarea 3.11, decision 17): las dos ultimas ya estan en el enum del contrato,
+ * del alta manual, RL-01, va al final del catalogo).
+ * `key` se tipa contra `SettingKey` con `satisfies`: las dos ultimas ya estan
+ * en el enum del contrato,
  * y un cambio de nombre ahi falla aqui en vez de en `changes[field.key]`. El
  * `as const` de al lado conserva los seis literales -no el tipo `SettingKey`
  * entero- para que `AttendanceKey` siga siendo solo estas seis, y `form` no
@@ -196,7 +195,7 @@ const ATTENDANCE_FIELDS = [
     testId: 'min-transit-seconds',
     i18n: 'minTransitSeconds',
   },
-  // Los valores de serie del catalogo (decision 7 de la ficha 3.11): 10 s de
+  // Los valores de serie del catalogo: 10 s de
   // ventana, 3 dias de repeticion.
   {
     key: 'ATTENDANCE_PATTERN_WINDOW_SECONDS',
@@ -208,7 +207,7 @@ const ATTENDANCE_FIELDS = [
     testId: 'pattern-min-repeats',
     i18n: 'patternMinRepeats',
   },
-  // F1: margen por delante de la hora del servidor que admiten el alta y la
+  // Margen por delante de la hora del servidor que admiten el alta y la
   // correccion manuales de un tramo. 5 minutos de serie.
   {
     key: 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES',
@@ -237,26 +236,26 @@ const form = ref<Record<AttendanceKey, number | string>>({
 const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
 const serviceCode = ref('')
-/** `enabled`/`disabled` (RF-AT-12, tarea 3.5). `disabled` de serie, como en el catalogo. */
+/** `enabled`/`disabled` (RF-AT-12). `disabled` de serie, como en el catalogo. */
 const breakClocking = ref<string>(DEFAULTS.breakClocking)
 const pinLength = ref<string>(DEFAULTS.pinLength)
 
-/** `disabled`/`enabled` (RF-PR-05, tarea 3.12). `disabled` de serie: el resumen es opcional (doc 05 §5.7). */
+/** `disabled`/`enabled` (RF-PR-05). `disabled` de serie: el resumen es opcional (doc 05 §5.7). */
 const weeklySummaryEmail = ref<string>(DEFAULTS.weeklySummaryEmail)
-/** `HH:MM-HH:MM` en hora local del centro (RF-KI-07, tarea 3.12). `03:00-05:00` de serie. */
+/** `HH:MM-HH:MM` en hora local del centro (RF-KI-07). `03:00-05:00` de serie. */
 const kioskUpdateWindow = ref<string>(DEFAULTS.kioskUpdateWindow)
-/** Entero 0-120 (RF-KI-07, tarea 3.12), como cadena para `v-model`. `10` de serie. */
+/** Entero 0-120 (RF-KI-07), como cadena para `v-model`. `10` de serie. */
 const kioskUpdateQuietMinutes = ref<number | string>('10')
 
 /**
- * `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08, tarea 3.13), como cadena para
- * `v-model`. `0` de serie -«no declarada»- (decision 9 de la ficha): sin este
+ * `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08), como cadena para
+ * `v-model`. `0` de serie -«no declarada»-: sin este
  * dato el cuadro de impacto deja el indicador vacio en vez de inventar una
  * mejora frente al proceso manual que el producto sustituye.
  */
 const baselineManualHoursPerMonth = ref<number | string>('0')
 /**
- * Guardado DEFENSIVO (segunda vuelta de la tarea 3.3): el contrato de hoy
+ * Guardado DEFENSIVO: el contrato de hoy
  * (`SettingValue = number | string | string[]`) no admite `null`, pero un
  * actor de SOPORTE (ADR-020) no deberia poder leer una clave confidencial
  * como `KIOSK_SERVICE_CODE`, y la forma prevista para eso es
@@ -267,7 +266,7 @@ const baselineManualHoursPerMonth = ref<number | string>('0')
  */
 const serviceCodeRedacted = ref(false)
 
-// --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
+// --- Salida a nomina (RF-IN-07) -----------------------------------
 //
 // `payrollColumnsText` es UNA LINEA POR COLUMNA, no un `string[]` como
 // `localeAvailable`: la lista importa el ORDEN -es el orden de las columnas
@@ -328,7 +327,7 @@ const pinLengthOptions = computed<readonly string[]>(() => {
 
 /**
  * `enabled`/`disabled` ya cargado, con `disabled` -el valor de serie del
- * catalogo (decision 7 de la ficha 3.5)- como respaldo mientras la clave no
+ * catalogo- como respaldo mientras la clave no
  * tenga fila (instalacion recien puesta en marcha). Usada en `fill()` Y en
  * `pendingChanges` para que las dos comparen SIEMPRE la misma normalizacion:
  * sin esto, una cadena vacia del servidor se leeria como «disabled» en
@@ -345,7 +344,7 @@ function breakClockingValueOf(catalog: InstallationSettings): string {
  * El mismo patron que `breakClockingValueOf`, generalizado para las CUATRO
  * claves `PAYROLL_EXPORT_*` de conjunto cerrado (delimitador, formato de
  * horas, formato de fecha, codificacion y cabecera): `fallback` es el valor de
- * serie de cada una (decision 5 de la ficha), usado mientras la clave no tenga
+ * serie de cada una, usado mientras la clave no tenga
  * fila propia. Usada en `fill()` y en `pendingChanges` para que las dos
  * comparen siempre la misma normalizacion.
  */
@@ -374,7 +373,7 @@ const payrollHeaderRowOptions = computed(() =>
   allowedValuesOf(settings.value, PAYROLL_HEADER_ROW_KEY),
 )
 
-/** Los dos valores que el catalogo admite para `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12), mismo criterio que `breakClockingOptions`. */
+/** Los dos valores que el catalogo admite para `WEEKLY_SUMMARY_EMAIL` (RF-PR-05), mismo criterio que `breakClockingOptions`. */
 const weeklySummaryEmailOptions = computed(() =>
   allowedValuesOf(settings.value, WEEKLY_SUMMARY_EMAIL_KEY),
 )
@@ -410,7 +409,7 @@ function isKnownPayrollColumn(id: string): id is PayrollColumnId {
 /**
  * El catalogo cerrado de columnas, con su etiqueta legible (`payrollExport.columns.*`,
  * el mismo catalogo que previsualiza `PayrollExportView`): la ayuda en linea
- * que exige la ficha, sin duplicar los textos en dos sitios.
+ * de la salida a nomina (RF-IN-07), sin duplicar los textos en dos sitios.
  */
 const payrollExportColumnCatalog = computed<Readonly<Record<string, string>>>(() =>
   Object.fromEntries(PAYROLL_COLUMN_IDS.map((id) => [id, t(`payrollExport.columns.${id}`)])),
@@ -434,7 +433,7 @@ function rangeOf(
 /**
  * `true` si el servidor devolvio `KIOSK_SERVICE_CODE` redactada: es lo que
  * recibe un acceso de soporte del fabricante (`redacted: true`, `value: null`,
- * tarea 3.3). Se mira la marca y no el `value`, que es lo que el contrato
+ * ADR-020). Se mira la marca y no el `value`, que es lo que el contrato
  * declara como señal (ver el comentario de `serviceCodeRedacted`).
  */
 function isServiceCodeRedacted(catalog: InstallationSettings): boolean {
@@ -471,8 +470,7 @@ function fill(catalog: InstallationSettings): void {
     KIOSK_UPDATE_WINDOW_KEY,
     DEFAULTS.kioskUpdateWindow,
   )
-  // Sin `fallback` (segunda vuelta, hallazgo del revisor en la 3.11
-  // aplicado aqui): si la clave no tiene fila propia se ve `0`, no un
+  // Sin `fallback`: si la clave no tiene fila propia se ve `0`, no un
   // valor de serie que nadie ha configurado.
   kioskUpdateQuietMinutes.value = integerValue(catalog, KIOSK_UPDATE_QUIET_MINUTES_KEY)
   baselineManualHoursPerMonth.value = integerValue(catalog, BASELINE_MANUAL_HOURS_KEY)
@@ -571,7 +569,7 @@ function asInteger(raw: number | string): number | undefined {
  * `required`/`notAWholeNumber`, o `null` si es un entero valido -sin mirar
  * rango, eso lo decide el `422` del servidor-. Pura: no lee `form`, para que
  * la reuse cualquier campo entero de la pantalla (los seis `ATTENDANCE_*` de
- * `issueOf` y `KIOSK_UPDATE_QUIET_MINUTES` de la tarea 3.12).
+ * `issueOf` y `KIOSK_UPDATE_QUIET_MINUTES`).
  */
 function wholeNumberIssueOf(raw: number | string): 'required' | 'notAWholeNumber' | null {
   if (raw === '' || raw === null) {
@@ -596,7 +594,7 @@ const invalidFields = computed(() =>
   ATTENDANCE_FIELDS.filter((field) => issueOf(field.key) !== null),
 )
 
-/** `KIOSK_UPDATE_QUIET_MINUTES` (RF-KI-07, tarea 3.12): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
+/** `KIOSK_UPDATE_QUIET_MINUTES` (RF-KI-07): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
 const kioskUpdateQuietMinutesIssue = computed<'required' | 'notAWholeNumber' | null>(() =>
   wholeNumberIssueOf(kioskUpdateQuietMinutes.value),
 )
@@ -608,7 +606,7 @@ const kioskUpdateQuietMinutesErrors = computed<readonly string[]>(() => {
   return [...local, ...serverFieldErrors(KIOSK_UPDATE_QUIET_MINUTES_KEY)]
 })
 
-/** `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08, tarea 3.13): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
+/** `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
 const baselineManualHoursPerMonthIssue = computed<'required' | 'notAWholeNumber' | null>(() =>
   wholeNumberIssueOf(baselineManualHoursPerMonth.value),
 )
@@ -622,7 +620,7 @@ const baselineManualHoursPerMonthErrors = computed<readonly string[]>(() => {
 
 /**
  * `invalidUpdateWindowFormat`, o `null` si el texto cumple `HH:MM-HH:MM`
- * (RF-KI-07, tarea 3.12): la misma forma que valida el servidor, comprobada
+ * (RF-KI-07): la misma forma que valida el servidor, comprobada
  * en el cliente para no mandar una peticion que ya se sabe invalida.
  */
 const kioskUpdateWindowLocalIssue = computed<'invalidUpdateWindowFormat' | null>(() =>
@@ -640,7 +638,7 @@ const kioskUpdateWindowErrors = computed<readonly string[]>(() => {
 
 /**
  * `null` (valido) con el campo vacio -«sin codigo, la pantalla se abre sin
- * el», decision 6 de la ficha 3.3-, o si lo escrito son de 8 a 12 cifras. El
+ * el»-, o si lo escrito son de 8 a 12 cifras. El
  * `422` del servidor sigue mandando (`serviceCodeErrors` lo añade).
  */
 const serviceCodeLocalIssue = computed<'notAServiceCode' | null>(() => {
@@ -743,7 +741,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
   }
 
   // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
-  // (RF-KI-07), tarea 3.12.
+  // (RF-KI-07).
   const previousWeeklySummaryEmail = closedTextValueOf(
     current,
     WEEKLY_SUMMARY_EMAIL_KEY,
@@ -772,7 +770,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes[KIOSK_UPDATE_QUIET_MINUTES_KEY] = quietMinutesValue
   }
 
-  // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13).
+  // Cuadro de impacto y adopcion (RF-IN-08).
   const baselineValue = asInteger(baselineManualHoursPerMonth.value)
   const previousBaselineValue = entryOf(current, BASELINE_MANUAL_HOURS_KEY)?.value
 
@@ -798,7 +796,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes['LOCALE_AVAILABLE'] = localeAvailable.value
   }
 
-  // Salida a nomina (RF-IN-07, tarea 3.9): las seis claves `PAYROLL_EXPORT_*`.
+  // Salida a nomina (RF-IN-07): las seis claves `PAYROLL_EXPORT_*`.
   // El ORDEN importa en `PAYROLL_EXPORT_COLUMNS` -es el orden del fichero-,
   // asi que la comparacion es posicional y no un conjunto ordenado como
   // `LOCALE_AVAILABLE`.
@@ -897,7 +895,7 @@ const accessControlPending = computed(() => {
   )
 })
 
-/** Se pide confirmacion con el antes y el despues de cada ajuste que cambia (R3-PA-09). */
+/** Se pide confirmacion con el antes y el despues de cada ajuste que cambia. */
 const confirming = ref(false)
 
 function askConfirmation(): void {
@@ -925,7 +923,7 @@ const PREVIEW_FALLBACKS: Readonly<Record<string, string>> = {
 
 /**
  * Un valor tal como se le ensena a quien confirma. El codigo de servicio del
- * quiosco nunca sale en claro (decision 6 de la ficha 3.3): solo si hay o no.
+ * quiosco nunca sale en claro: solo si hay o no.
  */
 function previewValue(
   key: string,
@@ -1125,7 +1123,7 @@ async function save(): Promise<void> {
         </p>
       </fieldset>
 
-      <!-- Resumen semanal por correo (RF-PR-05, tarea 3.12): opcional y
+      <!-- Resumen semanal por correo (RF-PR-05): opcional y
            apagado de serie (doc 05 §5.7 «correo opcional»). -->
       <fieldset class="flex flex-col gap-4" data-test="weekly-summary-settings">
         <legend class="text-lg font-medium text-kq-text">
@@ -1187,9 +1185,9 @@ async function save(): Promise<void> {
         </FormField>
       </fieldset>
 
-      <!-- Ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12): la
+      <!-- Ventana de actualizacion del quiosco (RF-KI-07): la
            tablet solo aplica una version nueva dentro de esta franja, con la
-           cola vacia y sin fichajes recientes (decision 9 de la ficha). -->
+           cola vacia y sin fichajes recientes. -->
       <fieldset class="flex flex-col gap-4" data-test="kiosk-update-settings">
         <legend class="text-lg font-medium text-kq-text">
           {{ t('operationalSettings.kioskHeading') }}
@@ -1242,7 +1240,7 @@ async function save(): Promise<void> {
         </FormField>
       </fieldset>
 
-      <!-- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): la linea base
+      <!-- Cuadro de impacto y adopcion (RF-IN-08): la linea base
            declarada de horas al mes que RRHH dedicaba a consolidar hojas de
            horas antes del sistema. Opcional: `0` significa «no declarada» y
            el cuadro deja el indicador vacio en vez de inventar una mejora. -->
@@ -1325,9 +1323,9 @@ async function save(): Promise<void> {
         </fieldset>
       </fieldset>
 
-      <!-- Salida a nomina (RF-IN-07, tarea 3.9): las seis claves
+      <!-- Salida a nomina (RF-IN-07): las seis claves
            `PAYROLL_EXPORT_*`. Ninguna cambia un calculo (impacto
-           `presentation`, decision 5 de la ficha), asi que este bloque no
+           `presentation`), asi que este bloque no
            dispara `affectsWorkedHoursWarning`. -->
       <fieldset class="flex flex-col gap-4" data-test="payroll-export-settings">
         <legend class="text-lg font-medium text-kq-text">
@@ -1354,8 +1352,8 @@ async function save(): Promise<void> {
         </FormField>
 
         <!-- El catalogo de columnas y su significado, para quien escribe el
-             editor de arriba (requisito de la ficha: «ayuda en linea con el
-             catalogo de columnas y su significado»). -->
+             editor de arriba: el formato es configurable (RF-IN-07) y quien
+             lo configura necesita saber que significa cada columna. -->
         <details data-test="payroll-columns-catalog">
           <summary class="cursor-pointer text-sm font-medium text-kq-text">
             {{ t('operationalSettings.hints.payrollColumnsCatalogToggle') }}

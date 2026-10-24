@@ -8,7 +8,7 @@
 // `isFetching` distingue «cargando por primera vez» de «actualizando lo que ya
 // se ve»: al cambiar el rango, la pantalla no tiene por que parpadear a vacio.
 //
-// **Lo que se ve no se queda viejo** (R1-RV-04, R2-PO-03). Una pestaña de movil
+// **Lo que se ve no se queda viejo**. Una pestaña de movil
 // puede quedarse abierta horas, o pasar la medianoche del centro, y «Hoy» y el
 // turno abierto no pueden seguir enseñando el dia anterior. La consulta se
 // repite al volver a la pestaña (si hace mas de un minuto o ha cambiado el dia

@@ -133,7 +133,7 @@ it('abre un tramo en el primer fichaje de la jornada', function (): void {
 
 it('cierra el turno y devuelve el acumulado recalculado del dia', function (): void {
     // Gherkin «Cierre de turno con acumulado»: 120 minutos previos + 240 = 360,
-    // y el quiosco enseña «Hoy: 6 h 0 min».
+    // y el quiosco enseña «Hoy: 6 h 00 min».
     $escenario = escenarioDeFichaje('2026-03-14 05:00:00');
     $employeeId = AttendanceFixtures::employeeIdOf($escenario['employee']);
 

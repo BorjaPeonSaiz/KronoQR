@@ -18,12 +18,12 @@
 //    ADR-040, ADR-056): un tramo nunca lleva sufijo de zona.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca
 //    que la salida cae en el dia siguiente.
-//  - **La pausa son dos tramos, no un hueco mudo** (tarea 3.5, ADR-024). Un
+//  - **La pausa son dos tramos, no un hueco mudo** (ADR-024). Un
 //    tramo cerrado por `break_start` lleva una insignia «Pausa» en su salida
 //    (texto e icono, nunca solo color, WCAG 1.4.1), y si el tramo siguiente lo
 //    abrio un `break_end` se enseña ademas «Pausa de HH:MM a HH:MM (N min)»
 //    entre los dos. **El predicado y la duracion (`breakBetween`) viven en
-//    `@kronoqr/web-kit/breaks`** (ADR-036, segunda vuelta de la tarea 3.5): el
+//    `@kronoqr/web-kit/breaks`** (ADR-036): el
 //    panel necesita exactamente la misma regla -los mismos dos escaneos, la
 //    misma resta de instantes-, y una primera version de cada SPA ya habia
 //    divergido (aqui se enseñaba `0 min` con `?? 0` cuando el analisis
@@ -39,14 +39,12 @@ import { breakBetween } from '@kronoqr/web-kit/breaks'
 import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
   formatDayMonthTime,
-  formatLocalTime,
   formatTimeOfDay,
-  minutesBetween,
-  readLocalTimestamp,
   resolveTimeZone,
   todayInZone,
 } from '@kronoqr/web-kit/datetime'
-import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
+import { durationParts, shiftMark, workDayTotals } from '@kronoqr/web-kit/workdayTotals'
+import type { ShiftMark } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ClockingSource, ShiftEntryStatus, WorkDayShiftEntry } from '@/shared/api/types'
@@ -63,15 +61,9 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-/** A partir de este desfase, la marca no llego en el acto: viajo encolada. */
-const QUEUE_NOTICE_MINUTES = 5
-
-interface MarkView {
-  local: string
-  nextDay: boolean
+interface MarkView extends ShiftMark {
   /** Cuando el servidor recibio la marca (HH:MM en la zona del centro), o `null` si no consta. */
   recordedAt: string | null
-  queueDelayMinutes: number | null
 }
 
 interface EntryRow {
@@ -90,7 +82,7 @@ interface EntryRow {
 
 /**
  * La hora de recepcion en la zona del centro, en 24 h y con el orden de fecha
- * del idioma (el mismo formateador que el historial, V2-PO-2). Si cae en otro dia
+ * del idioma (el mismo formateador que el historial). Si cae en otro dia
  * que la marca lleva dia y mes: un fichaje que viaja en la cola puede llegar
  * pasada la medianoche. Sin una zona valida no se pinta nada: nunca la del
  * navegador (regla dura 3).
@@ -109,14 +101,11 @@ function receivedMoment(recordedAt: string, markDate: string | null): string | n
 }
 
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
-  const parts = readLocalTimestamp(localValue)
-  const delay = recordedAt === null ? null : minutesBetween(utcValue, recordedAt)
+  const shared = shiftMark(utcValue, localValue, recordedAt, props.workDate)
 
   return {
-    local: formatLocalTime(localValue),
-    nextDay: parts !== null && parts.date !== props.workDate,
-    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, parts?.date ?? null),
-    queueDelayMinutes: delay !== null && delay >= QUEUE_NOTICE_MINUTES ? delay : null,
+    ...shared,
+    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, shared.date),
   }
 }
 
@@ -141,8 +130,9 @@ const rows = computed<EntryRow[]>(() =>
   }),
 )
 
-const summedMinutes = computed(() => sumShiftMinutes(props.entries))
-const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
+const totals = computed(() =>
+  workDayTotals({ shift_entries: props.entries, total_minutes: props.totalMinutes }),
+)
 
 /** El aviso de cola; sin hora de recepcion legible no se inventa una. */
 function queuedNotice(markView: MarkView): string {
@@ -285,11 +275,11 @@ function duration(minutes: number): string {
               {{ t('myRecords.entries.sum') }}
             </th>
             <td class="px-3 py-2 font-semibold tabular-nums" data-test="summed-total">
-              {{ duration(summedMinutes) }}
+              {{ duration(totals.summed) }}
             </td>
             <td class="px-3 py-2"></td>
           </tr>
-          <tr v-if="!totalsAgree">
+          <tr v-if="!totals.agree">
             <th scope="row" colspan="2" class="px-3 py-2 text-right">
               {{ t('myRecords.entries.declared') }}
             </th>
@@ -303,7 +293,7 @@ function duration(minutes: number): string {
     </div>
 
     <p
-      v-if="!totalsAgree"
+      v-if="!totals.agree"
       data-test="totals-mismatch"
       class="mt-2 rounded-kq border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
     >

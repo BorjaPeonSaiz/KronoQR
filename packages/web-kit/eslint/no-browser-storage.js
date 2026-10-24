@@ -1,4 +1,4 @@
-// Regla de lint contra el almacenamiento del navegador (bloque 21, §3).
+// Regla de lint contra el almacenamiento del navegador (ADR-052).
 //
 // Una sola definicion para el panel, el portal y web-kit. Cada aplicacion
 // declara solo su lista de excepciones, fichero a fichero y con su motivo.

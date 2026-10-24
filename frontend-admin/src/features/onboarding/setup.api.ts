@@ -1,9 +1,9 @@
-// El asistente de puesta en marcha (RF-PD-03, tarea 5.5). Las formas salen del
+// El asistente de puesta en marcha (RF-PD-03). Las formas salen del
 // contrato; aqui no se inventa ninguna.
 //
 // `GET /setup/status` es PUBLICO (se llama antes de que exista ninguna cuenta),
 // y por eso no lleva `Authorization`: se pide con `anonymous: true` igual que
-// `/auth/login`. **Nunca trae `steps`**: la revision de la 5.5 lo movio a
+// `/auth/login`. **Nunca trae `steps`**: viven en
 // `GET /setup/steps`, que exige sesion de administrador (`settings:*`) porque
 // el detalle de que pasos faltan es un inventario de la postura de la
 // instalacion, no algo que decidir a donde lleva el navegador. El resto de

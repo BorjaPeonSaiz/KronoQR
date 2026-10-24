@@ -15,7 +15,7 @@
 //     entro DESPUES, no lo que hay en disco: `stats().size` es `null`
 //     («desconocido») y el latido lo dice con `queue_storage`. En cada drenaje se
 //     intenta volver al disco, y al volver se migra lo de memoria.
-//     EXCEPCION (V2-KI-02): si el disco sigue LEYENDOSE y solo falla escribir
+//     EXCEPCION: si el disco sigue LEYENDOSE y solo falla escribir
 //     (cuota agotada), no se da por perdido: forma con la memoria un almacen
 //     compuesto (`overlayStorage.ts`) y el recuento SI se sabe. Las filas del disco
 //     se envian y se borran, que es lo que libera el sitio.
@@ -120,7 +120,7 @@ export interface ScanQueue {
    * para que un segundo drenaje no los envie a la vez. Es un PREFIJO de la cola
    * ordenada: se detiene en la primera fila cuyo reintento esta en el futuro
    * (salvo `ignoreSchedule`) **o que ya esta arrendada** (RN-21), para que nada
-   * posterior adelante a una fila atascada (G1) ni a un envio en vuelo.
+   * posterior adelante a una fila atascada ni a un envio en vuelo.
    */
   claim(limit: number, options?: { readonly ignoreSchedule?: boolean }): Promise<QueuedScanRecord[]>
   /**
@@ -200,7 +200,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
   const leased = new Set<string>()
 
   let store: QueueStorage
-  /** Disco que se lee pero no se escribe + memoria (V2-KI-02). `store` es esto mientras no sea `null`. */
+  /** Disco que se lee pero no se escribe + memoria. `store` es esto mientras no sea `null`. */
   let overlay: OverlayQueueStorage | null = null
   /** `true` si el disco existe pero no se ve: lo que haya en el es desconocido. */
   let diskUnknown = false
@@ -297,7 +297,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
    *
    * Si el disco todavia se LEE (cuota agotada: lo que falla es escribir), no se da
    * por perdido: queda como mitad de lectura de un almacen compuesto, y lo que no
-   * admite entra en memoria (V2-KI-02). Asi las filas que ya estan en disco se
+   * admite entra en memoria. Asi las filas que ya estan en disco se
    * siguen enviando y borrando, que es justo lo que libera el sitio. Solo si el
    * disco tampoco se lee se cae a memoria pura, con el disco «desconocido».
    */
@@ -412,7 +412,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
   async function recompute(): Promise<QueueStats> {
     try {
-      // Solo metadatos: no descifra nada (A1). Una fila ilegible no cuenta como cabeza.
+      // Solo metadatos: no descifra nada. Una fila ilegible no cuenta como cabeza.
       const rows = (await run((target) => metaOf(target, readWindow()))).filter(
         (row) => !unreadable.has(row.scan_id),
       )
@@ -426,7 +426,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (kind === 'durable') lastDiskCount = count
       const known = kind === 'durable' || (kind === 'memory' && !diskUnknown)
 
-      // G1: como `claim()` para en la primera fila con espera, el momento en
+      // Como `claim()` para en la primera fila con espera, el momento en
       // que la cola puede avanzar es el de la CABEZA, no el minimo de todas:
       // con el minimo, una fila nueva (espera 0) detras de una atascada
       // despertaria el drenaje a cada tic sin que `claim()` pudiera tomar nada.
@@ -533,7 +533,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (diskUnknown && !store.durable && lastDiskCount !== 0) return []
       const nowMs = clock.now().getTime()
 
-      // G1: el PREFIJO de la cola ordenada, no un filtro. Una fila que espera su
+      // El PREFIJO de la cola ordenada, no un filtro. Una fila que espera su
       // reintento (`next_attempt_at` futuro) detiene la lectura: lo que viene
       // detras —un escaneo nuevo, con `occurred_at` posterior— no puede
       // adelantarla, porque una salida de las 16:00 que llega antes que la
@@ -543,7 +543,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       // igual. Saltarla dejaba que un drenaje enviara B mientras A viajaba, y si
       // A acababa en `503`, B ya la habia adelantado.
       //
-      // A1: se ordena y se elige por METADATOS y solo se descifran las filas elegidas. Las
+      // Se ordena y se elige por METADATOS y solo se descifran las filas elegidas. Las
       // ilegibles se saltan (no cortan el prefijo: no se pueden enviar) y se vuelve a
       // elegir hasta llenar el lote, de modo que 500 ilegibles delante no bloquean a los
       // fichajes nuevos. Se recuerdan, asi que solo se intentan abrir una vez.

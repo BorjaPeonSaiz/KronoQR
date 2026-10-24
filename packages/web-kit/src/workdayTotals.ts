@@ -22,6 +22,8 @@
 // `schema.d.ts`). Cualquier objeto con estos campos sirve, que es justo lo que
 // ya trae la respuesta del contrato en ambas aplicaciones.
 
+import { formatLocalTime, minutesBetween, readLocalTimestamp } from './datetime'
+
 /** Lo minimo de un tramo que hace falta para sumar minutos. */
 export interface ShiftEntryDuration {
   /**
@@ -34,7 +36,13 @@ export interface ShiftEntryDuration {
 /** Lo minimo de una jornada que hace falta para calcular y contrastar su total. */
 export interface WorkDayDurations {
   readonly shift_entries: readonly ShiftEntryDuration[]
-  /** Lo que declara el servidor para el dia (`daily_totals`, RN-06). */
+  /**
+   * El total que declara el servidor para el dia. Hoy sale de los mismos tramos
+   * de la respuesta (`JournalWorkDay::totalMinutes()`), no de `daily_totals`: la
+   * divergencia con la proyeccion solo va al log del servidor. El
+   * contraste de aqui es una defensa en profundidad, no una verificacion
+   * contra otra fuente.
+   */
   readonly total_minutes: number
 }
 
@@ -74,7 +82,7 @@ export function sumShiftMinutes(entries: readonly ShiftEntryDuration[]): number 
 export interface WorkDayTotals {
   /** Lo que suman los tramos que se estan enseñando. */
   summed: number
-  /** Lo que declara el servidor para el dia (`daily_totals`, RN-06). */
+  /** Lo que declara el servidor para el dia (`total_minutes`). */
   declared: number
   /** Si las partes cuadran con el total. Cuando no, la pantalla lo dice. */
   agree: boolean
@@ -90,5 +98,46 @@ export function workDayTotals(day: WorkDayDurations): WorkDayTotals {
     declared: day.total_minutes,
     agree: summed === day.total_minutes,
     openEntries: day.shift_entries.filter((entry) => entry.duration_minutes === null).length,
+  }
+}
+
+/** A partir de este desfase entre fichar y recibir, la marca no llego en el acto: viajo encolada. */
+export const QUEUE_NOTICE_MINUTES = 5
+
+/** Lo que el panel y el portal leen igual de una marca de un tramo (entrada o salida). */
+export interface ShiftMark {
+  /** `HH:MM` en la zona del centro, tal y como la manda el servidor (regla dura 3). */
+  readonly local: string
+  /** El dia civil de la marca en la zona del centro, o `null` si no se puede leer. */
+  readonly date: string | null
+  /** La marca cae en otro dia que la jornada: la salida de un turno de noche (regla dura 4). */
+  readonly nextDay: boolean
+  /**
+   * Minutos entre fichar y recibir (regla dura 9) si llegan a
+   * `QUEUE_NOTICE_MINUTES`; `null` si llego en el acto o no consta la recepcion.
+   */
+  readonly queueDelayMinutes: number | null
+}
+
+/**
+ * Una marca de un tramo: `utcValue` es el instante (`clocked_*_at`), `localValue`
+ * la misma marca ya resuelta en la zona del centro (`clocked_*_at_local`) y
+ * `recordedAt` cuando la recibio el servidor. Como cada SPA enseña la recepcion
+ * a su manera, aqui solo se calcula lo que tiene que dar lo mismo en las dos.
+ */
+export function shiftMark(
+  utcValue: string,
+  localValue: string,
+  recordedAt: string | null,
+  workDate: string,
+): ShiftMark {
+  const parts = readLocalTimestamp(localValue)
+  const delay = recordedAt === null ? null : minutesBetween(utcValue, recordedAt)
+
+  return {
+    local: formatLocalTime(localValue),
+    date: parts?.date ?? null,
+    nextDay: parts !== null && parts.date !== workDate,
+    queueDelayMinutes: delay !== null && delay >= QUEUE_NOTICE_MINUTES ? delay : null,
   }
 }

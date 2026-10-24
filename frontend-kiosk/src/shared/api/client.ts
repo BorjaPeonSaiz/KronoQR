@@ -10,7 +10,7 @@
 // escaneo es una pantalla en blanco delante de una cola de gente.
 //
 // Cada peticion lleva un `traceparent` (W3C Trace Context) nuevo, generado con
-// `@kronoqr/web-kit/traceparent` (tarea 3.1): es la raiz de la traza que el
+// `@kronoqr/web-kit/traceparent`: es la raiz de la traza que el
 // backend sigue hasta la consulta SQL. Se genera por INTENTO, no por fichaje:
 // ver el comentario en `send()`.
 
@@ -46,7 +46,7 @@ export type ApiFailureCause =
   | 'unauthorized' // 401/403: token de dispositivo caducado o revocado
   | 'throttled' // 429
   // 400 o 422 con cuerpo JSON: el servidor decidio que ESTA peticion no vale y
-  // reenviarla no lo cambia (PIN-08). Un 400 sin cuerpo JSON (proxy, WAF) sigue
+  // reenviarla no lo cambia. Un 400 sin cuerpo JSON (proxy, WAF) sigue
   // siendo `server`: eso si puede ser transitorio.
   | 'invalid'
   | 'server' // 5xx u otro codigo inesperado
@@ -71,7 +71,7 @@ export type ApiResult<TOk, TProblem = ScanRejected | ScanDiscarded> =
        * (`errors`, RFC 9457). `undefined` salvo que quien llama lo rellene:
        * hoy solo `sendHeartbeat`, para distinguir un `client_errors` invalido
        * de un `app_version`/`pending_queue_size` invalidos sin adivinar por
-       * el codigo de estado (tarea 5.12, RF-PD-15).
+       * el codigo de estado (RF-PD-15).
        */
       readonly invalidFields?: readonly string[]
       /**
@@ -104,7 +104,7 @@ export interface ApiClientOptions {
 export interface ApiClient {
   recordScan(request: ScanRequest): Promise<ApiResult<ScanOk>>
   /**
-   * Fichaje de respaldo por PIN (RF-AT-11, tarea 1.12). Misma forma de
+   * Fichaje de respaldo por PIN (RF-AT-11). Misma forma de
    * respuesta que `recordScan` y a proposito: para el empleado no hay dos
    * caminos, hay uno con dos formas de identificarse.
    */
@@ -125,7 +125,7 @@ export interface ApiClient {
   fetchRoster(): Promise<ApiResult<KioskRoster>>
   sendHeartbeat(body: KioskHeartbeatRequest): Promise<ApiResult<KioskHeartbeat>>
   /**
-   * Paso 1 de RF-PD-06 (tarea 5.6): la tablet pide emparejarse. **Publica**,
+   * Paso 1 de RF-PD-06: la tablet pide emparejarse. **Publica**,
    * nunca lleva `Authorization` (quien la llama todavia no tiene token) y no
    * tiene forma de rechazo propia: solo puede fallar por transporte, limite de
    * borde o cuerpo mal formado, igual que `sendHeartbeat`.
@@ -142,7 +142,7 @@ export interface ApiClient {
     options?: { readonly signal?: AbortSignal },
   ): Promise<ApiResult<PairingClaim, PairingRejected>>
   /**
-   * Marca de la instalacion (RF-PD-08, tarea 5.8). **Publica** (`authenticated:
+   * Marca de la instalacion (RF-PD-08). **Publica** (`authenticated:
    * false`): la pantalla de espera la necesita antes de que nadie se
    * identifique, igual que `fetchRoster` no necesitaria token si no fuera
    * ademas el padron. Nunca puede impedir fichar (regla dura 19): quien la
@@ -246,7 +246,7 @@ const PROBLEM_TYPE = /^urn:kronoqr:problem:[a-z0-9-]+$/
 /** `type` de un problema de ESTE producto; `null` si no trae uno reconocible. */
 function problemTypeOf(body: Record<string, unknown>): string | null {
   const type = body['type']
-  // Mismo patron que el contrato de `POST /scan/discarded` (F9): un `type` que no
+  // Mismo patron que el contrato de `POST /scan/discarded`: un `type` que no
   // lo cumpla daria 400 para siempre, asi que viaja como `null`.
   return typeof type === 'string' && PROBLEM_TYPE.test(type) ? type : null
 }
@@ -256,7 +256,7 @@ function problemTypeOf(body: Record<string, unknown>): string | null {
  * no es el rechazo estandar, pero con cuerpo JSON (`ValidationProblem`), es
  * TERMINAL: el mismo `scan_id` con los mismos datos dara lo mismo siempre, y si
  * se reintentara, al respetar el orden de la cola bloquearia todo lo que viene
- * detras (PIN-08). Sin cuerpo JSON (pagina de error de un proxy) no se puede
+ * detras. Sin cuerpo JSON (pagina de error de un proxy) no se puede
  * afirmar que lo haya decidido la aplicacion, asi que sigue siendo transitorio.
  */
 function scanFailureFor(status: number, body: unknown): ApiResult<never> {
@@ -368,8 +368,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { failure: 'offline' }
     }
 
-    // `traceparent` (W3C Trace Context) nuevo por intento, no por fichaje
-    // (tarea 3.1, decision 7): un reenvio de la cola offline con el MISMO
+    // `traceparent` (W3C Trace Context) nuevo por intento, no por fichaje:
+    // un reenvio de la cola offline con el MISMO
     // `scan_id` genera una traza distinta cada vez. Es la traza del intento;
     // el `scan_id` sigue siendo la correlacion entre intentos (doc 01 §9.4).
     const headers: Record<string, string> = {
@@ -473,8 +473,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 207 }
       }
-      // Un `400` con cuerpo JSON es el lote entero rechazado por mal formado
-      // (PIN-08): `cause: 'invalid'` para que el drenaje lo reparta de uno en
+      // Un `400` con cuerpo JSON es el lote entero rechazado por mal formado:
+      // `cause: 'invalid'` para que el drenaje lo reparta de uno en
       // uno. Antes caia en `server` y se reintentaba el mismo lote para siempre.
       return scanFailureFor(result.status, result.body)
     },

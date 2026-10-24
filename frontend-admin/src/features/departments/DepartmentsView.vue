@@ -33,7 +33,7 @@ const queryClient = useQueryClient()
 const MANAGERS_PER_PAGE = 100
 
 const canAssign = computed(() => session.can(ACCOUNTS_MANAGE))
-// Crear y renombrar: `admin` y `rrhh` (`employees:*`). El responsable lo lee; el auditor ya no entra (bloque 25).
+// Crear y renombrar: `admin` y `rrhh` (`employees:*`). El responsable lo lee; el auditor no entra: solo lleva `reports:legal`.
 const canWrite = computed(() => session.can(EMPLOYEES_MANAGE))
 
 async function loadActiveManagers(): Promise<ManagementAccount[]> {

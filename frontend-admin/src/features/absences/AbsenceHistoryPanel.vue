@@ -3,8 +3,8 @@
 //
 // NADA SE HA BORRADO (regla dura 5): cada correccion crea una version nueva y
 // la anterior se conserva. Este panel pinta el historico de la mas antigua a
-// la mas reciente (decision 5 de la ficha: asi lo entrega
-// `GET /absences/{uuid}`), y cada version cambiada se enseña con el mismo
+// la mas reciente (asi lo entrega `GET /absences/{uuid}`), y cada version
+// cambiada se enseña con el mismo
 // patron que el resto del panel -que cambio, desde que valor y hacia cual-,
 // con el mismo `ChangePreview` que usa `CorrectionHistory.vue` del registro
 // horario.
@@ -75,7 +75,7 @@ function changesBetween(before: Absence, after: Absence): Change[] {
     })
   }
 
-  // La nota solo se compara si las dos versiones la llevan (decision 5): quien
+  // La nota solo se compara si las dos versiones la llevan: quien
   // no tiene `employees:*` nunca la recibe, y comparar `undefined` con un
   // texto real fabricaria un cambio que no se puede mostrar.
   if (before.note !== undefined && after.note !== undefined && before.note !== after.note) {

@@ -117,7 +117,7 @@ test(
     await expect(page.getByTestId('confirmation-headline')).toHaveText('Hasta luego, Lucia G.')
     await expect(page.getByTestId('confirmation-detail')).toContainText('Salida')
     // Horas y minutos, nunca decimales.
-    await expect(page.getByTestId('confirmation-total')).toHaveText('Hoy: 6 h 0 min')
+    await expect(page.getByTestId('confirmation-total')).toHaveText('Hoy: 6 h 00 min')
   },
 )
 

@@ -1,4 +1,4 @@
-// Battery Status API (RF-PA-07, tarea 3.3).
+// Battery Status API (RF-PA-07).
 //
 // Alimenta dos cosas con la MISMA implementacion: el latido (`battery_level` y
 // `battery_charging` en `KioskHeartbeatRequest`, para que el panel vea si una

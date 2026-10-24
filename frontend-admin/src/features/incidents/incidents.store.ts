@@ -171,7 +171,7 @@ export const useIncidentsStore = defineStore('incidents', () => {
 
   /**
    * Cierra una incidencia. Al confirmar, sustituye la fila sin volver a pedir
-   * la bandeja (regla general de la 2.4 para las escrituras que devuelven el
+   * la bandeja (regla general del panel para las escrituras que devuelven el
    * recurso entero).
    *
    * En un `409` -alguien se adelanto- deja el conflicto en `conflict` para que

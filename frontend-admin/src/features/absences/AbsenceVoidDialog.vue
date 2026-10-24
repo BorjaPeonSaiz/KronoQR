@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Anular una ausencia (RF-GP-04, RN-13).
 //
-// ANULAR ES UN HECHO Y NO UNA VERSION (decision 4 de la ficha): la ausencia
+// ANULAR ES UN HECHO Y NO UNA VERSION: la ausencia
 // pasa a `voided` con autor, momento y motivo, y no hay «version posterior» de
 // un hecho que no ocurrio -al contrario que corregir, que si crea una
 // version nueva. Por eso este dialogo no es un formulario: es un resumen de

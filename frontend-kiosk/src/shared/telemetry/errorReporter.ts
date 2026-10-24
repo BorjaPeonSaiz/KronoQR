@@ -76,7 +76,7 @@ export type ClientErrorCode =
   | 'kiosk.audio.blocked'
   | 'kiosk.scan.submit_failed'
   | 'kiosk.scan.malformed_payload'
-  // Cola offline (tarea 1.9). Ninguno lleva `scan_id` ni `qr_payload`: un
+  // Cola offline. Ninguno lleva `scan_id` ni `qr_payload`: un
   // `scan_id` no es PII, pero correlacionado con `scan_events` identifica a una
   // persona concreta en una hora concreta, y `error_events` viaja al fabricante
   // dentro del paquete de diagnostico (regla dura 21, ADR-020).
@@ -98,7 +98,7 @@ export type ClientErrorCode =
   | 'kiosk.clock.skew_detected'
   | 'kiosk.unhandled_error'
   | 'kiosk.service_worker.failed'
-  // Fichaje de respaldo por PIN (tarea 1.12). Nunca lleva el PIN, ni sellado ni
+  // Fichaje de respaldo por PIN. Nunca lleva el PIN, ni sellado ni
   // en claro: solo dice que el sellado en si ha fallado (RF-AT-11, RL-12).
   | 'kiosk.pin.seal_failed'
   // Modo urgente de actualizacion (RF-KI-07): el servidor declara una version
@@ -130,7 +130,7 @@ export function sanitizeContext(input: Readonly<Record<string, unknown>>): Error
       output[key] = value
     } else if (typeof value === 'string') {
       // `message` acaba en la columna de `error_events`: pasa siempre por el
-      // saneado, venga de donde venga (R3-KI-02).
+      // saneado, venga de donde venga.
       const text = key === 'message' ? scrubErrorMessage(value) : value
       output[key] = text.slice(0, MAX_STRING_LENGTH)
     } else {
@@ -150,7 +150,7 @@ export interface ErrorReporterOptions {
   readonly now?: () => Date
   readonly maxBuffered?: number
   /**
-   * Donde sobrevive el buffer a un reinicio o a una recarga (R3-KI-03). Sin el,
+   * Donde sobrevive el buffer a un reinicio o a una recarga. Sin el,
    * solo en memoria (pruebas).
    */
   readonly storage?: ErrorBufferStorage

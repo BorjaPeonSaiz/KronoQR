@@ -1063,7 +1063,7 @@ y no con la hora de llegada.
 5. **Verificación local del formato `FH1`** antes de encolar (§6, primer paso del diagrama de secuencia).
 6. **Confirmación en menos de 300 ms** (§6, RNF-P-03: decodificación < 300 ms; RNF-P-01: escaneo a confirmación p95 < 800 ms). La cola es de 1.9; aquí se construye la pantalla que confirma.
 7. **Feedback doble, visual y sonoro, diferenciado** para entrada, salida y error (RF-AT-05, RF-KI-06): color, **texto ≥ 24 px** y **sonidos distintos e inconfundibles**. *«En una cocina ruidosa hay que ver; en una recepción a oscuras hay que oír.»*
-8. **Pantalla de confirmación** con nombre, acción, hora y total acumulado del día (RF-AT-05). Del doc 01 §11: *«Buenos días, Lucía — Entrada 07:02»* y *«Hasta luego, Lucía — Salida 11:02 · Hoy: 6 h 0 min»*. **Horas y minutos, nunca decimales.**
+8. **Pantalla de confirmación** con nombre, acción, hora y total acumulado del día (RF-AT-05). Del doc 01 §11: *«Buenos días, Lucía — Entrada 07:02»* y *«Hasta luego, Lucía — Salida 11:02 · Hoy: 6 h 00 min»*. **Horas y minutos, nunca decimales.**
 9. **Multiidioma** (RF-KI-05): `vue-i18n` 10 con español e inglés mínimo, **selector persistente y detección automática**. Nada de literales en los componentes.
 10. **Accesibilidad** (RF-KI-06, doc 01 §6.5): contraste **≥ 4.5:1** (AA), tipografía **≥ 24 px** en mensajes de confirmación, objetivos táctiles **≥ 48 px**, operable con una sola mano y con guantes, funcional bajo iluminación baja, y **mensajes también sonoros**.
 11. **Aviso de privacidad visible** en la pantalla del quiosco (RF-KI-09, RL-09): información del art. 13 RGPD en capa 1, con enlace o QR a la política completa. **No es decorativo: es un requisito legal.**

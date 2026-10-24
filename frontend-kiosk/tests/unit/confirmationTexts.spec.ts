@@ -1,29 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { splitWorkedMinutes } from '@/features/scan/domain/workedTime'
+import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
 import { greetingSlotFor } from '@/features/scan/domain/greeting'
-
-describe('acumulado de la jornada', () => {
-  it('parte el ejemplo del documento 01 §11: 360 minutos son 6 h 0 min', () => {
-    expect(splitWorkedMinutes(360)).toEqual({ hours: 6, minutes: 0 })
-  })
-
-  it('nunca produce decimales', () => {
-    expect(splitWorkedMinutes(482)).toEqual({ hours: 8, minutes: 2 })
-    expect(splitWorkedMinutes(465)).toEqual({ hours: 7, minutes: 45 })
-    expect(splitWorkedMinutes(59)).toEqual({ hours: 0, minutes: 59 })
-  })
-
-  it('trata un total imposible como cero en vez de pintar NaN', () => {
-    expect(splitWorkedMinutes(-5)).toEqual({ hours: 0, minutes: 0 })
-    expect(splitWorkedMinutes(Number.NaN)).toEqual({ hours: 0, minutes: 0 })
-    expect(splitWorkedMinutes(Number.POSITIVE_INFINITY)).toEqual({ hours: 0, minutes: 0 })
-  })
-
-  it('trunca los segundos que pudieran venir como fraccion de minuto', () => {
-    expect(splitWorkedMinutes(120.9)).toEqual({ hours: 2, minutes: 0 })
-  })
-})
 
 describe('hora de pared', () => {
   it('usa 24 horas en los dos idiomas, como el ejemplo del documento 01', () => {
@@ -52,5 +30,16 @@ describe('saludo del turno', () => {
     expect(greetingSlotFor(new Date(2026, 7, 14, 20, 59))).toBe('afternoon')
     expect(greetingSlotFor(new Date(2026, 7, 14, 21, 0))).toBe('night')
     expect(greetingSlotFor(new Date(2026, 7, 14, 5, 59))).toBe('night')
+  })
+})
+
+// El acumulado sale de `durationParts` de web-kit, el mismo del panel y del
+// portal (C4): antes el quiosco tenia su copia y enseñaba «6 h 5 min» donde el
+// portal decia «6 h 05 min». Los bordes (NaN, negativos, fracciones) los cubre
+// la prueba de web-kit; aqui, el ejemplo del documento 01 §11.
+describe('acumulado de la jornada', () => {
+  it('parte el ejemplo del documento 01 §11: 360 minutos son 6 h 00 min', () => {
+    expect(durationParts(360)).toEqual({ hours: 6, minutes: '00' })
+    expect(durationParts(365)).toEqual({ hours: 6, minutes: '05' })
   })
 })

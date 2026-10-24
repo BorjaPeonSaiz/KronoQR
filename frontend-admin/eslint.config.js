@@ -6,14 +6,13 @@
 // - @typescript-eslint en modo estricto, con no-explicit-any como error: lo
 //   desconocido es unknown y se estrecha.
 // - Prettier al final, para que no discuta con nadie sobre formato.
-//
-// La configuracion definitiva de convenciones es de la tarea 0.7.
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
+import { noPlanReferences } from '@kronoqr/web-kit/eslint/no-plan-references'
 import { noBrowserStorage } from '@kronoqr/web-kit/eslint/no-browser-storage'
 
 export default defineConfigWithVueTs(
@@ -93,11 +92,13 @@ export default defineConfigWithVueTs(
   // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
   // La lista de palabras y el motivo viven en web-kit, una sola vez.
   identifierLanguage(),
-  // KI7-02: sin literales en las plantillas; los textos van en i18n.
+  // Sin literales en las plantillas; los textos van en i18n.
   noBareStrings(),
-  // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
+  // Sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
-  // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
+  // Comentarios con el motivo, no con la historia del plan ni de las revisiones (doc 02 §3.5).
+  noPlanReferences(),
+  // Datos del registro fuera del navegador (ADR-052). Regla y mensaje
   // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
   ...noBrowserStorage({
     exceptions: [

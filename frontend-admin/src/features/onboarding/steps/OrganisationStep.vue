@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // Paso 2: datos de la organizacion (RF-PD-03, RF-PD-01).
 //
-// Escribe en el mismo catalogo de `PATCH /settings` que gobernara la marca de
-// la tarea 5.8: el nombre visible del hotel (`BRANDING_APP_NAME`) y los
+// Escribe en el mismo catalogo de `PATCH /settings` que gobierna la marca
+// (RF-PD-08): el nombre visible del hotel (`BRANDING_APP_NAME`) y los
 // idiomas del panel (`LOCALE_DEFAULT`, `LOCALE_AVAILABLE`). Las tres se
-// guardan y se auditan desde ya, aunque las tres aplicaciones cliente sigan
-// leyendo la marca del entorno del servidor hasta la 5.8 (ver el contrato,
+// guardan y se auditan igual que desde la pantalla de marca (ver el contrato,
 // esquema `SettingKey`).
 //
 // A diferencia de la licencia o el quiosco, este paso NO es omitible: el

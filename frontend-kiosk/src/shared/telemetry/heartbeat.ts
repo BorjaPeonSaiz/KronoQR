@@ -8,7 +8,7 @@
 // reloj y avisa (RF-AT-10). **Nunca le impide fichar** (regla dura 19); el
 // desfase se registra escaneo a escaneo y se corrige despues.
 //
-// CANAL DE ERRORES DE CLIENTE (RF-PD-15, tarea 5.12). El mismo cuerpo lleva
+// CANAL DE ERRORES DE CLIENTE (RF-PD-15). El mismo cuerpo lleva
 // `client_errors` cuando el reporter tiene algo pendiente (`buildHeartbeatBody`,
 // maximo 50, los mas antiguos primero, sin `device_id`: el servidor lo sabe
 // por el token). La respuesta trae `client_errors_accepted`, y solo ESO es lo
@@ -61,7 +61,7 @@ const MAX_CLIENT_ERRORS_PER_HEARTBEAT = 50
 export { DEFAULT_HEARTBEAT_INTERVAL_MS }
 
 /**
- * NO HAY YA UNA CONSTANTE DE DESFASE (tarea 3.5, decision 6). Hasta esta
+ * NO HAY YA UNA CONSTANTE DE DESFASE. Hasta esta
  * tarea el quiosco comparaba contra `CLOCK_SKEW_WARNING_SECONDS`, un valor
  * fijo que podia no coincidir con `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` de la
  * instalacion (regla dura 13: el umbral es configuracion, no una constante
@@ -86,10 +86,10 @@ export interface KioskTelemetrySnapshot {
   readonly queueStorage?: QueueStorageKind | undefined
   /** Descartados (RN-22) cuyo aviso aun no tiene acuse. Ausente = 0. */
   readonly unreportedDiscards?: number | undefined
-  /** `occurred_at` del elemento mas antiguo de la cola, si hay cola (tarea 1.9). */
+  /** `occurred_at` del elemento mas antiguo de la cola, si hay cola. */
   readonly oldestPendingAt?: string | undefined
   /**
-   * Bateria (RF-PA-07, tarea 3.3), de `navigator.getBattery()`. Ausentes -no
+   * Bateria (RF-PA-07), de `navigator.getBattery()`. Ausentes -no
    * `null`- cuando el navegador no ofrece la API (`exactOptionalPropertyTypes`,
    * y el contrato dice «opcional», no «presente y nulo»): solo Chrome en
    * Android la tiene, y una tablet que no informa no es una tablet averiada.
@@ -114,7 +114,7 @@ function toClientErrorReport(event: ClientErrorEvent): ClientErrorReport {
 
 /**
  * Lee `update_window` de un `200` de `POST /kiosk/heartbeat` de forma
- * DEFENSIVA (RF-KI-07, tarea 3.12), aunque el contrato ya lo declare
+ * DEFENSIVA (RF-KI-07), aunque el contrato ya lo declare
  * obligatorio en `KioskHeartbeat` (`schema.d.ts`): `result.data` se trata como
  * `unknown` en vez de confiar ciegamente en el tipo estatico porque el
  * SERVIDOR puede no cumplirlo -una instalacion sin actualizar todavia a la
@@ -167,7 +167,7 @@ export function buildHeartbeatBody(
   // `exactOptionalPropertyTypes`: la clave no se escribe si no hay valor, en vez
   // de escribirse con `undefined`. El contrato dice «ausente cuando la cola esta
   // vacia», no «presente y nulo». Mismo criterio para `client_errors`, y para
-  // los dos campos de bateria (tarea 3.3): ausentes cuando el navegador no
+  // los dos campos de bateria: ausentes cuando el navegador no
   // ofrece la Battery Status API, no presentes y `null`.
   const withOldest: KioskHeartbeatRequest =
     snapshot.oldestPendingAt === undefined
@@ -194,7 +194,7 @@ export function buildHeartbeatBody(
 
 /**
  * Ultimo latido con exito, tal como lo necesita la pantalla de diagnostico
- * (RF-KI-08, tarea 3.3): «hora del ultimo latido correcto» y «desfase de
+ * (RF-KI-08): «hora del ultimo latido correcto» y «desfase de
  * reloj». Vive en el MODULO, no en el planificador de una pantalla concreta:
  * `ScanView.vue` y `PinView.vue` crean cada una el suyo y lo paran en
  * `onUnmounted`, pero el ultimo resultado tiene que sobrevivir a la navegacion
@@ -234,16 +234,16 @@ export interface HeartbeatSchedulerOptions {
   readonly intervalMs?: number
   readonly onSkew?: (seconds: number) => void
   /**
-   * Alimenta `features/pairing/application/deviceRevocation.ts` (RF-PD-06,
-   * tarea 5.6). Mismo contrato que en `syncRunner.ts` y `cachedRoster.ts`:
+   * Alimenta `features/pairing/application/deviceRevocation.ts` (RF-PD-06).
+   * Mismo contrato que en `syncRunner.ts` y `cachedRoster.ts`:
    * `true` solo en un `401`/`403` real, `false` en un latido que SI llega a
    * contestar, nunca por un fallo de red (el hotel sin ADSL no es una
    * desvinculacion).
    */
   readonly onAuthOutcome?: (unauthorized: boolean) => void
   /**
-   * `break_clocking_enabled` y `clock_skew_tolerance_seconds` de CADA `200`
-   * (tarea 3.5), ya cacheados en `localStorage` cuando esto se llama: la
+   * `break_clocking_enabled` y `clock_skew_tolerance_seconds` de CADA `200`,
+   * ya cacheados en `localStorage` cuando esto se llama: la
    * pantalla los usa para pintar el boton «Pausa» y la banda de desfase sin
    * esperar a un nuevo render disparado desde fuera.
    */
@@ -336,7 +336,7 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
         // pueden fallar la validacion, y esos no tienen nada que ver con el
         // buffer de errores). El servidor ha rechazado el propio
         // `client_errors` (la unica parte de este cuerpo que el quiosco no
-        // controla del todo, decision 7 de la tarea 5.12). Sin esto la
+        // controla del todo). Sin esto la
         // tablet reenviaria el mismo lote invalido en cada ciclo y se
         // quedaria muda para siempre (regla dura 19, al reves: un fallo al
         // REPORTAR no puede impedir que el latido siga sirviendo para lo
@@ -386,7 +386,7 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     // siguiente latido.
     options.reporter.acknowledge(result.data.client_errors_accepted)
 
-    // Huella del codigo de servicio (RF-KI-08, tarea 3.3), cacheada en CADA
+    // Huella del codigo de servicio (RF-KI-08), cacheada en CADA
     // `200`, aunque el desfase de mas abajo no se pueda calcular. Se comprueba
     // el tipo en vez de fiarse ciegamente del contrato: un doble de pruebas
     // (o una version de servidor mas vieja que esta PWA) puede responder sin
@@ -400,7 +400,7 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       storeServiceCodeHash(result.data.service_code_hash)
     }
 
-    // Ajustes de la tarea 3.5, cacheados en CADA `200` con el mismo patron que
+    // Pausa y desfase (RF-AT-12, RF-AT-10), cacheados en CADA `200` con el mismo patron que
     // `service_code_hash`: el boton «Pausa» y la banda de desfase de la
     // pantalla siguen funcionando sin red con lo ultimo que dijo la instalacion.
     storeBreakClockingEnabled(result.data.break_clocking_enabled)
@@ -410,7 +410,7 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       clockSkewToleranceSeconds: result.data.clock_skew_tolerance_seconds,
     })
 
-    // Ventana de actualizacion (RF-KI-07, tarea 3.12), MISMO PATRON: se
+    // Ventana de actualizacion (RF-KI-07), MISMO PATRON: se
     // cachea en CADA `200` que la traiga, para que `features/offline/domain/
     // updateWindow.ts` decida sin red. Ver `parseUpdateWindowFromHeartbeatData`.
     const updateWindow = parseUpdateWindowFromHeartbeatData(result.data)
@@ -419,7 +419,7 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       storeUpdateQuietMinutes(updateWindow.quietMinutes)
     }
 
-    // Zona horaria del centro (V2-KI-01): la hora de la confirmacion y la ventana
+    // Zona horaria del centro: la hora de la confirmacion y la ventana
     // de actualizacion se leen en SU reloj de pared. Opcional y aditiva: ausente
     // conserva la cacheada; un tipo que no es texto se ignora.
     storeSiteTimeZone(
@@ -436,11 +436,10 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     if (skew === null) return null
 
     // El MISMO umbral con el que el servidor marca el fichaje para revision
-    // (RF-AT-10, decision 6 de la tarea 3.5): ya no una constante propia, y
+    // (RF-AT-10): ya no una constante propia, y
     // el MISMO operador (`>` estricto) que `ReviewPolicy` en el servidor y
-    // que `settleFrom.ts` -un solo sitio decide "supera", `exceedsClockSkewTolerance`
-    // (revision de la segunda vuelta: aqui vivia un `>=` suelto, distinto del
-    // `>` del resto).
+    // que `settleFrom.ts` -un solo sitio decide "supera", `exceedsClockSkewTolerance`,
+    // para que ningun `>=` suelto discrepe del `>` del resto-.
     if (exceedsClockSkewTolerance(skew, result.data.clock_skew_tolerance_seconds)) {
       options.reporter.report('kiosk.clock.skew_detected', {
         skew_seconds: skew,

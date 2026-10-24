@@ -21,15 +21,11 @@
 // ajuste del hotel), pero conviven PIN antiguos de 6 y nuevos de 8, y el teclado
 // no sabe cual toca a quien: acepta de 6 a 8 y envia con «Aceptar», nunca solo
 // al llegar a una longitud. El rechazo sigue siendo generico (regla dura 17).
-export const PIN_MIN_LENGTH = 6
-export const PIN_MAX_LENGTH = 8
+// La forma es la del portal y la del contrato: vive en web-kit.
+export { isValidPinShape, PIN_MAX_LENGTH, PIN_MIN_LENGTH } from '@kronoqr/web-kit/pinShape'
 
 /** Techo de `PinScanRequest.employee_code` en el contrato. */
 export const MAX_EMPLOYEE_CODE_LENGTH = 32
-
-export function isValidPinShape(value: string): boolean {
-  return /^[0-9]{6,8}$/.test(value)
-}
 
 export function hasEmployeeCodeShape(value: string): boolean {
   const trimmed = value.trim()

@@ -51,7 +51,7 @@ it('emite el total completo de la jornada, no un incremento', function (): void 
 it('recalcula el total al cerrar el tramo, sumando toda la jornada', function (): void {
     // El escenario «Cierre de turno con acumulado» del doc 01 §11: un tramo
     // previo de 120 minutos y uno que se cierra con 240 dan 360, y el quiosco
-    // enseña «Hoy: 6 h 0 min».
+    // enseña «Hoy: 6 h 00 min».
     $jornada = WorkDayFactory::new()
         ->onWorkDate('2026-03-14')
         ->withClosedShift('2026-03-14 04:00', '2026-03-14 06:00')

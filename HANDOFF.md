@@ -89,7 +89,19 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 16 integrados (#182 a #187, #189 a #191, #193 a #198, #200 y #201). **Bloque 17** (`fix/quiosco-2.3.0`): 17.1–17.10 ✅, revisiones de seguridad y de código aplicadas; CI y PR en curso.
+**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 17 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #202; el 17 es `main` `ffb1cab8`, CI de `main` en verde). **Bloque 18** (`refactor/web-kit-una-sola-logica`): 18.1–18.5 ✅; CI manual y revisiones en curso.
+
+Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
+
+- **Minutos:** `minutesBetween` trunca cada marca al segundo, como `ElapsedMinutes`. Los casos compartidos están en `backend/tests/Fixtures/elapsed-minutes.json`, que leen `ElapsedMinutesFixtureTest` y `datetime.spec.ts`.
+- **Tramos:** `shiftMark`, `QUEUE_NOTICE_MINUTES` y `workDayTotals` (web-kit) los usan el panel, el portal y `PeriodSummary`; `formatLocalDateTime` sustituye los dos `performedAt`. El panel ya no enseña la zona de otro centro.
+- **Formatos:** `formatInstant(…, { seconds: true })` es el único formateador de instantes con fecha, en 24 h también en inglés. **Decisión del propietario (24-10):** los minutos van con dos cifras en todo el producto, también el quiosco («Hoy: 6 h 00 min»); doc 01 §11 y doc 05 §2 ya lo dicen así.
+- **PIN:** `web-kit/pinShape.ts`, atado a `PortalLoginRequest.pin.pattern` por `pinShape.spec.ts`.
+- **Comentarios (decisión del propietario, 24-10):** `kronoqr-comments/no-plan-references` prohíbe en `src/**` de las tres SPA y web-kit «bloque N», «tarea N.N», «hallazgo X», vueltas de revisión e ids de verificación (los cortos, solo cuando se citan); 627 comentarios limpiados. Los requisitos, ADR, reglas duras y versiones siguen permitidos (doc 02 §3.5). **Formato de instantes (decisión del 24-10):** `formatInstant` = «8 oct 2026, 07:14».
+- **Pendiente:**
+  - las descripciones de `openapi.yaml` aún citan «bloque N» (llegan a los `schema.d.ts`, que la regla excluye);
+  - el docblock de `Attendance/Domain/Event/EmployeeClockedOut.php` aún dice «6 h 0 min»: cambiar solo un comentario de `Domain/` tumba `mutate-changed` (0 mutantes); va con el primer bloque que toque esa clase con lógica probada;
+  - quedan ids en dos cadenas `message`/`reason` de los `eslint.config.js` (código, no comentarios); `H-07` (amenaza del doc 07) se permite.
 
 Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
 
@@ -237,7 +249,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 17 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 18 (una sola lógica en web-kit, rama `refactor/web-kit-una-sola-logica`), marcando ✅ el título del bloque 17 en su primer commit.
+**Siguiente acción:** cerrar el bloque 18 (18.1–18.5), CI manual, revisiones, PR y merge; después, sin preguntar, el bloque 19.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

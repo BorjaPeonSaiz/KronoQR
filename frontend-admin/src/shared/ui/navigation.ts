@@ -1,7 +1,7 @@
-// Las secciones del panel, declaradas UNA SOLA VEZ (deuda tecnica anotada en
-// `HANDOFF.md` desde la tarea 3.3: `AppShellView.vue` y `router/guards.ts`
-// llevaban cada una su propia lista, y una sola pantalla nueva obligaba a
-// tocar dos ficheros que tenian que acordarse de decir lo mismo).
+// Las secciones del panel, declaradas UNA SOLA VEZ: si `AppShellView.vue` y
+// `router/guards.ts` llevaran cada una su propia lista, una sola pantalla
+// nueva obligaria a tocar dos ficheros que tienen que acordarse de decir lo
+// mismo.
 //
 // Este modulo es la unica fuente: el NOMBRE de la ruta, la CLAVE i18n de su
 // etiqueta y los AMBITOS del token que la alcanzan (en O: basta con uno). Lo
@@ -42,14 +42,14 @@ export interface NavigationSection {
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
   {
-    // Lectura de plantilla (R6-BD-01): admin, rrhh y responsable; el auditor no
-    // la lleva (bloque 25). Crear y renombrar los decide la vista.
+    // Lectura de plantilla: admin, rrhh y responsable; el auditor no
+    // la lleva. Crear y renombrar los decide la vista.
     name: 'departments',
     labelKey: 'app.nav.departments',
     abilities: [EMPLOYEES_READ],
   },
   {
-    // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
+    // Ausencias (RF-GP-04): vacaciones, baja medica y permiso,
     // sin flujo de aprobacion (doc 05 §8, Fase 4). Ambito de LECTURA de
     // plantilla y no `EMPLOYEES_MANAGE`: es lo que le abre la pantalla a un
     // `responsable_departamento`, que no lleva la familia completa. Las
@@ -62,7 +62,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'live', labelKey: 'app.nav.live', abilities: [ATTENDANCE_READ] },
   { name: 'incidents', labelKey: 'app.nav.incidents', abilities: [INCIDENTS_MANAGE] },
   {
-    // La vista de cumplimiento (RF-PA-06, tarea 3.4): despues de «Incidencias»
+    // La vista de cumplimiento (RF-PA-06): despues de «Incidencias»
     // a proposito, es la primera pantalla de trabajo de un responsable tras la
     // bandeja. Mismo ambito que «Presencia»: leer el registro con una regla
     // legal encima sigue siendo leer el registro.
@@ -73,7 +73,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'credentials', labelKey: 'app.nav.credentials', abilities: [CREDENTIALS_MANAGE] },
   { name: 'reports', labelKey: 'app.nav.reports', abilities: [REPORTS_MANAGE] },
   {
-    // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): subentrada de
+    // Cuadro de impacto y adopcion (RF-IN-08): subentrada de
     // «Informes», con el mismo ambito. Solo `admin` y `rrhh` lo llevan hoy
     // (Anexo B), asi que un `responsable_departamento` no la ve, igual que
     // «Nomina»: no hace falta un ambito propio, ya lo hace `reports:*`.
@@ -82,10 +82,10 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
     abilities: [REPORTS_MANAGE],
   },
   {
-    // Salida a nomina (RF-IN-07, tarea 3.9): subentrada de «Informes», con el
+    // Salida a nomina (RF-IN-07): subentrada de «Informes», con el
     // mismo ambito. Solo `admin` y `rrhh` lo llevan hoy (doc 02 §7.3), asi que
-    // un `responsable_departamento` no la ve, tal como pide la ficha
-    // («solo rrhh+»): no hace falta un ambito propio para eso, ya lo hace
+    // un `responsable_departamento` no la ve («solo rrhh+»): no hace falta un
+    // ambito propio para eso, ya lo hace
     // `reports:*`.
     name: 'payroll-export',
     labelKey: 'app.nav.payrollExport',
@@ -93,9 +93,9 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   },
   { name: 'legal-export', labelKey: 'app.nav.legalExport', abilities: [REPORTS_LEGAL] },
   {
-    // El perfil de cumplimiento (RF-PD-07, tarea 5.2): los umbrales LEGALES del
-    // centro. Renombrado de «Cumplimiento» a «Perfil de cumplimiento» en la
-    // tarea 3.4, para que el nombre no colisione con la vista de hallazgos de
+    // El perfil de cumplimiento (RF-PD-07): los umbrales LEGALES del
+    // centro. Se llama «Perfil de cumplimiento», no «Cumplimiento», para que
+    // el nombre no colisione con la vista de hallazgos de
     // arriba: las dos cuentan cosas distintas -una es la ficha del convenio,
     // la otra es quien lo incumple- y compartir etiqueta las confundiria.
     name: 'compliance-profile',
@@ -103,7 +103,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
     abilities: [SETTINGS_MANAGE],
   },
   {
-    // Umbrales operativos e idiomas (RF-PD-01, tarea 5.13). Mismo ambito
+    // Umbrales operativos e idiomas (RF-PD-01). Mismo ambito
     // que «Perfil de cumplimiento», «Quioscos» y «Marca»: las cuatro son la
     // misma potestad de administrador de instalacion.
     name: 'operational-settings',
@@ -121,7 +121,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   },
   { name: 'license', labelKey: 'app.nav.license', abilities: [LICENSE_MANAGE] },
   {
-    // Soporte (RF-PD-09, RF-PD-11, tarea 5.9): la alcanza quien lleva
+    // Soporte (RF-PD-09, RF-PD-11): la alcanza quien lleva
     // `support:*` -para conceder y revocar accesos- **o** `diagnostics:*`
     // -un token de soporte con ese alcance tambien puede generar el
     // paquete anonimizado de su propia intervencion-. Ninguno de los dos lo
@@ -131,7 +131,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
     abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE],
   },
   {
-    // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12): el
+    // Historico de errores agrupado por huella (RF-PD-15): el
     // mismo ambito que la generacion del paquete de diagnostico.
     name: 'errors',
     labelKey: 'app.nav.errors',
@@ -167,8 +167,8 @@ export const FALLBACK_SECTIONS: readonly NavigationSection[] = [
   // no tiene ni plantilla ni credenciales. Sin ella, entrar con ese rol acababa
   // en «sin permiso» teniendo permiso para algo.
   section('legal-export'),
-  // Despues de la exportacion a proposito. El `auditor` ya no lee la presencia
-  // (bloque 25): solo lleva `reports:legal` y su unica pantalla es la Inspeccion.
+  // Despues de la exportacion a proposito. El `auditor` no lee la presencia:
+  // solo lleva `reports:legal` y su unica pantalla es la Inspeccion.
   // Es la primera seccion que alcanza un `responsable_departamento`, que no tiene
   // plantilla, ni credenciales, ni exportacion legal (RF-ID-03).
   section('live'),

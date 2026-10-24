@@ -23,8 +23,8 @@
 //    aproximacion converge -la lectura final nunca coincide con lo tecleado-,
 //    y `zonedInputToUtcIso` lo comprueba explicitamente al terminar: `null`
 //    en vez de devolver el desplazamiento silencioso a la hora siguiente que
-//    daban las dos pasadas sin esta comprobacion (hallazgo de la revision:
-//    `02:30` se colaba como `03:30`).
+//    darian las dos pasadas sin esta comprobacion (`02:30` se colaria como
+//    `03:30`).
 //  - **La hora que se repite** (el reloj retrocede: en `Europe/Madrid`,
 //    2026-10-25 vive las 02:00-03:00 dos veces). Aqui SI converge, y lo hace
 //    de forma determinista hacia la SEGUNDA ocurrencia -la posterior en el

@@ -60,6 +60,15 @@ describe('breakBetween', () => {
     expect(breakBetween(closing(), manual)).toBeNull()
   })
 
+  it('una vuelta anterior a la salida es un solape, no una pausa de 0 min (RN-02)', () => {
+    expect(
+      breakBetween(
+        closing({ clocked_out_at: '2026-03-14T10:00:30.000000Z' }),
+        opening({ clocked_in_at: '2026-03-14T10:00:00.000000Z' }),
+      ),
+    ).toBeNull()
+  })
+
   it('si minutesBetween no puede analizar las marcas, no hay pausa: nunca un 0 que finja un calculo', () => {
     expect(
       breakBetween(

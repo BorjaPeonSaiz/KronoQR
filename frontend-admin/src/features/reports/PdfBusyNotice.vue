@@ -4,8 +4,8 @@
 // PDF simultaneos y basta esperar `Retry-After` o llevarse el mismo informe en otro
 // formato. Con el motor ausente (`service-unavailable`) NO se usa este aviso.
 //
-// La cuenta atras baja de verdad (V21-3-UX-2) y, al llegar a 0, el mensaje cambia a «ya puedes
-// volver a intentarlo». El foco al aparecer y la señal unica (V21-3-PA-7, V21-1-UX-2) los da
+// La cuenta atras baja de verdad y, al llegar a 0, el mensaje cambia a «ya puedes
+// volver a intentarlo». El foco al aparecer y la señal unica los da
 // `NoticeWithActions`; el boton «PDF» ya no pierde el foco al bloquearse (`aria-disabled`), de
 // modo que el aviso lo recoge siempre y el siguiente Tab lleva a las alternativas.
 import BaseButton from '@kronoqr/web-kit/components/BaseButton.vue'

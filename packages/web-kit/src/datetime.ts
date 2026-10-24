@@ -174,16 +174,32 @@ export interface InstantFormatOptions {
   readonly hourCycle?: HourCycle
 }
 
+export interface InstantWithSecondsOptions extends InstantFormatOptions {
+  /**
+   * Con segundos (`14:50:03`), solo donde hacen falta para leer el dato: dos
+   * fichajes a 45 s de distancia (RN-16) o la pantalla de diagnostico del
+   * quiosco. Por omision no, porque el registro se lee en minutos.
+   */
+  readonly seconds?: boolean
+}
+
 /**
- * Un instante UTC en la zona del centro: fecha y hora con minutos, sin segundos
- * ni decimales. Nunca redondea nada hacia arriba. El orden de la fecha lo da el
- * idioma; el reloj es de 24 h salvo que se pida otra cosa.
+ * Un instante UTC en la zona del centro: `8 oct 2026, 07:14` (`Oct 8, 2026,
+ * 07:14` en ingles), sin segundos ni decimales salvo que se pidan. Nunca
+ * redondea nada hacia arriba. Es el unico formateador de instantes con fecha
+ * de las SPA, y su forma la decidio el propietario el 24-10-2026:
+ *
+ *  - la hora siempre `HH:MM` de 24 h, la misma que las marcas de los tramos:
+ *    `dateStyle`/`timeStyle` escriben `7:14` en espanol y no se pueden poner
+ *    al lado de un `07:14` que se contrasta con una nomina;
+ *  - el mes con letras, como `formatCivilDate`: `10/8/26` es el 8 de octubre
+ *    en ingles y el 10 de agosto en espanol, y quien lee no sabe cual.
  */
 export function formatInstant(
   value: string,
   timeZone: string,
   locale: string,
-  options: InstantFormatOptions = {},
+  options: InstantWithSecondsOptions = {},
 ): string {
   const instant = parseInstant(value)
 
@@ -193,8 +209,12 @@ export function formatInstant(
 
   return new Intl.DateTimeFormat(locale, {
     timeZone,
-    dateStyle: 'short',
-    timeStyle: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(options.seconds === true ? { second: '2-digit' } : {}),
     hourCycle: options.hourCycle ?? 'h23',
   }).format(instant)
 }
@@ -247,9 +267,9 @@ export function formatDayMonthTime(
 }
 
 /**
- * La etiqueta corta de la zona (`CEST`, `WEST`) para acompañar a la hora. En un
- * listado o un historico que cruza centros, la hora sin zona es una hora
- * inventada.
+ * La etiqueta corta de la zona (`CEST`, `WEST`) para acompañar a la hora: la
+ * misma zona del centro escribe `CET` en invierno y `CEST` en verano, y una
+ * hora sin ella no dice a cual de los dos lados del cambio pertenece.
  */
 export function formatZoneLabel(value: string, timeZone: string, locale: string): string {
   const instant = parseInstant(value) ?? new Date()
@@ -341,6 +361,26 @@ export function formatLocalTime(value: string): string {
   return readLocalTimestamp(value)?.time ?? ''
 }
 
+/**
+ * Fecha y hora de un `LocalTimestamp` ya resuelto por el servidor (`14 mar 2026,
+ * 06:00`): se lee, no se convierte. Si no se puede leer, cae al instante UTC
+ * convertido a la zona del centro con `formatInstant`. Es el momento de una
+ * correccion en el historial del panel y del portal, que tienen que decir la
+ * misma hora la noche que cambia la hora.
+ */
+export function formatLocalDateTime(
+  localValue: string,
+  utcValue: string,
+  timeZone: string,
+  locale: string,
+): string {
+  const parts = readLocalTimestamp(localValue)
+
+  return parts === null
+    ? formatInstant(utcValue, timeZone, locale)
+    : `${formatCivilDate(parts.date, locale)}, ${parts.time}`
+}
+
 /** `05:00` de un instante UTC, para enseñar la marca tal y como esta almacenada. */
 export function formatUtcTime(value: string): string {
   const instant = parseInstant(value)
@@ -358,9 +398,15 @@ export function formatUtcTime(value: string): string {
 }
 
 /**
- * Minutos entre dos instantes UTC, redondeados hacia abajo. Es una DURACION, no
- * una conversion de zona: sirve para decir cuanto tardo en llegar un fichaje que
- * viajo en la cola del quiosco (regla dura 9). `null` si falta alguno.
+ * Minutos entre dos instantes UTC con la regla de `ElapsedMinutes` del servidor
+ * (RN-09): cada marca se trunca a su segundo ANTES de restar y la diferencia se
+ * divide entre sesenta truncando. Asi una pausa de 10:00:00.900 a 10:15:00.100
+ * son 15 minutos aqui y en el servidor, no 14. Los casos los fija
+ * `backend/tests/Fixtures/elapsed-minutes.json`, que leen las dos pruebas.
+ *
+ * Es una DURACION, no una conversion de zona. Si `to` es anterior, el resultado
+ * es negativo (truncado hacia cero, como `intdiv`) y quien llama decide que
+ * hacer con el. `null` si falta alguno.
  */
 export function minutesBetween(from: string, to: string | null): number | null {
   const start = parseInstant(from)
@@ -370,5 +416,8 @@ export function minutesBetween(from: string, to: string | null): number | null {
     return null
   }
 
-  return Math.floor((end.getTime() - start.getTime()) / 60_000)
+  const seconds = Math.floor(end.getTime() / 1000) - Math.floor(start.getTime() / 1000)
+
+  // Resta el resto antes de dividir: trunca hacia cero sin el `-0` de `Math.trunc`.
+  return (seconds - (seconds % 60)) / 60
 }

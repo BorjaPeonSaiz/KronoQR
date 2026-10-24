@@ -72,7 +72,7 @@ export function registerAuthGuard(router: Router): void {
       return to.name === 'change-password' ? true : { name: 'change-password' }
     }
 
-    // `abilities` (en O) cubre pantallas como «Soporte» (tarea 5.9), que
+    // `abilities` (en O) cubre pantallas como «Soporte», que
     // alcanza quien lleva `support:*` **o** `diagnostics:*`: una unica clave
     // `ability` no puede expresar una disyuncion. Sin ninguna de las dos
     // claves, la pantalla es publica para cualquier sesion (como hasta ahora).

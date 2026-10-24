@@ -61,10 +61,10 @@ const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
  * la tarjeta en la mano». No es un `CredentialLifecycleStatus` de verdad: es
  * un filtro que va al SERVIDOR (acota tambien el lote de impresion y el
  * resumen, parametro `pending`), distinto de un estado concreto (parametro
- * `status`), que solo acota las filas. Antes era un checkbox aparte, mutuamente
- * excluyente con el select mediante `disabled` — inaccesible por teclado,
- * lector de pantalla o tactil (hallazgo de revision). Ahora es una opcion mas
- * del mismo control, sin exclusion que anunciar.
+ * `status`), que solo acota las filas. Es una opcion mas del mismo control,
+ * sin exclusion que anunciar: un checkbox aparte, mutuamente excluyente con el
+ * select mediante `disabled`, seria inaccesible por teclado, lector de
+ * pantalla o tactil.
  */
 const PENDING_ONLY_OPTION = '__pending_only__'
 type StatusFilterValue = CredentialLifecycleStatus | typeof PENDING_ONLY_OPTION | ''
@@ -73,7 +73,7 @@ const { t, locale } = useI18n()
 const { personFullName } = usePersonName()
 const queryClient = useQueryClient()
 
-// Filtros y paginacion EN EL SERVIDOR (RF-QR-08, V5-PA-2, HC1): texto, departamento,
+// Filtros y paginacion EN EL SERVIDOR (RF-QR-08): texto, departamento,
 // estado y pagina viajan en la consulta, y el summary sigue contando la plantilla
 // entera («faltan 3 de 60»). La opcion «pendiente de tarjeta» del select de estado
 // tambien acota el lote de impresion. No hay filtro por centro: hay exactamente uno
@@ -225,7 +225,7 @@ const unknownKeyCards = computed(() => summary.value?.active_unknown_key ?? 0)
  * —«Resultados: 12»— y anunciar aqui tambien pisaria ese mensaje o quedaria
  * pisado por el, que es el mismo problema que ya documenta ese `watch`. El
  * estado del filtro lo dice la etiqueta del propio boton, que nombra la accion; sin
- * `aria-pressed`, que con la etiqueta cambiante daba dos señales contradictorias (V7-PA-7).
+ * `aria-pressed`, que con la etiqueta cambiante daba dos señales contradictorias.
  */
 function toggleReprintFilter(): void {
   const progress = reprintProgress.value
@@ -245,7 +245,7 @@ function instant(value: string | null): string {
 /** Cuantas tarjetas entraran en el proximo lote. */
 const pendingPrintInScope = computed(() => summary.value?.pending_print ?? 0)
 
-// --- Hoja de instrucciones (tarea 5.11b, RL-05) ---------------------------
+// --- Hoja de instrucciones (RL-05) ----------------------------------------
 //
 // Un boton por cada idioma ACTIVO de la instalacion (`LOCALE_AVAILABLE`), no
 // por cada idioma del panel: la marca (RF-PD-08) ya trae esa lista cargada
@@ -453,9 +453,9 @@ const selectClass =
       </p>
     </div>
 
-    <!-- Hoja de instrucciones (tarea 5.11b, RL-05): un boton por cada idioma
+    <!-- Hoja de instrucciones (RL-05): un boton por cada idioma
          activo de la instalacion. Se entrega con la tarjeta y el PIN, en el
-         mismo acto (decision 10 de la ficha). -->
+         mismo acto. -->
     <section
       class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
       :aria-label="t('credentials.instructionsSheet.heading')"

@@ -1,7 +1,7 @@
 // Arranque y cambio de idioma con catalogos que se descargan por idioma.
 //
 // Vive fuera de `main.ts` para poder probarlo: tres casos que no pueden fallar en
-// silencio (14, revision de codigo).
+// silencio.
 //
 //  - **El idioma pedido cambia mientras se descarga el catalogo** (la marca de la
 //    instalacion llega despues, o entra otra persona): al terminar solo se aplica si

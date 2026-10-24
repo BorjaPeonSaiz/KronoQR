@@ -21,7 +21,7 @@ const session = useSessionStore()
 const branding = useBrandingStore()
 
 /**
- * Estados del enlace de navegacion (V7-UX-01). Cada estado fija fondo Y texto a
+ * Estados del enlace de navegacion. Cada estado fija fondo Y texto a
  * la vez, para que ninguna utilidad de `hover:`/`active:` cambie el fondo y deje
  * el texto del estado anterior (blanco sobre crema, 1,14:1). Las parejas estan
  * medidas en `themePairs.ts` (`nav link …`). El activo se calcula aqui, no con
@@ -35,7 +35,7 @@ function linkClass(name: string): string {
   return route.name === name ? LINK_ACTIVE : LINK_IDLE
 }
 
-/** Avisa al servidor y borra la sesion local siempre (ver `session.store.ts`, PO1). */
+/** Avisa al servidor y borra la sesion local siempre (ver `session.store.ts`). */
 const signingOut = ref(false)
 
 async function signOut(): Promise<void> {

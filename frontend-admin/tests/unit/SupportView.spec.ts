@@ -266,7 +266,7 @@ describe('pantalla de soporte', () => {
 
     expect(cell.exists()).toBe(true)
     expect(cell.text()).toContain('Motivo retirado el')
-    expect(cell.text()).toContain('20/12/26')
+    expect(cell.text()).toContain('20 dic 2026, 04:00')
   })
 
   it('un autor minimizado (granted_by.name vacio) se rotula en vez de dejar el hueco', async () => {

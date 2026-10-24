@@ -4,15 +4,16 @@
 //
 //  - **El total del periodo es la suma de los `total_minutes` que declara el
 //    servidor**, jornada a jornada, y se enseña en horas y minutos, nunca en
-//    decimal. No se recalcula desde los tramos: el total del dia lo declara el
-//    servidor (RN-06, regla dura 7) y la tabla de cada jornada ya contrasta
-//    las dos cifras (hoy salen de los mismos tramos: es una defensa en profundidad).
+//    decimal. No se recalcula desde los tramos. Ese `total_minutes` sale hoy de
+//    los mismos tramos de la respuesta, no de `daily_totals`: el
+//    contraste de `workDayTotals` es una defensa en profundidad, no una
+//    verificacion contra la proyeccion.
 //  - **Si el numero puede cambiar, se dice aqui**, no solo en la tarjeta del
 //    dia: un turno abierto, una revision pendiente o un dia cuyo total no
 //    cuadra con sus tramos hacen provisional la suma entera.
 //  - **«Hoy» lo da el servidor** (`today`, la zona del centro, regla dura 3);
 //    si no se sabe, no se inventa con el reloj del telefono.
-import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
+import { durationParts, workDayTotals } from '@kronoqr/web-kit/workdayTotals'
 import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -38,11 +39,7 @@ const periodTotal = computed(() =>
 
 /** Una jornada cuyo total todavia puede cambiar o no se puede dar por bueno. */
 function isProvisional(day: WorkDayDetail): boolean {
-  return (
-    day.has_open_shift ||
-    day.has_incident ||
-    sumShiftMinutes(day.shift_entries) !== day.total_minutes
-  )
+  return day.has_open_shift || day.has_incident || !workDayTotals(day).agree
 }
 
 const provisionalCount = computed(() => props.days.filter(isProvisional).length)

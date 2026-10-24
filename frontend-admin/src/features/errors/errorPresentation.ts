@@ -1,4 +1,4 @@
-// Presentacion pura (sin Vue) del historico de errores (RF-PD-15, tarea 5.12):
+// Presentacion pura (sin Vue) del historico de errores (RF-PD-15):
 // el color del nivel, el periodo en UTC y el «que hacer» por origen y nivel.
 // Se prueba sin montar `ErrorsView`, igual que `incidentPresentation.ts`.
 import { minutesBetween } from '@kronoqr/web-kit/datetime'
@@ -20,8 +20,8 @@ export function levelBadgeClass(level: ErrorLevel): string {
 }
 
 /**
- * Clave de i18n del bloque «que hacer» de un grupo, por origen y nivel
- * (decision 13 de la ficha 5.12). Cada combinacion tiene su propio texto,
+ * Clave de i18n del bloque «que hacer» de un grupo, por origen y nivel.
+ * Cada combinacion tiene su propio texto,
  * escrito para quien no conoce el sistema: `locales/{es,en}.json`,
  * `errorEvents.whatToDo.<source>.<level>`.
  */
@@ -81,8 +81,8 @@ export interface ErrorPeriodBounds {
  * `nowMs` tiene que ser el reloj del SERVIDOR extrapolado
  * (`errors.store.ts#serverNowMs`), nunca `Date.now()` a secas: con un reloj
  * local atrasado, un `to` calculado sobre el navegador dejaba fuera errores
- * recien creados que el servidor ya conocia (hallazgo I4 del cierre de la
- * Fase 5). Los presets (7/30/90 dias) **no llevan `to`**: son «los ultimos N
+ * recien creados que el servidor ya conocia. Los presets (7/30/90 dias) **no llevan
+ * `to`**: son «los ultimos N
  * dias», sin cota superior, para que un error que acaba de ocurrir -aunque el
  * reloj local siga desfasado tras la extrapolacion- nunca quede fuera por una
  * cota que no aporta nada (`from` ya acota la ventana por el lado que

@@ -41,7 +41,7 @@ export interface QueuedQrScanRecord extends QueuedScanRecordBase {
 }
 
 /**
- * Fila de la cola para un fichaje de respaldo por PIN (tarea 1.12). `pin_sealed`
+ * Fila de la cola para un fichaje de respaldo por PIN. `pin_sealed`
  * es el UNICO rastro del PIN que existe: ya viaja cerrado con la clave publica
  * de la instalacion (sobre de libsodium), asi que guardarlo tal cual en
  * IndexedDB no incumple «cero PIN en claro» — es ciphertext, no el secreto.
@@ -132,7 +132,7 @@ export interface EncryptedRosterRecord {
 
 /**
  * Lo que la cola necesita de una fila para ORDENARLA y PROGRAMARLA, sin tocar lo
- * cifrado (A1): ninguno de estos campos es secreto. Leer metadatos no descifra nada.
+ * cifrado: ninguno de estos campos es secreto. Leer metadatos no descifra nada.
  */
 export interface QueuedScanMeta {
   readonly scan_id: string
@@ -325,7 +325,7 @@ export function createMemoryQueueStorage(): QueueStorage {
 
     async clear() {
       // Desvinculacion: tambien los descartados, que llevan el `qr_payload` en
-      // claro (F10 del dictamen de seguridad). Ver `dexieStorage.ts`.
+      // claro. Ver `dexieStorage.ts`.
       rows.clear()
       discarded.clear()
     },

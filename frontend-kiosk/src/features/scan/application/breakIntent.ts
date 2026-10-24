@@ -1,5 +1,4 @@
-// Estado del boton «Pausa» del quiosco (RF-AT-12, tarea 3.5, decision 5 del
-// ADR-024, plan 06 -> "Tarea 3.5" -> "Decisiones tomadas").
+// Estado del boton «Pausa» del quiosco (RF-AT-12, ADR-024).
 //
 // «La eleccion en el quiosco: un boton "Pausa" que se ARMA antes de pasar la
 // tarjeta, no una pregunta despues.» Un toque lo arma, el SIGUIENTE fichaje
@@ -10,8 +9,8 @@
 // mas anade un paso: quien entra, sale o vuelve de la pausa solo pasa la
 // tarjeta (`auto`) y el servidor resuelve (`ScanIntentPolicy` en el backend).
 //
-// LA INTENCION ES DE LA TABLET, NO DE LA PERSONA (revision de la segunda
-// vuelta, seguridad): en una cola de cambio de turno, otro empleado puede
+// LA INTENCION ES DE LA TABLET, NO DE LA PERSONA: en una cola de cambio de
+// turno, otro empleado puede
 // pasar SU tarjeta dentro de los 10 s de armado. Por eso el arme NO sobrevive
 // a un cambio de pantalla, ni a un escaneo que no llega a fichar nada: el
 // margen de confusion se cierra en cuanto deja de estar claro que quien va a
@@ -23,8 +22,9 @@
 // para que dos pantallas montadas a la vez -no ocurre hoy con un unico router
 // de una sola vista activa, pero es la MISMA garantia que ya dan los otros
 // singletons- vean siempre el mismo estado. Los oyentes son un `Set`, no una
-// unica opcion capturada en la primera llamada -el mismo fallo que la
-// revision de la 3.3 corrigio en `onDeviceRevoked`-: cada pantalla que se
+// unica opcion capturada en la primera llamada -con una sola, la pantalla
+// que se monta despues no se entera, igual que en `onDeviceRevoked`-: cada
+// pantalla que se
 // monta se suscribe la suya, y el orden de montaje no importa.
 //
 // LOGICA PURA, sin Vue: se prueba con `vi.useFakeTimers()` igual que
@@ -33,7 +33,7 @@
 
 import type { ScanIntent } from '@/shared/api/types'
 
-/** Tiempo que el boton permanece armado sin fichar (decision 5 de la tarea 3.5). */
+/** Tiempo que el boton permanece armado sin fichar. */
 export const BREAK_ARM_TIMEOUT_MS = 10_000
 
 export interface BreakIntentControllerOptions {
@@ -46,8 +46,8 @@ export interface BreakIntentController {
   disarm(): void
   /**
    * Intencion para el PROXIMO fichaje: `'break_start'` si esta armado,
-   * `'auto'` si no. Desarma como efecto de leerla -"tras ese fichaje" de la
-   * decision 5-, asi que solo se llama una vez por escaneo o PIN, justo al
+   * `'auto'` si no. Desarma como efecto de leerla -"tras ese fichaje", ADR-024-,
+   * asi que solo se llama una vez por escaneo o PIN, justo al
    * encolar (nunca en una simple lectura de estado).
    */
   consumeIntent(): ScanIntent

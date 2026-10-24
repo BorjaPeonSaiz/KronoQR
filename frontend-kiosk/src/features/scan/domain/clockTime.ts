@@ -12,16 +12,12 @@
 // pared del hotel. Sin zona conocida, o con un nombre que el navegador no
 // reconoce, se usa la de la tablet y la hora se pinta igual.
 
-import { resolveTimeZone } from '@kronoqr/web-kit/datetime'
+import { formatTimeOfDay, resolveTimeZone } from '@kronoqr/web-kit/datetime'
 
 export function formatClockTime(instant: Date, locale: string, timeZone?: string | null): string {
   if (Number.isNaN(instant.getTime())) return '--:--'
 
-  const zone = resolveTimeZone(timeZone)
-  return new Intl.DateTimeFormat(locale, {
-    ...(zone === undefined ? {} : { timeZone: zone }),
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(instant)
+  // El formateador de web-kit, el mismo de las horas del panel y del portal.
+  const zone = resolveTimeZone(timeZone) ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  return formatTimeOfDay(instant.toISOString(), zone, locale)
 }

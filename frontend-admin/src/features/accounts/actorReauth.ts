@@ -1,4 +1,4 @@
-// Reautenticacion de quien actua (RF-ID-10, revision de seguridad del 12c).
+// Reautenticacion de quien actua (RF-ID-10).
 //
 // Crear una cuenta, restablecer una contrasena y retirar un segundo factor son
 // los tres actos que mas se parecen a «dame esa cuenta»: una sesion robada o un

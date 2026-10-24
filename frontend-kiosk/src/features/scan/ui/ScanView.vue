@@ -75,14 +75,14 @@ const api = createApiClient({
   ...deviceTokenApiOptions,
 })
 
-// La cola de IndexedDB (tarea 1.9). El escaneo se encola ANTES de confirmar y
+// La cola de IndexedDB. El escaneo se encola ANTES de confirmar y
 // el contador de pendientes del indicador sale del tamano real de la cola, no
 // de una cuenta en memoria que un reinicio se llevaria por delante.
 const offline = useOfflineQueue({
   api,
   reporter,
   connectivity,
-  // Dispositivo desvinculado desde el panel (RF-PD-06, tarea 5.6): el padron
+  // Dispositivo desvinculado desde el panel (RF-PD-06): el padron
   // ya esta purgado cuando esto se llama (`deviceRevocation.ts`). Aqui solo
   // queda limpiar el token y volver a la pantalla de emparejamiento. La cola
   // offline de fichajes NO se toca (regla dura 19).
@@ -92,7 +92,7 @@ const offline = useOfflineQueue({
   },
 })
 
-// PIN-03: la via del PIN solo se ofrece si se puede SELLAR. Con la clave en el
+// La via del PIN solo se ofrece si se puede SELLAR. Con la clave en el
 // padron pero libsodium sin arrancar, el boton llevaba a un teclado que
 // acababa en un «codigo no valido» que no era del empleado.
 const pinSealing = usePinSealingStatus({
@@ -104,7 +104,7 @@ const pinOffered = computed(
   () => offline.pinSealingPublicKey.value !== null && pinSealing.status.value !== 'unavailable',
 )
 
-// Marca blanca (RF-PD-08, tarea 5.8): pide la marca al servidor en segundo
+// Marca blanca (RF-PD-08): pide la marca al servidor en segundo
 // plano y se vuelve a pedir al recuperar la red. Nunca bloquea el fichaje
 // (regla dura 19): `useBranding` ya aplico la copia guardada -o el producto-
 // de forma sincrona antes de este punto.
@@ -114,7 +114,7 @@ const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
 })
 
-// Ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10). Sembrados con lo ultimo que
+// Pausa y desfase de reloj (RF-AT-12, RF-AT-10). Sembrados con lo ultimo que
 // dijo el latido -en esta sesion o en una anterior, `deviceIdentity.ts` los
 // cachea en `localStorage`- y actualizados en cada `200` por
 // `onSettingsUpdated` de mas abajo, sin esperar a que nadie navegue de
@@ -142,7 +142,7 @@ const clockSkewBannerMessage = computed(() => {
   return t(`scan.clockSkew.${direction}`, { minutes })
 })
 
-// R3-KI-04: una lectura que no es tarjeta deja rastro tecnico (sin su contenido),
+// Una lectura que no es tarjeta deja rastro tecnico (sin su contenido),
 // como mucho una vez por minuto.
 const reportMalformedRead = createMalformedReadReporter((context) =>
   reporter.report('kiosk.scan.malformed_payload', { ...context }),
@@ -155,11 +155,10 @@ const pipeline = createScanPipeline({
   // `null`, el quiosco encola igual y confirma «pendiente de validar»: es la
   // «degradacion honesta» del §6, nunca un rechazo.
   roster: offline.roster,
-  // ADR-024, decision 5 de la tarea 3.5: la intencion se resuelve al
-  // encolar, no antes.
+  // ADR-024: la intencion se resuelve al encolar, no antes.
   resolveIntent: () => breakIntent.consumeIntent(),
   clockSkewToleranceSeconds: () => clockSkewToleranceSeconds.value,
-  // Revision de la segunda vuelta (seguridad): una lectura ilegible o
+  // Una lectura ilegible o
   // repetida que no llega a fichar nada desarma el boton, en vez de dejarlo
   // armado para una tarjeta que no es la que se esperaba.
   onUnqueuedRead: () => breakIntent.disarm(),
@@ -177,7 +176,7 @@ const session = useScanSessionWithCleanup({
   isOffline: () => connectivity.status.value === 'offline',
 })
 
-// D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
+// El idioma elegido vale para ese fichaje, no para la tablet.
 const localePolicy = useLocalePolicy()
 useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
@@ -209,7 +208,7 @@ const wakeLock = useWakeLock({
   onDenied: (context) => reporter.report('kiosk.wake_lock.denied', context),
 })
 
-// Bateria (RF-PA-07, tarea 3.3): la misma lectura alimenta el latido y, si se
+// Bateria (RF-PA-07): la misma lectura alimenta el latido y, si se
 // abre desde aqui, la pantalla de diagnostico.
 const battery = useBatteryStatus()
 
@@ -226,10 +225,10 @@ const heartbeat = createHeartbeatScheduler({
     ...(battery.charging.value === null ? {} : { batteryCharging: battery.charging.value }),
   }),
   // El latido alimenta el MISMO contador de `401` consecutivos que la cola
-  // (RF-PD-06, tarea 5.6): la revocacion es una decision por tablet, no una
+  // (RF-PD-06): la revocacion es una decision por tablet, no una
   // por canal.
   onAuthOutcome: (unauthorized) => offline.reportAuthOutcome(unauthorized),
-  // Boton «Pausa» y umbral de desfase (tarea 3.5): se actualizan con CADA
+  // Boton «Pausa» y umbral de desfase: se actualizan con CADA
   // latido con exito, no solo al abrir la pantalla.
   onSettingsUpdated: (settings) => {
     breakClockingEnabled.value = settings.breakClockingEnabled
@@ -245,7 +244,7 @@ const cameraFailed = computed(
 )
 
 onMounted(() => {
-  // KP1: la camara (y con ella la descarga del decodificador) arranca tras el
+  // La camara (y con ella la descarga del decodificador) arranca tras el
   // primer pintado, no antes: el LCP no compite con ZXing. Coste para el primer
   // escaneo: un fotograma (~16 ms), muy por debajo del tiempo que tarda en
   // abrirse la camara. `scanner.start()` es idempotente. El bloqueo de pantalla
@@ -254,7 +253,7 @@ onMounted(() => {
   cancelDeferredStart = afterFirstPaint(() => {
     void scanner.start()
     void wakeLock.request()
-    // V21-5-KI-1 / R5-KI-01: el `AudioContext` cuesta ~520 ms en construirse y,
+    // El `AudioContext` cuesta ~520 ms en construirse y,
     // creado en el primer `play()`, entra en la latencia del primer fichaje de
     // cada arranque (el de las 06:00 si la tablet se reinicia antes). Se crea aqui,
     // en reposo; sin gesto previo queda suspendido y `play()` lo reanuda.
@@ -317,14 +316,14 @@ onUnmounted(() => {
       </div>
       <div class="flex shrink-0 items-center gap-3">
         <!-- Reloj de pared, y puerta de la pantalla de diagnostico con una
-             pulsacion larga de 3 s (RF-KI-08, tarea 3.3, decision 8). Nunca
+             pulsacion larga de 3 s (RF-KI-08). Nunca
              compite con el fichaje: una pulsacion corta no hace nada. -->
         <ClockDiagnosticsTrigger />
         <LanguageSelector :policy="localePolicy" />
       </div>
     </header>
 
-    <!-- Aviso de desfase (RF-AT-10, decision 6 de la tarea 3.5): discreto pero
+    <!-- Aviso de desfase (RF-AT-10): discreto pero
          SIEMPRE presente mientras el ultimo latido mida un desfase por encima
          de la tolerancia de la instalacion. Nunca cambia el camino de
          fichaje: es informativo, igual que `ConnectionStatusBadge`.
@@ -332,12 +331,11 @@ onUnmounted(() => {
          `text-kiosk-notice` (el marron del aviso) es SOLO para texto en blanco sobre ese
          fondo (ver `ScanConfirmationPanel`/`ConnectionStatusBadge`): usado
          como color de TEXTO sobre `bg-kq-kiosk-surface-raised` no llega a
-         2:1 (fallo de la primera version de este aviso, revision de la
-         3.5). Aqui el acento va SOLO en el borde; el texto y el simbolo
+         2:1. Aqui el acento va SOLO en el borde; el texto y el simbolo
          usan `text-kq-kiosk-text`, el mismo par que ya prueba
          `ConnectionStatusBadge` en su estado «en linea».
 
-         El BORDE tambien se corrigio en la segunda vuelta:
+         El BORDE tampoco es el del aviso:
          `border-kiosk-notice` sobre `bg-kq-kiosk-surface-raised` mide 1,45:1;
          `border-kq-kiosk-border` (el borde neutro del sistema, ya usado en
          `ConnectionStatusBadge`) mide 3,18:1. Un borde decorativo no exige
@@ -392,7 +390,7 @@ onUnmounted(() => {
             {{ t('scan.idle.subtitle') }}
           </p>
 
-          <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
+          <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017).
                Nunca deshabilitado con explicacion: si no hay clave, esta via no
                existe en esta instalacion, no existe "de momento". El bloque
                padre es `pointer-events-none`: el enlace necesita recuperar los
@@ -406,13 +404,13 @@ onUnmounted(() => {
             {{ t('pin.entryButton') }}
           </RouterLink>
 
-          <!-- Boton «Pausa» (RF-AT-12, ADR-024, decision 5 de la tarea 3.5):
+          <!-- Boton «Pausa» (RF-AT-12, ADR-024):
                solo si la instalacion tiene el fichaje de pausa activado. Un
                toque lo arma; el siguiente escaneo se encola con
                `intent: 'break_start'` y el boton se desarma solo (uso, 10 s,
                un escaneo que no llega a fichar nada, o cambiar de pantalla).
-               Junto al enlace del PIN, pero DIFERENCIADO de el (revision de
-               la segunda vuelta: eran identicos en reposo) con el pictograma
+               Junto al enlace del PIN, pero DIFERENCIADO de el (identicos en
+               reposo se confunden) con el pictograma
                ⏸ y el acento `kq-kiosk-primary` en el borde incluso desarmado;
                armado gana peso visual de verdad -relleno solido, no solo el
                borde- para que se note a distancia que la tablet esta a punto
@@ -434,10 +432,10 @@ onUnmounted(() => {
             {{ breakIntent.armed.value ? t('scan.break.toggleOn') : t('scan.break.toggleOff') }}
           </button>
 
-          <!-- Region viva del boton, SIEMPRE montada (revision de la segunda
-               vuelta): anuncia tanto el armado como el DESARME -uso, tiempo,
+          <!-- Region viva del boton, SIEMPRE montada: anuncia tanto el armado como
+               el DESARME -uso, tiempo,
                escaneo no encolado o cambio de pantalla-. Retirar el nodo al
-               desarmar (version anterior) no anuncia nada en la mayoria de
+               desarmar no anunciaria nada en la mayoria de
                lectores de pantalla; cambiar el texto de un nodo que ya
                estaba ahi, si. -->
           <p
@@ -568,7 +566,7 @@ onUnmounted(() => {
 
     <!-- Sonda del presupuesto de rendimiento (Anexo A): el E2E lee de aqui los
          milisegundos entre decodificar y confirmar: la parte del quiosco de
-         RNF-P-01, < 300 ms en el doc 02 §6 (KP2; RNF-P-03 es la decodificacion). -->
+         RNF-P-01, < 300 ms en el doc 02 §6 (RNF-P-03 es la decodificacion). -->
     <span
       v-if="session.lastLatencyMs.value !== null"
       class="kiosk-sr-only"

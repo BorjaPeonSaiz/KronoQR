@@ -8,7 +8,7 @@
 // texto atenuado sobre un fondo tintado, por ejemplo), se añade aqui su pareja
 // ANTES de usarlo en una plantilla.
 //
-// La tarea 5.8 (marca blanca) reutiliza esta tabla para avisar cuando los
+// La marca blanca (RF-PD-08) reutiliza esta tabla para avisar cuando los
 // colores que configure un cliente no alcancen el minimo.
 import type { ContrastRequirement } from './contrast'
 import type { PairState } from './pairContrast'

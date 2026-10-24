@@ -4,7 +4,13 @@
 // tiene que cuadrar con el). Antes de compartirse, esta era la funcion cuyo
 // cuerpo se habia copiado carater por caracter en `frontend-portal`.
 import { describe, expect, it } from 'vitest'
-import { durationParts, sumShiftMinutes, workDayTotals } from '../../src/workdayTotals'
+import {
+  durationParts,
+  QUEUE_NOTICE_MINUTES,
+  shiftMark,
+  sumShiftMinutes,
+  workDayTotals,
+} from '../../src/workdayTotals'
 import type { ShiftEntryDuration, WorkDayDurations } from '../../src/workdayTotals'
 
 function shiftEntry(durationMinutes: number | null): ShiftEntryDuration {
@@ -66,5 +72,61 @@ describe('suma de los tramos de una jornada', () => {
     expect(totals.summed).toBe(485)
     expect(totals.declared).toBe(500)
     expect(totals.agree).toBe(false)
+  })
+})
+
+// La marca de un tramo que leen igual el panel y el portal (C1): antes cada
+// `ShiftEntryTable.vue` tenia su `mark()` y su `QUEUE_NOTICE_MINUTES`.
+describe('marca de un tramo', () => {
+  it('lee la hora local tal cual, sin convertir', () => {
+    const mark = shiftMark(
+      '2026-03-14T05:00:00.000000Z',
+      '2026-03-14T06:00:00.000000+01:00',
+      '2026-03-14T05:00:02.113000Z',
+      '2026-03-14',
+    )
+
+    expect(mark).toEqual({
+      local: '06:00',
+      date: '2026-03-14',
+      nextDay: false,
+      queueDelayMinutes: null,
+    })
+  })
+
+  it('marca la salida de un turno de noche en el dia siguiente, sin partirlo', () => {
+    const mark = shiftMark(
+      '2026-03-15T05:00:00.000000Z',
+      '2026-03-15T06:00:00.000000+01:00',
+      null,
+      '2026-03-14',
+    )
+
+    expect(mark.nextDay).toBe(true)
+    expect(mark.date).toBe('2026-03-15')
+  })
+
+  it('avisa de la cola a partir del umbral, no antes', () => {
+    const at = '2026-03-14T05:00:00.000000Z'
+    const local = '2026-03-14T06:00:00.000000+01:00'
+
+    expect(QUEUE_NOTICE_MINUTES).toBe(5)
+    expect(
+      shiftMark(at, local, '2026-03-14T05:04:59.999000Z', '2026-03-14').queueDelayMinutes,
+    ).toBeNull()
+    expect(
+      shiftMark(at, local, '2026-03-14T05:05:00.000000Z', '2026-03-14').queueDelayMinutes,
+    ).toBe(5)
+    expect(
+      shiftMark(at, local, '2026-03-14T07:13:00.000000Z', '2026-03-14').queueDelayMinutes,
+    ).toBe(133)
+  })
+
+  it('sin hora local legible no inventa un dia', () => {
+    const mark = shiftMark('2026-03-14T05:00:00.000000Z', 'no es una hora', null, '2026-03-14')
+
+    expect(mark.local).toBe('')
+    expect(mark.date).toBeNull()
+    expect(mark.nextDay).toBe(false)
   })
 })

@@ -145,7 +145,7 @@ describe('EmployeeDetailView', () => {
       es.employees.detail.minimised,
     )
     expect(wrapper.find('[data-test="employee-minimised-at"]').text()).toContain(
-      '1/10/26, 10:30 (CEST)',
+      '1 oct 2026, 10:30 (CEST)',
     )
     expect(wrapper.text()).toContain('0199F0C21F4A7C3E9B214D5E6F7A8B90')
     expect(() => buttonWith(wrapper, es.common.edit)).toThrow()
