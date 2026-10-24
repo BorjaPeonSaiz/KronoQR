@@ -358,9 +358,15 @@ export function formatUtcTime(value: string): string {
 }
 
 /**
- * Minutos entre dos instantes UTC, redondeados hacia abajo. Es una DURACION, no
- * una conversion de zona: sirve para decir cuanto tardo en llegar un fichaje que
- * viajo en la cola del quiosco (regla dura 9). `null` si falta alguno.
+ * Minutos entre dos instantes UTC con la regla de `ElapsedMinutes` del servidor
+ * (RN-09): cada marca se trunca a su segundo ANTES de restar y la diferencia se
+ * divide entre sesenta truncando. Asi una pausa de 10:00:00.900 a 10:15:00.100
+ * son 15 minutos aqui y en el servidor, no 14 (V21-1-RV-1). Los casos los fija
+ * `backend/tests/Fixtures/elapsed-minutes.json`, que leen las dos pruebas.
+ *
+ * Es una DURACION, no una conversion de zona. Si `to` es anterior, el resultado
+ * es negativo (truncado hacia cero, como `intdiv`) y quien llama decide que
+ * hacer con el. `null` si falta alguno.
  */
 export function minutesBetween(from: string, to: string | null): number | null {
   const start = parseInstant(from)
@@ -370,5 +376,8 @@ export function minutesBetween(from: string, to: string | null): number | null {
     return null
   }
 
-  return Math.floor((end.getTime() - start.getTime()) / 60_000)
+  const seconds = Math.floor(end.getTime() / 1000) - Math.floor(start.getTime() / 1000)
+
+  // Resta el resto antes de dividir: trunca hacia cero sin el `-0` de `Math.trunc`.
+  return (seconds - (seconds % 60)) / 60
 }

@@ -1,0 +1,16 @@
+{
+  "description": "Minutos enteros entre dos instantes (RN-09, RN-10): cada marca se trunca a su segundo antes de restar y la diferencia se divide entre sesenta truncando. Fuente de verdad: ElapsedMinutes::between(). La leen las dos pruebas que tienen que dar la misma cifra: tests/Unit/Shared/Domain/ElapsedMinutesFixtureTest.php (backend) y la de minutesBetween() de packages/web-kit/src/datetime.ts, que enseña las pausas y los retrasos en el panel y en el portal (V21-1-RV-1).",
+  "cases": [
+    { "label": "jornada redonda", "from": "2026-10-07T06:00:00Z", "to": "2026-10-07T14:00:00Z", "minutes": 480 },
+    { "label": "6 h 0 min 59 s son 360", "from": "2026-10-07T06:00:00Z", "to": "2026-10-07T12:00:59Z", "minutes": 360 },
+    { "label": "un segundo antes del minuto", "from": "2026-10-07T06:00:01Z", "to": "2026-10-07T06:01:00Z", "minutes": 0 },
+    { "label": "pausa con fraccion de segundo: 10:00:00.900 a 10:15:00.100 son 15", "from": "2026-10-07T10:00:00.900000Z", "to": "2026-10-07T10:15:00.100000Z", "minutes": 15 },
+    { "label": "fraccion de segundo en la hora: 08:00:00.900 a 09:00:00.100 son 60", "from": "2026-10-07T08:00:00.900Z", "to": "2026-10-07T09:00:00.100Z", "minutes": 60 },
+    { "label": "fraccion que no completa el segundo final", "from": "2026-10-07T08:00:00.000Z", "to": "2026-10-07T08:00:59.999Z", "minutes": 0 },
+    { "label": "turno de noche", "from": "2026-10-07T20:00:00Z", "to": "2026-10-08T04:30:30Z", "minutes": 510 },
+    { "label": "salto de marzo en Madrid: tiempo real, no horas de pared", "from": "2026-03-29T00:30:00Z", "to": "2026-03-29T01:30:00Z", "minutes": 60 },
+    { "label": "salto de octubre en Madrid: tiempo real, no horas de pared", "from": "2026-10-25T00:30:00Z", "to": "2026-10-25T01:30:00Z", "minutes": 60 },
+    { "label": "el mismo instante", "from": "2026-03-19T00:00:00Z", "to": "2026-03-19T00:00:00Z", "minutes": 0 },
+    { "label": "desplazamiento en la marca", "from": "2026-10-07T08:00:00+02:00", "to": "2026-10-07T06:30:00Z", "minutes": 30 }
+  ]
+}

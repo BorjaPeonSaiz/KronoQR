@@ -1,4 +1,7 @@
 // Movida de `frontend-admin/tests/unit/datetime.spec.ts` (ADR-036).
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   formatCivilDate,
@@ -217,5 +220,38 @@ describe('reloj de 24 h y variantes cortas (V2-PO-2)', () => {
     expect(formatDayMonthTime(instant, 'Europe/Madrid', 'es')).toMatch(/^15\/0?3, 00:20$/)
     expect(formatDayMonthTime(instant, 'Europe/Madrid', 'en')).toMatch(/^0?3\/15, 00:20$/)
     expect(formatDayMonthTime('x', 'Europe/Madrid', 'es')).toBe('')
+  })
+})
+
+// Los mismos casos que el backend (`ElapsedMinutesFixtureTest`): la pausa que
+// enseñan el panel y el portal tiene que ser la que cuenta el servidor (V21-1-RV-1).
+interface ElapsedMinutesCase {
+  readonly label: string
+  readonly from: string
+  readonly to: string
+  readonly minutes: number
+}
+const elapsedMinutesFixture = JSON.parse(
+  readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../../backend/tests/Fixtures/elapsed-minutes.json',
+    ),
+    'utf8',
+  ),
+) as { readonly cases: ElapsedMinutesCase[] }
+
+describe('minutesBetween: la regla de ElapsedMinutes del servidor', () => {
+  it.each(
+    elapsedMinutesFixture.cases.map(
+      (item) => [item.label, item.from, item.to, item.minutes] as const,
+    ),
+  )('%s', (_label, from, to, minutes) => {
+    expect(minutesBetween(from, to)).toBe(minutes)
+  })
+
+  it('trunca hacia cero si la segunda marca es anterior, sin un -0', () => {
+    expect(minutesBetween('2026-10-07T10:00:30Z', '2026-10-07T10:00:00Z')).toBe(0)
+    expect(minutesBetween('2026-10-07T10:01:30Z', '2026-10-07T10:00:00Z')).toBe(-1)
   })
 })
