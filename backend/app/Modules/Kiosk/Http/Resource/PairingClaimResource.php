@@ -7,8 +7,9 @@ namespace App\Modules\Kiosk\Http\Resource;
 use App\Modules\Kiosk\Application\Query\PairingClaimResult;
 use App\Modules\Kiosk\Domain\ValueObject\ClaimOutcome;
 use App\Modules\Kiosk\Http\Response\PairingRejectedResponse;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use RuntimeException;
@@ -88,6 +89,6 @@ final class PairingClaimResource extends JsonResource
      */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z');
+        return UtcInstant::of($instant, UtcPrecision::Milliseconds);
     }
 }

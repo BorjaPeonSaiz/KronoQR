@@ -15,9 +15,10 @@ use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateInterval;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository as Config;
 use Throwable;
@@ -411,6 +412,6 @@ final class ProductErrorsCommand extends Command
     /** UTC siempre (regla dura 3); el panel es quien pinta la hora del centro. */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+        return UtcInstant::of($instant, UtcPrecision::Seconds);
     }
 }

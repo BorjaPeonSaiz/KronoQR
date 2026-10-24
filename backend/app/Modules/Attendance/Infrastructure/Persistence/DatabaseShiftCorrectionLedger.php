@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
@@ -88,7 +89,7 @@ final readonly class DatabaseShiftCorrectionLedger implements ShiftCorrectionLed
 
     private function iso(DateTimeImmutable $instant): string
     {
-        return $instant->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 
     /**

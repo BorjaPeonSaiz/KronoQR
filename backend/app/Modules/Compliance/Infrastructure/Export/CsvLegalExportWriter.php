@@ -14,6 +14,8 @@ use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
 use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;
@@ -198,7 +200,7 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
     {
         CsvDialect::writeRow($handle, [$this->text('title')]);
         CsvDialect::writeRow($handle, [$this->label('installation'), $this->installationName()]);
-        CsvDialect::writeRow($handle, [$this->label('generated_at'), $manifest->generatedAt->format('Y-m-d\TH:i:s\Z')]);
+        CsvDialect::writeRow($handle, [$this->label('generated_at'), UtcInstant::of($manifest->generatedAt, UtcPrecision::Seconds)]);
         CsvDialect::writeRow($handle, [$this->label('period'), $this->text('period_value', [
             'from' => $manifest->period->from,
             'to' => $manifest->period->to,

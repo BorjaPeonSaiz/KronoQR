@@ -6,7 +6,8 @@ namespace App\Modules\Kiosk\Http\Resource;
 
 use App\Modules\Kiosk\Application\Query\DeviceFleetView;
 use App\Modules\Kiosk\Application\Query\DeviceView;
-use DateTimeZone;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -52,9 +53,7 @@ final class DeviceListResource extends JsonResource
                 $fleet->devices,
             ),
             'meta' => [
-                'generated_at' => $fleet->generatedAt
-                    ->setTimezone(new DateTimeZone('UTC'))
-                    ->format('Y-m-d\TH:i:s.v\Z'),
+                'generated_at' => UtcInstant::of($fleet->generatedAt, UtcPrecision::Milliseconds),
                 'timezone' => $fleet->timezone,
                 // Los mismos umbrales que publica `kiosk:health --json`, escritos
                 // una sola vez en el dominio: si la consola y el panel dijeran

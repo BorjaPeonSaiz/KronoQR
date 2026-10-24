@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Infrastructure\Export;
 
+use App\Modules\Reporting\Application\Support\SiteWallClock;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicator;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicatorUnit;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionOriginShare;
@@ -12,7 +13,6 @@ use App\Modules\Reporting\Domain\ValueObject\AdoptionTarget;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionTargetComparison;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;
 
@@ -216,7 +216,7 @@ final readonly class AdoptionReportLayout
      */
     public static function localInstant(DateTimeImmutable $instant, string $timeZone): string
     {
-        return $instant->setTimezone(new DateTimeZone($timeZone))->format('Y-m-d H:i');
+        return new SiteWallClock($timeZone)->minute($instant);
     }
 
     /**

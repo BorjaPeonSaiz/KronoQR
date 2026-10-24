@@ -6,8 +6,8 @@ namespace App\Modules\Compliance\Http\Resource;
 
 use App\Modules\Compliance\Application\Port\IncidentActor;
 use App\Modules\Compliance\Application\Port\IncidentBoardRow;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * La forma del esquema `Incident` del contrato, en un solo sitio (RF-PA-05).
@@ -85,7 +85,7 @@ final readonly class IncidentPayload
      */
     public static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 
     private static function utcOrNull(?DateTimeImmutable $instant): ?string

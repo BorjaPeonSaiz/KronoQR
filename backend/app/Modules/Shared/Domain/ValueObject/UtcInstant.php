@@ -32,7 +32,7 @@ use Throwable;
 final readonly class UtcInstant
 {
     /** ISO-8601 en UTC con microsegundos, la forma del esquema `UtcTimestamp`. */
-    public const string FORMAT = 'Y-m-d\TH:i:s.u\Z';
+    public const string FORMAT = UtcPrecision::Microseconds->value;
 
     /**
      * Un instante que seguro existe.
@@ -40,15 +40,19 @@ final readonly class UtcInstant
      * Separado de {@see self::format()} para que los campos obligatorios del
      * contrato —`manifest.generated_at`, `doctor.checked_at`— no dependan de un
      * valor por defecto puesto en el sitio que los serializa.
+     *
+     * La precision es la del campo en el contrato ({@see UtcPrecision}); por
+     * omision, microsegundos, que es lo que guarda la base de datos.
      */
-    public static function of(DateTimeImmutable $instant): string
+    public static function of(DateTimeImmutable $instant, UtcPrecision $precision = UtcPrecision::Microseconds): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format(self::FORMAT);
+        return $instant->setTimezone(new DateTimeZone('UTC'))->format($precision->value);
     }
 
-    public static function format(?DateTimeImmutable $instant): ?string
+    /** Lo mismo para un campo anulable: `null` sigue siendo `null`. */
+    public static function format(?DateTimeImmutable $instant, UtcPrecision $precision = UtcPrecision::Microseconds): ?string
     {
-        return $instant === null ? null : self::of($instant);
+        return $instant === null ? null : self::of($instant, $precision);
     }
 
     /**

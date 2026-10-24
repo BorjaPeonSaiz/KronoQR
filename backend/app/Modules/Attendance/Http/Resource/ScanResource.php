@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Resource;
 
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -93,6 +95,6 @@ final class ScanResource extends JsonResource
      */
     private function instant(DateTimeImmutable $instant): string
     {
-        return $instant->format('Y-m-d\TH:i:s.v\Z');
+        return UtcInstant::of($instant, UtcPrecision::Milliseconds);
     }
 }

@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Response;
 
+use App\Modules\Reporting\Application\Support\SiteWallClock;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordRows;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Support\Facades\Lang;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -308,7 +310,7 @@ final readonly class PersonalRecordCsv
 
     private static function local(DateTimeImmutable $instant, string $timeZone): string
     {
-        return $instant->setTimezone(new DateTimeZone($timeZone))->format('Y-m-d H:i');
+        return new SiteWallClock($timeZone)->minute($instant);
     }
 
     private static function localOrEmpty(?DateTimeImmutable $instant, string $timeZone): string
@@ -318,7 +320,7 @@ final readonly class PersonalRecordCsv
 
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+        return UtcInstant::of($instant, UtcPrecision::Seconds);
     }
 
     private static function utcOrEmpty(?DateTimeImmutable $instant): string

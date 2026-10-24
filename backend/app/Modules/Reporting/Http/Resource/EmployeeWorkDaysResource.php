@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Resource;
 
+use App\Modules\Reporting\Application\Support\SiteWallClock;
 use App\Modules\Reporting\Application\Support\WorkDayJournalPage;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -230,7 +231,7 @@ final class EmployeeWorkDaysResource extends JsonResource
      */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 
     private static function utcOrNull(?DateTimeImmutable $instant): ?string
@@ -245,7 +246,7 @@ final class EmployeeWorkDaysResource extends JsonResource
      */
     private static function local(DateTimeImmutable $instant, string $timeZone): string
     {
-        return $instant->setTimezone(new DateTimeZone($timeZone))->format('Y-m-d\TH:i:s.uP');
+        return new SiteWallClock($timeZone)->withOffset($instant);
     }
 
     private static function localOrNull(?DateTimeImmutable $instant, string $timeZone): ?string

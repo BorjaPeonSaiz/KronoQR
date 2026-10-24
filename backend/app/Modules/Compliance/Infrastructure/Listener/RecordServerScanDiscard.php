@@ -11,6 +11,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 
 /**
  * El asiento `scan.discarded` (RN-22, ADR-061 §6.3, regla dura 6).
@@ -42,9 +43,9 @@ final readonly class RecordServerScanDiscard
             // `->value`: el vocabulario de la columna. `Compliance` no nombra los
             // enums de `Attendance` (solo alcanza `Attendance\Domain\Event`).
             'origin' => $event->origin->value,
-            'occurred_at' => $event->scannedAt->format('Y-m-d\TH:i:s.u\Z'),
-            'recorded_at' => $event->discardedAt->format('Y-m-d\TH:i:s.u\Z'),
-            'first_failed_at' => $event->history->firstFailedAt->format('Y-m-d\TH:i:s.u\Z'),
+            'occurred_at' => UtcInstant::of($event->scannedAt),
+            'recorded_at' => UtcInstant::of($event->discardedAt),
+            'first_failed_at' => UtcInstant::of($event->history->firstFailedAt),
             'attempts' => $event->history->attempts,
             'attribution' => $event->attribution->value,
         ];

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Resource;
 
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Application\UseCase\IssuedPin;
 use Illuminate\Http\Request;
@@ -39,7 +41,7 @@ final class IssuedPinResource extends JsonResource
             'employee_uuid' => $issued->employeeUuid,
             'pin' => $issued->pin,
             // Con milisegundos y sufijo Z: instante en UTC (regla dura 3).
-            'issued_at' => $issued->issuedAt->format('Y-m-d\TH:i:s.v\Z'),
+            'issued_at' => UtcInstant::of($issued->issuedAt, UtcPrecision::Milliseconds),
             'pin_status' => PinStatus::Issued->value,
         ];
     }

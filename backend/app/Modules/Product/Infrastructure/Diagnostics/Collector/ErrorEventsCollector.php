@@ -15,9 +15,9 @@ use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
 use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\FieldAllowlist;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateInterval;
 use DateTimeImmutable;
-use DateTimeZone;
 use Throwable;
 
 /**
@@ -241,6 +241,6 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
     /** ISO-8601 en UTC, como todo instante que sale del producto (regla dura 3). */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 }

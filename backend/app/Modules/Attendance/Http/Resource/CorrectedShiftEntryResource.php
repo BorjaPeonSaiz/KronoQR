@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Resource;
 
 use App\Modules\Attendance\Application\UseCase\CorrectedShift;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -66,6 +67,6 @@ final class CorrectedShiftEntryResource extends JsonResource
      */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 }

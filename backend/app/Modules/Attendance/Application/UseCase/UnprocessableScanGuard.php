@@ -28,6 +28,7 @@ use App\Modules\Attendance\Domain\ValueObject\UnprocessableScanVerdict;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Psr\Log\LoggerInterface;
@@ -302,7 +303,7 @@ final readonly class UnprocessableScanGuard
             'device_id' => $scan->deviceUuid,
             'employee_uuid' => $attribution->ownerUuid,
             'attempts' => $history->attempts,
-            'first_failed_at' => $history->firstFailedAt->format('Y-m-d\TH:i:s.u\Z'),
+            'first_failed_at' => UtcInstant::of($history->firstFailedAt),
             'exception_classes' => $failures->exceptionClasses,
             'attributed' => $attribution->isAttributed(),
         ]);

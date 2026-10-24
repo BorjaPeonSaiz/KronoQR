@@ -8,8 +8,9 @@ use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * La huella SHA-256 **del contenido** del registro propio (PR19, RF-ID-05).
@@ -150,7 +151,7 @@ final readonly class PersonalRecordDigest
     private static function utc(?DateTimeImmutable $instant): string
     {
         return $instant instanceof DateTimeImmutable
-            ? $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z')
+            ? UtcInstant::of($instant, UtcPrecision::Seconds)
             : '';
     }
 

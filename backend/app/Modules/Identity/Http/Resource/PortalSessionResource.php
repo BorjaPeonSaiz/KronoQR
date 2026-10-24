@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Shared\Domain\ValueObject\PortalSession;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -43,7 +45,7 @@ final class PortalSessionResource extends JsonResource
             'token' => $session->plainTextToken,
             'token_type' => 'Bearer',
             // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
-            'expires_at' => $session->expiresAt->format('Y-m-d\TH:i:s\Z'),
+            'expires_at' => UtcInstant::of($session->expiresAt, UtcPrecision::Seconds),
             'employee' => [
                 'uuid' => $session->employeeUuid,
                 'display_name' => $session->displayName,

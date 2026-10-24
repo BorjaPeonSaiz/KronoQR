@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Domain\ValueObject\TemporaryPassword;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -35,8 +37,8 @@ final class TemporaryPasswordIssuedResource extends JsonResource
         return [
             'account_uuid' => $this->accountUuid,
             'password' => $this->password->plain,
-            'issued_at' => $this->issuedAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
-            'expires_at' => $this->expiresAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
+            'issued_at' => UtcInstant::of($this->issuedAt, UtcPrecision::Seconds),
+            'expires_at' => UtcInstant::of($this->expiresAt, UtcPrecision::Seconds),
         ];
     }
 }

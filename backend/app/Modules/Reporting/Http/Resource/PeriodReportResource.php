@@ -9,6 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportLayout;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -72,7 +73,7 @@ final class PeriodReportResource extends JsonResource
                 // cliente no la adivine ni use la del navegador (regla dura 3):
                 // los `work_date` ya estan expresados en ella.
                 'time_zone' => $report->timeZone,
-                'generated_at' => $report->generatedAt->format('Y-m-d\TH:i:s.u\Z'),
+                'generated_at' => UtcInstant::of($report->generatedAt),
                 'row_count' => $report->rowCount(),
                 'criteria' => self::criteria($report),
                 'contract_coverage' => [

@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Domain\ValueObject;
 
 use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * El informe completo de `php artisan kiosk:health` (**RF-PA-07**, doc 02
@@ -206,6 +207,6 @@ final readonly class KioskHealthReport
 
     private static function utc(?DateTimeImmutable $instant): ?string
     {
-        return $instant?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z');
+        return UtcInstant::format($instant, UtcPrecision::Milliseconds);
     }
 }

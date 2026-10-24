@@ -451,3 +451,38 @@ it('no avisa del quiosco por delante del servidor tras una vuelta atras', functi
 
     expect($report->devices[0]->reason)->toBe(KioskHealthReason::Beating);
 })->group('RF-PA-07', 'RF-KI-07');
+
+it('escribe el informe para maquinas entero, con los instantes en UTC y al milisegundo', function (): void {
+    // Lo consume un script (`--json`): una clave que desaparece o un instante
+    // con la hora local y una `Z` detras rompen al consumidor sin avisar.
+    $report = saludDeLaFlota([
+        quioscoDePrueba(name: 'Recepcion', lastSeenAt: '2026-09-09 11:59:30'),
+        quioscoDePrueba(name: 'Cocina', lastSeenAt: '2026-09-09 11:55:00'),
+        quioscoDePrueba(name: 'Almacen', lastSeenAt: '2026-09-09 09:00:00'),
+        quioscoDePrueba(name: 'Cocina vieja', status: 'revoked', lastSeenAt: '2026-08-01 10:00:00'),
+        quioscoDePrueba(name: 'Terraza', lastSeenAt: null, pairedAt: '2026-09-09 11:59:00'),
+    ])->handle();
+
+    $json = $report->toArray();
+    /** @var list<array<string, mixed>> $devices */
+    $devices = $json['devices'];
+
+    expect(array_keys($json))->toBe(['generated_at', 'status', 'exit_code', 'thresholds', 'fleet', 'devices'])
+        ->and($json['generated_at'])->toBe('2026-09-09T12:00:00.000Z')
+        ->and($json['status'])->toBe($report->status->value)
+        ->and($json['exit_code'])->toBe(2)
+        ->and($json['thresholds'])->toBe(['fresh_within_seconds' => 120, 'silent_after_seconds' => 600, 'battery_low_percent' => 15])
+        ->and($json['fleet'])->toBe(['total' => 5, 'active' => 4])
+        ->and(array_keys($devices[0]))->toBe([
+            'uuid', 'name', 'status', 'app_version', 'last_seen_at', 'seconds_since_last_seen',
+            'pending_queue_size', 'queue_storage', 'unreported_discards', 'battery_level',
+            'battery_charging', 'verdict', 'reason',
+        ])
+        ->and($devices[0]['last_seen_at'])->toBe('2026-09-09T11:59:30.000Z')
+        ->and($devices[0]['seconds_since_last_seen'])->toBe(30)
+        ->and($devices[4]['last_seen_at'])->toBeNull()
+        // Lo que hay que mirar: ni el correcto ni el revocado; el recien
+        // vinculado que aun no ha latido es un aviso.
+        ->and(array_map(static fn (KioskHealthRow $row): string => $row->name, $report->problems()))
+        ->toBe(['Almacen', 'Cocina', 'Terraza']);
+})->group('RF-PA-07', 'RN-04');

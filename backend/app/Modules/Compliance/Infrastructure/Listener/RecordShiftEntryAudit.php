@@ -13,6 +13,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use UnhandledMatchError;
 
@@ -73,7 +74,7 @@ final readonly class RecordShiftEntryAudit
             'shift_entry_uuid' => $event->shiftEntryUuid,
             'site_id' => $event->siteId,
             'work_date' => $event->workDate->isoDate,
-            'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($event->clockedInAt),
             'origin' => $event->origin->value,
             // **Que abrio el tramo**: `clock_in` o `break_end` (RF-AT-12,
             // ADR-024). No es redundante con `scan_events.result`: esa tabla no
@@ -96,8 +97,8 @@ final readonly class RecordShiftEntryAudit
             'shift_entry_uuid' => $event->shiftEntryUuid,
             'site_id' => $event->siteId,
             'work_date' => $event->workDate->isoDate,
-            'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
-            'clocked_out_at' => $event->clockedOutAt->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($event->clockedInAt),
+            'clocked_out_at' => UtcInstant::of($event->clockedOutAt),
             'origin' => $event->origin->value,
             // **Que lo cerro**: `clock_out` o `break_start` (RF-AT-12, ADR-024).
             // Sin esto, el asiento de una pausa de las 15:00 afirmaria que esa
@@ -206,8 +207,8 @@ final readonly class RecordShiftEntryAudit
         }
 
         return [
-            'clocked_in_at' => $clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
-            'clocked_out_at' => $clockedOutAt?->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($clockedInAt),
+            'clocked_out_at' => UtcInstant::format($clockedOutAt),
             // Como termino (RN-05, 2.3.0): una correccion que solo declara la
             // pausa cambia esto y nada mas, y el asiento tiene que decirlo.
             'closed_by' => $closedBy,

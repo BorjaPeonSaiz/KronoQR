@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Support;
 
 use App\Modules\Reporting\Domain\ValueObject\PresenceEntry;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * La forma de cable de una fila de presencia: el esquema `LivePresenceEntry` del
@@ -81,6 +81,6 @@ final readonly class PresenceEntryPayload
      */
     public static function utc(?DateTimeImmutable $instant): ?string
     {
-        return $instant?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::format($instant);
     }
 }

@@ -8,6 +8,7 @@ use App\Modules\Attendance\Application\Command\ScanBatch;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
 use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Support\Facades\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -105,7 +106,7 @@ final readonly class ScanBatchTelemetry
             'not_processed' => $pending,
             // RN-21: los que se aplazaron detras del no procesado, sin mirarlos.
             'held_back' => $heldBack,
-            'oldest_occurred_at' => $batch->earliest()->occurredAt->format('Y-m-d\TH:i:s.u\Z'),
+            'oldest_occurred_at' => UtcInstant::of($batch->earliest()->occurredAt),
             'duration_ms' => (int) round($seconds * 1000),
         ];
 
