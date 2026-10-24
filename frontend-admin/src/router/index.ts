@@ -153,7 +153,7 @@ export const routes: RouteRecordRaw[] = [
         // es una lectura del registro con una regla legal encima, y quien
         // puede leerlo puede leerlo con la regla. La policy del servidor
         // (`ComplianceSummaryPolicy`) es la que autoriza de verdad (regla dura
-        // 18). El `auditor` ya no lleva `attendance:read` (bloque 25): ni ve la
+        // 18). El `auditor` ya no lleva `attendance:read`: ni ve la
         // ruta ni llega a ella.
         path: 'compliance',
         name: 'compliance',

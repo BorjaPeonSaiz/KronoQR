@@ -283,7 +283,7 @@ export type AdoptionOriginShare = Schemas['AdoptionOriginShare']
 // quien pulsa un boton de descarga ya ha elegido uno).
 export type AdoptionExportFormat = Parameters_['AdoptionExportFormat']
 
-// Cuentas de gestion administradas desde el panel (RF-ID-10, bloque 12c).
+// Cuentas de gestion administradas desde el panel (RF-ID-10, ADR-051).
 export type ManagementAccount = Schemas['ManagementAccount']
 export type ManagementAccountCollection = Schemas['ManagementAccountCollection']
 export type ManagementAccountProvisioned = Schemas['ManagementAccountProvisioned']

@@ -14,6 +14,7 @@ import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
+import { noPlanReferences } from '@kronoqr/web-kit/eslint/no-plan-references'
 import { noBrowserStorage } from '@kronoqr/web-kit/eslint/no-browser-storage'
 
 export default defineConfigWithVueTs(
@@ -97,6 +98,8 @@ export default defineConfigWithVueTs(
   noBareStrings(),
   // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
+  // Comentarios con el motivo, no con el numero de bloque del plan (V21-1-RV-5, C8).
+  noPlanReferences(),
   // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
   // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
   ...noBrowserStorage({

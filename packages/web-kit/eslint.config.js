@@ -8,6 +8,7 @@ import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from './eslint/identifier-language.js'
 import { noLiteralColors } from './eslint/no-literal-colors.js'
 import { noBrowserStorage } from './eslint/no-browser-storage.js'
+import { noPlanReferences } from './eslint/no-plan-references.js'
 
 export default defineConfigWithVueTs(
   {
@@ -48,5 +49,11 @@ export default defineConfigWithVueTs(
       },
     ],
   }),
+  // Comentarios con el motivo, no con el numero de bloque del plan (V21-1-RV-5, C8).
+  // La propia regla se excluye: sus ejemplos son lo que detecta.
+  noPlanReferences(
+    ['src/**/*.{ts,mts,tsx,vue,js,mjs}', 'eslint/**/*.js'],
+    ['**/*.d.ts', 'eslint/no-plan-references.js'],
+  ),
   skipFormatting,
 )

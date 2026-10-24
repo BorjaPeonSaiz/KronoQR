@@ -78,7 +78,7 @@ function instantLabel(value: string | null): string {
     : formatInstantWithZone(value, timezone.value, locale.value)
 }
 
-// --- Bloque 1: paquete de diagnostico (RF-PD-09) -----------------------------
+// --- Seccion 1: paquete de diagnostico (RF-PD-09) ----------------------------
 
 /** Desmarcada por defecto: el paquete sale anonimizado salvo decision expresa. */
 const includePersonalData = ref(false)
@@ -110,7 +110,7 @@ async function generateBundle(): Promise<void> {
   }
 }
 
-// --- Bloque 2: accesos de soporte (RF-PD-11) ---------------------------------
+// --- Seccion 2: accesos de soporte (RF-PD-11) --------------------------------
 
 const grants = ref<SupportGrant[]>([])
 const grantsLoading = ref(true)
@@ -319,7 +319,7 @@ const buttonClass =
       <p class="max-w-3xl text-kq-text-muted">{{ t('support.intro') }}</p>
     </header>
 
-    <!-- Bloque 1: paquete de diagnostico (RF-PD-09) -->
+    <!-- Seccion 1: paquete de diagnostico (RF-PD-09) -->
     <section
       v-if="canGenerateDiagnostics"
       class="flex max-w-3xl flex-col gap-4"
@@ -389,7 +389,7 @@ const buttonClass =
       </div>
     </section>
 
-    <!-- Bloque 2: accesos de soporte (RF-PD-11) -->
+    <!-- Seccion 2: accesos de soporte (RF-PD-11) -->
     <section
       v-if="canManageSupportGrants"
       class="flex max-w-3xl flex-col gap-4"

@@ -75,7 +75,7 @@ export interface Branding {
  * servidor. Coincide con los valores de serie del catalogo de
  * `installation_settings`: el producto, nunca la marca de otro cliente.
  *
- * Idiomas: solo espanol de serie (`LOCALE_AVAILABLE = [es]`, bloque 26 de la
+ * Idiomas: solo espanol de serie (`LOCALE_AVAILABLE = [es]`, decision del propietario de la
  * 2.2.1). Las aplicaciones traen el ingles traducido, pero no lo ofrecen hasta
  * que la instalacion lo activa; mientras tanto no hay selector ni deteccion
  * del navegador (`resolveUiLocale`).

@@ -1,5 +1,5 @@
 // Cuando una exportacion se pide en diferido por omision (decision del propietario,
-// bloque 14.4): la plantilla entera, o un periodo de mas de un mes. Las consultas
+// ADR-041): la plantilla entera, o un periodo de mas de un mes. Las consultas
 // cortas de una persona o un departamento siguen siendo sincronas. Los endpoints
 // sincronos se mantienen: esto solo decide cual se ofrece primero.
 

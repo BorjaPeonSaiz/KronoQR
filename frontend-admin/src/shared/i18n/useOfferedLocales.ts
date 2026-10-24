@@ -1,6 +1,6 @@
 // Idiomas que la instalacion ofrece (`branding.locales.available`) y que este
 // panel trae traducidos. Con uno solo no hay campo de idioma en ningun
-// formulario (bloque 26 de la 2.2.1): el servidor aplica `LOCALE_DEFAULT`.
+// formulario: el servidor aplica `LOCALE_DEFAULT`.
 import { offeredLocales } from '@kronoqr/web-kit/branding'
 import { computed, type ComputedRef } from 'vue'
 import { useBrandingStore } from '../branding/branding.store'

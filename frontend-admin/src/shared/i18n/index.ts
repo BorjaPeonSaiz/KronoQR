@@ -63,7 +63,7 @@ export async function ensureLocaleLoaded(i18n: AppI18n, locale: AppLocale): Prom
 /**
  * Idioma de la interfaz segun la politica de la instalacion: con un solo
  * idioma ofrecido, ese; con varios, el de la persona, el del navegador o el
- * por defecto de la instalacion (`resolveUiLocale`, bloque 26).
+ * por defecto de la instalacion (`resolveUiLocale` de web-kit).
  */
 export function resolveAppLocale(inputs: {
   readonly policy: LocalePolicy

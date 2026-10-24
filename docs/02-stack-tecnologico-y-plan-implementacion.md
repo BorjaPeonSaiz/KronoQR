@@ -449,6 +449,7 @@ Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un
 | Estado | Pinia con *stores* por dominio funcional, acciones tipadas, sin estado global mutable fuera de ellas | Revisión |
 | Estructura | Carpeta por *feature* (`features/scan/`, `features/live/`), no por tipo de fichero | Revisión |
 | Idioma de los identificadores | **Inglés en `src/**` de las tres SPA y de `packages/web-kit`**, con las mismas veinte palabras del glosario y el mismo criterio de segmento de `camelCase` que en el backend. `properties: false` y `onlyDeclarations: true`: se gobierna cómo se llama lo que este repositorio **declara**, no la clave de un objeto que llega de la API o que espera `i18n`. En `tests/**` no aplica | Regla `id-match` de ESLint, con la lista escrita una sola vez en `packages/web-kit/eslint/identifier-language.js` |
+| Comentarios con el motivo | Un comentario de `src/**` no cita el número de bloque del plan de correcciones («bloque 25», «bloque 14.4»): cita el requisito, el ADR o la decisión del propietario con su fecha. Los `schema.d.ts` generados quedan fuera; sus descripciones se corrigen en `openapi.yaml` | Regla `kronoqr-comments/no-plan-references` (`packages/web-kit/eslint/no-plan-references.js`), en las tres SPA y en web-kit |
 
 #### Scripts de instalación y operación
 

@@ -54,7 +54,7 @@ const branding = useBrandingStore(pinia)
 branding.apply()
 void branding.load()
 
-// Idioma de la interfaz (bloque 26): con un solo idioma ofrecido, ese; con varios,
+// Idioma de la interfaz (`resolveUiLocale`): con un solo idioma ofrecido, ese; con varios,
 // el de la persona, el del navegador o el por defecto de la instalacion. Se
 // calcula con la marca que ya haya (la cacheada o la del producto) y se
 // recalcula al llegar la del servidor y al entrar o salir una persona.

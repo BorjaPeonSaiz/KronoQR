@@ -43,7 +43,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
   {
     // Lectura de plantilla (R6-BD-01): admin, rrhh y responsable; el auditor no
-    // la lleva (bloque 25). Crear y renombrar los decide la vista.
+    // la lleva. Crear y renombrar los decide la vista.
     name: 'departments',
     labelKey: 'app.nav.departments',
     abilities: [EMPLOYEES_READ],
@@ -167,8 +167,8 @@ export const FALLBACK_SECTIONS: readonly NavigationSection[] = [
   // no tiene ni plantilla ni credenciales. Sin ella, entrar con ese rol acababa
   // en «sin permiso» teniendo permiso para algo.
   section('legal-export'),
-  // Despues de la exportacion a proposito. El `auditor` ya no lee la presencia
-  // (bloque 25): solo lleva `reports:legal` y su unica pantalla es la Inspeccion.
+  // Despues de la exportacion a proposito. El `auditor` no lee la presencia:
+  // solo lleva `reports:legal` y su unica pantalla es la Inspeccion.
   // Es la primera seccion que alcanza un `responsable_departamento`, que no tiene
   // plantilla, ni credenciales, ni exportacion legal (RF-ID-03).
   section('live'),
