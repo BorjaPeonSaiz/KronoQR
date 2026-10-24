@@ -230,8 +230,12 @@ export function createOverlayQueueStorage(
     },
 
     async readRoster(): Promise<EncryptedRosterRecord | null> {
-      const fromDisk = await readDisk<EncryptedRosterRecord | null>(null, () => disk.readRoster())
-      return fromDisk ?? (await memory.readRoster())
+      // La memoria primero: solo tiene algo si el disco RECHAZO la ultima escritura, y
+      // entonces es la copia mas nueva. Leer antes el disco devolveria un padron viejo
+      // (o uno cifrado con el token anterior tras un relevo).
+      const fromMemory = await memory.readRoster()
+      if (fromMemory !== null) return fromMemory
+      return readDisk<EncryptedRosterRecord | null>(null, () => disk.readRoster())
     },
 
     async writeRoster(record) {
