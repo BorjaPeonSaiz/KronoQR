@@ -89,9 +89,20 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (23-10-2026):** bloques 0 a 15 integrados (#182 a #187, #189 a #191, #193 a #198 y #200). **Bloque 16** (`fix/sistema-visual-y-marca`): 16.1–16.6 ✅, revisión de código aplicada; CI y PR en curso.
+**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 16 integrados (#182 a #187, #189 a #191, #193 a #198, #200 y #201). **Bloque 17** (`fix/quiosco-2.3.0`): 17.1–17.10 ✅, revisiones de seguridad y de código aplicadas; CI y PR en curso.
 
-Lo que conviene saber del bloque 16:
+Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
+
+- **ADR-061 (17.9, aceptado):** el servidor descarta un fichaje que no consigue procesar (excepción que no es rechazo ni dependencia caída de ADR-059) tras ≥ 10 intentos, ≥ 60 min y con cupo ≤ 3 por quiosco y 24 h (techo 20; agotado = la cola se atasca a propósito y alerta crítica). Lote, `/scan` y `/scan/pin` pasan por `UnprocessableScanGuard`; `422 urn:kronoqr:problem:scan-discarded`; nada se borra (`scan_events.result=discarded_unprocessable`, `discarded_scan_reports.source=server`, asiento `scan.discarded`, incidencia `discarded_scan`). Sin atribuir: titular por `payload_fingerprint` (índice parcial `scan_events_accepted_card_fingerprint_index`, 180 días) y si no, incidencia sin persona por quiosco y jornada. `employee_id` solo con tarjeta auténtica (PIN y huella, no). `scan_processing_failures` es seudonimizada, 30 días, y entra en la exportación íntegra (formato 7). La carrera del cupo es residual aceptado.
+- **Claim repetible (V6-KI-02):** entre 10 y 60 s, misma IP por HMAC, token anterior sin usar, como mucho 3; asiento `device.pairing_reclaimed`. El quiosco no lanza dos `claim` a la vez y recupera la respuesta perdida en 70 s.
+- **Quiosco:** cola y lista de descartados cifradas con AES-GCM y una clave propia no extraíble (`kronoqr-kiosk-queue-key`, no derivada del token); las ilegibles se saltan y conservan; solo se descifra lo que se envía. Almacén compuesto disco+memoria con la cuota agotada (el padrón se lee primero de memoria). Escáner que reintenta si ZXing no carga. Idioma de serie tras cada fichaje (D9, `useLocalePolicy`). `shared/device/` separado de `telemetry/`, con reglas `no-restricted-imports`. Vitest con entorno `node` por defecto: las specs con DOM llevan `// @vitest-environment jsdom`, y un `[Vue warn]` hace fallar la prueba.
+- **Observabilidad:** alertas `ScanDiscardedByServer` y `ScanDiscardBudgetExhausted`; `KioskDiscardedScansAttributed` excluye `source="server"` y cuenta la serie que nace en 1; runbook `cola-offline-atascada.md` §11.
+- **Pendiente:**
+  - ejecutar en la tablet real el guion de resistencia de 12 h (`alta-nuevo-quiosco.md` §4.5) y medir el primer fichaje en frío;
+  - desvincular no vacía la cola (regla 19); recuperar filas cifradas con la clave perdida sería otra tarea;
+  - `PairingView` aún no usa `useLocalePolicy()`.
+
+Lo que conviene saber del bloque 16 (#201):
 
 - **Acento legible:** una sola regla de oscurecido (`HexColor::darkenedUntil` en PHP, `accentTextOn`/`adjustUntil` en web-kit, redondeando antes de medir) atada por `backend/tests/Fixtures/accent-text-on-white.json`. La tarjeta y la hoja pintan el texto con el acento oscurecido sobre blanco y la decoración con el acento tal cual; el nombre de la tarjeta va a 8 pt (caben ~18 mayúsculas). Marca enseña siempre el tono de pantalla y el de papel. `AccentContrastPolicy` (aviso y 422) sigue midiendo 2 superficies.
 - **Tema:** `primary-strong` por omisión `#b0502a` (el acento de serie del catálogo sigue siendo `#b8542a`); deshabilitados con suelo de 1,5:1. `usedPairs.spec` barre las plantillas de las tres SPA y web-kit y exige que cada pareja usada (con estados hover, active, disabled y `aria-disabled`) esté medida en `themePairs.ts` y docs/06 §2. `no-literal-colors` detecta nombres de color, `color-mix()`, `<style>` y hex en comentarios. Gráficos con colores del tema y patrones por serie.
@@ -226,7 +237,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** si el bloque 16 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 17 (quiosco, rama `fix/quiosco-2.3.0`), marcando ✅ el título del bloque 16 en su primer commit.
+**Siguiente acción:** si el bloque 17 no está integrado, PR y merge con la CI en verde. Después, sin preguntar, el bloque 18 (una sola lógica en web-kit, rama `refactor/web-kit-una-sola-logica`), marcando ✅ el título del bloque 17 en su primer commit.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
