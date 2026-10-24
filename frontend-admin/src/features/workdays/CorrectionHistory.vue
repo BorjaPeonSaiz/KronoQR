@@ -11,12 +11,7 @@
 // quedaron escritas en el libro de correcciones. Se convierten aqui con la zona
 // del centro, que viaja en la respuesta, y nunca con la del navegador (regla
 // dura 3). La zona va escrita al lado.
-import {
-  formatCivilDate,
-  formatInstant,
-  formatZoneLabel,
-  readLocalTimestamp,
-} from '@kronoqr/web-kit/datetime'
+import { formatInstant, formatLocalDateTime, formatZoneLabel } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -54,11 +49,12 @@ function duration(minutes: number): string {
 
 /** El momento de la correccion, ya resuelto por el servidor: aqui solo se lee. */
 function performedAt(correction: WorkDayCorrection): string {
-  const parts = readLocalTimestamp(correction.performed_at_local)
-
-  return parts === null
-    ? instant(correction.performed_at)
-    : `${formatCivilDate(parts.date, locale.value)}, ${parts.time}`
+  return formatLocalDateTime(
+    correction.performed_at_local,
+    correction.performed_at,
+    props.timeZone,
+    locale.value,
+  )
 }
 
 type MarkField = 'in' | 'out' | 'closedBy' | 'worked' | 'version'

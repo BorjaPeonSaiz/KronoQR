@@ -150,10 +150,10 @@ describe('ShiftEntryTable', () => {
     expect(wrapper.text()).toContain(es.workdays.entries.nextDay)
   })
 
-  it('señala el tramo fichado en un centro con otra zona horaria', async () => {
+  it('no enseña sufijo de zona: el centro es unico y fijo (RN-23, ADR-040)', async () => {
     const wrapper = await mountTable([shiftEntry({ time_zone: 'Atlantic/Canary' })], 485)
 
-    expect(wrapper.text()).toContain('Atlantic/Canary')
+    expect(wrapper.text()).not.toContain('Atlantic/Canary')
   })
 
   it('un dia sin tramos vigentes se explica, en vez de dejar una tabla vacia', async () => {

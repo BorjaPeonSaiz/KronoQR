@@ -8,6 +8,7 @@ import {
   formatDayMonthTime,
   formatInstant,
   formatInstantWithZone,
+  formatLocalDateTime,
   formatLocalTime,
   formatTimeOfDay,
   formatUtcTime,
@@ -253,5 +254,24 @@ describe('minutesBetween: la regla de ElapsedMinutes del servidor', () => {
   it('trunca hacia cero si la segunda marca es anterior, sin un -0', () => {
     expect(minutesBetween('2026-10-07T10:00:30Z', '2026-10-07T10:00:00Z')).toBe(0)
     expect(minutesBetween('2026-10-07T10:01:30Z', '2026-10-07T10:00:00Z')).toBe(-1)
+  })
+})
+
+describe('formatLocalDateTime: el momento de una correccion', () => {
+  it('lee la fecha y la hora que resolvio el servidor, sin convertir', () => {
+    expect(
+      formatLocalDateTime(
+        '2026-03-14T06:00:00.000000+01:00',
+        '2026-03-14T05:00:00.000000Z',
+        'Europe/Madrid',
+        'es',
+      ),
+    ).toBe('14 mar 2026, 06:00')
+  })
+
+  it('sin hora local legible cae al instante en la zona del centro, en 24 h', () => {
+    expect(
+      formatLocalDateTime('no es una hora', '2026-10-08T05:14:00Z', 'Europe/Madrid', 'en'),
+    ).not.toMatch(/AM|PM/)
   })
 })

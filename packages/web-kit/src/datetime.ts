@@ -341,6 +341,26 @@ export function formatLocalTime(value: string): string {
   return readLocalTimestamp(value)?.time ?? ''
 }
 
+/**
+ * Fecha y hora de un `LocalTimestamp` ya resuelto por el servidor (`14 mar 2026,
+ * 06:00`): se lee, no se convierte. Si no se puede leer, cae al instante UTC
+ * convertido a la zona del centro con `formatInstant`. Es el momento de una
+ * correccion en el historial del panel y del portal, que tienen que decir la
+ * misma hora la noche que cambia la hora (C1).
+ */
+export function formatLocalDateTime(
+  localValue: string,
+  utcValue: string,
+  timeZone: string,
+  locale: string,
+): string {
+  const parts = readLocalTimestamp(localValue)
+
+  return parts === null
+    ? formatInstant(utcValue, timeZone, locale)
+    : `${formatCivilDate(parts.date, locale)}, ${parts.time}`
+}
+
 /** `05:00` de un instante UTC, para enseñar la marca tal y como esta almacenada. */
 export function formatUtcTime(value: string): string {
   const instant = parseInstant(value)

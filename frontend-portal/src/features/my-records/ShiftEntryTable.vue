@@ -39,14 +39,12 @@ import { breakBetween } from '@kronoqr/web-kit/breaks'
 import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
   formatDayMonthTime,
-  formatLocalTime,
   formatTimeOfDay,
-  minutesBetween,
-  readLocalTimestamp,
   resolveTimeZone,
   todayInZone,
 } from '@kronoqr/web-kit/datetime'
-import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
+import { durationParts, shiftMark, workDayTotals } from '@kronoqr/web-kit/workdayTotals'
+import type { ShiftMark } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ClockingSource, ShiftEntryStatus, WorkDayShiftEntry } from '@/shared/api/types'
@@ -63,15 +61,9 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-/** A partir de este desfase, la marca no llego en el acto: viajo encolada. */
-const QUEUE_NOTICE_MINUTES = 5
-
-interface MarkView {
-  local: string
-  nextDay: boolean
+interface MarkView extends ShiftMark {
   /** Cuando el servidor recibio la marca (HH:MM en la zona del centro), o `null` si no consta. */
   recordedAt: string | null
-  queueDelayMinutes: number | null
 }
 
 interface EntryRow {
@@ -109,14 +101,11 @@ function receivedMoment(recordedAt: string, markDate: string | null): string | n
 }
 
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
-  const parts = readLocalTimestamp(localValue)
-  const delay = recordedAt === null ? null : minutesBetween(utcValue, recordedAt)
+  const shared = shiftMark(utcValue, localValue, recordedAt, props.workDate)
 
   return {
-    local: formatLocalTime(localValue),
-    nextDay: parts !== null && parts.date !== props.workDate,
-    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, parts?.date ?? null),
-    queueDelayMinutes: delay !== null && delay >= QUEUE_NOTICE_MINUTES ? delay : null,
+    ...shared,
+    recordedAt: recordedAt === null ? null : receivedMoment(recordedAt, shared.date),
   }
 }
 
@@ -141,8 +130,9 @@ const rows = computed<EntryRow[]>(() =>
   }),
 )
 
-const summedMinutes = computed(() => sumShiftMinutes(props.entries))
-const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
+const totals = computed(() =>
+  workDayTotals({ shift_entries: props.entries, total_minutes: props.totalMinutes }),
+)
 
 /** El aviso de cola; sin hora de recepcion legible no se inventa una. */
 function queuedNotice(markView: MarkView): string {
@@ -285,11 +275,11 @@ function duration(minutes: number): string {
               {{ t('myRecords.entries.sum') }}
             </th>
             <td class="px-3 py-2 font-semibold tabular-nums" data-test="summed-total">
-              {{ duration(summedMinutes) }}
+              {{ duration(totals.summed) }}
             </td>
             <td class="px-3 py-2"></td>
           </tr>
-          <tr v-if="!totalsAgree">
+          <tr v-if="!totals.agree">
             <th scope="row" colspan="2" class="px-3 py-2 text-right">
               {{ t('myRecords.entries.declared') }}
             </th>
@@ -303,7 +293,7 @@ function duration(minutes: number): string {
     </div>
 
     <p
-      v-if="!totalsAgree"
+      v-if="!totals.agree"
       data-test="totals-mismatch"
       class="mt-2 rounded-kq border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
     >
