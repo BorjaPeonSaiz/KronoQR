@@ -124,6 +124,13 @@ describe('ADR-047 — un fallo puntual de IndexedDB se arregla reabriendo, sin d
             }
             return real.list(limit)
           },
+          listMeta: async (limit) => {
+            if (!broke) {
+              broke = true
+              throw new Error('InvalidStateError')
+            }
+            return (await real.listMeta?.(limit)) ?? []
+          },
         }
       },
       sleep: async () => undefined,

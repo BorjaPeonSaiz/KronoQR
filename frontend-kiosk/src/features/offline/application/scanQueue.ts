@@ -34,6 +34,8 @@ import { systemClock } from '@/shared/time/clock'
 import { nextAttemptAt } from '../domain/backoff'
 import { orderForSync } from '../domain/queueOrder'
 import type {
+  DiscardedScanMeta,
+  QueuedScanMeta,
   DiscardedScanRecord,
   QueuedScanRecord,
   QueueStorage,
@@ -41,7 +43,14 @@ import type {
 } from '../infrastructure/queueStorage'
 import { createMemoryQueueStorage } from '../infrastructure/queueStorage'
 import type { OverlayQueueStorage } from '../infrastructure/overlayStorage'
-import { createOverlayQueueStorage, OverlayDiskWriteError } from '../infrastructure/overlayStorage'
+import {
+  createOverlayQueueStorage,
+  discardedMetaOf,
+  fetchDiscarded,
+  fetchMany,
+  metaOf,
+  OverlayDiskWriteError,
+} from '../infrastructure/overlayStorage'
 
 /**
  * Techo de filas que se leen de una vez. Con 50 por lote, 500 son diez envios
@@ -163,6 +172,12 @@ export interface ScanQueueOptions {
   readonly openStorage: () => QueueStorage
   readonly clock?: Clock
   readonly onStorageFailure?: (reason: string) => void
+  /**
+   * Hay filas cifradas que no se abren (clave perdida, fila danada). UNA vez por sesion,
+   * con cuantas son. Se conservan en disco y se saltan al formar el lote: no bloquean a
+   * las legibles que tienen detras.
+   */
+  readonly onUnreadable?: (count: number) => void
   /** Inyectable para pruebas: por defecto `setTimeout`. */
   readonly sleep?: (ms: number) => Promise<void>
   readonly reopenDelaysMs?: readonly number[]
@@ -200,6 +215,33 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
    */
   let lastDiskCount: number | null = null
   let lastReopenAt: number | null = null
+  /** Filas cifradas que no se abren. Se saltan; se conservan. Vive lo que la sesion. */
+  const unreadable = new Set<string>()
+  let unreadableReported = false
+
+  /**
+   * Cuantas filas se leen: el techo MAS las ilegibles ya conocidas, que ocupan sitio
+   * en el orden pero no cuentan para el lote. Sin esto, 500 ilegibles delante dejarian
+   * fuera de la ventana a los fichajes nuevos.
+   */
+  function readWindow(): number {
+    return MAX_ROWS_PER_READ + unreadable.size
+  }
+
+  function markUnreadable(ids: readonly string[]): boolean {
+    let added = false
+    for (const id of ids) {
+      if (!unreadable.has(id)) {
+        unreadable.add(id)
+        added = true
+      }
+    }
+    if (added && !unreadableReported) {
+      unreadableReported = true
+      options.onUnreadable?.(unreadable.size)
+    }
+    return added
+  }
   /** Mientras se migra de memoria a disco, ninguna otra operacion toca el almacen. */
   let gate: Promise<void> | null = null
   /** Cola de turnos de reapertura: nunca dos reaperturas a la vez sobre el mismo almacen. */
@@ -370,9 +412,12 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
   async function recompute(): Promise<QueueStats> {
     try {
-      const rows = await run((target) => target.list(MAX_ROWS_PER_READ))
+      // Solo metadatos: no descifra nada (A1). Una fila ilegible no cuenta como cabeza.
+      const rows = (await run((target) => metaOf(target, readWindow()))).filter(
+        (row) => !unreadable.has(row.scan_id),
+      )
       const count = await run((target) => target.count())
-      const discarded = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+      const discarded = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
       const ordered = orderForSync(rows)
       const oldest = ordered[0]
       headId = oldest?.scan_id ?? null
@@ -487,13 +532,6 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       // siga en un disco que no se ve. Sale tras `tryReopen()`, mezclado y en orden.
       if (diskUnknown && !store.durable && lastDiskCount !== 0) return []
       const nowMs = clock.now().getTime()
-      let rows: QueuedScanRecord[]
-      try {
-        rows = await run((target) => target.list(MAX_ROWS_PER_READ))
-      } catch {
-        await recompute()
-        return []
-      }
 
       // G1: el PREFIJO de la cola ordenada, no un filtro. Una fila que espera su
       // reintento (`next_attempt_at` futuro) detiene la lectura: lo que viene
@@ -504,15 +542,53 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       // RN-21: una fila arrendada (la tiene un envio en vuelo) corta el prefijo
       // igual. Saltarla dejaba que un drenaje enviara B mientras A viajaba, y si
       // A acababa en `503`, B ya la habia adelantado.
-      const claimed: QueuedScanRecord[] = []
-      for (const row of orderForSync(rows)) {
-        if (claimed.length >= limit) break
-        if (leased.has(row.scan_id)) break
-        if (claimOptions.ignoreSchedule !== true && row.next_attempt_at > nowMs) break
-        claimed.push(row)
+      //
+      // A1: se ordena y se elige por METADATOS y solo se descifran las filas elegidas. Las
+      // ilegibles se saltan (no cortan el prefijo: no se pueden enviar) y se vuelve a
+      // elegir hasta llenar el lote, de modo que 500 ilegibles delante no bloquean a los
+      // fichajes nuevos. Se recuerdan, asi que solo se intentan abrir una vez.
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        let metas
+        try {
+          metas = await run((target) => metaOf(target, readWindow()))
+        } catch {
+          await recompute()
+          return []
+        }
+
+        const chosen: string[] = []
+        for (const row of orderForSync(metas)) {
+          if (chosen.length >= limit) break
+          if (unreadable.has(row.scan_id)) continue
+          if (leased.has(row.scan_id)) break
+          if (claimOptions.ignoreSchedule !== true && row.next_attempt_at > nowMs) break
+          chosen.push(row.scan_id)
+        }
+        if (chosen.length === 0) return []
+
+        let fetched
+        try {
+          fetched = await run((target) => fetchMany(target, chosen))
+        } catch {
+          await recompute()
+          return []
+        }
+
+        if (markUnreadable(fetched.unreadable)) {
+          // Hay que reelegir sin ellas; y la cabeza publicada ya no puede ser una de ellas.
+          await recompute()
+          continue
+        }
+
+        const byId = new Map(fetched.records.map((record) => [record.scan_id, record]))
+        const claimed = chosen.flatMap((id) => {
+          const record = byId.get(id)
+          return record === undefined ? [] : [record]
+        })
+        for (const row of claimed) leased.add(row.scan_id)
+        return claimed
       }
-      for (const row of claimed) leased.add(row.scan_id)
-      return claimed
+      return []
     },
 
     async confirm(scanIds) {
@@ -548,15 +624,21 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
     async discarded(discardedOptions = {}) {
       const nowMs = clock.now().getTime()
-      let rows: DiscardedScanRecord[]
       try {
-        rows = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+        const metas = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
+        const due = metas
+          .filter(
+            (row) =>
+              !unreadable.has(row.scan_id) &&
+              (discardedOptions.ignoreSchedule === true || row.next_attempt_at <= nowMs),
+          )
+          .map((row) => row.scan_id)
+        const fetched = await run((target) => fetchDiscarded(target, due))
+        markUnreadable(fetched.unreadable)
+        return fetched.records
       } catch {
         return []
       }
-      return discardedOptions.ignoreSchedule === true
-        ? rows
-        : rows.filter((row) => row.next_attempt_at <= nowMs)
     },
 
     async acknowledgeDiscarded(scanIds) {
@@ -576,9 +658,9 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (scanIds.length === 0) return
       const nowMs = (now ?? clock.now()).getTime()
 
-      let rows: DiscardedScanRecord[] = []
+      let rows: DiscardedScanMeta[] = []
       try {
-        rows = await run((target) => target.listDiscarded(MAX_ROWS_PER_READ))
+        rows = await run((target) => discardedMetaOf(target, MAX_ROWS_PER_READ))
       } catch {
         rows = []
       }
@@ -607,9 +689,9 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       if (scanIds.length === 0) return
       const nowMs = (now ?? clock.now()).getTime()
 
-      let rows: QueuedScanRecord[] = []
+      let rows: QueuedScanMeta[] = []
       try {
-        rows = await run((target) => target.list(MAX_ROWS_PER_READ))
+        rows = await run((target) => metaOf(target, readWindow()))
       } catch {
         rows = []
       }
@@ -721,6 +803,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         // Nada que hacer: el recuento se recalcula igual.
       }
       leased.clear()
+      unreadable.clear()
       await recompute()
     },
 

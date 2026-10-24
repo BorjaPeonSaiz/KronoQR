@@ -151,19 +151,20 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     openStorage: () =>
       createDexieQueueStorage(openKioskDatabase(options.databaseName), {
         cipher,
-        onUnreadable: (count) =>
-          reporter.report('kiosk.offline.storage_unavailable', {
-            reason: 'queue_rows_unreadable',
-            count,
-            durable: true,
-            message: 'queue_rows_unreadable',
-          }),
       }),
     onStorageFailure: (reason) =>
       reporter.report('kiosk.offline.storage_unavailable', {
         reason,
         durable: false,
         message: reason,
+      }),
+    // Filas cifradas que no se abren: se conservan, se saltan y se avisa UNA vez por sesion.
+    onUnreadable: (count) =>
+      reporter.report('kiosk.offline.storage_unavailable', {
+        reason: 'queue_rows_unreadable',
+        count,
+        durable: true,
+        message: 'queue_rows_unreadable',
       }),
   })
 

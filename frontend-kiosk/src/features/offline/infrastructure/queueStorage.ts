@@ -130,7 +130,46 @@ export interface EncryptedRosterRecord {
   readonly pin_sealing_public_key: string | null
 }
 
+/**
+ * Lo que la cola necesita de una fila para ORDENARLA y PROGRAMARLA, sin tocar lo
+ * cifrado (A1): ninguno de estos campos es secreto. Leer metadatos no descifra nada.
+ */
+export interface QueuedScanMeta {
+  readonly scan_id: string
+  readonly kind: 'qr' | 'pin'
+  readonly occurred_at: string
+  readonly attempts: number
+  readonly next_attempt_at: number
+}
+
+export interface DiscardedScanMeta {
+  readonly scan_id: string
+  readonly discarded_at: string
+  readonly attempts: number
+  readonly next_attempt_at: number
+}
+
+/** Filas pedidas por `scan_id`: las legibles, y los ids de las cifradas que no se abrieron. */
+export interface FetchedScans {
+  readonly records: QueuedScanRecord[]
+  readonly unreadable: string[]
+}
+
+export interface FetchedDiscarded {
+  readonly records: DiscardedScanRecord[]
+  readonly unreadable: string[]
+}
+
 export interface QueueStorage {
+  /**
+   * Metadatos (sin descifrar) de hasta `limit` filas, por `occurred_at`. OPCIONAL: sin
+   * esto la cola cae a `list()`, que descifra todo.
+   */
+  listMeta?(limit: number): Promise<QueuedScanMeta[]>
+  /** Solo las filas pedidas, descifradas. OPCIONAL, ver `listMeta`. */
+  getMany?(scanIds: readonly string[]): Promise<FetchedScans>
+  listDiscardedMeta?(limit: number): Promise<DiscardedScanMeta[]>
+  getDiscardedMany?(scanIds: readonly string[]): Promise<FetchedDiscarded>
   /** `false` si ya estaba (mismo `scan_id`): encolar dos veces no duplica. */
   add(record: QueuedScanRecord): Promise<boolean>
   /** Hasta `limit` filas, ordenadas por `occurred_at`. */
@@ -190,6 +229,47 @@ export function createMemoryQueueStorage(): QueueStorage {
 
     async count() {
       return rows.size
+    },
+
+    async listMeta(limit) {
+      return (await this.list(limit)).map(
+        ({ scan_id, kind, occurred_at, attempts, next_attempt_at }) => ({
+          scan_id,
+          kind,
+          occurred_at,
+          attempts,
+          next_attempt_at,
+        }),
+      )
+    },
+
+    async getMany(scanIds) {
+      const records: QueuedScanRecord[] = []
+      for (const scanId of scanIds) {
+        const row = rows.get(scanId)
+        if (row !== undefined) records.push(row)
+      }
+      return { records, unreadable: [] }
+    },
+
+    async listDiscardedMeta(limit) {
+      return (await this.listDiscarded(limit)).map(
+        ({ scan_id, discarded_at, attempts, next_attempt_at }) => ({
+          scan_id,
+          discarded_at,
+          attempts,
+          next_attempt_at,
+        }),
+      )
+    },
+
+    async getDiscardedMany(scanIds) {
+      const records: DiscardedScanRecord[] = []
+      for (const scanId of scanIds) {
+        const entry = discarded.get(scanId)
+        if (entry !== undefined) records.push(entry)
+      }
+      return { records, unreadable: [] }
     },
 
     async remove(scanIds) {

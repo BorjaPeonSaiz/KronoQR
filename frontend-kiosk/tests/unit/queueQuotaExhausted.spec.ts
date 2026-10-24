@@ -197,6 +197,10 @@ describe('V2-KI-02 — cuota agotada: lo que esta en disco se envia sin recargar
             if (readsBroken) throw new Error('InvalidStateError')
             return base.list(limit)
           },
+          listMeta: async (limit) => {
+            if (readsBroken) throw new Error('InvalidStateError')
+            return (await base.listMeta?.(limit)) ?? []
+          },
         }
       },
       sleep: async () => undefined,

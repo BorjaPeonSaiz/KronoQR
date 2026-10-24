@@ -26,6 +26,10 @@
 // se comporta como la memoria pura de siempre.
 
 import type {
+  DiscardedScanMeta,
+  FetchedDiscarded,
+  FetchedScans,
+  QueuedScanMeta,
   DiscardedScanRecord,
   EncryptedRosterRecord,
   QueuedScanRecord,
@@ -58,9 +62,59 @@ export interface OverlayOptions {
   readonly onDiskLost?: (reason: unknown) => void
 }
 
-function byOccurredAt(left: QueuedScanRecord, right: QueuedScanRecord): number {
+function byOccurredAt(left: { occurred_at: string }, right: { occurred_at: string }): number {
   if (left.occurred_at === right.occurred_at) return 0
   return left.occurred_at < right.occurred_at ? -1 : 1
+}
+
+/**
+ * Metadatos y filas por id de un almacen, con el rodeo por `list()` si el almacen no
+ * los ofrece (dobles de prueba). Los reutiliza `scanQueue.ts`.
+ */
+export async function metaOf(target: QueueStorage, limit: number): Promise<QueuedScanMeta[]> {
+  if (target.listMeta !== undefined) return target.listMeta(limit)
+  return (await target.list(limit)).map((row) => ({
+    scan_id: row.scan_id,
+    kind: row.kind,
+    occurred_at: row.occurred_at,
+    attempts: row.attempts,
+    next_attempt_at: row.next_attempt_at,
+  }))
+}
+
+export async function fetchMany(
+  target: QueueStorage,
+  scanIds: readonly string[],
+): Promise<FetchedScans> {
+  if (scanIds.length === 0) return { records: [], unreadable: [] }
+  if (target.getMany !== undefined) return target.getMany(scanIds)
+  const wanted = new Set(scanIds)
+  const rows = await target.list(Number.MAX_SAFE_INTEGER)
+  return { records: rows.filter((row) => wanted.has(row.scan_id)), unreadable: [] }
+}
+
+export async function discardedMetaOf(
+  target: QueueStorage,
+  limit: number,
+): Promise<DiscardedScanMeta[]> {
+  if (target.listDiscardedMeta !== undefined) return target.listDiscardedMeta(limit)
+  return (await target.listDiscarded(limit)).map((entry) => ({
+    scan_id: entry.scan_id,
+    discarded_at: entry.discarded_at,
+    attempts: entry.attempts,
+    next_attempt_at: entry.next_attempt_at,
+  }))
+}
+
+export async function fetchDiscarded(
+  target: QueueStorage,
+  scanIds: readonly string[],
+): Promise<FetchedDiscarded> {
+  if (scanIds.length === 0) return { records: [], unreadable: [] }
+  if (target.getDiscardedMany !== undefined) return target.getDiscardedMany(scanIds)
+  const wanted = new Set(scanIds)
+  const rows = await target.listDiscarded(Number.MAX_SAFE_INTEGER)
+  return { records: rows.filter((row) => wanted.has(row.scan_id)), unreadable: [] }
 }
 
 export function createOverlayQueueStorage(
@@ -141,6 +195,68 @@ export function createOverlayQueueStorage(
         memory.count(),
       ])
       return fromDisk + fromMemory
+    },
+
+    async listMeta(limit) {
+      const [fromDisk, fromMemory] = await Promise.all([
+        readDisk<QueuedScanMeta[]>([], () => metaOf(disk, limit)),
+        metaOf(memory, limit),
+      ])
+      const seen = new Set(fromDisk.map((row) => row.scan_id))
+      return [...fromDisk, ...fromMemory.filter((row) => !seen.has(row.scan_id))]
+        .sort(byOccurredAt)
+        .slice(0, limit)
+    },
+
+    async getMany(scanIds) {
+      const inMemory = await memoryIds()
+      const mine = scanIds.filter((id) => inMemory.has(id))
+      const onDisk = scanIds.filter((id) => !inMemory.has(id))
+      const fromMemory = await fetchMany(memory, mine)
+      const fromDisk = await readDisk<FetchedScans>({ records: [], unreadable: [] }, () =>
+        fetchMany(disk, onDisk),
+      )
+      const byId = new Map(
+        [...fromMemory.records, ...fromDisk.records].map((row) => [row.scan_id, row]),
+      )
+      return {
+        records: scanIds.flatMap((id) => {
+          const row = byId.get(id)
+          return row === undefined ? [] : [row]
+        }),
+        unreadable: [...fromMemory.unreadable, ...fromDisk.unreadable],
+      }
+    },
+
+    async listDiscardedMeta(limit) {
+      const [fromDisk, fromMemory] = await Promise.all([
+        readDisk<DiscardedScanMeta[]>([], () => discardedMetaOf(disk, limit)),
+        discardedMetaOf(memory, limit),
+      ])
+      const seen = new Set(fromDisk.map((entry) => entry.scan_id))
+      return [...fromDisk, ...fromMemory.filter((entry) => !seen.has(entry.scan_id))]
+        .sort((left, right) => (left.discarded_at < right.discarded_at ? -1 : 1))
+        .slice(0, limit)
+    },
+
+    async getDiscardedMany(scanIds) {
+      const inMemory = await discardedMemoryIds()
+      const mine = scanIds.filter((id) => inMemory.has(id))
+      const onDisk = scanIds.filter((id) => !inMemory.has(id))
+      const fromMemory = await fetchDiscarded(memory, mine)
+      const fromDisk = await readDisk<FetchedDiscarded>({ records: [], unreadable: [] }, () =>
+        fetchDiscarded(disk, onDisk),
+      )
+      const byId = new Map(
+        [...fromMemory.records, ...fromDisk.records].map((row) => [row.scan_id, row]),
+      )
+      return {
+        records: scanIds.flatMap((id) => {
+          const row = byId.get(id)
+          return row === undefined ? [] : [row]
+        }),
+        unreadable: [...fromMemory.unreadable, ...fromDisk.unreadable],
+      }
     },
 
     async remove(scanIds) {

@@ -347,6 +347,56 @@ export function createDexieQueueStorage(
       return db.scans.count()
     },
 
+    async listMeta(limit) {
+      // Sin descifrar ni esperar a la migracion: solo campos en claro (A1).
+      const rows = await db.scans.orderBy('occurred_at').limit(limit).toArray()
+      return rows.map((row) => ({
+        scan_id: row.scan_id,
+        kind: row.kind ?? 'qr',
+        occurred_at: row.occurred_at,
+        attempts: row.attempts,
+        next_attempt_at: row.next_attempt_at,
+      }))
+    },
+
+    async getMany(scanIds) {
+      await ready()
+      const rows = await db.scans.bulkGet([...scanIds])
+      const records: QueuedScanRecord[] = []
+      const unreadable: string[] = []
+      for (const row of rows) {
+        if (row === undefined) continue
+        const record = await openQueued(row)
+        if (record === null) unreadable.push(row.scan_id)
+        else records.push(record)
+      }
+      return { records, unreadable }
+    },
+
+    async listDiscardedMeta(limit) {
+      const rows = await db.discarded.orderBy('discarded_at').limit(limit).toArray()
+      return rows.map((row) => ({
+        scan_id: row.scan_id,
+        discarded_at: row.discarded_at,
+        attempts: row.attempts,
+        next_attempt_at: row.next_attempt_at,
+      }))
+    },
+
+    async getDiscardedMany(scanIds) {
+      await ready()
+      const rows = await db.discarded.bulkGet([...scanIds])
+      const records: DiscardedScanRecord[] = []
+      const unreadable: string[] = []
+      for (const row of rows) {
+        if (row === undefined) continue
+        const entry = await openDiscarded(row)
+        if (entry === null) unreadable.push(row.scan_id)
+        else records.push(entry)
+      }
+      return { records, unreadable }
+    },
+
     async remove(scanIds) {
       if (scanIds.length === 0) return
       await db.transaction('rw', db.scans, async () => {
