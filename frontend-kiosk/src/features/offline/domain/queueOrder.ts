@@ -48,12 +48,13 @@ interface HasKind {
 }
 
 /**
- * Trocea una lista YA ORDENADA por `occurred_at` en tramos maximos de la misma
+ * Trocea una lista YA ORDENADA por `occurred_at` en rachas maximas de la misma
  * `kind` (tarea 1.12). Existe porque `POST /api/v1/scan/pin` no tiene una
  * variante de lote: un QR y un PIN encolados sin red no pueden viajar en la
  * misma llamada, pero SI tienen que aplicarse en el mismo orden en que
- * ocurrieron (§6, «orden correcto»). El drenaje procesa un tramo entero antes
- * de pasar al siguiente, nunca al reves.
+ * ocurrieron (§6, «orden correcto»). El drenaje procesa una racha entera antes
+ * de pasar a la siguiente, nunca al reves. «Racha» y no «tramo»: en el glosario,
+ * «tramo» es `ShiftEntry` (V1-RV-04).
  */
 export function splitRuns<T extends HasKind>(records: readonly T[]): T[][] {
   const runs: T[][] = []

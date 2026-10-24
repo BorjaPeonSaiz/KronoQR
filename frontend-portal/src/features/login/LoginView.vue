@@ -15,6 +15,7 @@ import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
+import { isValidPinShape, PIN_MAX_LENGTH } from '@kronoqr/web-kit/pinShape'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -22,8 +23,6 @@ import { useBrandingStore } from '@/shared/branding/branding.store'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNotice from '@/shared/ui/PrivacyNotice.vue'
 import { useSessionStore } from './session.store'
-
-const PIN_PATTERN = /^\d{6,8}$/
 
 const { t } = useI18n()
 const route = useRoute()
@@ -94,7 +93,7 @@ const canSubmit = computed(
     !submitting.value &&
     !isLocked.value &&
     employeeCode.value.trim() !== '' &&
-    PIN_PATTERN.test(pin.value),
+    isValidPinShape(pin.value),
 )
 
 const DEFAULT_TARGET = '/records'
@@ -239,7 +238,7 @@ async function submit(): Promise<void> {
             name="pin"
             inputmode="numeric"
             autocomplete="off"
-            maxlength="8"
+            :maxlength="PIN_MAX_LENGTH"
             required
             :aria-describedby="field.describedBy"
             class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg tracking-widest"

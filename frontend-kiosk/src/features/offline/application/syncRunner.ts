@@ -21,16 +21,16 @@
 // va por el lote ordenado. Es la garantia «Orden correcto» aplicada tambien al
 // camino rapido.
 //
-// TRAMOS POR TIPO (tarea 1.12). Un drenaje puede tener QR y PIN entremezclados
+// RACHAS POR TIPO (tarea 1.12). Un drenaje puede tener QR y PIN entremezclados
 // por `occurred_at` — una entrada por tarjeta y una salida por PIN, o al reves.
-// `splitRuns()` los agrupa en tramos maximos de la misma via SIN reordenarlos,
-// y el drenaje procesa un tramo entero (con su llamada de lote o su secuencia
-// de llamadas individuales) antes de tocar el siguiente.
+// `splitRuns()` los agrupa en rachas maximas de la misma via SIN reordenarlos,
+// y el drenaje procesa una racha entera (con su llamada de lote o su secuencia
+// de llamadas individuales) antes de tocar la siguiente.
 //
-// UN TRAMO SOLO «PROGRESA» SI TODOS SUS ELEMENTOS TIENEN DESENLACE (RN-21,
+// UNA RACHA SOLO «PROGRESA» SI TODOS SUS ELEMENTOS TIENEN DESENLACE (RN-21,
 // ADR-047). Si alguno se conserva para reintento —`503`, `ScanHeldBack`, ausente
 // de la respuesta— los decididos se confirman, el resto se aplaza y TODO lo que
-// vendria despues, tramo actual incluido, se aplaza con el mismo retroceso:
+// vendria despues, racha actual incluida, se aplaza con el mismo retroceso:
 // dejar que un PIN mas tardio adelante a un QR varado seria romper exactamente
 // la garantia que esto existe para mantener. Vale tambien contra un servidor
 // anterior que procesara elementos posteriores al fallido: se confirman (estan
@@ -320,7 +320,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   /**
    * `true` solo si TODOS los elementos tienen desenlace terminal (RN-21): `200`,
    * `422` estandar, o descartado con aviso pendiente. Cualquier otra cosa
-   * (`503`, `ScanHeldBack`, ausente) detiene el drenaje en este tramo.
+   * (`503`, `ScanHeldBack`, ausente) detiene el drenaje en esta racha.
    */
   async function sendBatch(records: readonly QueuedQrScanRecord[]): Promise<boolean> {
     const result = await options.api.syncScanBatch({ scans: records.map(toRequest) }, newBatchKey())
@@ -398,7 +398,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
 
     // RN-22: los `422` no estandar se MUEVEN a descartados (no se borran). Si el
-    // movimiento no llega a escribirse, el elemento se conserva y el tramo se detiene.
+    // movimiento no llega a escribirse, el elemento se conserva y la racha se detiene.
     for (const item of discard) {
       const moved = await discardScan(item.record, {
         httpStatus: 422,
@@ -424,7 +424,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       return false
     }
 
-    // El tramo progresa solo si no queda NADA para reintento. Con un `503` (o un
+    // La racha progresa solo si no queda NADA para reintento. Con un `503` (o un
     // elemento ausente) los decididos ya estan confirmados, el resto aplazado, y
     // el drenaje se detiene aqui: nada posterior se envia antes de que ese
     // elemento tenga desenlace.
@@ -432,9 +432,9 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   }
 
   /**
-   * El tramo de PIN: sin variante de lote, cada elemento es su propia llamada a
+   * La racha de PIN: sin variante de lote, cada elemento es su propia llamada a
    * `/scan/pin`, ESPERADA antes de mandar la siguiente. Es lo que impide que un
-   * PIN mas tardio (dentro del mismo tramo) adelante a uno mas temprano que
+   * PIN mas tardio (dentro de la misma racha) adelante a uno mas temprano que
    * todavia no ha tenido respuesta.
    *
    * Tambien es el plan B de un lote QR que el servidor rechaza entero por mal
@@ -488,7 +488,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
             message: result.cause,
           })
         }
-        // Este y los que quedan de ESTE tramo: ninguno se manda antes de saber
+        // Este y los que quedan de ESTA racha: ninguno se manda antes de saber
         // que paso con el que fallo, o el orden se rompe igual que si se
         // hubiera enviado de mas.
         await queue.retryLater(
@@ -516,7 +516,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       }
     }
 
-    // Todos los elementos del tramo tienen desenlace (RN-21).
+    // Todos los elementos de la racha tienen desenlace (RN-21).
     return true
   }
 
@@ -632,7 +632,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
   }
 
-  /** Los fichajes pendientes, en orden y por tramos. Ver la cabecera. */
+  /** Los fichajes pendientes, en orden y por rachas. Ver la cabecera. */
   async function drainScans(initialIgnoreSchedule: boolean): Promise<void> {
     let ignoreSchedule = initialIgnoreSchedule
 
@@ -647,7 +647,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
         return
       }
 
-      // Tramos de la misma via, EN EL ORDEN en que `claim()` ya los entrego
+      // Rachas de la misma via, EN EL ORDEN en que `claim()` ya los entrego
       // (por `occurred_at`, mezclando QR y PIN si hace falta). Ver cabecera.
       const runs = splitRuns(claimed)
       let stalledAt = runs.length
@@ -666,7 +666,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
             )
           : await sendBatch(run as QueuedQrScanRecord[])
 
-        // RN-21: solo se sigue si TODO el tramo tiene desenlace.
+        // RN-21: solo se sigue si TODA la racha tiene desenlace.
         if (!complete) {
           stalledAt = index
           break
@@ -674,7 +674,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       }
 
       if (stalledAt < runs.length) {
-        // El tramo que se atasco ya ha aplazado lo suyo. Lo que viene
+        // La racha que se atasco ya ha aplazado lo suyo. Lo que viene
         // DESPUES en este drenaje todavia no se ha tocado: si no se aplaza
         // tambien, un PIN o un QR mas tardio se reclamaria en la siguiente
         // pasada y adelantaria al que sigue varado.
