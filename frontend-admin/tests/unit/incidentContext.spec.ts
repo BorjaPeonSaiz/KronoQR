@@ -67,7 +67,7 @@ describe('describeIncidentContext', () => {
     })
 
     expect(lines).toEqual([
-      { key: 'occurred_at', text: 'hora del fichaje: 14/3/26, 14:50' },
+      { key: 'occurred_at', text: 'hora del fichaje: 14 mar 2026, 14:50' },
       { key: 'scan_id', text: 'identificador del escaneo: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90' },
       { key: 'scans', text: 'escaneos fuera de orden: 2' },
     ])
@@ -83,7 +83,7 @@ describe('describeIncidentContext', () => {
     })
 
     expect(lines).toEqual([
-      { key: 'occurred_at', text: 'hora del fichaje: 14/3/26, 8:02' },
+      { key: 'occurred_at', text: 'hora del fichaje: 14 mar 2026, 08:02' },
       { key: 'scan_id', text: 'identificador del escaneo: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91' },
       { key: 'attempts', text: 'intentos por PIN sin registrar: 4' },
       { key: 'lockout_attempts', text: 'de ellos, con el PIN bloqueado: 2' },
@@ -134,8 +134,8 @@ describe('describeIncidentContext', () => {
         },
         { key: 'coincidence_days', text: 'Días con coincidencia: 5 de un mínimo de 3' },
         { key: 'window_seconds', text: 'Ventana aplicada: 10 s o menos entre los dos fichajes' },
-        { key: 'first_coincidence_at', text: 'primera coincidencia: 10/3/26, 6:00' },
-        { key: 'last_coincidence_at', text: 'última coincidencia: 14/3/26, 6:02' },
+        { key: 'first_coincidence_at', text: 'primera coincidencia: 10 mar 2026, 06:00' },
+        { key: 'last_coincidence_at', text: 'última coincidencia: 14 mar 2026, 06:02' },
         // `last_gap_seconds` NO es un maximo: es el hueco del ultimo dia, que
         // puede ser mayor que el mas estrecho de toda la serie (aqui, 4 s
         // frente a los 3 s mas ajustados que se vieron en algun dia anterior).
@@ -227,8 +227,8 @@ describe('describeIncidentContext', () => {
         { key: 'to_device_name', text: 'quiosco de destino: Cocina' },
         // Con segundos (decision 14): sin ellos, 45 s de diferencia se leerian
         // como la misma hora, que es exactamente lo que RN-16 no puede decir.
-        { key: 'first_occurred_at', text: 'primer fichaje: 14/3/26, 14:50:00' },
-        { key: 'second_occurred_at', text: 'segundo fichaje: 14/3/26, 14:50:45' },
+        { key: 'first_occurred_at', text: 'primer fichaje: 14 mar 2026, 14:50:00' },
+        { key: 'second_occurred_at', text: 'segundo fichaje: 14 mar 2026, 14:50:45' },
         {
           key: 'gap_seconds',
           text: 'Intervalo entre los dos fichajes: 45 s (mínimo de tránsito: 120 s)',

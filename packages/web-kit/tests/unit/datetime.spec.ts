@@ -276,14 +276,18 @@ describe('formatLocalDateTime: el momento de una correccion', () => {
   })
 })
 
-describe('formatInstant: un solo formateador de instantes (V21-1-RV-3)', () => {
-  it('en ingles tambien escribe 24 h, con y sin segundos', () => {
+describe('formatInstant: un solo formateador de instantes', () => {
+  it('escribe la hora HH:MM de 24 h y el mes con letras, en los dos idiomas', () => {
     const value = '2026-10-08T05:14:03Z'
 
-    expect(formatInstant(value, 'Europe/Madrid', 'en')).toContain('07:14')
-    expect(formatInstant(value, 'Europe/Madrid', 'en')).not.toMatch(/AM|PM/)
-    expect(formatInstant(value, 'Europe/Madrid', 'en', { seconds: true })).toContain('07:14:03')
-    expect(formatInstant(value, 'Europe/Madrid', 'en', { seconds: true })).not.toMatch(/AM|PM/)
+    expect(formatInstant(value, 'Europe/Madrid', 'es')).toBe('8 oct 2026, 07:14')
+    expect(formatInstant(value, 'Europe/Madrid', 'en')).toBe('Oct 8, 2026, 07:14')
+    expect(formatInstant(value, 'Europe/Madrid', 'es', { seconds: true })).toBe(
+      '8 oct 2026, 07:14:03',
+    )
+    expect(formatInstant(value, 'Europe/Madrid', 'en', { seconds: true })).toBe(
+      'Oct 8, 2026, 07:14:03',
+    )
   })
 
   it('sin segundos salvo que se pidan', () => {

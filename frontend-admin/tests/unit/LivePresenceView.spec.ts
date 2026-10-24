@@ -242,7 +242,7 @@ describe('LivePresenceView', () => {
       expect(notice.attributes('role')).toBe('status')
       expect(notice.text()).toBe(
         es.live.notice.poll
-          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{moment}', '14 mar 2026, 10:12')
           .replace('{zone}', 'Europe/Madrid'),
       )
       expect(notice.attributes('aria-live')).toBe('polite')
@@ -308,7 +308,7 @@ describe('LivePresenceView', () => {
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('role')).toBe('status')
       expect(wrapper.find('[data-test="refresh-notice"]').text()).toBe(
         es.live.notice.realtime
-          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{moment}', '14 mar 2026, 10:12')
           .replace('{zone}', 'Europe/Madrid'),
       )
 
@@ -449,7 +449,7 @@ describe('LivePresenceView', () => {
       expect(transport.text()).toBe(es.live.transport.live)
       expect(wrapper.find('[data-test="channel-contact"]').text()).toBe(
         es.live.counts.contact
-          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{moment}', '14 mar 2026, 10:12')
           .replace('{zone}', 'Europe/Madrid'),
       )
 

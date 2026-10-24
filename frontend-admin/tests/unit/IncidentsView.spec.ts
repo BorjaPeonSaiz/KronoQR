@@ -40,7 +40,7 @@ describe('IncidentsView', () => {
     expect(wrapper.findAll('[data-test="incident-row"]')).toHaveLength(1)
     // 08:00 UTC son las 09:00 en Europe/Madrid en marzo, sea cual sea la zona del navegador.
     expect(wrapper.find('[data-test="read-at"]').text()).toBe(
-      es.incidents.refresh.readAt.replace('{moment}', '15/3/26, 9:00 (Europe/Madrid)'),
+      es.incidents.refresh.readAt.replace('{moment}', '15 mar 2026, 09:00 (Europe/Madrid)'),
     )
 
     wrapper.unmount()
@@ -167,7 +167,7 @@ describe('IncidentsView', () => {
 
     expect(notice.attributes('data-kind')).toBe('refresh')
     expect(notice.attributes('role')).toBe('status')
-    expect(notice.text()).toContain('15/3/26, 9:00 (Europe/Madrid)')
+    expect(notice.text()).toContain('15 mar 2026, 09:00 (Europe/Madrid)')
     expect(wrapper.findAll('[data-test="incident-row"]')).toHaveLength(1)
     expect(wrapper.find('[data-test="read-at"]').text()).toContain('9:00')
 

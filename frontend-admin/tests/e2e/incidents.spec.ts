@@ -199,7 +199,7 @@ test(
     // como numero simple.
     await row.getByTestId('resolve-button').click()
     const dialog = page.getByRole('dialog', { name: 'Cerrar incidencia' })
-    await expect(dialog).toContainText('hora del fichaje: 14/3/26, 14:50')
+    await expect(dialog).toContainText('hora del fichaje: 14 mar 2026, 14:50')
     await expect(dialog).toContainText(
       `identificador del escaneo: ${String(OUT_OF_ORDER_INCIDENT.context['scan_id'])}`,
     )
@@ -234,8 +234,8 @@ test(
     // admite escalares, ADR-012): el primer y el ultimo dia de la serie, y el
     // hueco mas estrecho de la serie frente al del ultimo dia -que NO es un
     // maximo (decision 13 de la segunda vuelta)-.
-    await expect(dialog).toContainText('primera coincidencia: 10/3/26')
-    await expect(dialog).toContainText('última coincidencia: 14/3/26')
+    await expect(dialog).toContainText('primera coincidencia: 10 mar 2026')
+    await expect(dialog).toContainText('última coincidencia: 14 mar 2026')
     await expect(dialog).toContainText('Hueco más estrecho de la serie: 3 s · último día: 4 s')
 
     // El indicio nunca califica: ninguna palabra de acusacion en el detalle.
@@ -302,8 +302,8 @@ test(
     await expect(dialog).toContainText('quiosco de destino: Cocina')
     // Con segundos (decision 14): sin ellos los 45 s de diferencia se leerian
     // como la misma hora dos veces.
-    await expect(dialog).toContainText('primer fichaje: 14/3/26, 14:50:00')
-    await expect(dialog).toContainText('segundo fichaje: 14/3/26, 14:50:45')
+    await expect(dialog).toContainText('primer fichaje: 14 mar 2026, 14:50:00')
+    await expect(dialog).toContainText('segundo fichaje: 14 mar 2026, 14:50:45')
     await expect(dialog).toContainText(
       'Intervalo entre los dos fichajes: 45 s (mínimo de tránsito: 120 s)',
     )

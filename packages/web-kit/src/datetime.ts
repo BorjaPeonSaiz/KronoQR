@@ -184,11 +184,16 @@ export interface InstantWithSecondsOptions extends InstantFormatOptions {
 }
 
 /**
- * Un instante UTC en la zona del centro: fecha y hora con minutos, sin segundos
- * ni decimales salvo que se pidan. Nunca redondea nada hacia arriba. El orden de
- * la fecha lo da el idioma; el reloj es de 24 h salvo que se pida otra cosa
- * (V21-1-RV-3). Es el UNICO formateador de instantes con fecha de las SPA:
- * `incidentContext.ts` y la pantalla de diagnostico del quiosco tenian copias.
+ * Un instante UTC en la zona del centro: `8 oct 2026, 07:14` (`Oct 8, 2026,
+ * 07:14` en ingles), sin segundos ni decimales salvo que se pidan. Nunca
+ * redondea nada hacia arriba. Es el unico formateador de instantes con fecha
+ * de las SPA, y su forma la decidio el propietario el 24-10-2026:
+ *
+ *  - la hora siempre `HH:MM` de 24 h, la misma que las marcas de los tramos:
+ *    `dateStyle`/`timeStyle` escriben `7:14` en espanol y no se pueden poner
+ *    al lado de un `07:14` que se contrasta con una nomina;
+ *  - el mes con letras, como `formatCivilDate`: `10/8/26` es el 8 de octubre
+ *    en ingles y el 10 de agosto en espanol, y quien lee no sabe cual.
  */
 export function formatInstant(
   value: string,
@@ -204,8 +209,12 @@ export function formatInstant(
 
   return new Intl.DateTimeFormat(locale, {
     timeZone,
-    dateStyle: 'short',
-    timeStyle: options.seconds === true ? 'medium' : 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(options.seconds === true ? { second: '2-digit' } : {}),
     hourCycle: options.hourCycle ?? 'h23',
   }).format(instant)
 }
