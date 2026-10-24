@@ -1462,7 +1462,7 @@
     "noPerson": {
       "label": "Fichaje sin persona en {device}",
       "unknownDevice": "un quiosco desconocido",
-      "at": "Fichaje a las {moment}"
+      "at": "Fichaje del {moment}"
     },
     "title": "Bandeja de incidencias",
     "subtitle": "Lo que del registro horario tiene que mirar una persona. Resolver una incidencia no cambia ninguna hora: si hay que rectificar un tramo, se hace desde el registro horario de la persona.",

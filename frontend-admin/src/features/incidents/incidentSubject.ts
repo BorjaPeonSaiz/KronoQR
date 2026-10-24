@@ -7,8 +7,14 @@ import type { Incident } from '@/shared/api/types'
 
 type Translate = (key: string, named?: Record<string, unknown>) => string
 
-/** Identificador corto del quiosco, o `null` si el contexto no lo trae. */
+/** El quiosco: su nombre (`context.device_name`) o, sin el, el prefijo de su uuid; `null` si no hay ninguno. */
 export function incidentDevice(incident: Incident): string | null {
+  const name = incident.context['device_name']
+
+  if (typeof name === 'string' && name.trim() !== '') {
+    return name.trim()
+  }
+
   const uuid = incident.context['device_uuid']
 
   return typeof uuid === 'string' && uuid !== '' ? `${uuid.slice(0, 8)}…` : null

@@ -67,9 +67,33 @@ describe('IncidentsView', () => {
     const cell = wrapper.find('[data-test="incident-employee"]')
 
     expect(cell.text()).toContain('Fichaje sin persona en 0199f3c9…')
-    expect(cell.text()).toContain('Fichaje a las')
+    expect(cell.text()).toContain('Fichaje del')
     expect(wrapper.find('[data-test="incident-row"] a').exists()).toBe(false)
     expect(wrapper.find('[data-test="resolve-button"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('con context.device_name usa el nombre del quiosco; sin el, el uuid; sin ninguno, «desconocido»', async () => {
+    collection = incidentCollection([
+      incident({
+        id: 902,
+        employee: null,
+        context: { device_name: 'Recepción', device_uuid: '0199f3c9-1b7d' },
+      }),
+      incident({ id: 903, employee: null, context: { device_uuid: '0199f3c9-1b7d-7a44' } }),
+      incident({ id: 904, employee: null, context: {} }),
+    ])
+    const wrapper = await mountView(IncidentsView)
+    await settle()
+
+    const cells = wrapper.findAll('[data-test="incident-no-person"]').map((cell) => cell.text())
+
+    expect(cells).toEqual([
+      'Fichaje sin persona en Recepción',
+      'Fichaje sin persona en 0199f3c9…',
+      'Fichaje sin persona en un quiosco desconocido',
+    ])
 
     wrapper.unmount()
   })

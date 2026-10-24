@@ -1462,7 +1462,7 @@
     "noPerson": {
       "label": "Scan without a person at {device}",
       "unknownDevice": "an unknown kiosk",
-      "at": "Scan at {moment}"
+      "at": "Scan on {moment}"
     },
     "title": "Incident inbox",
     "subtitle": "What in the time record needs a person to look at it. Resolving an incident does not change any hour: if a shift entry needs correcting, that is done from the person's time record.",
