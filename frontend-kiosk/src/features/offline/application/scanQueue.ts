@@ -29,6 +29,7 @@
 // viene detras no puede adelantar a un envio que todavia no ha tenido desenlace.
 
 import type { QueuedScan } from '@/features/scan/application/ports'
+import type { QueueStorageKind } from '@/shared/telemetry/queueStorageKind'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { nextAttemptAt } from '../domain/backoff'
@@ -66,8 +67,7 @@ export const REOPEN_DELAYS_MS: readonly number[] = [0, 250]
 /** Como mucho una vez por minuto se intenta volver al disco desde memoria. */
 export const RECOVERY_INTERVAL_MS = 60_000
 
-/** Donde esta guardando la tablet su cola ahora mismo (`queue_storage` del latido). */
-export type QueueStorageKind = 'durable' | 'memory' | 'unavailable'
+export type { QueueStorageKind }
 
 export interface QueueStats {
   /**

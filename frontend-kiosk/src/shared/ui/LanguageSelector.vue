@@ -16,7 +16,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import type { AppLocale } from '@/shared/i18n'
-import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES } from '@/shared/i18n'
+import { isSupportedLocale, SUPPORTED_LOCALES } from '@/shared/i18n'
 
 const props = defineProps<{ policy?: LocalePolicy }>()
 
@@ -39,23 +39,20 @@ function select(next: AppLocale): void {
   apply(next)
 }
 
-// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar.
-// Dos casos, ninguno guarda nada (no es una eleccion de nadie):
-//   - el idioma activo ya no se ofrece: se recalcula (con uno solo, ese);
-//   - la politica cambia y no hay eleccion guardada: se recalcula con el
-//     navegador, como en el arranque.
-// Una eleccion guardada que sigue ofrecida no se toca.
+// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar. Solo se
+// recalcula el idioma si el ACTIVO deja de ofrecerse (con uno solo, ese). Una politica
+// nueva que sigue ofreciendo el idioma activo no lo toca: pisaria la eleccion que una
+// persona acaba de hacer a media confirmacion. La vuelta al idioma de serie la hace
+// `useLocaleResetAfterScan` al terminar el fichaje.
 watch(
   options,
-  (next, previous) => {
-    const current = isSupportedLocale(locale.value) && next.includes(locale.value)
-    const changed = previous !== undefined
-    if (current && !(changed && readStoredLocale() === null)) return
+  (next) => {
+    if (isSupportedLocale(locale.value) && next.includes(locale.value)) return
     apply(
       resolveUiLocale<AppLocale>({
         policy: effectivePolicy.value,
         shipped: SUPPORTED_LOCALES,
-        stored: readStoredLocale(),
+        stored: null,
         browser: typeof navigator === 'undefined' ? [] : navigator.languages,
       }),
     )

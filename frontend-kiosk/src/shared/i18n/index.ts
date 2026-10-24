@@ -55,16 +55,6 @@ export function readStoredLocale(storage: Storage | null = safeStorage()): AppLo
   }
 }
 
-export function storeLocale(locale: AppLocale, storage: Storage | null = safeStorage()): void {
-  if (storage === null) return
-  try {
-    storage.setItem(LOCALE_STORAGE_KEY, locale)
-  } catch {
-    // Almacenamiento lleno o deshabilitado: se pierde la preferencia, no el
-    // idioma. Nada que un empleado delante de la tablet tenga que sufrir.
-  }
-}
-
 /**
  * Con un unico idioma ofrecido (`branding.locales.available`, de serie `[es]`),
  * ese y nada mas: ni la eleccion guardada ni el navegador lo cambian. Con

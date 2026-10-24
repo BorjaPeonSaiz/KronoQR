@@ -191,7 +191,7 @@ describe('selector de idioma', () => {
     expect(wrapper.findAll('button')).toHaveLength(2)
   })
 
-  it('cuando la marca abre un segundo idioma sin eleccion guardada, vuelve a seguir al navegador (RF-KI-05)', async () => {
+  it('cuando la marca abre un segundo idioma, el idioma activo NO se toca: la vuelta al de serie es de useLocaleResetAfterScan (D9)', async () => {
     const i18n = createAppI18n('es')
     const wrapper = mount(LanguageSelector, {
       props: { policy: SPANISH_ONLY },
@@ -202,9 +202,21 @@ describe('selector de idioma', () => {
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
     await wrapper.setProps({ policy: BILINGUAL })
 
-    expect(i18n.global.locale.value).toBe('en')
+    expect(i18n.global.locale.value).toBe('es')
     expect(readStoredLocale()).toBeNull()
     vi.restoreAllMocks()
+  })
+
+  it('una politica nueva que sigue ofreciendo el idioma elegido no lo pisa a media confirmacion', async () => {
+    const i18n = createAppI18n('en')
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: BILINGUAL },
+      global: { plugins: [i18n] },
+    })
+
+    await wrapper.setProps({ policy: { default: 'es', available: ['en', 'es'] } })
+
+    expect(i18n.global.locale.value).toBe('en')
   })
 
   it('con una eleccion guardada, abrir un segundo idioma no la pisa (RF-KI-05)', async () => {

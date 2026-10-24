@@ -7,7 +7,7 @@
 // `window.__KRONOQR_ENABLE_TEST_HOOKS__` ANTES de que arranque la
 // aplicacion, mismo patron que `pairDevice`/`stubKioskApi` con
 // `page.addInitScript`) para forzar «hay version pendiente» y dejar que la
-// puerta real (`canApply`, `features/offline/domain/updateWindow.ts`) y el
+// puerta real (`canApply`, `shared/update/updateWindow.ts`) y el
 // temporizador de reintento (`registerServiceWorker.ts`) decidan.
 //
 // Sin `update_window` en el latido (`stubKioskApi` no lo declara), el

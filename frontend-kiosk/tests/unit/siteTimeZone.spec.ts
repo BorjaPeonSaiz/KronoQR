@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
 import type { KioskHeartbeat } from '@/shared/api/types'
-import { isWithinUpdateWindow, canApplyUpdate } from '@/features/offline/domain/updateWindow'
+import { isWithinUpdateWindow, canApplyUpdate } from '@/shared/update/updateWindow'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
 import { greetingSlotFor } from '@/features/scan/domain/greeting'
 import { readSiteTimeZone, storeSiteTimeZone } from '@/shared/device/deviceSettings'

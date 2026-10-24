@@ -84,3 +84,37 @@ describe('el idioma vuelve al de serie tras cada fichaje (D9)', () => {
     expect(readStoredLocale()).toBeNull()
   })
 })
+
+describe('una sola fuente para la politica de idiomas', () => {
+  it('useLocalePolicy lee la copia de la marca y se actualiza cuando llega una marca nueva', async () => {
+    const { useLocalePolicy, useBranding } = await import('@/shared/branding/useBranding')
+    localStorage.setItem(
+      'kronoqr.kiosk.branding',
+      JSON.stringify({
+        application_name: 'KronoQR',
+        accent_color: null,
+        logo_url: null,
+        locales: { default: 'es', available: ['es', 'en'] },
+        privacy_notice: { controller_name: null, policy_url: null },
+      }),
+    )
+
+    const policy = useLocalePolicy()
+    expect(policy.value.available).toEqual(['es', 'en'])
+
+    // Una marca nueva del servidor, con un solo idioma.
+    const next = {
+      application_name: 'KronoQR',
+      accent_color: null,
+      logo_url: null,
+      locales: { default: 'es', available: ['es'] },
+      privacy_notice: { controller_name: null, policy_url: null },
+    }
+    useBranding({
+      api: { fetchBranding: async () => ({ outcome: 'ok', data: next }) } as never,
+    })
+    await vi.waitFor(() => expect(policy.value.available).toEqual(['es']))
+    // Otra pantalla que la pide despues ve la MISMA politica.
+    expect(useLocalePolicy().value.available).toEqual(['es'])
+  })
+})

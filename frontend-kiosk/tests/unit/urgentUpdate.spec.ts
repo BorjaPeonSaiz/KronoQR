@@ -2,7 +2,7 @@
 // Registro de intentos del modo urgente (RF-KI-07): sobrevive a un disco que se niega a escribir.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/features/offline/domain/minimumVersion'
+import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/shared/update/minimumVersion'
 import {
   currentUrgentGiveUpMotive,
   currentUrgentUpdateMode,

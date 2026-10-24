@@ -25,7 +25,7 @@
 // misma frase que la banda de `ScanView`.
 
 import { clockSkewSeconds } from '@/shared/telemetry/heartbeat'
-import { exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
+import { exceedsClockSkewTolerance } from '@/shared/time/clockSkewMessage'
 import type { ScanConfirmation } from '../domain/scanOutcome'
 import type { ScanSubmissionResult } from './ports'
 

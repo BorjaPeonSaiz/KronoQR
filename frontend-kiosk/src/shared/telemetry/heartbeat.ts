@@ -24,13 +24,13 @@
 
 import type { ApiClient } from '@/shared/api/client'
 import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/types'
-import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
+import type { QueueStorageKind } from './queueStorageKind'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
-import { exceedsClockSkewTolerance } from '@/features/scan/domain/clockSkewMessage'
-import { isValidUpdateWindow } from '@/features/offline/domain/updateWindow'
-import { parseMinimumVersionFromHeartbeatData } from '@/features/offline/domain/minimumVersion'
-import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
+import { exceedsClockSkewTolerance } from '@/shared/time/clockSkewMessage'
+import { isValidUpdateWindow } from '@/shared/update/updateWindow'
+import { parseMinimumVersionFromHeartbeatData } from '@/shared/update/minimumVersion'
+import type { UpdateWindow } from '@/shared/update/updateWindow'
 import {
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,

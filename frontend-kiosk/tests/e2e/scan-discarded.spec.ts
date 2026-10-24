@@ -48,7 +48,7 @@ async function queueOneScanThenServe(page: import('@playwright/test').Page, type
 
 test(
   'un `scan-discarded` del servidor saca el fichaje de la cola sin avisar ni abrir descartado propio',
-  { tag: ['@RF-KI-03', '@RF-KI-04', '@RQ-05'] },
+  { tag: ['@RF-KI-03', '@RF-KI-04', '@RQ-05', '@RN-22'] },
   async ({ page }) => {
     const { reports, sent } = await queueOneScanThenServe(
       page,
@@ -64,7 +64,7 @@ test(
 
 test(
   'un `422` de lote que no es estandar va a descartados y se avisa al servidor (RN-22)',
-  { tag: ['@RF-KI-03', '@RF-KI-04', '@RQ-05'] },
+  { tag: ['@RF-KI-03', '@RF-KI-04', '@RQ-05', '@RN-22'] },
   async ({ page }) => {
     const { reports, sent } = await queueOneScanThenServe(page, 'urn:kronoqr:problem:algo-nuevo')
 

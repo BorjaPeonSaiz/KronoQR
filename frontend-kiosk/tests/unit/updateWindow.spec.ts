@@ -13,7 +13,7 @@ import {
   isValidUpdateWindow,
   isWithinUpdateWindow,
   URGENT_MIN_QUIET_MINUTES,
-} from '@/features/offline/domain/updateWindow'
+} from '@/shared/update/updateWindow'
 
 /** Hora LOCAL de la tablet: es la del reloj de la pared la que trae la cola de gente. */
 const at = (hour: number, minute: number): Date => new Date(2026, 7, 14, hour, minute, 0)

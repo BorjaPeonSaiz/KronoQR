@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  DEFAULT_UPDATE_QUIET_MINUTES,
-  DEFAULT_UPDATE_WINDOW,
-} from '@/features/offline/domain/updateWindow'
+import { DEFAULT_UPDATE_QUIET_MINUTES, DEFAULT_UPDATE_WINDOW } from '@/shared/update/updateWindow'
 import {
   persistPairedDevice,
   readDeviceName,

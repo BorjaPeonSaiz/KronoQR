@@ -34,7 +34,7 @@ import {
   type LocalePolicy,
   type PrivacyNotice,
 } from '@kronoqr/web-kit/branding'
-import { readonly, ref, watch, type Ref } from 'vue'
+import { readonly, ref, shallowRef, watch, type Ref } from 'vue'
 import { createApiClient, type ApiClient } from '@/shared/api/client'
 import type { ConnectivityController } from '@/shared/connectivity/useConnectivity'
 
@@ -100,6 +100,19 @@ export function readCachedLocalePolicy(): LocalePolicy {
   return (readCachedBranding() ?? PRODUCT_BRANDING).locales
 }
 
+/**
+ * La politica de idiomas VIGENTE de la tablet: UNA sola fuente para el selector y para la
+ * vuelta al idioma de serie, en `ScanView` y en `PinView`. Arranca con la copia guardada y
+ * cambia cuando `useBranding` recibe una marca nueva del servidor.
+ */
+const localePolicy = shallowRef<LocalePolicy>(readCachedLocalePolicy())
+
+export function useLocalePolicy(): Readonly<Ref<LocalePolicy>> {
+  // La copia pudo cambiar desde que se creo el modulo (pruebas, otra pantalla).
+  localePolicy.value = readCachedLocalePolicy()
+  return localePolicy
+}
+
 export interface UseBrandingOptions {
   /** Por defecto, un cliente propio: la marca es publica y no necesita el de `ScanView`. */
   readonly api?: ApiClient
@@ -137,6 +150,7 @@ export function useBranding(options: UseBrandingOptions = {}): BrandingControlle
       current.value = parsed
       applyBranding(parsed, { mode: 'kiosk' })
       writeCachedBranding(result.data)
+      localePolicy.value = parsed.locales
     } catch {
       // Nunca debe llegar hasta aqui (el cliente HTTP no lanza), pero un
       // fallo de la marca jamas puede tumbar la pantalla de fichaje.

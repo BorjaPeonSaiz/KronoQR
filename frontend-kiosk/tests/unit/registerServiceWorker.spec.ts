@@ -16,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterSWLoader } from '@/sw/registerServiceWorker'
 import { isUpdatePending, registerServiceWorker } from '@/sw/registerServiceWorker'
-import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/features/offline/domain/minimumVersion'
+import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/shared/update/minimumVersion'
 import {
   currentUrgentGiveUpMotive,
   currentUrgentUpdateMode,

@@ -37,6 +37,7 @@ import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
+import { useLocalePolicy } from '@/shared/branding/useBranding'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
@@ -139,7 +140,8 @@ const session = useScanSessionWithCleanup({
   sound,
 })
 // D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
-useLocaleResetAfterScan(session.confirmation)
+const localePolicy = useLocalePolicy()
+useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
 type Step = 'code' | 'pin' | 'submitting'
 const step = ref<Step>('code')
@@ -357,7 +359,7 @@ onUnmounted(() => {
         :pending-count="connectivity.pendingCount.value"
         :syncing="offline.syncing.value"
       />
-      <LanguageSelector />
+      <LanguageSelector :policy="localePolicy" />
     </header>
 
     <section class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-10">

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  clockSkewMinutesFrom,
-  exceedsClockSkewTolerance,
-} from '@/features/scan/domain/clockSkewMessage'
+import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '@/shared/time/clockSkewMessage'
 
 describe('clockSkewMinutesFrom', () => {
   it('redondea a minutos y dice "adelantada" con desfase positivo', () => {

@@ -15,6 +15,28 @@ import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
 
+const MOVED_FROM_TELEMETRY = {
+  group: [
+    '**/telemetry/deviceIdentity',
+    '**/telemetry/deviceSettings',
+    '**/telemetry/tokenRotation',
+  ],
+  message:
+    'La identidad, los ajustes y la rotacion del token del dispositivo viven en `shared/device/` (R1-RV-06), no en `shared/telemetry/`.',
+}
+
+const SHARED_NOT_FEATURES = {
+  group: ['@/features/*', '**/features/*'],
+  message:
+    '`shared/` no importa de `features/`: es la capa de abajo. Lo que comparten las dos va en `shared/`.',
+}
+
+const DEVICE_NOT_TELEMETRY = {
+  group: ['@/shared/telemetry/*', '**/telemetry/*'],
+  message:
+    '`shared/device/` no depende de `shared/telemetry/` (R1-RV-06): el latido usa la identidad del dispositivo, no al reves.',
+}
+
 export default defineConfigWithVueTs(
   {
     name: 'kronoqr/files-to-lint',
@@ -77,6 +99,37 @@ export default defineConfigWithVueTs(
           message:
             '`new Promise((resolve) => setTimeout(resolve, N))` es un `sleep()` con otro nombre y el doc 02 §3.5 lo prohibe igual: el temporizador no espera a nada, solo deja pasar el tiempo. Espera por condicion: `await expect.poll(() => ...)`, `await expect(async () => { ... }).toPass()`, `page.waitForResponse`/`waitForRequest`, o `page.clock` si lo que hace falta es que la PAGINA crea que ha pasado el tiempo. Si el reloj es legitimo —un doble que simula un servidor lento, no una espera— la excepcion se declara con `// eslint-disable-next-line no-restricted-syntax -- <motivo>` justo encima, con el motivo escrito en esa MISMA linea.',
         },
+      ],
+    },
+  },
+  // R1-RV-06 y limites entre capas. `no-restricted-imports` no se acumula entre bloques
+  // que casan el mismo fichero (gana el ultimo), asi que cada bloque repite lo anterior.
+  {
+    // Nadie importa los modulos que se sacaron de `shared/telemetry/`: la identidad y los
+    // ajustes del dispositivo viven en `shared/device/`.
+    name: 'kronoqr/limites-telemetria-movida',
+    files: ['src/**/*.{ts,vue}', 'tests/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [MOVED_FROM_TELEMETRY] }],
+    },
+  },
+  {
+    // `shared/` es la capa de abajo: no conoce las features que la usan.
+    name: 'kronoqr/shared-no-importa-features',
+    files: ['src/shared/**/*.{ts,vue}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [MOVED_FROM_TELEMETRY, SHARED_NOT_FEATURES] }],
+    },
+  },
+  {
+    // `shared/device/` (identidad, token, ajustes) esta por debajo del latido: `telemetry/`
+    // la usa, nunca al reves.
+    name: 'kronoqr/device-no-depende-de-telemetria',
+    files: ['src/shared/device/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [MOVED_FROM_TELEMETRY, SHARED_NOT_FEATURES, DEVICE_NOT_TELEMETRY] },
       ],
     },
   },

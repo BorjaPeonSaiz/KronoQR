@@ -11,14 +11,14 @@
 // es registro legal sin escribir y va a IndexedDB.
 
 import { isValidTimeZone } from '@kronoqr/web-kit/datetime'
-import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
+import type { UpdateWindow } from '@/shared/update/updateWindow'
 import {
   DEFAULT_UPDATE_QUIET_MINUTES,
   DEFAULT_UPDATE_WINDOW,
   isValidUpdateWindow,
-} from '@/features/offline/domain/updateWindow'
-import type { UrgentUpdateAttempts } from '@/features/offline/domain/minimumVersion'
-import { isUrgentUpdateAttempts } from '@/features/offline/domain/minimumVersion'
+} from '@/shared/update/updateWindow'
+import type { UrgentUpdateAttempts } from '@/shared/update/minimumVersion'
+import { isUrgentUpdateAttempts } from '@/shared/update/minimumVersion'
 import { deviceStorage } from './deviceStorage'
 
 /**

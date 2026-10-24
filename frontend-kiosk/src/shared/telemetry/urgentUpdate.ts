@@ -3,7 +3,7 @@
 // Une tres cosas que viven en sitios distintos: la version minima que declaro
 // el ultimo latido (`deviceIdentity.ts`), la version de esta PWA (`APP_VERSION`)
 // y lo ya intentado (recargas y comprobaciones sin version nueva). La decision
-// pura esta en `features/offline/domain/minimumVersion.ts`; aqui solo se lee el
+// pura esta en `shared/update/minimumVersion.ts`; aqui solo se lee el
 // disco y se avisa a quien escucha (el registro del service worker, `sw/`),
 // porque el latido lo crean tres pantallas y el service worker se registra en
 // `main.ts`.
@@ -19,13 +19,13 @@ import {
   urgentGiveUpReason,
   urgentUpdateState as decideUrgentUpdateMode,
   withoutUrgentChecks,
-} from '@/features/offline/domain/minimumVersion'
+} from '@/shared/update/minimumVersion'
 import type {
   MinimumVersionReading,
   UrgentGiveUpMotive,
   UrgentUpdateAttempts,
   UrgentUpdateMode,
-} from '@/features/offline/domain/minimumVersion'
+} from '@/shared/update/minimumVersion'
 import { APP_VERSION } from '@/shared/device/deviceIdentity'
 import {
   readMinimumAppVersion,

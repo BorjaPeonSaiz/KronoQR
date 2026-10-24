@@ -49,7 +49,7 @@ service worker es el logotipo, porque sus bytes no caben en `localStorage`.
 La franja YA NO esta en el codigo: la declara el centro (`KIOSK_UPDATE_WINDOW`,
 `KIOSK_UPDATE_QUIET_MINUTES` en `installation_settings`) y viaja en cada latido
 (`KioskHeartbeat.update_window`), cacheada en `shared/device/deviceSettings.ts` para que
-la puerta funcione sin red. `features/offline/domain/updateWindow.ts` -> `canApplyUpdate` es
+la puerta funcione sin red. `shared/update/updateWindow.ts` -> `canApplyUpdate` es
 verdadera solo si la cola esta vacia, no hubo ningun escaneo en los ultimos `quiet_minutes`
 minutos, y la hora LOCAL de la tablet cae dentro de la ventana (que puede cruzar la
 medianoche). Sin configuracion recibida todavia, la ventana de serie es `03:00-05:00` con 10
@@ -70,7 +70,7 @@ espera hasta que la puerta lo aplica, o hasta que no queda ninguna pestaña del 
 ## Actualizacion urgente (RF-KI-07, 2.2.1)
 
 Desde la 2.2.1 el latido trae `minimum_app_version` (nucleo X.Y.Z de la version del
-servidor). `features/offline/domain/minimumVersion.ts` la compara por nucleo con
+servidor). `shared/update/minimumVersion.ts` la compara por nucleo con
 `APP_VERSION` (`2.2.1-dev` frente a `2.2.1` no es desfasada) y, si la tablet va por debajo,
 entra en **modo urgente** (`shared/telemetry/urgentUpdate.ts`):
 

@@ -23,7 +23,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { markInteraction } from '@/features/offline/application/interactionGuard'
-import { useBranding } from '@/shared/branding/useBranding'
+import { useBranding, useLocalePolicy } from '@/shared/branding/useBranding'
 import { useLocaleResetAfterScan } from '@/shared/i18n/useLocaleReset'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import { APP_VERSION, clearDeviceToken, resolveDeviceId } from '@/shared/device/deviceIdentity'
@@ -42,7 +42,7 @@ import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 import { createMalformedReadReporter } from '../application/malformedReadReporter'
 import { createScanPipeline } from '../application/scanPipeline'
-import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
+import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '@/shared/time/clockSkewMessage'
 import { useQrScanner } from '../composables/useQrScanner'
 import { useBreakIntent } from '../composables/useBreakIntent'
 import { usePinSealingStatus } from '@/features/pin/composables/usePinSealingStatus'
@@ -178,7 +178,8 @@ const session = useScanSessionWithCleanup({
 })
 
 // D9 (V7-KI-05): el idioma elegido vale para ese fichaje, no para la tablet.
-useLocaleResetAfterScan(session.confirmation, () => branding.current.value.locales)
+const localePolicy = useLocalePolicy()
+useLocaleResetAfterScan(session.confirmation, () => localePolicy.value)
 
 const scanner = useQrScanner({
   video,
@@ -319,7 +320,7 @@ onUnmounted(() => {
              pulsacion larga de 3 s (RF-KI-08, tarea 3.3, decision 8). Nunca
              compite con el fichaje: una pulsacion corta no hace nada. -->
         <ClockDiagnosticsTrigger />
-        <LanguageSelector :policy="branding.current.value.locales" />
+        <LanguageSelector :policy="localePolicy" />
       </div>
     </header>
 
