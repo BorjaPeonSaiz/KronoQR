@@ -275,3 +275,18 @@ describe('formatLocalDateTime: el momento de una correccion', () => {
     ).not.toMatch(/AM|PM/)
   })
 })
+
+describe('formatInstant: un solo formateador de instantes (V21-1-RV-3)', () => {
+  it('en ingles tambien escribe 24 h, con y sin segundos', () => {
+    const value = '2026-10-08T05:14:03Z'
+
+    expect(formatInstant(value, 'Europe/Madrid', 'en')).toContain('07:14')
+    expect(formatInstant(value, 'Europe/Madrid', 'en')).not.toMatch(/AM|PM/)
+    expect(formatInstant(value, 'Europe/Madrid', 'en', { seconds: true })).toContain('07:14:03')
+    expect(formatInstant(value, 'Europe/Madrid', 'en', { seconds: true })).not.toMatch(/AM|PM/)
+  })
+
+  it('sin segundos salvo que se pidan', () => {
+    expect(formatInstant('2026-10-08T05:14:03Z', 'Europe/Madrid', 'es')).not.toContain(':03')
+  })
+})

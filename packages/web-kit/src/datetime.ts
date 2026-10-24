@@ -174,16 +174,27 @@ export interface InstantFormatOptions {
   readonly hourCycle?: HourCycle
 }
 
+export interface InstantWithSecondsOptions extends InstantFormatOptions {
+  /**
+   * Con segundos (`14:50:03`), solo donde hacen falta para leer el dato: dos
+   * fichajes a 45 s de distancia (RN-16) o la pantalla de diagnostico del
+   * quiosco. Por omision no, porque el registro se lee en minutos.
+   */
+  readonly seconds?: boolean
+}
+
 /**
  * Un instante UTC en la zona del centro: fecha y hora con minutos, sin segundos
- * ni decimales. Nunca redondea nada hacia arriba. El orden de la fecha lo da el
- * idioma; el reloj es de 24 h salvo que se pida otra cosa.
+ * ni decimales salvo que se pidan. Nunca redondea nada hacia arriba. El orden de
+ * la fecha lo da el idioma; el reloj es de 24 h salvo que se pida otra cosa
+ * (V21-1-RV-3). Es el UNICO formateador de instantes con fecha de las SPA:
+ * `incidentContext.ts` y la pantalla de diagnostico del quiosco tenian copias.
  */
 export function formatInstant(
   value: string,
   timeZone: string,
   locale: string,
-  options: InstantFormatOptions = {},
+  options: InstantWithSecondsOptions = {},
 ): string {
   const instant = parseInstant(value)
 
@@ -194,7 +205,7 @@ export function formatInstant(
   return new Intl.DateTimeFormat(locale, {
     timeZone,
     dateStyle: 'short',
-    timeStyle: 'short',
+    timeStyle: options.seconds === true ? 'medium' : 'short',
     hourCycle: options.hourCycle ?? 'h23',
   }).format(instant)
 }

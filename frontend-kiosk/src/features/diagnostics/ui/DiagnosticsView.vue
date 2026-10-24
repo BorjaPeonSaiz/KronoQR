@@ -48,7 +48,7 @@ import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/device/tokenRotation'
-import { resolveTimeZone } from '@kronoqr/web-kit/datetime'
+import { formatInstant, resolveTimeZone } from '@kronoqr/web-kit/datetime'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'
 import type { QueueStats } from '@/features/offline/application/scanQueue'
@@ -391,18 +391,18 @@ const updateStatusText = computed(() => {
     : t('diagnostics.values.updateUpToDate')
 })
 
-function formatInstant(iso: string | null): string {
+/**
+ * Un instante con segundos y en 24 h, con el formateador de web-kit: el reloj de
+ * esta pantalla ya era `07:14` y la fecha decia `7:14:03 AM` en ingles
+ * (V21-1-RV-3). En la zona del CENTRO, la misma del reloj que abre esta
+ * pantalla; sin zona conocida (aun sin latido), la de la tablet.
+ */
+function instantLabel(iso: string | null): string {
   if (iso === null) return t('diagnostics.values.notAvailable')
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return t('diagnostics.values.notAvailable')
-  // En la zona del CENTRO, la misma del reloj que abre esta pantalla; sin zona
-  // conocida (aun sin latido), la de la tablet.
-  const timeZone = resolveTimeZone(readSiteTimeZone())
-  return new Intl.DateTimeFormat(locale.value, {
-    dateStyle: 'short',
-    timeStyle: 'medium',
-    ...(timeZone === undefined ? {} : { timeZone }),
-  }).format(parsed)
+  const timeZone =
+    resolveTimeZone(readSiteTimeZone()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  const label = formatInstant(iso, timeZone, locale.value, { seconds: true })
+  return label === '' ? t('diagnostics.values.notAvailable') : label
 }
 
 /**
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
             {{ yesNo(snapshot.network.reachable) }}
           </dd>
           <dt>{{ t('diagnostics.rows.network.lastHeartbeat') }}</dt>
-          <dd>{{ formatInstant(snapshot.network.lastHeartbeat?.beatAt ?? null) }}</dd>
+          <dd>{{ instantLabel(snapshot.network.lastHeartbeat?.beatAt ?? null) }}</dd>
           <dt>{{ t('diagnostics.rows.network.clockSkew') }}</dt>
           <dd>
             {{
@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
             {{ snapshot.queue.size ?? t('diagnostics.values.unknown') }}
           </dd>
           <dt>{{ t('diagnostics.rows.queue.oldest') }}</dt>
-          <dd>{{ formatInstant(snapshot.queue.oldestOccurredAt) }}</dd>
+          <dd>{{ instantLabel(snapshot.queue.oldestOccurredAt) }}</dd>
           <dt>{{ t('diagnostics.rows.queue.storage') }}</dt>
           <dd data-testid="diagnostics-queue-storage">
             {{ t('diagnostics.values.' + snapshot.queue.storage) }}
@@ -693,7 +693,7 @@ onBeforeUnmount(() => {
         </p>
         <dl v-else class="text-confirm-sm grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
           <dt>{{ t('diagnostics.rows.roster.generatedAt') }}</dt>
-          <dd>{{ formatInstant(snapshot.roster.generatedAt) }}</dd>
+          <dd>{{ instantLabel(snapshot.roster.generatedAt) }}</dd>
           <dt>{{ t('diagnostics.rows.roster.entries') }}</dt>
           <dd>{{ snapshot.roster.entryCount }}</dd>
           <dt>{{ t('diagnostics.rows.roster.pinAvailable') }}</dt>
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
               {{ snapshot.token.shortId ?? t('diagnostics.values.notAvailable') }}
             </dd>
             <dt>{{ t('diagnostics.rows.token.expiresAt') }}</dt>
-            <dd>{{ formatInstant(snapshot.token.expiresAt) }}</dd>
+            <dd>{{ instantLabel(snapshot.token.expiresAt) }}</dd>
             <dt>{{ t('diagnostics.rows.token.deviceId') }}</dt>
             <dd>{{ snapshot.deviceId }}</dd>
             <dt>{{ t('diagnostics.rows.token.deviceName') }}</dt>

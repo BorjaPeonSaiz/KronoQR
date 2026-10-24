@@ -9,7 +9,12 @@
 // LAS HORAS SE MUESTRAN EN LA ZONA DEL CENTRO, con la zona escrita en la
 // cabecera (regla dura 3). El tiempo transcurrido se calcula contra el reloj del
 // servidor que entrega el store, nunca contra el del navegador.
-import { formatZoneLabel, minutesBetween, todayInZone } from '@kronoqr/web-kit/datetime'
+import {
+  formatTimeOfDay,
+  formatZoneLabel,
+  minutesBetween,
+  todayInZone,
+} from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -59,16 +64,6 @@ const zoneLabel = computed(() =>
     : props.timeZone,
 )
 
-const timeFormatter = computed(
-  () =>
-    new Intl.DateTimeFormat(locale.value, {
-      timeZone: props.timeZone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }),
-)
-
 function clockedInLabel(entry: LivePresenceEntry): string {
   if (entry.clocked_in_at === null) {
     return t('live.table.notInside')
@@ -81,14 +76,10 @@ function clockedInLabel(entry: LivePresenceEntry): string {
   }
 
   const sameDay =
-    new Intl.DateTimeFormat('en-CA', { timeZone: props.timeZone, dateStyle: 'short' }).format(
-      instant,
-    ) ===
-    new Intl.DateTimeFormat('en-CA', { timeZone: props.timeZone, dateStyle: 'short' }).format(
-      new Date(props.serverNowMs),
-    )
+    todayInZone(props.timeZone, instant) ===
+    todayInZone(props.timeZone, new Date(props.serverNowMs))
 
-  const time = timeFormatter.value.format(instant)
+  const time = formatTimeOfDay(entry.clocked_in_at, props.timeZone, locale.value)
 
   return sameDay ? time : t('live.table.previousDay', { time })
 }

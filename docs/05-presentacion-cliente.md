@@ -41,7 +41,7 @@ El resultado habitual es una hoja de papel en recepción, horas apuntadas a mano
    > **Buenos días, Lucía — Entrada 07:02**
    con un sonido de confirmación distinto para entrada, para salida y para error, que suena en cuanto el servidor lo confirma. Si en ese momento la tablet no tiene conexión, el fichaje se guarda igual, la pantalla lo dice y suena un tono de «guardado».
 3. Al salir, vuelve a pasar la tarjeta:
-   > **Hasta luego, Lucía — Salida 15:02 · Hoy: 8 h 0 min**
+   > **Hasta luego, Lucía — Salida 15:02 · Hoy: 8 h 00 min**
 
 Si ese día tiene jornada partida, simplemente pasa la tarjeta cada vez que entra y cada vez que sale. El sistema cuenta todos los tramos.
 

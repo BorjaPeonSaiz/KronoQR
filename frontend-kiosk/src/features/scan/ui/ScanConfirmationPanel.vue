@@ -31,7 +31,7 @@ import { clockSkewMinutesFrom } from '@/shared/time/clockSkewMessage'
 import { greetingSlotFor } from '../domain/greeting'
 import type { ConfirmationVariant, ScanConfirmation } from '../domain/scanOutcome'
 import { isArrival, variantFor } from '../domain/scanOutcome'
-import { splitWorkedMinutes } from '../domain/workedTime'
+import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 
 const props = withDefaults(
   defineProps<{ confirmation: ScanConfirmation; branding?: Branding }>(),
@@ -162,7 +162,7 @@ const total = computed(() => {
   const confirmation = props.confirmation
   if (confirmation.kind !== 'accepted' && confirmation.kind !== 'debounced') return null
 
-  const worked = splitWorkedMinutes(confirmation.workedMinutes)
+  const worked = durationParts(confirmation.workedMinutes)
   return t('scan.todayTotal', {
     duration: t('scan.duration', { hours: worked.hours, minutes: worked.minutes }),
   })

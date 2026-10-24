@@ -88,28 +88,13 @@ function shortUuid(uuid: string): string {
 }
 
 /**
- * Un instante UTC en la zona del centro, con SEGUNDOS (a diferencia de
- * `formatInstant`, que los omite a proposito para el resto de la bandeja).
- * `impossible_sequence` (RN-16) los necesita: un salto de 45 s entre dos
- * fichajes se lee como la misma hora con precision de minuto, y sin segundos
+ * Un instante UTC en la zona del centro, con SEGUNDOS (el resto de la bandeja
+ * los omite). `impossible_sequence` (RN-16) los necesita: un salto de 45 s entre
+ * dos fichajes se lee como la misma hora con precision de minuto, y sin segundos
  * la frase parece decir que los dos momentos son identicos cuando no lo son.
  */
 function formatInstantWithSeconds(value: string, timeZone: string, locale: string): string {
-  const instant = new Date(value)
-
-  if (Number.isNaN(instant.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    year: '2-digit',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(instant)
+  return formatInstant(value, timeZone, locale, { seconds: true })
 }
 
 /**

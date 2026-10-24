@@ -1014,7 +1014,7 @@ Escenario: Cierre de turno con acumulado
   Cuando escanea su tarjeta a las 11:02
   Entonces el tramo se cierra con 240 minutos
   Y el total diario consolidado es de 360 minutos
-  Y el quiosco muestra "Hasta luego, Lucía — Salida 11:02 · Hoy: 6 h 0 min"
+  Y el quiosco muestra "Hasta luego, Lucía — Salida 11:02 · Hoy: 6 h 00 min"
 
 Escenario: Turno nocturno que cruza la medianoche
   Dado un empleado "Marc" que ficha entrada el día 14 a las 22:00
