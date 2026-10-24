@@ -89,7 +89,18 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 17 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #202; el 17 es `main` `ffb1cab8`, CI de `main` en verde). **Bloque 18** en curso (`refactor/web-kit-una-sola-logica`).
+**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 17 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #202; el 17 es `main` `ffb1cab8`, CI de `main` en verde). **Bloque 18** (`refactor/web-kit-una-sola-logica`): 18.1–18.5 ✅; CI manual y revisiones en curso.
+
+Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
+
+- **Minutos:** `minutesBetween` trunca cada marca al segundo, como `ElapsedMinutes`. Los casos compartidos están en `backend/tests/Fixtures/elapsed-minutes.json`, que leen `ElapsedMinutesFixtureTest` y `datetime.spec.ts`.
+- **Tramos:** `shiftMark`, `QUEUE_NOTICE_MINUTES` y `workDayTotals` (web-kit) los usan el panel, el portal y `PeriodSummary`; `formatLocalDateTime` sustituye los dos `performedAt`. El panel ya no enseña la zona de otro centro.
+- **Formatos:** `formatInstant(…, { seconds: true })` es el único formateador de instantes con fecha, en 24 h también en inglés. **Decisión del propietario (24-10):** los minutos van con dos cifras en todo el producto, también el quiosco («Hoy: 6 h 00 min»); doc 01 §11 y doc 05 §2 ya lo dicen así.
+- **PIN:** `web-kit/pinShape.ts`, atado a `PortalLoginRequest.pin.pattern` por `pinShape.spec.ts`.
+- **Comentarios (decisión del propietario, 24-10):** `kronoqr-comments/no-plan-references` prohíbe en `src/**` de las tres SPA y web-kit «bloque N», «tarea N.N», «hallazgo X», vueltas de revisión e ids de verificación (los cortos, solo cuando se citan); 627 comentarios limpiados. Los requisitos, ADR, reglas duras y versiones siguen permitidos (doc 02 §3.5). **Formato de instantes (decisión del 24-10):** `formatInstant` = «8 oct 2026, 07:14».
+- **Pendiente:**
+  - las descripciones de `openapi.yaml` aún citan «bloque N» (llegan a los `schema.d.ts`, que la regla excluye);
+  - quedan ids en dos cadenas `message`/`reason` de los `eslint.config.js` (código, no comentarios); `H-07` (amenaza del doc 07) se permite.
 
 Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
 
