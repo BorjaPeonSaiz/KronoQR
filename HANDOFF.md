@@ -91,7 +91,16 @@ Lo que se aprobó con el plan:
 
 **Estado de la 2.3.0 (24-10-2026):** bloques 0 a 18 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19** en curso (`refactor/deuda-backend-2.3.0`).
 
-Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
+Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
+
+- **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` en Reporting, comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
+- **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
+- **Pendiente:**
+  - nota de actualización de la 2.3.0: un trabajo de `BroadcastPresenceChange` en cola con el nombre viejo `ShiftCorrected` falla al deserializarse (solo la presencia en vivo);
+  - `ExportedShiftEntry` con enums (resto de H5) y seis `new DateTimeImmutable($fecha.' 00:00:00')` del dominio a `createFromFormat('!…')` (19.4);
+  - Redis local con el AOF corrupto: Feature/Integration/Contract solo en la CI hasta que el propietario decida repararlo.
+
+$1(decisiones en Engram `2.3.0/b18-decisiones`):
 
 - **Minutos:** `minutesBetween` trunca cada marca al segundo, como `ElapsedMinutes`. Los casos compartidos están en `backend/tests/Fixtures/elapsed-minutes.json`, que leen `ElapsedMinutesFixtureTest` y `datetime.spec.ts`.
 - **Tramos:** `shiftMark`, `QUEUE_NOTICE_MINUTES` y `workDayTotals` (web-kit) los usan el panel, el portal y `PeriodSummary`; `formatLocalDateTime` sustituye los dos `performedAt`. El panel ya no enseña la zona de otro centro.
