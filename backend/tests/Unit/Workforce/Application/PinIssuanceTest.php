@@ -9,6 +9,7 @@ use App\Modules\Workforce\Application\Port\PinCandidateSource;
 use App\Modules\Workforce\Application\Port\PinPolicy;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\RandomPinCandidateSource;
+use Tests\Support\Workforce\ScriptedPinCandidates;
 
 /*
  * El generador de PIN (RF-ID-09), probado sin base de datos ni framework.
@@ -30,32 +31,11 @@ use App\Modules\Workforce\Infrastructure\Adapter\RandomPinCandidateSource;
  */
 
 /**
- * Una fuente de candidatos que devuelve, en orden, los que se le dan, y anota
- * el maximo que le pidieron. Repite el ultimo cuando se agotan.
- *
  * @param  non-empty-list<int>  $picks
  */
-function candidatosDePin(array $picks): PinCandidateSource
+function candidatosDePin(array $picks): ScriptedPinCandidates
 {
-    return new class($picks) implements PinCandidateSource
-    {
-        public int $calls = 0;
-
-        /** @var list<int> */
-        public array $maximums = [];
-
-        /**
-         * @param  non-empty-list<int>  $picks
-         */
-        public function __construct(private readonly array $picks) {}
-
-        public function pick(int $maximum): int
-        {
-            $this->maximums[] = $maximum;
-
-            return $this->picks[min($this->calls++, \count($this->picks) - 1)];
-        }
-    };
+    return new ScriptedPinCandidates($picks);
 }
 
 /**
