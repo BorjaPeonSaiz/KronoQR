@@ -11,12 +11,12 @@ use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 
 /*
- * Un asiento ya encadenado lleva hashes con la forma del `CHECK` de
- * `audit_log` (RS-07, ADR-010, H5).
+ * Los hashes de un asiento tienen la forma del `CHECK` de `audit_log` (RS-07,
+ * ADR-010, H5), y esa forma se exige **al escribir**: `AuditChain::link`
+ * rechaza un eslabon anterior mal formado y calcula el propio.
  *
- * Un hash truncado o en mayusculas nunca casaria con el recalculado y pareceria
- * una manipulacion; al escribir, seria una fila que la tabla rechaza a
- * destiempo.
+ * Al leer no: una fila con un hash manipulado tras quitar el `CHECK` tiene que
+ * llegar al verificador para que la denuncie en esa fila y siga con las demas.
  */
 
 function asientoDeAuditoriaBorrador(): AuditEntryDraft
@@ -38,19 +38,50 @@ it('acepta el asiento que encadena AuditChain, con y sin identificador', functio
         ->and(new AuditEntry($entry->draft, '', $entry->hash, 2)->previousHash)->toBe('');
 })->group('RS-07');
 
-it('rechaza un hash o un identificador que la tabla no admite', function (string $previous, string $hash, ?int $id): void {
-    expect(static fn (): AuditEntry => new AuditEntry(asientoDeAuditoriaBorrador(), $previous, $hash, $id))
+it('no encadena detras de un eslabon anterior mal formado', function (string $previous): void {
+    expect(static fn (): AuditEntry => AuditChain::link(asientoDeAuditoriaBorrador(), $previous))
+        ->toThrow(InvalidArgumentException::class, 'SHA-256');
+})->with([
+    'vacio' => [''],
+    'truncado' => [str_repeat('a', 63)],
+    'largo' => [str_repeat('a', 65)],
+    'en mayusculas' => [str_repeat('A', 64)],
+    'que no es hexadecimal' => [str_repeat('g', 64)],
+    'con salto de linea' => [str_repeat('a', 64)."\n"],
+    'con salto de linea delante' => ["\n".str_repeat('a', 64)],
+])->group('RS-07');
+
+it('reconoce la forma de un hash de la tabla y nada mas', function (string $hash, bool $wellFormed): void {
+    expect(AuditEntry::isWellFormedHash($hash))->toBe($wellFormed);
+})->with([
+    'la genesis' => [AuditChain::genesisHash(), true],
+    'cifras y letras' => [str_repeat('0123456789abcdef', 4), true],
+    'truncado' => [str_repeat('b', 63), false],
+    'largo' => [str_repeat('b', 65), false],
+    'en mayusculas' => [str_repeat('B', 64), false],
+    'vacio' => ['', false],
+    'con salto de linea' => [str_repeat('b', 64)."\n", false],
+])->group('RS-07');
+
+it('acepta tal cual la fila leida con un hash mal formado, para que el verificador la denuncie', function (string $previous, string $hash): void {
+    // Lanzar aqui cortaba `audit:verify` y la retencion en la primera fila
+    // manipulada, sin informar de ella ni de las siguientes.
+    $entry = new AuditEntry(asientoDeAuditoriaBorrador(), $previous, $hash, 2);
+
+    expect($entry->hash)->toBe($hash)
+        ->and($entry->previousHash)->toBe($previous);
+})->with([
+    'hash truncado' => [str_repeat('a', 64), str_repeat('b', 63)],
+    'hash en mayusculas' => [str_repeat('a', 64), str_repeat('B', 64)],
+    'eslabon anterior truncado' => [str_repeat('a', 10), str_repeat('b', 64)],
+])->group('RS-07');
+
+it('rechaza un identificador que la tabla no admite', function (int $id): void {
+    expect(static fn (): AuditEntry => new AuditEntry(asientoDeAuditoriaBorrador(), str_repeat('a', 64), str_repeat('b', 64), $id))
         ->toThrow(InvalidArgumentException::class);
 })->with([
-    'hash truncado' => [str_repeat('a', 64), str_repeat('b', 63), null],
-    'hash largo' => [str_repeat('a', 64), str_repeat('b', 65), null],
-    'hash en mayusculas' => [str_repeat('a', 64), str_repeat('B', 64), null],
-    'hash vacio' => [str_repeat('a', 64), '', null],
-    'hash con salto de linea' => [str_repeat('a', 64), str_repeat('b', 64)."\n", null],
-    'eslabon anterior truncado' => [str_repeat('a', 10), str_repeat('b', 64), null],
-    'eslabon anterior que no es hexadecimal' => [str_repeat('g', 64), str_repeat('b', 64), null],
-    'identificador cero' => [str_repeat('a', 64), str_repeat('b', 64), 0],
-    'identificador negativo' => [str_repeat('a', 64), str_repeat('b', 64), -1],
+    'identificador cero' => [0],
+    'identificador negativo' => [-1],
 ])->group('RS-07');
 
 it('da el identificador de una entrada escrita, y falla si no lo tiene (R1-AR-03)', function (): void {
