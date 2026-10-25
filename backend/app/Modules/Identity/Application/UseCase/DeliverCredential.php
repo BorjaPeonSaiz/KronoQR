@@ -122,7 +122,7 @@ final readonly class DeliverCredential
                 }
 
                 $this->events->publish(new CredentialDelivered(
-                    credentialId: $delivered->id ?? 0,
+                    credentialId: $delivered->persistedId(),
                     credentialUuid: $delivered->uuid,
                     employeeUuid: $employeeUuid,
                     deliveredByUserId: $command->deliveredByUserId,
@@ -181,7 +181,7 @@ final readonly class DeliverCredential
             $this->credentials->save($revoked);
 
             $this->events->publish(new CredentialRevoked(
-                credentialId: $revoked->id ?? 0,
+                credentialId: $revoked->persistedId(),
                 credentialUuid: $revoked->uuid,
                 employeeUuid: $employeeUuid,
                 reason: $reason,

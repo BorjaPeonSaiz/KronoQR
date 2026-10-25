@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * Una entrada de auditoria ya encadenada: el hecho, el eslabon anterior y el
@@ -44,6 +45,18 @@ final readonly class AuditEntry
         if ($id !== null && $id <= 0) {
             throw new InvalidArgumentException('El identificador de un asiento de auditoria es positivo, y llego '.$id.'.');
         }
+    }
+
+    /**
+     * El identificador de la fila, para señalarla en una rotura de la cadena.
+     * Una entrada leida de la tabla siempre lo trae: sin el, el hallazgo
+     * apuntaria a la fila 0 en lugar de fallar (R1-AR-03).
+     *
+     * @throws LogicException si la entrada todavia no se ha escrito
+     */
+    public function persistedId(): int
+    {
+        return $this->id ?? throw new LogicException('La entrada de auditoria todavia no se ha escrito: no tiene identificador.');
     }
 
     /**

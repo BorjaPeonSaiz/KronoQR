@@ -52,3 +52,10 @@ it('rechaza un hash o un identificador que la tabla no admite', function (string
     'identificador cero' => [str_repeat('a', 64), str_repeat('b', 64), 0],
     'identificador negativo' => [str_repeat('a', 64), str_repeat('b', 64), -1],
 ])->group('RS-07');
+
+it('da el identificador de una entrada escrita, y falla si no lo tiene (R1-AR-03)', function (): void {
+    $entry = AuditChain::link(asientoDeAuditoriaBorrador(), AuditChain::genesisHash());
+
+    expect($entry->withId(8)->persistedId())->toBe(8)
+        ->and(static fn (): int => $entry->persistedId())->toThrow(LogicException::class);
+})->group('RS-07', 'RL-04');

@@ -6,6 +6,7 @@ namespace App\Modules\Product\Domain\Event;
 
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * El cliente ha concedido al fabricante un acceso temporal (**RF-PD-11**,
@@ -48,7 +49,13 @@ final readonly class SupportAccessGranted implements DomainEvent
         /** La cuenta que lo autorizo. Nunca su nombre (regla dura 21). */
         public int $grantedByUserId,
         private DateTimeImmutable $occurredAt,
-    ) {}
+    ) {
+        // Es el `subject_id` del asiento: sin fila no hay sujeto, y un cero
+        // dejaria un asiento sobre el sujeto 0 en lugar de fallar (R1-AR-03).
+        if ($grantId <= 0) {
+            throw new InvalidArgumentException('El hecho sobre la concesion necesita el identificador de su fila, y llego '.$grantId.'.');
+        }
+    }
 
     public function eventName(): string
     {

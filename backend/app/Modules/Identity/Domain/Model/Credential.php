@@ -13,6 +13,7 @@ use App\Modules\Identity\Domain\ValueObject\CredentialSecret;
 use App\Modules\Identity\Domain\ValueObject\QrSigningKey;
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * La tarjeta fisica de un empleado (doc 01 §5.2 y §5.5, ADR-014, ADR-034).
@@ -314,6 +315,20 @@ final readonly class Credential
     }
 
     /** Sigue en vigor: no se ha revocado. */
+    /**
+     * El identificador de la fila, que solo existe una vez guardada.
+     *
+     * Para los hechos que van a `audit_log`, cuyo `subject_id` es este entero:
+     * sin fila no hay sujeto, y un `?? 0` dejaria un asiento sobre el sujeto 0
+     * en lugar de fallar (R1-AR-03).
+     *
+     * @throws LogicException si todavia no se ha guardado
+     */
+    public function persistedId(): int
+    {
+        return $this->id ?? throw new LogicException('La credencial todavia no se ha guardado: no tiene identificador.');
+    }
+
     public function isActive(): bool
     {
         return ! $this->revokedAt instanceof DateTimeImmutable;

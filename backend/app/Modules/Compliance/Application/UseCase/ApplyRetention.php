@@ -353,14 +353,14 @@ final readonly class ApplyRetention
             if (! AuditChain::matches((string) $previous, $entry->previousHash)) {
                 throw AuditPartitionNotPurgeable::chainIsBroken(
                     $year,
-                    'el eslabon de la entrada '.($entry->id ?? 0).' no apunta a la fila anterior',
+                    'el eslabon de la entrada '.$entry->persistedId().' no apunta a la fila anterior',
                 );
             }
 
             if (! AuditChain::matches(AuditChain::hashFor($entry->draft, $entry->previousHash), $entry->hash)) {
                 throw AuditPartitionNotPurgeable::chainIsBroken(
                     $year,
-                    'el contenido de la entrada '.($entry->id ?? 0).' no produce su hash',
+                    'el contenido de la entrada '.$entry->persistedId().' no produce su hash',
                 );
             }
 

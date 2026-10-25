@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Domain\Model;
 
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * Un departamento dentro de un centro (doc 01 §5.5).
@@ -52,6 +53,20 @@ final readonly class Department
     public function rename(string $name): self
     {
         return new self($this->id, $this->siteId, $name);
+    }
+
+    /**
+     * El identificador de la fila, que solo existe una vez guardada.
+     *
+     * Para los hechos que van a `audit_log`, cuyo `subject_id` es este entero:
+     * sin fila no hay sujeto, y un `?? 0` dejaria un asiento sobre el sujeto 0
+     * en lugar de fallar (R1-AR-03).
+     *
+     * @throws LogicException si todavia no se ha guardado
+     */
+    public function persistedId(): int
+    {
+        return $this->id ?? throw new LogicException('El departamento todavia no se ha guardado: no tiene identificador.');
     }
 
     public function withId(int $id): self

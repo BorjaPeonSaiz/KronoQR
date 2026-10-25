@@ -62,7 +62,7 @@ final readonly class CreateDepartmentHandler
             $department = $this->departments->add(Department::create($siteId, $command->name));
 
             $this->events->publish(new DepartmentCreated(
-                departmentId: $department->id ?? 0,
+                departmentId: $department->persistedId(),
                 siteId: $siteId,
                 occurredAt: $this->clock->now(),
             ));
