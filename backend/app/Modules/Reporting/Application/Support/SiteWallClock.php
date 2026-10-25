@@ -52,6 +52,25 @@ final readonly class SiteWallClock
     }
 
     /**
+     * `UTC+02:00`: el desfase respecto a UTC que tenia el reloj del centro en
+     * ese instante. Es lo que hace inequivoca una hora de pared: en la madrugada
+     * del cambio de hora de octubre las `02:30` pasan dos veces, una a
+     * `UTC+02:00` y otra a `UTC+01:00` (R1-RV-01).
+     *
+     * El desfase y no la abreviatura: `CEST` existe para Madrid, pero para
+     * muchas zonas la base tz no tiene abreviatura y PHP escribe `-03`.
+     *
+     * **Con el prefijo `UTC`**, que no es adorno: un `+02:00` suelto es, para
+     * una hoja de calculo, el principio de una formula, y el dialecto CSV lo
+     * neutraliza anteponiendo un apostrofo. `UTC+02:00` se lee igual en el CSV y
+     * en el PDF y no hay que neutralizar nada.
+     */
+    public function offset(DateTimeImmutable $instant): string
+    {
+        return 'UTC'.$instant->setTimezone($this->zone)->format('P');
+    }
+
+    /**
      * `2026-03-29T03:00:00.000000+02:00`: el mismo instante con el
      * desplazamiento explicito, el esquema `LocalTimestamp` del contrato. No
      * sustituye al de UTC, viaja ademas.

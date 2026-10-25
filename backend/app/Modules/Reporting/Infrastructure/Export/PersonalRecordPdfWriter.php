@@ -89,9 +89,9 @@ final readonly class PersonalRecordPdfWriter
             'brandLogo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
             'metadata' => PersonalRecordLayout::metadata($journal, $holderName, $digest, $generatedAt),
             'criteriaLabel' => PersonalRecordLayout::text('criteria_label'),
-            'criteria' => PersonalRecordLayout::criteria(),
-            'header' => PersonalRecordLayout::header(),
-            'rows' => PersonalRecordLayout::rows($journal),
+            'criteria' => PersonalRecordLayout::criteria(PersonalRecordFormat::Pdf),
+            'header' => PersonalRecordLayout::header(PersonalRecordFormat::Pdf),
+            'rows' => PersonalRecordLayout::rows($journal, PersonalRecordFormat::Pdf),
             'wrapColumns' => PersonalRecordLayout::wrappingColumnIndexes(),
             'emptyLabel' => PersonalRecordLayout::text('empty'),
         ])->render();

@@ -1708,6 +1708,15 @@ export interface paths {
          *     correccion con su autor y su motivo (RN-13). El titulo del documento y
          *     el nombre del fichero no llevan ni nombre ni codigo de empleado.
          *
+         *     **El CSV y el PDF salen de una sola definicion de columnas y valores**
+         *     (2.3.0, R1-RV-02): las mismas filas, las mismas horas y los mismos
+         *     textos. El PDF no lleva las columnas que solo sirven a una maquina —la
+         *     zona IANA de cada fila y las marcas en UTC—, y su tipo de fila se
+         *     traduce. **Cada hora lleva al lado su desfase respecto a UTC** en ese
+         *     instante (`UTC+02:00`, `UTC+01:00`; R1-RV-01): en la madrugada del
+         *     cambio de hora de octubre las `02:30` pasan dos veces, y un turno de
+         *     noche que cruza el cambio entra con un desfase y sale con otro.
+         *
          *     **Sin `from` se descarga el ultimo año: los 366 dias que terminan en
          *     `to`**, o en hoy en la zona del centro si tampoco viene `to` (2.2.1,
          *     V3-PO-2). No es el mes de `GET /api/v1/me/workdays`: quien deja el campo
