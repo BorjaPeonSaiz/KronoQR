@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Contratado frente a real para las dos magnitudes del plan (**ADR-028**).
  *
@@ -32,7 +34,13 @@ final readonly class PlanUsage
         public PlanLimit $limit,
         public ?int $contracted,
         public int $actual,
-    ) {}
+    ) {
+        // Ni el plan ni lo real cuentan en negativo: un `actual` de -1 diria que
+        // la instalacion cabe en un plan de cero (H5).
+        if ($actual < 0 || ($contracted !== null && $contracted < 0)) {
+            throw new InvalidArgumentException('El uso del plan no cuenta en negativo.');
+        }
+    }
 
     public function isExceeded(): bool
     {

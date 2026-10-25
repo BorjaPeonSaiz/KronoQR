@@ -350,3 +350,17 @@ it('ordena a las personas por apellidos, nombre e identificador', function (): v
         ->and((new ComplianceEmployee('u', 'E3', 'Ana', 'alvarez', null, null))->sortKey())
         ->toBeLessThan($primera->sortKey());
 })->group('RF-PA-06');
+
+it('el tramo de cumplimiento no sale antes de entrar ni deja de señalar su tramo (H5)', function (string $uuid, string $in, string $out): void {
+    expect(static fn (): ComplianceShiftSegment => new ComplianceShiftSegment($uuid, Instants::inMadrid($in), Instants::inMadrid($out)))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'sale un segundo antes de entrar' => ['0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11', '2026-03-10 09:00:00', '2026-03-10 08:59:59'],
+    'sin uuid' => ['', '2026-03-10 09:00:00', '2026-03-10 17:00:00'],
+])->group('RN-12', 'RN-03');
+
+it('admite un tramo de cumplimiento de cero minutos', function (): void {
+    $segment = new ComplianceShiftSegment('0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11', Instants::inMadrid('2026-03-10 09:00'), Instants::inMadrid('2026-03-10 09:00'));
+
+    expect($segment->minutes())->toBe(0);
+})->group('RN-12', 'RN-03');

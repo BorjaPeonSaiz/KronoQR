@@ -7,6 +7,7 @@ use App\Modules\Compliance\Application\Port\AuditTrail;
 use App\Modules\Compliance\Application\Port\PurgeReviewLedger;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
+use App\Modules\Compliance\Domain\AuditChain;
 use App\Modules\Compliance\Domain\Exception\PurgeReviewRejected;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
@@ -141,7 +142,7 @@ function reviewPurgeUseCase(
             $this->journal->steps[] = 'append';
             $this->journal->written[] = $draft;
 
-            return new AuditEntry($draft, 'previo', 'hash', 500 + count($this->journal->written));
+            return AuditChain::link($draft, AuditChain::genesisHash())->withId(500 + count($this->journal->written));
         }
     };
 

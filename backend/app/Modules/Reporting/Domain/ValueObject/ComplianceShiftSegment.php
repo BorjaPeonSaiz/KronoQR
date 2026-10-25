@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Domain\ValueObject;
 
 use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Un tramo **cerrado y vigente** de una jornada, con lo justo para medir RN-12.
@@ -27,7 +28,18 @@ final readonly class ComplianceShiftSegment
         public string $uuid,
         public DateTimeImmutable $clockedInAt,
         public DateTimeImmutable $clockedOutAt,
-    ) {}
+    ) {
+        // Un tramo que sale antes de entrar no tiene duracion que medir contra
+        // RN-12 (RN-03, H5). El CHECK de `shift_entries` ya lo impide en la
+        // fila; aqui se impide en el objeto, que tambien se construye sin ella.
+        if ($uuid === '') {
+            throw new InvalidArgumentException('El tramo de cumplimiento lleva el uuid del tramo que señala.');
+        }
+
+        if ($clockedOutAt < $clockedInAt) {
+            throw new InvalidArgumentException('Un tramo cerrado no sale antes de entrar (RN-03).');
+        }
+    }
 
     /**
      * Minutos enteros entre las dos marcas, truncando los segundos.
@@ -39,7 +51,7 @@ final readonly class ComplianceShiftSegment
     public function minutes(): int
     {
         // RN-09 con la regla unica del producto. La salida nunca es anterior a
-        // la entrada: lo impide el CHECK de `shift_entries` (RN-03).
+        // la entrada: lo impide el constructor (RN-03).
         return ElapsedMinutes::between($this->clockedInAt, $this->clockedOutAt)->minutes;
     }
 }
