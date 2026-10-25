@@ -6,6 +6,7 @@ namespace App\Modules\Shared\Domain\Support;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use InvalidArgumentException;
 
 /**
  * La hora que marcaba el reloj del centro en un instante: **la unica
@@ -77,6 +78,22 @@ final readonly class SiteWallClock
     public function offset(DateTimeImmutable $instant): string
     {
         return 'UTC'.$instant->setTimezone($this->zone)->format('P');
+    }
+
+    /**
+     * El desfase que tenia el reloj del centro a la medianoche de una fecha
+     * `YYYY-MM-DD` de su calendario. El registro propio en PDF lo usa como
+     * desfase habitual de un periodo cuando ningun otro desempata.
+     */
+    public function offsetAtMidnightOf(string $isoDate): string
+    {
+        $midnight = DateTimeImmutable::createFromFormat('!Y-m-d', $isoDate, $this->zone);
+
+        if (! $midnight instanceof DateTimeImmutable || $midnight->format('Y-m-d') !== $isoDate) {
+            throw new InvalidArgumentException('No es una fecha YYYY-MM-DD: «'.$isoDate.'».');
+        }
+
+        return $this->offset($midnight);
     }
 
     /**

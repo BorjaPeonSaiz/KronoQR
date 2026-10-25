@@ -23,7 +23,9 @@ use Tests\Support\Reporting\FakeReportDocumentRenderer;
 
 /*
  * El CSV y el PDF del registro propio dicen lo mismo (R1-RV-02) y cada hora
- * declara su desfase respecto a UTC (R1-RV-01). RF-ID-05, RL-05, RN-05.
+ * declara su desfase respecto a UTC (R1-RV-01): el CSV siempre, en tres
+ * columnas al final; el PDF solo cuando no es el habitual del periodo. RF-ID-05,
+ * RL-05, RN-05.
  *
  * **Por que existe.** Hasta la 2.3.0 cada formato tenia su lista de columnas y
  * su forma de escribir cada celda, y ya divergian: un estado sin traduccion
@@ -220,6 +222,21 @@ function paridadPorColumna(array $row, PersonalRecordFormat $format): array
     return array_combine(PersonalRecordLayout::columns($format), $row);
 }
 
+/*
+ * En el registro de `paridadRegistro()` hay cuatro horas a `UTC+01:00` (la
+ * entrada de marzo, su correccion, la salida del turno de noche de octubre y el
+ * tramo abierto) y tres a `UTC+02:00`: el habitual es `UTC+01:00`, que ademas es
+ * el del 1 de marzo, inicio del periodo.
+ */
+const PARIDAD_REGISTRO_HABITUAL = 'UTC+01:00';
+
+/** Cada hora y la columna de su desfase en el CSV. */
+const PARIDAD_REGISTRO_HORAS = [
+    'local_in' => 'offset_in',
+    'local_out' => 'offset_out',
+    'correction_local_at' => 'correction_offset',
+];
+
 it('saca del CSV y del PDF las mismas filas con los mismos valores, cambios de hora incluidos', function (): void {
     $journal = paridadRegistro();
     $csv = paridadTablaCsv($journal);
@@ -236,17 +253,23 @@ it('saca del CSV y del PDF las mismas filas con los mismos valores, cambios de h
         $deCsv = paridadPorColumna($csvRow, PersonalRecordFormat::Csv);
         $dePdf = paridadPorColumna($pdf['rows'][$index], PersonalRecordFormat::Pdf);
 
-        // Cada celda del PDF es la del CSV en la misma columna. La unica que se
-        // escribe distinto es el tipo de fila, que en el PDF se traduce.
+        // Cada celda del PDF es la del CSV en la misma columna. Se escriben
+        // distinto el tipo de fila, que en el PDF se traduce, y la hora cuyo
+        // desfase no es el habitual, que en el PDF lo lleva entre parentesis.
         foreach ($dePdf as $column => $value) {
-            $expected = $column === 'record_type' ? $tipos[$deCsv[$column]] : $deCsv[$column];
+            $expected = match (true) {
+                $column === 'record_type' => $tipos[$deCsv[$column]],
+                isset(PARIDAD_REGISTRO_HORAS[$column]) && $deCsv[$column] !== ''
+                    && $deCsv[PARIDAD_REGISTRO_HORAS[$column]] !== PARIDAD_REGISTRO_HABITUAL => $deCsv[$column].' ('.$deCsv[PARIDAD_REGISTRO_HORAS[$column]].')',
+                default => $deCsv[$column],
+            };
 
             expect($value)->toBe($expected, 'fila '.$index.', columna '.$column);
         }
     }
 })->group('RF-ID-05', 'RL-05', 'RN-05', 'RN-13');
 
-it('declara en cada hora su desfase respecto a UTC, el de ese instante', function (): void {
+it('trae en el CSV el desfase de cada hora, siempre, el de ese instante', function (): void {
     $filas = array_map(
         static fn (array $row): array => paridadPorColumna($row, PersonalRecordFormat::Csv),
         paridadTablaCsv(paridadRegistro())['rows'],
@@ -297,14 +320,96 @@ it('declara en cada hora su desfase respecto a UTC, el de ese instante', functio
         ]);
 })->group('RF-ID-05', 'RL-05', 'RN-05');
 
-it('rotula en el PDF el desfase de cada hora y deja fuera solo lo que sirve a una maquina', function (): void {
-    $pdf = paridadTablaPdf(paridadRegistro());
+it('anota en el PDF el desfase solo en las horas que no tienen el habitual', function (): void {
+    $filas = array_map(
+        static fn (array $row): array => paridadPorColumna($row, PersonalRecordFormat::Pdf),
+        paridadTablaPdf(paridadRegistro())['rows'],
+    );
 
-    expect(PersonalRecordLayout::columns(PersonalRecordFormat::Pdf))
-        ->toBe(array_values(array_diff(PersonalRecordLayout::COLUMNS, ['time_zone', 'utc_in', 'utc_out'])))
-        ->and($pdf['header'])->toContain('Desfase (entrada)', 'Desfase (salida)', 'Desfase (corrección)')
-        ->and(FakeReportDocumentRenderer::lastHtml())->toContain('desfase respecto a UTC');
+    // Marzo: la entrada de invierno va sin nada; la salida de verano lo dice.
+    expect($filas[0]['local_in'])->toBe('2026-03-29 01:30')
+        ->and($filas[0]['local_out'])->toBe('2026-03-29 07:00 (UTC+02:00)')
+        ->and($filas[1]['correction_local_at'])->toBe('2026-03-29 01:45')
+        ->and($filas[3]['correction_local_at'])->toBe('2026-04-03 10:00 (UTC+02:00)')
+        // El turno de noche de octubre entra en verano y sale en invierno: por
+        // eso dura nueve horas, y el papel lo explica en la entrada.
+        ->and($filas[4]['local_in'])->toBe('2026-10-24 22:00 (UTC+02:00)')
+        ->and($filas[4]['local_out'])->toBe('2026-10-25 06:00')
+        ->and($filas[4]['duration'])->toBe('09:00')
+        ->and($filas[5]['local_in'])->toBe('2026-10-30 08:00')
+        ->and($filas[5]['local_out'])->toBe('');
+})->group('RF-ID-05', 'RL-05', 'RN-05');
+
+it('declara en la cabecera del PDF la zona del centro y el desfase habitual', function (): void {
+    paridadTablaPdf(paridadRegistro());
+    $html = FakeReportDocumentRenderer::lastHtml();
+
+    expect($html)->toContain('Zona horaria del centro')
+        ->and($html)->toContain('Europe/Madrid')
+        ->and($html)->toContain('Desfase habitual respecto a UTC')
+        ->and($html)->toContain('UTC+01:00')
+        ->and($html)->toContain('lo lleva al lado entre paréntesis');
 })->group('RF-ID-05', 'RL-05');
+
+it('toma como habitual el desfase mas frecuente y, en empate, el del inicio del periodo', function (): void {
+    $verano = static fn (string $dia): JournalWorkDay => new JournalWorkDay($dia, PARIDAD_REGISTRO_MADRID, null, [
+        paridadTramo('t-'.$dia, $dia.'T06:00:00Z', $dia.'T14:00:00Z', 'closed', 480),
+    ], []);
+    $registro = static fn (string $desde, JournalWorkDay ...$dias): WorkDayJournal => new WorkDayJournal(
+        employeeUuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+        timeZone: PARIDAD_REGISTRO_MADRID,
+        range: DateRange::between($desde, '2026-07-31'),
+        days: array_values($dias),
+    );
+
+    // Empieza en invierno (1 de marzo) pero todas sus horas son de verano.
+    // Una hora de invierno y otra de verano: el empate lo decide el inicio.
+    $empate = new JournalWorkDay('2026-03-29', PARIDAD_REGISTRO_MADRID, null, [
+        paridadTramo('t-empate', '2026-03-29T00:30:00Z', '2026-03-29T05:00:00Z', 'closed', 270),
+    ], []);
+
+    expect(PersonalRecordLayout::usualOffset($registro('2026-03-01', $verano('2026-07-01'), $verano('2026-07-02'))))
+        ->toBe('UTC+02:00')
+        // Sin ninguna hora: el del inicio del periodo.
+        ->and(PersonalRecordLayout::usualOffset($registro('2026-03-01')))->toBe('UTC+01:00')
+        ->and(PersonalRecordLayout::usualOffset($registro('2026-03-01', $empate)))->toBe('UTC+01:00')
+        ->and(PersonalRecordLayout::usualOffset($registro('2026-06-01', $empate)))->toBe('UTC+02:00');
+})->group('RF-ID-05', 'RL-05');
+
+it('deja fuera del PDF solo lo que sirve a una maquina, desfases incluidos', function (): void {
+    expect(PersonalRecordLayout::columns(PersonalRecordFormat::Pdf))
+        ->toBe(array_values(array_diff(
+            PersonalRecordLayout::COLUMNS,
+            ['time_zone', 'utc_in', 'utc_out', 'offset_in', 'offset_out', 'correction_offset'],
+        )));
+})->group('RF-ID-05', 'RL-05');
+
+it('no mueve ninguna columna del CSV de la 2.2.1: las de desfase van detras', function (string $locale, array $rotulos): void {
+    // Quien ya descargo su registro puede tenerlo en una hoja que lo lee por
+    // posicion. Los rotulos de la 2.2.1 se escriben aqui tal cual, copiados de
+    // `main`, y no se leen de `lang/`: si alguien los reordena o los cambia,
+    // esto falla en lugar de seguirle la corriente.
+    App::setLocale($locale);
+
+    $cabecera = PersonalRecordLayout::header(PersonalRecordFormat::Csv);
+
+    expect(\array_slice($cabecera, 0, \count($rotulos)))->toBe($rotulos)
+        ->and(\array_slice($cabecera, \count($rotulos)))->toBe($locale === 'es'
+            ? ['Desfase de la entrada', 'Desfase de la salida', 'Correccion: desfase']
+            : ['Clock-in offset', 'Clock-out offset', 'Correction offset'])
+        ->and(paridadTablaCsv(paridadRegistro())['header'])->toBe($cabecera);
+})->with([
+    'es' => ['es', [
+        'Tipo', 'Jornada', 'Zona horaria', 'Entrada (hora local)', 'Salida (hora local)', 'Duracion',
+        'Total del dia', 'Estado', 'Origen de la entrada', 'Origen de la salida', 'Entrada (UTC)',
+        'Salida (UTC)', 'Correccion (hora local)', 'Corregido por', 'Accion', 'Motivo', 'Explicacion',
+    ]],
+    'en' => ['en', [
+        'Type', 'Work date', 'Time zone', 'Clock in (local time)', 'Clock out (local time)', 'Duration',
+        'Day total', 'Status', 'Clock-in source', 'Clock-out source', 'Clock in (UTC)',
+        'Clock out (UTC)', 'Correction (local time)', 'Corrected by', 'Action', 'Reason', 'Explanation',
+    ]],
+])->group('RF-ID-05', 'RL-05');
 
 it('escribe igual en los dos formatos un estado que el idioma no traduce', function (): void {
     // Antes divergian: el CSV imprimia la clave `personal-record.status.x` y el

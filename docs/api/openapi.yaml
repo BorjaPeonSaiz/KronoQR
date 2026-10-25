@@ -3499,11 +3499,17 @@ paths:
         **El CSV y el PDF salen de una sola definicion de columnas y valores**
         (2.3.0, R1-RV-02): las mismas filas, las mismas horas y los mismos
         textos. El PDF no lleva las columnas que solo sirven a una maquina —la
-        zona IANA de cada fila y las marcas en UTC—, y su tipo de fila se
-        traduce. **Cada hora lleva al lado su desfase respecto a UTC** en ese
+        zona IANA de cada fila, las marcas en UTC y los desfases—, y su tipo de
+        fila se traduce. **Cada hora declara su desfase respecto a UTC** en ese
         instante (`UTC+02:00`, `UTC+01:00`; R1-RV-01): en la madrugada del
         cambio de hora de octubre las `02:30` pasan dos veces, y un turno de
-        noche que cruza el cambio entra con un desfase y sale con otro.
+        noche que cruza el cambio entra con un desfase y sale con otro. En el
+        **CSV**, siempre, en tres columnas **al final** de la tabla
+        (`offset_in`, `offset_out`, `correction_offset`), de modo que ninguna
+        columna anterior cambia de sitio. En el **PDF**, la cabecera declara la
+        zona del centro y el desfase habitual del periodo (el mas frecuente
+        entre sus horas), y solo la hora que tiene otro lo lleva al lado entre
+        parentesis: `2026-10-25 06:00 (UTC+01:00)`.
 
         **Sin `from` se descarga el ultimo año: los 366 dias que terminan en
         `to`**, o en hoy en la zona del centro si tampoco viene `to` (2.2.1,

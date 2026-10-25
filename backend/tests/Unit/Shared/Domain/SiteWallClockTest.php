@@ -48,3 +48,19 @@ it('sella la hora de pared con el patron del idioma y siempre con su desfase', f
     'la segunda vez que son las 02:30 en octubre' => ['2026-10-25T01:30:00Z', 'd/m/Y H:i:s', '25/10/2026 02:30:00 UTC+01:00'],
     'con el patron en ingles' => ['2026-09-09T11:59:30Z', 'Y-m-d H:i:s', '2026-09-09 13:59:30 UTC+02:00'],
 ])->group('RN-04', 'RF-PA-07');
+
+it('da el desfase de la medianoche de una fecha del centro', function (string $zone, string $date, string $offset): void {
+    expect(new SiteWallClock($zone)->offsetAtMidnightOf($date))->toBe($offset);
+})->with([
+    'invierno en Madrid' => ['Europe/Madrid', '2026-03-01', 'UTC+01:00'],
+    'el dia del salto de marzo, todavia en invierno a medianoche' => ['Europe/Madrid', '2026-03-29', 'UTC+01:00'],
+    'el dia siguiente, ya en verano' => ['Europe/Madrid', '2026-03-30', 'UTC+02:00'],
+    'el dia del cambio de octubre, todavia en verano a medianoche' => ['Europe/Madrid', '2026-10-25', 'UTC+02:00'],
+    'Canarias' => ['Atlantic/Canary', '2026-07-01', 'UTC+01:00'],
+    'UTC' => ['UTC', '2026-07-01', 'UTC+00:00'],
+])->group('RN-04', 'RF-ID-05');
+
+it('rechaza lo que no es una fecha del calendario en lugar de inventar un desfase', function (string $date): void {
+    expect(static fn (): string => new SiteWallClock('Europe/Madrid')->offsetAtMidnightOf($date))
+        ->toThrow(InvalidArgumentException::class, 'No es una fecha YYYY-MM-DD');
+})->with(['2026-02-30', '2026-3-1', 'ayer', ''])->group('RN-04');

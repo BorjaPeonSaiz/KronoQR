@@ -41,20 +41,38 @@ use RuntimeException;
  *
  * Las horas se leen en la zona del centro (regla dura 3, ADR-040), y la zona no
  * basta para leerlas: en la madrugada del cambio de hora de octubre las 02:30
- * pasan dos veces. Por eso cada instante lleva al lado su desfase respecto a
- * UTC en ese momento (`UTC+02:00`, `UTC+01:00`), que calcula
- * {@see SiteWallClock}. Un turno de noche que cruza el cambio de hora entra
- * con un desfase y sale con otro, y el documento lo dice en lugar de dejar que
- * su duracion parezca un error.
+ * pasan dos veces. Un turno de noche que cruza el cambio de hora entra con un
+ * desfase y sale con otro, y el documento tiene que decirlo para que su
+ * duracion no parezca un error. El desfase de cada instante (`UTC+02:00`,
+ * `UTC+01:00`) lo calcula {@see SiteWallClock}, y se escribe distinto en cada
+ * formato (decision del propietario, 25-10-2026):
+ *
+ * - **En el CSV, siempre**, en tres columnas propias (`offset_in`,
+ *   `offset_out`, `correction_offset`) **al final** de la lista: ninguna
+ *   columna anterior cambia de sitio, y una hoja que alguien ya lea por
+ *   posicion sigue cuadrando.
+ * - **En el PDF, solo cuando no es el habitual**, entre parentesis junto a la
+ *   hora: «2026-03-29 07:00 (UTC+02:00)». La cabecera declara la zona del
+ *   centro y el desfase habitual, de modo que una hora sin parentesis se lee
+ *   con ese. Escribirlo en todas las filas hacia el papel mas ancho y mas
+ *   pesado sin decir nada mas.
+ *
+ * **El habitual es el mas frecuente entre las horas del documento**, y en caso
+ * de empate el que tenia el reloj del centro al empezar el periodo (la
+ * medianoche de su primer dia). El mas frecuente y no el del inicio porque es
+ * el que menos parentesis deja: un año que empieza en marzo tiene siete meses
+ * de verano y cinco de invierno, y con el del inicio llevarian parentesis siete
+ * meses de filas en lugar de cinco. Lo calcula {@see self::usualOffset()}.
  *
  * ## Lo que si cambia de un formato a otro
  *
  * - **El tipo de fila.** En el CSV, `TRAMO` y `CORRECCION` son cadenas que
  *   compara una maquina, sin traducir, igual que en la exportacion legal. En el
  *   PDF las lee una persona y se traducen.
- * - **Las columnas `time_zone`, `utc_in` y `utc_out`** solo van en el CSV. El
- *   papel declara la zona una vez en la cabecera y el desfase al lado de cada
- *   hora; la marca almacenada en UTC esta en la descarga en CSV.
+ * - **Las columnas `time_zone`, `utc_in`, `utc_out` y las tres de desfase**
+ *   solo van en el CSV. El papel declara la zona y el desfase habitual en la
+ *   cabecera y anota junto a la hora el que no lo es; la marca almacenada en
+ *   UTC esta en la descarga en CSV.
  * - **Los rotulos**, que en el CSV dicen ademas «(hora local)».
  *
  * Los origenes, acciones y codigos de motivo se dejan sin traducir en los dos,
@@ -80,6 +98,11 @@ final readonly class PersonalRecordLayout
      * esta misma lista, de modo que una columna nueva no puede quedar rotulada
      * en un sitio y vacia en el otro.
      *
+     * **Una columna nueva va al final.** El orden es el del CSV que ya tienen
+     * las personas que lo descargaron; las tres de desfase llegaron en la 2.3.0
+     * detras de todas. `PersonalRecordCsvPdfParityTest` fija los rotulos de la
+     * 2.2.1 en su sitio.
+     *
      * @var list<string>
      */
     public const array COLUMNS = [
@@ -87,9 +110,7 @@ final readonly class PersonalRecordLayout
         'work_date',
         'time_zone',
         'local_in',
-        'offset_in',
         'local_out',
-        'offset_out',
         'duration',
         'day_total',
         'status',
@@ -98,11 +119,13 @@ final readonly class PersonalRecordLayout
         'utc_in',
         'utc_out',
         'correction_local_at',
-        'correction_offset',
         'correction_author',
         'correction_action',
         'correction_reason',
         'correction_explanation',
+        'offset_in',
+        'offset_out',
+        'correction_offset',
     ];
 
     /**
@@ -127,7 +150,19 @@ final readonly class PersonalRecordLayout
      *
      * @var list<string>
      */
-    private const array CSV_ONLY_COLUMNS = ['time_zone', 'utc_in', 'utc_out'];
+    private const array CSV_ONLY_COLUMNS = ['time_zone', 'utc_in', 'utc_out', 'offset_in', 'offset_out', 'correction_offset'];
+
+    /**
+     * Cada hora y la columna de su desfase. En el PDF el desfase no tiene
+     * columna: se anota junto a la hora cuando no es el habitual.
+     *
+     * @var array<string, string>
+     */
+    private const array OFFSET_OF = [
+        'local_in' => 'offset_in',
+        'local_out' => 'offset_out',
+        'correction_local_at' => 'correction_offset',
+    ];
 
     /**
      * Prefijos de fila del CSV. Sin traducir, igual que en la exportacion legal:
@@ -197,14 +232,31 @@ final readonly class PersonalRecordLayout
     public static function rows(WorkDayJournal $journal, PersonalRecordFormat $format): array
     {
         $columns = self::columns($format);
+        $rows = self::cells($journal, $format);
+
+        if ($format === PersonalRecordFormat::Pdf) {
+            $usual = self::usualOffsetOf($rows, $journal);
+            $rows = array_map(static fn (array $cells): array => self::withUnusualOffsets($cells, $usual), $rows);
+        }
 
         return array_map(
             static fn (array $cells): array => array_map(
                 static fn (string $column): string => $cells[$column],
                 $columns,
             ),
-            self::cells($journal, $format),
+            $rows,
         );
+    }
+
+    /**
+     * El desfase habitual del documento: el mas frecuente entre sus horas y, en
+     * empate o sin ninguna hora, el del reloj del centro a la medianoche del
+     * primer dia del periodo. Por que este y no otro: ver el docblock de la
+     * clase. El PDF lo declara en la cabecera y solo anota los que no lo son.
+     */
+    public static function usualOffset(WorkDayJournal $journal): string
+    {
+        return self::usualOffsetOf(self::cells($journal, PersonalRecordFormat::Csv), $journal);
     }
 
     /**
@@ -260,6 +312,9 @@ final readonly class PersonalRecordLayout
                 'to' => $journal->range->isoTo(),
             ])],
             [self::text('time_zone'), $journal->timeZone],
+            // Con esto se lee una hora sin parentesis: las que tienen otro
+            // desfase lo llevan escrito al lado.
+            [self::text('usual_offset'), self::usualOffset($journal)],
             [self::text('period_total'), self::duration(self::totalMinutes($journal))],
             [self::text('work_days'), (string) $journal->dayCount()],
             [self::text('generated_at'), self::localInstant($generatedAt, $journal->timeZone)],
@@ -388,6 +443,64 @@ final readonly class PersonalRecordLayout
             'correction_reason' => $correction->reasonCode,
             'correction_explanation' => $correction->reasonText ?? '',
         ]);
+    }
+
+    /**
+     * @param  list<array<string, string>>  $rows
+     */
+    private static function usualOffsetOf(array $rows, WorkDayJournal $journal): string
+    {
+        $atStart = self::offsetAtStart($journal);
+        $counts = [];
+
+        foreach ($rows as $cells) {
+            foreach (self::OFFSET_OF as $offsetColumn) {
+                $offset = $cells[$offsetColumn];
+
+                if ($offset !== '') {
+                    $counts[$offset] = ($counts[$offset] ?? 0) + 1;
+                }
+            }
+        }
+
+        if ($counts === []) {
+            return $atStart;
+        }
+
+        $most = max($counts);
+
+        // En empate gana el del inicio del periodo, si es uno de los empatados;
+        // si no, el primero que aparece en el documento.
+        if (($counts[$atStart] ?? 0) === $most) {
+            return $atStart;
+        }
+
+        return (string) array_search($most, $counts, true);
+    }
+
+    private static function offsetAtStart(WorkDayJournal $journal): string
+    {
+        return new SiteWallClock($journal->timeZone)->offsetAtMidnightOf($journal->range->isoFrom());
+    }
+
+    /**
+     * La fila del PDF: cada hora cuyo desfase no es el habitual lo lleva al
+     * lado entre parentesis.
+     *
+     * @param  array<string, string>  $cells
+     * @return array<string, string>
+     */
+    private static function withUnusualOffsets(array $cells, string $usual): array
+    {
+        foreach (self::OFFSET_OF as $timeColumn => $offsetColumn) {
+            $offset = $cells[$offsetColumn];
+
+            if ($cells[$timeColumn] !== '' && $offset !== '' && $offset !== $usual) {
+                $cells[$timeColumn] .= ' ('.$offset.')';
+            }
+        }
+
+        return $cells;
     }
 
     private static function shiftRecordType(PersonalRecordFormat $format): string
