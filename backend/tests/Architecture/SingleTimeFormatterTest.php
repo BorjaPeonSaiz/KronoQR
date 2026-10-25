@@ -21,6 +21,12 @@ use Tests\Architecture\Support\ModuleTree;
  *    prueba `SiteWallClockMatchesPostgresTest`.
  * 3. **Una duracion `HH:MM`**: `Shared\Domain\ValueObject\HoursAndMinutes`.
  *    La exportacion legal y los informes tenian cada uno su `sprintf`.
+ * 4. **Una hora rotulada «UTC» en un texto** (correo, consola, `detail` de un
+ *    error, informe de texto): `UtcInstant::wallTime()`, con la forma en
+ *    `UtcWallTime`. Habia diez `format('Y-m-d H:i')` o `format('H:i')` seguidos
+ *    de « UTC» sin pasar antes a UTC. Fuera de `SiteWallClock`, que escribe la
+ *    hora del centro, **ningun** `->format()` con hora puede ir sin zona: o
+ *    lleva desfase (`P`, `O`, `e`, `T`) o pasa por uno de los dos.
  *
  * Se mira el TEXTO del codigo sin comentarios —los comentarios explican la
  * regla y la citan—, como `SingleMinuteRuleTest`.
@@ -30,6 +36,7 @@ use Tests\Architecture\Support\ModuleTree;
 const SINGLE_TIME_FORMATTER_UTC_HOMES = [
     'Shared/Domain/ValueObject/UtcInstant.php',
     'Shared/Domain/ValueObject/UtcPrecision.php',
+    'Shared/Domain/ValueObject/UtcWallTime.php',
 ];
 
 const SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME = 'Reporting/Application/Support/SiteWallClock.php';
@@ -64,7 +71,22 @@ function escribeInstanteUtcAMano(string $source): bool
         }
     }
 
-    return preg_match('/->format\(\s*(?:UtcInstant::FORMAT|UtcPrecision::\w+->value)/', codigoSinComentariosDelTiempo($source)) === 1;
+    return preg_match('/->format\(\s*(?:UtcInstant::FORMAT|(?:UtcPrecision|UtcWallTime)::\w+->value)/', codigoSinComentariosDelTiempo($source)) === 1;
+}
+
+/**
+ * Si el codigo escribe una hora con un patron que no dice su zona: ni `P`, ni
+ * `O`, ni `e`, ni `T` sin escapar. Es la hora que luego se rotula «UTC» sin
+ * serlo, o que se lee como local sin que nadie lo diga.
+ */
+function escribeHoraSinZona(string $code): bool
+{
+    preg_match_all('/->format\(\s*\'([^\']*H:?i[^\']*)\'\s*\)/', $code, $matches);
+
+    return array_any(
+        $matches[1],
+        static fn (string $pattern): bool => preg_match('/[POeT]/', (string) preg_replace('/\\\\./', '', $pattern)) !== 1,
+    );
 }
 
 /**
@@ -159,6 +181,16 @@ it('nadie fuera de HoursAndMinutes escribe una duracion HH:MM', function (): voi
         ->and($found['copias'])->toBe([]);
 })->group('RL-06', 'RF-IN-04');
 
+it('nadie escribe una hora sin zona fuera de UtcInstant y de SiteWallClock', function (): void {
+    $found = copiasDelTiempo(
+        static fn (string $source): bool => escribeHoraSinZona(codigoSinComentariosDelTiempo($source)),
+        [...SINGLE_TIME_FORMATTER_UTC_HOMES, SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME],
+    );
+
+    expect($found['vigilados'])->toBeGreaterThan(500)
+        ->and($found['copias'])->toBe([]);
+})->group('RN-04');
+
 it('cada forma vive donde dice la guarda', function (): void {
     // Si una casa se mueve, su exencion dejaria de apuntar a nada y la guarda
     // seguiria verde sin proteger nada.
@@ -169,8 +201,27 @@ it('cada forma vive donde dice la guarda', function (): void {
         ->and(convierteALaZonaDelCentro(codigoSinComentariosDelTiempo(
             str_replace('$this->zone', 'new DateTimeZone($timeZone)', $read(SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME)),
         )))->toBeTrue()
-        ->and(escribeHorasYMinutos(codigoSinComentariosDelTiempo($read(SINGLE_TIME_FORMATTER_DURATION_HOME))))->toBeTrue();
+        ->and(escribeHorasYMinutos(codigoSinComentariosDelTiempo($read(SINGLE_TIME_FORMATTER_DURATION_HOME))))->toBeTrue()
+        ->and(escribeHoraSinZona(codigoSinComentariosDelTiempo($read(SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME))))->toBeTrue()
+        ->and($read('Shared/Domain/ValueObject/UtcInstant.php'))->toContain('function wallTime(');
 })->group('RN-04', 'RL-06');
+
+it('el detector de la hora sin zona ve las copias y deja pasar lo que no lo es', function (string $fragmento, bool $copia): void {
+    expect(escribeHoraSinZona(codigoSinComentariosDelTiempo('<?php '.$fragmento)))->toBe($copia);
+})->with([
+    'minuto rotulado UTC' => ["return \$i->format('Y-m-d H:i').' UTC';", true],
+    'solo la hora' => ["return \$i?->format('H:i');", true],
+    'con segundos' => ["return \$i->format('Y-m-d H:i:s');", true],
+    'ISO sin zona' => ["return \$i->format('Y-m-d\\TH:i:s');", true],
+    'sello de fichero sin zona' => ["return 'informe-'.\$i->format('Ymd-His').'.txt';", true],
+    'sello de fichero con Z escapada' => ["return \$i->format('Ymd\\THis\\Z');", true],
+    'con desplazamiento para SQL' => ["return \$i->format('Y-m-d H:i:s.uP');", false],
+    'con desplazamiento sin dos puntos' => ["return \$i->format('Y-m-d H:i O');", false],
+    'con el nombre de la zona' => ["return \$i->format('Y-m-d H:i e');", false],
+    'solo la fecha' => ["return \$i->format('Y-m-d');", false],
+    'UtcInstant::wallTime' => ['return UtcInstant::wallTime($i, UtcWallTime::TimeOfDay);', false],
+    'en un comentario' => ["// \$i->format('H:i')\n\$x = 1;", false],
+])->group('RN-04');
 
 it('el detector del instante ve las copias y deja pasar lo que no lo es', function (string $fragmento, bool $copia): void {
     expect(escribeInstanteUtcAMano('<?php '.$fragmento))->toBe($copia);
@@ -181,6 +232,7 @@ it('el detector del instante ve las copias y deja pasar lo que no lo es', functi
     'comillas dobles' => ['return $i->format("Y-m-d\\\\TH:i:s\\\\Z");', true],
     'el patron sin pasar a UTC' => ['return $i->format(UtcInstant::FORMAT);', true],
     'la precision sin pasar a UTC' => ['return $i->format(UtcPrecision::Seconds->value);', true],
+    'la hora rotulada sin pasar a UTC' => ['return $i->format(UtcWallTime::Minute->value);', true],
     'UtcInstant' => ['return UtcInstant::of($i, UtcPrecision::Seconds);', false],
     'parsear con el patron' => ["DateTimeImmutable::createFromFormat('!'.UtcInstant::FORMAT, \$raw);", false],
     'ATOM con desplazamiento' => ['return $i->format(DateTimeInterface::ATOM);', false],

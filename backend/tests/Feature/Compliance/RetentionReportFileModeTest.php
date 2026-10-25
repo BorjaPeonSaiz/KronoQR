@@ -64,3 +64,23 @@ it('no pisa un informe que ya existe con el mismo nombre', function (): void {
         ->and(basename($ruta))->toBe('retencion-propuesta-20261002-051000-1.txt')
         ->and(fileperms($ruta) & 0o777)->toBe(0o640);
 })->group('RF-PR-03', 'RL-04');
+
+it('escribe en UTC la hora rotulada «UTC» y la del nombre, aunque el informe llegue con desfase', function (): void {
+    // 07:10 en Madrid (+02:00) son las 05:10 UTC. Sin conversion, el informe
+    // diria «07:10:00 UTC» y el nombre mentiria en dos horas.
+    config(['compliance.retention.report_path' => GeneratedFilesSandbox::directory('retention')]);
+    $madrid = new RetentionReport(
+        mode: RetentionMode::Simulation,
+        generatedAt: new DateTimeImmutable('2026-10-02 07:10:00', new DateTimeZone('Europe/Madrid')),
+        policy: new RetentionPolicySnapshot(4, 90, 90, 1, 4, 'ES', 4),
+        workRecordCutoff: new DateTimeImmutable('2022-01-01T00:00:00Z'),
+        auditPartitionYears: [],
+        shortCycleCutoffs: [],
+        tallies: [],
+    );
+
+    $ruta = (new FileRetentionReportStore)->store($madrid);
+
+    expect(basename($ruta))->toBe('retencion-propuesta-20261002-051000.txt')
+        ->and((string) file_get_contents($ruta))->toContain('Generado:          2026-10-02 05:10:00 UTC');
+})->group('RF-PR-03', 'RN-04');

@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 
 /**
@@ -67,7 +68,7 @@ final readonly class SchedulerProbe implements DoctorProbe
         $params = [
             'minutes' => intdiv($age, 60),
             // Etiquetada como UTC en el texto (regla dura 3).
-            'last_run_at' => new DateTimeImmutable('@'.$timestamp)->format('Y-m-d H:i'),
+            'last_run_at' => UtcInstant::wallTime(new DateTimeImmutable('@'.$timestamp)),
         ];
 
         if ($age > self::MAX_HEARTBEAT_AGE_SECONDS) {

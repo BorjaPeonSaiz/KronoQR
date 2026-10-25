@@ -8,6 +8,7 @@ use App\Modules\Identity\Application\Port\ManagementAccountFilter;
 use App\Modules\Identity\Application\Query\ManagementAccountsQuery;
 use App\Modules\Identity\Application\Query\ManagementAccountView;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 
 /**
  * `php artisan identity:list-users` — las cuentas de gestion de la instalacion
@@ -64,7 +65,7 @@ final class ListManagementUsersCommand extends AbstractManagementAccountCommand
                 $view->account->active ? 'active' : 'deactivated',
                 $view->account->twoFactorEnabled ? 'si' : 'no',
                 $view->passwordStatus->value,
-                $view->account->lastLoginAt?->format('Y-m-d H:i') ?? '-',
+                $view->account->lastLoginAt === null ? '-' : UtcInstant::wallTime($view->account->lastLoginAt),
             ], $listing->items),
         );
 

@@ -56,6 +56,18 @@ final readonly class UtcInstant
     }
 
     /**
+     * Una hora UTC para un texto que ya la rotula «UTC» (`caduca el 2026-10-25
+     * 01:30 UTC`), sin `Z` y sin desfase: la forma la elige {@see UtcWallTime}.
+     *
+     * La misma trampa que el instante del contrato: sin `setTimezone()`, una
+     * hora en otra zona sale con su hora local y la etiqueta miente.
+     */
+    public static function wallTime(DateTimeImmutable $instant, UtcWallTime $shape = UtcWallTime::Minute): string
+    {
+        return $instant->setTimezone(new DateTimeZone('UTC'))->format($shape->value);
+    }
+
+    /**
      * Un instante para un nombre de fichero: `20260908T090905Z`, sin separadores
      * ni microsegundos.
      *

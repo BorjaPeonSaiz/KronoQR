@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Notification;
 use App\Modules\Reporting\Application\Port\ReportExportRecipient;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use App\Modules\Shared\Infrastructure\Notification\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -102,7 +103,7 @@ final class ReportExportReadyNotification extends Notification
             // La caducidad va en una linea propia: es lo que decide si quien lo
             // lee tiene que hacer algo hoy o puede esperar.
             ->line(Lang::get('report-exports.mail.expires', [
-                'date' => $this->export->expiresAt?->format('Y-m-d H:i') ?? '',
+                'date' => $this->export->expiresAt === null ? '' : UtcInstant::wallTime($this->export->expiresAt),
             ], $locale))
             ->line(Lang::get('report-exports.mail.where', [], $locale))
             ->line(Lang::get('report-exports.mail.single_use', [], $locale))

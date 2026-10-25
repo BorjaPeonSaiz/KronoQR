@@ -9,6 +9,8 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionMode;
 use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use Illuminate\Support\Facades\Config;
 use RuntimeException;
 
@@ -100,7 +102,7 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
     {
         $prefix = $report->mode === RetentionMode::Simulation ? 'propuesta' : 'purga';
 
-        return 'retencion-'.$prefix.'-'.$report->generatedAt->format('Ymd-His').'.txt';
+        return 'retencion-'.$prefix.'-'.UtcInstant::wallTime($report->generatedAt, UtcWallTime::FileStamp).'.txt';
     }
 
     private function render(RetentionReport $report): string
@@ -110,7 +112,7 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             '=======================================================',
             '',
             'Modo:              '.$report->mode->label(),
-            'Generado:          '.$report->generatedAt->format('Y-m-d H:i:s').' UTC',
+            'Generado:          '.UtcInstant::wallTime($report->generatedAt, UtcWallTime::Second).' UTC',
             'Centro:            '.$report->policy->siteId,
             'Plazos aplicados:  registro de jornada y auditoria '.$report->policy->legalRecordYears.' anos · '
                 .'log tecnico '.$report->policy->technicalLogDays.' dias · '

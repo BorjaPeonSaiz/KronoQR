@@ -16,6 +16,8 @@ use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Http\Resource\DataExportCollectionResource;
 use App\Modules\Product\Http\Resource\DataExportResource;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -157,7 +159,7 @@ final class DataExportController extends Controller
 
         return ProblemDetails::dataExportInProgress(
             'Espera a que termine la exportacion pedida a las '
-            .$conflict->current->requestedAt->format('H:i').' UTC. '
+            .UtcInstant::wallTime($conflict->current->requestedAt, UtcWallTime::TimeOfDay).' UTC. '
             .'Podras descargarla desde esta misma pantalla.',
             DataExportResource::payload($conflict->current),
         );

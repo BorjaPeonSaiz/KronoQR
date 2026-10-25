@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 
 /*
  * **El unico formateador del instante del contrato** (`UtcTimestamp`, regla
@@ -66,3 +67,22 @@ it('lee un instante de la base de datos y lo escribe en UTC', function (mixed $v
     'un numero' => [1_757_322_453, null],
     'texto que no es una fecha' => ['no es una fecha', null],
 ])->group('RN-04');
+
+it('escribe la hora rotulada «UTC» en UTC aunque el instante llegue con desfase', function (UtcWallTime $shape, string $expected): void {
+    // 02:30:15 en Madrid el 24 de octubre de 2026, todavia en verano (+02:00):
+    // son las 00:30:15 UTC. Sin conversion saldria «02:30 UTC», dos horas mal.
+    $madrid = new DateTimeImmutable('2026-10-24 02:30:15', new DateTimeZone('Europe/Madrid'));
+
+    expect(UtcInstant::wallTime($madrid, $shape))->toBe($expected);
+})->with([
+    'minuto' => [UtcWallTime::Minute, '2026-10-24 00:30'],
+    'segundo' => [UtcWallTime::Second, '2026-10-24 00:30:15'],
+    'hora del dia' => [UtcWallTime::TimeOfDay, '00:30'],
+    'sello de fichero' => [UtcWallTime::FileStamp, '20261024-003015'],
+])->group('RN-04');
+
+it('la hora rotulada va al minuto si no se pide otra forma', function (): void {
+    $canarias = new DateTimeImmutable('2026-12-31 23:59:59', new DateTimeZone('Atlantic/Canary'));
+
+    expect(UtcInstant::wallTime($canarias))->toBe('2026-12-31 23:59');
+})->group('RN-04');
