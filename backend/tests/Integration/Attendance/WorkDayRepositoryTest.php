@@ -187,7 +187,9 @@ it('no carga los tramos anulados ni los sustituidos', function (): void {
             'work_date' => '2026-03-14',
             'clocked_in_at' => '2026-03-14 '.$desde.':00+00',
             'clocked_out_at' => '2026-03-14 '.$hasta.':00+00',
-            'duration_minutes' => 120,
+            // La de sus marcas: el motor no admite otra al nacer (migracion
+            // `2026_10_25_100000`).
+            'duration_minutes' => intdiv(strtotime('2026-03-14 '.$hasta.':00+00') - strtotime('2026-03-14 '.$desde.':00+00'), 60),
             // Nace vigente; se retira despues (ADR-057 §2). `RefreshDatabase` no
             // confirma, asi que el sustituido no necesita version nueva.
             'status' => 'closed',

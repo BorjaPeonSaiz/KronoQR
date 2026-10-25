@@ -390,6 +390,13 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // esto, lo que ya estaba escrito se queda como estaba, que es lo que dice
         // el dominio.
         //
+        // Desde la 2.3.0 una fila asi ya no puede **nacer**: el *trigger*
+        // `shift_entries_guard_duration` (migracion `2026_10_25_100000`)
+        // rechaza con `23514` todo tramo que se inserte o se cierre con una
+        // duracion distinta de la de sus marcas. Este `CASE` queda para las
+        // filas anteriores, que no se reescriben (regla dura 5) y que la
+        // conciliacion de ADR-057 §4 denuncia.
+        //
         // **`clocked_out_at` no lleva ese `CASE`, a proposito.** Es la marca que
         // el agregado afirma y la que viaja en su evento y en su asiento. Si la
         // fila ya tiene otra, guardar en silencio la de la fila dejaria

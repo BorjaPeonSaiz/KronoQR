@@ -95,7 +95,9 @@ function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?
         'work_date' => $workDate,
         'clocked_in_at' => $clockedInAt.'+00',
         'clocked_out_at' => $clockedOutAt === null ? null : $clockedOutAt.'+00',
-        'duration_minutes' => $clockedOutAt === null ? null : 240,
+        // La de sus marcas: el motor no admite otra al nacer (migracion
+        // `2026_10_25_100000`).
+        'duration_minutes' => $clockedOutAt === null ? null : intdiv(strtotime($clockedOutAt.'+00') - strtotime($clockedInAt.'+00'), 60),
         'status' => $clockedOutAt === null ? 'open' : 'closed',
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
