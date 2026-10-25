@@ -9,6 +9,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReport;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\SiteWallClock;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Console\Command;
@@ -98,7 +99,9 @@ final class KioskHealthCommand extends Command
             return $report->exitCode();
         }
 
-        $this->render($report, $translator, $this->resolveTimezone($sites));
+        $zone = $this->resolveTimezone($sites);
+
+        $this->render($report, $translator, $zone, new SiteWallClock($zone->getName()));
 
         return $report->exitCode();
     }
@@ -149,11 +152,11 @@ final class KioskHealthCommand extends Command
         }
     }
 
-    private function render(KioskHealthReport $report, Translator $translator, DateTimeZone $zone): void
+    private function render(KioskHealthReport $report, Translator $translator, DateTimeZone $zone, SiteWallClock $wallClock): void
     {
         $this->line('');
         $this->line($this->say($translator, 'title', [
-            'moment' => $this->absolute($report->generatedAt, $zone, $translator),
+            'moment' => $this->absolute($report->generatedAt, $wallClock, $translator),
             'zone' => $zone->getName(),
         ]));
         $this->line('==============================');
@@ -182,7 +185,7 @@ final class KioskHealthCommand extends Command
                 $row->name,
                 $this->say($translator, 'status.'.$row->status),
                 $row->appVersion ?? '-',
-                $this->lastSeen($row, $zone, $translator),
+                $this->lastSeen($row, $wallClock, $translator),
                 $row->pendingQueueSize === null ? $this->say($translator, 'column.queue_unknown') : (string) $row->pendingQueueSize,
                 $this->battery($row, $translator),
                 $this->say($translator, 'verdict.'.$row->verdict->value),
@@ -271,7 +274,7 @@ final class KioskHealthCommand extends Command
      * con el resto de las evidencias de la incidencia: el corte de luz, la
      * ventana de mantenimiento, el turno en el que dejaron de llegar fichajes.
      */
-    private function lastSeen(KioskHealthRow $row, DateTimeZone $zone, Translator $translator): string
+    private function lastSeen(KioskHealthRow $row, SiteWallClock $wallClock, Translator $translator): string
     {
         if ($row->lastSeenAt === null || $row->secondsSinceLastSeen === null) {
             return $this->say($translator, 'relative.never');
@@ -279,7 +282,7 @@ final class KioskHealthCommand extends Command
 
         return $this->say($translator, 'relative.ago', [
             'duration' => $this->duration($row->secondsSinceLastSeen, $translator),
-        ]).' ('.$this->absolute($row->lastSeenAt, $zone, $translator).')';
+        ]).' ('.$this->absolute($row->lastSeenAt, $wallClock, $translator).')';
     }
 
     /**
@@ -322,10 +325,15 @@ final class KioskHealthCommand extends Command
      * El formato es una clave de traduccion porque `09/09/2026` y `2026-09-09`
      * son el mismo dia para maquinas distintas y dias distintos para personas
      * distintas.
+     *
+     * **Con el desfase detras** (`UTC+02:00`), que pone {@see SiteWallClock}: en
+     * la madrugada del cambio de hora de octubre las `02:30` pasan dos veces, y
+     * el ultimo contacto de un quiosco tiene que poder cruzarse sin ambiguedad
+     * con el corte de luz o con el turno.
      */
-    private function absolute(DateTimeImmutable $instant, DateTimeZone $zone, Translator $translator): string
+    private function absolute(DateTimeImmutable $instant, SiteWallClock $wallClock, Translator $translator): string
     {
-        return $instant->setTimezone($zone)->format($this->say($translator, 'absolute_format'));
+        return $wallClock->stamp($instant, $this->say($translator, 'absolute_format'));
     }
 
     /**

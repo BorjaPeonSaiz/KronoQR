@@ -36,7 +36,9 @@ return [
         /*
          * The absolute date format is a TRANSLATABLE STRING, not a constant:
          * `09/09/2026` and `2026-09-09` are the same day for a machine and two
-         * different days for two people.
+         * different days for two people. No zone here: the offset
+         * (`UTC+02:00`) is appended after it, so that the two 02:30 of the
+         * October clock change read differently.
          */
         'absolute_format' => 'Y-m-d H:i:s',
 

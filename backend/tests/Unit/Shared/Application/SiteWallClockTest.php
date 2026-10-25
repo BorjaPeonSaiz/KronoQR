@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Modules\Reporting\Application\Support\SiteWallClock;
+use App\Modules\Shared\Application\Support\SiteWallClock;
 
 /*
- * **La unica conversion UTC → zona del centro de Reporting** (RN-04, regla
- * dura 3).
+ * **La unica conversion UTC → zona del centro de Reporting y de Kiosk** (RN-04,
+ * regla dura 3).
  *
  * En 2026 Madrid adelanta el reloj el 29 de marzo a las 01:00 UTC (de las 02:00
  * a las 03:00) y lo atrasa el 25 de octubre a las 01:00 UTC (de las 03:00 a las
@@ -37,3 +37,14 @@ it('rechaza una zona que no existe en lugar de escribir otra hora', function ():
     expect(static fn (): SiteWallClock => new SiteWallClock('Europe/Atlantida'))
         ->toThrow(Exception::class);
 })->group('RN-04');
+
+it('sella la hora de pared con el patron del idioma y siempre con su desfase', function (string $utc, string $pattern, string $stamp): void {
+    // La consola de salud de los quioscos escribe el ultimo contacto con el
+    // formato de su idioma. Sin el desfase, las dos 02:30 de octubre serian la
+    // misma hora escrita.
+    expect(new SiteWallClock('Europe/Madrid')->stamp(new DateTimeImmutable($utc), $pattern))->toBe($stamp);
+})->with([
+    'la primera vez que son las 02:30 en octubre' => ['2026-10-25T00:30:00Z', 'd/m/Y H:i:s', '25/10/2026 02:30:00 UTC+02:00'],
+    'la segunda vez que son las 02:30 en octubre' => ['2026-10-25T01:30:00Z', 'd/m/Y H:i:s', '25/10/2026 02:30:00 UTC+01:00'],
+    'con el patron en ingles' => ['2026-09-09T11:59:30Z', 'Y-m-d H:i:s', '2026-09-09 13:59:30 UTC+02:00'],
+])->group('RN-04', 'RF-PA-07');

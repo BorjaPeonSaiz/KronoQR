@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Resource;
 
-use App\Modules\Reporting\Application\Support\SiteWallClock;
 use App\Modules\Reporting\Application\Support\WorkDayJournalPage;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Shared\Application\Support\SiteWallClock;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Http\Request;

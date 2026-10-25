@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Reporting\Application\Support;
+namespace App\Modules\Shared\Application\Support;
 
 use DateTimeImmutable;
 use DateTimeZone;
 
 /**
  * La hora que marcaba el reloj del centro en un instante: **la unica
- * conversion UTC → zona del centro de `Reporting`** (regla dura 3, ADR-040).
+ * conversion UTC → zona del centro** de `Reporting` y de `Kiosk` (regla dura 3,
+ * ADR-040).
  *
  * Lo que se almacena es UTC y lo que lee una persona es la hora que vivio: un
  * informe sellado a las 05:12 cuando en el hotel eran las 07:12 parece de otro
@@ -22,6 +23,11 @@ use DateTimeZone;
  * Cinco copias de una linea no fallan por separado: fallan cuando una cambia de
  * formato y las demas no, y el mismo tramo sale a una hora en el PDF y a otra
  * en el CSV.
+ *
+ * Vive en `Shared` desde que la consola de salud de los quioscos tambien
+ * escribe la hora del centro: `Kiosk` no puede usar una clase de `Reporting`
+ * (Deptrac), y una copia propia volveria a ser la sexta. `SingleTimeFormatterTest`
+ * vigila que nadie fuera de aqui convierta a la zona del centro.
  *
  * ## PHP y PostgreSQL tienen que decir lo mismo
  *
@@ -78,5 +84,20 @@ final readonly class SiteWallClock
     public function withOffset(DateTimeImmutable $instant): string
     {
         return $instant->setTimezone($this->zone)->format('Y-m-d\TH:i:s.uP');
+    }
+
+    /**
+     * `09/09/2026 07:14:03 UTC+02:00`: fecha y hora de pared con el patron que
+     * elige quien escribe —el de su idioma, que es texto traducido— y **siempre**
+     * el desfase detras, con la forma de {@see self::offset()}. Sin el, la
+     * madrugada del cambio de hora de octubre da dos instantes con la misma
+     * hora escrita.
+     *
+     * El patron no lleva zona: la pone este metodo. Si la trajera, saldria dos
+     * veces.
+     */
+    public function stamp(DateTimeImmutable $instant, string $pattern): string
+    {
+        return $instant->setTimezone($this->zone)->format($pattern).' '.$this->offset($instant);
     }
 }

@@ -52,7 +52,9 @@ return [
         /*
          * El formato de la fecha absoluta es un TEXTO TRADUCIBLE, no una
          * constante: `09/09/2026` y `2026-09-09` son el mismo dia para una
-         * maquina y dias distintos para dos personas.
+         * maquina y dias distintos para dos personas. Sin zona: el desfase
+         * (`UTC+02:00`) se escribe detras, para que las dos 02:30 del cambio de
+         * hora de octubre no se lean igual.
          */
         'absolute_format' => 'd/m/Y H:i:s',
 

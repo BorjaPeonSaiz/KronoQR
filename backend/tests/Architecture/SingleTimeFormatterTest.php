@@ -15,10 +15,13 @@ use Tests\Architecture\Support\ModuleTree;
  *    Habia ~50 copias de `format('Y-m-d\TH:i:s[.u|.v]\Z')` y la mitad no pasaba
  *    antes a UTC: la `Z` es literal, y un objeto en otra zona salia con su hora
  *    local y una `Z` detras, incluido el payload de `audit_log`.
- * 2. **La hora de pared del centro en Reporting**:
- *    `Reporting\Application\Support\SiteWallClock`. Estaba copiada cinco veces
- *    y la exportacion legal convierte en PostgreSQL; que las dos coincidan lo
- *    prueba `SiteWallClockMatchesPostgresTest`.
+ * 2. **La hora de pared del centro**:
+ *    `Shared\Application\Support\SiteWallClock`. Estaba copiada cinco veces en
+ *    Reporting y la exportacion legal convierte en PostgreSQL; que las dos
+ *    coincidan lo prueba `SiteWallClockMatchesPostgresTest`. Subio a `Shared`
+ *    cuando `kiosk:health` resulto ser la sexta copia, con el patron sacado de
+ *    una traduccion y sin desfase: por eso el detector tambien ve un `format()`
+ *    cuyo patron no es un literal, y vigila todos los modulos.
  * 3. **Una duracion `HH:MM`**: `Shared\Domain\ValueObject\HoursAndMinutes`.
  *    La exportacion legal y los informes tenian cada uno su `sprintf`.
  * 4. **Una hora rotulada «UTC» en un texto** (correo, consola, `detail` de un
@@ -39,7 +42,7 @@ const SINGLE_TIME_FORMATTER_UTC_HOMES = [
     'Shared/Domain/ValueObject/UtcWallTime.php',
 ];
 
-const SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME = 'Reporting/Application/Support/SiteWallClock.php';
+const SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME = 'Shared/Application/Support/SiteWallClock.php';
 
 const SINGLE_TIME_FORMATTER_DURATION_HOME = 'Shared/Domain/ValueObject/HoursAndMinutes.php';
 
@@ -90,12 +93,13 @@ function escribeHoraSinZona(string $code): bool
 }
 
 /**
- * Si el codigo pasa un instante a una zona que no es UTC y lo escribe con hora
- * y minuto en la misma sentencia.
+ * Si el codigo pasa un instante a una zona que no es UTC y lo escribe en la
+ * misma sentencia con hora y minuto, o con un patron que no es un literal (una
+ * traduccion, una variable): ese patron puede llevar la hora y no se ve.
  */
 function convierteALaZonaDelCentro(string $code): bool
 {
-    return preg_match('/setTimezone\((?!\s*new \\\\?DateTimeZone\(\s*\'UTC\'\s*\)\s*\))[^;]*?->format\(\s*\'[^\']*H:i/', $code) === 1;
+    return preg_match('/setTimezone\((?!\s*new \\\\?DateTimeZone\(\s*\'UTC\'\s*\)\s*\))[^;]*?->format\(\s*(?:\'[^\']*H:i|(?![\'"]))/', $code) === 1;
 }
 
 /** Si el codigo escribe una duracion `HH:MM` con su propio `sprintf`. */
@@ -160,14 +164,13 @@ it('nadie fuera de UtcInstant escribe el instante del contrato a mano', function
         ->and($found['copias'])->toBe([]);
 })->group('RN-04', 'RQ-06');
 
-it('Reporting convierte a la zona del centro solo en SiteWallClock', function (): void {
+it('nadie convierte a la zona del centro fuera de SiteWallClock', function (): void {
     $found = copiasDelTiempo(
         static fn (string $source): bool => convierteALaZonaDelCentro(codigoSinComentariosDelTiempo($source)),
         [SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME],
-        'Reporting/',
     );
 
-    expect($found['vigilados'])->toBeGreaterThan(100)
+    expect($found['vigilados'])->toBeGreaterThan(500)
         ->and($found['copias'])->toBe([]);
 })->group('RN-04');
 
@@ -249,6 +252,10 @@ it('el detector de la zona del centro ve las copias y deja pasar lo que no lo es
     'solo la fecha de hoy' => ["return \$now->setTimezone(new DateTimeZone(\$tz))->format('Y-m-d');", false],
     'a UTC' => ["return \$i->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i');", false],
     'SiteWallClock' => ['return new SiteWallClock($tz)->minute($i);', false],
+    'con el patron de una traduccion' => ["return \$i->setTimezone(\$zone)->format(\$this->say(\$t, 'absolute_format'));", true],
+    'con el patron en una variable' => ['return $i->setTimezone(new DateTimeZone($tz))->format($pattern);', true],
+    'con un patron en una constante, a UTC' => ["return \$i->setTimezone(new DateTimeZone('UTC'))->format(self::PATTERN);", false],
+    'SiteWallClock con patron' => ['return $clock->stamp($i, $pattern);', false],
 ])->group('RN-04');
 
 it('el detector de HH:MM ve las copias y deja pasar lo que no lo es', function (string $fragmento, bool $copia): void {

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Infrastructure\Export;
 
-use App\Modules\Reporting\Application\Support\SiteWallClock;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
+use App\Modules\Shared\Application\Support\SiteWallClock;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;

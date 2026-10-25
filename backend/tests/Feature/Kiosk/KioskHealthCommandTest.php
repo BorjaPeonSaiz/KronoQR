@@ -179,10 +179,28 @@ it('enseña el ultimo contacto en relativo y en la hora del centro', function ()
     $resultado = ejecutarSalud();
 
     expect($resultado['output'])->toContain('hace 30 s')
-        ->and($resultado['output'])->toContain('09/09/2026 13:59:30')
+        // Con su desfase: en la madrugada del cambio de hora de octubre la hora
+        // escrita sola seria ambigua.
+        ->and($resultado['output'])->toContain('09/09/2026 13:59:30 UTC+02:00')
+        ->and($resultado['output'])->toContain('09/09/2026 14:00:00 UTC+02:00 (Europe/Madrid)')
         ->and($resultado['output'])->toContain('hace 3 h 00 min')
         ->and($resultado['output'])->toContain('Europe/Madrid');
 })->group('RF-PA-07');
+
+it('distingue las dos 02:30 de la madrugada del cambio de hora de octubre', function (): void {
+    // El 25-10-2026 Madrid atrasa el reloj a las 01:00 UTC: las 02:30 pasan dos
+    // veces. Dos quioscos callados en cada una de ellas no pueden salir con la
+    // misma hora escrita, o no se sabe cual dejo de responder antes.
+    FrozenTime::at('2026-10-25 03:00:00');
+    quioscoEnLaBase('Recepcion', '2026-10-25 00:30:00+00');
+    quioscoEnLaBase('Cocina', '2026-10-25 01:30:00+00');
+
+    $resultado = ejecutarSalud();
+
+    expect($resultado['output'])->toContain('25/10/2026 02:30:00 UTC+02:00')
+        ->and($resultado['output'])->toContain('25/10/2026 02:30:00 UTC+01:00')
+        ->and($resultado['output'])->toContain('25/10/2026 04:00:00 UTC+01:00 (Europe/Madrid)');
+})->group('RF-PA-07', 'RN-04');
 
 it('dice que mirar en cada quiosco con hallazgos, no solo que va mal', function (): void {
     // El fabricante no accede a este servidor (ADR-016): un mensaje que solo
