@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Un tramo cuyo registro no cuadra con su auditoria, un asiento de purga que
  * no se puede creer, o un centro cuya zona no es la de su ultimo asiento
@@ -31,7 +33,32 @@ final readonly class WorkRecordDiscrepancy
         public ?int $siteId = null,
         /** Solo en la de la traza: la fila de `site_timezone_changes`. */
         public ?int $siteTimezoneChangeId = null,
-    ) {}
+    ) {
+        $ofAnEntry = ! \in_array($kind, [WorkRecordDiscrepancyKind::PurgeOutOfBounds, WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit], true);
+
+        // Cada tipo señala lo suyo, y solo lo suyo: un hallazgo sin a quien
+        // señalar se escribiria `audit_log # · …` y el runbook no tendria por
+        // donde empezar (V1-AR-4).
+        if ($ofAnEntry !== ($shiftEntryUuid !== null) || $shiftEntryUuid === '') {
+            throw new InvalidArgumentException('Una discrepancia '.$kind->value.($ofAnEntry ? ' es de un tramo y lleva su uuid.' : ' no es de ningun tramo.'));
+        }
+
+        $ofASite = $kind === WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit;
+
+        if ($ofASite !== ($siteId !== null) || ($siteTimezoneChangeId !== null && ! $ofASite)) {
+            throw new InvalidArgumentException('Solo una discrepancia de la zona del centro lleva el centro y la fila de su traza.');
+        }
+
+        $needsAudit = \in_array($kind, [WorkRecordDiscrepancyKind::PurgeOutOfBounds, WorkRecordDiscrepancyKind::AuditWithoutEntry, WorkRecordDiscrepancyKind::EntryDiffersFromAudit, WorkRecordDiscrepancyKind::RetiredWithoutCorrection], true);
+
+        if (($needsAudit && $auditEntryId === null) || ($kind === WorkRecordDiscrepancyKind::EntryWithoutAudit && $auditEntryId !== null)) {
+            throw new InvalidArgumentException('Una discrepancia '.$kind->value.($needsAudit ? ' señala el asiento.' : ' no tiene asiento que señalar.'));
+        }
+
+        if (! array_is_list($fields)) {
+            throw new InvalidArgumentException('Los campos de una discrepancia son una lista.');
+        }
+    }
 
     public function describe(): string
     {
