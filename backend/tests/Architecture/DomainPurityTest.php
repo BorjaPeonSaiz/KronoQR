@@ -95,3 +95,23 @@ it('no conoce el puerto Clock desde el dominio', function (): void {
 
     expect($offenders)->toBe([]);
 })->group('RNF-M-03');
+
+it('no construye fechas con el analizador libre de PHP en el dominio (V1-AR-2)', function (): void {
+    // `new DateTimeImmutable($texto)` acepta `"now"`, `"tomorrow"` o `"+1 week"`
+    // y entonces lee el reloj del proceso aunque no lo parezca: el argumento es
+    // una variable y ni la lista de funciones de arriba ni Semgrep (que busca
+    // el `'now'` literal) lo ven. En el dominio las fechas llegan hechas, o se
+    // leen con `UtcInstant::parse()` o `createFromFormat('!…')`, que solo
+    // admiten un instante escrito.
+    $offenders = [];
+
+    foreach (domainFiles() as $file) {
+        $source = (string) file_get_contents($file);
+
+        if (preg_match('/new\s+\\?DateTime(?:Immutable)?\s*\(|(?<![\w>:$])date_create(?:_immutable)?\s*\(/', $source) === 1) {
+            $offenders[] = ModuleTree::relative($file);
+        }
+    }
+
+    expect($offenders)->toBe([]);
+})->group('RNF-M-03');

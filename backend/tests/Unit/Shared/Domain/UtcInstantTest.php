@@ -86,3 +86,48 @@ it('la hora rotulada va al minuto si no se pide otra forma', function (): void {
 
     expect(UtcInstant::wallTime($canarias))->toBe('2026-12-31 23:59');
 })->group('RN-04');
+
+it('lee solo un instante escrito, nunca una expresion relativa que mire el reloj (V1-AR-2)', function (string $value): void {
+    // Con el analizador libre de PHP, cada una de estas daba la hora del
+    // proceso o un dia desplazado: el dominio leia el reloj del sistema a
+    // traves de una cadena (regla dura 2).
+    expect(UtcInstant::parse($value))->toBeNull()
+        ->and(UtcInstant::fromDatabase($value))->toBeNull();
+})->with([
+    'ahora' => ['now'],
+    'mañana' => ['tomorrow'],
+    'dentro de una semana' => ['+1 week'],
+    'hoy a mediodia' => ['today noon'],
+    'marca de Unix' => ['@1757322453'],
+    'solo la fecha' => ['2026-09-08'],
+    'sin segundos' => ['2026-09-08T09:07Z'],
+    'siete decimales' => ['2026-09-08T09:07:33.1234567Z'],
+    'el 31 de febrero' => ['2026-02-31T10:00:00Z'],
+    'la hora 25' => ['2026-09-08T25:00:00Z'],
+    'el minuto 60' => ['2026-09-08T09:60:00Z'],
+    'un desfase de 15 horas' => ['2026-09-08T09:07:33+15:00'],
+    'un desfase con minuto 60' => ['2026-09-08T09:07:33+02:60'],
+    'una zona con nombre' => ['2026-09-08T09:07:33 Europe/Madrid'],
+    'texto delante' => ['x2026-09-08T09:07:33Z'],
+    'texto detras' => ['2026-09-08T09:07:33Zx'],
+    'cadena vacia' => [''],
+])->group('RN-04', 'RL-04');
+
+it('lee las formas ISO-8601 y de PostgreSQL y las deja en UTC', function (string $value, string $expected): void {
+    $instant = UtcInstant::parse($value);
+
+    expect($instant)->not->toBeNull()
+        ->and($instant?->getTimezone()->getName())->toBe('UTC')
+        ->and(UtcInstant::format($instant))->toBe($expected);
+})->with([
+    'con Z' => ['2026-09-08T09:07:33Z', '2026-09-08T09:07:33.000000Z'],
+    'sin zona, que es UTC' => ['2026-09-08 09:07:33', '2026-09-08T09:07:33.000000Z'],
+    'PostgreSQL con +00' => ['2026-09-08 09:07:33.123456+00', '2026-09-08T09:07:33.123456Z'],
+    'un decimal' => ['2026-09-08T09:07:33.5Z', '2026-09-08T09:07:33.500000Z'],
+    'desfase con dos puntos' => ['2026-09-08T11:07:33+02:00', '2026-09-08T09:07:33.000000Z'],
+    'desfase sin dos puntos' => ['2026-09-08T11:37:33+0230', '2026-09-08T09:07:33.000000Z'],
+    'desfase de horas' => ['2026-09-08 11:07:33+02', '2026-09-08T09:07:33.000000Z'],
+    'desfase negativo' => ['2026-09-08T05:07:33-04:00', '2026-09-08T09:07:33.000000Z'],
+    'desfase de 14 horas' => ['2026-09-08T23:07:33+14:00', '2026-09-08T09:07:33.000000Z'],
+    'el 29 de febrero bisiesto' => ['2028-02-29T00:00:00Z', '2028-02-29T00:00:00.000000Z'],
+])->group('RN-04', 'RL-04');

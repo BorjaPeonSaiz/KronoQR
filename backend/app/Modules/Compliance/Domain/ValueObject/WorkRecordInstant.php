@@ -6,8 +6,6 @@ namespace App\Modules\Compliance\Domain\ValueObject;
 
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
-use Exception;
 
 /**
  * Como lee la conciliacion una marca escrita como texto, en la fila o en el
@@ -22,20 +20,13 @@ final class WorkRecordInstant
     private function __construct() {}
 
     /**
-     * El instante, o `null` si no se puede leer. Con el instante escrito y no
-     * «ahora»: lee una marca, no pregunta la hora (regla dura 2).
+     * El instante, o `null` si no se puede leer. Solo un instante escrito
+     * ({@see UtcInstant::parse()}): `"now"` o `"+1 week"` en un asiento
+     * manipulado son ilegibles, no la hora del proceso (regla dura 2, V1-AR-2).
      */
     public static function parse(?string $value): ?DateTimeImmutable
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        try {
-            return new DateTimeImmutable($value, new DateTimeZone('UTC'))->setTimezone(new DateTimeZone('UTC'));
-        } catch (Exception) {
-            return null;
-        }
+        return $value === null ? null : UtcInstant::parse($value);
     }
 
     /**

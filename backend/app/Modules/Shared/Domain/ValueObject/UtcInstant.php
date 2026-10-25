@@ -6,7 +6,6 @@ namespace App\Modules\Shared\Domain\ValueObject;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use Throwable;
 
 /**
  * El unico sitio donde se escribe la forma de un instante en la API
@@ -33,6 +32,12 @@ final readonly class UtcInstant
 {
     /** ISO-8601 en UTC con microsegundos, la forma del esquema `UtcTimestamp`. */
     public const string FORMAT = UtcPrecision::Microseconds->value;
+
+    /**
+     * Fecha y hora con segundos (grupos 1 y 2), decimales (3) y desfase (4).
+     * Las horas del desfase, de 00 a 14, que es lo que existe.
+     */
+    private const string WRITTEN_INSTANT = '/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:0\d|1[0-4])(?::?[0-5]\d)?)?$/';
 
     /**
      * Un instante que seguro existe.
@@ -95,14 +100,61 @@ final readonly class UtcInstant
             return self::of($value);
         }
 
-        if (! is_string($value) || $value === '') {
+        if (! is_string($value)) {
             return null;
         }
 
-        try {
-            return self::of(new DateTimeImmutable($value, new DateTimeZone('UTC')));
-        } catch (Throwable) {
+        $instant = self::parse($value);
+
+        return $instant instanceof DateTimeImmutable ? self::of($instant) : null;
+    }
+
+    /**
+     * Un instante **escrito**, en UTC, o `null` si el texto no es uno.
+     *
+     * Solo la forma ISO-8601 o la de PostgreSQL: fecha, `T` o espacio, hora con
+     * segundos, hasta seis decimales y, opcionalmente, `Z` o un desfase
+     * (`+00`, `+02:00`, `+0200`). Sin desfase es UTC, como la sesion de la base
+     * de datos.
+     *
+     * **Nunca con el analizador libre de PHP.** `new DateTimeImmutable('now')`,
+     * `'tomorrow'` o `'+1 week'` dan la hora del proceso: el dominio leeria el
+     * reloj del sistema a traves de una cadena (regla dura 2), y la conciliacion,
+     * que compara marcas venidas de un asiento que se puede manipular, dejaria de
+     * ser determinista (V1-AR-2). Tampoco desplaza en silencio un 31 de febrero
+     * o una hora 25: no son instantes, son errores.
+     */
+    public static function parse(string $value): ?DateTimeImmutable
+    {
+        if (preg_match(self::WRITTEN_INSTANT, $value, $parts) !== 1) {
             return null;
         }
+
+        $wallTime = $parts[1].' '.$parts[2];
+        $fraction = str_pad($parts[3] ?? '', 6, '0');
+        $parsed = DateTimeImmutable::createFromFormat(
+            '!Y-m-d H:i:s.uP',
+            $wallTime.'.'.$fraction.self::offsetOf($parts[4] ?? ''),
+        );
+
+        // `createFromFormat` acepta el 31 de febrero y lo lleva a marzo: si la
+        // fecha y la hora no son las escritas, no era un instante.
+        if ($parsed === false || $parsed->format('Y-m-d H:i:s') !== $wallTime) {
+            return null;
+        }
+
+        return $parsed->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /** `Z`, nada, `+02`, `+0200` o `+02:00`, siempre como `+HH:MM`. */
+    private static function offsetOf(string $written): string
+    {
+        if ($written === '' || $written === 'Z') {
+            return '+00:00';
+        }
+
+        $digits = str_replace(':', '', $written);
+
+        return substr($digits, 0, 3).':'.str_pad(substr($digits, 3), 2, '0');
     }
 }

@@ -796,3 +796,14 @@ it('trata como salida el cierre de un asiento anterior a la v2.1.0, que no apunt
     expect(conciliacionCompara(conciliacionFila(['closedBy' => 'clock_out']), $asiento))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(['closedBy' => 'break_start']), $asiento)?->fields)->toBe(['closed_by']);
 })->group('RL-04', 'RS-07', 'RN-05');
+
+it('una marca relativa en el asiento es ilegible y no la hora del proceso (V1-AR-2)', function (string $relativa): void {
+    // Con el analizador libre, `now` daba la hora de la pasada: la salida no
+    // cuadraba y, ademas, los minutos se median contra el reloj del sistema, de
+    // modo que el resultado dependia de cuando corriera la conciliacion.
+    $hallazgo = conciliacionCompara(conciliacionFila(), conciliacionAsientoDeSalida(['clocked_out_at' => $relativa]));
+
+    expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::EntryDiffersFromAudit)
+        ->and($hallazgo?->fields)->toContain('clocked_out_at')
+        ->and($hallazgo?->fields)->not->toContain('duration_minutes');
+})->with(['now', 'tomorrow', '+8 hours'])->group('RL-04', 'RS-07');
