@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 use Illuminate\Support\Facades\DB;
 use Tests\Architecture\Support\Repo;
 

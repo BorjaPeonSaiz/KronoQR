@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Application\Support;
+namespace App\Modules\Shared\Domain\Support;
 
 use DateTimeImmutable;
 use DateTimeZone;
@@ -24,10 +24,13 @@ use DateTimeZone;
  * formato y las demas no, y el mismo tramo sale a una hora en el PDF y a otra
  * en el CSV.
  *
- * Vive en `Shared` desde que la consola de salud de los quioscos tambien
- * escribe la hora del centro: `Kiosk` no puede usar una clase de `Reporting`
- * (Deptrac), y una copia propia volveria a ser la sexta. `SingleTimeFormatterTest`
- * vigila que nadie fuera de aqui convierta a la zona del centro.
+ * Vive en `Shared/Domain/Support`, junto a `UtcInstant`, desde que la consola
+ * de salud de los quioscos tambien escribe la hora del centro: `Kiosk` no puede
+ * usar una clase de `Reporting` (Deptrac), y una copia propia volveria a ser la
+ * sexta. Es el criterio de admision de ADR-021: la necesitan dos modulos, no es
+ * una regla de negocio de ninguno y no depende de nada mas que de PHP.
+ * `SingleTimeFormatterTest` vigila que nadie fuera de aqui convierta a la zona
+ * del centro.
  *
  * ## PHP y PostgreSQL tienen que decir lo mismo
  *

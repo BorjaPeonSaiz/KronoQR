@@ -11,7 +11,7 @@ use App\Modules\Reporting\Domain\ValueObject\AdoptionReport;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionTarget;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionTargetComparison;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;

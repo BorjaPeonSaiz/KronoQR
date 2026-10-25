@@ -16,7 +16,7 @@ use Tests\Architecture\Support\ModuleTree;
  *    antes a UTC: la `Z` es literal, y un objeto en otra zona salia con su hora
  *    local y una `Z` detras, incluido el payload de `audit_log`.
  * 2. **La hora de pared del centro**:
- *    `Shared\Application\Support\SiteWallClock`. Estaba copiada cinco veces en
+ *    `Shared\Domain\Support\SiteWallClock`. Estaba copiada cinco veces en
  *    Reporting y la exportacion legal convierte en PostgreSQL; que las dos
  *    coincidan lo prueba `SiteWallClockMatchesPostgresTest`. Subio a `Shared`
  *    cuando `kiosk:health` resulto ser la sexta copia, con el patron sacado de
@@ -42,7 +42,7 @@ const SINGLE_TIME_FORMATTER_UTC_HOMES = [
     'Shared/Domain/ValueObject/UtcWallTime.php',
 ];
 
-const SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME = 'Shared/Application/Support/SiteWallClock.php';
+const SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME = 'Shared/Domain/Support/SiteWallClock.php';
 
 const SINGLE_TIME_FORMATTER_DURATION_HOME = 'Shared/Domain/ValueObject/HoursAndMinutes.php';
 

@@ -9,7 +9,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReport;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Console\Command;

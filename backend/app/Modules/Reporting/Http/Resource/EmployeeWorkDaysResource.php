@@ -10,7 +10,7 @@ use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Http\Request;

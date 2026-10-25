@@ -8,7 +8,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;

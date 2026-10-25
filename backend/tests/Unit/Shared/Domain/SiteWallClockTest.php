@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Support\SiteWallClock;
+use App\Modules\Shared\Domain\Support\SiteWallClock;
 
 /*
  * **La unica conversion UTC → zona del centro de Reporting y de Kiosk** (RN-04,
