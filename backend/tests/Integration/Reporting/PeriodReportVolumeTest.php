@@ -12,6 +12,8 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\QueryPlans;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -52,6 +54,48 @@ use Tests\Support\Workforce\WorkforceFixtures;
  */
 
 uses(RefreshDatabase::class);
+
+/*
+ * ## La prueba corre en la sesion del rol dueño de las tablas
+ *
+ * Para que el planificador tenga estadisticas de lo sembrado hace falta un
+ * `ANALYZE` que las vea, y eso exige dos cosas a la vez: **el rol dueño** —con
+ * el de la aplicacion PostgreSQL responde `WARNING: permission denied to
+ * analyze` y no hace nada— y **la misma sesion** que sembro, porque las filas
+ * no estan confirmadas.
+ *
+ * Hasta la 19a la siembra y el `ANALYZE` iban por la conexion de la aplicacion:
+ * el `ANALYZE` no hacia nada y el plan dependia de lo que el autovacuum hubiera
+ * dejado de las pruebas de volumen anteriores. En la CI era `daily_totals` con
+ * `reltuples = 0` y miles de paginas: densidad cero, una fila estimada, y un
+ * `Nested Loop` que volvia a leer las 15.500 filas del mes 15.500 veces (120
+ * millones de filas descartadas, 5,9 s). Pasaba o fallaba segun cuando hubiera
+ * pasado el autovacuum.
+ *
+ * Se siembra, se analiza y se mide en una transaccion de la conexion de
+ * migracion que se deshace al acabar: las estadisticas de `pg_statistic` son
+ * transaccionales y se van con ella, asi que la siguiente prueba no planifica
+ * con el histograma de un historico que ya no existe. Datos confirmados con
+ * {@see CommittedDatabase} si dejarian ese histograma detras
+ * (`ReportExportVolumeTest` acababa en `Seq Scan on daily_totals`).
+ *
+ * El SQL que se mide es el mismo; cambia el rol que lo ejecuta, que solo
+ * afecta a la comprobacion de permisos.
+ */
+beforeEach(function (): void {
+    $migracion = config()->string('database.migrations.connection');
+
+    DB::setDefaultConnection($migracion);
+    DB::connection($migracion)->beginTransaction();
+});
+
+afterEach(function (): void {
+    $migracion = DB::connection(config()->string('database.migrations.connection'));
+
+    while ($migracion->transactionLevel() > 0) {
+        $migracion->rollBack();
+    }
+});
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS = 500;
@@ -140,15 +184,51 @@ function volumenDeInforme(string $primerDia = PRIMER_DIA, int $dias = DIAS): arr
     // Sin esto, el planificador trabaja con las estadisticas de una tabla vacia
     // y elige un plan que no tiene nada que ver con el de produccion: la prueba
     // mediria el plan equivocado y pasaria o fallaria por casualidad.
-    DB::statement('ANALYZE daily_totals');
-    DB::statement('ANALYZE employees');
-    DB::statement('ANALYZE employment_contracts');
+    //
+    // Con el rol de migracion, que es el dueño, y en la misma sesion que sembro
+    // (ver el `beforeEach` de arriba). {@see QueryPlans::analyze()} falla si no
+    // deja estadisticas, que es lo que pasaba en silencio con el de la aplicacion.
+    QueryPlans::analyze('daily_totals', 'employees', 'employment_contracts', 'departments');
 
     return [
         'site' => $site,
         'from' => '2026-01-01',
         'to' => '2026-01-31',
     ];
+}
+
+/**
+ * `EXPLAIN (ANALYZE, BUFFERS)` de una sentencia y el estado de las tablas del
+ * informe, como texto para la salida de la prueba: con el reloj solo se sabe
+ * que tardo; con esto, por que.
+ *
+ * @param  array<int, mixed>  $bindings
+ */
+function periodReportVolumeDiagnosis(string $sql, array $bindings): string
+{
+    $plan = array_map(static function (object $fila): string {
+        $linea = get_object_vars($fila)['QUERY PLAN'] ?? '';
+
+        return is_scalar($linea) ? (string) $linea : '';
+    }, DB::select('EXPLAIN (ANALYZE, BUFFERS) '.$sql, $bindings));
+
+    $tablas = array_map(static fn (object $fila): string => implode(' ', array_map(
+        static fn (mixed $valor): string => is_scalar($valor) ? (string) $valor : 'null',
+        get_object_vars($fila),
+    )), DB::select(<<<'SQL'
+        SELECT s.relname,
+               'live=' || s.n_live_tup AS live, 'dead=' || s.n_dead_tup AS dead,
+               'reltuples=' || c.reltuples AS reltuples, 'relpages=' || c.relpages AS relpages,
+               'analyze=' || COALESCE(s.last_analyze::text, '-') AS analyzed,
+               'autoanalyze=' || COALESCE(s.last_autoanalyze::text, '-') AS autoanalyzed,
+               'autovacuum=' || COALESCE(s.last_autovacuum::text, '-') AS autovacuumed
+          FROM pg_stat_user_tables s
+          JOIN pg_class c ON c.oid = s.relid
+         WHERE s.relname IN ('daily_totals', 'employees', 'employment_contracts', 'absences', 'departments', 'shift_entries')
+         ORDER BY s.relname
+        SQL));
+
+    return "RNF-P-05 plan:\n  ".implode("\n  ", $plan)."\nRNF-P-05 tablas:\n  ".implode("\n  ", $tablas)."\n";
 }
 
 it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-05', function (): void {
@@ -172,10 +252,10 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
     // PostgreSQL, o espera Redis (la metrica del caso de uso se escribe dentro
     // de lo cronometrado), o es PHP. Escuchar no cambia lo medido: son quince
     // sentencias y una observacion.
-    /** @var list<array{sql: string, ms: float}> $sentencias */
+    /** @var list<array{sql: string, bindings: array<int, mixed>, ms: float}> $sentencias */
     $sentencias = [];
     DB::listen(static function (QueryExecuted $sentencia) use (&$sentencias): void {
-        $sentencias[] = ['sql' => $sentencia->sql, 'ms' => $sentencia->time];
+        $sentencias[] = ['sql' => $sentencia->sql, 'bindings' => array_values($sentencia->bindings), 'ms' => $sentencia->time];
     });
 
     $metrica = 0.0;
@@ -206,13 +286,19 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
     if (getenv('KRONOQR_PRINT_PLAN') !== false || $tardo >= 5.0) {
         $sql = array_sum(array_column($sentencias, 'ms')) / 1000;
         usort($sentencias, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
-        $lenta = $sentencias[0] ?? ['sql' => '-', 'ms' => 0.0];
+        $lenta = $sentencias[0] ?? ['sql' => '-', 'bindings' => [], 'ms' => 0.0];
 
         fwrite(STDOUT, 'RNF-P-05: informe mensual de '.EMPLEADOS.' empleados en '
             .round($tardo, 3).' s (SQL '.round($sql, 3).' s en '.\count($sentencias).' sentencias, la mas lenta '
             .round($lenta['ms'], 1).' ms «'.mb_substr((string) preg_replace('/\s+/', ' ', $lenta['sql']), 0, 60).'»; '
             .'metrica en Redis '.round($metrica, 3).' s; resto '
             .round($tardo - $sql - $metrica, 3)." s)\n");
+
+        // Por encima del presupuesto, ademas, el plan de la sentencia mas lenta
+        // y el estado de las tablas que lee (y con `KRONOQR_PRINT_PLAN=1`).
+        if ($lenta['sql'] !== '-') {
+            fwrite(STDOUT, periodReportVolumeDiagnosis($lenta['sql'], $lenta['bindings']));
+        }
     }
 
     expect($informe->rowCount())->toBe(EMPLEADOS)
