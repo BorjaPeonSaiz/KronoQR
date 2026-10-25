@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Kiosk\Domain\ValueObject;
+namespace App\Modules\Shared\Domain\ValueObject;
 
 /**
  * Donde guarda la tablet su cola de fichajes ahora mismo, segun su latido
@@ -17,6 +17,10 @@ namespace App\Modules\Kiosk\Domain\ValueObject;
  *
  * Fuera de `durable` **la tablet no sabe cuantos fichajes tiene** y declara el
  * tamaño de la cola como desconocido, nunca como cero.
+ *
+ * Vive en `Shared` y no en `Kiosk` porque viaja tambien en
+ * {@see KioskAppVersionEntry}, que `Product` lee sin poder importar el dominio
+ * de `Kiosk` (V21-1-AR-4).
  */
 enum QueueStorage: string
 {
