@@ -40,6 +40,7 @@ use Illuminate\Support\Facades\DB;
  * afecta a la comprobacion de permisos. Por eso esto es para pruebas de plan y
  * de volumen, no para las de privilegios.
  */
+/** @phpstan-ignore trait.unused (Pest lo compone con uses() en el fichero de prueba, no con un `use` dentro de una clase: PHPStan no puede ver esa composicion y lo da por muerto.) */
 trait RefreshDatabaseAsOwner
 {
     use RefreshDatabase {
