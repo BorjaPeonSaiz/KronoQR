@@ -314,7 +314,6 @@ final readonly class Credential
         );
     }
 
-    /** Sigue en vigor: no se ha revocado. */
     /**
      * El identificador de la fila, que solo existe una vez guardada.
      *
@@ -329,6 +328,7 @@ final readonly class Credential
         return $this->id ?? throw new LogicException('La credencial todavia no se ha guardado: no tiene identificador.');
     }
 
+    /** Sigue en vigor: no se ha revocado. */
     public function isActive(): bool
     {
         return ! $this->revokedAt instanceof DateTimeImmutable;
