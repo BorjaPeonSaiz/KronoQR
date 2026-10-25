@@ -35,7 +35,7 @@ function teletrabajoFicha(bool $teleworking = false, EmploymentStatus $status = 
 it('nace sin teletrabajo si nadie lo dice', function (): void {
     $employee = Employee::hire(
         uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
-        code: EmployeeCode::generate(),
+        code: EmployeeCode::fromString('E7QK2MXPR'),
         firstName: 'Youssef',
         lastName: 'Amrani',
         email: null,
@@ -51,7 +51,7 @@ it('nace sin teletrabajo si nadie lo dice', function (): void {
 it('nace con teletrabajo si el alta lo marca', function (): void {
     $employee = Employee::hire(
         uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
-        code: EmployeeCode::generate(),
+        code: EmployeeCode::fromString('E7QK2MXPR'),
         firstName: 'Youssef',
         lastName: 'Amrani',
         email: null,

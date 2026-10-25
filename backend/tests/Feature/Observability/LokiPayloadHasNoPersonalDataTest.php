@@ -184,7 +184,7 @@ it('tampoco lo manda por la pila completa, que es el canal que usa el producto',
  * ---------------------------------------------------------------------------
  */
 
-/** La forma canonica de `EmployeeCode::generate()`. Inventado. */
+/** La forma canonica de `EmployeeCode::fromRandomPicks()`. Inventado. */
 const LOKI_PII_CODIGO_DE_EMPLEADO = 'E7K2M9QX4B';
 
 /** Con puntos, como lo teclea una persona; la forma compacta ya se cubria. */

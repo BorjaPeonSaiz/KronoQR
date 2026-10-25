@@ -207,7 +207,7 @@ it('no deja pasar los datos personales de F4c-2 y PR12', function (string $texto
     expect(ErrorMessageSanitizer::sanitize($texto))->not->toContain($prohibido)
         ->and(ErrorMessageSanitizer::redact($texto))->not->toContain($prohibido);
 })->with([
-    // Codigo de empleado: la forma que genera `EmployeeCode::generate()`, la de
+    // Codigo de empleado: la forma que genera `EmployeeCode::fromRandomPicks()`, la de
     // la semilla (hexadecimal), la de los ejemplos del contrato (ocho) y la que
     // no tiene ni una cifra pero si el alfabeto sin ambiguos.
     'codigo canonico' => ['Employee E7K2M9QX4B not found', 'E7K2M9QX4B'],
@@ -333,7 +333,7 @@ it('ningun codigo, DNI ni IBAN generado sobrevive, sea cual sea la plantilla', f
     /*
      * Propiedad sobre valores generados, con semilla fija para que un fallo se
      * reproduzca. No hay `Pest\Faker` en el repositorio y no hace falta: el
-     * generador sigue las mismas reglas que `EmployeeCode::generate()`, la
+     * generador sigue las mismas reglas que `EmployeeCode::fromRandomPicks()`, la
      * letra de control del DNI y el formato agrupado del IBAN espanol.
      */
     expect(ErrorMessageSanitizer::redact($texto))->not->toContain($dato);

@@ -40,7 +40,7 @@ it('da de alta a alguien sin direccion de correo', function (): void {
     // comprobacion del modelo lo exige.
     $employee = Employee::hire(
         uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
-        code: EmployeeCode::generate(),
+        code: EmployeeCode::fromString('E7QK2MXPR'),
         firstName: 'Youssef',
         lastName: 'Amrani',
         email: null,

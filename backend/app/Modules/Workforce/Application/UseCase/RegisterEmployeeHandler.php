@@ -10,6 +10,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
+use App\Modules\Workforce\Application\Port\EmployeeCodeGenerator;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -69,6 +70,7 @@ final readonly class RegisterEmployeeHandler
         private Clock $clock,
         private IssueEmployeePinHandler $pins,
         private EmployeeWriteRetry $retry,
+        private EmployeeCodeGenerator $codes,
     ) {}
 
     /**
@@ -149,7 +151,7 @@ final readonly class RegisterEmployeeHandler
         $lastFailure = null;
 
         for ($attempt = 1; $attempt <= self::MAX_CODE_ATTEMPTS; $attempt++) {
-            $employee = $this->buildEmployee($command, $siteId, EmployeeCode::generate());
+            $employee = $this->buildEmployee($command, $siteId, $this->codes->next());
 
             try {
                 $this->employees->add($employee, $command->nationalId);
