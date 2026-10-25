@@ -61,6 +61,7 @@ it('el alfabeto del codigo nuevo no tiene los caracteres que se confunden al lee
 })->group('RF-ID-06');
 
 it('rechaza unas posiciones que no forman un codigo nuevo', function (array $picks): void {
+    /** @var list<int> $picks */
     expect(static fn (): EmployeeCode => EmployeeCode::fromRandomPicks($picks))->toThrow(InvalidArgumentException::class);
 })->with([
     'una de menos' => [[0, 0, 0, 0, 0, 0, 0, 0]],

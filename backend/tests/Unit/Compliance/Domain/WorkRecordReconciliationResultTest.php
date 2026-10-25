@@ -119,12 +119,12 @@ it('rechaza un resultado incoherente', function (Closure $resultado): void {
     'completo con mas de las listadas' => [static fn (): WorkRecordReconciliationResult => resultadoConciliacion(['entry_without_audit' => 2], [resultadoConciliacionSinAsiento()], truncado: false)],
 ])->group('RL-04', 'RS-07');
 
-it('rechaza un recuento negativo en cualquiera de los avisos de la zona del centro', function (string $campo): void {
-    expect(static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(
-        WorkRecordReconciliationWindow::full(),
-        0,
-        WorkRecordReconciliationResult::emptyCounts(),
-        [],
-        ...[$campo => -1],
-    ))->toThrow(InvalidArgumentException::class);
-})->with(['reviewedPurgesExplainingDeletions', 'unverifiableSiteTimezones', 'unverifiableSiteTimezoneChanges', 'reviewedSiteTimezoneChanges', 'reviewedSiteTimezoneEntries'])->group('RL-04', 'RN-23');
+it('rechaza un recuento negativo en cualquiera de los avisos de la zona del centro', function (Closure $resultado): void {
+    expect($resultado)->toThrow(InvalidArgumentException::class);
+})->with([
+    'revisadas que explican' => [static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(WorkRecordReconciliationWindow::full(), 0, WorkRecordReconciliationResult::emptyCounts(), [], reviewedPurgesExplainingDeletions: -1)],
+    'zonas sin verificar' => [static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(WorkRecordReconciliationWindow::full(), 0, WorkRecordReconciliationResult::emptyCounts(), [], unverifiableSiteTimezones: -1)],
+    'cambios sin verificar' => [static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(WorkRecordReconciliationWindow::full(), 0, WorkRecordReconciliationResult::emptyCounts(), [], unverifiableSiteTimezoneChanges: -1)],
+    'cambios revisados' => [static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(WorkRecordReconciliationWindow::full(), 0, WorkRecordReconciliationResult::emptyCounts(), [], reviewedSiteTimezoneChanges: -1)],
+    'asientos revisados' => [static fn (): WorkRecordReconciliationResult => new WorkRecordReconciliationResult(WorkRecordReconciliationWindow::full(), 0, WorkRecordReconciliationResult::emptyCounts(), [], reviewedSiteTimezoneEntries: -1)],
+])->group('RL-04', 'RN-23');
