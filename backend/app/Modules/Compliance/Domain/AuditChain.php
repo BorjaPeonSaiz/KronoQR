@@ -73,7 +73,7 @@ final class AuditChain
     public static function link(AuditEntryDraft $draft, string $previousHash): AuditEntry
     {
         if (! AuditEntry::isWellFormedHash($previousHash)) {
-            throw new InvalidArgumentException('El eslabon anterior de un asiento de auditoria es un SHA-256 en hexadecimal minusculo.');
+            throw new InvalidArgumentException('El hash anterior de un asiento de auditoria es un SHA-256 en hexadecimal minusculo.');
         }
 
         return new AuditEntry($draft, $previousHash, self::hashFor($draft, $previousHash));

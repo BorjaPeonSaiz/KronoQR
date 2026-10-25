@@ -102,8 +102,8 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
         // `forInstallation()` acaba de resolverlos o lanza: aqui no pueden ser
         // `null`. Si algun dia lo fueran, el asiento de la purga diria «centro 0»
         // y «sin jurisdiccion»; mejor fallar que firmar eso (R1-AR-03).
-        $siteId = $this->siteId ?? throw new LogicException('La politica de retencion no ha resuelto el centro.');
-        $floor = $this->floor ?? throw new LogicException('La politica de retencion no ha resuelto el suelo legal.');
+        $siteId = $this->siteId ?? throw new LogicException('La politica de retencion todavia no tiene centro.');
+        $floor = $this->floor ?? throw new LogicException('La politica de retencion todavia no tiene minimo legal.');
 
         return new RetentionPolicySnapshot(
             legalRecordYears: $policy->legalRecordYears,
