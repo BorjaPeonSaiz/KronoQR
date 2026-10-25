@@ -38,15 +38,14 @@ use App\Modules\Workforce\Domain\Event\EmployeesImported;
  * El sujeto es «la plantilla», no una persona. Poner ahi el UUID de la primera
  * importada seria dar por sujeto a alguien elegido al azar.
  *
- * ## Sincrono, pero DESPUES de confirmar
+ * ## Sincrono y DENTRO de la transaccion de la importacion
  *
- * Al contrario que el asiento del centro y el del contrato. La razon es la
- * transaccion: la importacion escribe cuarenta altas en una sola, y su evento se
- * publica **al confirmarla**, cuando esas altas ya existen. Un asiento de una
- * carga que luego revierte dejaria en el trail una plantilla que no llego a
- * existir; y su fallo aqui no puede deshacer nada, porque lo unico que quedaria
- * sin escribir es el resumen de un hecho que si ocurrio y que ya tiene sus
- * asientos individuales.
+ * Como el asiento de cada alta y el del centro (regla dura 6, ADR-010). La
+ * importacion escribe sus altas en una sola transaccion y publica el evento del
+ * lote antes de confirmarla: si este asiento falla, la plantilla no entra; si
+ * algo falla despues de el, el asiento revierte con la plantilla. Nunca queda
+ * una carga sin su «quien, cuando y con que fichero», ni el resumen de una carga
+ * que no llego a existir (V3-BE-1, tarea 19.6 de la 2.3.0).
  */
 final readonly class RecordEmployeeImport
 {
