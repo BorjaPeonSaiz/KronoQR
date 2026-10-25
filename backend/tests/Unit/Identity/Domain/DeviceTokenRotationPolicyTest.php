@@ -138,16 +138,6 @@ it('no rota un token sin caducidad, ni vigente ni en solape', function (): void 
         ->and($relevado->retire)->toBe([]);
 })->group('RF-ID-04');
 
-it('no rota un token cuya caducidad no es posterior a su emision', function (): void {
-    $decision = politicaDeRotacion()->decide(
-        [tokenDeNoventaDias(7, '2026-03-01T00:00:00Z', '2026-03-01T00:00:00Z')],
-        7,
-        instanteDeRotacion('2026-03-01T00:00:00Z'),
-    );
-
-    expect($decision->outcome)->toBe(DeviceTokenRotationOutcome::NONE);
-})->group('RF-ID-04');
-
 it('rechaza un umbral o un solape fuera de rango', function (float $threshold, int $overlapSeconds): void {
     expect(static fn (): DeviceTokenRotationPolicy => new DeviceTokenRotationPolicy($threshold, $overlapSeconds))
         ->toThrow(InvalidArgumentException::class);
@@ -171,3 +161,29 @@ it('una rotacion siempre dice que token entra en solape y no puede retirarlo a l
         ->toThrow(InvalidArgumentException::class)
         ->and(DeviceTokenRotation::rotate(7, $until, [3])->retire)->toBe([3]);
 })->group('RF-ID-04');
+
+it('un token del quiosco no puede caducar al nacer ni llevar marcas fuera de UTC (R1-AR-04)', function (Closure $token): void {
+    expect($token)->toThrow(InvalidArgumentException::class);
+})->with([
+    'caduca antes de emitirse' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(7, expiresAt: '2025-12-31T23:59:59Z')],
+    'caduca al emitirse' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(7, expiresAt: '2026-01-01T00:00:00Z')],
+    'emitido con desfase' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(7, issuedAt: '2026-01-01T02:00:00+02:00')],
+    'caducidad con desfase' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(7, expiresAt: '2026-04-01T02:00:00+02:00')],
+    'identificador cero' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(0)],
+    'identificador negativo' => [static fn (): DeviceTokenRecord => tokenDeNoventaDias(-3)],
+])->group('RF-ID-04', 'RN-04');
+
+it('admite un token sin caducidad y uno que caduca un segundo despues de emitirse', function (): void {
+    expect(tokenDeNoventaDias(1, expiresAt: null)->expiresAt)->toBeNull()
+        ->and(tokenDeNoventaDias(1, expiresAt: '2026-01-01T00:00:01Z')->id)->toBe(1);
+})->group('RF-ID-04');
+
+it('una rotacion solo nombra tokens que existen y su solape va en UTC (R1-AR-04)', function (Closure $rotacion): void {
+    expect($rotacion)->toThrow(InvalidArgumentException::class);
+})->with([
+    'retira el token cero' => [static fn (): DeviceTokenRotation => DeviceTokenRotation::none([3, 0])],
+    'retira un negativo' => [static fn (): DeviceTokenRotation => DeviceTokenRotation::rotate(7, new DateTimeImmutable('2026-03-15T00:00:00Z'), [-1])],
+    'releva el token cero' => [static fn (): DeviceTokenRotation => DeviceTokenRotation::rotate(0, new DateTimeImmutable('2026-03-15T00:00:00Z'))],
+    'solape con desfase' => [static fn (): DeviceTokenRotation => DeviceTokenRotation::rotate(7, new DateTimeImmutable('2026-03-15T02:00:00+02:00'))],
+    'reentrega con desfase' => [static fn (): DeviceTokenRotation => DeviceTokenRotation::redeliver(7, new DateTimeImmutable('2026-03-15T02:00:00+02:00'), [9])],
+])->group('RF-ID-04', 'RN-04');

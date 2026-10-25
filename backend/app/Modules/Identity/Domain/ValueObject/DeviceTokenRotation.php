@@ -31,6 +31,20 @@ final readonly class DeviceTokenRotation
         if ($supersededTokenId !== null && in_array($supersededTokenId, $retire, true)) {
             throw new InvalidArgumentException('Un token no puede quedar en solape y retirarse a la vez.');
         }
+
+        // El caso de uso ejecuta la orden tal cual: un identificador que no es
+        // un token, o un solape con desfase, se escribiria en la tabla de
+        // tokens sin que nadie lo mirara (regla dura 3, R1-AR-04).
+        // Que sea una lista de enteros lo dice el tipo, y PHPStan lo exige.
+        foreach ([...$retire, ...($supersededTokenId === null ? [] : [$supersededTokenId])] as $tokenId) {
+            if ($tokenId <= 0) {
+                throw new InvalidArgumentException('Un token de quiosco tiene un identificador positivo.');
+            }
+        }
+
+        if ($supersededUntil instanceof DateTimeImmutable && $supersededUntil->getOffset() !== 0) {
+            throw new InvalidArgumentException('El fin del solape del token relevado va en UTC.');
+        }
     }
 
     /**
