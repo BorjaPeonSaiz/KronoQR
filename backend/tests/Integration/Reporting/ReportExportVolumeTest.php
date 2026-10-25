@@ -7,7 +7,8 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\QueryPlans;
+use Tests\Support\Database\RefreshDatabaseAsOwner;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Reporting\ReportExports;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -49,7 +50,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * dicho aqui para que nadie lea la ausencia como un olvido.
  */
 
-uses(RefreshDatabase::class);
+// En la sesion del rol dueño de las tablas: sin ella `ANALYZE` no hace nada
+// y el plan depende del autovacuum (ver RefreshDatabaseAsOwner).
+uses(RefreshDatabaseAsOwner::class);
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS_EN_DIFERIDO = 500;
@@ -60,7 +63,21 @@ const DESDE_EN_DIFERIDO = '2026-01-01';
 const HASTA_EN_DIFERIDO = '2026-04-02';
 
 /**
- * Plantilla, contratos y proyeccion de un trimestre.
+ * El historico de la prueba del plan: dos años, el trimestre dentro.
+ *
+ * Con solo el trimestre sembrado, el trimestre ES la tabla entera y un
+ * `Seq Scan` es el plan correcto: la afirmacion «sin `Seq Scan`» solo se
+ * cumplia porque el `ANALYZE` no hacia nada y el planificador no sabia cuantas
+ * filas habia. Con estadisticas de verdad hace falta lo que hay en produccion,
+ * un historico mas largo que lo que se pide (RL-02: cuatro años de retencion).
+ */
+const REPORT_EXPORT_VOLUME_HISTORY_FROM = '2025-01-01';
+
+const REPORT_EXPORT_VOLUME_HISTORY_TO = '2026-12-31';
+
+/**
+ * Plantilla, contratos y proyeccion de un trimestre (o del historico que se
+ * pida, que lo contiene).
  *
  * Las filas de `daily_totals` se escriben con una sola sentencia y no por el
  * agregado: lo que aqui se mide es el camino en diferido, no la coherencia de la
@@ -69,7 +86,7 @@ const HASTA_EN_DIFERIDO = '2026-04-02';
  *
  * @return list<int> los identificadores de los diez departamentos
  */
-function plantillaEnDiferido(): array
+function plantillaEnDiferido(string $desde = DESDE_EN_DIFERIDO, string $hasta = HASTA_EN_DIFERIDO): array
 {
     $site = WorkforceFixtures::site('Hotel con volumen en diferido');
 
@@ -119,11 +136,10 @@ function plantillaEnDiferido(): array
              has_open_shift, has_incident, recalculated_at)
         SELECT e.id, d::date, 480, 1, NULL, NULL, FALSE, FALSE, now()
           FROM employees e
-         CROSS JOIN generate_series(DATE '2026-01-01', DATE '2026-04-02', interval '1 day') AS d
-        SQL);
+         CROSS JOIN generate_series(?::date, ?::date, interval '1 day') AS d
+        SQL, [$desde, $hasta]);
 
-    DB::statement('ANALYZE daily_totals');
-    DB::statement('ANALYZE employees');
+    QueryPlans::analyze('daily_totals', 'employees');
 
     return $departamentos;
 }
@@ -195,7 +211,7 @@ it('no recorre daily_totals entera para sacar el trimestre', function (): void {
      * lo que decide el plan es ese `LEFT JOIN`, y escribir aqui las cincuenta
      * lineas del informe ataria la prueba a su redaccion.
      */
-    plantillaEnDiferido();
+    plantillaEnDiferido(REPORT_EXPORT_VOLUME_HISTORY_FROM, REPORT_EXPORT_VOLUME_HISTORY_TO);
 
     /** @var list<object> $filas */
     $filas = DB::select(<<<'SQL'

@@ -12,9 +12,8 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Database\QueryPlans;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\RefreshDatabaseAsOwner;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -53,49 +52,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * unitaria tiene presupuesto de duracion y esto no cabria en el.
  */
 
-uses(RefreshDatabase::class);
-
-/*
- * ## La prueba corre en la sesion del rol dueño de las tablas
- *
- * Para que el planificador tenga estadisticas de lo sembrado hace falta un
- * `ANALYZE` que las vea, y eso exige dos cosas a la vez: **el rol dueño** —con
- * el de la aplicacion PostgreSQL responde `WARNING: permission denied to
- * analyze` y no hace nada— y **la misma sesion** que sembro, porque las filas
- * no estan confirmadas.
- *
- * Hasta la 19a la siembra y el `ANALYZE` iban por la conexion de la aplicacion:
- * el `ANALYZE` no hacia nada y el plan dependia de lo que el autovacuum hubiera
- * dejado de las pruebas de volumen anteriores. En la CI era `daily_totals` con
- * `reltuples = 0` y miles de paginas: densidad cero, una fila estimada, y un
- * `Nested Loop` que volvia a leer las 15.500 filas del mes 15.500 veces (120
- * millones de filas descartadas, 5,9 s). Pasaba o fallaba segun cuando hubiera
- * pasado el autovacuum.
- *
- * Se siembra, se analiza y se mide en una transaccion de la conexion de
- * migracion que se deshace al acabar: las estadisticas de `pg_statistic` son
- * transaccionales y se van con ella, asi que la siguiente prueba no planifica
- * con el histograma de un historico que ya no existe. Datos confirmados con
- * {@see CommittedDatabase} si dejarian ese histograma detras
- * (`ReportExportVolumeTest` acababa en `Seq Scan on daily_totals`).
- *
- * El SQL que se mide es el mismo; cambia el rol que lo ejecuta, que solo
- * afecta a la comprobacion de permisos.
- */
-beforeEach(function (): void {
-    $migracion = config()->string('database.migrations.connection');
-
-    DB::setDefaultConnection($migracion);
-    DB::connection($migracion)->beginTransaction();
-});
-
-afterEach(function (): void {
-    $migracion = DB::connection(config()->string('database.migrations.connection'));
-
-    while ($migracion->transactionLevel() > 0) {
-        $migracion->rollBack();
-    }
-});
+// En la sesion del rol dueño de las tablas y dentro de una transaccion que se
+// deshace: es lo que deja a `ANALYZE` ver lo sembrado sin que sus estadisticas
+// sobrevivan a la prueba (ver RefreshDatabaseAsOwner, que cuenta el fallo de
+// la CI de la 19a que lo motivo).
+uses(RefreshDatabaseAsOwner::class);
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS = 500;
@@ -186,7 +147,7 @@ function volumenDeInforme(string $primerDia = PRIMER_DIA, int $dias = DIAS): arr
     // mediria el plan equivocado y pasaria o fallaria por casualidad.
     //
     // Con el rol de migracion, que es el dueño, y en la misma sesion que sembro
-    // (ver el `beforeEach` de arriba). {@see QueryPlans::analyze()} falla si no
+    // (RefreshDatabaseAsOwner). {@see QueryPlans::analyze()} falla si no
     // deja estadisticas, que es lo que pasaba en silencio con el de la aplicacion.
     QueryPlans::analyze('daily_totals', 'employees', 'employment_contracts', 'departments');
 

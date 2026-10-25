@@ -102,10 +102,9 @@ function conciliacionHistoricoConAsientos(): void
         DB::table('audit_log')->insert($chunk);
     }
 
-    QueryPlans::analyze('shift_entries', 'employees');
     // `audit_log` es particionada: el `ANALYZE` de la madre recorre sus
     // particiones, que es donde el planificador mira.
-    DB::connection(config()->string('database.migrations.connection'))->statement('ANALYZE audit_log');
+    QueryPlans::analyze('shift_entries', 'employees', 'audit_log');
 }
 
 it('resuelve la ventana diaria por indice, sin recorrer ninguna particion de audit_log con datos', function (): void {

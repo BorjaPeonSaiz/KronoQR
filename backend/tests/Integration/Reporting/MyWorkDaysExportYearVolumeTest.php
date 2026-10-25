@@ -14,7 +14,8 @@ use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\QueryPlans;
+use Tests\Support\Database\RefreshDatabaseAsOwner;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
@@ -60,7 +61,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * año dentro del rango (30-03-2025 y 26-10-2025).
  */
 
-uses(RefreshDatabase::class);
+// En la sesion del rol dueño de las tablas: sin ella `ANALYZE` no hace nada
+// y el plan depende del autovacuum (ver RefreshDatabaseAsOwner).
+uses(RefreshDatabaseAsOwner::class);
 
 /** Hoy, en UTC: el 20 de marzo de 2026 por la tarde, tambien en Madrid. */
 const MY_WORK_DAYS_EXPORT_YEAR_TODAY = '2026-03-20 19:00:00';
@@ -119,8 +122,7 @@ function anoCompletoDeTramos(): array
         }
     }
 
-    DB::statement('ANALYZE shift_entries');
-    DB::statement('ANALYZE daily_totals');
+    QueryPlans::analyze('shift_entries', 'daily_totals');
 
     return ['token' => $token, 'employee' => $employee];
 }
