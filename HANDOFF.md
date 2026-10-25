@@ -99,6 +99,7 @@ Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
 - **19.6:** el asiento de la importación entra en su transacción; dos triggers (`shift_entries_guard_duration`, nota del 25-10 en ADR-057) rechazan un tramo que nace o se cierra con otra duración que la de sus marcas (filas antiguas intactas, las denuncia la conciliación).
 - **Pendiente:**
   - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
+  - posición de las columnas de desfase del CSV del registro propio (junto a su hora o al final): decide el propietario;
   - seis `new DateTimeImmutable($fecha.' 00:00:00')` del dominio a `createFromFormat('!…')` (19.4);
   - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
   - Redis local con el AOF corrupto: Feature/Integration/Contract solo en la CI hasta que el propietario decida repararlo.
