@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Export;
 
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
+use App\Modules\Compliance\Domain\ValueObject\ExportedClockSource;
 use App\Modules\Compliance\Domain\ValueObject\ExportedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\ExportedDuration;
 use App\Modules\Compliance\Domain\ValueObject\ExportedMarks;
@@ -238,9 +239,13 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
             'local_out' => $entry->localClockedOutAt,
             'duration' => $entry->duration->toClockText(),
             'day_total' => $entry->dayTotal->toClockText(),
-            'status' => $this->translated('status.'.$entry->status, $entry->status),
-            'clock_in_source' => $this->translated('source.'.$entry->clockInSource, $entry->clockInSource),
-            'clock_out_source' => $this->translated('source.'.$entry->clockOutSource, $entry->clockOutSource),
+            'status' => $this->translated('status.'.$entry->status->value, $entry->status->value),
+            'clock_in_source' => $this->translated('source.'.$entry->clockInSource->value, $entry->clockInSource->value),
+            // Sin salida no hay origen de la salida: celda vacia, como antes de
+            // que el origen fuera un enumerado.
+            'clock_out_source' => $entry->clockOutSource instanceof ExportedClockSource
+                ? $this->translated('source.'.$entry->clockOutSource->value, $entry->clockOutSource->value)
+                : '',
             'utc_in' => $entry->utcClockedInAt,
             'utc_out' => $entry->utcClockedOutAt,
         ]);
@@ -372,10 +377,13 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
      * uno que el idioma no conoce.
      *
      * **No falla como {@see self::text}**, y la diferencia importa: un rotulo que
-     * falta es un error del producto, pero un estado o un origen desconocido es
-     * un dato que ya esta en la base. Negarse a exportarlo dejaria sin registro
-     * legal a quien mas lo necesita; escribir el codigo en crudo es feo y
-     * verdadero.
+     * falta es un error del producto, pero un estado o un origen que el idioma
+     * no traduce es un dato que ya esta en la base. Negarse a exportarlo dejaria
+     * sin registro legal a quien mas lo necesita; escribir el codigo en crudo es
+     * feo y verdadero. Desde H5 el estado y el origen son enumerados
+     * (`ExportedShiftEntryStatus`, `ExportedClockSource`) que repiten las
+     * restricciones `CHECK` de `shift_entries`, asi que lo que puede faltar es
+     * la traduccion, no el valor.
      */
     private function translated(string $key, string $fallback): string
     {

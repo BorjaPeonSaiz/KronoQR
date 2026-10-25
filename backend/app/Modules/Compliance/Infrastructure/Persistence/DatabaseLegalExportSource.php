@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Persistence;
 
 use App\Modules\Compliance\Application\Port\LegalExportSource;
+use App\Modules\Compliance\Domain\ValueObject\ExportedClockSource;
 use App\Modules\Compliance\Domain\ValueObject\ExportedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\ExportedDuration;
 use App\Modules\Compliance\Domain\ValueObject\ExportedMarks;
 use App\Modules\Compliance\Domain\ValueObject\ExportedShiftEntry;
+use App\Modules\Compliance\Domain\ValueObject\ExportedShiftEntryStatus;
 use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportRecord;
@@ -342,10 +344,19 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
             utcClockedOutAt: $row->nullableString('utc_out') ?? '',
             duration: ExportedDuration::ofNullableMinutes($row->nullableInt('duration_minutes')),
             dayTotal: ExportedDuration::ofMinutes($row->int('day_minutes')),
-            status: $row->string('status'),
-            clockInSource: $row->string('clock_in_source'),
-            clockOutSource: $row->nullableString('clock_out_source') ?? '',
+            status: ExportedShiftEntryStatus::from($row->string('status')),
+            clockInSource: ExportedClockSource::from($row->string('clock_in_source')),
+            clockOutSource: $this->nullableSource($row->nullableString('clock_out_source')),
         );
+    }
+
+    /**
+     * El origen de la salida, o `null` mientras el tramo siga abierto. Un valor
+     * fuera del enumerado no puede llegar: lo impide `shift_entries_chk_sources`.
+     */
+    private function nullableSource(?string $source): ?ExportedClockSource
+    {
+        return $source === null ? null : ExportedClockSource::from($source);
     }
 
     private function toCorrection(Row $row): ExportedCorrection

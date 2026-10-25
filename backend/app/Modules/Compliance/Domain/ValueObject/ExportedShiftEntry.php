@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Un periodo de trabajo tal y como se entrega a la Inspeccion (RF-IN-05,
  * RL-01, RL-06).
@@ -49,12 +51,24 @@ final readonly class ExportedShiftEntry implements LegalExportRecord
         public string $utcClockedOutAt,
         public ExportedDuration $duration,
         public ExportedDuration $dayTotal,
-        /** `open`, `closed`, `anomalous` o `voided`. Nunca `superseded`. */
-        public string $status,
-        /** `qr_kiosk`, `pin_kiosk`, `manual_admin` o `import` (RL-01). */
-        public string $clockInSource,
-        public string $clockOutSource,
-    ) {}
+        /** Nunca `superseded`: el tipo no lo admite. */
+        public ExportedShiftEntryStatus $status,
+        /** RL-01: de donde viene cada marca. */
+        public ExportedClockSource $clockInSource,
+        /** `null` si el tramo no tiene salida. */
+        public ?ExportedClockSource $clockOutSource,
+    ) {
+        if ($entryNumber < 1) {
+            throw new InvalidArgumentException('El orden de un tramo dentro de su jornada empieza en 1, y llego '.$entryNumber.'.');
+        }
+
+        // Lo garantiza `shift_entries_chk_open_has_no_clock_out`: un tramo
+        // abierto con hora de salida seria un estado que nadie sabe leer, y en
+        // el documento de la Inspeccion pareceria un turno cerrado (H5).
+        if ($status === ExportedShiftEntryStatus::Open && ($localClockedOutAt !== '' || $utcClockedOutAt !== '')) {
+            throw new InvalidArgumentException('Un tramo abierto no tiene hora de salida.');
+        }
+    }
 
     public function type(): LegalExportRecordType
     {
