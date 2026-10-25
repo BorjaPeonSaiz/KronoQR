@@ -52,5 +52,5 @@ it('rechaza un sondeo con recuentos imposibles', function (Closure $sondeo): voi
     // El caso reproducido en la verificacion de la 2.2.1.
     'comparados negativos' => [static fn (): KioskAppVersionSurvey => new KioskAppVersionSurvey('2.2.0', -1)],
     'lista mas de los comparados' => [static fn (): KioskAppVersionSurvey => new KioskAppVersionSurvey('2.2.0', 1, [sondeoDeVersionTablet()], [sondeoDeVersionTablet()])],
-    'compara sin version del servidor' => [static fn (): KioskAppVersionSurvey => new KioskAppVersionSurvey(null, 2)],
+    'compara sin version del servidor' => [static fn (): KioskAppVersionSurvey => new KioskAppVersionSurvey(null, 1)],
 ])->group('RF-PD-13', 'RF-KI-07');

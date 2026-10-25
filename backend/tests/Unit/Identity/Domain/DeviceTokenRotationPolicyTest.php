@@ -159,7 +159,9 @@ it('una rotacion siempre dice que token entra en solape y no puede retirarlo a l
         ->toThrow(InvalidArgumentException::class)
         ->and(static fn (): DeviceTokenRotation => DeviceTokenRotation::redeliver(7, $until, [7, 9]))
         ->toThrow(InvalidArgumentException::class)
-        ->and(DeviceTokenRotation::rotate(7, $until, [3])->retire)->toBe([3]);
+        ->and(DeviceTokenRotation::rotate(7, $until, [3])->retire)->toBe([3])
+        ->and(DeviceTokenRotation::rotate(1, $until, [2])->supersededTokenId)->toBe(1)
+        ->and(DeviceTokenRotation::none([1])->retire)->toBe([1]);
 })->group('RF-ID-04');
 
 it('un token del quiosco no puede caducar al nacer ni llevar marcas fuera de UTC (R1-AR-04)', function (Closure $token): void {

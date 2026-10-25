@@ -133,10 +133,14 @@ final readonly class UtcInstant
         }
 
         $wallTime = $parts[1].' '.$parts[2];
-        $fraction = str_pad($parts[3] ?? '', 6, '0');
+        $fraction = $parts[3] ?? '';
+        $offset = $parts[4] ?? '';
+
+        // `P` lee las cuatro formas del desfase (`Z`, `+02`, `+0200`, `+02:00`);
+        // sin desfase es UTC, como la sesion de la base de datos.
         $parsed = DateTimeImmutable::createFromFormat(
-            '!Y-m-d H:i:s.uP',
-            $wallTime.'.'.$fraction.self::offsetOf($parts[4] ?? ''),
+            $fraction === '' ? '!Y-m-d H:i:sP' : '!Y-m-d H:i:s.uP',
+            $wallTime.($fraction === '' ? '' : '.'.$fraction).($offset === '' ? 'Z' : $offset),
         );
 
         // `createFromFormat` acepta el 31 de febrero y lo lleva a marzo: si la
@@ -146,17 +150,5 @@ final readonly class UtcInstant
         }
 
         return $parsed->setTimezone(new DateTimeZone('UTC'));
-    }
-
-    /** `Z`, nada, `+02`, `+0200` o `+02:00`, siempre como `+HH:MM`. */
-    private static function offsetOf(string $written): string
-    {
-        if ($written === '' || $written === 'Z') {
-            return '+00:00';
-        }
-
-        $digits = str_replace(':', '', $written);
-
-        return substr($digits, 0, 3).':'.str_pad(substr($digits, 3), 2, '0');
     }
 }

@@ -25,4 +25,5 @@ it('rechaza una cobertura imposible', function (int $dias, int $personas): void 
     'mas personas que dias' => [1, 2],
     'personas sin dias' => [0, 1],
     'dias sin personas' => [3, 0],
+    'un dia sin persona' => [1, 0],
 ])->group('RF-IN-03');
