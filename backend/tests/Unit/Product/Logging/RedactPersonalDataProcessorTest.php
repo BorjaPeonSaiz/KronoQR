@@ -156,7 +156,7 @@ it('cuesta poco por linea', function (): void {
         'duration_ms' => 12.5,
     ]);
 
-    $vueltas = 2000;
+    $vueltas = 500;
     $inicio = hrtime(true);
 
     for ($i = 0; $i < $vueltas; $i++) {

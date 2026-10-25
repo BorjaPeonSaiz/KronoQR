@@ -6,8 +6,8 @@ use App\Modules\Identity\Infrastructure\Adapter\RandomTemporaryPasswordGenerator
 
 /*
  * La contrasena temporal cumple la politica de RF-ID-01 POR CONSTRUCCION
- * (RF-ID-10): mil generaciones y ninguna excepcion. Sin contenedor: el
- * generador solo depende de `random_int`.
+ * (RF-ID-10): trescientas generaciones por longitud y ninguna excepcion. Sin
+ * contenedor: el generador solo depende de `random_int`.
  */
 
 it('genera siempre las cuatro clases, sin caracteres ambiguos y con la longitud mayor entre 20 y el minimo', function (
@@ -16,18 +16,31 @@ it('genera siempre las cuatro clases, sin caracteres ambiguos y con la longitud 
 ): void {
     $generator = new RandomTemporaryPasswordGenerator;
 
-    for ($i = 0; $i < 1000; $i++) {
+    // Trescientas por longitud y no mil, y comprobadas con PHP con una sola
+    // afirmacion al final: mil con siete `expect` cada una eran 21.000
+    // afirmaciones y la segunda prueba mas cara de la suite unitaria (doc 02
+    // §9.2, presupuesto de 5 s). Cada contrasena se sigue comprobando entera, y
+    // las que fallen salen en el mensaje.
+    $rotas = [];
+
+    for ($i = 0; $i < 300; $i++) {
         $password = $generator->generate($minLength);
 
-        expect(strlen($password))->toBe($expectedLength)
-            ->and($password)->toMatch('/[a-z]/')
-            ->and($password)->toMatch('/[A-Z]/')
-            ->and($password)->toMatch('/[0-9]/')
-            ->and($password)->toMatch('/[^a-zA-Z0-9]/')
-            ->and($password)->not->toMatch('/[lIO01]/')
+        $cumple = strlen($password) === $expectedLength
+            && preg_match('/[a-z]/', $password) === 1
+            && preg_match('/[A-Z]/', $password) === 1
+            && preg_match('/[0-9]/', $password) === 1
+            && preg_match('/[^a-zA-Z0-9]/', $password) === 1
+            && preg_match('/[lIO01]/', $password) === 0
             // ASCII: nunca pasa de los 72 bytes que lee `bcrypt`.
-            ->and(mb_check_encoding($password, 'ASCII'))->toBeTrue();
+            && mb_check_encoding($password, 'ASCII');
+
+        if (! $cumple) {
+            $rotas[] = $password;
+        }
     }
+
+    expect($rotas)->toBe([]);
 })->with([
     'minimo de serie, 12' => [12, 20],
     'minimo mayor que 20' => [30, 30],

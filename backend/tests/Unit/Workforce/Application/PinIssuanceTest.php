@@ -81,26 +81,21 @@ it('no descarta los PIN con ceros a la izquierda', function (): void {
 })->group('RF-ID-09');
 
 it('nunca emite un PIN excluido por la configuracion', function (): void {
-    // El escenario real: los patrones triviales del `.env` de serie. Se excluyen
-    // TODOS menos uno, de modo que el generador solo puede devolver ese: si la
-    // exclusion no funcionara, la prueba lo veria en el primer intento.
-    $onlyAdmissible = '483920';
+    // El escenario real: los patrones triviales del `.env` de serie, aqui una
+    // lista larga de 999 (`000000` a `000998`) que el generador tiene que
+    // esquivar en cada intento.
+    // Solo se construyen los 999 primeros excluidos, que son los que la prueba
+    // usa: antes se generaba el millon entero para quedarse con esos mismos 999,
+    // y era la decima de segundo mas cara de la suite unitaria (doc 02 §9.2).
+    $forbidden = array_map(
+        static fn (int $pin): string => str_pad((string) $pin, 6, '0', STR_PAD_LEFT),
+        range(0, 998),
+    );
 
-    $forbidden = [];
-
-    for ($pin = 0; $pin < 1000000; $pin++) {
-        $candidate = str_pad((string) $pin, 6, '0', STR_PAD_LEFT);
-
-        if ($candidate !== $onlyAdmissible) {
-            $forbidden[] = $candidate;
-        }
-    }
-
-    // Con 999.999 exclusiones el generador tiene que reintentar hasta dar con el
-    // unico admisible; el limite de intentos hace que, si no lo encuentra, falle
-    // en voz alta en vez de colgarse.
-    expect(pinGeneratorWith(array_slice($forbidden, 0, 999))->generate())
-        ->not->toBeIn(array_slice($forbidden, 0, 999));
+    // El limite de intentos hace que, si el generador no encuentra un PIN
+    // admisible, falle en voz alta en vez de colgarse.
+    expect(pinGeneratorWith($forbidden)->generate())
+        ->not->toBeIn($forbidden);
 })->group('RF-ID-09');
 
 it('rechaza los patrones triviales que la instalacion excluye de serie', function (string $trivial): void {
