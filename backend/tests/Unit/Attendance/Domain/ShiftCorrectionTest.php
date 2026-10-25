@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use Tests\Support\Domain\RecordedEvents;
 use Tests\Support\Factory\ClockingPolicyFactory;
@@ -45,10 +45,10 @@ use Tests\Support\Time\Instants;
  *
  * @param  list<DomainEvent>  $events
  */
-function recordedCorrection(array $events): ShiftCorrected
+function recordedCorrection(array $events): ShiftEntryCorrected
 {
     foreach ($events as $event) {
-        if ($event instanceof ShiftCorrected) {
+        if ($event instanceof ShiftEntryCorrected) {
             return $event;
         }
     }
@@ -344,7 +344,7 @@ it('da de alta un tramo que nunca se ficho', function (): void {
 
     $entry = $jornada->addEntry(
         'shift-entry-manual',
-        ShiftTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 15:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 15:00')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->because(CorrectionReasonCode::CREDENCIAL_NO_ENTREGADA)->build(),
         ClockingPolicyFactory::standard(),

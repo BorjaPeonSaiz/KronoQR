@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
@@ -51,7 +51,7 @@ use RuntimeException;
  * restricciones de PostgreSQL son la ultima linea de defensa (doc 02 §3.2) y
  * bajo concurrencia **saltan**: dos escaneos simultaneos del mismo empleado
  * llegan los dos a una jornada sin turno abierto. El caso de uso sabe que hacer
- * con `ShiftAlreadyOpen` —reintentar, y resolverlo por anti-rebote—, pero no con
+ * con `ShiftEntryAlreadyOpen` —reintentar, y resolverlo por anti-rebote—, pero no con
  * un `SQLSTATE 23505`.
  *
  * ## El tramo que se va a escribir se carga bloqueado
@@ -626,12 +626,12 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      * Cualquier otro fallo de base de datos sube tal cual: convertirlo en un
      * conflicto de negocio ocultaria un problema real.
      */
-    private function translate(QueryException $exception, WorkDay $workDay): QueryException|ShiftAlreadyOpen|OverlappingShiftEntry
+    private function translate(QueryException $exception, WorkDay $workDay): QueryException|ShiftEntryAlreadyOpen|OverlappingShiftEntry
     {
         $message = $exception->getMessage();
 
         if (str_contains($message, 'one_open_shift_per_employee')) {
-            return ShiftAlreadyOpen::forEmployee($workDay->employeeUuid());
+            return ShiftEntryAlreadyOpen::forEmployee($workDay->employeeUuid());
         }
 
         if (str_contains($message, 'shift_entries_no_overlap')) {

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
@@ -138,15 +138,15 @@ it('no compara contra una fecha que falta: a esa baja ya no la admite admitsEntr
 // --- RN-05 (2.3.0): las marcas no pasan de la cota del dia del cese ----------
 
 /** La excepcion del cese; si `$accion` no la lanza, la prueba falla. */
-function rechazoPorElCese(Closure $accion): ShiftMarkAfterTermination
+function rechazoPorElCese(Closure $accion): ShiftEntryMarkAfterTermination
 {
     try {
         $accion();
-    } catch (ShiftMarkAfterTermination $exception) {
+    } catch (ShiftEntryMarkAfterTermination $exception) {
         return $exception;
     }
 
-    throw new RuntimeException('Se esperaba ShiftMarkAfterTermination y no se lanzo nada.');
+    throw new RuntimeException('Se esperaba ShiftEntryMarkAfterTermination y no se lanzo nada.');
 }
 
 it('admite marcas de una persona de baja hasta un segundo antes de la cota de su dia de cese', function (string $cese, string $entrada, ?string $salida): void {
@@ -158,8 +158,8 @@ it('admite marcas de una persona de baja hasta un segundo antes de la cota de su
 
     expect(sinRechazoDelAltaManual(fn () => $baja->assertTimesAllowed(
         $salida === null
-            ? ShiftTimes::open(Instants::utc($entrada))
-            : ShiftTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
+            ? ShiftEntryTimes::open(Instants::utc($entrada))
+            : ShiftEntryTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     )))->toBeTrue();
@@ -175,8 +175,8 @@ it('rechaza a una persona de baja la marca que llega a la cota de su dia de cese
 
     $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
         $salida === null
-            ? ShiftTimes::open(Instants::utc($entrada))
-            : ShiftTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
+            ? ShiftEntryTimes::open(Instants::utc($entrada))
+            : ShiftEntryTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     ));
@@ -196,7 +196,7 @@ it('dice en el mensaje tecnico cual es el limite, sin datos de la persona', func
     $baja = personaParaElAltaManual(EmploymentStatus::TERMINATED, '2026-03-01', '2026-10-10');
 
     $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
-        ShiftTimes::open(Instants::utc('2026-10-11 10:00')),
+        ShiftEntryTimes::open(Instants::utc('2026-10-11 10:00')),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     ));
@@ -211,7 +211,7 @@ it('no acota las marcas de quien no esta de baja', function (EmploymentStatus $s
     $persona = personaParaElAltaManual($status, '2026-03-01', '2026-10-10');
 
     expect(sinRechazoDelAltaManual(fn () => $persona->assertTimesAllowed(
-        ShiftTimes::closed(Instants::utc('2026-10-20 08:00'), Instants::utc('2026-10-20 15:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-10-20 08:00'), Instants::utc('2026-10-20 15:00')),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     )))->toBeTrue();
@@ -224,17 +224,17 @@ it('en una correccion solo mira las marcas que cambian', function (): void {
     // La salida antigua ya estaba mas alla de la cota (un dato anterior a la
     // 2.3.0); corregir la entrada no tropieza con ella. Cambiarla, si.
     $baja = personaParaElAltaManual(EmploymentStatus::TERMINATED, '2026-03-01', '2026-10-10');
-    $antes = ShiftTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 11:00'));
+    $antes = ShiftEntryTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 11:00'));
 
     expect(sinRechazoDelAltaManual(fn () => $baja->assertTimesAllowed(
-        ShiftTimes::closed(Instants::utc('2026-10-10 07:00'), Instants::utc('2026-10-11 11:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-10-10 07:00'), Instants::utc('2026-10-11 11:00')),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
         $antes,
     )))->toBeTrue();
 
     $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
-        ShiftTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 12:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 12:00')),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
         $antes,

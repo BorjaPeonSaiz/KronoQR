@@ -33,7 +33,7 @@ use DateTimeImmutable;
  * continua la jornada (RN-05), y por eso forma parte del estado temporal del
  * tramo y de su igualdad.
  */
-final readonly class ShiftTimes
+final readonly class ShiftEntryTimes
 {
     /**
      * @param  EntryClosure|null  $closure  como termino el tramo (RN-05, 2.3.0): nulo si y solo si

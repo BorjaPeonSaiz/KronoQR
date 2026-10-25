@@ -37,7 +37,7 @@ use DateTimeImmutable;
  * `$mark` reutiliza {@see FutureMark} porque sus valores son los nombres de las
  * columnas, que son tambien los del contrato.
  *
- * Mismo criterio que {@see ShiftMarkInFuture}: `getMessage()` es tecnico y en
+ * Mismo criterio que {@see ShiftEntryMarkInFuture}: `getMessage()` es tecnico y en
  * ingles —va al log, **sin datos personales** (regla dura 21)—; lo que ve una
  * persona sale de {@see self::$translationKey} y {@see self::$parameters}, con la
  * cota en horas.

@@ -6,7 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Listener;
 
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
@@ -115,7 +115,7 @@ final readonly class RecordShiftEntryAudit
             'daily_total_minutes' => $event->dailyTotal->minutes,
             // `array_column` y no un `array_map` con el tipo del enum: `Compliance`
             // solo puede alcanzar `Attendance\Domain\Event` (doc 02 §1.6), asi que
-            // nombrar `ShiftAnomaly` aqui seria la frontera que este listener
+            // nombrar `ShiftEntryAnomaly` aqui seria la frontera que este listener
             // existe para respetar. Los valores respaldados del enum son ya los de
             // `incidents.type`, que es lo que la Fase 2 necesita leer.
             'anomalies' => array_column($event->anomalies, 'value'),
@@ -152,7 +152,7 @@ final readonly class RecordShiftEntryAudit
      * de hoy, y las horas van dentro, en `before` y `after`. Es la unica lectura
      * que permite responder «que se toco esta semana».
      */
-    public function corrected(ShiftCorrected $event): void
+    public function corrected(ShiftEntryCorrected $event): void
     {
         $this->append(self::actionFor($event->action->value), $event->occurredAt(), [
             'employee_uuid' => $event->employeeUuid,
@@ -174,7 +174,7 @@ final readonly class RecordShiftEntryAudit
             'performed_by_user_id' => $event->correction->performedByUserId,
             'daily_total_minutes' => $event->dailyTotal->minutes,
             // Ver el metodo `clockedOut()`: `Compliance` solo alcanza
-            // `Attendance\Domain\Event`, asi que nombrar `ShiftAnomaly` aqui
+            // `Attendance\Domain\Event`, asi que nombrar `ShiftEntryAnomaly` aqui
             // seria la frontera que este listener existe para respetar.
             'anomalies' => array_column($event->anomalies, 'value'),
         ]);
@@ -184,13 +184,13 @@ final readonly class RecordShiftEntryAudit
      * Las marcas de una version, o `null` cuando esa version no existe: no hay
      * `before` en un alta ni `after` en una anulacion.
      *
-     * **Recibe los dos instantes sueltos y no el objeto de valor `ShiftTimes`**,
+     * **Recibe los dos instantes sueltos y no el objeto de valor `ShiftEntryTimes`**,
      * y no es descuido: `Compliance` solo puede alcanzar
      * `Attendance\Domain\Event` (doc 02 §1.6, verificado por Deptrac). Nombrar
      * aqui un objeto de `Attendance\Domain\ValueObject` seria justo la frontera
      * que este listener existe para respetar; leer sus propiedades publicas
      * desde el evento, no. Es la misma tecnica que usa `clockedOut()` con
-     * `ShiftAnomaly`.
+     * `ShiftEntryAnomaly`.
      *
      * Se serializa aqui porque el payload de `audit_log` es JSON canonico y
      * tiene que ser reproducible byte a byte para que la cadena de hash

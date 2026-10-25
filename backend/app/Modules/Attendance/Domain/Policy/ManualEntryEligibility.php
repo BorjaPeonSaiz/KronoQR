@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Policy;
 
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
@@ -103,13 +103,13 @@ final readonly class ManualEntryEligibility
      * las del tramo antes de corregir), igual que la guarda del agregado es
      * local: una marca que ya estaba escrita no impide corregir la otra.
      *
-     * @throws ShiftMarkAfterTermination
+     * @throws ShiftEntryMarkAfterTermination
      */
     public function assertTimesAllowed(
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ContinuationCeiling $continuation,
         DateTimeZone $timezone,
-        ?ShiftTimes $previous = null,
+        ?ShiftEntryTimes $previous = null,
     ): void {
         $terminatedOn = $this->employee->terminatedOn;
 
@@ -134,7 +134,7 @@ final readonly class ManualEntryEligibility
     }
 
     /**
-     * @throws ShiftMarkAfterTermination
+     * @throws ShiftEntryMarkAfterTermination
      */
     private static function assertMark(FutureMark $mark, DateTimeImmutable $instant, DateTimeImmutable $limit, string $terminatedOn): void
     {
@@ -142,6 +142,6 @@ final readonly class ManualEntryEligibility
             return;
         }
 
-        throw ShiftMarkAfterTermination::instant($mark, $instant, $limit, $terminatedOn);
+        throw ShiftEntryMarkAfterTermination::instant($mark, $instant, $limit, $terminatedOn);
     }
 }

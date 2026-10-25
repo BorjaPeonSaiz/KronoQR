@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
@@ -209,7 +209,7 @@ it('no carga los tramos anulados ni los sustituidos', function (): void {
 it('traduce la violacion de RN-01 a una excepcion de dominio', function (): void {
     // El indice unico parcial `one_open_shift_per_employee` es la ultima linea
     // de defensa (doc 02 §3.2) y bajo concurrencia SALTA. El caso de uso sabe
-    // que hacer con `ShiftAlreadyOpen` —reintentar y resolverlo por
+    // que hacer con `ShiftEntryAlreadyOpen` —reintentar y resolverlo por
     // anti-rebote—, pero no con un `SQLSTATE 23505`.
     ['site' => $site, 'employee' => $employee] = jornadaFixture();
     $repositorio = repositorio();
@@ -226,7 +226,7 @@ it('traduce la violacion de RN-01 a una excepcion de dominio', function (): void
 
     expect(function () use ($repositorio, $paralela): void {
         $repositorio->save($paralela);
-    })->toThrow(ShiftAlreadyOpen::class);
+    })->toThrow(ShiftEntryAlreadyOpen::class);
 })->group('RN-01');
 
 it('proyecta daily_totals con lo que emite el agregado y cuadra con los tramos', function (): void {

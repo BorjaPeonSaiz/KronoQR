@@ -6,11 +6,11 @@ namespace App\Modules\Attendance\Application\Support;
 
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -45,19 +45,19 @@ final readonly class ManualEntryRecheck
     /**
      * @param  bool  $mustAdmitEntries  el alta exige que la persona admita tramos nuevos (en alta o de baja
      *                                  con fechas); la correccion no depende de su estado (RF-PA-04)
-     * @param  ShiftTimes|null  $previous  en una correccion, las marcas anteriores: solo se miran las que cambian
+     * @param  ShiftEntryTimes|null  $previous  en una correccion, las marcas anteriores: solo se miran las que cambian
      *
      * @throws EmployeeCannotBeClocked
      * @throws WorkDateOutsideEmployment
-     * @throws ShiftMarkAfterTermination
+     * @throws ShiftEntryMarkAfterTermination
      */
     public function afterAudit(
         string $employeeUuid,
         WorkDate $workDate,
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ContinuationCeiling $continuation,
         bool $mustAdmitEntries,
-        ?ShiftTimes $previous = null,
+        ?ShiftEntryTimes $previous = null,
     ): void {
         $this->serialized->withChainLock(function () use ($employeeUuid, $workDate, $times, $continuation, $mustAdmitEntries, $previous): void {
             $current = $this->employees->find($employeeUuid);
@@ -80,15 +80,15 @@ final readonly class ManualEntryRecheck
      *
      * @throws EmployeeCannotBeClocked
      * @throws WorkDateOutsideEmployment
-     * @throws ShiftMarkAfterTermination
+     * @throws ShiftEntryMarkAfterTermination
      */
     public static function assertAllowed(
         EmployeeSnapshot $employee,
         WorkDate $workDate,
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ContinuationCeiling $continuation,
         bool $mustAdmitEntries,
-        ?ShiftTimes $previous = null,
+        ?ShiftEntryTimes $previous = null,
     ): void {
         $eligibility = ManualEntryEligibility::of($employee);
 

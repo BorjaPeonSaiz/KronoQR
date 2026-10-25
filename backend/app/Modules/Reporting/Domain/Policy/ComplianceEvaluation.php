@@ -9,7 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceFacts;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceFinding;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleName;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleStatus;
-use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSuspensionReason;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceWeek;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
@@ -227,18 +227,18 @@ final readonly class ComplianceEvaluation
     /** RN-12, sobre el tramo cerrado mas largo. */
     private function continuousShift(ComplianceFacts $day): ?ComplianceFinding
     {
-        $segment = $day->longestClosedSegment;
+        $entry = $day->longestClosedEntry;
 
         if (! $this->evaluates(ComplianceRuleName::MissingBreak)
-            || ! $segment instanceof ComplianceShiftSegment
-            || ! $this->policy->continuousShiftNeedsBreak($segment->minutes())) {
+            || ! $entry instanceof ComplianceShiftEntry
+            || ! $this->policy->continuousShiftNeedsBreak($entry->minutes())) {
             return null;
         }
 
         return ComplianceFinding::missingBreak(
             employee: $day->employee,
             workDate: $day->workDate,
-            segment: $segment,
+            entry: $entry,
             thresholdMinutes: $this->policy->breakRequiredAfterMinutes,
             hasOpenShift: $day->hasOpenShift,
         );

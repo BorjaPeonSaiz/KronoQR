@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Exception;
 
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
  * Un tramo sin salida no puede haber terminado en pausa (RN-05, RF-PA-04; 2.3.0).
  *
  * `ends_in_break` describe como termino un tramo, y un tramo abierto todavia no
- * ha terminado. Es un estado imposible de {@see ShiftTimes},
+ * ha terminado. Es un estado imposible de {@see ShiftEntryTimes},
  * y el borde HTTP lo traduce a `422` en `ends_in_break`.
  */
 final class BreakWithoutClockOut extends AttendanceDomainException implements BusinessRejection

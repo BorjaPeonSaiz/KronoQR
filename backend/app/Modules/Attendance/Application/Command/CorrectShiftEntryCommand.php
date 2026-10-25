@@ -25,7 +25,7 @@ use InvalidArgumentException;
  * El motivo llega ya construido: si es `OTROS` sin explicacion de veinte
  * caracteres, `CorrectionReason` no existe y esta orden no se puede formar.
  */
-final readonly class CorrectShiftCommand
+final readonly class CorrectShiftEntryCommand
 {
     public function __construct(
         /** Identificador publico del tramo **vigente** que se corrige. */

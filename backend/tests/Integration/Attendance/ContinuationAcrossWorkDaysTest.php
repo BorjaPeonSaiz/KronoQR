@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
@@ -142,7 +142,7 @@ it('rechaza mover con una correccion un tramo de la jornada del 14 detras de la 
         ->value('uuid');
     \assert(\is_string($tarde));
 
-    expect(fn () => app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    expect(fn () => app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $tarde,
         clockedInAt: Instants::inMadrid('2026-03-15 05:00'),
         clockedOutAt: Instants::inMadrid('2026-03-15 07:00'),

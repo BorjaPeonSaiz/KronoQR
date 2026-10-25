@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\UseCase;
 
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\EventPublisher;
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\ContinuationAcrossWorkDays;
@@ -16,14 +16,14 @@ use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Application\Support\Corrections;
 use App\Modules\Attendance\Application\Support\ManualEntryRecheck;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
@@ -66,7 +66,7 @@ use Illuminate\Support\Str;
  *
  * **El asiento de auditoria (5) tambien va dentro.** `Attendance` no puede
  * importar `Compliance` (doc 02 §1.6), asi que la entrada de `audit_log` la
- * escribe un listener suyo al recibir `ShiftCorrected`, igual que con
+ * escribe un listener suyo al recibir `ShiftEntryCorrected`, igual que con
  * `EmployeeClockedIn`. Para que se sostenga la garantia de la regla dura 6 —si
  * el asiento falla, la accion no se confirma— la publicacion es lo ultimo antes
  * del commit. Una correccion sin traza es peor que ninguna correccion: cambia
@@ -88,12 +88,12 @@ use Illuminate\Support\Str;
  *   trabajadas llegan en la orden y pueden ser de hace tres semanas (regla dura
  *   2, ADR-021).
  */
-final readonly class CorrectShiftHandler
+final readonly class CorrectShiftEntryHandler
 {
     public function __construct(
         private ConnectionInterface $connection,
         private WorkDayRepository $workDays,
-        private ShiftCorrectionLedger $ledger,
+        private ShiftEntryCorrectionLedger $ledger,
         private EventPublisher $events,
         private OperationalSettingsProvider $settings,
         private Clock $clock,
@@ -104,27 +104,27 @@ final readonly class CorrectShiftHandler
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya no es vigente
-     * @throws ShiftMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
-     * @throws ShiftMarkAfterTermination la persona esta de baja y una marca resultante pasa de la cota de su dia de cese (RN-05)
+     * @throws ShiftEntryMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
+     * @throws ShiftEntryMarkAfterTermination la persona esta de baja y una marca resultante pasa de la cota de su dia de cese (RN-05)
      * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
-    public function handle(CorrectShiftCommand $command): CorrectedShift
+    public function handle(CorrectShiftEntryCommand $command): CorrectedShiftEntry
     {
-        return UseCaseInstrumentation::run('attendance.correct_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+        return UseCaseInstrumentation::run('attendance.correct_shift_entry', fn (): CorrectedShiftEntry => $this->doHandle($command));
     }
 
-    private function doHandle(CorrectShiftCommand $command): CorrectedShift
+    private function doHandle(CorrectShiftEntryCommand $command): CorrectedShiftEntry
     {
         // Regla dura 9 y RN-13: el momento de la correccion lo fija el servidor
         // una sola vez, y no es ninguna de las dos marcas del tramo.
         $performedAt = $this->clock->now();
 
         return $this->connection->transaction(
-            fn (): CorrectedShift => $this->correct($command, $performedAt),
+            fn (): CorrectedShiftEntry => $this->correct($command, $performedAt),
         );
     }
 
-    private function correct(CorrectShiftCommand $command, DateTimeImmutable $performedAt): CorrectedShift
+    private function correct(CorrectShiftEntryCommand $command, DateTimeImmutable $performedAt): CorrectedShiftEntry
     {
         $workDay = $this->workDays->findWorkDayOfShiftEntry($command->shiftEntryUuid);
 
@@ -203,18 +203,18 @@ final readonly class CorrectShiftHandler
             $previous,
         );
 
-        return CorrectedShift::of($workDay, $corrected, $correction);
+        return CorrectedShiftEntry::of($workDay, $corrected, $correction);
     }
 
     /**
      * Las marcas nuevas, compuestas sobre las que el tramo ya tenia.
      *
      * Un `PATCH` que solo trae la salida deja la entrada donde estaba: por eso se
-     * parte de `times()` en vez de construir un `ShiftTimes` desde cero con lo
+     * parte de `times()` en vez de construir un `ShiftEntryTimes` desde cero con lo
      * que venga en la orden, que dejaria a nulo lo que el cliente no envio y
      * reabriria tramos cerrados sin que nadie lo hubiera pedido.
      */
-    private function timesFor(CorrectShiftCommand $command, WorkDay $workDay): ShiftTimes
+    private function timesFor(CorrectShiftEntryCommand $command, WorkDay $workDay): ShiftEntryTimes
     {
         $times = $workDay->entry($command->shiftEntryUuid)->times();
 
@@ -224,7 +224,7 @@ final readonly class CorrectShiftHandler
         // tramo entero a una hora posterior a su salida antigua daba un `422`
         // en `clocked_out_at` que no era verdad (2.3.0).
         if ($command->clockedInAt !== null && $command->clockedOutAt !== null) {
-            return $this->withClosure($command, ShiftTimes::closed(
+            return $this->withClosure($command, ShiftEntryTimes::closed(
                 $command->clockedInAt,
                 $command->clockedOutAt,
                 $times->closure ?? EntryClosure::CLOCK_OUT,
@@ -246,9 +246,9 @@ final readonly class CorrectShiftHandler
      * Como termino el tramo (`ends_in_break`, RN-05, 2.3.0): sin declararlo se
      * conserva el de antes —o salida, si la correccion cierra un tramo abierto—.
      * Declarar la pausa en un tramo que sigue abierto es un estado imposible y
-     * lo rechaza `ShiftTimes` (`422`).
+     * lo rechaza `ShiftEntryTimes` (`422`).
      */
-    private function withClosure(CorrectShiftCommand $command, ShiftTimes $times): ShiftTimes
+    private function withClosure(CorrectShiftEntryCommand $command, ShiftEntryTimes $times): ShiftEntryTimes
     {
         return match (true) {
             $command->endsInBreak === true => $times->withClosure(EntryClosure::BREAK_START),

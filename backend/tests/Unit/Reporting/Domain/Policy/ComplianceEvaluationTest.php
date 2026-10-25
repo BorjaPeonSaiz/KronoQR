@@ -8,7 +8,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceFacts;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceFinding;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleName;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleStatus;
-use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSuspensionReason;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
@@ -111,7 +111,7 @@ function evaluationDay(
         previousLastOutAt: $previousLastOut === null ? null : Instants::inMadrid($previousLastOut),
         totalMinutes: $totalMinutes,
         hasOpenShift: $hasOpenShift,
-        longestClosedSegment: $longestFrom === null || $longestTo === null ? null : new ComplianceShiftSegment(
+        longestClosedEntry: $longestFrom === null || $longestTo === null ? null : new ComplianceShiftEntry(
             '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
             Instants::inMadrid($longestFrom),
             Instants::inMadrid($longestTo),

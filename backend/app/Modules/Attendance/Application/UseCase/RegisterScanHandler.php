@@ -20,7 +20,7 @@ use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Domain\Event\ScanRejected;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
@@ -274,7 +274,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
                         previous: $replayed,
                     );
                 }
-            } catch (ShiftAlreadyOpen|OverlappingShiftEntry $race) {
+            } catch (ShiftEntryAlreadyOpen|OverlappingShiftEntry $race) {
                 if ($attempt >= self::MAX_ATTEMPTS) {
                     throw $race;
                 }

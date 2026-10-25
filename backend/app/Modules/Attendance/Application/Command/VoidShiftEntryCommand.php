@@ -19,7 +19,7 @@ use InvalidArgumentException;
  * No lleva marcas: no hay nada que rectificar. Solo hace falta saber cual, quien
  * y por que.
  */
-final readonly class VoidShiftCommand
+final readonly class VoidShiftEntryCommand
 {
     public function __construct(
         public string $shiftEntryUuid,

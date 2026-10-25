@@ -21,7 +21,7 @@ use DateTimeImmutable;
  * alcanzar `Attendance\Domain\Event` (§1.6, verificado por Deptrac): si el
  * listener tuviera que nombrar `AnomalyType` o `WorkDate` para leer el evento,
  * la frontera se rompería justo aqui. Es la misma tecnica que usa
- * `RecordShiftEntryAudit` con `ShiftAnomaly`.
+ * `RecordShiftEntryAudit` con `ShiftEntryAnomaly`.
  *
  * **Se publica DESPUES de confirmar** —a diferencia de los eventos del fichaje—
  * porque la deteccion no es una transaccion de negocio: no hay nada que deshacer

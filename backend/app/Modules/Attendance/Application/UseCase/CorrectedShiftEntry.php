@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\UseCase;
 
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
@@ -24,7 +24,7 @@ use DateTimeImmutable;
  * correccion crea una fila nueva y `shift_entries.uuid` es unico, asi que la
  * version corregida tiene identificador propio (RN-13, ADR-026).
  */
-final readonly class CorrectedShift
+final readonly class CorrectedShiftEntry
 {
     public function __construct(
         public string $employeeUuid,
@@ -42,7 +42,7 @@ final readonly class CorrectedShift
         public int $dailyTotalMinutes,
     ) {}
 
-    public static function of(WorkDay $workDay, ShiftEntry $entry, ShiftCorrected $correction): self
+    public static function of(WorkDay $workDay, ShiftEntry $entry, ShiftEntryCorrected $correction): self
     {
         return new self(
             employeeUuid: $workDay->employeeUuid(),

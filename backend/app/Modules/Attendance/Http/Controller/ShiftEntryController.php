@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Http\Controller;
 use App\Http\Controllers\Controller;
 use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
 use App\Modules\Attendance\Http\Request\AddShiftEntryRequest;
 use App\Modules\Attendance\Http\Request\CorrectShiftEntryRequest;
 use App\Modules\Attendance\Http\Resource\CorrectedShiftEntryResource;
@@ -90,7 +90,7 @@ final class ShiftEntryController extends Controller
     public function update(
         CorrectShiftEntryRequest $request,
         string $uuid,
-        CorrectShiftHandler $handler,
+        CorrectShiftEntryHandler $handler,
         CorrectionTelemetry $telemetry,
         ScopeGuard $scope,
         EmployeeScopeDirectory $employees,

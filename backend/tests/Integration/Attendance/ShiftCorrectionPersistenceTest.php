@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\Corrections;
@@ -10,7 +10,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -104,7 +104,7 @@ it('conserva la fila anterior y la deja fuera del agregado reconstruido', functi
     $jornada->correctEntry(
         $original,
         $nuevo,
-        ShiftTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 13:30')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 13:30')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -150,7 +150,7 @@ it('corrige un tramo cerrado sin violar la restriccion de exclusion', function (
     $jornada->correctEntry(
         $original,
         Str::uuid7()->toString(),
-        ShiftTimes::closed(Instants::utc('2026-03-14 06:15'), Instants::utc('2026-03-14 14:15')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 06:15'), Instants::utc('2026-03-14 14:15')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -196,7 +196,7 @@ it('anular libera el hueco y deja meter otro tramo en el mismo horario', functio
     $nueva = WorkDay::start($employee, $site, WorkDate::fromIsoDate('2026-03-14', Instants::madrid()));
     $nueva->addEntry(
         Str::uuid7()->toString(),
-        ShiftTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 14:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 14:00')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -220,7 +220,7 @@ it('escribe la fila del libro de correcciones con el antes y el despues', functi
     $jornada->correctEntry(
         $original,
         $nuevo,
-        ShiftTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 13:30')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 06:00'), Instants::utc('2026-03-14 13:30')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::new()->by($usuario)->at('2026-03-16 09:00')->build(),
         ClockingPolicyFactory::standard(),
@@ -228,7 +228,7 @@ it('escribe la fila del libro de correcciones con el antes y el despues', functi
     );
 
     app(WorkDayRepository::class)->save($jornada);
-    app(ShiftCorrectionLedger::class)->record(Corrections::in($jornada->releaseEvents()));
+    app(ShiftEntryCorrectionLedger::class)->record(Corrections::in($jornada->releaseEvents()));
 
     $fila = DB::table('shift_corrections')->first();
     $reemplazo = DB::table('shift_entries')->where('uuid', $nuevo)->value('id');
@@ -265,7 +265,7 @@ it('apunta la anulacion al tramo que termino y sin valor posterior', function ()
     $jornada->voidEntry($original, CorrectionFactory::new()->by($usuario)->build(), ContinuationCeilingFactory::standard());
 
     app(WorkDayRepository::class)->save($jornada);
-    app(ShiftCorrectionLedger::class)->record(Corrections::in($jornada->releaseEvents()));
+    app(ShiftEntryCorrectionLedger::class)->record(Corrections::in($jornada->releaseEvents()));
 
     $fila = DB::table('shift_corrections')->first();
     $anulado = DB::table('shift_entries')->where('uuid', $original)->value('id');

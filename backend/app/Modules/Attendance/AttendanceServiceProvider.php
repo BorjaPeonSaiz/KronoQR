@@ -25,7 +25,7 @@ use App\Modules\Attendance\Application\Port\ScanFailureClassifier;
 use App\Modules\Attendance\Application\Port\ScanFailureLedger;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
 use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
 use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
@@ -55,7 +55,7 @@ use App\Modules\Attendance\Infrastructure\Persistence\DatabaseCardFingerprintOwn
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScanReportLog;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseScanFailureLedger;
-use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseWithdrawnCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentAnomalousPatternHistory;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentCredentialScans;
@@ -134,7 +134,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         // `shift_corrections` es parte del registro horario —se consulta al
         // pintar una jornada y se exporta con el registro legal—, no auditoria
         // de otro modulo.
-        $this->app->bind(ShiftCorrectionLedger::class, DatabaseShiftCorrectionLedger::class);
+        $this->app->bind(ShiftEntryCorrectionLedger::class, DatabaseShiftEntryCorrectionLedger::class);
         $this->app->bind(ShiftEntryHistory::class, EloquentShiftEntryHistory::class);
 
         /*

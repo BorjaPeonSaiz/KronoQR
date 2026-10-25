@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * Fila de `shift_corrections` (doc 01 §5.5). **Detalle de persistencia**: el
- * hecho que describe vive en el evento de dominio `ShiftCorrected`, y es ese —no
+ * hecho que describe vive en el evento de dominio `ShiftEntryCorrected`, y es ese —no
  * esto— lo que sale de este modulo hacia arriba.
  *
  * **Sin `updated_at` y sin `$timestamps`.** No es una comodidad: esta tabla es un
@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  * no la tiene, que es preferible a tenerla y no saber que significa.
  *
  * Aqui no hay ningun metodo que anule, corrija o reescriba nada: el unico camino
- * para escribir una fila es {@see DatabaseShiftCorrectionLedger}, que la deriva
+ * para escribir una fila es {@see DatabaseShiftEntryCorrectionLedger}, que la deriva
  * del evento de dominio.
  *
  * @property int $id
@@ -35,7 +35,7 @@ use Illuminate\Support\Carbon;
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
-final class ShiftCorrection extends Model
+final class ShiftEntryCorrection extends Model
 {
     public $timestamps = false;
 

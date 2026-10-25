@@ -6,12 +6,12 @@ use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\InstantIsNotUtc;
 use App\Modules\Attendance\Domain\Exception\NoOpenShiftEntry;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryDoesNotBelongToWorkDay;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use Tests\Support\Domain\RecordedEvents;
@@ -45,14 +45,14 @@ it('no abre un segundo turno cuando ya hay uno abierto', function (): void {
     $workDay = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 21:00')->build();
 
     expect(fn (): ShiftEntry => $workDay->clockIn('shift-entry-2', Instants::utc('2026-03-14 22:00'), ScanOrigin::QR_KIOSK))
-        ->toThrow(ShiftAlreadyOpen::class);
+        ->toThrow(ShiftEntryAlreadyOpen::class);
 })->group('RN-01', 'RQ-01');
 
 it('no deja el segundo tramo a medio anadir cuando rechaza abrirlo', function (): void {
     $workDay = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 21:00')->build();
 
     expect(fn (): ShiftEntry => $workDay->clockIn('shift-entry-2', Instants::utc('2026-03-14 22:00'), ScanOrigin::QR_KIOSK))
-        ->toThrow(ShiftAlreadyOpen::class)
+        ->toThrow(ShiftEntryAlreadyOpen::class)
         ->and($workDay->shiftCount())->toBe(1)
         ->and($workDay->releaseEvents())->toBe([]);
 })->group('RN-01');
@@ -65,7 +65,7 @@ it('se niega a rehidratarse con dos turnos abiertos', function (): void {
         ->withShift(ShiftEntryFactory::new()->withUuid('shift-entry-1')->openSince('2026-03-14 07:00'))
         ->withShift(ShiftEntryFactory::new()->withUuid('shift-entry-2')->openSince('2026-03-14 09:00'));
 
-    expect(fn (): WorkDay => $twoOpen->reconstituted())->toThrow(ShiftAlreadyOpen::class);
+    expect(fn (): WorkDay => $twoOpen->reconstituted())->toThrow(ShiftEntryAlreadyOpen::class);
 })->group('RN-01');
 
 it('se rehidrata con un solo turno abierto', function (): void {
@@ -309,7 +309,7 @@ it('lleva la anomalia clasificada en el evento de salida', function (): void {
     );
     $clockedOut = RecordedEvents::clockedOut($workDay->releaseEvents());
 
-    expect($clockedOut->anomalies)->toBe([ShiftAnomaly::LONG_SHIFT]);
+    expect($clockedOut->anomalies)->toBe([ShiftEntryAnomaly::LONG_SHIFT]);
 })->group('RN-08');
 
 it('no tiene anomalia cuando todos sus tramos son corrientes', function (): void {

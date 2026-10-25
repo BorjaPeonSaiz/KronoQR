@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -71,9 +71,9 @@ final class CorrectShiftEntryRequest extends FormRequest
         return $this->utcMarkMessages();
     }
 
-    public function toCommand(string $shiftEntryUuid): CorrectShiftCommand
+    public function toCommand(string $shiftEntryUuid): CorrectShiftEntryCommand
     {
-        return new CorrectShiftCommand(
+        return new CorrectShiftEntryCommand(
             shiftEntryUuid: $shiftEntryUuid,
             clockedInAt: $this->utcInstant('clocked_in_at'),
             clockedOutAt: $this->utcInstant('clocked_out_at'),

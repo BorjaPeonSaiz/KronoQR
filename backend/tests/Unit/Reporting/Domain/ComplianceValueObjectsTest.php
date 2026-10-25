@@ -7,7 +7,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceFacts;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceFinding;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceIncidentLink;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleName;
-use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceTotals;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceWeek;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRule;
@@ -118,7 +118,7 @@ it('el descanso se mide en minutos enteros y cero minutos sigue siendo descanso'
         previousLastOutAt: Instants::inMadrid('2026-03-10 06:00'),
         totalMinutes: 480,
         hasOpenShift: false,
-        longestClosedSegment: null,
+        longestClosedEntry: null,
         openingShiftEntryUuid: null,
     );
 
@@ -133,7 +133,7 @@ it('el descanso se mide en minutos enteros y cero minutos sigue siendo descanso'
         previousLastOutAt: Instants::inMadrid('2026-03-10 06:01'),
         totalMinutes: 480,
         hasOpenShift: false,
-        longestClosedSegment: null,
+        longestClosedEntry: null,
         openingShiftEntryUuid: null,
     );
 
@@ -148,7 +148,7 @@ it('el descanso se mide en minutos enteros y cero minutos sigue siendo descanso'
         previousLastOutAt: null,
         totalMinutes: 480,
         hasOpenShift: false,
-        longestClosedSegment: null,
+        longestClosedEntry: null,
         openingShiftEntryUuid: null,
     );
 
@@ -169,7 +169,7 @@ it('no mide el descanso de una jornada cuyos tramos se anularon todos', function
         previousLastOutAt: Instants::inMadrid('2026-03-09 23:30'),
         totalMinutes: 0,
         hasOpenShift: false,
-        longestClosedSegment: null,
+        longestClosedEntry: null,
         openingShiftEntryUuid: null,
     );
 
@@ -189,7 +189,7 @@ it('un solo segundo de solape ya no es descanso', function (): void {
         previousLastOutAt: Instants::inMadrid('2026-03-10 06:00:00'),
         totalMinutes: 480,
         hasOpenShift: false,
-        longestClosedSegment: null,
+        longestClosedEntry: null,
         openingShiftEntryUuid: null,
     );
 
@@ -200,7 +200,7 @@ it('el hallazgo de pausa señala el tramo continuado y no la semana', function (
     // RN-12 es la unica regla diaria que se cuelga de un tramo concreto ademas de
     // RN-10: el continuado que se paso del maximo, que es el que quien revisa
     // necesita mirar.
-    $segment = new ComplianceShiftSegment(
+    $entry = new ComplianceShiftEntry(
         '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
         Instants::inMadrid('2026-03-10 09:00'),
         Instants::inMadrid('2026-03-10 17:30'),
@@ -209,7 +209,7 @@ it('el hallazgo de pausa señala el tramo continuado y no la semana', function (
     $finding = ComplianceFinding::missingBreak(
         employee: empleadoDeCumplimiento(),
         workDate: '2026-03-10',
-        segment: $segment,
+        entry: $entry,
         thresholdMinutes: 360,
         hasOpenShift: false,
     );
@@ -227,13 +227,13 @@ it('el tramo continuo trunca los segundos hacia abajo', function (): void {
     // 6 h 0 min 59 s son 360 minutos y no 361, asi que no alerta con el umbral de
     // seis horas: redondear al alza convertiria el limite abierto del doc 01 en
     // cerrado por accidente.
-    $segment = new ComplianceShiftSegment(
+    $entry = new ComplianceShiftEntry(
         '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
         Instants::inMadrid('2026-03-10 09:00:00'),
         Instants::inMadrid('2026-03-10 15:00:59'),
     );
 
-    expect($segment->minutes())->toBe(360);
+    expect($entry->minutes())->toBe(360);
 })->group('RN-12', 'RF-PA-06');
 
 it('rechaza un hallazgo que no describe ningun incumplimiento', function (): void {
@@ -352,7 +352,7 @@ it('ordena a las personas por apellidos, nombre e identificador', function (): v
 })->group('RF-PA-06');
 
 it('el tramo de cumplimiento no sale antes de entrar ni deja de señalar su tramo (H5)', function (string $uuid, string $in, string $out): void {
-    expect(static fn (): ComplianceShiftSegment => new ComplianceShiftSegment($uuid, Instants::inMadrid($in), Instants::inMadrid($out)))
+    expect(static fn (): ComplianceShiftEntry => new ComplianceShiftEntry($uuid, Instants::inMadrid($in), Instants::inMadrid($out)))
         ->toThrow(InvalidArgumentException::class);
 })->with([
     'sale un segundo antes de entrar' => ['0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11', '2026-03-10 09:00:00', '2026-03-10 08:59:59'],
@@ -360,7 +360,7 @@ it('el tramo de cumplimiento no sale antes de entrar ni deja de señalar su tram
 ])->group('RN-12', 'RN-03');
 
 it('admite un tramo de cumplimiento de cero minutos', function (): void {
-    $segment = new ComplianceShiftSegment('0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11', Instants::inMadrid('2026-03-10 09:00'), Instants::inMadrid('2026-03-10 09:00'));
+    $entry = new ComplianceShiftEntry('0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11', Instants::inMadrid('2026-03-10 09:00'), Instants::inMadrid('2026-03-10 09:00'));
 
-    expect($segment->minutes())->toBe(0);
+    expect($entry->minutes())->toBe(0);
 })->group('RN-12', 'RN-03');

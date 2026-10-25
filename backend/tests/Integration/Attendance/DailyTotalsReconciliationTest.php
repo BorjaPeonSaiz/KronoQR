@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
@@ -268,7 +268,7 @@ it('cuadra con los eventos origen despues de una correccion y una anulacion', fu
     $corregible = reconciledShiftEntry($scenario['employee'], $scenario['site'], '2026-03-15', '2026-03-15 06:00:00+00', '2026-03-15 14:00:00+00');
     $duplicado = reconciledShiftEntry($scenario['employee'], $scenario['site'], '2026-03-15', '2026-03-15 15:00:00+00', '2026-03-15 17:00:00+00');
 
-    app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $corregible,
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-03-15 13:30'),
@@ -276,7 +276,7 @@ it('cuadra con los eventos origen despues de una correccion y una anulacion', fu
         performedByUserId: $author->id,
     ));
 
-    app(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+    app(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
         shiftEntryUuid: $duplicado,
         reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
         performedByUserId: $author->id,
@@ -373,7 +373,7 @@ it('deja a cero la jornada anulada por completo, sin borrar la fila', function (
     projectDailyTotals();
 
     // Se anula por SQL para dejar la proyeccion desactualizada a proposito: por
-    // el camino bueno —`VoidShiftHandler`— la fila se recalcularia sola, que es
+    // el camino bueno —`VoidShiftEntryHandler`— la fila se recalcularia sola, que es
     // justo lo que hace que esta divergencia no pueda existir en produccion.
     DB::table('shift_entries')->where('uuid', $entry)->update(['status' => 'voided']);
 

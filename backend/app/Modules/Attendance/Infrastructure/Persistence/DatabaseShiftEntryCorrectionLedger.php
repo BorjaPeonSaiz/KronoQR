@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Infrastructure\Persistence;
 
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
@@ -31,13 +31,13 @@ use RuntimeException;
  * esta en el tramo, no en el JSON. Este documento acaba en la exportacion legal
  * y en el paquete de diagnostico.
  */
-final readonly class DatabaseShiftCorrectionLedger implements ShiftCorrectionLedger
+final readonly class DatabaseShiftEntryCorrectionLedger implements ShiftEntryCorrectionLedger
 {
     public function __construct(private ConnectionInterface $connection) {}
 
-    public function record(ShiftCorrected $correction): void
+    public function record(ShiftEntryCorrected $correction): void
     {
-        ShiftCorrection::query()->create([
+        ShiftEntryCorrection::query()->create([
             'shift_entry_id' => $this->shiftEntryIdOf($correction->correctedShiftEntryUuid()),
             'performed_by_user_id' => $correction->correction->performedByUserId,
             'action' => $correction->action->value,
@@ -67,9 +67,9 @@ final readonly class DatabaseShiftCorrectionLedger implements ShiftCorrectionLed
      *
      * @return array<string, mixed>|null
      */
-    private function snapshot(?ShiftTimes $times, int $version): ?array
+    private function snapshot(?ShiftEntryTimes $times, int $version): ?array
     {
-        if (! $times instanceof ShiftTimes) {
+        if (! $times instanceof ShiftEntryTimes) {
             return null;
         }
 

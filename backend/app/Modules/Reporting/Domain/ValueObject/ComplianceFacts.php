@@ -79,7 +79,7 @@ final readonly class ComplianceFacts
          */
         public bool $hasOpenShift,
         /** El tramo cerrado mas largo de la jornada, o `null` si no hay ninguno. */
-        public ?ComplianceShiftSegment $longestClosedSegment,
+        public ?ComplianceShiftEntry $longestClosedEntry,
         /** Identificador publico del tramo que **abre** la jornada, o `null`. */
         public ?string $openingShiftEntryUuid,
     ) {}

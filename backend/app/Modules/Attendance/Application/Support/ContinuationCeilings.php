@@ -15,7 +15,7 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
  * **Existe para que el umbral se lea en un solo sitio**, con el mismo patron que
  * {@see ClockingPolicies}. Lo usan el fichaje (`RegisterScanHandler`, la vuelta
  * de una pausa), el alta manual (`AddShiftEntryHandler`) y la correccion
- * (`CorrectShiftHandler`). Si cada uno resolviera el perfil por su cuenta, el
+ * (`CorrectShiftEntryHandler`). Si cada uno resolviera el perfil por su cuenta, el
  * dia que uno leyera otro campo el mismo hueco seria pausa en el quiosco y
  * jornada nueva en el panel.
  */

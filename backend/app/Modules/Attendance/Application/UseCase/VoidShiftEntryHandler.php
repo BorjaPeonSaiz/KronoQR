@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\UseCase;
 
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\EventPublisher;
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ContinuationAcrossWorkDays;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
@@ -42,12 +42,12 @@ use Illuminate\Database\ConnectionInterface;
  * separado del `PATCH`: anular quita horas de la nomina de una persona, y no es
  * la misma responsabilidad que ajustar diez minutos.
  */
-final readonly class VoidShiftHandler
+final readonly class VoidShiftEntryHandler
 {
     public function __construct(
         private ConnectionInterface $connection,
         private WorkDayRepository $workDays,
-        private ShiftCorrectionLedger $ledger,
+        private ShiftEntryCorrectionLedger $ledger,
         private EventPublisher $events,
         private Clock $clock,
         private CompliancePolicyProvider $compliance,
@@ -58,21 +58,21 @@ final readonly class VoidShiftHandler
      * @throws EntryDoesNotContinueWorkDay el tramo siguiente dejaria de continuar la jornada (RN-05)
      * @throws CorrectionWouldChangeWorkDate la jornada quedaria abierta por un tramo de otro dia civil (RN-05)
      */
-    public function handle(VoidShiftCommand $command): CorrectedShift
+    public function handle(VoidShiftEntryCommand $command): CorrectedShiftEntry
     {
-        return UseCaseInstrumentation::run('attendance.void_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+        return UseCaseInstrumentation::run('attendance.void_shift_entry', fn (): CorrectedShiftEntry => $this->doHandle($command));
     }
 
-    private function doHandle(VoidShiftCommand $command): CorrectedShift
+    private function doHandle(VoidShiftEntryCommand $command): CorrectedShiftEntry
     {
         $performedAt = $this->clock->now();
 
         return $this->connection->transaction(
-            fn (): CorrectedShift => $this->void($command, $performedAt),
+            fn (): CorrectedShiftEntry => $this->void($command, $performedAt),
         );
     }
 
-    private function void(VoidShiftCommand $command, DateTimeImmutable $performedAt): CorrectedShift
+    private function void(VoidShiftEntryCommand $command, DateTimeImmutable $performedAt): CorrectedShiftEntry
     {
         $workDay = $this->workDays->findWorkDayOfShiftEntry($command->shiftEntryUuid);
 
@@ -105,6 +105,6 @@ final readonly class VoidShiftHandler
         $this->ledger->record($correction);
         $this->events->publish(...$events);
 
-        return CorrectedShift::of($workDay, $voided, $correction);
+        return CorrectedShiftEntry::of($workDay, $voided, $correction);
     }
 }

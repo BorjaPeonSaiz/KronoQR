@@ -6,7 +6,7 @@ namespace App\Modules\Reporting\Infrastructure\Broadcasting;
 
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Support\Database\DatabaseUnavailable;
@@ -146,7 +146,7 @@ final class BroadcastPresenceChange implements ShouldQueue
         $this->announce($event->employeeUuid, $event->clockedOutAt);
     }
 
-    public function corrected(ShiftCorrected $event): void
+    public function corrected(ShiftEntryCorrected $event): void
     {
         // El momento de la CORRECCION, no el de las horas corregidas: lo que ha
         // cambiado en el panel ha cambiado ahora.

@@ -24,7 +24,7 @@ use DateTimeImmutable;
  * **Nunca llega al quiosco**: ese camino no pasa por esta politica (regla dura
  * 19).
  */
-final class ShiftMarkInFuture extends AttendanceDomainException implements BusinessRejection
+final class ShiftEntryMarkInFuture extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, int>  $parameters  sustituciones del mensaje traducido

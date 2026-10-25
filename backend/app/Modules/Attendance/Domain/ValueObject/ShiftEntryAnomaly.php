@@ -16,7 +16,7 @@ namespace App\Modules\Attendance\Domain\ValueObject;
  * recalcular cual de las dos reglas salto, y a tener otra vez los umbrales
  * delante para hacerlo.
  */
-enum ShiftAnomaly: string
+enum ShiftEntryAnomaly: string
 {
     /** RN-07: por debajo de la duracion minima computable. Se registra igual, y se marca para revision. */
     case SHORT_SHIFT = 'short_shift';

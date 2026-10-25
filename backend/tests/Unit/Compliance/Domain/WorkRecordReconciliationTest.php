@@ -537,7 +537,7 @@ it('no deja que el plazo vigente del perfil convierta en sospechosa una purga le
 
 it('cuenta los minutos del asiento con la regla unica del registro', function (string $salida, int $minutos): void {
     // Ya no hay copia que atar: la conciliacion, `TimeRange` y
-    // `ComplianceShiftSegment` usan `ElapsedMinutes` (bloque 19, y la guarda
+    // `ComplianceShiftEntry` usan `ElapsedMinutes` (bloque 19, y la guarda
     // `SingleMinuteRuleTest`). Lo que se fija aqui es que la conciliacion la
     // aplica: los minutos que el registro escribio coinciden, y uno mas no.
     $fila = ['clockedOutAt' => $salida];

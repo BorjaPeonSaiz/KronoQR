@@ -18,12 +18,12 @@ use DateTimeImmutable;
  * contado desde el final del dia del cese. Una marca posterior seria trabajo de
  * otra jornada, y esa persona ya no trabajaba en el hotel.
  *
- * Mismo criterio que {@see ShiftMarkInFuture}: `getMessage()` es tecnico y en
+ * Mismo criterio que {@see ShiftEntryMarkInFuture}: `getMessage()` es tecnico y en
  * ingles, **sin datos personales** (regla dura 21); el texto de la persona sale
  * de {@see self::$translationKey} y {@see self::$parameters}. Solo la lanza el
  * camino manual del panel: el escaneo de una persona de baja ya se rechaza antes.
  */
-final class ShiftMarkAfterTermination extends AttendanceDomainException implements BusinessRejection
+final class ShiftEntryMarkAfterTermination extends AttendanceDomainException implements BusinessRejection
 {
     /**
      * @param  array<string, string>  $parameters  sustituciones del mensaje traducido

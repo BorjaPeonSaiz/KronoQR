@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 
 /**
  * El libro de correcciones del registro horario: `shift_corrections` (doc 01
@@ -35,7 +35,7 @@ use App\Modules\Attendance\Domain\Event\ShiftCorrected;
  * formas de decir lo mismo acabarian divergiendo en la tercera correccion que
  * alguien anada.
  */
-interface ShiftCorrectionLedger
+interface ShiftEntryCorrectionLedger
 {
     /**
      * Escribe la fila de `shift_corrections` que explica esta correccion.
@@ -58,5 +58,5 @@ interface ShiftCorrectionLedger
      * pertenecen. **Nunca el nombre del empleado** (regla dura 21): el JSON
      * describe horas, no personas.
      */
-    public function record(ShiftCorrected $correction): void;
+    public function record(ShiftEntryCorrected $correction): void;
 }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Support;
 
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
-use App\Modules\Attendance\Application\UseCase\CorrectedShift;
+use App\Modules\Attendance\Application\UseCase\CorrectedShiftEntry;
 use App\Modules\Shared\Application\Support\SpanScope;
 use Psr\Log\LoggerInterface;
 
@@ -59,9 +59,9 @@ final readonly class CorrectionTelemetry
      * @param  string  $operation  `add`, `correct` o `void`: lo que se pidio, que no
      *                             siempre coincide con la accion que resulta —un `PATCH`
      *                             puede acabar en `closed` o en `modified`—.
-     * @param  callable(): CorrectedShift  $apply
+     * @param  callable(): CorrectedShiftEntry  $apply
      */
-    public function measure(string $operation, string $reasonCode, callable $apply): CorrectedShift
+    public function measure(string $operation, string $reasonCode, callable $apply): CorrectedShiftEntry
     {
         // El span del acto lo abre el caso de uso (`UseCaseInstrumentation`,
         // `attendance.<operacion>_shift_entry`); el motivo es de la peticion y va
@@ -89,7 +89,7 @@ final readonly class CorrectionTelemetry
         return $corrected;
     }
 
-    private function log(CorrectedShift $corrected, string $reasonCode): void
+    private function log(CorrectedShiftEntry $corrected, string $reasonCode): void
     {
         // `notice` y no `info`: una correccion manual es poco frecuente y tiene
         // relevancia legal. Que destaque sobre el ruido de los fichajes es lo

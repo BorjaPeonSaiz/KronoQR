@@ -5,7 +5,7 @@ declare(strict_types=1);
 use App\Modules\Attendance\Application\Exception\ScanAlreadyRecorded;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Infrastructure\Adapter\ScanFailureTransience;
 use App\Support\Database\DatabaseUnavailable;
 use App\Support\Redis\RedisCircuitOpen;
@@ -41,7 +41,7 @@ dataset('fallos que no cuentan', [
     'error de E/S, clase 58' => fn (): Throwable => fallaConSqlstate('58030'),
     'interbloqueo envuelto en previous' => fn (): Throwable => new RuntimeException('envuelta', previous: fallaConSqlstate('40P01')),
     'carrera de idempotencia por el UNIQUE de scan_id' => fn (): Throwable => fallaConSqlstate('23505', 'duplicate key value violates unique constraint "scan_events_scan_id_unique"'),
-    'carrera de RN-01' => fn (): Throwable => ShiftAlreadyOpen::forEmployee('0199f0c2-0000-7000-8000-000000000009'),
+    'carrera de RN-01' => fn (): Throwable => ShiftEntryAlreadyOpen::forEmployee('0199f0c2-0000-7000-8000-000000000009'),
     'solape de RN-02' => fn (): Throwable => OverlappingShiftEntry::at('0199f0c2-0000-7000-8000-000000000009', new DateTimeImmutable('2026-08-14T07:00:00Z')),
     'reenvio idempotente' => fn (): Throwable => new ScanAlreadyRecorded('0199f0c2-0000-7000-8000-000000000001'),
     'reenvio ilegible envuelto' => fn (): Throwable => new RuntimeException('no legible', previous: new ScanAlreadyRecorded('0199f0c2-0000-7000-8000-000000000001')),

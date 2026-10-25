@@ -14,7 +14,7 @@ use App\Modules\Shared\Domain\Exception\BusinessRejection;
  * aplicacion tiene un fallo de concurrencia. Que exista en los dos sitios no es
  * duplicacion, es defensa en profundidad (ADR-003, ADR-026).
  */
-final class ShiftAlreadyOpen extends AttendanceDomainException implements BusinessRejection
+final class ShiftEntryAlreadyOpen extends AttendanceDomainException implements BusinessRejection
 {
     public static function forEmployee(string $employeeUuid): self
     {

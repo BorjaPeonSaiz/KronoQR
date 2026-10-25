@@ -21,7 +21,7 @@ use InvalidArgumentException;
  * dos aritmeticas distintas para la misma unidad son dos sitios donde el cambio
  * de hora puede colarse (RN-09).
  */
-final readonly class ComplianceShiftSegment
+final readonly class ComplianceShiftEntry
 {
     public function __construct(
         /** Identificador publico del tramo, para que la pantalla lo señale. */

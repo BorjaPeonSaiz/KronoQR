@@ -413,7 +413,7 @@ it('devuelve el tramo del break_start aunque una correccion lo haya sustituido',
 
     $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::BREAK_START, '2026-03-14 01:00:00', $original));
 
-    // La correccion, tal y como la escribe `CorrectShiftHandler`: primero la
+    // La correccion, tal y como la escribe `CorrectShiftEntryHandler`: primero la
     // version anterior pasa a `superseded` —si no, la sucesora chocaria contra
     // `shift_entries_no_overlap`, que es exactamente lo que ese estado existe
     // para permitir (ADR-026)— y despues se enlazan.

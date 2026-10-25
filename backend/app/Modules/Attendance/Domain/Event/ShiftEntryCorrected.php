@@ -6,8 +6,8 @@ namespace App\Modules\Attendance\Domain\Event;
 
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Domain\Event\DomainEvent;
@@ -41,10 +41,10 @@ use DateTimeImmutable;
  * rectifico, y las horas trabajadas van dentro, en `before` y `after`. Un tramo
  * de hace tres semanas corregido hoy produce un asiento de hoy.
  */
-final readonly class ShiftCorrected implements DomainEvent
+final readonly class ShiftEntryCorrected implements DomainEvent
 {
     /**
-     * @param  list<ShiftAnomaly>  $anomalies  Lo que tiene de rara la version resultante (RN-07, RN-08). Vacia en el caso normal.
+     * @param  list<ShiftEntryAnomaly>  $anomalies  Lo que tiene de rara la version resultante (RN-07, RN-08). Vacia en el caso normal.
      */
     public function __construct(
         public string $employeeUuid,
@@ -58,9 +58,9 @@ final readonly class ShiftCorrected implements DomainEvent
         public ?string $replacementShiftEntryUuid,
         public ?int $replacementVersion,
         /** Marcas anteriores. Nulas en un alta manual: antes no habia tramo. */
-        public ?ShiftTimes $before,
+        public ?ShiftEntryTimes $before,
         /** Marcas resultantes. Nulas en una anulacion: el tramo no ocurrio. */
-        public ?ShiftTimes $after,
+        public ?ShiftEntryTimes $after,
         /** Autor, momento y motivo. Los tres que RN-13 exige, juntos. */
         public Correction $correction,
         /** Total del dia **recalculado** tras la correccion, nunca incrementado (RN-06, regla dura 7). */

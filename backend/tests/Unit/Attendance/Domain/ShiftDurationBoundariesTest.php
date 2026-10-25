@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use Tests\Support\Domain\RecordedEvents;
 use Tests\Support\Factory\ClockingPolicyFactory;
@@ -75,7 +75,7 @@ it('anuncia el tramo corto como anomalia en el evento de salida', function (): v
     );
     $clockedOut = RecordedEvents::clockedOut($workDay->releaseEvents());
 
-    expect($clockedOut->anomalies)->toBe([ShiftAnomaly::SHORT_SHIFT])
+    expect($clockedOut->anomalies)->toBe([ShiftEntryAnomaly::SHORT_SHIFT])
         ->and($clockedOut->worked->minutes)->toBe(0);
 })->group('RN-07');
 
