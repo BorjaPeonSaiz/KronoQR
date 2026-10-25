@@ -12,7 +12,8 @@
 # 2026_10_13_100100) y, desde el bloque 7, la 2026_10_14_100000 (ADR-057 §2/§3: el
 # trigger y la funcion de purga `SECURITY DEFINER`, y sin DELETE de tabla para el rol) y, desde
 # la 2.3.0, la 2026_10_18_120000 (RN-23, ADR-056: el trigger de `sites` y la funcion
-# `SECURITY DEFINER` de la correccion de la zona).
+# `SECURITY DEFINER` de la correccion de la zona) y la 2026_10_25_100000 (los dos triggers
+# que exigen que la duracion de un tramo sea la de sus marcas).
 # La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) lo devuelve todo si
 # alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria.
 
@@ -72,6 +73,13 @@ readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences employees u
 readonly KQ_WORK_RECORD_TRIGGERS="shift_entries:shift_entries_guard_transition shift_entries:shift_entries_superseded_is_linked shift_entries:shift_entries_guard_insert incidents:incidents_guard_transition incidents:incidents_guard_insert"
 # shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
 readonly KQ_WORK_RECORD_TRIGGER_TABLES="shift_entries incidents"
+# La duracion de un tramo, la de sus marcas, tambien en el motor (RN-06, RN-09, ADR-057 par.2,
+# 2.3.0): dos triggers AFTER de shift_entries. Se exigen SOLO si su migracion esta aplicada,
+# dentro del propio SQL como la zona del centro: una 2.2.x no los tiene hasta migrar. Que esten
+# activos ya lo vigila la comprobacion de todos los triggers de la tabla. Misma lista que
+# ServiceInspector::WORK_RECORD_DURATION_GUARD_TRIGGERS (WorkRecordGuardListsParityTest).
+readonly KQ_WORK_RECORD_DURATION_MIGRATION="'2026_10_25_100000_guard_shift_entry_duration_in_database'"
+readonly KQ_WORK_RECORD_DURATION_TRIGGERS="shift_entries:shift_entries_guard_duration_insert shift_entries:shift_entries_guard_duration_close"
 
 # Privilegios de TABLA enteros: tabla:INSERT:UPDATE:DELETE (t = concedido, f = no).
 # SELECT siempre se concede; TRUNCATE, REFERENCES, TRIGGER y MAINTAIN, nunca.
@@ -324,6 +332,14 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
   SELECT 'trigger:' || g.tgname || ':DESACTIVADO'
     FROM pg_trigger g
    WHERE g.tgrelid IN (SELECT tn::regclass FROM unnest(ARRAY[${trg_tables}]) AS tn) AND NOT g.tgisinternal AND g.tgenabled <> 'O'"
+    local duration_applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_WORK_RECORD_DURATION_MIGRATION})"
+    for entry in ${KQ_WORK_RECORD_DURATION_TRIGGERS}; do
+      purge_sql="${purge_sql}
+  UNION ALL
+  SELECT 'trigger:${entry#*:}:AUSENTE'
+   WHERE ${duration_applied}
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = '${entry%%:*}'::regclass AND g.tgname = '${entry#*:}' AND NOT g.tgisinternal)"
+    done
     # La zona del centro (RN-23, ADR-056): con su migracion aplicada, el trigger de
     # sites (y ninguno de sites desactivado), la funcion de la correccion de consola y su traza
     # solo-append (solo SELECT para el rol, propiedad del mismo rol que sites).

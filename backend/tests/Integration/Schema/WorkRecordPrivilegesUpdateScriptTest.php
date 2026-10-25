@@ -123,6 +123,38 @@ it('el SQL de update.sh detecta la guarda de la zona del centro tocada, y la da 
     'funcion borrada' => ['DROP FUNCTION public.site_correct_timezone(bigint, text, text)', 'site_correct_timezone:AUSENTE', true],
 ])->group('RS-07', 'RN-23');
 
+it('el SQL de update.sh detecta un trigger de la duracion borrado, y no lo exige sin su migracion', function (string $trigger): void {
+    // RN-06, RN-09, ADR-057 §2 (2.3.0): una 2.2.x no tiene la migracion del
+    // 25-10 hasta que migra. Con el rol de migracion, en una transaccion que se
+    // deshace.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement('DROP TRIGGER '.$trigger.' ON shift_entries');
+        $row = $migrator->selectOne($sql);
+
+        $migrator->table('migrations')->where('migration', '2026_10_25_100000_guard_shift_entry_duration_in_database')->delete();
+        $without = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row) && is_object($without));
+
+    $expected = 'trigger:'.$trigger.':AUSENTE';
+
+    expect(array_values((array) $row)[0])->toBe($expected)
+        ->and(array_values((array) $without)[0])->toBe('ok')
+        // Un trigger quitado lo quita un superusuario: update.sh deshace.
+        ->and(privilegiosActualizadorManipulado($expected))->toBeTrue();
+})->with([
+    'el del alta' => ['shift_entries_guard_duration_insert'],
+    'el del cierre' => ['shift_entries_guard_duration_close'],
+])->group('RS-07', 'RL-04', 'RN-06');
+
 it('la reparacion de update.sh deja la traza y la linea base de la zona en solo lectura', function (): void {
     // Privilegios de mas sobre la traza, su secuencia y la linea base, y el
     // SELECT de la traza retirado: es deriva, y la reparacion la deshace. En
