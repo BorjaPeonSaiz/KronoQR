@@ -7,7 +7,9 @@ use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
+use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
@@ -164,16 +166,53 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
         employeeUuid: null,
     );
 
+    // El desglose de lo medido, para que un fallo diga DONDE se fue el tiempo.
+    // En local el caso de uso entero cuesta ~0,07 s, y en la CI de la 19a cayo
+    // tres veces seguidas con 5,7-5,8 s y el mismo codigo: o espera
+    // PostgreSQL, o espera Redis (la metrica del caso de uso se escribe dentro
+    // de lo cronometrado), o es PHP. Escuchar no cambia lo medido: son quince
+    // sentencias y una observacion.
+    /** @var list<array{sql: string, ms: float}> $sentencias */
+    $sentencias = [];
+    DB::listen(static function (QueryExecuted $sentencia) use (&$sentencias): void {
+        $sentencias[] = ['sql' => $sentencia->sql, 'ms' => $sentencia->time];
+    });
+
+    $metrica = 0.0;
+    $anotar = static function (float $segundos) use (&$metrica): void {
+        $metrica += $segundos;
+    };
+    app()->extend(UseCaseMetrics::class, static fn (UseCaseMetrics $real): UseCaseMetrics => new readonly class($real, $anotar) implements UseCaseMetrics
+    {
+        /** @param  Closure(float): void  $anotar */
+        public function __construct(private UseCaseMetrics $real, private Closure $anotar) {}
+
+        public function observe(string $useCase, string $outcome, float $seconds): void
+        {
+            $empezo = microtime(true);
+            $this->real->observe($useCase, $outcome, $seconds);
+            ($this->anotar)(microtime(true) - $empezo);
+        }
+    });
+
     $empezo = microtime(true);
     $informe = $caso->handle($consulta, maxRangeDays: 92, maxRows: 20000);
     $tardo = microtime(true) - $empezo;
 
     // La cifra medida se deja a mano con `KRONOQR_PRINT_PLAN=1`, igual que el
     // plan: es el numero que se pega en el informe de la tarea y el que hay que
-    // volver a mirar el dia que alguien toque la consulta.
-    if (getenv('KRONOQR_PRINT_PLAN') !== false) {
+    // volver a mirar el dia que alguien toque la consulta. Por encima del
+    // presupuesto sale siempre, con el desglose.
+    if (getenv('KRONOQR_PRINT_PLAN') !== false || $tardo >= 5.0) {
+        $sql = array_sum(array_column($sentencias, 'ms')) / 1000;
+        usort($sentencias, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
+        $lenta = $sentencias[0] ?? ['sql' => '-', 'ms' => 0.0];
+
         fwrite(STDOUT, 'RNF-P-05: informe mensual de '.EMPLEADOS.' empleados en '
-            .round($tardo, 3)." s\n");
+            .round($tardo, 3).' s (SQL '.round($sql, 3).' s en '.\count($sentencias).' sentencias, la mas lenta '
+            .round($lenta['ms'], 1).' ms «'.mb_substr((string) preg_replace('/\s+/', ' ', $lenta['sql']), 0, 60).'»; '
+            .'metrica en Redis '.round($metrica, 3).' s; resto '
+            .round($tardo - $sql - $metrica, 3)." s)\n");
     }
 
     expect($informe->rowCount())->toBe(EMPLEADOS)
