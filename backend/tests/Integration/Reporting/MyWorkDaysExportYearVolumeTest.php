@@ -18,6 +18,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Reporting\PersonalRecordCsvTable;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -178,15 +179,11 @@ it('descarga en blanco un año de 1.464 tramos en CSV dentro del presupuesto y c
     $tramos = 0;
     $minutos = 0;
 
-    foreach (explode("\r\n", $descarga['body']) as $linea) {
-        if (! str_starts_with($linea, 'TRAMO;')) {
-            continue;
-        }
-
+    // `duration` se busca por su rotulo, no por su posicion (ver
+    // PersonalRecordCsvTable).
+    foreach (PersonalRecordCsvTable::rowsOfType($descarga['body'], 'TRAMO') as $tramo) {
         $tramos++;
-        // `duration` es la sexta columna de `PersonalRecordCsv::COLUMNS`, `HH:MM`.
-        [$horas, $resto] = explode(':', explode(';', $linea)[5]);
-        $minutos += ((int) $horas * 60) + (int) $resto;
+        $minutos += PersonalRecordCsvTable::minutes($tramo['duration']);
     }
 
     if (getenv('KRONOQR_PRINT_PLAN') !== false) {
