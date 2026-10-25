@@ -93,12 +93,12 @@ Lo que se aprobó con el plan:
 
 Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
 
-- **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` en Reporting, comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
+- **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` (hoy en `Shared/Domain/Support`, también lo usa `kiosk:health`), comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
 - **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
 - **19.2:** el CSV y el PDF del registro propio salen de `PersonalRecordLayout` (una lista de columnas, `PersonalRecordFormat` elige cuales y con que rotulos); cada hora lleva su desfase `UTC+HH:MM` de `SiteWallClock::offset` (con prefijo: un `+` suelto lo neutraliza el dialecto CSV); `PersonalRecordCsvPdfParityTest` compara los dos escritores con los dos cambios de hora. `ExportedShiftEntry` con `ExportedShiftEntryStatus` y `ExportedClockSource` (resto de H5), espejo de los enums de Attendance comprobado por `ExportedShiftEntryTest`.
 - **19.6:** el asiento de la importación entra en su transacción; dos triggers (`shift_entries_guard_duration`, nota del 25-10 en ADR-057) rechazan un tramo que nace o se cierra con otra duración que la de sus marcas (filas antiguas intactas, las denuncia la conciliación).
 - **Pendiente:**
-  - nota de actualización de la 2.3.0: un trabajo de `BroadcastPresenceChange` en cola con el nombre viejo `ShiftCorrected` falla al deserializarse (solo la presencia en vivo);
+  - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
   - seis `new DateTimeImmutable($fecha.' 00:00:00')` del dominio a `createFromFormat('!…')` (19.4);
   - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
   - Redis local con el AOF corrupto: Feature/Integration/Contract solo en la CI hasta que el propietario decida repararlo.
