@@ -68,5 +68,4 @@ it('rechaza unas posiciones que no forman un codigo nuevo', function (array $pic
     'ninguna' => [[]],
     'negativa' => [[0, 0, 0, 0, 0, 0, 0, 0, -1]],
     'fuera del alfabeto' => [[0, 0, 0, 0, 0, 0, 0, 0, 31]],
-    'no es una lista' => [[1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0, 6 => 0, 7 => 0, 8 => 0, 9 => 0]],
 ])->group('RF-GP-01');

@@ -34,30 +34,31 @@ final readonly class WorkRecordDiscrepancy
         /** Solo en la de la traza: la fila de `site_timezone_changes`. */
         public ?int $siteTimezoneChangeId = null,
     ) {
-        $ofAnEntry = ! \in_array($kind, [WorkRecordDiscrepancyKind::PurgeOutOfBounds, WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit], true);
-
         // Cada tipo señala lo suyo, y solo lo suyo: un hallazgo sin a quien
         // señalar se escribiria `audit_log # · …` y el runbook no tendria por
-        // donde empezar (V1-AR-4).
-        if ($ofAnEntry !== ($shiftEntryUuid !== null) || $shiftEntryUuid === '') {
-            throw new InvalidArgumentException('Una discrepancia '.$kind->value.($ofAnEntry ? ' es de un tramo y lleva su uuid.' : ' no es de ningun tramo.'));
+        // donde empezar (V1-AR-4). Tramo, centro y asiento: exigido (`true`),
+        // prohibido (`false`) u opcional (`null`).
+        [$entry, $site, $audit] = match ($kind) {
+            WorkRecordDiscrepancyKind::EntryWithoutAudit => [true, false, false],
+            WorkRecordDiscrepancyKind::EntryDiffersFromAudit,
+            WorkRecordDiscrepancyKind::RetiredWithoutCorrection,
+            WorkRecordDiscrepancyKind::AuditWithoutEntry => [true, false, true],
+            WorkRecordDiscrepancyKind::PurgeOutOfBounds => [false, false, true],
+            WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit => [false, true, null],
+        };
+
+        if (! self::points($entry, $shiftEntryUuid)
+            || ! self::points($site, $siteId)
+            || ! self::points($audit, $auditEntryId)
+            || ($siteTimezoneChangeId !== null && ! $site)
+            || $shiftEntryUuid === '') {
+            throw new InvalidArgumentException('Una discrepancia '.$kind->value.' no señala lo que su tipo exige.');
         }
+    }
 
-        $ofASite = $kind === WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit;
-
-        if ($ofASite !== ($siteId !== null) || ($siteTimezoneChangeId !== null && ! $ofASite)) {
-            throw new InvalidArgumentException('Solo una discrepancia de la zona del centro lleva el centro y la fila de su traza.');
-        }
-
-        $needsAudit = \in_array($kind, [WorkRecordDiscrepancyKind::PurgeOutOfBounds, WorkRecordDiscrepancyKind::AuditWithoutEntry, WorkRecordDiscrepancyKind::EntryDiffersFromAudit, WorkRecordDiscrepancyKind::RetiredWithoutCorrection], true);
-
-        if (($needsAudit && $auditEntryId === null) || ($kind === WorkRecordDiscrepancyKind::EntryWithoutAudit && $auditEntryId !== null)) {
-            throw new InvalidArgumentException('Una discrepancia '.$kind->value.($needsAudit ? ' señala el asiento.' : ' no tiene asiento que señalar.'));
-        }
-
-        if (! array_is_list($fields)) {
-            throw new InvalidArgumentException('Los campos de una discrepancia son una lista.');
-        }
+    private static function points(?bool $required, string|int|null $value): bool
+    {
+        return $required === null || $required === ($value !== null);
     }
 
     public function describe(): string

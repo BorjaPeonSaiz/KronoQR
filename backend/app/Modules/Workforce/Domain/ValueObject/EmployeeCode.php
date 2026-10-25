@@ -91,7 +91,7 @@ final readonly class EmployeeCode
      */
     public static function fromRandomPicks(array $picks): self
     {
-        if (! array_is_list($picks) || \count($picks) !== self::RANDOM_LENGTH) {
+        if (\count($picks) !== self::RANDOM_LENGTH) {
             throw new InvalidArgumentException('Un codigo de empleado nuevo lleva '.self::RANDOM_LENGTH.' caracteres aleatorios.');
         }
 

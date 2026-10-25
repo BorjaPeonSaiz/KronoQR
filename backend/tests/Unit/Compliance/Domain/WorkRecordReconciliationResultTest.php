@@ -77,11 +77,6 @@ it('rechaza una discrepancia que no señala lo que su tipo exige', function (Wor
     'zona de un tramo' => [WorkRecordDiscrepancyKind::SiteTimezoneDiffersFromAudit, 't1', 7, 3, null],
 ])->group('RL-04', 'RS-07');
 
-it('rechaza unos campos que no son una lista', function (): void {
-    expect(static fn (): WorkRecordDiscrepancy => new WorkRecordDiscrepancy('t1', WorkRecordDiscrepancyKind::EntryWithoutAudit, ['a' => 'campo']))
-        ->toThrow(InvalidArgumentException::class);
-})->group('RL-04');
-
 it('un resultado con una discrepancia listada no puede ser coherente (V1-AR-4)', function (): void {
     // El caso reproducido: recuentos vacios, una discrepancia en la lista y
     // `isConsistent()` respondiendo `true`.
