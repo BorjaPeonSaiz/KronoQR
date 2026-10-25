@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Infrastructure\Export;
 
-use App\Modules\Reporting\Domain\ValueObject\PayrollCell;
+use App\Modules\Reporting\Domain\Support\PayrollCell;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Shared\Domain\ValueObject\PayrollEncoding;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;

@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
+
+use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 
 /**
  * Quita del mensaje **todo lo que cambia de una ocurrencia a otra**, para que la

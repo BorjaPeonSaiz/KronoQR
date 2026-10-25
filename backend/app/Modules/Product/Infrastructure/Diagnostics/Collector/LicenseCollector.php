@@ -11,8 +11,8 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\PlanUsage;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 
 /**
  * Seccion `license`: en que estado esta la licencia, **sin la razon social del

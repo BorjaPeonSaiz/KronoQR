@@ -6,6 +6,7 @@ namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
+use App\Modules\Product\Domain\Support\DataExportCatalog;
 
 /**
  * Que puede valer una clave de configuracion, y que es cuando cambia

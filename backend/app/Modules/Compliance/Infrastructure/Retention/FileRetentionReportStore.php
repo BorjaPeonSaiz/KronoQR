@@ -9,7 +9,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionMode;
 use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use Illuminate\Support\Facades\Config;
 use RuntimeException;

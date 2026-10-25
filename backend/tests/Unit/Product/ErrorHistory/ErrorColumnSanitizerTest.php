@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
+use App\Modules\Product\Domain\Support\ErrorColumnSanitizer;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 
 /*

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Domain\ValueObject;
+namespace App\Modules\Shared\Domain\Support;
 
 /**
  * base64url sin relleno (RFC 4648 §5), que es como viaja **todo el material

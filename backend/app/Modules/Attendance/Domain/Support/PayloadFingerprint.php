@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Attendance\Domain\ValueObject;
+namespace App\Modules\Attendance\Domain\Support;
 
 /**
  * **La huella del contenido de una tarjeta**: el SHA-256 del `qr_payload`, nunca

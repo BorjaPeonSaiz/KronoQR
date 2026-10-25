@@ -9,7 +9,7 @@ use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseRejection;
 use App\Modules\Product\Domain\ValueObject\LicenseVerification;
-use App\Modules\Shared\Domain\ValueObject\Base64Url;
+use App\Modules\Shared\Domain\Support\Base64Url;
 use SodiumException;
 
 /**

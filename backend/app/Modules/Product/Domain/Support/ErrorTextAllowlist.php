@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
 
 /**
  * **La lista blanca por palabra** (ADR-048, pasos 4 y 5; RF-PD-15, RL-19,

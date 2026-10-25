@@ -14,7 +14,7 @@ use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 

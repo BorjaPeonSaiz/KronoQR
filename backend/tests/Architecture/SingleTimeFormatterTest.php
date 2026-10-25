@@ -11,7 +11,7 @@ use Tests\Architecture\Support\ModuleTree;
  * Tres formas, tres casas:
  *
  * 1. **El instante del contrato** (`UtcTimestamp`, `…Z`):
- *    `Shared\Domain\ValueObject\UtcInstant`, con la precision en `UtcPrecision`.
+ *    `Shared\Domain\Support\UtcInstant`, con la precision en `UtcPrecision`.
  *    Habia ~50 copias de `format('Y-m-d\TH:i:s[.u|.v]\Z')` y la mitad no pasaba
  *    antes a UTC: la `Z` es literal, y un objeto en otra zona salia con su hora
  *    local y una `Z` detras, incluido el payload de `audit_log`.
@@ -34,7 +34,7 @@ use Tests\Architecture\Support\ModuleTree;
 
 /** Las casas de cada forma, relativas a `app/Modules/`. */
 const SINGLE_TIME_FORMATTER_UTC_HOMES = [
-    'Shared/Domain/ValueObject/UtcInstant.php',
+    'Shared/Domain/Support/UtcInstant.php',
     'Shared/Domain/ValueObject/UtcPrecision.php',
     'Shared/Domain/ValueObject/UtcWallTime.php',
 ];
@@ -203,7 +203,7 @@ it('cada forma vive donde dice la guarda', function (): void {
         )))->toBeTrue()
         ->and(escribeHorasYMinutos(codigoSinComentariosDelTiempo($read(SINGLE_TIME_FORMATTER_DURATION_HOME))))->toBeTrue()
         ->and(escribeHoraSinZona(codigoSinComentariosDelTiempo($read(SINGLE_TIME_FORMATTER_WALL_CLOCK_HOME))))->toBeTrue()
-        ->and($read('Shared/Domain/ValueObject/UtcInstant.php'))->toContain('function wallTime(');
+        ->and($read('Shared/Domain/Support/UtcInstant.php'))->toContain('function wallTime(');
 })->group('RN-04', 'RL-06');
 
 it('el detector de la hora sin zona ve las copias y deja pasar lo que no lo es', function (string $fragmento, bool $copia): void {

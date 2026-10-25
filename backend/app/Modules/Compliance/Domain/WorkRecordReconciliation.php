@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain;
 
+use App\Modules\Compliance\Domain\Support\WorkRecordInstant;
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\ExpectedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancyKind;
-use App\Modules\Compliance\Domain\ValueObject\WorkRecordInstant;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
 use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;

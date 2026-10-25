@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Reporting\Domain\ValueObject;
+namespace App\Modules\Reporting\Domain\Support;
 
+use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
+use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
+use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
 use App\Modules\Shared\Domain\ValueObject\PayrollColumn;
 use App\Modules\Shared\Domain\ValueObject\PayrollDateFormat;
 use App\Modules\Shared\Domain\ValueObject\PayrollHoursFormat;

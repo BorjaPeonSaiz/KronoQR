@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
+use App\Modules\Product\Domain\Support\CanonicalJson;
 use DateTimeImmutable;
 
 /**

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Product\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
-use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
+use App\Modules\Product\Domain\Support\ErrorContextAllowlist;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Http\Policy\ErrorEventPolicy;
 use App\Modules\Shared\Application\Port\ManagementActor;
-use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
+use App\Modules\Shared\Domain\Support\ClientErrorCode;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;

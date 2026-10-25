@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\CanonicalJson;
+use App\Modules\Product\Domain\Support\CanonicalJson;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsDigestCheck;

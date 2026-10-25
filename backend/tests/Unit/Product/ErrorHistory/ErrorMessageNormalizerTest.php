@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorMessageNormalizer;
+use App\Modules\Product\Domain\Support\ErrorMessageNormalizer;
 
 /*
  * La normalizacion quita lo que cambia entre repeticiones y **no toca ni una

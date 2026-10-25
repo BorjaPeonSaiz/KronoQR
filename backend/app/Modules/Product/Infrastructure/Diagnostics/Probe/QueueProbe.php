@@ -10,7 +10,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\QueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 
 /**

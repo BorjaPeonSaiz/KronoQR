@@ -12,7 +12,7 @@ use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;

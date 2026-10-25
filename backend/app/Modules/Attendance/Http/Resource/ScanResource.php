@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Resource;
 
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use Illuminate\Http\Request;

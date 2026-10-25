@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Domain\ValueObject;
 
 use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 

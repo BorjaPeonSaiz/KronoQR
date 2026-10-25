@@ -14,7 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
 use App\Modules\Shared\Application\Port\BrandingProvider;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Support\Facades\Lang;

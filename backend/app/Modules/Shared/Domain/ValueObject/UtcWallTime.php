@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
+
 /**
  * La forma de una hora UTC escrita para una persona, **sin `Z`**, en un texto
  * que ya dice «UTC» al lado: un correo, una linea de consola, un `detail` de

@@ -8,7 +8,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
-use App\Modules\Product\Domain\ValueObject\DataExportCatalog;
+use App\Modules\Product\Domain\Support\DataExportCatalog;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;

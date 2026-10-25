@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\Exception;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Modules\Shared\Domain\ValueObject\FeatureAvailability;
 use App\Modules\Shared\Domain\ValueObject\FeatureRestriction;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use RuntimeException;
 

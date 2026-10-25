@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\DataExportCatalog;
+use App\Modules\Product\Domain\Support\DataExportCatalog;
 use App\Modules\Product\Domain\ValueObject\DataExportFormat;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
 

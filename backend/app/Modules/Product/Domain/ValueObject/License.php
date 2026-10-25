@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use DateTimeInterface;

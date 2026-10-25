@@ -11,7 +11,7 @@ use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordRows;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use DateTimeImmutable;

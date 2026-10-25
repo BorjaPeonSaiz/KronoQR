@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
+
+use App\Modules\Product\Domain\ValueObject\ExportedDataset;
+use App\Modules\Product\Domain\ValueObject\SettingDefinition;
 
 /**
  * **Que se lleva el cliente cuando pide todos sus datos** (**RF-PD-14**, RL-20,

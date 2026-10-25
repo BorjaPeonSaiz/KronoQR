@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Http\Support;
 
 use App\Modules\Reporting\Application\Support\PresenceChannels;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\FeatureAvailability;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Support\Facades\Config;
 
 /**

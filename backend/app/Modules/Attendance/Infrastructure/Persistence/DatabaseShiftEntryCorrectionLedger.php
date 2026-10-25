@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use RuntimeException;

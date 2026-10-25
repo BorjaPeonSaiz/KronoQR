@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Notification;
 use App\Modules\Reporting\Application\Port\ReportExportRecipient;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Infrastructure\Notification\BrandedMailMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;

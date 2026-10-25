@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
+
 /**
  * Cuantos decimales de segundo lleva un instante escrito por {@see UtcInstant}.
  *

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 
 /*
  * El saneado es la regla dura 21 convertida en codigo (RF-PD-15, RL-19,

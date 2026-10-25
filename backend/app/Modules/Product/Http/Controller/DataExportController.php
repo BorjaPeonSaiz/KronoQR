@@ -16,7 +16,7 @@ use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Http\Resource\DataExportCollectionResource;
 use App\Modules\Product\Http\Resource\DataExportResource;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

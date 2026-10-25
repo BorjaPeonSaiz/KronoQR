@@ -11,8 +11,8 @@ use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Domain\Support\PathOverlap;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
-use App\Modules\Shared\Domain\ValueObject\PathOverlap;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 
 /**

@@ -8,7 +8,7 @@ use App\Modules\Attendance\Application\Command\ScanBatch;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
 use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Support\Facades\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;

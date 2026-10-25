@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Domain\ValueObject;
+namespace App\Modules\Shared\Domain\Support;
+
+use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
+use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 
 /**
  * El catalogo CERRADO de codigos que un cliente puede reportar, por origen

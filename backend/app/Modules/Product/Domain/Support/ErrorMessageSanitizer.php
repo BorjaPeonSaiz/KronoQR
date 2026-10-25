@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
 
 /**
  * Quita del texto de un error **todo lo que pueda identificar a una persona o

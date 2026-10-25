@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
+
+use App\Modules\Product\Domain\ValueObject\FieldAllowlist;
 
 /**
  * Que puede llevar `error_events.context`: **una lista cerrada, derivada de lo

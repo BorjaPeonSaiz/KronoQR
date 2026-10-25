@@ -6,7 +6,7 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\Port\ErrorMetrics;
-use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
+use App\Modules\Product\Domain\Support\ErrorColumnSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 use App\Modules\Product\Domain\ValueObject\ErrorWriteOutcome;
 use App\Modules\Product\Domain\ValueObject\SanitizedErrorRow;

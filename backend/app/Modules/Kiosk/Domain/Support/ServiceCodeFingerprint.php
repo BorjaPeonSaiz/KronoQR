@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Kiosk\Domain\ValueObject;
+namespace App\Modules\Kiosk\Domain\Support;
 
 /**
  * La huella del codigo de servicio con el que se abre la pantalla de

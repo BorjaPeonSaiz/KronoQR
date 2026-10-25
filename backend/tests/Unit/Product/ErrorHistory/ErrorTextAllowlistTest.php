@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorTextAllowlist;
-use App\Modules\Product\Domain\ValueObject\ErrorVocabulary;
+use App\Modules\Product\Domain\Support\ErrorTextAllowlist;
+use App\Modules\Product\Domain\Support\ErrorVocabulary;
 
 /*
  * LA LISTA BLANCA POR PALABRA, pasos 4 y 5 de ADR-048 (RF-PD-15, RL-19,

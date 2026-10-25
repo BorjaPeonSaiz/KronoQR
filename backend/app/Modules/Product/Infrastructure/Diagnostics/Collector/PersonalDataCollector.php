@@ -8,7 +8,7 @@ use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\FieldAllowlist;
 use App\Modules\Shared\Application\Port\Clock;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;

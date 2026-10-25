@@ -10,7 +10,7 @@ use App\Modules\Kiosk\Application\Command\RecordHeartbeatCommand;
 use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
 use App\Modules\Kiosk\Http\Support\KioskDevice;
-use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
+use App\Modules\Shared\Domain\Support\ClientErrorCode;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;

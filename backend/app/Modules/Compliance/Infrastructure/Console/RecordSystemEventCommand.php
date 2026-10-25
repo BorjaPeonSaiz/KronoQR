@@ -9,7 +9,7 @@ use App\Modules\Compliance\Application\UseCase\RecordSystemEvent as RecordSystem
 use App\Modules\Compliance\Domain\Exception\ComplianceDomainException;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Console\Command;
 use JsonException;
 use Throwable;

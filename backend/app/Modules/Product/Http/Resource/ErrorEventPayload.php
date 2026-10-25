@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

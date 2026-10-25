@@ -6,7 +6,7 @@ namespace App\Modules\Kiosk\Infrastructure\Adapter;
 
 use App\Modules\Kiosk\Application\Port\PairingSecrets;
 use App\Modules\Kiosk\Domain\ValueObject\PairingCode;
-use App\Modules\Shared\Domain\ValueObject\Base64Url;
+use App\Modules\Shared\Domain\Support\Base64Url;
 use SensitiveParameter;
 
 /**

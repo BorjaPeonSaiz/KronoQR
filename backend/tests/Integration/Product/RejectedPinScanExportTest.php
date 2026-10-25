@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\Port\DataExportSource;
-use App\Modules\Product\Domain\ValueObject\DataExportCatalog;
+use App\Modules\Product\Domain\Support\DataExportCatalog;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;

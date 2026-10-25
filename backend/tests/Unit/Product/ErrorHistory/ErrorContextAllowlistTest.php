@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
+use App\Modules\Product\Domain\Support\ErrorContextAllowlist;
 
 /*
  * `context` es una lista de PERMITIDOS, no de exclusiones (RF-PD-15, RL-19,

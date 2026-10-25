@@ -8,7 +8,7 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Shared\Application\Port\Clock;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Domain\ValueObject;
+namespace App\Modules\Shared\Domain\Support;
 
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use DateTimeImmutable;
 use DateTimeZone;
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Logging;
 
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use Closure;
 use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;

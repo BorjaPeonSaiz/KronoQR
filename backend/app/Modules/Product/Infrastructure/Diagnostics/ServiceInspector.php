@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Support\Network\BoundedReachability;
 use DateTimeImmutable;
 use DateTimeInterface;

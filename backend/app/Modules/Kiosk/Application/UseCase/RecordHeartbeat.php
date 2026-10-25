@@ -9,7 +9,7 @@ use App\Modules\Kiosk\Application\Port\DeviceFleet;
 use App\Modules\Kiosk\Application\Port\DeviceTokenRenewal;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
-use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
+use App\Modules\Kiosk\Domain\Support\ServiceCodeFingerprint;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;

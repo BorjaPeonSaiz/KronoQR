@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Support;
 
 use App\Modules\Reporting\Domain\ValueObject\PresenceEntry;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

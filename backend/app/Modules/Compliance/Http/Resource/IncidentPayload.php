@@ -6,7 +6,7 @@ namespace App\Modules\Compliance\Http\Resource;
 
 use App\Modules\Compliance\Application\Port\IncidentActor;
 use App\Modules\Compliance\Application\Port\IncidentBoardRow;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

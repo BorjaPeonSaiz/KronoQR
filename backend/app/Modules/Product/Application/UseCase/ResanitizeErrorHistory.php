@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\ErrorHistoryRewriter;
-use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
+use App\Modules\Product\Domain\Support\ErrorColumnSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;

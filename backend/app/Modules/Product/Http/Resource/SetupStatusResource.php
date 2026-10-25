@@ -6,7 +6,7 @@ namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Domain\ValueObject\SetupStep;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

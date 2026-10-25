@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Domain\ValueObject\PathOverlap;
+use App\Modules\Shared\Domain\Support\PathOverlap;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Illuminate\Config\Repository;
 use Illuminate\Container\Container;

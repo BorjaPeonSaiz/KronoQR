@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
+use App\Modules\Product\Domain\Support\ErrorContextAllowlist;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;

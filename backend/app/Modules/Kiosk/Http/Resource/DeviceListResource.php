@@ -6,7 +6,7 @@ namespace App\Modules\Kiosk\Http\Resource;
 
 use App\Modules\Kiosk\Application\Query\DeviceFleetView;
 use App\Modules\Kiosk\Application\Query\DeviceView;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;

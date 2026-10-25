@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
-use App\Modules\Product\Domain\ValueObject\ErrorVocabulary;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
+use App\Modules\Product\Domain\Support\ErrorVocabulary;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -336,7 +336,7 @@ function errorVocabularyCoverageCatalogues(): array
 {
     preg_match_all(
         '/\'((?:kiosk|web)\.[a-z0-9_.]+)\'/',
-        (string) file_get_contents(Repo::file('backend/app/Modules/Shared/Domain/ValueObject/ClientErrorCode.php')),
+        (string) file_get_contents(Repo::file('backend/app/Modules/Shared/Domain/Support/ClientErrorCode.php')),
         $codes,
     );
 

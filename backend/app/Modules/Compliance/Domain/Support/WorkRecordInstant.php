@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Compliance\Domain\ValueObject;
+namespace App\Modules\Compliance\Domain\Support;
 
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorVocabulary;
+use App\Modules\Product\Domain\Support\ErrorVocabulary;
 use Tests\Support\Product\FrequentPersonNames;
 use Tests\Support\Product\FrequentPersonNameSections;
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Domain\ValueObject;
+namespace App\Modules\Shared\Domain\Support;
 
 /**
  * ¿Dos raices de clase se pisan? (ADR-045, condicion C3).

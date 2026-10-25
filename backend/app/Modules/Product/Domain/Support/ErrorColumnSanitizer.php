@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Product\Domain\ValueObject;
+namespace App\Modules\Product\Domain\Support;
 
-use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
+use App\Modules\Product\Domain\ValueObject\SanitizedErrorRow;
+use App\Modules\Shared\Domain\Support\ClientErrorCode;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 
 /**

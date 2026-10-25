@@ -7,8 +7,8 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Port\ManagementAccountFilter;
 use App\Modules\Identity\Application\Query\ManagementAccountsQuery;
 use App\Modules\Identity\Application\Query\ManagementAccountView;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 
 /**
  * `php artisan identity:list-users` — las cuentas de gestion de la instalacion

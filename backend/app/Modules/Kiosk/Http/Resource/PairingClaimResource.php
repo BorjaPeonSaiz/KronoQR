@@ -7,7 +7,7 @@ namespace App\Modules\Kiosk\Http\Resource;
 use App\Modules\Kiosk\Application\Query\PairingClaimResult;
 use App\Modules\Kiosk\Domain\ValueObject\ClaimOutcome;
 use App\Modules\Kiosk\Http\Response\PairingRejectedResponse;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
