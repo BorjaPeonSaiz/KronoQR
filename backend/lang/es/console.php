@@ -572,4 +572,65 @@ return [
         ],
     ],
 
+    'verify_audit_chain' => [
+        'sealed_purge' => 'Purga sellada reconocida: particion :year (ADR-027).',
+        'unknown_action' => 'Accion desconocida para esta version: :action — no es una rotura (el hash cuadra). '
+            .'Escrita por una version posterior; ver docs/runbooks/rotura-cadena-auditoria.md §3.',
+        'intact' => 'Cadena integra: :rows entradas verificadas.',
+        'broken' => 'ROTURA DE LA CADENA DE AUDITORIA: :failures hallazgo(s) sobre :rows entradas.',
+        'incident' => 'Incidente de seguridad. Procedimiento: docs/runbooks/rotura-cadena-auditoria.md',
+    ],
+
+    'ensure_audit_partitions' => [
+        'procedure' => ' Procedimiento: :runbook',
+        'created' => 'Particion audit_log_:year creada.',
+        'current_was_missing' => 'Faltaba la particion del año en curso (:year). Se ha creado, pero hasta ahora '
+            .'TODA accion auditable estaba fallando. Procedimiento: :runbook',
+        'up_to_date' => 'Particiones al dia: :year presente.',
+        'up_to_date_with_next' => 'Particiones al dia: :year presente y :next preparada.',
+    ],
+
+    'record_system_event' => [
+        'unknown_action' => 'Accion desconocida: «:action». Solo se admiten las acciones «system.*» del catalogo.',
+        'invalid_json' => 'El valor de --data no es JSON valido: :detail',
+        'data_required' => '--data debe ser un objeto JSON con los datos del asiento.',
+        'not_recorded' => 'No se pudo escribir el asiento: :detail',
+    ],
+
+    'incident_metrics' => [
+        'published' => 'Metrica publicada: :count incidencia(s) abiertas.',
+    ],
+
+    'reconcile_work_record' => [
+        'window_too_short' => 'La ventana tiene que cubrir al menos un dia (--days o compliance.work_record_reconciliation.window_days).',
+        'coverage' => [
+            'full' => 'registro completo',
+            'recent' => 'ultimos :days dias',
+        ],
+        'consistent' => 'Registro y auditoria cuadran (:coverage): :count tramos conciliados.',
+        'not_counted' => [
+            'reviewed_purges' => 'purgas fuera de limites revisadas: :count (no cuentan)',
+            'reviewed_site_timezone' => 'discrepancias de la zona del centro revisadas: :changes de la traza, :entries de asientos sin firma (no cuentan)',
+            'unverifiable_site_timezone' => 'zona del centro no verificable: :sites centro(s) sin asiento site.*, :changes cambio(s) de zona anteriores a la auditoria conservada o a la linea base (no cuentan)',
+        ],
+        'mismatch' => 'EL REGISTRO HORARIO NO CUADRA CON SU AUDITORIA (:coverage): :count discrepancia(s) sobre :entries tramos.',
+        'truncated' => '  (se listan las primeras :count; los recuentos de arriba son completos)',
+        'incident' => 'Posible incidente de seguridad. Procedimiento: docs/runbooks/discrepancia-registro-auditoria.md',
+    ],
+
+    'legal_export' => [
+        'example' => 'Ejemplo: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31',
+        'generated' => 'Exportacion legal generada.',
+        'columns' => ['Concepto', 'Valor'],
+        'rows' => [
+            'period' => 'Periodo',
+            'scope' => 'Alcance',
+            'shift_entries' => 'Tramos',
+            'corrections' => 'Correcciones',
+            'employees' => 'Trabajadores',
+            'file' => 'Fichero',
+        ],
+        'whole_staff' => 'plantilla completa',
+    ],
+
 ];

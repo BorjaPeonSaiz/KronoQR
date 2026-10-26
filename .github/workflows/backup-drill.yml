@@ -634,7 +634,7 @@ jobs:
           aplicacion sh -c 'for i in $(seq 1 12); do php artisan compliance:record-system-event system.restored_from_backup --data="{\"backup_file\":\"kronoqr-20260101T000000Z.dump.enc\",\"backup_taken_at\":\"2026-01-01T00:00:00Z\",\"failed_step\":\"manual_restore\",\"reason\":\"manual_restore\",\"from_version\":\"2.3.0\",\"to_version\":\"2.3.0\",\"report_id\":\"drill-ci-$i\"}" >/dev/null || exit 1; done'
           filas="$(en_cadena "SELECT count(*) FROM audit_log")"
           [ "$filas" -ge 12 ] || { echo "::error::La aplicacion solo ha escrito $filas asientos."; exit 1; }
-          aplicacion php artisan compliance:verify-audit-chain | grep -q 'Cadena integra' ||
+          aplicacion php artisan compliance:verify-audit-chain | grep -qE '^audit_chain=intact|Cadena integra' ||
             { echo "::error::La cadena de origen ya no es integra: el montaje de la prueba es invalido."; exit 1; }
           copia_con_cadena() {
             DB_DATABASE=fichaje_chain PGUSER="$BACKUP_DB_USERNAME" PGPASSWORD="$BACKUP_DB_PASSWORD" bash infra/scripts/backup.sh run --mode dump >/dev/null

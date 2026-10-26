@@ -11,6 +11,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use Illuminate\Support\Facades\Config;
 use RuntimeException;
 
@@ -44,6 +45,17 @@ use RuntimeException;
  */
 final readonly class FileRetentionReportStore implements RetentionReportStore
 {
+    /** Clave de `lang/*\/retention.php` bajo la que vive el texto del informe. */
+    private const string TEXTS = 'retention.report';
+
+    /**
+     * El informe sale en el idioma de la instalacion, como la consola que lo
+     * anuncia: lo archiva y lo defiende el hotel, no quien lo programo. El
+     * NOMBRE del fichero no se traduce: lo buscan por patron los scripts de
+     * rescate (`retencion-propuesta-*`, `retencion-purga-*`).
+     */
+    public function __construct(private InstallationText $texts) {}
+
     public function store(RetentionReport $report): string
     {
         $directory = $this->directory();
@@ -107,18 +119,22 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
 
     private function render(RetentionReport $report): string
     {
+        $policy = $report->policy;
+        $title = $this->text('title');
+
         $lines = [
-            'KronoQR — informe de retencion (RL-02, RL-11, RF-PR-03)',
-            '=======================================================',
+            $title,
+            str_repeat('=', mb_strlen($title)),
             '',
-            'Modo:              '.$report->mode->label(),
-            'Generado:          '.UtcInstant::wallTime($report->generatedAt, UtcWallTime::Second).' UTC',
-            'Centro:            '.$report->policy->siteId,
-            'Plazos aplicados:  registro de jornada y auditoria '.$report->policy->legalRecordYears.' anos · '
-                .'log tecnico '.$report->policy->technicalLogDays.' dias · '
-                .'historico de errores '.$report->policy->errorHistoryDays.' dias',
-            'Corte de jornada:  anterior a '.$report->workRecordCutoff->format('Y-m-d')
-                .' (ese dia NO se purga: el plazo lo incluye)',
+            $this->text('mode', ['mode' => $this->text('modes.'.$report->mode->value)]),
+            $this->text('generated', ['at' => UtcInstant::wallTime($report->generatedAt, UtcWallTime::Second)]),
+            $this->text('site', ['site' => $policy->siteId]),
+            $this->text('terms', [
+                'years' => $policy->legalRecordYears,
+                'log_days' => $policy->technicalLogDays,
+                'error_days' => $policy->errorHistoryDays,
+            ]),
+            $this->text('cutoff', ['date' => $report->workRecordCutoff->format('Y-m-d')]),
             '',
         ];
 
@@ -126,13 +142,15 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             $lines = [...$lines, ...$this->section($report, $scope)];
         }
 
-        $lines[] = 'TOTAL de registros '.($report->mode === RetentionMode::Simulation ? 'a purgar' : 'purgados')
-            .': '.$report->totalRows();
+        $lines[] = $this->text($report->mode === RetentionMode::Simulation ? 'total_to_purge' : 'total_purged', [
+            'count' => $report->totalRows(),
+        ]);
         $lines[] = '';
 
         if ($report->notes !== []) {
-            $lines[] = 'Observaciones';
-            $lines[] = '-------------';
+            $notes = $this->text('notes');
+            $lines[] = $notes;
+            $lines[] = str_repeat('-', mb_strlen($notes));
 
             foreach ($report->notes as $note) {
                 $lines[] = '  · '.$note;
@@ -141,23 +159,37 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             $lines[] = '';
         }
 
-        if ($report->mode === RetentionMode::Simulation) {
-            $lines[] = 'No se ha borrado nada. Para ejecutar ESTA purga, con la confirmacion del responsable:';
-            $lines[] = '';
-            // La misma orden que imprime la consola: sale de un solo sitio.
-            $lines[] = '    '.RetentionExecutionCommand::for($report);
-            $lines[] = '';
-            $lines[] = 'La frase caduca cuando cambia el corte o el perfil de cumplimiento: se ejecuta lo que';
-            $lines[] = 'se aprobo, no lo que hoy toque.';
-        } else {
-            $lines[] = 'Purga ejecutada con la confirmacion '.$report->confirmationToken().'.';
-            $lines[] = 'Queda asiento en audit_log; las particiones soltadas quedan selladas en audit_chain_anchors.';
-        }
+        $lines = [...$lines, ...$this->closing($report)];
 
         $lines[] = '';
-        $lines[] = 'Este informe se queda en el servidor del cliente (ADR-020). No contiene datos personales.';
+        $lines[] = $this->text('stays_on_server');
 
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * Lo que queda por hacer, o lo que se hizo: la orden que ejecuta ESTA purga
+     * en una simulacion, la confirmacion en una ejecucion.
+     *
+     * @return list<string>
+     */
+    private function closing(RetentionReport $report): array
+    {
+        if ($report->mode !== RetentionMode::Simulation) {
+            return [
+                $this->text('executed', ['token' => $report->confirmationToken()]),
+                $this->text('executed_entries'),
+            ];
+        }
+
+        return [
+            $this->text('nothing_deleted'),
+            '',
+            // La misma orden que imprime la consola: sale de un solo sitio.
+            '    '.RetentionExecutionCommand::for($report),
+            '',
+            ...$this->texts->lines(self::TEXTS.'.phrase_expires'),
+        ];
     }
 
     /**
@@ -171,22 +203,24 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             return [];
         }
 
+        $unit = $this->text('units.'.$scope->value);
+
         $lines = [
-            $scope->label().' ('.$this->term($report, $scope).')',
+            $this->text('scopes.'.$scope->value).' ('.$this->term($report, $scope).')',
             str_repeat('-', 55),
         ];
 
         foreach ($tallies as $tally) {
-            $lines[] = sprintf(
+            $lines[] = \sprintf(
                 '  %-22s %8s %-9s %s',
                 $tally->dataset,
                 (string) $tally->rows,
-                $scope->unit(),
-                $tally->range(),
+                $unit,
+                $tally->available ? $tally->range() : $this->text('not_installed'),
             );
         }
 
-        $lines[] = sprintf('  %-22s %8s %s', 'subtotal', (string) $this->subtotal($tallies), $scope->unit());
+        $lines[] = \sprintf('  %-22s %8s %s', $this->text('subtotal'), (string) $this->subtotal($tallies), $unit);
         $lines[] = '';
 
         return $lines;
@@ -195,13 +229,21 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
     /** El plazo de ese ambito, dicho en su unidad: anos para lo legal, dias para el ciclo corto. */
     private function term(RetentionReport $report, RetentionScope $scope): string
     {
+        $policy = $report->policy;
+
         return match ($scope) {
             RetentionScope::WorkRecords, RetentionScope::AuditLog,
-            RetentionScope::ManagementAccounts => $report->policy->legalRecordYears.' anos',
-            RetentionScope::PersonnelRecords => $report->policy->personnelRecordYears.' anos desde el cese',
-            RetentionScope::TechnicalLog => $report->policy->technicalLogDays.' dias',
-            RetentionScope::ErrorHistory => $report->policy->errorHistoryDays.' dias',
+            RetentionScope::ManagementAccounts => $this->text('term.years', ['years' => $policy->legalRecordYears]),
+            RetentionScope::PersonnelRecords => $this->text('term.years_since_leaving', ['years' => $policy->personnelRecordYears]),
+            RetentionScope::TechnicalLog => $this->text('term.days', ['days' => $policy->technicalLogDays]),
+            RetentionScope::ErrorHistory => $this->text('term.days', ['days' => $policy->errorHistoryDays]),
         };
+    }
+
+    /** @param  array<string, int|string>  $replace */
+    private function text(string $key, array $replace = []): string
+    {
+        return $this->texts->line(self::TEXTS.'.'.$key, $replace);
     }
 
     /**

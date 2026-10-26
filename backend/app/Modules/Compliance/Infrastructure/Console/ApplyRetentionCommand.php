@@ -18,6 +18,7 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
@@ -64,6 +65,11 @@ use Illuminate\Support\Facades\Config;
  */
 final class ApplyRetentionCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Fichero de `lang/` de la purga: lo comparten esta orden y su informe. */
+    private const string TEXTS = 'retention';
+
     protected $signature = 'compliance:apply-retention
         {--dry-run : Simula y no borra nada. Es el modo por defecto}
         {--confirm= : Frase que imprime la simulacion. Sin ella NO se borra nada}
@@ -99,7 +105,7 @@ final class ApplyRetentionCommand extends Command
         try {
             $outcome = $retention->handle($order);
         } catch (RetentionResponsibleNotActive) {
-            $this->error($this->text('retention.responsible_not_active'));
+            $this->error($this->text('responsible_not_active'));
 
             return self::INVALID;
         } catch (RetentionNotConfirmed|AuditPartitionNotPurgeable|InstallationSiteMissing $stopped) {
@@ -142,7 +148,7 @@ final class ApplyRetentionCommand extends Command
         $declined = ConsoleResponsible::confirm(
             $this,
             $responsible,
-            $this->text('retention.confirm_signature'),
+            $this->text('confirm_signature'),
             ! $this->input->isInteractive(),
         );
 
@@ -153,9 +159,12 @@ final class ApplyRetentionCommand extends Command
     {
         $report = $outcome->report;
 
-        $this->info($report->mode->label());
-        $this->line('Corte del registro de jornada: anterior a '.$report->workRecordCutoff->format('Y-m-d')
-            .' ('.$report->policy->legalRecordYears.' anos, perfil del centro '.$report->policy->siteId.').');
+        $this->info($this->text('report.modes.'.$report->mode->value));
+        $this->line($this->text('console.cutoff', [
+            'date' => $report->workRecordCutoff->format('Y-m-d'),
+            'years' => $report->policy->legalRecordYears,
+            'site' => $report->policy->siteId,
+        ]));
 
         foreach (RetentionScope::cases() as $scope) {
             $tallies = $report->talliesFor($scope);
@@ -165,14 +174,14 @@ final class ApplyRetentionCommand extends Command
             }
 
             $this->line('');
-            $this->line($scope->label().':');
+            $this->line($this->text('report.scopes.'.$scope->value).':');
             $this->table(
-                ['Almacen', 'Cantidad', 'Rango'],
+                $this->texts('console.columns'),
                 array_map(
-                    static fn (RetentionTally $tally): array => [
+                    fn (RetentionTally $tally): array => [
                         $tally->dataset,
                         (string) $tally->rows,
-                        $tally->range(),
+                        $tally->available ? $tally->range() : $this->text('report.not_installed'),
                     ],
                     $tallies,
                 ),
@@ -184,22 +193,22 @@ final class ApplyRetentionCommand extends Command
         }
 
         $this->line('');
-        $this->line('Informe: '.$outcome->reportPath);
+        $this->line($this->text('console.report', ['path' => $outcome->reportPath]));
 
         if (! $report->mode->isSimulation()) {
-            $this->info('Purgados '.$report->totalRows().' registros. Queda asiento en audit_log.');
+            $this->info($this->text('console.purged', ['count' => $report->totalRows()]));
 
             return;
         }
 
         if ($report->isEmpty()) {
-            $this->info('No hay nada vencido: no se purgaria nada.');
+            $this->info($this->text('console.nothing_due'));
 
             return;
         }
 
         $this->line('');
-        $this->warn('Nada se ha borrado. Para ejecutar ESTA purga, con la autorizacion del responsable:');
+        $this->warn($this->text('console.how_to_execute'));
         // La misma orden que imprime el informe: sale de un solo sitio.
         $this->line('  '.RetentionExecutionCommand::for($report));
     }
@@ -232,35 +241,11 @@ final class ApplyRetentionCommand extends Command
             default => 'generic',
         };
 
-        $this->error($this->text('retention.failure.title'));
-
-        foreach ($this->lines('retention.failure.'.$reason) as $line) {
-            $this->line($line);
-        }
-
-        $this->line($this->text('retention.failure.detail', ['detail' => $failed->getMessage()]));
+        $this->error($this->text('failure.title'));
+        $this->paragraph('failure.'.$reason);
+        $this->line($this->text('failure.detail', ['detail' => $failed->getMessage()]));
 
         return self::FAILURE;
-    }
-
-    /**
-     * @param  array<string, string>  $replace
-     */
-    private function text(string $key, array $replace = []): string
-    {
-        $text = __($key, $replace);
-
-        return \is_string($text) ? $text : $key;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function lines(string $key): array
-    {
-        $lines = __($key);
-
-        return \is_array($lines) ? array_values(array_filter($lines, \is_string(...))) : [$key];
     }
 
     private function batchSize(): int

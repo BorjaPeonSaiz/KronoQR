@@ -572,4 +572,65 @@ return [
         ],
     ],
 
+    'verify_audit_chain' => [
+        'sealed_purge' => 'Sealed purge recognised: partition :year (ADR-027).',
+        'unknown_action' => 'Action unknown to this version: :action — it is not a break (the hash matches). '
+            .'Written by a later version; see docs/runbooks/rotura-cadena-auditoria.md §3.',
+        'intact' => 'Intact chain: :rows entries verified.',
+        'broken' => 'AUDIT CHAIN BREAK: :failures finding(s) over :rows entries.',
+        'incident' => 'Security incident. Procedure: docs/runbooks/rotura-cadena-auditoria.md',
+    ],
+
+    'ensure_audit_partitions' => [
+        'procedure' => ' Procedure: :runbook',
+        'created' => 'Partition audit_log_:year created.',
+        'current_was_missing' => 'The partition for the current year (:year) was missing. It has been created, but until now '
+            .'EVERY auditable action was failing. Procedure: :runbook',
+        'up_to_date' => 'Partitions up to date: :year present.',
+        'up_to_date_with_next' => 'Partitions up to date: :year present and :next ready.',
+    ],
+
+    'record_system_event' => [
+        'unknown_action' => 'Unknown action: «:action». Only the «system.*» actions of the catalogue are accepted.',
+        'invalid_json' => 'The value of --data is not valid JSON: :detail',
+        'data_required' => '--data must be a JSON object with the data of the audit entry.',
+        'not_recorded' => 'The audit entry could not be written: :detail',
+    ],
+
+    'incident_metrics' => [
+        'published' => 'Metric published: :count open incident(s).',
+    ],
+
+    'reconcile_work_record' => [
+        'window_too_short' => 'The window must cover at least one day (--days or compliance.work_record_reconciliation.window_days).',
+        'coverage' => [
+            'full' => 'full record',
+            'recent' => 'last :days days',
+        ],
+        'consistent' => 'Record and audit match (:coverage): :count shift entries reconciled.',
+        'not_counted' => [
+            'reviewed_purges' => 'out-of-bounds purges reviewed: :count (not counted)',
+            'reviewed_site_timezone' => 'site time zone discrepancies reviewed: :changes from the trail, :entries from unsigned entries (not counted)',
+            'unverifiable_site_timezone' => 'site time zone not verifiable: :sites site(s) without a site.* entry, :changes time zone change(s) older than the kept audit or the baseline (not counted)',
+        ],
+        'mismatch' => 'THE TIME RECORD DOES NOT MATCH ITS AUDIT (:coverage): :count discrepanc(y/ies) over :entries shift entries.',
+        'truncated' => '  (the first :count are listed; the counts above are complete)',
+        'incident' => 'Possible security incident. Procedure: docs/runbooks/discrepancia-registro-auditoria.md',
+    ],
+
+    'legal_export' => [
+        'example' => 'Example: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31',
+        'generated' => 'Legal export generated.',
+        'columns' => ['Item', 'Value'],
+        'rows' => [
+            'period' => 'Period',
+            'scope' => 'Scope',
+            'shift_entries' => 'Shift entries',
+            'corrections' => 'Corrections',
+            'employees' => 'Employees',
+            'file' => 'File',
+        ],
+        'whole_staff' => 'whole staff',
+    ],
+
 ];

@@ -34,4 +34,68 @@ return [
         'detail' => 'Technical detail: :detail',
     ],
 
+    /*
+     * What the command writes on screen when simulating or running the purge.
+     */
+    'console' => [
+        'cutoff' => 'Work record cutoff: before :date (:years years, profile of site :site).',
+        'columns' => ['Store', 'Count', 'Range'],
+        'report' => 'Report: :path',
+        'purged' => ':count records purged. The audit entry is in audit_log.',
+        'nothing_due' => 'Nothing is due: nothing would be purged.',
+        'how_to_execute' => 'Nothing has been deleted. To run THIS purge, with the authorisation of the person responsible:',
+    ],
+
+    /*
+     * The report archived as the record of each run. It is written in the
+     * installation language; its file name is not (scripts look for it).
+     */
+    'report' => [
+        'title' => 'KronoQR — retention report (RL-02, RL-11, RF-PR-03)',
+        'mode' => 'Mode:              :mode',
+        'modes' => [
+            'simulation' => 'SIMULATION (nothing has been deleted)',
+            'execution' => 'REAL RUN',
+        ],
+        'generated' => 'Generated:         :at UTC',
+        'site' => 'Site:              :site',
+        'terms' => 'Periods applied:   work record and audit :years years · technical log :log_days days · '
+            .'error history :error_days days',
+        'cutoff' => 'Work record cutoff: before :date (that day is NOT purged: the period includes it)',
+        'scopes' => [
+            'work_records' => 'Work record',
+            'audit_log' => 'Audit chain',
+            'technical_log' => 'Technical log',
+            'error_history' => 'Error history',
+            'personnel_records' => 'Personnel records',
+            'management_accounts' => 'Management accounts',
+        ],
+        'units' => [
+            'work_records' => 'rows',
+            'audit_log' => 'rows',
+            'technical_log' => 'files',
+            'error_history' => 'rows',
+            'personnel_records' => 'people',
+            'management_accounts' => 'accounts',
+        ],
+        'term' => [
+            'years' => ':years years',
+            'years_since_leaving' => ':years years since leaving',
+            'days' => ':days days',
+        ],
+        'not_installed' => 'not installed',
+        'subtotal' => 'subtotal',
+        'total_to_purge' => 'TOTAL records to purge: :count',
+        'total_purged' => 'TOTAL records purged: :count',
+        'notes' => 'Notes',
+        'nothing_deleted' => 'Nothing has been deleted. To run THIS purge, with the confirmation of the person responsible:',
+        'phrase_expires' => [
+            'The phrase expires when the cutoff or the compliance profile changes: what runs is what',
+            'was approved, not whatever is due today.',
+        ],
+        'executed' => 'Purge run with confirmation :token.',
+        'executed_entries' => 'The audit entry is in audit_log; the released partitions are sealed in audit_chain_anchors.',
+        'stays_on_server' => 'This report stays on the customer\'s server (ADR-020). It contains no personal data.',
+    ],
+
 ];

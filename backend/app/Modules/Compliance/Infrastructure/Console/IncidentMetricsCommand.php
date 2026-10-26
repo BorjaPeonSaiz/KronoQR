@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Console;
 
 use App\Modules\Compliance\Application\UseCase\PublishIncidentMetrics;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -26,6 +27,11 @@ use Illuminate\Console\Command;
  */
 final class IncidentMetricsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.incident_metrics';
+
     protected $signature = 'compliance:incident-metrics';
 
     protected $description = 'Recalcula y publica el gauge de incidencias abiertas (doc 02 §8.2).';
@@ -38,7 +44,7 @@ final class IncidentMetricsCommand extends Command
         // planificador (`ScheduledTaskOutput`). Una linea por pasada no dice nada
         // que no diga ya el gauge; un fallo si llega, porque sale por la salida
         // de error del comando.
-        $this->info('Metrica publicada: '.$open.' incidencia(s) abiertas.', 'v');
+        $this->info($this->text('published', ['count' => $open]), 'v');
 
         return self::SUCCESS;
     }

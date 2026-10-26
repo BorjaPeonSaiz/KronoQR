@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Console;
 
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainBreak;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -35,6 +36,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class VerifyAuditChainCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.verify_audit_chain';
+
     protected $signature = 'compliance:verify-audit-chain
         {--chunk=1000 : Filas por lote. Solo afecta a la memoria, no al resultado}';
 
@@ -50,7 +56,7 @@ final class VerifyAuditChainCommand extends Command
             // No es una rotura: es una purga de retencion que dejo su ancla
             // (ADR-027). Se informa para que quede en el log del dia, no para
             // que nadie haga nada.
-            $this->line('Purga sellada reconocida: particion '.$year.' (ADR-027).');
+            $this->line($this->text('sealed_purge', ['year' => $year]));
         }
 
         foreach ($result->unknownActions as $action) {
@@ -60,15 +66,14 @@ final class VerifyAuditChainCommand extends Command
             // esta base la escribio una version posterior a la que esta
             // corriendo -tipicamente tras una vuelta atras de `update.sh`-, y
             // eso conviene verlo en el log del dia.
-            $this->warn(
-                'Accion desconocida para esta version: '.$action
-                .' — no es una rotura (el hash cuadra). Escrita por una version posterior; '
-                .'ver docs/runbooks/rotura-cadena-auditoria.md §3.'
-            );
+            $this->warn($this->text('unknown_action', ['action' => $action]));
         }
 
         if ($result->isIntact()) {
-            $this->info('Cadena integra: '.$result->rowsVerified.' entradas verificadas.');
+            $this->info($this->text('intact', ['rows' => $result->rowsVerified]));
+            // El veredicto para los scripts (`restore-drill.sh`, el simulacro de
+            // la CI), que no deben depender del idioma de la instalacion.
+            $this->line(\sprintf('audit_chain=intact rows=%d', $result->rowsVerified));
 
             return self::SUCCESS;
         }
@@ -87,16 +92,17 @@ final class VerifyAuditChainCommand extends Command
             ),
         ]);
 
-        $this->error(
-            'ROTURA DE LA CADENA DE AUDITORIA: '.$result->failureCount().' hallazgo(s) sobre '
-            .$result->rowsVerified.' entradas.'
-        );
+        $this->error($this->text('broken', [
+            'failures' => $result->failureCount(),
+            'rows' => $result->rowsVerified,
+        ]));
 
         foreach ($result->breaks as $break) {
             $this->line('  '.$break->describe());
         }
 
-        $this->error('Incidente de seguridad. Procedimiento: docs/runbooks/rotura-cadena-auditoria.md');
+        $this->error($this->text('incident'));
+        $this->line(\sprintf('audit_chain=broken failures=%d rows=%d', $result->failureCount(), $result->rowsVerified));
 
         return self::FAILURE;
     }
