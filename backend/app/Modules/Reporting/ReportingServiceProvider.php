@@ -152,8 +152,7 @@ use Psr\Log\LoggerInterface;
  * (doc 02 §1.6). Depende de Shared y de eventos de otros modulos.
  *
  * daily_totals es una proyeccion reconstruible que se recalcula, nunca se
- * incrementa (regla dura 7, RN-06, ADR-007). Sus listeners llegan con la
- * tarea 1.9.
+ * incrementa (regla dura 7, RN-06, ADR-007).
  *
  * Aqui esta la raiz de composicion del modulo: los puertos de lectura con sus
  * adaptadores, las policies de los recursos que sirven y el mapa evento →
@@ -202,7 +201,7 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(PresenceMetrics::class, TextfilePresenceMetrics::class);
 
         /*
-         * `workdays_complete_ratio{site}` (doc 02 §8.2, RF-IN-08, tarea 3.1).
+         * `workdays_complete_ratio{site}` (doc 02 §8.2, RF-IN-08).
          *
          * Tambien por fichero, y por una razon propia ademas de la de arriba: es
          * un RATIO que se recalcula entero desde los datos cada noche (regla
@@ -217,7 +216,7 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(RealtimeConnectionCounter::class, ReverbConnectionCounter::class);
 
         /*
-         * `absences_current{type}` (doc 02 §8.2, RF-GP-04, tarea 3.10).
+         * `absences_current{type}` (doc 02 §8.2, RF-GP-04).
          *
          * Fichero para el colector *textfile*, con el mismo patron que las de
          * cumplimiento y adopcion: es un gauge que un comando programado
@@ -247,7 +246,7 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(PresenceBoard::class, LivePresencePolicy::class);
 
         /*
-         * El informe por periodo (RF-IN-01, tarea 2.8). `manager+` del Anexo B,
+         * El informe por periodo (RF-IN-01). `manager+` del Anexo B,
          * que aqui es `{admin, rrhh}`: el `responsable_departamento` no lleva
          * `reports:*` en su token (§7.3) y por tanto ni siquiera pasa del
          * middleware. Las dos comprobaciones dicen lo mismo, que es como tienen
@@ -256,7 +255,7 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(PeriodReport::class, PeriodReportPolicy::class);
 
         /*
-         * La salida a nomina (RF-IN-07, tarea 3.9). «rrhh+» del Anexo B, que aqui
+         * La salida a nomina (RF-IN-07). «rrhh+» del Anexo B, que aqui
          * vuelve a ser `{admin, rrhh}` — y aun asi es una policy propia y no la
          * de arriba: el dia que un responsable pueda ver las horas de su equipo,
          * esa concesion no puede arrastrar consigo el fichero con el que se paga.
@@ -269,7 +268,7 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(PayrollLayout::class, PayrollExportPolicy::class);
 
         /*
-         * La vista de cumplimiento (RF-PA-06, tarea 3.4). «manager+» del Anexo B,
+         * La vista de cumplimiento (RF-PA-06). «manager+» del Anexo B,
          * que aqui es `{admin, rrhh, responsable_departamento}` —el mismo conjunto
          * que la presencia y que la bandeja de incidencias, porque esta pantalla
          * es lo que un responsable mira despues de aquella—. El `auditor` queda
@@ -278,7 +277,7 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(ComplianceSummary::class, ComplianceSummaryPolicy::class);
 
         /*
-         * El cuadro de impacto y adopcion (RF-IN-08, tarea 3.13). `{admin, rrhh}`
+         * El cuadro de impacto y adopcion (RF-IN-08). `{admin, rrhh}`
          * y NADIE MAS, que es lo que dice el Anexo B —«rol: admin|rrhh»— y lo que
          * hace coherente que la consulta no lleve alcance: quien llega alcanza a
          * toda la plantilla por definicion.
@@ -291,7 +290,7 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(AdoptionReport::class, AdoptionReportPolicy::class);
 
         /*
-         * El informe generado en diferido (RF-IN-06, RF-IN-07, tarea 3.9).
+         * El informe generado en diferido (RF-IN-06, RF-IN-07).
          *
          * `{admin, rrhh}` para las dos clases de informe, que es lo mismo que
          * pide el sincrono y lo que el Anexo B llama «rol rrhh» para la nomina.
@@ -322,8 +321,7 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * El informe por periodo y sus dos techos de recursos (RF-IN-01..03, tarea
-     * 2.8).
+     * El informe por periodo y sus dos techos de recursos (RF-IN-01..03).
      *
      * **El `statement_timeout` se inyecta desde `config/reporting.php`** y no se
      * lee dentro del adaptador: `Infrastructure` puede hablar con el framework,
@@ -355,7 +353,7 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * El resumen semanal por correo (RF-PR-05, tarea 3.12).
+     * El resumen semanal por correo (RF-PR-05).
      *
      * **Se compone a mano y no se deja al contenedor** por un solo colaborador:
      * `MAIL_MAILER`. El caso de uso necesita saber si el transporte es de verdad
@@ -413,7 +411,7 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * La vista de cumplimiento y sus dos metricas (RF-PA-06, tarea 3.4).
+     * La vista de cumplimiento y sus dos metricas (RF-PA-06).
      *
      * **El `statement_timeout` se inyecta desde `config/reporting.php`** por lo
      * mismo que en el informe: `Infrastructure` puede hablar con el framework,
@@ -454,20 +452,20 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * El cuadro de impacto y adopcion (RF-IN-08, RNF-D-01, tarea 3.13).
+     * El cuadro de impacto y adopcion (RF-IN-08, RNF-D-01).
      *
      * **Un solo puerto nuevo**, y el adaptador se compone con dos cosas que ya
      * existian: el `statement_timeout` de `config/reporting.php` —porque
      * `Application` no lee configuracion (doc 02 §3.5)— y
-     * {@see WorkDayCompletionReader}, que es quien define «jornada completa» desde
-     * la tarea 3.1. Que el lector de hechos lo reciba **inyectado** y no repita su
+     * {@see WorkDayCompletionReader}, que es quien define «jornada completa».
+     * Que el lector de hechos lo reciba **inyectado** y no repita su
      * SQL es lo que impide que el cuadro de Grafana y el cuadro del panel den dos
-     * porcentajes distintos para la misma semana (decision 8 de la ficha).
+     * porcentajes distintos para la misma semana.
      *
      * **No hay metrica nueva.** Las del §8.2 que alimentan el cuadro
      * —`workdays_complete_ratio`, `scans_by_origin_total`,
      * `incident_resolution_seconds`, `employees_without_delivered_credential`— se
-     * publican desde las tareas 3.1 y 3.2. Publicar aqui otra serie daria un valor
+     * publican por `/metrics`. Publicar aqui otra serie daria un valor
      * que cambia cada vez que alguien abre la pantalla; lo que este endpoint tiene
      * es `http_requests_total{route}` y su traza.
      */
@@ -484,7 +482,7 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * La descarga del informe en CSV, XLSX y PDF (RF-IN-04, tarea 2.9).
+     * La descarga del informe en CSV, XLSX y PDF (RF-IN-04).
      *
      * **Los tres puertos son de esta tarea y ninguno amplia una frontera.** El
      * del motor de PDF existe para que la ausencia de Chromium degrade **un
@@ -515,7 +513,7 @@ final class ReportingServiceProvider extends ServiceProvider
         );
         $this->app->bind(ReportIssuerDirectory::class, DatabaseReportIssuerDirectory::class);
 
-        // El titular del registro propio, para el PDF del portal (PR19). Misma
+        // El titular del registro propio, para el PDF del portal. Misma
         // forma que el emisor: una consulta de dos columnas sobre `employees`,
         // sin el modelo de `Workforce`.
         $this->app->bind(PersonalRecordHolderDirectory::class, DatabasePersonalRecordHolderDirectory::class);
@@ -533,7 +531,7 @@ final class ReportingServiceProvider extends ServiceProvider
          * UNA SOLA FUENTE para los tres sitios donde se leen: el bloque de
          * cabecera del informe por periodo, la cabecera
          * `X-Kronoqr-Export-Criteria` de la salida a nomina —cuyo fichero no los
-         * lleva dentro, decision 5 de la ficha 3.9— y la columna `criteria` de la
+         * lleva dentro— y la columna `criteria` de la
          * exportacion en diferido. Con tres composiciones distintas, el fichero y
          * la pantalla acabarian diciendo cosas distintas sobre el mismo informe.
          */
@@ -543,8 +541,7 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los informes generados **en diferido** (RF-IN-06, RF-IN-07, ADR-041,
-     * tarea 3.9).
+     * Los informes generados **en diferido** (RF-IN-06, RF-IN-07, ADR-041).
      *
      * ## Todo lo que se construye a mano se construye por lo mismo
      *
@@ -710,7 +707,7 @@ final class ReportingServiceProvider extends ServiceProvider
 
     /**
      * Las tres formas de escribir el fichero de un informe en diferido, y el
-     * avance que anotan mientras lo escriben (V5-PA-4).
+     * avance que anotan mientras lo escriben.
      *
      * **Todas con los techos del diferido**: el lector del informe por periodo
      * con `REPORTING_EXPORT_TIMEOUT_SECONDS`, el cuadro de impacto con el mismo
@@ -838,7 +835,7 @@ final class ReportingServiceProvider extends ServiceProvider
 
     /**
      * El contador de minutos trabajados, alimentado por el cierre de tramo
-     * (§8.2, tarea 2.8).
+     * (§8.2).
      *
      * **Encolado y despues del commit**, como la difusion de presencia y al
      * contrario que los listeners de auditoria: este habla con Redis y consulta

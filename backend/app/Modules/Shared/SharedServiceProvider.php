@@ -44,9 +44,9 @@ use Psr\Log\LoggerInterface;
  * transversales (doc 02 §1.6). No depende de ningun otro modulo.
  *
  * Enlaces pendientes de las tareas que los declaran:
- *   - CompliancePolicyProvider  -> Product/Infrastructure/Adapter (tarea 5.1, ADR-025)
- *   - OperationalSettingsProvider -> Product/Infrastructure/Adapter (tarea 5.1, ADR-025)
- * Los declara la tarea 1.1 y los enlaza ProductServiceProvider, que es quien
+ *   - CompliancePolicyProvider  -> Product/Infrastructure/Adapter (ADR-025)
+ *   - OperationalSettingsProvider -> Product/Infrastructure/Adapter (ADR-025)
+ * Los declara este modulo y los enlaza ProductServiceProvider, que es quien
  * tiene las tablas: el enlace puerto->adaptador se declara siempre en el
  * ServiceProvider de quien implementa (ADR-025, restriccion 3).
  */
@@ -63,7 +63,7 @@ final class SharedServiceProvider extends ServiceProvider
         // `Str::uuid7()` en cada caso de uso.
         $this->app->singleton(UuidGenerator::class, TimeOrderedUuidGenerator::class);
 
-        // La version desplegada (DC8). Vive aqui porque la leen `Kiosk` —la
+        // La version desplegada. Vive aqui porque la leen `Kiosk` —la
         // salud de cada tablet y el `minimum_app_version` del latido— y
         // `Product` —la sonda de version de `product:doctor`—, que no pueden
         // importarse entre si. El dato es de configuracion, no de un modulo.
@@ -80,7 +80,7 @@ final class SharedServiceProvider extends ServiceProvider
         // al servidor (RF-AT-11, RL-12). Vive aqui, junto al contador de
         // intentos y al verificador, porque los tres son piezas del mismo PIN y
         // los tocan modulos que no pueden importarse entre si: el quiosco lo
-        // abre al fichar (tarea 1.12) y `Kiosk` publica su clave publica en el
+        // abre al fichar y `Kiosk` publica su clave publica en el
         // padron para que la tablet pueda cerrarlo sin red.
         $this->app->singleton(SealedPinOpener::class, SodiumSealedPinOpener::class);
 
@@ -102,7 +102,7 @@ final class SharedServiceProvider extends ServiceProvider
         UseCaseMetricsRegistry::resolveWith(static fn (): UseCaseMetrics => $app->make(UseCaseMetrics::class));
 
         // El orden de candados de toda escritura que se audita (ADR-010,
-        // ADR-027, tarea 3.6). Vive aqui, y no en `Compliance`, porque lo
+        // ADR-027). Vive aqui, y no en `Compliance`, porque lo
         // necesita `Attendance` —la reconciliacion de `daily_totals` corrige una
         // fila y deja asiento— y `Attendance` no puede importar `Compliance`
         // (doc 02 §1.6). La clave del candado es la MISMA que usa el escritor de
@@ -110,7 +110,7 @@ final class SharedServiceProvider extends ServiceProvider
         // ordenes de adquisicion y el mismo abrazo mortal por otra puerta.
         $this->app->singleton(SerializedLedgerWrite::class, ChainLockedWrite::class);
 
-        // El suelo de tiempo de todo camino de rechazo (RS-03, tarea 5.6).
+        // El suelo de tiempo de todo camino de rechazo (RS-03).
         // Vive aqui por el mismo motivo que el contador de intentos: lo aplican
         // dos modulos que no pueden importarse entre si —la resolucion de una
         // credencial en `Identity` y la recogida de un emparejamiento en
@@ -129,7 +129,7 @@ final class SharedServiceProvider extends ServiceProvider
         // Los ficheros que genera el producto en el volumen `app-storage`
         // (ADR-045). Vive aqui porque los purgan tres modulos que no pueden
         // importarse entre si —`Product`, `Reporting` y `Compliance`— y el
-        // confinamiento (C3) tiene que ser el MISMO para los tres: una copia por
+        // confinamiento (ADR-045 C3) tiene que ser el MISMO para los tres: una copia por
         // modulo seria tres sitios donde olvidarse de no seguir un enlace.
         $this->app->singleton(
             GeneratedFileStore::class,

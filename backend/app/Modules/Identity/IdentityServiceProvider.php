@@ -167,7 +167,7 @@ use Throwable;
 final class IdentityServiceProvider extends ServiceProvider
 {
     /**
-     * La tabla del `tokenable` de una sesion de portal (RF-ID-07, tarea 1.11).
+     * La tabla del `tokenable` de una sesion de portal (RF-ID-07).
      *
      * Se compara la tabla y no la clase porque este modulo no puede importar el
      * modelo `Employee` de `Workforce` (doc 02 §1.6). Es el mismo criterio que
@@ -179,8 +179,7 @@ final class IdentityServiceProvider extends ServiceProvider
     private const string EMPLOYEES_TABLE = 'employees';
 
     /**
-     * La tabla del `tokenable` de un acceso de soporte (RF-PD-11, ADR-020, tarea
-     * 5.9).
+     * La tabla del `tokenable` de un acceso de soporte (RF-PD-11, ADR-020).
      *
      * Mismo criterio que la de arriba: `Identity` no puede importar el modelo de
      * `Product`. Y mismo motivo por el que el token cuelga de esa tabla y no de
@@ -194,7 +193,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(UserAccounts::class, EloquentUserAccounts::class);
 
         /*
-         * Alta de cuentas de gestion (tarea 5.5, RF-PD-03).
+         * Alta de cuentas de gestion (RF-PD-03).
          *
          * Puerto SEPARADO de `UserAccounts`, que es «las cuentas vistas por quien
          * autentica» y no tiene ninguna escritura: darle un `create()`
@@ -204,8 +203,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(ManagementAccountRegistry::class, EloquentManagementAccountRegistry::class);
 
         /*
-         * Baja de la cuenta y sustitucion de su contrasena (tarea 3.8, H-03 de la
-         * revision interna ASVS de 2026-09).
+         * Baja de la cuenta y sustitucion de su contrasena (RS-05, ASVS V3).
          *
          * TERCER puerto sobre la misma tabla, y no dos metodos mas en los otros
          * dos. `UserAccounts` es «las cuentas vistas por quien autentica» y no
@@ -248,13 +246,13 @@ final class IdentityServiceProvider extends ServiceProvider
             ManagementAccountPolicy::class,
         );
 
-        // RN-14 (N1): la baja de una persona le retira la credencial y le cierra
+        // RN-14: la baja de una persona le retira la credencial y le cierra
         // el portal, en la misma transaccion y con su asiento. Sincrono a
         // proposito (ADR-010): ver el listener.
         Event::listen(EmployeeOffboarded::class, [RevokeCredentialsOnOffboarding::class, 'handle']);
 
         if ($this->app->runningInConsole()) {
-            // Los del Anexo C del doc 02, ya completos: la tarea 2.12 añadio
+            // Los del Anexo C del doc 02, completos: tambien
             // `credentials:rotate-key` y su cierre, `credentials:retire-key`.
             $this->commands([
                 /*
@@ -281,7 +279,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 DeliverCredentialCommand::class,
                 CredentialStatusCommand::class,
                 RevokeCredentialCommand::class,
-                // Bajas anteriores a la 2.2.0 con tarjetas activas (R3-AR-07):
+                // Bajas anteriores a la 2.2.0 con tarjetas activas:
                 // la lanza `update.sh` tras migrar; idempotente.
                 RevokeOffboardedCredentialsCommand::class,
                 // Rotacion con solape (RF-QR-07). No tienen endpoint y no lo
@@ -332,7 +330,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * Segundo factor de gestion (RS-06, RF-ID-01, tarea 2.1).
+     * Segundo factor de gestion (RS-06, RF-ID-01).
      *
      * **Los cuatro valores del algoritmo entran resueltos** desde la
      * configuracion y no los consulta ni el adaptador ni el caso de uso, igual
@@ -445,7 +443,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(CredentialRepository::class, EloquentCredentialRepository::class);
 
         // El padron cacheable del quiosco necesita el hash del token de cada
-        // tarjeta activa (RF-KI-03, tarea 1.7). El puerto lo declara `Shared`
+        // tarjeta activa (RF-KI-03). El puerto lo declara `Shared`
         // porque quien lo necesita —`Kiosk`— y quien lo tiene —este modulo— son
         // dos satelites y ninguno puede importar al otro (§1.6). Es el hash, nunca
         // el token: el token en claro no existe fuera del momento de imprimir
@@ -484,7 +482,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * La hoja que se entrega con la tarjeta (tarea 5.11b, RL-05).
+     * La hoja que se entrega con la tarjeta (RL-05).
      *
      * **Metodo aparte del de la impresion de tarjetas**, aunque las dos cosas
      * salgan del mismo Chromium y las pida el mismo rol: aquella acuña un QR y
@@ -526,7 +524,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * La tarjeta impresa (RF-QR-04..06, RF-QR-08, tarea 1.10).
+     * La tarjeta impresa (RF-QR-04..06, RF-QR-08).
      *
      * **El nivel de correccion de errores llega ya resuelto** desde la
      * configuracion, igual que el suelo de tiempo de los rechazos y que los
@@ -550,7 +548,7 @@ final class IdentityServiceProvider extends ServiceProvider
 
         /*
          * La marca entra por los dos puertos de `Shared` y no por la
-         * configuracion (tarea 5.8, RF-PD-08). El nivel de correccion del QR si
+         * configuracion (RF-PD-08). El nivel de correccion del QR si
          * es del despliegue y sigue leyendose aqui, en el borde: no tiene sentido
          * cambiarlo sin reimprimir todas las tarjetas.
          */
@@ -573,7 +571,7 @@ final class IdentityServiceProvider extends ServiceProvider
 
         $this->app->bind(CredentialMetrics::class, TextfileCredentialMetrics::class);
 
-        // Cuentas activas sin uso (ADR-060, tarea 11.3 B).
+        // Cuentas activas sin uso (ADR-060).
         $this->app->bind(DormantManagementAccounts::class, static fn (): DatabaseDormantAccounts => new DatabaseDormantAccounts(DB::connection()));
         $this->app->bind(DormantAccountMetrics::class, TextfileDormantAccountMetrics::class);
 
@@ -590,7 +588,7 @@ final class IdentityServiceProvider extends ServiceProvider
             ),
         );
 
-        // Rotacion de la clave de firma con solape (RF-QR-07, §5.3, tarea 2.12).
+        // Rotacion de la clave de firma con solape (RF-QR-07, §5.3).
         // Se declaran a mano por lo mismo que los demas: `ConnectionInterface`
         // no se resuelve sola, y la transaccion es parte del caso de uso.
         $this->app->bind(
@@ -682,7 +680,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * Portal del empleado (RF-ID-05..07, RL-05, tarea 1.11).
+     * Portal del empleado (RF-ID-05..07, RL-05).
      *
      * **El caso de uso se declara explicitamente y no se deja al autowiring**
      * porque la vida de la sesion entra como valor ya resuelto: `Application` no
@@ -694,8 +692,8 @@ final class IdentityServiceProvider extends ServiceProvider
      * declara `Shared` y lo implementa `Workforce`, que es quien tiene
      * `employees` y por tanto el unico que puede acuñar un token colgado de una
      * persona; su enlace vive en `WorkforceServiceProvider` (ADR-025,
-     * restriccion 3). Lo mismo vale para `EmployeePinVerifier`, que ya venia de
-     * la tarea 1.12.
+     * restriccion 3). Lo mismo vale para `EmployeePinVerifier`, que es el mismo
+     * del fichaje por PIN del quiosco.
      */
     private function registerPortal(): void
     {
@@ -985,7 +983,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 }
 
                 // El tercer tokenable, que ya existe: la sesion del portal del
-                // empleado (RF-ID-07, ADR-015, tarea 1.11). Cuelga de
+                // empleado (RF-ID-07, ADR-015). Cuelga de
                 // `employees` porque el producto no puede exigir correo a la
                 // plantilla (regla dura 12).
                 //
@@ -1002,7 +1000,7 @@ final class IdentityServiceProvider extends ServiceProvider
                     return self::portalSessionIsStillValid($accessToken, $owner);
                 }
 
-                // El CUARTO tokenable, que llega con la tarea 5.9: la concesion
+                // El CUARTO tokenable: la concesion
                 // de acceso de soporte (RF-PD-11, ADR-020, regla dura 16). No
                 // cuelga de `users` y no puede colgar — el fabricante no tiene
                 // cuenta en la instalacion, que es literalmente la alternativa
@@ -1016,8 +1014,8 @@ final class IdentityServiceProvider extends ServiceProvider
                     return self::supportGrantIsStillValid($owner);
                 }
 
-                // Falla cerrado, no abierto (revision de seguridad de la tarea
-                // 1.5). Un tokenable que este metodo no reconoce es uno cuyo
+                // Falla cerrado, no abierto. Un tokenable que este metodo no
+                // reconoce es uno cuyo
                 // estado no se ha comprobado: aceptarlo por defecto reintroduce
                 // el fallo que este metodo existe para cerrar.
                 return false;
@@ -1055,7 +1053,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * Si un acceso de soporte sigue valiendo (**RF-PD-11**, ADR-020, tarea 5.9).
+     * Si un acceso de soporte sigue valiendo (**RF-PD-11**, ADR-020).
      *
      * Dos condiciones, y las dos se comprueban **en cada peticion**:
      *
@@ -1098,7 +1096,7 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
-     * Si una sesion de portal sigue valiendo (RF-ID-07, RF-ID-09, tarea 1.11).
+     * Si una sesion de portal sigue valiendo (RF-ID-07, RF-ID-09).
      *
      * Dos condiciones, y las dos tienen que valer **en cada peticion**, no solo
      * al emitir el token:
