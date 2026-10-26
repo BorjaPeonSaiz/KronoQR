@@ -46,45 +46,31 @@ final class DeactivateManagementUserCommand extends AbstractManagementAccountCom
             : $handler->handle(new DeactivateManagementAccountCommand($uuid, $this->reason()));
 
         return match ($outcome) {
-            AccountDeactivationOutcome::NotFound => $this->refuse(
-                'No existe ninguna cuenta de gestion con ese correo.'
-            ),
+            AccountDeactivationOutcome::NotFound => $this->refuse('deactivate.not_found'),
             // No es un error del operador, pero se devuelve `FAILURE` para que un
             // script que encadene bajas no de por cerrado un acceso que ya lo
             // estaba.
-            AccountDeactivationOutcome::AlreadyInactive => $this->refuse(
-                'Esa cuenta ya estaba dada de baja. No se ha cambiado nada ni se ha escrito ningun asiento.'
-            ),
+            AccountDeactivationOutcome::AlreadyInactive => $this->refuse('deactivate.already_inactive'),
             // En consola no hay sesion, asi que no puede ser la propia cuenta;
             // el caso existe para la API y se cubre por completitud.
-            AccountDeactivationOutcome::OwnAccount => $this->refuse(
-                'No se puede dar de baja la propia cuenta.'
-            ),
-            AccountDeactivationOutcome::LastActiveAdmin => $this->refuse(
-                'Es la ultima cuenta admin activa de la instalacion. Crea otra con identity:create-user '
-                .'antes de dar de baja esta. No se ha cambiado nada.'
-            ),
+            AccountDeactivationOutcome::OwnAccount => $this->refuse('deactivate.own_account'),
+            AccountDeactivationOutcome::LastActiveAdmin => $this->refuse('deactivate.last_admin'),
             AccountDeactivationOutcome::Deactivated => $this->confirmDeactivation(),
         };
     }
 
     private function confirmDeactivation(): int
     {
-        $this->components->info(
-            'Cuenta dada de baja. Sus sesiones abiertas han dejado de valer y no podra volver a entrar.'
-        );
+        $this->components->info($this->text('deactivate.done'));
 
-        $this->components->warn(
-            'La cuenta NO se ha borrado: su historial y sus asientos siguen ahi, y sigue contando '
-            .'para que el alta publica del primer administrador continue cerrada.'
-        );
+        $this->components->warn($this->text('deactivate.not_deleted'));
 
         return self::SUCCESS;
     }
 
-    private function refuse(string $message): int
+    private function refuse(string $key): int
     {
-        $this->components->error($message);
+        $this->components->error($this->text($key));
 
         return self::FAILURE;
     }

@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Identity\Application\UseCase\UnlockPortalOrigin;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
 
@@ -25,6 +26,11 @@ use InvalidArgumentException;
  */
 final class UnlockPortalOriginCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `identity:*` que no tocan cuentas. */
+    private const string TEXTS = 'console.identity';
+
     protected $signature = 'identity:origin-unlock
         {ip : Direccion IPv4 o IPv6 bloqueada (de una IPv6 se levanta su /64)}';
 
@@ -35,15 +41,15 @@ final class UnlockPortalOriginCommand extends Command
         try {
             $origin = RequestOrigin::of((string) $this->argument('ip'));
         } catch (InvalidArgumentException) {
-            $this->components->error('No es una direccion IPv4 ni IPv6.');
+            $this->components->error($this->text('origin_unlock.invalid'));
 
             return self::INVALID;
         }
 
         if ($handler->handle($origin)) {
-            $this->components->info('Bloqueo y cuenta de fallos de ese origen borrados. Queda constancia en el registro de auditoria.');
+            $this->components->info($this->text('origin_unlock.unlocked'));
         } else {
-            $this->components->info('Ese origen no tenia bloqueo ni fallos pendientes. Queda constancia en el registro de auditoria.');
+            $this->components->info($this->text('origin_unlock.nothing'));
         }
 
         return self::SUCCESS;

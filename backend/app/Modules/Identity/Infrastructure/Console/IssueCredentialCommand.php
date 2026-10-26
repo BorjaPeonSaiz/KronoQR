@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\UseCase\IssueCredential as IssueCredentialH
 use App\Modules\Identity\Domain\Exception\CredentialHolderIsOffboarded;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -34,6 +35,11 @@ use Illuminate\Console\Command;
  */
 final class IssueCredentialCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:issue
         {employee : UUID del empleado}
         {--reissue : Revoca la credencial activa anterior y emite otra}
@@ -48,7 +54,7 @@ final class IssueCredentialCommand extends Command
         $reason = $this->option('reason');
 
         if ($employeeUuid === '') {
-            $this->error('Hace falta el UUID del empleado.');
+            $this->error($this->text('employee_required'));
 
             return self::INVALID;
         }
@@ -61,11 +67,11 @@ final class IssueCredentialCommand extends Command
             ));
         } catch (EmployeeAlreadyHasCredential $exception) {
             $this->error($exception->getMessage());
-            $this->line('Usa --reissue --reason="motivo" para sustituirla.');
+            $this->line($this->text('issue.use_reissue'));
 
             return self::FAILURE;
         } catch (CredentialHolderIsOffboarded) {
-            $this->error(__('credentials.errors.holder_offboarded'));
+            $this->error($this->installationText('credentials.errors.holder_offboarded'));
 
             return self::FAILURE;
         } catch (IdentityDomainException $exception) {
@@ -75,14 +81,14 @@ final class IssueCredentialCommand extends Command
         }
 
         if ($issued === null) {
-            $this->error('No hay ningun empleado con ese UUID.');
+            $this->error($this->text('employee_not_found'));
 
             return self::FAILURE;
         }
 
-        $this->info(($issued->reissue ? 'Credencial reemitida' : 'Credencial emitida').': '.$issued->credential->uuid);
-        $this->line('Estado: pendiente de imprimir. Nadie puede fichar con ella todavia.');
-        $this->line('El QR se acuña al imprimir: php artisan credentials:print '.$this->argument('employee'));
+        $this->info($this->text($issued->reissue ? 'issue.reissued' : 'issue.issued', ['uuid' => $issued->credential->uuid]));
+        $this->line($this->text('issue.pending'));
+        $this->line($this->text('issue.next', ['employee' => $employeeUuid]));
 
         return self::SUCCESS;
     }

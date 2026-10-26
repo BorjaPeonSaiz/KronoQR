@@ -42,7 +42,7 @@ final class ListManagementUsersCommand extends AbstractManagementAccountCommand
 
         if (($status !== null && ! \in_array($status, ['active', 'deactivated'], true))
             || ($role !== null && ($roleFilter === null || ! $roleFilter->isManagementRole()))) {
-            $this->components->error('Filtro no valido. --status: active o deactivated; --role: un rol de gestion.');
+            $this->components->error($this->text('list.invalid_filter'));
 
             return self::FAILURE;
         }
@@ -57,19 +57,19 @@ final class ListManagementUsersCommand extends AbstractManagementAccountCommand
         );
 
         $this->table(
-            ['UUID', 'Correo', 'Rol', 'Estado', '2FA', 'Contrasena', 'Ultimo acceso (UTC)'],
-            array_map(static fn (ManagementAccountView $view): array => [
+            $this->texts('list.columns'),
+            array_map(fn (ManagementAccountView $view): array => [
                 $view->account->uuid,
                 $view->account->email,
                 implode(',', array_map(static fn (UserRole $r): string => $r->value, $view->account->roles)),
                 $view->account->active ? 'active' : 'deactivated',
-                $view->account->twoFactorEnabled ? 'si' : 'no',
+                $this->text($view->account->twoFactorEnabled ? 'list.yes' : 'list.no'),
                 $view->passwordStatus->value,
                 $view->account->lastLoginAt === null ? '-' : UtcInstant::wallTime($view->account->lastLoginAt),
             ], $listing->items),
         );
 
-        $this->components->info($listing->total.' cuenta(s).');
+        $this->components->info($this->text('list.total', ['count' => $listing->total]));
 
         return self::SUCCESS;
     }

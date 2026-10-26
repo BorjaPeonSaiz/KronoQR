@@ -422,4 +422,154 @@ return [
         ],
     ],
 
+    'identity_accounts' => [
+        'temporary_password' => 'It is a TEMPORARY password: it expires on :expires UTC and its holder will have to '
+            .'change it when signing in. Write it down now: it cannot be looked up again. It is handed over in person, '
+            .'never by email or messaging.',
+        'create' => [
+            'ask_name' => 'Name',
+            'ask_email' => 'Email',
+            'ask_role' => 'Role',
+            'email_taken' => 'There is already a management account with that email, active or deactivated.',
+            'created' => 'Management account created with role :role and UUID :uuid.',
+        ],
+        'deactivate' => [
+            'not_found' => 'There is no management account with that email.',
+            'already_inactive' => 'That account was already deactivated. Nothing has changed and no audit entry has been written.',
+            'own_account' => 'You cannot deactivate your own account.',
+            'last_admin' => 'It is the last active admin account of the installation. Create another with identity:create-user '
+                .'before deactivating this one. Nothing has changed.',
+            'done' => 'Account deactivated. Its open sessions are no longer valid and it will not be able to sign in again.',
+            'not_deleted' => 'The account has NOT been deleted: its history and audit entries are still there, and it still counts '
+                .'to keep the public sign-up of the first administrator closed.',
+        ],
+        'list' => [
+            'invalid_filter' => 'Invalid filter. --status: active or deactivated; --role: a management role.',
+            'columns' => ['UUID', 'Email', 'Role', 'Status', '2FA', 'Password', 'Last sign-in (UTC)'],
+            'yes' => 'yes',
+            'no' => 'no',
+            'total' => ':count account(s).',
+        ],
+        'reset_password' => [
+            'not_found' => 'There is no active management account with that email.',
+            'done' => 'Password reset. The open sessions of that account are no longer valid.',
+        ],
+        'reset_two_factor' => [
+            'not_enrolled' => 'That account had no active second factor: there is nothing to remove. No audit entry has been written.',
+            'not_found' => 'There is no active management account with that UUID.',
+            'done' => 'Second factor removed. Account :uuid will have to enrol it on its next sign-in.',
+        ],
+    ],
+
+    'identity' => [
+        'origin_unlock' => [
+            'invalid' => 'It is not an IPv4 or IPv6 address.',
+            'unlocked' => 'Lock and failure count of that origin cleared. It is recorded in the audit log.',
+            'nothing' => 'That origin had no lock or pending failures. It is recorded in the audit log.',
+        ],
+        'dormant' => ':count active management account(s) without signing in for more than :days days:roles.',
+    ],
+
+    'credentials' => [
+        'employee_required' => 'The employee UUID is required.',
+        'employee_not_found' => 'There is no employee with that UUID.',
+        'credential_required' => 'The credential UUID is required.',
+        'credential_not_found' => 'There is no credential with that UUID.',
+        'issue' => [
+            'use_reissue' => 'Use --reissue --reason="reason" to replace it.',
+            'issued' => 'Credential issued: :uuid',
+            'reissued' => 'Credential reissued: :uuid',
+            'pending' => 'State: pending print. Nobody can clock with it yet.',
+            'next' => 'The QR is minted when printing: php artisan credentials:print :employee',
+        ],
+        'revoke' => [
+            'reason_required' => 'A revocation must state its reason: --reason="lost".',
+            'revoked' => 'Credential revoked: :uuid',
+            'reason' => 'Reason: :reason',
+        ],
+        'deliver' => [
+            'delivered' => 'Delivery recorded: :uuid',
+            'responsible' => 'Responsible: :email',
+            'moment' => 'At: :at',
+            'reminder' => 'Remember to hand over the portal PIN and the instructions sheet as well: docs/runbooks/alta-nuevo-empleado.md',
+            'by_retired' => '--by was removed in 2.3.0: the delivery is signed by the account in --responsible (its uuid or its email), which confirms who it is. Nothing has been recorded.',
+            'confirm' => 'Record the delivery of card :uuid with this signature?',
+        ],
+        'print' => [
+            'out_required' => '--out=/path/credential.pdf is required: this command does not choose where to leave a card PDF.',
+            'no_reprint' => 'There is no reprint (ADR-034). To replace a card: revoke, reissue and print the new one.',
+            'no_active_credential' => 'That employee does not exist or has no active credential.',
+            'issue_first' => 'Issue it first: php artisan credentials:issue :employee',
+            'not_written' => 'The PDF was generated but could not be written to «:path».',
+            'printed_one' => 'The credential is recorded as PRINTED and its token cannot be recovered.',
+            'runbook' => 'Follow docs/runbooks/tarjeta-perdida-o-rota.md: revoke with reason «failed print» and reissue.',
+            'generated' => 'Card generated: :path',
+            'credential' => 'Credential: :uuid',
+            'handle_with_care' => 'Print, laminate and DELETE the file: it is a bearer instrument.',
+            'next' => 'Then record the delivery: php artisan credentials:deliver :uuid --responsible=<email>',
+        ],
+        'print_batch' => [
+            'all_or_nothing' => 'The batch is all or nothing: no card has been printed. Run it again.',
+            'nothing_pending' => 'There is no credential pending print.',
+            'printed_many' => 'The :count credentials are recorded as PRINTED and their tokens cannot be recovered.',
+            'generated' => ':count card(s) on a single sheet: :path',
+            'handle_with_care' => 'Print, cut along the guides and DELETE the file.',
+            'next' => 'Then record each delivery: php artisan credentials:deliver <credential> --responsible=<email>',
+            'pending_required' => '--pending is required. It is the only possible selection: there is no reprint (ADR-034).',
+            'out_required' => '--out=/path/credentials.pdf is required: this command does not choose where to leave a card PDF.',
+        ],
+        'retire_key' => [
+            'key_required' => 'The key_id of the key being retired is required.',
+            'retired' => 'Key :key no longer signs any active credential (:count cards in total over its lifetime).',
+            'last_step' => [
+                'Last step, on the server:',
+                '  - Empty QR_SIGNING_KEY_PREVIOUS_ID and QR_SIGNING_KEY_PREVIOUS.',
+                '  - Restart the application and check that clocking works as usual.',
+                '  - Destroy the copy of the retired key in the secrets manager.',
+            ],
+        ],
+        'rotate_key' => [
+            'keys' => 'Retiring key: :retiring · current key: :current',
+            'cards' => 'Active cards signed with :retiring: :count',
+            'dry_run' => 'Dry run: :count credentials would be reissued.',
+            'dry_run_pending' => ':count already have a reissue pending print and would not be duplicated.',
+            'reissued' => ':count credentials reissued, pending print. No valid card has been invalidated.',
+            'already_pending' => ':count were already pending and have not been duplicated.',
+            'next_steps' => [
+                'Next steps (docs/runbooks/rotacion-clave-qr.md):',
+                '  1. php artisan credentials:print-batch --pending --out=/tmp/credentials.pdf',
+                '  2. Hand over in person and record: php artisan credentials:deliver <uuid> --responsible=<email>',
+                '  3. php artisan credentials:status --key-id=:key   # who is left',
+                '  4. php artisan credentials:retire-key :key        # when nobody is left',
+            ],
+        ],
+        'revoke_offboarded' => [
+            'failed' => 'The cards of the people who left could not be revoked: :error',
+            'one_failed' => 'One of the people who left could not be revoked: :error',
+        ],
+        'status' => [
+            'no_site' => 'The installation has no site yet: complete the setup wizard in the panel first. Until then there are no credentials to show.',
+            'print_hint' => 'To print them: php artisan credentials:print-batch --pending --out=/tmp/credentials.pdf',
+            'key_unused' => 'Nobody clocks any more with a card signed by key :key.',
+            'can_retire' => 'It can be retired: php artisan credentials:retire-key :key',
+            'all_delivered' => 'Everyone has their card delivered.',
+            'columns' => ['Employee', 'Code', 'Department', 'State', 'Credential'],
+            'states' => [
+                'no_credential' => 'No credential',
+                'pending_print' => 'Pending print',
+                'pending_delivery' => 'Pending delivery',
+                'delivered' => 'Delivered',
+                'revoked' => 'Revoked',
+            ],
+            'coverage' => ':site — without a delivered card: :without of :employees · pending print: :pending',
+            'unknown_key' => 'WARNING: :count active card(s) signed with key :key, which is no longer configured. '
+                .'Those people cannot clock with a card.',
+            'unknown_key_help' => [
+                '  Who they are:    php artisan credentials:status --key-id=:key',
+                '  How to fix it:   docs/runbooks/rotacion-clave-qr.md §6',
+            ],
+            'rotation' => 'Rotation in progress: :pending of :employees still clock with key :key',
+        ],
+    ],
+
 ];

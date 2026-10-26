@@ -14,6 +14,7 @@ use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -48,6 +49,11 @@ use Illuminate\Console\Command;
  */
 final class DeliverCredentialCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:deliver
         {credential : UUID de la credencial}
         {--responsible= : Uuid o correo de la cuenta de gestion (admin o rrhh) que responde de la entrega y la firma. Obligatorio}
@@ -61,7 +67,7 @@ final class DeliverCredentialCommand extends Command
         $credentialUuid = trim((string) $this->argument('credential'));
 
         if ($credentialUuid === '') {
-            $this->error('Hace falta el UUID de la credencial.');
+            $this->error($this->text('credential_required'));
 
             return self::INVALID;
         }
@@ -91,15 +97,17 @@ final class DeliverCredentialCommand extends Command
         }
 
         if ($delivered === null) {
-            $this->error('No hay ninguna credencial con ese UUID.');
+            $this->error($this->text('credential_not_found'));
 
             return self::FAILURE;
         }
 
-        $this->info('Entrega registrada: '.$delivered->credential->uuid);
-        $this->line('Responsable: '.$responsible->email);
-        $this->line('Momento: '.(UtcInstant::format($delivered->credential->deliveredAt, UtcPrecision::Seconds) ?? '—'));
-        $this->line('Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/runbooks/alta-nuevo-empleado.md');
+        $this->info($this->text('deliver.delivered', ['uuid' => $delivered->credential->uuid]));
+        $this->line($this->text('deliver.responsible', ['email' => $responsible->email]));
+        $this->line($this->text('deliver.moment', [
+            'at' => UtcInstant::format($delivered->credential->deliveredAt, UtcPrecision::Seconds) ?? '—',
+        ]));
+        $this->line($this->text('deliver.reminder'));
 
         return self::SUCCESS;
     }
@@ -115,7 +123,7 @@ final class DeliverCredentialCommand extends Command
         $by = $this->option('by');
 
         if (\is_string($by) && $by !== '') {
-            $this->error('--by se retiro en la 2.3.0: la entrega la firma la cuenta de --responsible (su uuid o su correo), que confirma quien es. No se ha registrado nada.');
+            $this->error($this->text('deliver.by_retired'));
 
             return self::INVALID;
         }
@@ -138,7 +146,7 @@ final class DeliverCredentialCommand extends Command
         return ConsoleResponsible::confirm(
             $this,
             $responsible,
-            '¿Registrar la entrega de la tarjeta '.$credentialUuid.' con esta firma?',
+            $this->text('deliver.confirm', ['uuid' => $credentialUuid]),
             ! $this->input->isInteractive(),
         ) ?? $responsible;
     }

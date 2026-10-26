@@ -44,8 +44,8 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
 
     public function handle(CreateManagementAccountHandler $handler): int
     {
-        $name = $this->stringOption('name') ?? $this->asked('Nombre');
-        $email = $this->stringOption('email') ?? $this->asked('Correo');
+        $name = $this->stringOption('name') ?? $this->asked($this->text('create.ask_name'));
+        $email = $this->stringOption('email') ?? $this->asked($this->text('create.ask_email'));
         $role = $this->stringOption('role') ?? $this->chosenRole();
         // Sin `--locale`, el de la instalacion (`LOCALE_DEFAULT`), y uno fuera de
         // los activos se rechaza: el mismo criterio que el alta desde el panel.
@@ -80,14 +80,12 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
                 locale: ActiveLocale::canonical($locale),
             ));
         } catch (ManagementAccountEmailTaken) {
-            $this->components->error('Ya hay una cuenta de gestion con ese correo, activa o dada de baja.');
+            $this->components->error($this->text('create.email_taken'));
 
             return self::FAILURE;
         }
 
-        $this->components->info(
-            'Cuenta de gestion creada con el rol '.$role.' y UUID '.$provisioned->account->uuid.'.'
-        );
+        $this->components->info($this->text('create.created', ['role' => $role, 'uuid' => $provisioned->account->uuid]));
 
         $this->showTemporaryPassword($provisioned->password->plain, $provisioned->expiresAt);
 
@@ -97,7 +95,7 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
     private function chosenRole(): string
     {
         $answer = $this->choice(
-            'Rol',
+            $this->text('create.ask_role'),
             array_map(static fn (UserRole $case): string => $case->value, UserRole::managementRoles()),
             UserRole::RRHH->value,
         );

@@ -422,4 +422,154 @@ return [
         ],
     ],
 
+    'identity_accounts' => [
+        'temporary_password' => 'Es una contrasena TEMPORAL: caduca el :expires UTC y su titular tendra que '
+            .'cambiarla al entrar. Anotala ahora: no se puede volver a consultar. Se entrega en mano, nunca por '
+            .'correo ni por mensajeria.',
+        'create' => [
+            'ask_name' => 'Nombre',
+            'ask_email' => 'Correo',
+            'ask_role' => 'Rol',
+            'email_taken' => 'Ya hay una cuenta de gestion con ese correo, activa o dada de baja.',
+            'created' => 'Cuenta de gestion creada con el rol :role y UUID :uuid.',
+        ],
+        'deactivate' => [
+            'not_found' => 'No existe ninguna cuenta de gestion con ese correo.',
+            'already_inactive' => 'Esa cuenta ya estaba dada de baja. No se ha cambiado nada ni se ha escrito ningun asiento.',
+            'own_account' => 'No se puede dar de baja la propia cuenta.',
+            'last_admin' => 'Es la ultima cuenta admin activa de la instalacion. Crea otra con identity:create-user '
+                .'antes de dar de baja esta. No se ha cambiado nada.',
+            'done' => 'Cuenta dada de baja. Sus sesiones abiertas han dejado de valer y no podra volver a entrar.',
+            'not_deleted' => 'La cuenta NO se ha borrado: su historial y sus asientos siguen ahi, y sigue contando '
+                .'para que el alta publica del primer administrador continue cerrada.',
+        ],
+        'list' => [
+            'invalid_filter' => 'Filtro no valido. --status: active o deactivated; --role: un rol de gestion.',
+            'columns' => ['UUID', 'Correo', 'Rol', 'Estado', '2FA', 'Contrasena', 'Ultimo acceso (UTC)'],
+            'yes' => 'si',
+            'no' => 'no',
+            'total' => ':count cuenta(s).',
+        ],
+        'reset_password' => [
+            'not_found' => 'No existe ninguna cuenta de gestion activa con ese correo.',
+            'done' => 'Contrasena restablecida. Las sesiones abiertas de esa cuenta han dejado de valer.',
+        ],
+        'reset_two_factor' => [
+            'not_enrolled' => 'Esa cuenta no tenia segundo factor activo: no hay nada que retirar. No se ha escrito ningun asiento.',
+            'not_found' => 'No existe ninguna cuenta de gestion activa con ese UUID.',
+            'done' => 'Segundo factor retirado. La cuenta :uuid tendra que darlo de alta en su proximo acceso.',
+        ],
+    ],
+
+    'identity' => [
+        'origin_unlock' => [
+            'invalid' => 'No es una direccion IPv4 ni IPv6.',
+            'unlocked' => 'Bloqueo y cuenta de fallos de ese origen borrados. Queda constancia en el registro de auditoria.',
+            'nothing' => 'Ese origen no tenia bloqueo ni fallos pendientes. Queda constancia en el registro de auditoria.',
+        ],
+        'dormant' => ':count cuenta(s) de gestion activa(s) sin entrar en mas de :days dias:roles.',
+    ],
+
+    'credentials' => [
+        'employee_required' => 'Hace falta el UUID del empleado.',
+        'employee_not_found' => 'No hay ningun empleado con ese UUID.',
+        'credential_required' => 'Hace falta el UUID de la credencial.',
+        'credential_not_found' => 'No hay ninguna credencial con ese UUID.',
+        'issue' => [
+            'use_reissue' => 'Usa --reissue --reason="motivo" para sustituirla.',
+            'issued' => 'Credencial emitida: :uuid',
+            'reissued' => 'Credencial reemitida: :uuid',
+            'pending' => 'Estado: pendiente de imprimir. Nadie puede fichar con ella todavia.',
+            'next' => 'El QR se acuña al imprimir: php artisan credentials:print :employee',
+        ],
+        'revoke' => [
+            'reason_required' => 'Una revocacion tiene que declarar su motivo: --reason="perdida".',
+            'revoked' => 'Credencial revocada: :uuid',
+            'reason' => 'Motivo: :reason',
+        ],
+        'deliver' => [
+            'delivered' => 'Entrega registrada: :uuid',
+            'responsible' => 'Responsable: :email',
+            'moment' => 'Momento: :at',
+            'reminder' => 'Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/runbooks/alta-nuevo-empleado.md',
+            'by_retired' => '--by se retiro en la 2.3.0: la entrega la firma la cuenta de --responsible (su uuid o su correo), que confirma quien es. No se ha registrado nada.',
+            'confirm' => '¿Registrar la entrega de la tarjeta :uuid con esta firma?',
+        ],
+        'print' => [
+            'out_required' => 'Hace falta --out=/ruta/credencial.pdf: este comando no elige donde dejar un PDF de tarjeta.',
+            'no_reprint' => 'No hay reimpresion (ADR-034). Para reponer una tarjeta: revocar, reemitir e imprimir la nueva.',
+            'no_active_credential' => 'Ese empleado no existe o no tiene ninguna credencial activa.',
+            'issue_first' => 'Emitela primero: php artisan credentials:issue :employee',
+            'not_written' => 'El PDF se genero pero no se ha podido escribir en «:path».',
+            'printed_one' => 'La credencial consta IMPRESA y su token es irrecuperable.',
+            'runbook' => 'Sigue docs/runbooks/tarjeta-perdida-o-rota.md: revocar con motivo «impresion fallida» y reemitir.',
+            'generated' => 'Tarjeta generada: :path',
+            'credential' => 'Credencial: :uuid',
+            'handle_with_care' => 'Imprime, plastifica y BORRA el fichero: es un instrumento al portador.',
+            'next' => 'Despues, registra la entrega: php artisan credentials:deliver :uuid --responsible=<correo>',
+        ],
+        'print_batch' => [
+            'all_or_nothing' => 'El lote es todo o nada: no se ha impreso ninguna tarjeta. Vuelve a ejecutarlo.',
+            'nothing_pending' => 'No hay ninguna credencial pendiente de imprimir.',
+            'printed_many' => 'Las :count credenciales constan IMPRESAS y sus tokens son irrecuperables.',
+            'generated' => ':count tarjeta(s) en una sola hoja: :path',
+            'handle_with_care' => 'Imprime, corta por las guias y BORRA el fichero.',
+            'next' => 'Despues, registra cada entrega: php artisan credentials:deliver <credencial> --responsible=<correo>',
+            'pending_required' => 'Hace falta --pending. Es la unica seleccion posible: no existe la reimpresion (ADR-034).',
+            'out_required' => 'Hace falta --out=/ruta/credenciales.pdf: este comando no elige donde dejar un PDF de tarjetas.',
+        ],
+        'retire_key' => [
+            'key_required' => 'Hace falta el key_id de la clave que se retira.',
+            'retired' => 'La clave :key ya no firma ninguna credencial activa (:count tarjetas en total a lo largo de su vida).',
+            'last_step' => [
+                'Ultimo paso, en el servidor:',
+                '  - Vacia QR_SIGNING_KEY_PREVIOUS_ID y QR_SIGNING_KEY_PREVIOUS.',
+                '  - Reinicia la aplicacion y comprueba que se ficha con normalidad.',
+                '  - Destruye la copia de la clave retirada del gestor de secretos.',
+            ],
+        ],
+        'rotate_key' => [
+            'keys' => 'Clave saliente: :retiring · clave actual: :current',
+            'cards' => 'Tarjetas activas firmadas con :retiring: :count',
+            'dry_run' => 'En seco: se reemitirian :count credenciales.',
+            'dry_run_pending' => ':count ya tienen una reemision pendiente de imprimir y no se duplicarian.',
+            'reissued' => 'Reemitidas :count credenciales, pendientes de imprimir. Ninguna tarjeta vigente se ha invalidado.',
+            'already_pending' => ':count ya estaban pendientes y no se han duplicado.',
+            'next_steps' => [
+                'Siguientes pasos (docs/runbooks/rotacion-clave-qr.md):',
+                '  1. php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf',
+                '  2. Entregar en mano y registrar: php artisan credentials:deliver <uuid> --responsible=<correo>',
+                '  3. php artisan credentials:status --key-id=:key   # quien falta',
+                '  4. php artisan credentials:retire-key :key        # cuando no falte nadie',
+            ],
+        ],
+        'revoke_offboarded' => [
+            'failed' => 'No se han podido revocar las tarjetas de las bajas: :error',
+            'one_failed' => 'No se ha podido revocar una de las bajas: :error',
+        ],
+        'status' => [
+            'no_site' => 'La instalacion todavia no tiene centro: completa antes el asistente de puesta en marcha, en el panel. Hasta entonces no hay credenciales que mostrar.',
+            'print_hint' => 'Para imprimirlas: php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf',
+            'key_unused' => 'Nadie ficha ya con una tarjeta firmada por la clave :key.',
+            'can_retire' => 'Se puede retirar: php artisan credentials:retire-key :key',
+            'all_delivered' => 'Todo el mundo tiene su tarjeta entregada.',
+            'columns' => ['Empleado', 'Codigo', 'Departamento', 'Estado', 'Credencial'],
+            'states' => [
+                'no_credential' => 'Sin credencial',
+                'pending_print' => 'Pendiente de imprimir',
+                'pending_delivery' => 'Pendiente de entregar',
+                'delivered' => 'Entregada',
+                'revoked' => 'Revocada',
+            ],
+            'coverage' => ':site — sin tarjeta entregada: :without de :employees · pendientes de imprimir: :pending',
+            'unknown_key' => 'AVISO: :count tarjeta(s) activa(s) firmada(s) con la clave :key, que ya no esta configurada. '
+                .'Esas personas no pueden fichar con tarjeta.',
+            'unknown_key_help' => [
+                '  Quienes son:   php artisan credentials:status --key-id=:key',
+                '  Como se arregla: docs/runbooks/rotacion-clave-qr.md §6',
+            ],
+            'rotation' => 'Rotacion en curso: :pending de :employees siguen fichando con la clave :key',
+        ],
+    ],
+
 ];

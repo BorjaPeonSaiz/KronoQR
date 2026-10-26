@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\PrintCredentialCommand as PrintCredential;
 use App\Modules\Identity\Application\UseCase\PrintCredential as PrintCredentialHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -36,6 +37,11 @@ use Illuminate\Console\Command;
  */
 final class PrintCredentialCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:print
         {employee : UUID del empleado}
         {--out= : Ruta del fichero PDF que se va a escribir. Obligatoria}';
@@ -50,13 +56,13 @@ final class PrintCredentialCommand extends Command
         $out = \is_string($target) ? trim($target) : '';
 
         if ($employeeUuid === '') {
-            $this->error('Hace falta el UUID del empleado.');
+            $this->error($this->text('employee_required'));
 
             return self::INVALID;
         }
 
         if ($out === '') {
-            $this->error('Hace falta --out=/ruta/credencial.pdf: este comando no elige donde dejar un PDF de tarjeta.');
+            $this->error($this->text('print.out_required'));
 
             return self::INVALID;
         }
@@ -65,14 +71,14 @@ final class PrintCredentialCommand extends Command
             $printed = $handler->handle(PrintCredential::forEmployee($employeeUuid));
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
-            $this->line('No hay reimpresion (ADR-034). Para reponer una tarjeta: revocar, reemitir e imprimir la nueva.');
+            $this->line($this->text('print.no_reprint'));
 
             return self::FAILURE;
         }
 
         if ($printed === null) {
-            $this->error('Ese empleado no existe o no tiene ninguna credencial activa.');
-            $this->line('Emitela primero: php artisan credentials:issue '.$employeeUuid);
+            $this->error($this->text('print.no_active_credential'));
+            $this->line($this->text('print.issue_first', ['employee' => $employeeUuid]));
 
             return self::FAILURE;
         }
@@ -82,17 +88,17 @@ final class PrintCredentialCommand extends Command
             // irrecuperable: es el riesgo residual de ADR-034 materializado. Hay
             // que decirlo con todas las letras, porque la salida se resuelve
             // revocando y reemitiendo, no reintentando.
-            $this->error('El PDF se genero pero no se ha podido escribir en «'.$out.'».');
-            $this->line('La credencial consta IMPRESA y su token es irrecuperable.');
-            $this->line('Sigue docs/runbooks/tarjeta-perdida-o-rota.md: revocar con motivo «impresion fallida» y reemitir.');
+            $this->error($this->text('print.not_written', ['path' => $out]));
+            $this->line($this->text('print.printed_one'));
+            $this->line($this->text('print.runbook'));
 
             return self::FAILURE;
         }
 
-        $this->info('Tarjeta generada: '.$out);
-        $this->line('Credencial: '.$printed->credentials[0]->credential->uuid);
-        $this->line('Imprime, plastifica y BORRA el fichero: es un instrumento al portador.');
-        $this->line('Despues, registra la entrega: php artisan credentials:deliver '.$printed->credentials[0]->credential->uuid.' --responsible=<correo>');
+        $this->info($this->text('print.generated', ['path' => $out]));
+        $this->line($this->text('print.credential', ['uuid' => $printed->credentials[0]->credential->uuid]));
+        $this->line($this->text('print.handle_with_care'));
+        $this->line($this->text('print.next', ['uuid' => $printed->credentials[0]->credential->uuid]));
 
         return self::SUCCESS;
     }

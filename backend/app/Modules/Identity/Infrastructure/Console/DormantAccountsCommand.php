@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Port\DormantAccountMetrics;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DormantManagementAccounts;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 
@@ -23,6 +24,11 @@ use Illuminate\Support\Facades\Config;
  */
 final class DormantAccountsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `identity:*` que no tocan cuentas. */
+    private const string TEXTS = 'console.identity';
+
     protected $signature = 'identity:dormant-accounts';
 
     protected $description = 'Cuenta las cuentas de gestion activas sin uso y publica management_accounts_dormant';
@@ -34,16 +40,15 @@ final class DormantAccountsCommand extends Command
 
         $metrics->record($byRole, $days, $clock->now());
 
-        $this->line(\sprintf(
-            '%d cuenta(s) de gestion activa(s) sin entrar en mas de %d dias%s.',
-            array_sum($byRole),
-            $days,
-            $byRole === [] ? '' : ' ('.implode(', ', array_map(
+        $this->line($this->text('dormant', [
+            'count' => array_sum($byRole),
+            'days' => $days,
+            'roles' => $byRole === [] ? '' : ' ('.implode(', ', array_map(
                 static fn (string $role, int $count): string => $role.': '.$count,
                 array_keys($byRole),
                 $byRole,
             )).')',
-        ));
+        ]));
 
         return self::SUCCESS;
     }
