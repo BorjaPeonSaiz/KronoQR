@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Domain\Policy;
 
 use App\Modules\Compliance\Domain\Exception\InvalidRetentionPolicy;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use DateInterval;
 use DateTimeImmutable;
@@ -146,7 +147,7 @@ final readonly class RetentionPolicy
      */
     public function purgesAuditPartition(int $year, DateTimeImmutable $now): bool
     {
-        $endOfPartition = new DateTimeImmutable(($year + 1).'-01-01T00:00:00', new DateTimeZone('UTC'));
+        $endOfPartition = CivilDate::midnight(\sprintf('%04d-01-01', $year + 1), new DateTimeZone('UTC'));
 
         return $endOfPartition <= $this->workRecordCutoff($now);
     }

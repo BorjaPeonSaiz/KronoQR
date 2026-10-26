@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\Support\CivilDate;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -106,6 +107,6 @@ final readonly class ComplianceWeek
      */
     private static function asCivilDate(string $isoDate): DateTimeImmutable
     {
-        return new DateTimeImmutable($isoDate.' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($isoDate, new DateTimeZone('UTC'));
     }
 }
