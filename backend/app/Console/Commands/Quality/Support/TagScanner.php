@@ -100,7 +100,7 @@ final class TagScanner
      * Una prueba que no se ejecuta NUNCA no cubre nada.
      *
      * `it('conserva el registro anterior')->group('RL-04')->skip('pendiente de
-     * la 2.4')` haria figurar RL-04 como cubierto en la matriz —que se entrega
+     * la 2.4.0')` haria figurar RL-04 como cubierto en la matriz —que se entrega
      * como evidencia de que cada obligacion legal tiene una prueba automatica—
      * sin que se verifique absolutamente nada. Lo mismo con `->todo()` y con
      * `test.skip('nombre', …)` de Playwright.
@@ -550,7 +550,7 @@ final class TagScanner
      * herramientas:
      *
      *     ->skip()                            incondicional, no cubre
-     *     ->skip('pendiente de la 2.4')       incondicional, no cubre
+     *     ->skip('pendiente de la 2.4.0')     incondicional, no cubre
      *     test.skip('nombre', { tag: … })     incondicional, no cubre
      *     ->skip(! hayChromium(), 'motivo')   condicional, SI cubre
      *     test.skip(browserName === 'x', …)   condicional, SI cubre
