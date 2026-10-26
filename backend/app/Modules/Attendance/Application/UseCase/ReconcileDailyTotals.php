@@ -19,12 +19,12 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Database\QueryException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -120,6 +120,12 @@ final readonly class ReconcileDailyTotals
         private Clock $clock,
         private LoggerInterface $logger,
         private CaughtFailureReporter $caughtFailures,
+        /**
+         * «No pude tomar el candado» frente a «la escritura fallo»: el
+         * `lock_timeout` (`55P03`) y el abrazo (`40P01`) los reconoce el
+         * adaptador, no este caso de uso.
+         */
+        private DatabaseFailureTranslator $databaseFailures,
     ) {}
 
     public function handle(ReconcileDailyTotalsCommand $command): ReconciliationReport
@@ -390,7 +396,7 @@ final readonly class ReconcileDailyTotals
                 fn (): CorrectionAttempt => $this->recheckAndWrite($suspicion, $now),
             );
         } catch (Throwable $failure) {
-            $sqlState = self::sqlStateOf($failure);
+            $database = $this->databaseFailures->translate($failure);
 
             $this->logger->error('attendance.projection_not_corrected', [
                 'employee_uuid' => $suspicion->employeeUuid(),
@@ -400,10 +406,10 @@ final readonly class ReconcileDailyTotals
                 // El SQLSTATE distingue «no pude tomar el candado» de «la
                 // escritura fallo»: sin el, las dos se leen igual en el log y la
                 // primera parece un problema de integridad.
-                'sqlstate' => $sqlState,
+                'sqlstate' => $database?->sqlState,
             ]);
 
-            if (self::isContention($sqlState)) {
+            if ($database?->kind->isContention() === true) {
                 // Un candado que no se pudo tomar no es una averia: la pasada
                 // siguiente lo vuelve a intentar.
                 return CorrectionAttempt::contended($suspicion);
@@ -415,33 +421,6 @@ final readonly class ReconcileDailyTotals
 
             return CorrectionAttempt::failed($suspicion);
         }
-    }
-
-    /**
-     * El SQLSTATE de un fallo del motor, o `null` si no viene de PostgreSQL.
-     *
-     * Se lee de `errorInfo` y no de `getCode()`: el codigo de una
-     * `QueryException` es el SQLSTATE en unos drivers y un entero en otros, y
-     * esta decision no puede depender de eso.
-     */
-    private static function sqlStateOf(Throwable $failure): ?string
-    {
-        if (! $failure instanceof QueryException) {
-            return null;
-        }
-
-        $state = $failure->errorInfo[0] ?? null;
-
-        return \is_string($state) ? $state : null;
-    }
-
-    /**
-     * `55P03` lock_not_available (el `lock_timeout` de la instalacion) y `40P01`
-     * deadlock_detected. Los dos dicen lo mismo: no se llego a comparar nada.
-     */
-    private static function isContention(?string $sqlState): bool
-    {
-        return $sqlState === '55P03' || $sqlState === '40P01';
     }
 
     /**

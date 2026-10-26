@@ -6,6 +6,7 @@ namespace App\Modules\Shared;
 
 use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
@@ -32,6 +33,7 @@ use App\Modules\Shared\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
+use App\Modules\Shared\Infrastructure\Persistence\PostgresFailureTranslator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Config;
@@ -138,6 +140,10 @@ final class SharedServiceProvider extends ServiceProvider
             ),
         );
         $this->app->singleton(GeneratedFileMetrics::class, RedisGeneratedFileMetrics::class);
+
+        // Los fallos de la base de datos, en el vocabulario de los casos de
+        // uso: `Application` no lee SQLSTATE ni nombra los tipos del driver.
+        $this->app->singleton(DatabaseFailureTranslator::class, PostgresFailureTranslator::class);
 
         // El tope de Chromium simultaneos de TODA la instalacion:
         // informes y registro propio (`Reporting`), tarjetas y hoja de

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Infrastructure\Persistence\PostgresFailureTranslator;
 use App\Modules\Workforce\Application\UseCase\EmployeeWriteRetry;
 use App\Modules\Workforce\Domain\Exception\ConcurrentEmployeeWrite;
 use Illuminate\Database\ConnectionInterface;
@@ -73,7 +74,7 @@ function conexionDelReintento(array $guion, array &$contador, int $nivel = 0): C
 it('reintenta una vez el cruce que llega como DeadlockException y deja un aviso sin datos personales', function (): void {
     $contador = ['calls' => 0];
     $log = new RecordingLogger;
-    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceAnidadoDeLaPlantilla(), null], $contador), $log);
+    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceAnidadoDeLaPlantilla(), null], $contador), $log, new PostgresFailureTranslator);
 
     expect($reintento->run('employee.update', static fn (): string => 'confirmada'))->toBe('confirmada')
         ->and($contador['calls'])->toBe(2)
@@ -90,6 +91,7 @@ it('responde ConcurrentEmployeeWrite, y no un 500, si el reintento tambien se cr
     $reintento = new EmployeeWriteRetry(
         conexionDelReintento([cruceAnidadoDeLaPlantilla(), cruceAnidadoDeLaPlantilla('40001')], $contador),
         $log,
+        new PostgresFailureTranslator,
     );
 
     expect(fn () => $reintento->run('employee.register', static fn (): string => 'nunca'))
@@ -104,7 +106,7 @@ it('responde ConcurrentEmployeeWrite, y no un 500, si el reintento tambien se cr
 
 it('reconoce tambien el cruce que llega como QueryException en la transaccion de fuera', function (): void {
     $contador = ['calls' => 0];
-    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceDeLaPlantilla('40P01'), null], $contador), new RecordingLogger);
+    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceDeLaPlantilla('40P01'), null], $contador), new RecordingLogger, new PostgresFailureTranslator);
 
     expect($reintento->run('employee.import', static fn (): int => 7))->toBe(7)
         ->and($contador['calls'])->toBe(2);
@@ -114,7 +116,7 @@ it('no reintenta ni traduce un fallo que no es de concurrencia', function (): vo
     $contador = ['calls' => 0];
     $otro = cruceDeLaPlantilla('23505');
     $log = new RecordingLogger;
-    $reintento = new EmployeeWriteRetry(conexionDelReintento([$otro], $contador), $log);
+    $reintento = new EmployeeWriteRetry(conexionDelReintento([$otro], $contador), $log, new PostgresFailureTranslator);
 
     expect(fn () => $reintento->run('employee.update', static fn (): null => null))->toThrow(QueryException::class);
 
@@ -125,7 +127,7 @@ it('no reintenta ni traduce un fallo que no es de concurrencia', function (): vo
 it('dentro de una transaccion ajena no reintenta: el cruce sube para que lo reintente la de fuera', function (): void {
     $contador = ['calls' => 0];
     $log = new RecordingLogger;
-    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceAnidadoDeLaPlantilla()], $contador, nivel: 1), $log);
+    $reintento = new EmployeeWriteRetry(conexionDelReintento([cruceAnidadoDeLaPlantilla()], $contador, nivel: 1), $log, new PostgresFailureTranslator);
 
     expect(fn () => $reintento->run('employee.update', static fn (): null => null))->toThrow(DeadlockException::class);
 
@@ -133,11 +135,14 @@ it('dentro de una transaccion ajena no reintenta: el cruce sube para que lo rein
         ->and($log->lines)->toBe([]);
 })->group('RF-GP-01');
 
-it('lee el SQLSTATE de la causa y no de la clase ni del mensaje', function (Throwable $fallo, ?string $sqlState): void {
-    expect(EmployeeWriteRetry::concurrencySqlState($fallo))->toBe($sqlState);
+it('reconoce la concurrencia por el SQLSTATE de la causa y no por la clase ni el mensaje', function (Throwable $fallo, ?string $sqlState, bool $concurrencia): void {
+    $traducido = (new PostgresFailureTranslator)->translate($fallo);
+
+    expect($traducido?->sqlState)->toBe($sqlState);
+    expect($traducido?->kind->isConcurrency() === true)->toBe($concurrencia);
 })->with([
-    'DeadlockException con 40P01 en la causa' => [cruceAnidadoDeLaPlantilla('40P01'), '40P01'],
-    'serializacion en la transaccion de fuera' => [cruceDeLaPlantilla('40001'), '40001'],
-    'indice unico' => [cruceDeLaPlantilla('23505'), null],
-    'cualquier otra cosa' => [new RuntimeException('deadlock detected'), null],
+    'DeadlockException con 40P01 en la causa' => [cruceAnidadoDeLaPlantilla('40P01'), '40P01', true],
+    'serializacion en la transaccion de fuera' => [cruceDeLaPlantilla('40001'), '40001', true],
+    'indice unico' => [cruceDeLaPlantilla('23505'), '23505', false],
+    'cualquier otra cosa' => [new RuntimeException('deadlock detected'), null, false],
 ])->group('RF-GP-01');

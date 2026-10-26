@@ -180,6 +180,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
@@ -997,6 +998,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 locales: $app->make(LocalePolicyProvider::class),
                 connection: DB::connection(),
+                databaseFailures: $app->make(DatabaseFailureTranslator::class),
                 productVersion: Config::string('app.version'),
                 retentionDays: max(1, Config::integer('product.data_export_retention_days', 7)),
             ),

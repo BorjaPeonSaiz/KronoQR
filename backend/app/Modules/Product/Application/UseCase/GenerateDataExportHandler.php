@@ -18,12 +18,11 @@ use App\Modules\Product\Domain\ValueObject\DataExportFailure;
 use App\Modules\Product\Domain\ValueObject\DataExportFile;
 use App\Modules\Product\Domain\ValueObject\DataExportManifest;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\QueryException;
-use PDOException;
 use RuntimeException;
 use Throwable;
 
@@ -105,6 +104,7 @@ final readonly class GenerateDataExportHandler
         private Clock $clock,
         private LocalePolicyProvider $locales,
         private ConnectionInterface $connection,
+        private DatabaseFailureTranslator $databaseFailures,
         private string $productVersion,
         /** Dias que vive el fichero antes de purgarse (regla dura 14: ya resuelto). */
         private int $retentionDays,
@@ -174,7 +174,7 @@ final readonly class GenerateDataExportHandler
             // Un codigo del catalogo, nunca la clase ni el mensaje. La clase
             // real la registra quien invoca —el trabajo o el comando— junto al
             // `uuid` (regla dura 21).
-            $this->exports->markFailed($export->id, $this->clock->now(), self::failureOf($failure));
+            $this->exports->markFailed($export->id, $this->clock->now(), $this->failureOf($failure));
 
             throw $failure;
         } finally {
@@ -187,21 +187,21 @@ final readonly class GenerateDataExportHandler
     /**
      * De que fallo se trata, en el vocabulario que lee el cliente.
      *
-     * Se clasifica **aqui y no en el dominio** porque distinguir un error de base
-     * de datos exige nombrar los tipos del driver, y `Domain/` no puede (regla
-     * dura 1). La capa de aplicacion si.
+     * Se clasifica **aqui y no en el dominio**, y sin nombrar los tipos del
+     * driver: si el fallo viene de la base de datos lo dice el adaptador de
+     * {@see DatabaseFailureTranslator} (regla dura 1 en el dominio; en
+     * `Application`, que no dependa del driver).
      *
      * El orden importa: {@see DataExportWriteFailed} primero, porque es la unica
      * que el producto lanza a proposito y la causa mas frecuente con diferencia
-     * —disco lleno o permisos—; despues el driver; y lo que no encaje en ninguna
-     * es `unexpected`, que es la unica que justifica abrir incidencia.
+     * —disco lleno o permisos—; despues la base de datos; y lo que no encaje en
+     * ninguna es `unexpected`, que es la unica que justifica abrir incidencia.
      */
-    private static function failureOf(Throwable $failure): DataExportFailure
+    private function failureOf(Throwable $failure): DataExportFailure
     {
         return match (true) {
             $failure instanceof DataExportWriteFailed => DataExportFailure::WriteFailed,
-            $failure instanceof QueryException,
-            $failure instanceof PDOException => DataExportFailure::DatabaseError,
+            $this->databaseFailures->translate($failure) !== null => DataExportFailure::DatabaseError,
             default => DataExportFailure::Unexpected,
         };
     }

@@ -123,6 +123,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
@@ -700,6 +701,7 @@ final class ReportingServiceProvider extends ServiceProvider
                 $app->make(ReportingEventPublisher::class),
                 $app->make(Clock::class),
                 $app->make(ConnectionInterface::class),
+                $app->make(DatabaseFailureTranslator::class),
                 Config::integer('reporting.export.retention_days'),
             ),
         );
