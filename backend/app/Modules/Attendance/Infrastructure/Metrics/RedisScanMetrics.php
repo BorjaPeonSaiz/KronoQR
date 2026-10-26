@@ -41,7 +41,7 @@ use Throwable;
  */
 final readonly class RedisScanMetrics implements ScanMetrics
 {
-    /** Prefijo comun para que la tarea 3.1 encuentre todas las series con un solo `SCAN`. */
+    /** Prefijo comun para que `/metrics` encuentre todas las series con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string SCANS_TOTAL = self::KEY_PREFIX.'scans_total';

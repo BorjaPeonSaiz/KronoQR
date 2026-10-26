@@ -21,7 +21,7 @@ use Illuminate\Database\ConnectionInterface;
  * 14). Lo unico que esta consulta decide es **que filas son un uso de
  * credencial**, que es una propiedad del dato y no una regla.
  *
- * ## Los dos filtros, y su porque (decision 4 de la ficha)
+ * ## Los dos filtros, y su porque
  *
  * - `origin IN ('qr_kiosk', 'pin_kiosk')` — solo lo que paso por una tablet. El
  *   PIN de emergencia (RF-AT-11) entra porque tambien es una credencial
@@ -40,7 +40,7 @@ use Illuminate\Database\ConnectionInterface;
  * 10–30 s, la que nadie puede explicar, y activa solo entre los 60 s y los 120 s
  * del transito minimo. Y es un desenlace **aceptado** (ADR-031): siempre resolvio
  * a una persona y siempre fue una tarjeta presentada en una tablet. Lo unico que
- * no tiene es tramo, de ahi el respaldo de `shift_entry_id` de la decision 14.
+ * no tiene es tramo, de ahi el respaldo de `shift_entry_id`.
  *
  * Se une con `employees` y con `devices` para devolver el **UUID publico** del
  * empleado y el rotulo del quiosco, y con `shift_entries` para el UUID del tramo
@@ -54,7 +54,7 @@ use Illuminate\Database\ConnectionInterface;
  * holgadamente en memoria: son los fichajes de un hotel, no un historico. Dos
  * consultas obligarian a mantener dos filtros que tienen que decir lo mismo.
  *
- * **Ningun indice de `scan_events` sirve este rango** (R2 de la revision), y
+ * **Ningun indice de `scan_events` sirve este rango**, y
  * conviene decirlo en vez de citar los que hay: los dos compuestos empiezan por
  * `employee_id` y por `device_id`, asi que un `WHERE occurred_at BETWEEN …` sin
  * columna de cabecera termina en recorrido secuencial. **Se acepta**: corre una

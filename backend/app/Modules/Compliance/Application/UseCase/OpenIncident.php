@@ -37,8 +37,8 @@ use Illuminate\Database\ConnectionInterface;
  * planificador corre. Cuando ya existia, **tampoco se escribe asiento**: no ha
  * pasado nada nuevo que auditar.
  *
- * **La restriccion NO es parcial, y esa propiedad es la que importa** (O-6 de la
- * revision de la ficha 3.11). Alcanza **todos** los estados, no solo `open`: si
+ * **La restriccion NO es parcial, y esa propiedad es la que importa**.
+ * Alcanza **todos** los estados, no solo `open`: si
  * solo mirase las abiertas, la incidencia que un responsable descarto ayer
  * reviviria esta noche mientras su jornada siguiera en la ventana, y la bandeja
  * se volveria imposible de vaciar. Aqui estuvo escrito «indice unico parcial»
@@ -46,7 +46,7 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Cuando el conflicto **no** es idempotencia
  *
- * Desde la ficha 3.11 el tipo dejo de describir el hallazgo entero: dos indicios
+ * Con la deteccion de patrones el tipo dejo de describir el hallazgo entero: dos indicios
  * distintos de `anomalous_pattern` de la misma persona y el mismo dia comparten
  * cuadrupla. El adaptador los distingue y lanza
  * {@see ConflictingFinding}, que este caso

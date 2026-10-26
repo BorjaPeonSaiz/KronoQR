@@ -8,8 +8,8 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use DateTimeImmutable;
 
 /**
- * Las cuentas de gestion dadas de baja que han cumplido su plazo (ADR-060,
- * tarea 11.3 B; RL-11, RGPD art. 5.1.e).
+ * Las cuentas de gestion dadas de baja que han cumplido su plazo (ADR-060;
+ * RL-11, RGPD art. 5.1.e).
  *
  * No borra: **minimiza en sitio**. La cuenta se conserva con su `id`, su `uuid`
  * y sus roles, porque otras filas la nombran (soporte, contratos, ausencias…),

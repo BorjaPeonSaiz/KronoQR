@@ -17,7 +17,7 @@ use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
  * adaptador de la Fase 1 escribe CSV en UTF-8 con BOM y separador `;`, con las
  * horas como texto `HH:MM` y **nunca en decimal**. Que sea un puerto y no una
  * llamada directa es lo que permite que las exportaciones ofimaticas de
- * conveniencia de la tarea 2.9 —que son otra cosa y otro requisito— no tengan
+ * conveniencia (RF-IN-04) —que son otra cosa y otro requisito— no tengan
  * que reabrir este camino.
  *
  * ## Devuelve el recuento porque es quien lo sabe

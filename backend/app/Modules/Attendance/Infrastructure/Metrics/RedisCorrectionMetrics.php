@@ -12,8 +12,8 @@ use Throwable;
  * `manual_corrections_total{reason_code}` sobre Redis (doc 02 §8.2).
  *
  * Mismo soporte que {@see RedisScanMetrics} y por el mismo motivo, aunque el
- * hecho medido sea mil veces menos frecuente: el endpoint `/metrics` de la tarea
- * 3.1 recoge todas las series con un solo `SCAN` sobre el prefijo comun, y una
+ * hecho medido sea mil veces menos frecuente: el endpoint `/metrics`
+ * recoge todas las series con un solo `SCAN` sobre el prefijo comun, y una
  * metrica escrita en otro sitio se quedaria fuera sin que nadie lo notara.
  *
  * `HINCRBY` es atomico: dos responsables corrigiendo a la vez suman dos, no uno.

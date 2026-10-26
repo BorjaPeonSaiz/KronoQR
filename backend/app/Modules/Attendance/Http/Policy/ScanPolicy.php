@@ -25,7 +25,7 @@ use Illuminate\Database\Eloquent\Model;
  * importar el modelo `Device` de `Identity` (doc 02 §1.6), y tampoco le
  * conviene: la clase puede cambiar de nombre y la tabla no, porque
  * `scan_events.device_id` es una clave foranea hacia ella. Esto vale sin cambios
- * para los tokens que emite la tarea 1.5.
+ * para los tokens de dispositivo que emite el emparejamiento.
  *
  * **Deniega tambien al token de gestion mas poderoso.** Un administrador no
  * ficha por nadie desde este endpoint: para eso existe la correccion manual

@@ -171,8 +171,7 @@ final readonly class ApplyRetention
     }
 
     /**
-     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060, tarea
-     * 11.3 A).
+     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060).
      *
      * **Despues de purgar el registro y soltar particiones**, pero **solo las
      * fichas que ya eran candidatas antes** (`$candidates`): las que esa purga
@@ -546,7 +545,7 @@ final readonly class ApplyRetention
     }
 
     /**
-     * Minimiza las cuentas de gestion vencidas (ADR-060, tarea 11.3 B).
+     * Minimiza las cuentas de gestion vencidas (ADR-060).
      *
      * **Despues de soltar particiones**, pero **solo las cuentas que ya eran
      * candidatas antes** (`$candidates`): las que libera la suelta de los

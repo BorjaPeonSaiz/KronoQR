@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\Port;
 
 /**
- * Una ficha recien minimizada (ADR-060, tarea 11.3 A): lo que necesita su
+ * Una ficha recien minimizada (ADR-060): lo que necesita su
  * asiento `retention.personnel_record_anonymized`. Sin nombre ni codigo: ya no
  * existen.
  */

@@ -7,7 +7,7 @@ namespace App\Modules\Compliance\Application\Port;
 /**
  * El historico de errores agrupado por huella (RF-PD-15, 90 dias).
  *
- * El almacen es la tabla `error_events`, que crea la migracion de la tarea 5.12:
+ * El almacen es la tabla `error_events`, que crea su migracion:
  * en una instalacion con las migraciones aplicadas esta siempre. El adaptador
  * conserva la respuesta «no instalado» —{@see
  * \App\Modules\Compliance\Domain\ValueObject\RetentionTally::unavailable()}—

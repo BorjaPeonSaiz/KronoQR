@@ -207,8 +207,7 @@ final class ProblemDetails
 
     /**
      * El `{uuid}` de la correccion existio y **ya no es la version vigente**:
-     * otra persona lo corrigio o lo anulo antes (ADR-035, tarea 5.11b tras la
-     * revision de codigo).
+     * otra persona lo corrigio o lo anulo antes (ADR-035).
      *
      * **Tipo propio y no `TYPE_CONFLICT`**, aunque los tres conflictos de la
      * correccion sean `409`, porque el panel tiene que reaccionar distinto a

@@ -157,7 +157,7 @@ final readonly class AddShiftEntryHandler
         );
         $settings = $this->settings->forSite($employee->siteId);
 
-        // F1: lo que no ha ocurrido no se anota. La jornada primero, porque una
+        // Lo que no ha ocurrido no se anota. La jornada primero, porque una
         // jornada futura con horas pasadas daria un error de RN-05 que no dice
         // cual es el problema.
         $horizon = ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes);

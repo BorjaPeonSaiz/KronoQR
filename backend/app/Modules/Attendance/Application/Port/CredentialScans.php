@@ -14,10 +14,10 @@ use DateTimeZone;
  *
  * **Lee hacia atras lo que el fichaje ya escribio**, como {@see FlaggedScans} y
  * {@see OutOfOrderScans}: no hay proceso nuevo ni evento nuevo en el camino de
- * fichaje. La deteccion de patrones es nocturna a proposito (decision fuera de
- * alcance de la ficha 3.11), y lo que mira son filas de `scan_events`.
+ * fichaje. La deteccion de patrones es nocturna a proposito, y lo que mira son
+ * filas de `scan_events`.
  *
- * ## Que entrega, y que deja fuera (decision 4 de la ficha)
+ * ## Que entrega, y que deja fuera
  *
  * Solo `origin` `qr_kiosk` o `pin_kiosk` —el PIN de emergencia tambien es una
  * credencial personal— y solo los desenlaces **aceptados**: un `rejected_*` no

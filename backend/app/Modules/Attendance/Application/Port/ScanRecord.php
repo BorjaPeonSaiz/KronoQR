@@ -47,12 +47,12 @@ final readonly class ScanRecord
      *                                       (`scan_events_chk_rejected_has_no_shift_entry`).
      * @param  int|null  $clockSkewSeconds  `recordedAt - occurredAt`, con signo (RF-AT-10). El
      *                                      desfase **nunca rechaza el fichaje** (regla dura 19):
-     *                                      se registra para que la incidencia de la tarea 3.5
+     *                                      se registra para que la incidencia de desfase
      *                                      pueda construirse hacia atras.
      * @param  bool  $flaggedForReview  El fichaje pide validacion humana por su origen (RF-AT-11:
      *                                  el PIN) o por su desfase (RN-15: el retraso supera el
      *                                  umbral de la instalacion). Lo decide `ReviewPolicy` en el
-     *                                  dominio; la bandeja que lo trabaja es de la 2.5/3.5.
+     *                                  dominio; lo trabaja la bandeja de incidencias.
      * @param  int|null  $workedMinutes  El acumulado de la jornada tal y como este escaneo lo
      *                                   dejo, no como este HOY (regla dura 8): un reenvio tiene
      *                                   que devolver el mismo numero, y recalcularlo desde

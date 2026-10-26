@@ -37,7 +37,7 @@ use DateTimeImmutable;
  * patron duplicaria `anomalous_patterns_detected_total{pattern}`. Aqui la
  * pregunta es de la **pasada**, no del hallazgo.
  *
- * **Lo que NO alerta es el hallazgo** (decision 9 de la ficha): un indicio sobre
+ * **Lo que NO alerta es el hallazgo**: un indicio sobre
  * dos personas concretas se revisa en la bandeja por quien conoce el turno, no
  * se enruta a un canal de guardia. Lo que alerta es que la pasada no corra o
  * falle, que es operacion y no personas.

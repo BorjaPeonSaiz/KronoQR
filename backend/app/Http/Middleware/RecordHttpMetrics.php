@@ -32,9 +32,8 @@ use Throwable;
  *
  * Mismo motivo que `RedisScanMetrics`: el proceso PHP que atiende una peticion
  * termina con ella, asi que un contador en memoria no lo lee nadie. `HINCRBY` es
- * atomico entre procesos y cuesta microsegundos. `/metrics` las publica desde
- * la tarea 3.1, con `MetricCatalogue` y `MetricsCatalogueTest` contra el doc
- * 02 §8.2.
+ * atomico entre procesos y cuesta microsegundos. `/metrics` las publica con
+ * `MetricCatalogue`, y `MetricsCatalogueTest` las contrasta con el doc 02 §8.2.
  *
  * ## Los cubos son los del presupuesto de latencia
  *
@@ -55,7 +54,7 @@ use Throwable;
  */
 final readonly class RecordHttpMetrics
 {
-    /** Mismo prefijo que el resto de metricas, para que la tarea 3.1 las encuentre con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas, para que `/metrics` las encuentre con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string REQUESTS_TOTAL = self::KEY_PREFIX.'http_requests_total';

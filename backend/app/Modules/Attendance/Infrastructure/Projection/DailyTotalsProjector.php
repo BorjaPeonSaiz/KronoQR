@@ -24,7 +24,7 @@ use Illuminate\Database\ConnectionInterface;
  * el error se descubriria en la nomina de alguien. Con el recalculo, anular un
  * tramo cambia el resultado sin que nadie tenga que acordarse de restar, y la
  * comprobacion de integridad es trivial y automatizable —la reconciliacion
- * nocturna de RF-PR-02 y el comando `attendance:reconcile` de la tarea 2.7—:
+ * nocturna de RF-PR-02 y el comando `attendance:reconcile`—:
  *
  * ```sql
  * SELECT employee_id, work_date, total_minutes FROM daily_totals;

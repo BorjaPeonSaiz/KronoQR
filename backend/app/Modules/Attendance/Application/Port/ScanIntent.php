@@ -11,7 +11,7 @@ use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
  * `scan_events.intent` y del esquema `ScanIntent` del contrato (ADR-024,
  * RF-AT-12).
  *
- * **El servidor la honra siempre que pueda** (decision 1 de la ficha): este o
+ * **El servidor la honra siempre que pueda**: este o
  * no activado el fichaje de pausa en la instalacion, porque ese ajuste gobierna
  * la pantalla del quiosco y la evaluacion de RN-12, no la verdad de lo que la
  * persona declaro. Quien decide es `ScanIntentPolicy`. La columna existe por un
@@ -28,7 +28,7 @@ use App\Modules\Attendance\Domain\ValueObject\DeclaredIntent;
  * Vive junto a {@see ScanResult} y por el mismo motivo: es vocabulario del
  * puerto {@see ScanLog}, que es quien escribe la columna.
  *
- * **La tarea 3.5 hizo que la intencion decida** (ADR-024, RF-AT-12), asi que el
+ * **La intencion decide** (ADR-024, RF-AT-12), asi que el
  * concepto subio al dominio como {@see DeclaredIntent} y este enum se queda
  * donde estaba, con un trabajo mas modesto y bien delimitado: es la forma que
  * tiene el valor **en el contrato y en la columna**, y {@see declared()} es el

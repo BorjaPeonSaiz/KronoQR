@@ -125,7 +125,7 @@ final readonly class DetectAttendanceAnomalies
         $timezone = new DateTimeZone($site->timezone);
         $policy = $this->policyFor($site->id);
 
-        // RF-AT-12 y decision 8 de la ficha 3.5: que reglas abren incidencia en
+        // RF-AT-12: que reglas abren incidencia en
         // ESTA instalacion depende de si el hotel ficha la pausa. Se resuelve
         // aqui —que es quien alcanza los ajustes— y se le pasa ya resuelta al
         // dominio (regla dura 14). Una pasada entera usa el mismo valor: leerlo

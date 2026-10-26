@@ -240,7 +240,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      * revierte, el total revierte con el.
      *
      * Consecuencia para quien escriba el proximo caso de uso que guarde una
-     * jornada —la correccion de la tarea 1.15—: **tiene que publicar los eventos
+     * jornada —como la correccion manual—: **tiene que publicar los eventos
      * del agregado dentro de su transaccion**. Guardar sin publicar deja la
      * proyeccion vieja.
      */

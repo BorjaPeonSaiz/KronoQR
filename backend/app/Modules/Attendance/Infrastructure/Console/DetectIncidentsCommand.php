@@ -59,8 +59,8 @@ final class DetectIncidentsCommand extends Command
         $days = $this->lookbackDays();
 
         if ($days === null || $days < 1) {
-            // `< 1` tambien aqui y no solo en `DetectAnomaliesCommand` (decision
-            // 17 de la ficha 3.11, deuda heredada): dejarselo a la excepcion del
+            // `< 1` tambien aqui y no solo en `DetectAnomaliesCommand`:
+            // dejarselo a la excepcion del
             // comando de dominio convertia un `--days=0` escrito de mas en una
             // traza de PHP en el log del planificador, y una traza no dice que
             // corregir.

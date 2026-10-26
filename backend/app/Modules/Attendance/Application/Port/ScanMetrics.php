@@ -13,7 +13,7 @@ use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
  * Es un puerto y no una llamada directa por el mismo motivo que
  * `Compliance\Application\Port\AuditMetrics`: quien mide no sabe si detras hay
  * un contador en Redis, un fichero para el colector *textfile* o nada. El
- * endpoint `/metrics` que las publica es de la tarea 3.1; en las pruebas es un
+ * endpoint `/metrics` las publica; en las pruebas es un
  * doble que cuenta y permite afirmar sobre lo medido sin levantar Prometheus.
  *
  * **`result` es el desenlace detallado y aqui si puede serlo.** El §8.2 exige

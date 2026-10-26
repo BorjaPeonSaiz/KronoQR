@@ -127,7 +127,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ScanFailureLedger::class, DatabaseScanFailureLedger::class);
         $this->app->bind(ScanFailureClassifier::class, ScanFailureTransience::class);
         $this->app->bind(ScanDiscardSettings::class, ConfiguredScanDiscardSettings::class);
-        // A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
+        // ADR-061 A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
         $this->app->bind(CardFingerprintOwners::class, DatabaseCardFingerprintOwners::class);
 
         // Correcciones. Las dos las sirve este mismo modulo:
@@ -189,7 +189,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(CredentialScans::class, EloquentCredentialScans::class);
 
         // Que hay ya en la bandeja sobre los indicios de patron de cada persona
-        // (decision 13c de la ficha 3.11). Es el unico puerto del modulo cuyo
+        // (RF-PR-06). Es el unico puerto del modulo cuyo
         // adaptador lee una tabla de otro —`incidents`, de `Compliance`—, y esa
         // excepcion acotada esta razonada en su propio docblock: Deptrac no le
         // concede a `Compliance` la capa `Attendance\Application\Port`, asi que

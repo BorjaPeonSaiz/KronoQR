@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\Port;
 
 /**
- * Una cuenta de gestion recien minimizada (ADR-060, tarea 11.3 B): lo que
+ * Una cuenta de gestion recien minimizada (ADR-060): lo que
  * necesita su asiento `retention.management_account_anonymized`. Sin nombre ni
  * correo: ya no existen.
  */

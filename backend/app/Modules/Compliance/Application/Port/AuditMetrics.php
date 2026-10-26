@@ -22,7 +22,7 @@ use DateTimeImmutable;
  *
  * Es un puerto y no una llamada directa por la razon de siempre: el caso de uso
  * no sabe si detras hay un fichero para el colector *textfile*, un registro de
- * `promphp` o nada. Hoy es lo primero —`/metrics` lo expone la tarea 3.1—; en
+ * `promphp` o nada. Hoy es lo primero —`/metrics` lo expone—; en
  * las pruebas es un doble que cuenta.
  */
 interface AuditMetrics

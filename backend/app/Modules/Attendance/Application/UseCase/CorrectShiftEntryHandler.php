@@ -136,7 +136,7 @@ final readonly class CorrectShiftEntryHandler
         $times = $this->timesFor($command, $workDay);
         $settings = $this->settings->forSite($workDay->siteId());
 
-        // F1: tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
+        // Tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
         // no solo lo que trae la orden: es el que queda en el registro. La
         // jornada no se comprueba porque una correccion no puede moverla
         // (`CorrectionWouldChangeWorkDate`, ADR-035).

@@ -62,7 +62,7 @@ use RuntimeException;
  * pide revision humana es `ClockingPolicy` (RN-07, RN-08). Aqui no hay ni un
  * `if` con una regla de negocio dentro.
  *
- * ## El orden de la tarea 3.5, y por que es ese
+ * ## El orden de lectura, y por que es ese
  *
  * Desde RF-AT-12 la decision depende de tres hechos y no de uno, asi que
  * {@see processResolved()} lee en este orden: **turno abierto → ultimo aceptado
@@ -96,7 +96,7 @@ use RuntimeException;
  * 7). Se **recalcula** como suma de los tramos vigentes, nunca se incrementa: un
  * acumulador seria correcto hasta la primera correccion, y a partir de ahi
  * mentiria en la direccion mas cara. Que la promesa viva en el repositorio y no
- * aqui es deliberado: la correccion de la tarea 1.15 tambien guarda jornadas, y
+ * aqui es deliberado: la correccion manual tambien guarda jornadas, y
  * asi obtiene la proyeccion sin tener que acordarse.
  *
  * **La auditoria (6) y los eventos (7) son la misma llamada, y ocurre DENTRO de

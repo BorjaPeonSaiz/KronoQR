@@ -41,8 +41,8 @@ use stdClass;
  * `acceptedScansAdjacentTo()` mide la ventana de RF-AT-06 y
  * `lastAcceptedScanOf()` responde en que estado quedo la persona (RF-AT-12,
  * ADR-024). Las dos resuelven por `(employee_id, occurred_at DESC)` con un
- * `LIMIT 1`, asi que la tarea 3.5 anade **una fila mas leida** por escaneo, no
- * un recorrido del historico. Desde esa tarea las dos devuelven
+ * `LIMIT 1`, asi que la intencion declarada anade **una fila mas leida** por
+ * escaneo, no un recorrido del historico. Las dos devuelven
  * {@see AcceptedScan} y no instantes sueltos: el anti-rebote necesita saber
  * **que fue** el escaneo vecino y la resolucion de la intencion **de que tramo**
  * venia.
