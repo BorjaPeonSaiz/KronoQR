@@ -52,7 +52,7 @@ final class StoreManagementAccountRequest extends FormRequest
             email: $this->string('email')->trim()->value(),
             role: UserRole::from($this->string('role')->value()),
             locale: $this->has('locale')
-                ? $this->string('locale')->value()
+                ? ActiveLocale::canonical($this->string('locale')->value())
                 : ActiveLocale::defaultLocale(),
             actorUuid: $this->actorUuid(),
             proof: $this->actorProof(),

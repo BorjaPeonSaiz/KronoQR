@@ -77,7 +77,7 @@ final class CreateManagementUserCommand extends AbstractManagementAccountCommand
                 name: $name,
                 email: $email,
                 role: UserRole::from($role),
-                locale: $locale,
+                locale: ActiveLocale::canonical($locale),
             ));
         } catch (ManagementAccountEmailTaken) {
             $this->components->error('Ya hay una cuenta de gestion con ese correo, activa o dada de baja.');

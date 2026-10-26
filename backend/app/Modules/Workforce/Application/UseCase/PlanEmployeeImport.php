@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\ActiveLocaleMatch;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\NationalId;
@@ -260,7 +261,8 @@ final readonly class PlanEmployeeImport
      * exportado de otro sistema en una instalacion que solo tiene el español.
      *
      * Se compara sin distinguir mayusculas y se guarda en la forma de la lista
-     * (`ES` del fichero se guarda como `es`).
+     * (`ES` del fichero se guarda como `es`), con el mismo criterio que la API
+     * ({@see ActiveLocaleMatch}).
      *
      * @return array{0: ImportedEmployee, 1: list<ImportMessage>}
      */
@@ -270,12 +272,10 @@ final readonly class PlanEmployeeImport
             return [$employee, []];
         }
 
-        $wanted = mb_strtolower($employee->locale);
+        $active = ActiveLocaleMatch::canonical($this->locales->current()->available, $employee->locale);
 
-        foreach ($this->locales->current()->available as $locale) {
-            if (mb_strtolower($locale) === $wanted) {
-                return [$employee->withLocale($locale), []];
-            }
+        if ($active !== null) {
+            return [$employee->withLocale($active), []];
         }
 
         return [

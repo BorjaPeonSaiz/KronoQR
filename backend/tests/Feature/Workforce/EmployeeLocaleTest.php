@@ -119,6 +119,28 @@ it('acepta el ingles en cuanto la instalacion lo activa', function (): void {
         ->assertJsonPath('employee.locale', 'en');
 })->group('RF-KI-05', 'RF-GP-01');
 
+it('acepta el idioma en mayusculas en el alta y en la modificacion, y lo guarda como la importacion', function (): void {
+    // Un solo criterio de idioma activo: la importacion ya guardaba `EN` como
+    // `en`; el alta y la modificacion respondian 422 al mismo valor.
+    InstallationLocale::set('es', ['es', 'en']);
+    $token = idiomaFichaToken();
+
+    $uuid = Api::as($token)->post('/api/v1/employees', idiomaFichaAlta(['locale' => 'EN']))
+        ->assertValidRequest()
+        ->assertValidResponse(201)
+        ->assertJsonPath('employee.locale', 'en')
+        ->json('employee.uuid');
+
+    expect(DB::table('employees')->value('locale'))->toBe('en');
+
+    Api::as($token)->patch('/api/v1/employees/'.(\is_string($uuid) ? $uuid : ''), ['locale' => 'Es'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('locale', 'es');
+
+    expect(DB::table('employees')->value('locale'))->toBe('es');
+})->group('RF-KI-05', 'RF-GP-01', 'RF-GP-03');
+
 it('rechaza con 422 cambiar la ficha a un idioma inactivo, y la deja como estaba', function (): void {
     $token = idiomaFichaToken();
     $uuid = Api::as($token)->post('/api/v1/employees', idiomaFichaAlta())

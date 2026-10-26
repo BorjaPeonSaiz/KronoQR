@@ -7953,6 +7953,8 @@ export interface components {
              * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              * @example es
              */
             locale?: string;
@@ -8423,6 +8425,8 @@ export interface components {
              * @description Idioma de la persona, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              */
             locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
@@ -8450,7 +8454,8 @@ export interface components {
             /**
              * @description Idioma de la persona, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, no cambia. Fuera de la
-             *     lista es `422`.
+             *     lista es `422`. Sin distinguir mayusculas: `ES` se acepta y se
+             *     guarda como `es`, igual que en la importacion de plantilla.
              */
             locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
@@ -13473,6 +13478,8 @@ export interface components {
              * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              */
             locale?: string;
             /**

@@ -47,4 +47,12 @@ interface NegotiableLocales
      * @return list<string>
      */
     public function availableLocales(): array;
+
+    /**
+     * La forma en la lista del idioma pedido si esta activo, o `null`. Sin
+     * distinguir mayusculas: `ES` es `es`. Es el mismo criterio de la
+     * importacion de plantilla (`Shared\Application\Support\ActiveLocaleMatch`),
+     * que este lado no puede nombrar; lo aplica quien implementa.
+     */
+    public function activeLocaleFor(string $requested): ?string;
 }

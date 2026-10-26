@@ -79,7 +79,7 @@ final class CreateFirstAdministratorRequest extends FormRequest
             email: $this->string('email')->trim()->value(),
             password: $this->string('password')->value(),
             locale: $this->has('locale')
-                ? $this->string('locale')->trim()->value()
+                ? ActiveLocale::canonical($this->string('locale')->trim()->value())
                 : ActiveLocale::defaultLocale(),
             deviceName: $this->string('device_name', 'Panel de gestion')->trim()->value(),
         );

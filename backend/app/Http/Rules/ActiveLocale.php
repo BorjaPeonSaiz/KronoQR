@@ -23,6 +23,14 @@ use Illuminate\Contracts\Validation\ValidationRule;
  * no ofrece por un camino y no por otro. Aqui esta el criterio una vez, y
  * {@see self::defaultLocale()} es el valor por defecto de todos.
  *
+ * ## El mismo criterio que la importacion: sin distinguir mayusculas
+ *
+ * `ES` es `es`, aqui y en la importacion de plantilla, y se guarda con la forma
+ * de la lista ({@see self::canonical()}). La comparacion no esta escrita aqui:
+ * la hace quien implementa {@see NegotiableLocales::activeLocaleFor()}, con la
+ * misma funcion que usa la importacion. Antes este lado comparaba tal cual y
+ * respondia `422` a `ES` mientras la importacion lo aceptaba.
+ *
  * ## Por que se apoya en `NegotiableLocales` y no en `LocalePolicyProvider`
  *
  * Porque vive en el armazon (`App\Http`), que Deptrac no deja alcanzar ningun
@@ -51,9 +59,19 @@ final readonly class ActiveLocale implements ValidationRule
         return app(NegotiableLocales::class)->defaultLocale();
     }
 
+    /**
+     * El idioma ya validado, con la forma de la lista (`ES` → `es`). Lo que no
+     * esta activo sale tal cual: no deberia llegar aqui, porque la regla lo
+     * habria rechazado antes.
+     */
+    public static function canonical(string $validated): string
+    {
+        return app(NegotiableLocales::class)->activeLocaleFor($validated) ?? $validated;
+    }
+
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        if (! \is_string($value) || ! \in_array($value, $this->locales->availableLocales(), true)) {
+        if (! \is_string($value) || $this->locales->activeLocaleFor($value) === null) {
             $fail('validation.in')->translate();
         }
     }

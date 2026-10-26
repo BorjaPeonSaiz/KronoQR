@@ -57,9 +57,17 @@ final class UpdateEmployeeRequest extends FormRequest
                 : null,
             departmentGiven: $this->has('department_id'),
             status: $this->filledString('status'),
-            locale: $this->filledString('locale'),
+            locale: $this->activeLocale(),
             teleworking: $this->has('teleworking') ? $this->boolean('teleworking') : null,
         );
+    }
+
+    /** El idioma pedido con la forma de la lista (`ES` → `es`), o `null` si no viene. */
+    private function activeLocale(): ?string
+    {
+        $locale = $this->filledString('locale');
+
+        return $locale !== null ? ActiveLocale::canonical($locale) : null;
     }
 
     private function filledString(string $key): ?string
