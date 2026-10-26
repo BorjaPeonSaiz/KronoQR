@@ -169,8 +169,9 @@ script, `-T`), add `--responsible-confirm=<the same e-mail>`.
 - **Check the report against its audit entry** (§3.1). It takes a minute, and
   it is what makes the report worth something two years from now.
 - Run `docker compose exec app php artisan compliance:verify-audit-chain`. It has to finish green and
-  say «Purga sellada reconocida: particion AAAA» (sealed purge recognised for
-  partition YYYY). If it said anything else, that is a security incident.
+  say «Sealed purge recognised: partition YYYY» («Purga sellada reconocida:
+  particion AAAA» in a Spanish installation). If it said anything else, that
+  is a security incident.
 - Run `docker compose exec app php artisan compliance:reconcile-work-record --full`.
   It also has to finish green: the purge leaves its audit entry with the
   cut-off date, and the reconciliation treats everything before that cut-off
@@ -2016,6 +2017,24 @@ moment: **the card is not marked as printed** and can be printed as soon as a
 slot is free. And if Redis does not respond, printing cards fails just like a
 report PDF, instead of starting Chromium without a limit. If it happens often,
 raise the limit only if the server has memory for one more Chromium.
+
+**When updating to 2.3.0: the console speaks the installation language.** The
+commands you read on the console —the purge (`compliance:apply-retention`),
+cards (`credentials:*`), accounts (`identity:*`), the licence (`license:*`),
+support (`support:*`), the full export (`product:export-all`), diagnostics,
+the audit chain and the rest— write in the language you chose in the panel, as
+`product:doctor` and `kiosk:health` already did. **The archived purge report**
+comes out in that language too; its file name does not change
+(`retencion-propuesta-…`, `retencion-purga-…`). In a Spanish installation not
+a single word changes. `compliance:verify-audit-chain` also writes an
+`audit_chain=intact` (or `audit_chain=broken`) line with its counts, which is
+never translated: if you have your own script that looks for «Cadena integra»,
+change it to look for that line. And in an English installation, **the personal
+record file** an employee downloads from the portal is called
+`my-time-record-…` instead of `mi-registro-horario-…`, and the reason the
+system writes when it revokes the card of someone who left reads «Employee
+left (RN-14)»; in the database and the audit log it is still stored the same
+way.
 
 ### 11.1 The tablet app: when it changes version
 

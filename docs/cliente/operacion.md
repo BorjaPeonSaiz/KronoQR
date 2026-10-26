@@ -1997,6 +1997,24 @@ cuanto haya hueco. Y si Redis no responde, imprimir tarjetas falla igual que
 un PDF de informe, en lugar de arrancar Chromium sin límite. Si te ocurre a
 menudo, súbelo solo si el servidor tiene memoria para un Chromium más.
 
+**Al actualizar a la 2.3.0: la consola habla el idioma de la instalación.**
+Las órdenes que lees por consola —la purga (`compliance:apply-retention`), las
+tarjetas (`credentials:*`), las cuentas (`identity:*`), la licencia
+(`license:*`), el soporte (`support:*`), la exportación íntegra
+(`product:export-all`), el diagnóstico, la cadena de auditoría y el resto—
+escriben en el idioma que elegiste en el panel, como ya hacían
+`product:doctor` y `kiosk:health`. **El informe de purga que se archiva** sale
+también en ese idioma; su nombre de fichero no cambia (`retencion-propuesta-…`,
+`retencion-purga-…`). En una instalación en español no cambia ni una palabra.
+`compliance:verify-audit-chain` escribe además una línea
+`audit_chain=intact` (o `audit_chain=broken`) con sus recuentos, que no se
+traduce: si tienes un guion propio que busque «Cadena integra», cámbialo para
+que busque esa línea. Y en una instalación en inglés, **el fichero del registro
+propio** que se descarga el empleado desde el portal se llama
+`my-time-record-…` en lugar de `mi-registro-horario-…`, y el motivo que pone el
+sistema al revocar la tarjeta de una baja se lee «Employee left (RN-14)»; en la
+base y en la auditoría se sigue guardando igual.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la
