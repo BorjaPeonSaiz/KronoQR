@@ -2,9 +2,8 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Application\Exception;
+namespace App\Modules\Shared\Application\Port;
 
-use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use RuntimeException;
 use Throwable;
 

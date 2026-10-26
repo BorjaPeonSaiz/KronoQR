@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Shared\Application\Exception;
-
-use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
+namespace App\Modules\Shared\Application\Port;
 
 /**
  * Que le ha pasado a una operacion contra la base de datos, en el vocabulario

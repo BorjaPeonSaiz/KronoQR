@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Support\Shared;
 
-use App\Modules\Shared\Application\Exception\PdfRenderingSlotsBusy;
 use App\Modules\Shared\Application\Port\PdfRenderingSlots;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsBusy;
 use Closure;
 
 /**

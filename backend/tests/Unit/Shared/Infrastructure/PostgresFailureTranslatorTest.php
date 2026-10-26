@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Exception\DatabaseFailureKind;
+use App\Modules\Shared\Application\Port\DatabaseFailureKind;
 use App\Modules\Shared\Infrastructure\Persistence\PostgresFailureTranslator;
 use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;

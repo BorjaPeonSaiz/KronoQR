@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Infrastructure\Adapter;
 
-use App\Modules\Shared\Application\Exception\PdfRenderingSlotsBusy;
-use App\Modules\Shared\Application\Exception\PdfRenderingSlotsUnavailable;
 use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
 use App\Modules\Shared\Application\Port\PdfRenderingSlots;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsBusy;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsUnavailable;
 use Closure;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Contracts\Redis\LimiterTimeoutException;

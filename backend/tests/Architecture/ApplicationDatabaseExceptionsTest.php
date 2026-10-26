@@ -82,7 +82,7 @@ it('reconoce lo que vigila', function (): void {
         ->and(applicationDbExceptionIsForbidden('Illuminate\Database\UniqueConstraintViolationException'))->toBeTrue()
         ->and(applicationDbExceptionIsForbidden('PDOException'))->toBeTrue()
         ->and(applicationDbExceptionIsForbidden('Illuminate\Database\ConnectionInterface'))->toBeFalse()
-        ->and(applicationDbExceptionIsForbidden('App\Modules\Shared\Application\Exception\DatabaseFailure'))->toBeFalse();
+        ->and(applicationDbExceptionIsForbidden('App\Modules\Shared\Application\Port\DatabaseFailure'))->toBeFalse();
 })->group('RNF-M-03');
 
 it('ningun caso de uso nombra las excepciones de la base de datos ni lee su SQLSTATE', function (): void {

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Application\Port;
 
-use App\Modules\Shared\Application\Exception\PdfRenderingSlotsBusy;
-use App\Modules\Shared\Application\Exception\PdfRenderingSlotsUnavailable;
 use Closure;
 
 /**

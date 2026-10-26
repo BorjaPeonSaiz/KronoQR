@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Infrastructure\Persistence;
 
-use App\Modules\Shared\Application\Exception\DatabaseFailure;
-use App\Modules\Shared\Application\Exception\DatabaseFailureKind;
+use App\Modules\Shared\Application\Port\DatabaseFailure;
+use App\Modules\Shared\Application\Port\DatabaseFailureKind;
 use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use Illuminate\Database\QueryException;
 use PDOException;
