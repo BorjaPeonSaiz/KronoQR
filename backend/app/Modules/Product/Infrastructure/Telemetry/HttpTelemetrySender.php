@@ -86,7 +86,7 @@ final readonly class HttpTelemetrySender implements TelemetrySender
 
         // El unico reintento. Escrito sin bucle a proposito: un `for` invita a
         // subir el tope, y el numero de intentos es una decision documentada
-        // (ficha 5.10 punto 8), no un parametro.
+        // (RF-PD-12), no un parametro.
         return $this->attempt($body, $endpoint, 2);
     }
 

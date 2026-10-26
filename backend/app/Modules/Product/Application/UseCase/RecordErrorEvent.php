@@ -124,7 +124,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
             $context = $row->context;
             $fingerprint = $this->fingerprint($report, $message);
 
-            // Decision 14: por encima del techo, la ocurrencia se cuenta en el
+            // Por encima del techo, la ocurrencia se cuenta en el
             // grupo de desbordamiento del origen en vez de abrir fila.
             if ($this->overflows($report, $fingerprint)) {
                 $report = $this->asOverflow($report);

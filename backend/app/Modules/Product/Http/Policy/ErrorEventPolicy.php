@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  * al administrador de instalacion. El middleware `ability` comprueba el ambito y
  * esta policy el rol: dos controles distintos que aqui coinciden.
  *
- * **Un token de soporte SI lee** (RF-PD-11). El alcance `diagnostics` de la 5.9
+ * **Un token de soporte SI lee** (RF-PD-11). El alcance `diagnostics`
  * se concede, con todas las letras, «para el paquete anonimizado **y los
  * errores**»: negarle esta pantalla dejaria la concesion sin la mitad de su
  * utilidad y obligaria a que el cliente reenviara un paquete por cada pregunta.

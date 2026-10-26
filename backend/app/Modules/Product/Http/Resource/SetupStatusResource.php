@@ -24,7 +24,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * hace falta a un navegador sin credenciales para elegir a donde ir, y a quien
  * mira desde fuera le dice si el servidor lleva anos funcionando o se monto
  * ayer —que es justo la clase de dato con el que se decide si merece la pena
- * insistir— (correccion de la revision del cierre de la Fase 5). Con sesion de
+ * insistir—. Con sesion de
  * administrador sigue viajando, que es donde tiene consumidor: el resumen de
  * `POST /setup/complete` y `GET /setup/steps`.
  *
@@ -88,8 +88,8 @@ final class SetupStatusResource extends JsonResource
         // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
         // Por `UtcInstant` y no a mano: convierte a UTC ANTES de escribir la
         // `Z`, asi que la invariante no depende de la zona de la sesion de
-        // base de datos ni del proceso (tarea 5.9, el mismo helper que el
-        // resto de recursos del modulo).
+        // base de datos ni del proceso (el mismo helper que el resto de
+        // recursos del modulo).
         $body['completed_at'] = UtcInstant::format($state->completedAt);
         $body['steps'] = $state->isAvailable() ? self::steps($state) : [];
 

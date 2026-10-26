@@ -59,7 +59,7 @@ final readonly class DbDeviceFleet implements DeviceFleet
                 'last_seen_at' => $now,
                 'app_version' => $telemetry->appVersion,
                 'pending_queue_size' => $telemetry->pendingQueueSize,
-                // Las tres columnas de la tarea 3.3. Se escriben SIEMPRE, tambien
+                // Las tres columnas de salud. Se escriben SIEMPRE, tambien
                 // cuando valen `NULL`: dejar el valor anterior haria que una cola
                 // ya drenada siguiera diciendo «el mas antiguo es de hace tres
                 // horas» y que una tablet que dejo de informar de su bateria

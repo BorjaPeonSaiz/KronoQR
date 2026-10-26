@@ -7,8 +7,7 @@ namespace App\Modules\Product\Infrastructure\Capture;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 
 /**
- * «Donde estoy» en el momento en que algo falla (RF-PD-15, tarea 5.12,
- * decision 2 de la ficha).
+ * «Donde estoy» en el momento en que algo falla (RF-PD-15).
  *
  * Un marco es lo que {@see ExecutionContext} mantiene abierto mientras corre un
  * trabajo de cola, una tarea del planificador o un comando: el origen que le

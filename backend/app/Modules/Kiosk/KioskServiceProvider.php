@@ -163,7 +163,7 @@ final class KioskServiceProvider extends ServiceProvider
             // (`security.rejection_floor_ms`): los dos caminos tienen la misma
             // obligacion de RS-03 y ya no pueden divergir.
             $app->make(ConstantTimeFloor::class),
-            // V6-KI-02: la recogida repetida deja su asiento por evento.
+            // La recogida repetida deja su asiento por evento.
             $app->make(KioskEventPublisher::class),
         ));
     }

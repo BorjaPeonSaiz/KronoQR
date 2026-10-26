@@ -140,7 +140,7 @@ interface SupportGrantRepository
     /**
      * Vacia el `reason` de las concesiones cerradas —`revoked_at` o, si no se
      * revocaron, `expires_at`— en o antes de `$closedBy`, y anota `$now` en
-     * `reason_purged_at` (tarea 11.3 C). Idempotente: las ya vaciadas no se
+     * `reason_purged_at`. Idempotente: las ya vaciadas no se
      * vuelven a tocar.
      *
      * @return int Concesiones vaciadas en esta llamada.

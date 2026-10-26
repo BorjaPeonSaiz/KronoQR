@@ -94,7 +94,7 @@ final class UpdateSettingsRequest extends FormRequest
      * escribir (RF-PD-11, ADR-020, regla dura 16).
      *
      * **Se llamaba `COMPLIANCE_GOVERNING_KEYS`** y el nombre dejo de ser cierto
-     * en la tarea 3.12: la segunda clave no decide que jornadas se marcan, sino
+     * con el resumen semanal (RF-PR-05): la segunda clave no decide que jornadas se marcan, sino
      * a donde van los datos de la plantilla. Lo que las dos comparten —y lo que
      * esta lista significa de verdad— es que deciden algo que es **del hotel** y
      * no de quien mantiene el producto.
@@ -220,9 +220,9 @@ final class UpdateSettingsRequest extends FormRequest
      * ## LA LISTA HA LLEGADO A CINCO, Y AQUI ESTABA ESCRITO QUE ENTONCES TOCABA MOVERLA
      *
      * Decia que «si llegara a haber cinco, habra ganado el derecho a ser una
-     * propiedad del dominio». Ha llegado con las dos claves de RF-PR-06 en el
-     * cierre de la Fase 3, y la decision de ese cierre fue **mantenerla explicita
-     * un ciclo mas**: las tres alternativas siguen mintiendo por los mismos
+     * propiedad del dominio». Ha llegado con las dos claves de RF-PR-06, y se
+     * decidio **mantenerla explicita un ciclo mas**: las tres alternativas siguen
+     * mintiendo por los mismos
      * motivos, y mover la marca al catalogo es un cambio del dominio
      * —`SettingDefinition` y su migracion— que no se hace dentro de una
      * correccion de seguridad. Queda anotado aqui y no en la cabeza de nadie: la
@@ -266,7 +266,7 @@ final class UpdateSettingsRequest extends FormRequest
     {
         $rules = [
             'settings' => ['required', 'array', 'min:1'],
-            // MB2: la confirmacion explicita de un acento sin contraste sobre
+            // La confirmacion explicita de un acento sin contraste sobre
             // las superficies claras. Booleano ESTRICTO, como los enteros de abajo: un «1» o un
             // «yes» escritos a mano no son alguien diciendo «lo he visto».
             'confirm_low_contrast' => [

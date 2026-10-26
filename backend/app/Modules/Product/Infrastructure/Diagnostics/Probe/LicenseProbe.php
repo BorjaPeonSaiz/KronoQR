@@ -63,7 +63,7 @@ final readonly class LicenseProbe implements DoctorProbe
         try {
             $overview = $this->licenses->handle();
         } catch (LicenseUnavailable) {
-            // V21-4-PL-1: con la base caida no se sabe si hay licencia, y decir
+            // Con la base caida no se sabe si hay licencia, y decir
             // «no hay ninguna» mandaba a reactivarla en plena caida. Un
             // `warning` como cualquier otro estado (regla dura 15) y ninguna
             // comprobacion de marca, que tambien depende de la licencia.

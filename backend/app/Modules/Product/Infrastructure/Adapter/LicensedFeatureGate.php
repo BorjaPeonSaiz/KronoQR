@@ -27,7 +27,7 @@ use Throwable;
  * El estado se resuelve una vez por peticion y se reutiliza: el informe por
  * periodo y la presencia en vivo comparten la respuesta. Se enlaza con
  * `scoped()` y no con `singleton()`, por la misma razon que los proveedores de
- * la tarea 5.1: un `singleton` sobrevive a la peticion en un trabajador de cola
+ * configuracion: un `singleton` sobrevive a la peticion en un trabajador de cola
  * o en Octane, y ahi la memoria dejaria de ser «por peticion» para convertirse
  * en una cache sin invalidacion — una licencia recien activada no surtiria
  * efecto hasta reiniciar el proceso.

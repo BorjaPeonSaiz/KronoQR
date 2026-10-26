@@ -145,7 +145,7 @@ final class KioskHeartbeatRequest extends FormRequest
             // envio creeria que se guarda.
             'client_errors.*' => ['array:code,occurred_at,app_version,context'],
             // Contra el CATALOGO CERRADO del quiosco y no solo contra el patron
-            // del contrato (decision 3, revision de seguridad): un codigo libre
+            // del contrato: un codigo libre
             // pasaba la forma, creaba una huella nueva por envio -600 grupos por
             // minuto y actor, sin techo- y, si imitaba uno de camara, fabricaba
             // una fila `critical` que despierta al IT del cliente.
@@ -303,7 +303,7 @@ final class KioskHeartbeatRequest extends FormRequest
             // Lo decide el TIPO DE TOKEN y no el cuerpo: quien llega
             // por aqui se autentico como dispositivo.
             source: ErrorSource::Kiosk,
-            // Con el ORIGEN delante (decision 3, revision de seguridad): solo un
+            // Con el ORIGEN delante: solo un
             // quiosco produce un `critical` de cliente.
             level: ErrorLevel::forClientCode(ErrorSource::Kiosk, $code),
             // El mensaje del contexto si lo hay, y si no el propio codigo: una
@@ -360,8 +360,8 @@ final class KioskHeartbeatRequest extends FormRequest
      *
      * `ClientErrorCode` es copia literal del tipo `ClientErrorCode` de
      * `errorReporter.ts`, atada por prueba de arquitectura. Validar contra el
-     * catalogo y no contra el patron es lo que impide las dos cosas que encontro
-     * la revision de seguridad: la entropia sin techo de un codigo libre —cada
+     * catalogo y no contra el patron es lo que impide dos cosas: la entropia sin
+     * techo de un codigo libre —cada
      * envio, una huella y una fila nuevas— y que un origen fabrique la severidad
      * de otro.
      *

@@ -40,7 +40,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
      * @param  array<string, mixed>  $environment  El entorno del proceso, inyectado y no leido
      *                                             con `env()`: asi la prueba puede pasarle el `.env.example` entero y
      *                                             afirmar que ninguna de sus claves secretas sale por aqui, que es
-     *                                             exactamente la prueba que la ficha 5.9 exige.
+     *                                             exactamente la prueba que exige ADR-020.
      */
     public function __construct(
         private GetSettingsHandler $settings,
@@ -72,7 +72,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
 
         return [
             'env' => $env,
-            // PR14: los ajustes guardados, que mandan sobre el `.env`, por lista
+            // Los ajustes guardados, que mandan sobre el `.env`, por lista
             // de permitidos y con su procedencia (`DiagnosticsSettingsAllowlist`).
             'installation_settings' => DiagnosticsSettingsAllowlist::apply($resolved),
             'invalid_keys' => array_map(

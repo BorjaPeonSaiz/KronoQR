@@ -42,7 +42,7 @@ interface AccessHardeningFacts
     public function activeAccountsWithoutSecondFactor(array $roles): int;
 
     /**
-     * Tokens de acceso sin `expires_at` (tarea 11.3 D). Sanctum no los da por
+     * Tokens de acceso sin `expires_at`. Sanctum no los da por
      * caducados, asi que `sanctum:prune-expired` no los borra nunca. Hoy ningun
      * emisor los crea: son de versiones antiguas.
      */

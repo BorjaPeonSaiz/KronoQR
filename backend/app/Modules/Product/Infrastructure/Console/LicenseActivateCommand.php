@@ -19,8 +19,8 @@ use Illuminate\Support\Facades\Config;
  * ## La clave puede venir del entorno
  *
  * Sin argumento se toma `LICENSE_KEY` del entorno. **Es la unica cosa que lee
- * esa variable en todo el producto**, y es deliberado: la decision de la tarea
- * 5.1 —**manda la base de datos**— vale aqui igual que para la configuracion. La
+ * esa variable en todo el producto**, y es deliberado: **manda la base de
+ * datos**, aqui igual que para la configuracion. La
  * variable es el valor de arranque con el que el instalador (5.4) activara la
  * primera clave llamando a este comando; en ejecucion no se consulta nunca.
  *

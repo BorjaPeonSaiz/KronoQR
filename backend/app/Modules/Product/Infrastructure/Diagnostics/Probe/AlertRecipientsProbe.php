@@ -30,8 +30,8 @@ use App\Modules\Product\Domain\ValueObject\DoctorStatus;
  *
  * ## Papel a papel, y no «alguno de los tres»
  *
- * Es lo que corrigio la revision de seguridad (decision 17i). La primera version
- * salia en verde en cuanto **un** destino estaba puesto, y el reparto de
+ * Una version que saliera en verde en cuanto **un** destino estuviera puesto
+ * mentiria, porque el reparto de
  * destinatarios del §9.3 no es decorativo: `RoturaDeCadenaDeAuditoria` va a
  * `seguridad` y `TurnoAbiertoProlongado` a `rrhh`. Con solo `ALERT_EMAIL_IT`
  * relleno —el caso normal de una instalacion recien puesta en marcha— la rotura

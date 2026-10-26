@@ -293,8 +293,7 @@ final readonly class GenerateDataExportHandler
             $this->events->publish(new DataExportGenerated(
                 uuid: $export->uuid,
                 requestedVia: $export->requestedVia,
-                // Quien la PIDIO, aunque este metodo corra en la cola sin sesion
-                // (decision 7 de la ficha 5.10).
+                // Quien la PIDIO, aunque este metodo corra en la cola sin sesion.
                 requestedByUserId: $export->requestedByUserId,
                 fileName: $archive->fileName,
                 sha256: $archive->sha256,

@@ -57,7 +57,7 @@ use Throwable;
  * sitio en el disco sin esperar.
  *
  * En la misma pasada barre los paquetes de diagnostico de mas de
- * `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` dias (ADR-045 §g, C4): es la pasada
+ * `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` dias (ADR-045 §g, condicion C4): es la pasada
  * horaria de los ficheros del modulo, y un paquete pedido con datos personales
  * no puede esperar a que alguien genere el siguiente para desaparecer.
  *

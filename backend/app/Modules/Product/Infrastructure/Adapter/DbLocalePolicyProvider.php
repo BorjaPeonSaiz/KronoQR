@@ -41,7 +41,7 @@ use Throwable;
  * daria 500 en `/health` en lugar de decir que le pasa.
  *
  * El respaldo no es la fuente: en cuanto la base de datos responde, manda la
- * fila (decision de la tarea 5.1, y la misma que rige para la marca).
+ * fila (la misma regla que rige para la configuracion y la marca).
  *
  * ## Memoria por peticion
  *

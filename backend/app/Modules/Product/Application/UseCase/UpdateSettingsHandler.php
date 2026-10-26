@@ -156,7 +156,7 @@ final readonly class UpdateSettingsHandler
                 return [];
             }
 
-            // MB2: un acento NUEVO sin contraste sobre las superficies claras solo pasa
+            // Un acento NUEVO sin contraste sobre las superficies claras solo pasa
             // confirmado. Sobre lo que cambia y no sobre lo pedido, para no
             // volver a pedir confirmacion de un color ya guardado.
             AccentContrastPolicy::assertAcceptable($command->confirmLowContrast, ...$changed);

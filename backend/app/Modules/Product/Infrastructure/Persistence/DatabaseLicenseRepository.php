@@ -21,7 +21,7 @@ use Throwable;
  *
  * ## La lectura no puede fallar
  *
- * Es la misma politica que la tarea 5.1 impuso a la configuracion, y aqui pesa
+ * Es la misma politica que rige la configuracion, y aqui pesa
  * lo mismo: este adaptador lo consulta el `FeatureGate`, y el `FeatureGate` lo
  * consulta cualquier pantalla del panel. Si una fila corrupta —o una tabla que
  * todavia no existe porque la migracion no se ha aplicado— pudiera lanzar, el

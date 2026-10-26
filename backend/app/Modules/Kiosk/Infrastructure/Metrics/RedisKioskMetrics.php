@@ -37,7 +37,7 @@ use Throwable;
  */
 final readonly class RedisKioskMetrics implements KioskMetrics
 {
-    /** Mismo prefijo que el resto de metricas, para que la tarea 3.1 las encuentre con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas, para que `/metrics` las encuentre con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string LAST_SEEN = self::KEY_PREFIX.'kiosk_last_seen_seconds';

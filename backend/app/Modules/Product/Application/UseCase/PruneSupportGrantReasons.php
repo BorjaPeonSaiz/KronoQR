@@ -12,7 +12,7 @@ use DateTimeImmutable;
 
 /**
  * Vacia el motivo de las concesiones de soporte cerradas hace mas del plazo
- * (bloque 11 de la 2.3.0, tarea 11.3 C, F4; RGPD art. 5.1.e, RL-11, ADR-020).
+ * (RGPD art. 5.1.e, RL-11, ADR-020).
  *
  * ## Por que se vacia y no se borra
  *

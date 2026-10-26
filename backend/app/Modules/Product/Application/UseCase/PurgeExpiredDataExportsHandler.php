@@ -47,8 +47,8 @@ use DateTimeInterface;
  *
  * - **Fila sin fichero → `purged`.** Si aun no habia caducado, es un evento de
  *   seguridad —un borrado a mano o un `mv`— y deja `data_export.file_missing`
- *   con el `uuid` y sin ruta, ademas de una metrica con alerta (C5).
- * - **Fila que apunta fuera de su raiz → `purged` sin borrar nada** (C3).
+ *   con el `uuid` y sin ruta, ademas de una metrica con alerta (ADR-045 C5).
+ * - **Fila que apunta fuera de su raiz → `purged` sin borrar nada** (ADR-045 C3).
  * - **Fichero sin fila viva → se borra** al superar la edad minima de su clase:
  *   el plazo de retencion para un ZIP; 2 × `stale_after` para el espacio de
  *   trabajo y los temporales de `ZipArchive`. Log tecnico y metrica, sin asiento.
@@ -164,7 +164,7 @@ final readonly class PurgeExpiredDataExportsHandler
             }
 
             if ($location === RecordedFileLocation::OutsideArea || $export->expired($now)) {
-                // Fuera de su raiz: se marca y no se borra nada (C3). Caducada:
+                // Fuera de su raiz: se marca y no se borra nada (ADR-045 C3). Caducada:
                 // es la purga normal de una fila que se cruzo con esta pasada.
                 $this->exports->markPurged($export->id, $now);
 

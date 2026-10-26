@@ -26,8 +26,8 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  * 2. **Rechazar lo que no se conoce.** El endpoint no admite ningun parametro, y
  *    en particular **no admite `site_id`**: el centro sale del token (§7.3, ver
  *    {@see KioskDevice}). Ignorar en silencio un
- *    `?site_id=7` dejaria a quien lo envia convencido de haber pedido el padron
- *    de otro centro y de haberlo recibido — cuando lo que recibio fue el suyo.
+ *    `?site_id=7` dejaria a quien lo envia convencido de haber elegido un
+ *    padron —cuando hay un solo centro por instalacion (ADR-040) y recibio el de siempre—.
  *    Es exactamente el modo de fallo que `RejectsUnknownInput` existe para
  *    cerrar, y aqui ademas tiene consecuencias de seguridad.
  */

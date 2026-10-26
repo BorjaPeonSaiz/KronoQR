@@ -63,7 +63,7 @@ final class GrantSupportAccessRequest extends FormRequest
                 'string',
                 'min:'.SupportGrant::REASON_MIN_LENGTH,
                 'max:'.SupportGrant::REASON_MAX_LENGTH,
-                // Tarea 11.3 C: el mismo detector que aplica el dominio, aqui
+                // El mismo detector que aplica el dominio, aqui
                 // para que el `422` llegue en `errors.reason` y en el idioma
                 // de quien lo escribe.
                 static function (string $attribute, mixed $value, Closure $fail): void {

@@ -73,7 +73,7 @@ final class SupportGrantCommand extends Command
             return self::FAILURE;
         }
 
-        // Tarea 11.3 C: antes de conceder, el recordatorio de que el motivo va
+        // Antes de conceder, el recordatorio de que el motivo va
         // tal cual a la auditoria y no puede llevar datos personales.
         $this->line(self::text('support.reason_hint'));
 
@@ -93,7 +93,7 @@ final class SupportGrantCommand extends Command
         } catch (InvalidSupportGrant $invalid) {
             $this->error('No se ha concedido nada.');
             $this->line($invalid->getMessage());
-            // Tarea 11.3 C: el porque, en el idioma de la instalacion.
+            // El porque, en el idioma de la instalacion.
             $this->line(self::text($invalid->translationKey, $invalid->parameters));
             $this->line('');
             $this->line('Uso:  php artisan support:grant --reason="Incidencia #123" --hours=24');

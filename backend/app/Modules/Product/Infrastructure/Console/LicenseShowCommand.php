@@ -75,7 +75,7 @@ final class LicenseShowCommand extends Command
         try {
             $overview = $licenses->handle();
         } catch (LicenseUnavailable) {
-            // V21-4-PL-1: no saber no es «no hay». Sin consejo de reactivarla.
+            // No saber no es «no hay». Sin consejo de reactivarla.
             $this->line('');
             $this->line('Licencia de KronoQR');
             $this->line('===================');

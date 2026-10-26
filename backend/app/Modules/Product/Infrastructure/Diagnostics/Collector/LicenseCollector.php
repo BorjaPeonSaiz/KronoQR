@@ -26,7 +26,7 @@ use App\Modules\Shared\Domain\ValueObject\Feature;
  *
  * ## `customer_name` NO sale, y aqui se cierra un riesgo abierto
  *
- * El doc 07 §6 lo dejo anotado en la tarea 5.3: la razon social viaja en el
+ * El doc 07 §6 lo deja anotado: la razon social viaja en el
  * asiento `license.activated` y no debe salir de la instalacion. El paquete es
  * el unico canal por el que algo sale, asi que es aqui donde se corta. Va la
  * **huella corta** de la clave —doce caracteres— que es lo que sirve para

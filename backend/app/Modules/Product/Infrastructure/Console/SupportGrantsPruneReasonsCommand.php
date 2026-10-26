@@ -11,8 +11,7 @@ use Throwable;
 /**
  * `php artisan product:support-grants:prune-reasons` — vacia el motivo de las
  * concesiones de soporte cerradas hace mas de
- * `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` (bloque 11 de la 2.3.0, tarea
- * 11.3 C; RGPD art. 5.1.e).
+ * `PRODUCT_SUPPORT_GRANT_REASON_RETENTION_DAYS` (RGPD art. 5.1.e).
  *
  * Hermana de `product:errors:prune`: diaria, automatica y sin asiento. La
  * concesion se sigue listando entera; el motivo original sigue en el asiento

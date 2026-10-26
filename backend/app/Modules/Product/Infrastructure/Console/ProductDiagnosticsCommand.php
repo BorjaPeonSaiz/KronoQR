@@ -368,7 +368,7 @@ final class ProductDiagnosticsCommand extends Command
      *
      * ## Aqui Y en la pasada horaria
      *
-     * Con el volumen persistente (ADR-045 §g, C4) el ultimo paquete no
+     * Con el volumen persistente (ADR-045 §g, condicion C4) el ultimo paquete no
      * desaparece al recrear el contenedor, y por eso la pasada horaria de
      * `product:export-all --purge` barre tambien. Aqui se conserva porque es el
      * momento en que alguien esta mirando, y lo dice en la salida. Los dos

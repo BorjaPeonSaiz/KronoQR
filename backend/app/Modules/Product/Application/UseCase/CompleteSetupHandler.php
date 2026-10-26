@@ -129,7 +129,7 @@ final readonly class CompleteSetupHandler
             employees: $this->facts->activeEmployees(),
             departments: $this->facts->departments(),
             credentialsPending: $this->facts->employeesWithoutUsableCredential(),
-            // Por el punto unico de resolucion de la 5.3 y no por una consulta
+            // Por el punto unico de resolucion de la licencia y no por una consulta
             // propia: es el mismo estado que ve `GET /api/v1/license`, la sonda
             // de salud y `license:show`. Aqui solo se informa —`absent` es lo
             // normal en una puesta en marcha— y no condiciona nada (ADR-019).

@@ -64,7 +64,7 @@ final class SupportGrantResource extends JsonResource
             'expires_at' => self::utc($grant->expiresAt),
             'revoked_at' => self::utc($grant->revokedAt()),
             'accessed_at' => self::utc($grant->accessedAt()),
-            // Tarea 11.3 C: cuando se vacio `reason`; nulo mientras se conserva.
+            // Cuando se vacio `reason`; nulo mientras se conserva.
             'reason_purged_at' => self::utc($grant->reasonPurgedAt),
         ];
     }

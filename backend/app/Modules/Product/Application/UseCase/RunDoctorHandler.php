@@ -92,7 +92,7 @@ final readonly class RunDoctorHandler
         } catch (Throwable $failure) {
             return [DoctorFinding::failure(
                 $probe->family().'.probe',
-                // PR2: si lo que fallo fue Redis o PostgreSQL, el texto lo dice y
+                // Si lo que fallo fue Redis o PostgreSQL, el texto lo dice y
                 // manda a su comprobacion; «es un fallo del producto, avisa a
                 // soporte» queda para lo que de verdad lo es.
                 variant: $this->failures?->unavailableService($failure),

@@ -84,7 +84,7 @@ final class KioskHeartbeatResource extends JsonResource
             // «la instalacion no tiene codigo»— y del segundo depende que la
             // pantalla de diagnostico se abra sin pedirlo.
             'service_code_hash' => $outcome->serviceCodeHash,
-            // **Los dos de la tarea 3.5, y los dos obligatorios** (RF-AT-12,
+            // **Los dos ajustes de la tablet, y los dos obligatorios** (RF-AT-12,
             // RF-AT-10). Van siempre por lo mismo que `client_errors_accepted`:
             // un campo ausente obligaria a la tablet a elegir un valor por su
             // cuenta, y en el caso del umbral de desfase eso es volver a la

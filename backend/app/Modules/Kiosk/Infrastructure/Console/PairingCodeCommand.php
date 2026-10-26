@@ -20,8 +20,7 @@ use Illuminate\Console\Command;
  * ## CONFIRMA, no genera. Y el nombre del comando se conserva
  *
  * El Anexo C lo describia como «genera el codigo en el servidor», que era la
- * lectura del flujo antes de escribirlo (contradiccion C-3, cerrada el 07-09-2026
- * en la ficha de la tarea 5.6). El codigo lo pide **la tablet**, que es quien
+ * lectura del flujo antes de escribirlo. El codigo lo pide **la tablet**, que es quien
  * tiene que enseñarlo: un codigo generado en el servidor habria que llevarlo hasta
  * la tablet de alguna manera, y esa manera no existe.
  *
