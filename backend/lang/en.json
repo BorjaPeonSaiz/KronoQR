@@ -64,5 +64,15 @@
     "Las marcas enviadas son las que el tramo ya tiene: no hay nada que corregir.": "The times sent are the ones the shift entry already has: there is nothing to correct.",
     "Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.": "That clock-in time would move the work day to another day. To move hours from one day to another, void the shift entry in the original work day and add it to the destination one: they are two actions, each with its own reason.",
     "La hora de salida tiene que ser posterior a la de entrada.": "The clock-out time must be later than the clock-in time.",
-    "Esa persona no existe o no esta en alta: no se le pueden registrar horas.": "That person does not exist or is not active: hours cannot be recorded for them."
+    "Esa persona no existe o no esta en alta: no se le pueden registrar horas.": "That person does not exist or is not active: hours cannot be recorded for them.",
+    "El identificador del escaneo debe ser un UUID v7 generado en el cliente.": "The scan identifier must be a UUID v7 generated on the client.",
+    "El instante debe ir en UTC con sufijo Z.": "The instant must be in UTC with the Z suffix.",
+    "El PIN debe viajar cerrado con la clave publica de la instalacion, en base64.": "The PIN must travel sealed with the installation public key, in base64.",
+    "El PIN son de 6 a 8 cifras.": "The PIN has 6 to 8 digits.",
+    "Un lote no puede llevar mas de :max escaneos.": "A batch cannot carry more than :max scans.",
+    "Un envio no puede llevar mas de :max avisos.": "A submission cannot carry more than :max notices.",
+    "El periodo termina antes de empezar.": "The period ends before it starts.",
+    "La ausencia no puede terminar antes de empezar.": "The absence cannot end before it starts.",
+    "La hora de entrada tiene que ir en UTC, con el sufijo Z (2026-08-14T06:00:00Z).": "The clock-in time must be in UTC, with the Z suffix (2026-08-14T06:00:00Z).",
+    "La hora de salida tiene que ir en UTC, con el sufijo Z (2026-08-14T14:00:00Z).": "The clock-out time must be in UTC, with the Z suffix (2026-08-14T14:00:00Z)."
 }

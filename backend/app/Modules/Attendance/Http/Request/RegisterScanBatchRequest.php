@@ -96,12 +96,18 @@ final class RegisterScanBatchRequest extends FormRequest
     }
 
     /**
+     * Los mensajes van en español y su ingles en `lang/en.json`: el borde los
+     * traduce al responder. El de `:max` se traduce aqui, antes de que el
+     * validador ponga la cifra, porque despues ya no casa con su entrada.
+     *
      * @return array<string, string>
      */
     public function messages(): array
     {
+        $max = __('Un lote no puede llevar mas de :max escaneos.');
+
         return [
-            'scans.max' => 'Un lote no puede llevar mas de :max escaneos.',
+            'scans.max' => \is_string($max) ? $max : 'Un lote no puede llevar mas de :max escaneos.',
             'scans.*.scan_id.regex' => 'El identificador del escaneo debe ser un UUID v7 generado en el cliente.',
             'scans.*.occurred_at.regex' => 'El instante debe ir en UTC con sufijo Z.',
         ];
