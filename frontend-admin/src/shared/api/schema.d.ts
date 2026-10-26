@@ -16008,7 +16008,9 @@ export interface operations {
                     /**
                      * @description Adjunto, con un nombre de fichero que no lleva ningun nombre de
                      *     persona ni ningun codigo de empleado: solo el periodo y la
-                     *     extension (`.csv` o `.pdf`).
+                     *     extension (`.csv` o `.pdf`). El comienzo va en el idioma de la
+                     *     instalacion, como el documento: `mi-registro-horario-…` o
+                     *     `my-time-record-…`.
                      */
                     "Content-Disposition"?: string;
                     /** @description Siempre `no-store`: el cuerpo es el registro horario de una persona. */

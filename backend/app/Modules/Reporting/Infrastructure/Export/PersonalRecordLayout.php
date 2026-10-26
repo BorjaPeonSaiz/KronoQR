@@ -340,10 +340,14 @@ final readonly class PersonalRecordLayout
      * de empleado** (regla dura 21), igual en los dos formatos. Un adjunto con el
      * nombre de alguien divulga de quien es con solo verlo en una bandeja de
      * descargas.
+     *
+     * El comienzo sale de `lang/` en el idioma del documento
+     * (`mi-registro-horario`, `my-time-record`), como el resto del documento.
      */
     public static function filename(WorkDayJournal $journal, string $extension): string
     {
-        return 'mi-registro-horario-'.$journal->range->isoFrom().'_'.$journal->range->isoTo().'.'.$extension;
+        return self::line('personal-record.file_name')
+            .'-'.$journal->range->isoFrom().'_'.$journal->range->isoTo().'.'.$extension;
     }
 
     /**

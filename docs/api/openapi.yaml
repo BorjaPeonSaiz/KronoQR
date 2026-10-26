@@ -3560,7 +3560,9 @@ paths:
               description: |
                 Adjunto, con un nombre de fichero que no lleva ningun nombre de
                 persona ni ningun codigo de empleado: solo el periodo y la
-                extension (`.csv` o `.pdf`).
+                extension (`.csv` o `.pdf`). El comienzo va en el idioma de la
+                instalacion, como el documento: `mi-registro-horario-…` o
+                `my-time-record-…`.
               schema:
                 type: string
                 examples: ['attachment; filename=mi-registro-horario-2026-03-01_2026-03-31.csv']

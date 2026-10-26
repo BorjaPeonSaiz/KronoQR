@@ -15,6 +15,10 @@ return [
 
     'title' => 'My time record',
 
+    // Start of the downloaded file name. Lower case, digits and hyphens only:
+    // it travels in `Content-Disposition` without quotes.
+    'file_name' => 'my-time-record',
+
     'header' => [
         'period' => 'Period',
         'time_zone' => 'Site time zone',

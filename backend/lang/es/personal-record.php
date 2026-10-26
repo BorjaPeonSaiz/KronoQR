@@ -27,6 +27,10 @@ return [
 
     'title' => 'Mi registro horario',
 
+    // Comienzo del nombre del fichero descargado. Solo minusculas, cifras y
+    // guiones: viaja en `Content-Disposition` sin comillas.
+    'file_name' => 'mi-registro-horario',
+
     'header' => [
         'period' => 'Periodo',
         'time_zone' => 'Zona horaria del centro',
