@@ -9593,7 +9593,10 @@ export interface components {
             revoked_at: components["schemas"]["UtcTimestamp"] | null;
             /**
              * @description Motivo de la revocacion, escrito por quien la ordeno. **No se
-             *     escriben nombres**: el titular ya viaja como `employee_uuid`.
+             *     escriben nombres**: el titular ya viaja como `employee_uuid`. El
+             *     que pone el sistema al dar de baja a la persona (RN-14) sale en el
+             *     idioma de la respuesta («Baja del empleado (RN-14)», «Employee left
+             *     (RN-14)»); en el registro y en la auditoria se guarda siempre igual.
              */
             revoked_reason: string | null;
             status: components["schemas"]["CredentialStatus"];

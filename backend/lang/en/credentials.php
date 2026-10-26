@@ -10,6 +10,15 @@ declare(strict_types=1);
 return [
 
     /*
+     * The reason the system writes when it revokes the card of someone who
+     * leaves (RN-14). It is always stored with the same text —the one of the
+     * legal record and the audit entry— and translated when shown.
+     */
+    'revoked_reason' => [
+        'offboarded' => 'Employee left (RN-14)',
+    ],
+
+    /*
      * RV-2: the credential PDF title. It goes to the document metadata and the
      * browser download history, so it never carries names (hard rule 21).
      */
