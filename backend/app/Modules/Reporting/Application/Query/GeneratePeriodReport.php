@@ -105,8 +105,8 @@ final readonly class GeneratePeriodReport
      *
      * Son **claves**, no texto: la traduccion es de la capa de presentacion, que
      * es la que sabe en que idioma esta hablando. Estan aqui y no en el
-     * `Resource` porque forman parte de lo que el informe **es**: la tarea 2.9
-     * los escribira en la cabecera del CSV y del PDF desde este mismo objeto, y
+     * `Resource` porque forman parte de lo que el informe **es**: la exportacion
+     * (RF-IN-04) los escribe en la cabecera del CSV y del PDF desde este mismo objeto, y
      * si vivieran en el serializador de JSON habria dos listas que mantener.
      *
      * @var list<string>

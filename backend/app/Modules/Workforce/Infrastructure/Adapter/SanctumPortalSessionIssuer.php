@@ -42,9 +42,8 @@ use DateTimeImmutable;
  *
  * `sites.timezone` del centro al que la persona esta adscrita **hoy** (RN-04).
  * Es la que decide que dia es «hoy» para ella y en la que se le presentan sus
- * horas; la del navegador no se usa nunca (regla dura 3). La de cada tramo
- * historico viaja aparte, con el tramo, porque un traslado de centro no reescribe
- * donde ocurrieron las jornadas anteriores.
+ * horas; la del navegador no se usa nunca (regla dura 3). Hay un solo centro y
+ * una sola zona para todo el historico (ADR-040, ADR-056).
  *
  * ## Nada de lo que sale de aqui puede ir a un log
  *

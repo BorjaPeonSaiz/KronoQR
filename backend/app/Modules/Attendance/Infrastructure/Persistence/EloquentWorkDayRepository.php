@@ -511,9 +511,8 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         return [
             'uuid' => $entry->uuid(),
             'employee_id' => $employeeId,
-            // El centro se guarda en el tramo y no se deduce del empleado: un
-            // traslado de centro no puede reescribir donde ocurrieron las
-            // jornadas anteriores.
+            // El centro se guarda en el tramo: ADR-040 conserva `site_id` en
+            // el registro legal aunque apunte siempre al unico centro.
             'site_id' => $siteId,
             'work_date' => $entry->workDate()->isoDate,
             'clocked_in_at' => $this->toTimestamp($entry->clockedInAt()),

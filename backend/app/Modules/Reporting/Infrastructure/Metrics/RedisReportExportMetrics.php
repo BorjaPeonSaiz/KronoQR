@@ -19,7 +19,7 @@ use Throwable;
  * —`RedisWorkedTimeMetrics` de este mismo modulo y `RedisScanMetrics` de
  * `Attendance`, nombrada asi y no como `{@see}` porque un `use` de otro modulo
  * es la frontera del §1.6 que Deptrac rechaza— para que el `SCAN` del endpoint
- * `/metrics` de la tarea 3.1 las encuentre todas juntas.
+ * `/metrics` las encuentre todas juntas.
  *
  * **Medir no puede romper una descarga.** Si Redis no responde, el informe se
  * entrega igual: perder un punto de una serie es infinitamente mas barato que

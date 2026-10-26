@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\View;
 
 /**
  * El registro propio como PDF **sellado** (`GET /api/v1/me/export?format=pdf`,
- * RF-ID-05, RL-05; PR19 de la verificacion de la 2.1.0).
+ * RF-ID-05, RL-05).
  *
  * El Anexo B del doc 01 exige CSV **y PDF** para el historico personal: el CSV
  * cubre la portabilidad del RGPD y el PDF es lo que una persona presenta ante

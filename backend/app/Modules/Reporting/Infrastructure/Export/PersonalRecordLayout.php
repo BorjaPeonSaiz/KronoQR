@@ -18,8 +18,7 @@ use RuntimeException;
 
 /**
  * Que dice el registro propio, en CSV y en PDF, y en que orden (`GET
- * /api/v1/me/export`, RF-ID-05, RL-05; PR19 de la verificacion de la 2.1.0,
- * R1-RV-01 y R1-RV-02 de la reverificacion de la 2.2.0).
+ * /api/v1/me/export`, RF-ID-05, RL-05).
  *
  * ## Una sola definicion de columnas y valores para los dos formatos
  *

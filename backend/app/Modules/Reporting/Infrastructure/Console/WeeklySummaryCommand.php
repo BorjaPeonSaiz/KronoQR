@@ -129,7 +129,7 @@ final class WeeklySummaryCommand extends Command
      *
      * Distinto de cero **solo** si algun envio fallo, aunque los demas salieran:
      * ahi hay una persona esperando un correo que no llego. La alerta no existe
-     * a proposito (decision 8 de la ficha); lo que queda es este codigo de
+     * a proposito; lo que queda es este codigo de
      * salida, que el planificador convierte en `scheduler.command_failed`.
      */
     private function report(WeeklySummaryPass $pass): int

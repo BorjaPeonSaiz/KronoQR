@@ -129,8 +129,9 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
 
             $day = new JournalWorkDay(
                 workDate: $workDate,
-                // La zona del tramo y no la del empleado: un traslado de centro
-                // no reescribe donde ocurrieron las jornadas anteriores.
+                // La zona del centro, que es una por instalacion y fija desde el
+                // primer fichaje (ADR-040, ADR-056): la del tramo y la de la
+                // jornada coinciden.
                 timeZone: $dayEntries === [] ? $timeZone : $dayEntries[0]->timeZone,
                 recalculatedAt: $projection[$workDate]['recalculated_at'] ?? null,
                 shiftEntries: $dayEntries,
@@ -363,8 +364,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      * sea la que importa. El `id` desempata, por lo mismo que alli: dos
      * incidencias de la misma pasada comparten `detected_at` al microsegundo.
      *
-     * Cae sobre `incidents_employee_id_work_date_index`, que la migracion de la
-     * tarea 2.6 creo para esto.
+     * Cae sobre `incidents_employee_id_work_date_index`, que se creo para esto.
      *
      * **Lee `incidents`, que es tabla de `Compliance`.** Es la misma excepcion
      * acotada que esta clase ya se toma con `employees`, `sites`, `scan_events` y

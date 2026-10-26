@@ -26,8 +26,7 @@ use Psr\Log\LoggerInterface;
  * cuadro vacio —instalacion recien puesta en marcha— de una consulta mal escrita, y
  * se ve si esta pantalla aguanta en una instalacion real sin preguntarle a nadie.
  *
- * **No lleva ni una cifra del cuadro**, y esa es la correccion de la segunda vuelta.
- * La tentacion era dejar los dos ratios con
+ * **No lleva ni una cifra del cuadro**. La tentacion era dejar los dos ratios con
  * objetivo —jornadas completas y disponibilidad— para poder contrastar una queja
  * sin pedir una captura. No entran, porque **un ratio sin su denominador es un dato
  * de una persona en cuanto el denominador es pequeño**: `workdays_complete_ratio:
@@ -51,8 +50,8 @@ use Psr\Log\LoggerInterface;
  *
  * Las metricas del §8.2 que alimentan el cuadro —`workdays_complete_ratio`,
  * `scans_by_origin_total`, `incident_resolution_seconds`,
- * `employees_without_delivered_credential`— se publican desde las tareas 3.1 y 3.2
- * y se **recalculan** desde los datos (regla dura 7 aplicada a la instrumentacion).
+ * `employees_without_delivered_credential`— se publican por `/metrics` y se
+ * **recalculan** desde los datos (regla dura 7 aplicada a la instrumentacion).
  * Publicar una serie nueva al abrir la pantalla daria un valor que cambia cada vez
  * que alguien mira. Lo que este endpoint ya tiene es `http_requests_total{route}` y
  * `http_request_duration_seconds{route}` de {@see RecordHttpMetrics}.

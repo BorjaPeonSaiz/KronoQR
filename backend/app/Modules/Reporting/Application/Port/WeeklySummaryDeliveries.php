@@ -8,7 +8,7 @@ use DateTimeImmutable;
 
 /**
  * El registro de resumenes semanales ya enviados (`weekly_summary_deliveries`,
- * decision 6 de la ficha 3.12, reordenado por la decision 13).
+ * RF-PR-05).
  *
  * ## Para que una tabla, si ya esta el asiento de `audit_log`
  *

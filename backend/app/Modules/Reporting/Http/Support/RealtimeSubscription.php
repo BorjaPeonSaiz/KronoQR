@@ -146,9 +146,8 @@ final readonly class RealtimeSubscription
      *
      * ADR-023 lo exige por escrito: la frontera entre registro legal y
      * funcionalidad accesoria se declara en un sitio y no como un
-     * `if (license.expired)` repartido por el codigo. La tarea 2.4 dejo aqui el
-     * hueco y la **tarea 5.3 lo ha rellenado**: la licencia entra por este
-     * metodo y por ningun otro, y no ha cambiado nada mas — el endpoint sigue
+     * `if (license.expired)` repartido por el codigo. **La licencia entra por
+     * este metodo y por ningun otro** (ADR-023) — el endpoint sigue
      * respondiendo `enabled: false` y el panel ya sabia sondear.
      *
      * **Degrada a sondeo, no se apaga** (ADR-011, y la unica degradacion parcial

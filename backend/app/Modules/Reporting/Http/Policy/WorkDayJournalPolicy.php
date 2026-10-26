@@ -63,8 +63,8 @@ final class WorkDayJournalPolicy
     /**
      * Roles que pueden consultar el registro horario de un tercero («manager+»).
      *
-     * Metodo y no constante porque en la tarea 2.1 deja de ser una lista fija:
-     * `responsable_departamento` entrara con alcance por departamento, y el
+     * Metodo y no constante porque no es una lista fija:
+     * `responsable_departamento` entra con alcance por departamento, y el
      * alcance se resuelve, no se enumera.
      *
      * @return list<UserRole>

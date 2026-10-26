@@ -40,8 +40,8 @@ use Illuminate\Support\Facades\Config;
  * ## La constancia del acceso tampoco se escribe aqui
  *
  * La escribe la consulta, dentro (RS-05). Si dependiera de una linea de este
- * metodo, el dia que la exportacion de la tarea 2.9 use el mismo informe habria
- * que acordarse de repetirla — y la 2.9 no la va a repetir, la va a heredar.
+ * metodo, la exportacion (RF-IN-04), que usa el mismo informe, tendria que
+ * acordarse de repetirla; asi la hereda.
  *
  * ## Los dos techos vienen de la configuracion, no de constantes
  *

@@ -48,7 +48,7 @@ interface PortalSessionIssuer
      *
      * **`null` no es un error del programa**: es la carrera —estrecha, pero
      * real— entre comprobar el PIN y acuñar el token, en la que a la persona le
-     * dan de baja o se le cambia de centro. Quien llama lo traduce al **mismo**
+     * dan de baja. Quien llama lo traduce al **mismo**
      * rechazo generico que un PIN incorrecto (regla dura 17): desde fuera no se
      * distingue, y desde dentro queda en el log.
      *

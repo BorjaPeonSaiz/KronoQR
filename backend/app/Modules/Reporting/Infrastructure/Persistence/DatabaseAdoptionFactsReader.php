@@ -105,7 +105,7 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
 
     /**
      * Las clases de error del quiosco que cuentan como **un intento de fichar que
-     * no se pudo cursar** (RNF-D-01, decision 2(g) de la ficha 3.13).
+     * no se pudo cursar** (RNF-D-01).
      *
      * Seis de las veinticinco del catalogo de `ClientErrorCode`, y las seis estan
      * elegidas por lo mismo: **detras de cada una hay alguien delante de la tablet

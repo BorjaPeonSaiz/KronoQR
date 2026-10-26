@@ -50,8 +50,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *
  * Se comprueba la licencia **antes** de construir la consulta, para que una
  * instalacion sin la funcionalidad no llegue siquiera a tocar la base de datos.
- * Y es la primera consumidora de `PayrollExport`, que estaba en el catalogo desde
- * la tarea 5.3 sin que nada la mirara.
+ * Y es la consumidora de `PayrollExport` en el catalogo de funcionalidades.
  *
  * **Esto no es el registro legal.** La exportacion para la Inspeccion
  * (`GET /reports/legal-export`) no se degrada jamas (RL-06, regla dura 15); esta

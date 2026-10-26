@@ -56,7 +56,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  *
  * ## `404` y no `403` para la exportacion ajena
  *
- * Decision 2. Solo el solicitante ve y descarga la suya, tambien si quien
+ * Solo el solicitante ve y descarga la suya, tambien si quien
  * pregunta es `admin`. El filtro entra **en la consulta**, asi que aqui lo unico
  * que se ve es que no hay fila: `404` sin detalle. Un `403` confirmaria que esa
  * exportacion existe.
@@ -223,8 +223,8 @@ final class ReportExportController extends Controller
      */
     /**
      * Las clases que alcanza quien pregunta: todas con `reports:*`, y solo
-     * `legal` con `reports:legal` —el auditor— (revision de seguridad del
-     * bloque 14). Una fila de otra clase no existe para el: no la lista, y
+     * `legal` con `reports:legal` —el auditor—. Una fila de otra clase no
+     * existe para el: no la lista, y
      * consultarla o cancelarla responde `404`, como la de otra persona.
      *
      * Por el ambito del token y no por el rol, con el mismo patron que

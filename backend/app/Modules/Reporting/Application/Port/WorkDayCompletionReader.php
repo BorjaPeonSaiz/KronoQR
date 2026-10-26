@@ -56,8 +56,8 @@ interface WorkDayCompletionReader
      * ## Y por que aqui y no una consulta propia del cuadro
      *
      * Porque «jornada completa» tiene que significar **una sola cosa** en el
-     * producto: la del `workdays_complete_ratio{site}` que pinta Grafana desde la
-     * tarea 3.1 y la del indicador que enseña el panel. Con dos consultas, el
+     * producto: la del `workdays_complete_ratio{site}` que pinta Grafana y la
+     * del indicador que enseña el panel. Con dos consultas, el
      * cuadro de mando y el cuadro de impacto acabarian dando dos porcentajes para
      * la misma semana, y el cuadro perderia justo la funcion que tiene.
      * **Lo que no comparten es la ventana**: Grafana mira los

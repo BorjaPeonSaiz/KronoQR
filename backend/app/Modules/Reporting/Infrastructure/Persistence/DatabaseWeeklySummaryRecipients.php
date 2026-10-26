@@ -21,7 +21,7 @@ use Illuminate\Database\ConnectionInterface;
  * sin ningun rol de alcance global**.
  *
  * Las dos primeras condiciones son obvias; las dos ultimas no, y son las que
- * sostienen la decision 2:
+ * deciden quien recibe el resumen:
  *
  * - **Con el rol, no «quien dirige un departamento».** Podria parecer lo mismo
  *   —el alcance sale de `departments.manager_user_id`— y no lo es: una cuenta de

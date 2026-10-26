@@ -295,7 +295,7 @@ final readonly class GenerateReportExportHandler
             uuid: $completed->uuid,
             kind: $completed->kind->value,
             format: $completed->format,
-            // El NOMBRE, nunca la ruta absoluta (regla dura 21 y decision 7).
+            // El NOMBRE, nunca la ruta absoluta (regla dura 21).
             fileName: $completed->fileName ?? '',
             sha256: $completed->sha256 ?? '',
             sizeBytes: $completed->sizeBytes ?? 0,

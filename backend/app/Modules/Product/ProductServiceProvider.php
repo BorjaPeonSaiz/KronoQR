@@ -634,7 +634,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // Tarea 11.3 C: el motivo de una concesion de soporte tiene plazo.
+        // El motivo de una concesion de soporte tiene plazo (RL-11).
         $this->app->bind(
             PruneSupportGrantReasons::class,
             static fn (Application $app): PruneSupportGrantReasons => new PruneSupportGrantReasons(
@@ -1041,7 +1041,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // El barrido del paquete de diagnostico (ADR-045 §g, C4). Raiz y plazo
+        // El barrido del paquete de diagnostico (ADR-045 §g, condicion C4). Raiz y plazo
         // se leen aqui, en el borde (regla dura 14).
         $this->app->bind(
             SweepExpiredDiagnosticsBundles::class,
@@ -1164,7 +1164,7 @@ final class ProductServiceProvider extends ServiceProvider
      * peticion en un trabajador de cola o en Octane, y ahi dejaria de ser
      * memoria para ser una cache sin invalidacion: una clave recien activada no
      * surtiria efecto hasta reiniciar el proceso. Es el mismo criterio de los
-     * cuatro proveedores de la tarea 5.1.
+     * cuatro proveedores de configuracion.
      *
      * ## `bind()` para todo lo demas
      *
@@ -1312,8 +1312,8 @@ final class ProductServiceProvider extends ServiceProvider
          * por cuenta con el `email` del cuerpo, y aqui no hay ninguna cuenta a la
          * que contar: la de `/setup/administrator` todavia no existe y la de
          * `/setup/status` no la hay. Con la zona de acceso, todo el trafico del
-         * asistente compartiria el cubo de la cadena vacia —el mismo fallo que la
-         * tarea 2.1 encontro en `/auth/2fa/*`—, y ademas gastaria el cupo de
+         * asistente compartiria el cubo de la cadena vacia —el mismo fallo que
+         * tendria `/auth/2fa/*`—, y ademas gastaria el cupo de
          * acceso de la persona que esta a punto de entrar.
          *
          * SOLO POR ORIGEN, que es lo unico que hay. No hace falta mas: la unica
@@ -1600,9 +1600,9 @@ final class ProductServiceProvider extends ServiceProvider
              * **NO van en `routes/console.php`**: ahi vive cuando se ejecuta
              * cada comando programado, y ninguno de estos dos se programa.
              * `license:show` lo ejecuta una persona que quiere saber como esta
-             * su licencia —o `doctor` en la 5.9—, y `license:activate` lo
-             * ejecuta quien acaba de recibir una clave, o el instalador de la
-             * 5.4 la primera vez.
+             * su licencia —o `product:doctor`—, y `license:activate` lo
+             * ejecuta quien acaba de recibir una clave, o el instalador
+             * la primera vez.
              *
              * Y sobre todo: **una comprobacion de licencia programada no existe
              * en este producto**. No hay tarea nocturna que revise la licencia
@@ -1796,7 +1796,7 @@ final class ProductServiceProvider extends ServiceProvider
         Event::listen(EmployeeHired::class, [ObservePlanLimits::class, 'onEmployeeHired']);
         // La carga masiva de plantilla se cuenta por el evento del LOTE y no por
         // sus filas, que llegan igualmente como `EmployeeHired` y el listener
-        // descarta por `viaImport` (H-04 de la 3.8, ADR-010).
+        // descarta por `viaImport` (ADR-010).
         Event::listen(EmployeesImported::class, [ObservePlanLimits::class, 'onEmployeesImported']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
 
@@ -1818,7 +1818,7 @@ final class ProductServiceProvider extends ServiceProvider
      * Rutas, umbrales, version, idioma y **el entorno del proceso entero** entran
      * ya resueltos en las sondas y en los recolectores. Es el mismo criterio que
      * el resto del modulo (regla dura 14), y aqui tiene un motivo extra: la
-     * prueba que exige la ficha 5.9 —«ninguna clave secreta del `.env.example`
+     * prueba que exige ADR-020 —«ninguna clave secreta del `.env.example`
      * aparece en el paquete»— necesita poder pasarle al recolector un entorno
      * inventado. Con `env()` dentro del recolector, esa prueba no se podria
      * escribir sin ensuciar el proceso entero.
@@ -2088,7 +2088,7 @@ final class ProductServiceProvider extends ServiceProvider
                 translator: $app->make(DoctorTranslator::class),
                 clock: $app->make(Clock::class),
                 productVersion: Config::string('app.version'),
-                // PR2: una sonda que revienta porque Redis o PostgreSQL no
+                // Una sonda que revienta porque Redis o PostgreSQL no
                 // contestan no es un fallo del producto.
                 failures: new ConnectionProbeFailureClassifier,
             ),

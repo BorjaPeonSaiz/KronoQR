@@ -17,7 +17,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  *
  * ## Solo los suyos, tambien si es `admin`
  *
- * Decision 2 de la ficha, y no es una limitacion tecnica: un informe en diferido
+ * No es una limitacion tecnica: un informe en diferido
  * contiene las horas nominales de un conjunto de personas, y quien lo pidio
  * eligio ese conjunto. Que un administrador vea —y pueda pedir enlace de— los
  * ficheros que genero RRHH seria una via de acceso a datos personales que nadie
@@ -63,7 +63,7 @@ final readonly class ListReportExports
     /**
      * @param  list<ReportExportKind>|null  $kinds  Las clases que alcanza quien pregunta, o todas. Un
      *                                              token sin `reports:*` —el auditor— solo alcanza
-     *                                              `legal` (revision de seguridad del bloque 14).
+     *                                              `legal`.
      * @return list<ReportExportView>
      */
     public function handle(int $requestedByUserId, ?array $kinds = null): array

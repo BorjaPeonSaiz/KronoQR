@@ -16,8 +16,8 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * presencia (ADR-011, RF-PA-01).
  *
  * Sustituye a la ruta que registraba `withBroadcasting()`, que aceptaba `GET` y
- * `POST`, no validaba la peticion y respondia JSONP con un `callback` (B3 y
- * R6-BD-02 de la verificacion de la 2.2.0). Quien decide si se firma sigue siendo
+ * `POST`, no validaba la peticion y respondia JSONP con un `callback`. Quien
+ * decide si se firma sigue siendo
  * el difusor: ejecuta el callback del canal de `routes/channels.php` y responde
  * `403` si dice que no.
  *

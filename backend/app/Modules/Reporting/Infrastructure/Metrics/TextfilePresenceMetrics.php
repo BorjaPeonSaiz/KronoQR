@@ -20,7 +20,7 @@ use DateTimeImmutable;
  *
  * **Por que un fichero y no un contador en memoria.** Lo mismo que en
  * `Identity\Infrastructure\Metrics\TextfileCredentialMetrics` y por el mismo
- * motivo: `/metrics` lo expone la aplicacion a partir de la tarea 3.1, y quien
+ * motivo: `/metrics` lo expone la aplicacion, y quien
  * produce estos numeros es un comando programado que corre y termina. Un
  * contador en memoria de un proceso que termina no lo lee nadie.
  *

@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * El historico propio como PDF sellado (`GET /api/v1/me/export?format=pdf`,
- * RF-ID-05, RL-05; PR19 de la verificacion de la 2.1.0).
+ * RF-ID-05, RL-05).
  *
  * Hermano de {@see PersonalRecordCsv} sobre **el mismo** `WorkDayJournal`: lo
  * que la persona descarga en PDF, en CSV y lo que ve en pantalla salen de una
