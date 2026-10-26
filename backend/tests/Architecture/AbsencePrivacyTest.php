@@ -174,8 +174,11 @@ it('el comando de metricas solo escribe frases fijas por la consola', function (
 
     $conDatos = array_values(array_filter(
         $llamadas[1],
-        // Una frase fija es `'…'` entera: ni `$`, ni `.`, ni `"` con llaves.
-        static fn (string $argumento): bool => preg_match("/^'[^'\\\\$]*'$/", trim($argumento)) !== 1,
+        // Una frase fija es `'…'` entera —ni `$`, ni `.`, ni `"` con llaves— o
+        // un texto de `lang/` pedido por su clave y SIN parametros
+        // (`$this->text('absences.published')`): el idioma cambia, el contenido no.
+        static fn (string $argumento): bool => preg_match("/^'[^'\\\\$]*'$/", trim($argumento)) !== 1
+            && preg_match("/^\\\$this->text\('[a-z0-9_.]+'\)$/", trim($argumento)) !== 1,
     ));
 
     expect($conDatos)->toBe(
