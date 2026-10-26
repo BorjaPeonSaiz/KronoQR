@@ -633,4 +633,94 @@ return [
         'whole_staff' => 'whole staff',
     ],
 
+    'detect_incidents' => [
+        'invalid_days' => '--days expects a whole number of days greater than zero and got «:value». '
+            .'Without a valid value the window is not guessed: reviewing too much opens incidents on '
+            .'working days already handed over, and reviewing too little leaves them unopened.',
+        'no_site' => 'There is no work site yet: without a time zone there is no working day to review (RF-PD-03).',
+        'inspected' => ':work_days working days of the last :days days reviewed, plus the open shifts.',
+        'none' => 'No findings.',
+        'safe_to_repeat' => 'Findings already open are not duplicated: running the command again is safe. '
+            .'No shift entry has been closed (RN-08).',
+        'failures' => ':count finding(s) could not be opened as an incident. The rest could. '
+            .'Look for «attendance.incident_not_opened» in the log to see which.',
+    ],
+
+    'detect_patterns' => [
+        'invalid_days' => '--days expects a whole number of days greater than zero and got «:value». '
+            .'Without a valid value the window is not guessed: a pattern is stated over the days looked at, '
+            .'and looking at too few misses it.',
+        'no_site' => 'There is no work site yet: without a time zone there is no calendar day to group by (RF-PD-03).',
+        'inspected' => ':scans kiosk scans of the last :days days reviewed.',
+        'none' => 'No anomalous patterns.',
+        'hints_only' => 'They are hints for human review, not a conclusion: no clocking has been voided or flagged '
+            .'as fraudulent (RF-PR-06). Running the command again is safe: findings already open are not duplicated.',
+        'failures' => ':count finding(s) could not be opened as an incident. The rest could. '
+            .'Look for «attendance.pattern_incident_not_opened» in the log to see which.',
+    ],
+
+    'prune_scan_failures' => [
+        'pruned' => 'scan_processing_failures: :count attempts older than :days days deleted.',
+    ],
+
+    'reconcile_projections' => [
+        'invalid_dates' => '--from and --to expect a date in YYYY-MM-DD format. '
+            .'Without valid dates the range is not guessed: the default run is yesterday\'s working day.',
+        'no_site' => 'There is no work site yet: without a time zone there is no working day to reconcile (RF-PD-03).',
+        'inspected' => ':work_days working days checked from :from to :to (:days days).',
+        'clean' => 'No divergences: the projection matches the current shift entries (RN-06).',
+        'missing_row' => 'missing row',
+        'divergences' => ':count divergence(s), :corrected corrected. The projection had drifted from its source events: '
+            .'it is not routine maintenance. Follow docs/runbooks/divergencia-proyeccion.md.',
+        'failures' => ':count working day(s) could not be reconciled. Look for «attendance.projection_not_corrected» '
+            .'and «attendance.projection_reconciliation_failed» in the log to see which.',
+        'self_resolved' => ':count working day(s) resolved themselves: the read crossed a clocking and when read again '
+            .'under lock they already matched. Nothing has been written to them.',
+    ],
+
+    'kiosk_pairing_code' => [
+        'name_required' => '--name with the kiosk name is missing, for example --name="Reception".',
+        'no_site' => 'The installation has no site yet: complete the setup wizard first.',
+        'name_taken' => 'There is already an active kiosk with that name. Choose another or unpair the old one.',
+        'rejected' => 'The code could not be confirmed. Ask the tablet for another code and try again.',
+        'paired' => 'Kiosk «:name» paired (:uuid).',
+        'reactivated' => 'Kiosk «:name» reactivated (:uuid).',
+        'next' => 'The tablet will collect its token in a few seconds. Check with: php artisan kiosk:health',
+    ],
+
+    'reporting_metrics' => [
+        'absences' => [
+            'no_site' => 'There is no work site yet: no time zone to resolve today with (RF-PD-03).',
+            'published' => 'Absence metrics published.',
+        ],
+        'adoption' => [
+            'no_site' => 'There is no work site yet: no working day to measure (RF-PD-03).',
+            'published' => 'Adoption metrics published.',
+        ],
+        'compliance' => [
+            'no_site' => 'There is no work site yet: no profile to evaluate with (RF-PD-03).',
+            'published' => 'Compliance metrics published.',
+        ],
+        'presence' => [
+            'no_site' => 'There is no work site yet: there is nothing to label (RF-PD-03).',
+            'published' => 'Presence metrics published.',
+        ],
+    ],
+
+    'weekly_summary' => [
+        'sent' => 'Week :week: :sent summar(y/ies) sent, :skipped skipped out of :recipients manager(s).',
+        'failures' => ':count summar(y/ies) could not be delivered; their week stays pending and will be retried. '
+            .'Look for «reporting.weekly_summary_failed» in the log to see which accounts and what kind '
+            .'of problem it was.',
+    ],
+
+    'backup' => [
+        'unverified' => 'UNVERIFIED backup: an unverified backup is not a backup. '
+            .'Verify it as soon as you can with: php artisan backup:verify',
+        'run_failed' => 'The backup has not completed (code :code). The previous backup is still the good one. '
+            .'Procedure: docs/runbooks/restaurar-backup.md',
+        'verify_failed' => 'The backup is NOT verified (code :code). Treat it as missing until it is solved: '
+            .'docs/runbooks/restaurar-backup.md',
+    ],
+
 ];

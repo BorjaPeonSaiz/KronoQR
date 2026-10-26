@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Infrastructure\Console;
 use App\Modules\Attendance\Application\Command\DetectPatternsCommand as DetectPatterns;
 use App\Modules\Attendance\Application\UseCase\DetectCredentialPatterns;
 use App\Modules\Attendance\Application\UseCase\PatternScanResult;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -43,6 +44,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class DetectPatternsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.detect_patterns';
+
     protected $signature = 'attendance:detect-patterns
         {--days= : Dias hacia atras a revisar. Por defecto, compliance.pattern_detection.lookback_days}';
 
@@ -57,11 +63,7 @@ final class DetectPatternsCommand extends Command
             // dejarselo a la excepcion del `DetectPatternsCommand` de aplicacion
             // convertia un `--days=0` escrito de mas en una traza de PHP en el log
             // del planificador, y una traza no dice que corregir.
-            $this->error(
-                '--days espera un numero entero de dias mayor que cero y ha llegado «'.(string) $this->option('days').'». '
-                .'Sin valor valido no se adivina la ventana: un patron se afirma sobre los dias que se miran, '
-                .'y mirar de menos deja de verlo.'
-            );
+            $this->error($this->text('invalid_days', ['value' => (string) $this->option('days')]));
 
             return self::INVALID;
         }
@@ -69,7 +71,7 @@ final class DetectPatternsCommand extends Command
         $result = $detect->handle(new DetectPatterns($days));
 
         if (! $result->ranOverASite) {
-            $this->warn('Todavia no hay centro de trabajo: sin zona horaria no hay dia civil con el que agrupar (RF-PD-03).');
+            $this->warn($this->text('no_site'));
 
             // Cero y no error: antes de la puesta en marcha esto es lo esperado.
             return self::SUCCESS;
@@ -83,14 +85,13 @@ final class DetectPatternsCommand extends Command
             'failures' => $result->failures,
         ]);
 
-        $this->info(sprintf(
-            'Revisados %d escaneos de quiosco de los ultimos %d dias.',
-            $result->scansInspected,
-            $result->daysInspected,
-        ));
+        $this->info($this->text('inspected', [
+            'scans' => $result->scansInspected,
+            'days' => $result->daysInspected,
+        ]));
 
         if ($result->total() === 0) {
-            $this->line('Sin patrones anomalos.');
+            $this->line($this->text('none'));
 
             return $this->report($result);
         }
@@ -99,10 +100,7 @@ final class DetectPatternsCommand extends Command
             $this->line('  '.$pattern.': '.$count);
         }
 
-        $this->line(
-            'Son indicios para revision humana, no una conclusion: ningun fichaje se ha anulado ni marcado '
-            .'como fraudulento (RF-PR-06). Repetir el comando es seguro: los hallazgos ya abiertos no se duplican.'
-        );
+        $this->line($this->text('hints_only'));
 
         return $this->report($result);
     }
@@ -122,11 +120,7 @@ final class DetectPatternsCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->error(sprintf(
-            '%d hallazgo(s) no se pudieron abrir como incidencia. El resto si. '
-            .'Busca «attendance.pattern_incident_not_opened» en el log para ver cuales.',
-            $result->failures,
-        ));
+        $this->error($this->text('failures', ['count' => $result->failures]));
 
         return self::FAILURE;
     }

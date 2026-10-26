@@ -40,12 +40,21 @@ final class BackupVerifyCommand extends Command
         $code = (new BackupScript($this))->run('backup.sh', $arguments);
 
         if ($code !== 0) {
-            $this->error(
-                'La copia NO esta verificada (codigo '.$code.'). Tratala como inexistente hasta resolverlo: '.
-                'docs/runbooks/restaurar-backup.md'
-            );
+            $this->error(self::text('console.backup.verify_failed', ['code' => $code]));
         }
 
         return $code;
+    }
+
+    /**
+     * En el idioma de `APP_LOCALE`: ver `BackupRunCommand::text()`.
+     *
+     * @param  array<string, int|string>  $replace
+     */
+    private static function text(string $key, array $replace = []): string
+    {
+        $text = __($key, $replace);
+
+        return \is_string($text) ? $text : $key;
     }
 }

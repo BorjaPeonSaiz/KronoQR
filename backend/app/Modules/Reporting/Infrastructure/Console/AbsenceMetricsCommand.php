@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Infrastructure\Console;
 
 use App\Modules\Reporting\Application\UseCase\PublishAbsenceMetrics;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -22,6 +23,11 @@ use Illuminate\Console\Command;
  */
 final class AbsenceMetricsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las metricas de `reporting:*`. */
+    private const string TEXTS = 'console.reporting_metrics';
+
     protected $signature = 'reporting:absence-metrics';
 
     protected $description = 'Recalcula y publica las personas ausentes hoy, por tipo (doc 02 §8.2).';
@@ -29,7 +35,7 @@ final class AbsenceMetricsCommand extends Command
     public function handle(PublishAbsenceMetrics $metrics): int
     {
         if (! $metrics->handle()) {
-            $this->warn('Todavia no hay centro de trabajo: no hay zona con la que resolver el dia de hoy (RF-PD-03).');
+            $this->warn($this->text('absences.no_site'));
 
             // Cero y no error: antes de la puesta en marcha esto es lo esperado, y
             // un planificador que fallara cada noche llenaria el log de una
@@ -37,7 +43,7 @@ final class AbsenceMetricsCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info('Metricas de ausencias publicadas.');
+        $this->info($this->text('absences.published'));
 
         return self::SUCCESS;
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Infrastructure\Console;
 
 use App\Modules\Attendance\Application\UseCase\PruneScanProcessingFailures;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -20,6 +21,11 @@ use Throwable;
  */
 final class PruneScanFailuresCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.prune_scan_failures';
+
     protected $signature = 'attendance:prune-scan-failures';
 
     protected $description = 'Borra los intentos fallidos de procesar un fichaje de mas de 30 dias (RN-22, ADR-061)';
@@ -29,16 +35,15 @@ final class PruneScanFailuresCommand extends Command
         try {
             $deleted = $prune->handle();
         } catch (Throwable $failure) {
-            $this->error('attendance.scan_failures_prune_failed '.$failure::class);
+            $this->error(\sprintf('attendance.scan_failures_prune_failed %s', $failure::class));
 
             return self::FAILURE;
         }
 
-        $this->line(sprintf(
-            'scan_processing_failures: %d intentos de mas de %d dias borrados.',
-            $deleted,
-            PruneScanProcessingFailures::RETENTION_DAYS,
-        ));
+        $this->line($this->text('pruned', [
+            'count' => $deleted,
+            'days' => PruneScanProcessingFailures::RETENTION_DAYS,
+        ]));
 
         return self::SUCCESS;
     }

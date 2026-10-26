@@ -633,4 +633,94 @@ return [
         'whole_staff' => 'plantilla completa',
     ],
 
+    'detect_incidents' => [
+        'invalid_days' => '--days espera un numero entero de dias mayor que cero y ha llegado «:value». '
+            .'Sin valor valido no se adivina la ventana: revisar de mas abre incidencias sobre '
+            .'jornadas ya entregadas, y revisar de menos las deja sin abrir.',
+        'no_site' => 'Todavia no hay centro de trabajo: sin zona horaria no hay jornada que revisar (RF-PD-03).',
+        'inspected' => 'Revisadas :work_days jornadas de los ultimos :days dias, mas los turnos abiertos.',
+        'none' => 'Sin hallazgos.',
+        'safe_to_repeat' => 'Los hallazgos ya abiertos no se duplican: repetir el comando es seguro. '
+            .'Ningun tramo se ha cerrado (RN-08).',
+        'failures' => ':count hallazgo(s) no se pudieron abrir como incidencia. El resto si. '
+            .'Busca «attendance.incident_not_opened» en el log para ver cuales.',
+    ],
+
+    'detect_patterns' => [
+        'invalid_days' => '--days espera un numero entero de dias mayor que cero y ha llegado «:value». '
+            .'Sin valor valido no se adivina la ventana: un patron se afirma sobre los dias que se miran, '
+            .'y mirar de menos deja de verlo.',
+        'no_site' => 'Todavia no hay centro de trabajo: sin zona horaria no hay dia civil con el que agrupar (RF-PD-03).',
+        'inspected' => 'Revisados :scans escaneos de quiosco de los ultimos :days dias.',
+        'none' => 'Sin patrones anomalos.',
+        'hints_only' => 'Son indicios para revision humana, no una conclusion: ningun fichaje se ha anulado ni marcado '
+            .'como fraudulento (RF-PR-06). Repetir el comando es seguro: los hallazgos ya abiertos no se duplican.',
+        'failures' => ':count hallazgo(s) no se pudieron abrir como incidencia. El resto si. '
+            .'Busca «attendance.pattern_incident_not_opened» en el log para ver cuales.',
+    ],
+
+    'prune_scan_failures' => [
+        'pruned' => 'scan_processing_failures: :count intentos de mas de :days dias borrados.',
+    ],
+
+    'reconcile_projections' => [
+        'invalid_dates' => '--from y --to esperan una fecha en formato YYYY-MM-DD. '
+            .'Sin fechas validas no se adivina el rango: la pasada por defecto es la jornada de ayer.',
+        'no_site' => 'Todavia no hay centro de trabajo: sin zona horaria no hay jornada que reconciliar (RF-PD-03).',
+        'inspected' => 'Contrastadas :work_days jornadas de :from a :to (:days dias).',
+        'clean' => 'Sin divergencias: la proyeccion coincide con los tramos vigentes (RN-06).',
+        'missing_row' => 'fila ausente',
+        'divergences' => ':count divergencia(s), :corrected corregida(s). La proyeccion se habia desviado de sus eventos origen: '
+            .'no es mantenimiento rutinario. Sigue docs/runbooks/divergencia-proyeccion.md.',
+        'failures' => ':count jornada(s) no se pudieron reconciliar. Busca «attendance.projection_not_corrected» '
+            .'y «attendance.projection_reconciliation_failed» en el log para ver cuales.',
+        'self_resolved' => ':count jornada(s) se resolvieron solas: la lectura se cruzo con un fichaje y al releerlas '
+            .'bajo candado ya cuadraban. No se ha escrito nada en ellas.',
+    ],
+
+    'kiosk_pairing_code' => [
+        'name_required' => 'Falta --name con el nombre del quiosco, por ejemplo --name="Recepcion".',
+        'no_site' => 'La instalacion todavia no tiene centro: completa antes el asistente de puesta en marcha.',
+        'name_taken' => 'Ya hay un quiosco activo con ese nombre. Elige otro o desvincula el anterior.',
+        'rejected' => 'El codigo no se ha podido confirmar. Pide otro codigo en la tablet e intentalo de nuevo.',
+        'paired' => 'Vinculado el quiosco «:name» (:uuid).',
+        'reactivated' => 'Reactivado el quiosco «:name» (:uuid).',
+        'next' => 'La tablet recogera su token en unos segundos. Comprueba con: php artisan kiosk:health',
+    ],
+
+    'reporting_metrics' => [
+        'absences' => [
+            'no_site' => 'Todavia no hay centro de trabajo: no hay zona con la que resolver el dia de hoy (RF-PD-03).',
+            'published' => 'Metricas de ausencias publicadas.',
+        ],
+        'adoption' => [
+            'no_site' => 'Todavia no hay centro de trabajo: no hay jornada que medir (RF-PD-03).',
+            'published' => 'Metricas de adopcion publicadas.',
+        ],
+        'compliance' => [
+            'no_site' => 'Todavia no hay centro de trabajo: no hay perfil con el que evaluar (RF-PD-03).',
+            'published' => 'Metricas de cumplimiento publicadas.',
+        ],
+        'presence' => [
+            'no_site' => 'Todavia no hay centro de trabajo: no hay nada que etiquetar (RF-PD-03).',
+            'published' => 'Metricas de presencia publicadas.',
+        ],
+    ],
+
+    'weekly_summary' => [
+        'sent' => 'Semana :week: :sent resumen(es) enviados, :skipped omitidos de :recipients responsable(s).',
+        'failures' => ':count resumen(es) no se pudieron entregar; su semana sigue pendiente y se reintentara. '
+            .'Busca «reporting.weekly_summary_failed» en el log para ver a que cuentas y de que clase '
+            .'fue el problema.',
+    ],
+
+    'backup' => [
+        'unverified' => 'Copia SIN verificar: una copia no verificada no es una copia. '
+            .'Verificala en cuanto puedas con: php artisan backup:verify',
+        'run_failed' => 'La copia no se ha completado (codigo :code). La copia anterior sigue siendo la buena. '
+            .'Procedimiento: docs/runbooks/restaurar-backup.md',
+        'verify_failed' => 'La copia NO esta verificada (codigo :code). Tratala como inexistente hasta resolverlo: '
+            .'docs/runbooks/restaurar-backup.md',
+    ],
+
 ];
