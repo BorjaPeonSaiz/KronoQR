@@ -56,20 +56,20 @@ parameters:
           value: '#^Illuminate\\Database\\Eloquent\\#'
     # Lo UNICO del framework que admiten las capas `*Application`: el contrato
     # de la conexion, con el que el caso de uso abre su transaccion y toma su
-    # cerrojo, y la excepcion de consulta mientras Application siga
-    # distinguiendo un fallo de base de datos. Ni `Str`, ni `Collection`, ni
+    # cerrojo. Ni `QueryException` (el fallo de base de datos lo traduce el
+    # adaptador a una excepcion del puerto), ni `Str`, ni `Collection`, ni
     # `Carbon` de Laravel, ni contratos de cola o de cache: lo que el caso de uso
     # necesita del mundo entra por un puerto (ADR-002 §Verificacion, nota del
     # 26-10-2026; RV-3). El resto de capas la tienen junto a `Laravel`.
     - name: LaravelConnection
       collectors:
         - type: classNameRegex
-          value: '#^Illuminate\\Database\\(ConnectionInterface|QueryException)$#'
+          value: '#^Illuminate\\Database\\ConnectionInterface$#'
     # El resto del framework: contratos, colecciones, cola, HTTP.
     - name: Laravel
       collectors:
         - type: classNameRegex
-          value: '#^(Illuminate\\(?!Support\\Facades\\|Database\\Eloquent\\|Database\\(ConnectionInterface|QueryException)$)|Laravel\\)#'
+          value: '#^(Illuminate\\(?!Support\\Facades\\|Database\\Eloquent\\|Database\\ConnectionInterface$)|Laravel\\)#'
 
     # Cualquier otra libreria de terceros: Carbon, Symfony, Psr, Ramsey,
     # Spatie, OpenTelemetry... El `must_not` de php_internal deja fuera las
