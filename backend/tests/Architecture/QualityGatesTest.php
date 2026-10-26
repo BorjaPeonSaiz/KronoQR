@@ -46,6 +46,15 @@ it('exige PHPStan en el nivel maximo', function (): void {
         ->toMatch('/^\s*level:\s*9\s*$/m');
 })->group('RNF-M-02');
 
+it('analiza con PHPStan tambien bootstrap y config', function (): void {
+    // RNF-M-02 y R1-BE-02. config/ es la unica capa que lee env(), cuyo tipo
+    // es mixed: fuera del analisis, un rtrim(env(...)) sin cast pasaba verde.
+    $neon = repoContents('backend/phpstan.neon');
+
+    expect($neon)->toMatch('/^\s*-\s*bootstrap\s*$/m')
+        ->and($neon)->toMatch('/^\s*-\s*config\s*$/m');
+})->group('RNF-M-02');
+
 it('exige justificacion en cada supresion de PHPStan', function (): void {
     // RNF-M-02, segunda mitad: "sin errores suprimidos sin justificar". PHPStan
     // obliga a nombrar el identificador del error tras la anotacion de

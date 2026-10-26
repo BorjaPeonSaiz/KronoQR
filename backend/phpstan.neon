@@ -16,8 +16,14 @@ includes:
 parameters:
     level: 9
 
+    # bootstrap/ y config/ también (R1-BE-02): config/ es la única capa que lee
+    # env(), y su tipo es mixed; sin analizarla, un rtrim(env(...)) sin cast
+    # llega a producción sin que nadie lo vea. bootstrap/cache lo genera
+    # Laravel y no es código del repositorio.
     paths:
         - app
+        - bootstrap
+        - config
         - database
         - routes
         - tests
@@ -26,6 +32,10 @@ parameters:
     # El cache dentro del proyecto: el contenedor se recrea a menudo y /tmp se
     # va con el. Con esto, un `make quality` repetido no vuelve a analizarlo todo.
     tmpDir: storage/framework/cache/phpstan
+
+    excludePaths:
+        analyseAndScan:
+            - bootstrap/cache
 
     # Sanctum no anota @property en PersonalAccessToken y Larastan no infiere
     # columnas de un modelo de vendor/: sin el stub, el analisis marca sus
