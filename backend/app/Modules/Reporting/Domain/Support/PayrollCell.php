@@ -157,7 +157,10 @@ final readonly class PayrollCell
      */
     private static function counter(PayrollColumn $column, PeriodReportRow $row): string
     {
-        return (string) match ($column) {
+        // El `match` en una variable y no detras de `(string)`: el analizador de
+        // Semgrep no entiende el cast delante de un `match` con `throw`, y deja
+        // el fichero entero a medio leer para las reglas del dominio.
+        $count = match ($column) {
             PayrollColumn::DaysInPeriod => $row->daysInPeriod,
             PayrollColumn::DaysWithActivity => $row->daysWithActivity,
             PayrollColumn::ShiftCount => $row->shiftCount,
@@ -169,6 +172,8 @@ final readonly class PayrollCell
                 'La columna de nomina "'.$column->value.'" no tiene celda definida.',
             ),
         };
+
+        return (string) $count;
     }
 
     /**

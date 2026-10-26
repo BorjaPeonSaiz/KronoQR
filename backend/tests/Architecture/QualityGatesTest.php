@@ -68,6 +68,14 @@ it('exige justificacion en cada supresion de PHPStan', function (): void {
         ->toContain('kronoqr-phpstan-ignore-sin-justificacion');
 })->group('RNF-M-02');
 
+it('hace fallar make sast si Semgrep no entiende un fichero entero', function (): void {
+    // V2-DV-03: un `PartialParsing` deja trozos del dominio sin mirar por las
+    // reglas del reloj, y Semgrep sale con 0. `--strict` lo convierte en fallo.
+    preg_match('/^sast:[^\n]*\n((?:\t[^\n]*\n)+)/m', repoContents('Makefile'), $recipe);
+
+    expect($recipe[1] ?? '')->toMatch('/--config \.semgrep [^\n]*--strict/');
+})->group('RNF-M-02', 'RS-10');
+
 it('exige los umbrales de cobertura del dominio y del backend', function (): void {
     // RNF-M-01: dominio >= 90 %, global >= 75 % (§9.2). Son DOS umbrales, y el
     // `--min` de Pest es uno solo y global: sin la segunda pasada acotada a
