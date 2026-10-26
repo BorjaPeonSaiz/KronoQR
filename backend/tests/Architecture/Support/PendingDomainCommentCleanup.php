@@ -57,7 +57,6 @@ final class PendingDomainCommentCleanup
         'Modules/Compliance/Domain/Exception/InvalidSystemEventPayload.php',
         'Modules/Compliance/Domain/Exception/SiteTimezoneReviewRejected.php',
         'Modules/Compliance/Domain/Model/Incident.php',
-        'Modules/Compliance/Domain/Policy/RetentionPolicy.php',
         'Modules/Compliance/Domain/Support/WorkRecordInstant.php',
         'Modules/Compliance/Domain/ValueObject/AuditAction.php',
         'Modules/Compliance/Domain/ValueObject/AuditActor.php',

@@ -10,7 +10,7 @@ use InvalidArgumentException;
 
 /**
  * El comienzo de una fecha civil `YYYY-MM-DD` en una zona: la unica forma en el
- * dominio de convertir una fecha escrita en un instante (regla dura 2, H4).
+ * dominio de convertir una fecha escrita en un instante (regla dura 2).
  *
  * ## Por que existe
  *

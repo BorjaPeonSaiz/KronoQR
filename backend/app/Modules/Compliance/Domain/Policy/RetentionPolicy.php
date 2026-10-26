@@ -69,7 +69,7 @@ final readonly class RetentionPolicy
         public int $errorHistoryDays,
         /**
          * Anos que se conserva la ficha de una persona dada de baja antes de
-         * minimizarla (ADR-060, tarea 11.3 A). Del perfil de cumplimiento
+         * minimizarla (ADR-060). Del perfil de cumplimiento
          * (`personnel_record_retention_years`); sin valor de serie aqui.
          */
         public int $personnelRecordYears,
@@ -117,7 +117,7 @@ final readonly class RetentionPolicy
 
     /**
      * Ultima fecha de cese cuya ficha ya se puede minimizar, a medianoche UTC
-     * (ADR-060, tarea 11.3 A). Misma aritmetica que {@see self::workRecordCutoff()}
+     * (ADR-060). Misma aritmetica que {@see self::workRecordCutoff()}
      * —el 29 de febrero menos un año no bisiesto da el 1 de marzo, como en
      * `work_record_purge_max_cutoff()`—, con los años de la ficha. La ficha de
      * quien ceso ese mismo dia **si** se minimiza: `terminated_at <= corte`.
@@ -128,8 +128,8 @@ final readonly class RetentionPolicy
     }
 
     /**
-     * Ultima fecha de baja cuya cuenta de gestion ya se puede minimizar (ADR-060,
-     * tarea 11.3 B): los años del registro, porque la cuenta es autora de
+     * Ultima fecha de baja cuya cuenta de gestion ya se puede minimizar
+     * (ADR-060): los años del registro, porque la cuenta es autora de
      * asientos que se conservan ese tiempo. `deactivated_at <= corte`.
      */
     public function managementAccountCutoff(DateTimeImmutable $now): DateTimeImmutable
