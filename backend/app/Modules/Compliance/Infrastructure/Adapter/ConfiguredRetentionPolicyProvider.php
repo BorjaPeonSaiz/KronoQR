@@ -13,6 +13,7 @@ use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use Illuminate\Support\Facades\Config;
+use LogicException;
 
 /**
  * Junta las dos fuentes de los plazos de retencion (regla dura 14, RL-11).
@@ -98,14 +99,19 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
     {
         $policy = $this->forInstallation();
 
+        // `forInstallation()` acaba de resolverlos o lanza: aqui no pueden ser
+        // `null`. Si algun dia lo fueran, el asiento de la purga diria «centro 0»
+        // y «sin jurisdiccion»; mejor fallar que firmar eso (R1-AR-03).
+        $siteId = $this->siteId ?? throw new LogicException('La politica de retencion todavia no tiene centro.');
+        $floor = $this->floor ?? throw new LogicException('La politica de retencion todavia no tiene minimo legal.');
+
         return new RetentionPolicySnapshot(
             legalRecordYears: $policy->legalRecordYears,
             technicalLogDays: $policy->technicalLogDays,
             errorHistoryDays: $policy->errorHistoryDays,
-            // `forInstallation()` acaba de resolverlos: aqui nunca son `null`.
-            siteId: $this->siteId ?? 0,
-            legalRecordFloorYears: $this->floor->years ?? $policy->legalRecordYears,
-            jurisdiction: $this->floor->jurisdiction->code ?? '',
+            siteId: $siteId,
+            legalRecordFloorYears: $floor->years,
+            jurisdiction: $floor->jurisdiction->code,
             personnelRecordYears: $policy->personnelRecordYears,
         );
     }

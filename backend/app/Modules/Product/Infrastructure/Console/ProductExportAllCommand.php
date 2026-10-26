@@ -12,6 +12,7 @@ use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;
@@ -136,7 +137,7 @@ final class ProductExportAllCommand extends Command
         $this->line('  Tamaño:     '.ByteSize::human($export->sizeBytes ?? 0));
         $this->line('  SHA-256:    '.($export->sha256 ?? ''));
         $this->line('  Identificador: '.$export->uuid);
-        $this->line('  Caduca:     '.($export->expiresAt?->format('Y-m-d H:i').' UTC'));
+        $this->line('  Caduca:     '.($export->expiresAt === null ? '' : UtcInstant::wallTime($export->expiresAt)).' UTC');
         $this->newLine();
 
         $this->line('Filas por fichero:');

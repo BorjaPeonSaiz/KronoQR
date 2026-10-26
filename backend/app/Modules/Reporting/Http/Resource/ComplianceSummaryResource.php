@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Http\Resource;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceFinding;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceRuleStatus;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Lang;

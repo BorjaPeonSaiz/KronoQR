@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Domain\Exception\InstantIsNotUtc;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Kiosk\Http\Support\KioskDevice;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
@@ -96,7 +96,7 @@ beforeEach(function (): void {
         // excepcion de dominio solo es un `409` en la ruta de los tramos, y lo
         // que aqui se reproduce es esa situacion completa —el sistema
         // funcionando— y no una excepcion suelta.
-        Route::get('/api/v1/__capture/domain', static fn () => throw ShiftAlreadyOpen::forEmployee('0199a1f0-0000-7000-8000-000000000000'))
+        Route::get('/api/v1/__capture/domain', static fn () => throw ShiftEntryAlreadyOpen::forEmployee('0199a1f0-0000-7000-8000-000000000000'))
             ->name('attendance.shift-entries.__capture');
         // La otra mitad de la decision 1: una excepcion de dominio que NADIE
         // traduce. Vive en `Attendance\Domain\Exception`, o sea en la carpeta que

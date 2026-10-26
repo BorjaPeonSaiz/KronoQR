@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Cuanto del informe se pudo comparar contra un contrato, y cuanto no
  * (**RF-IN-03**).
@@ -35,7 +37,18 @@ final readonly class ContractCoverage
         public int $daysWithoutContract,
         /** Cuantas personas distintas tienen al menos uno de esos dias. */
         public int $employeesWithoutContract,
-    ) {}
+    ) {
+        // Cada persona sin contrato aporta al menos un dia sin el, y no hay dias
+        // negativos: un aviso con «-3 dias», o con personas y sin dias, no se
+        // puede leer en `meta` (H5).
+        if ($daysWithoutContract < 0 || $employeesWithoutContract < 0) {
+            throw new InvalidArgumentException('La cobertura de contratos no cuenta en negativo.');
+        }
+
+        if ($employeesWithoutContract > $daysWithoutContract || ($daysWithoutContract > 0 && $employeesWithoutContract === 0)) {
+            throw new InvalidArgumentException('Cada persona sin contrato tiene al menos un dia sin el, y cada dia es de alguien.');
+        }
+    }
 
     public function isComplete(): bool
     {

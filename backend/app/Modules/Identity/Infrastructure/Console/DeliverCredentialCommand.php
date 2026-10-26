@@ -10,7 +10,9 @@ use App\Modules\Identity\Application\Support\CredentialManagers;
 use App\Modules\Identity\Application\UseCase\DeliverCredential as DeliverCredentialHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use Illuminate\Console\Command;
 
@@ -96,7 +98,7 @@ final class DeliverCredentialCommand extends Command
 
         $this->info('Entrega registrada: '.$delivered->credential->uuid);
         $this->line('Responsable: '.$responsible->email);
-        $this->line('Momento: '.($delivered->credential->deliveredAt?->format('Y-m-d\TH:i:s\Z') ?? '—'));
+        $this->line('Momento: '.(UtcInstant::format($delivered->credential->deliveredAt, UtcPrecision::Seconds) ?? '—'));
         $this->line('Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/runbooks/alta-nuevo-empleado.md');
 
         return self::SUCCESS;

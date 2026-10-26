@@ -89,7 +89,19 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 17 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #202; el 17 es `main` `ffb1cab8`, CI de `main` en verde). **Bloque 18** (`refactor/web-kit-una-sola-logica`): 18.1–18.5 ✅; CI manual y revisiones en curso.
+**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 18 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19** en curso (`refactor/deuda-backend-2.3.0`).
+
+Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
+
+- **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` (hoy en `Shared/Domain/Support`, también lo usa `kiosk:health`), comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
+- **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
+- **19.2:** el CSV y el PDF del registro propio salen de `PersonalRecordLayout` (una lista de columnas, `PersonalRecordFormat` elige cuales y con que rotulos); cada hora lleva su desfase `UTC+HH:MM` de `SiteWallClock::offset` (con prefijo: un `+` suelto lo neutraliza el dialecto CSV): en el CSV siempre, en tres columnas al final (decisión del propietario 25-10); en el PDF solo junto a la hora cuyo desfase no es el habitual del periodo (el más frecuente; en empate, el del inicio), declarado en la cabecera; `PersonalRecordCsvPdfParityTest` compara los dos escritores con los dos cambios de hora. `ExportedShiftEntry` con `ExportedShiftEntryStatus` y `ExportedClockSource` (resto de H5), espejo de los enums de Attendance comprobado por `ExportedShiftEntryTest`.
+- **19.6:** el asiento de la importación entra en su transacción; dos triggers (`shift_entries_guard_duration`, nota del 25-10 en ADR-057) rechazan un tramo que nace o se cierra con otra duración que la de sus marcas (filas antiguas intactas, las denuncia la conciliación).
+- **Pendiente:**
+  - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
+  - seis `new DateTimeImmutable($fecha.' 00:00:00')` del dominio a `createFromFormat('!…')` (19.4);
+  - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
+  - Redis local con el AOF corrupto: Feature/Integration/Contract solo en la CI hasta que el propietario decida repararlo.
 
 Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
 
@@ -249,7 +261,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción:** cerrar el bloque 18 (18.1–18.5), CI manual, revisiones, PR y merge; después, sin preguntar, el bloque 19.
+**Siguiente acción:** bloque 19 (deuda de backend, L, divisible en 19a/19b): 19.1–19.9, CI manual, revisiones, PR y merge.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

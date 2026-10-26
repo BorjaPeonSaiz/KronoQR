@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Domain;
 
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
+use InvalidArgumentException;
 
 /**
  * La cadena de hash de la auditoria (doc 02 §7.4, RS-07, ADR-010).
@@ -60,9 +61,21 @@ final class AuditChain
      * `genesisHash()` si no hay ninguna. **Quien lo averigua es el adaptador**,
      * dentro de la transaccion y con el candado que serializa los apuntes: el
      * dominio no consulta la tabla.
+     *
+     * **Aqui se exige la forma del eslabon anterior**, y no al leer una fila: un
+     * `$previousHash` vacio, truncado o en mayusculas seria una fila que el
+     * `CHECK` de `audit_log.prev_hash` rechaza a destiempo, o peor, sin el
+     * `CHECK`, un eslabon que nunca verifica. El hash propio lo calcula
+     * {@see self::hashFor()} y siempre tiene la forma.
+     *
+     * @throws InvalidArgumentException si `$previousHash` no es un SHA-256 en hexadecimal minusculo
      */
     public static function link(AuditEntryDraft $draft, string $previousHash): AuditEntry
     {
+        if (! AuditEntry::isWellFormedHash($previousHash)) {
+            throw new InvalidArgumentException('El hash anterior de un asiento de auditoria es un SHA-256 en hexadecimal minusculo.');
+        }
+
         return new AuditEntry($draft, $previousHash, self::hashFor($draft, $previousHash));
     }
 

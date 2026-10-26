@@ -16,6 +16,7 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
+use App\Modules\Workforce\Application\Port\EmployeeCodeGenerator;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
@@ -23,6 +24,7 @@ use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Application\Port\ManagementAccountLookup;
 use App\Modules\Workforce\Application\Port\ParentRowLocks;
+use App\Modules\Workforce\Application\Port\PinCandidateSource;
 use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
@@ -52,6 +54,8 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelPinHasher;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
+use App\Modules\Workforce\Infrastructure\Adapter\RandomEmployeeCodeGenerator;
+use App\Modules\Workforce\Infrastructure\Adapter\RandomPinCandidateSource;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
 use App\Modules\Workforce\Infrastructure\Console\CorrectSiteTimezoneCommand;
@@ -91,6 +95,11 @@ final class WorkforceServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(EmployeeRepository::class, EloquentEmployeeRepository::class);
+
+        // H8: el azar del codigo de empleado, fuera del dominio y probado aparte.
+        $this->app->bind(EmployeeCodeGenerator::class, RandomEmployeeCodeGenerator::class);
+        // H8: el azar de los PIN candidatos, con el mismo criterio.
+        $this->app->bind(PinCandidateSource::class, RandomPinCandidateSource::class);
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
 

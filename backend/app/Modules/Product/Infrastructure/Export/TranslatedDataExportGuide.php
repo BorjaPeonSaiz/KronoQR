@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Export;
 
 use App\Modules\Product\Application\Port\DataExportGuide;
-use App\Modules\Product\Domain\ValueObject\DataExportCatalog;
+use App\Modules\Product\Domain\Support\DataExportCatalog;
 use App\Modules\Product\Domain\ValueObject\DataExportManifest;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
 use App\Modules\Shared\Application\Port\BrandingProvider;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Contracts\Translation\Translator;
 

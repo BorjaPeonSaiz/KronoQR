@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
+use App\Modules\Product\Domain\Support\ErrorContextAllowlist;
 use Tests\Architecture\Support\Repo;
 
 /*

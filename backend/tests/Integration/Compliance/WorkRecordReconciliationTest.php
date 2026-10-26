@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
@@ -169,7 +169,7 @@ function registroAuditadoLegitimo(array $escenario): array
     registroAuditadoFichar($escenario, WORK_RECORD_RECONCILIATION_TARJETA_A, '2026-10-07T14:00:00Z');
     $original = registroAuditadoTramo($escenario['employee'], '2026-10-07 06:00');
 
-    $corregido = resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    $corregido = resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $original,
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-10-07 14:30'),
@@ -182,7 +182,7 @@ function registroAuditadoLegitimo(array $escenario): array
     registroAuditadoFichar($escenario, WORK_RECORD_RECONCILIATION_TARJETA_A, '2026-10-07T17:00:00Z');
     $anulado = registroAuditadoTramo($escenario['employee'], '2026-10-07 15:00');
 
-    resolve(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+    resolve(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
         shiftEntryUuid: $anulado,
         reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
         performedByUserId: $escenario['autor'],
@@ -218,14 +218,14 @@ function registroAuditadoLegitimo(array $escenario): array
     // D: correcciones encadenadas v1 -> v2 -> v3 sobre la misma jornada...
     registroAuditadoFichar($escenario, WORK_RECORD_RECONCILIATION_TARJETA_D, '2026-10-07T07:00:00Z');
     registroAuditadoFichar($escenario, WORK_RECORD_RECONCILIATION_TARJETA_D, '2026-10-07T15:00:00Z');
-    $v2 = resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    $v2 = resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: registroAuditadoTramo($escenario['cuarta'], '2026-10-07 07:00'),
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-10-07 15:30'),
         reason: CorrectionReason::fromCode('OLVIDO_FICHAJE_SALIDA'),
         performedByUserId: $escenario['autor'],
     ))->shiftEntryUuid;
-    resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $v2,
         clockedInAt: Instants::utc('2026-10-07 06:30'),
         clockedOutAt: null,
@@ -245,7 +245,7 @@ function registroAuditadoLegitimo(array $escenario): array
         reason: CorrectionReason::fromCode('OLVIDO_FICHAJE_ENTRADA'),
         performedByUserId: $escenario['autor'],
     ));
-    resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: registroAuditadoTramo($escenario['cuarta'], '2026-09-25 07:00'),
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-09-25 15:15'),
@@ -414,14 +414,14 @@ it('vuelve a cuadrar cuando se remedia desde el panel, como dice el runbook, y d
 
     expect(registroAuditadoConciliar()['code'])->toBe(1);
 
-    resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $tramos['corregido'],
         clockedInAt: Instants::utc('2026-10-07 06:00'),
         clockedOutAt: null,
         reason: CorrectionReason::fromCode('OTROS', 'Incidente de seguridad: hora devuelta a la del asiento.'),
         performedByUserId: $escenario['autor'],
     ));
-    resolve(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+    resolve(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
         shiftEntryUuid: $inventado,
         reason: CorrectionReason::fromCode('OTROS', 'Incidente de seguridad: tramo que nadie ficho.'),
         performedByUserId: $escenario['autor'],

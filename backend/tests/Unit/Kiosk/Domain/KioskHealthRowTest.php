@@ -8,7 +8,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReason;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthVerdict;
-use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
+use App\Modules\Shared\Domain\ValueObject\QueueStorage;
 
 /*
  * El veredicto de un quiosco, juzgado directamente sobre la clase que lo decide

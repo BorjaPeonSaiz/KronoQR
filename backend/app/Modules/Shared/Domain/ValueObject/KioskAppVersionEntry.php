@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Una tablet de {@see KioskAppVersionSurvey}: su `uuid`, la version que declara
  * y el estado de su cola segun su ultimo latido (RF-KI-07, ADR-047).
@@ -18,21 +20,29 @@ namespace App\Modules\Shared\Domain\ValueObject;
  */
 final readonly class KioskAppVersionEntry
 {
-    private const string DURABLE = 'durable';
-
     public function __construct(
         public string $deviceUuid,
         /** La `app_version` del ultimo latido; `null` si no la declaro. */
         public ?string $appVersion,
-        /** `durable`, `memory` o `unavailable` (ADR-047), tal y como lo declaro la tablet. */
-        public string $queueStorage,
+        /** Donde guarda la cola, tal y como lo declaro la tablet (ADR-047). */
+        public QueueStorage $queueStorage,
         /** Fichajes pendientes declarados; `null` si la tablet no lo sabe. */
         public ?int $pendingQueueSize,
-    ) {}
+    ) {
+        // Una tablet sin `uuid` no se encuentra en el panel, y una cola de
+        // menos uno no esta «vacia»: diria que se puede recargar (V21-1-AR-4).
+        if ($deviceUuid === '') {
+            throw new InvalidArgumentException('La tablet del sondeo de versiones lleva su uuid.');
+        }
+
+        if ($pendingQueueSize !== null && $pendingQueueSize < 0) {
+            throw new InvalidArgumentException('Una tablet no puede tener '.$pendingQueueSize.' fichajes pendientes.');
+        }
+    }
 
     /** Cola en disco y vacia: recargar no se lleva ningun fichaje. */
     public function isReadyToReload(): bool
     {
-        return $this->queueStorage === self::DURABLE && $this->pendingQueueSize === 0;
+        return $this->queueStorage->isDurable() && $this->pendingQueueSize === 0;
     }
 }

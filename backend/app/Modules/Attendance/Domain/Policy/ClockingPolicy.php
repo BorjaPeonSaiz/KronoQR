@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\Exception\InvalidClockingPolicy;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 
 /**
@@ -63,18 +63,18 @@ final readonly class ClockingPolicy
      * Lo que tiene de raro esta duracion, si algo. Lista vacia cuando el tramo
      * es normal, que es el caso de casi todos.
      *
-     * @return list<ShiftAnomaly>
+     * @return list<ShiftEntryAnomaly>
      */
     public function anomaliesFor(WorkedDuration $worked): array
     {
         $anomalies = [];
 
         if ($this->isTooShort($worked)) {
-            $anomalies[] = ShiftAnomaly::SHORT_SHIFT;
+            $anomalies[] = ShiftEntryAnomaly::SHORT_SHIFT;
         }
 
         if ($this->isTooLong($worked)) {
-            $anomalies[] = ShiftAnomaly::LONG_SHIFT;
+            $anomalies[] = ShiftEntryAnomaly::LONG_SHIFT;
         }
 
         return $anomalies;

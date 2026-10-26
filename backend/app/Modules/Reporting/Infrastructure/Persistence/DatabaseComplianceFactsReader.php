@@ -8,7 +8,7 @@ use App\Modules\Reporting\Application\Port\ComplianceFactsReader;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceEmployee;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceFacts;
-use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummaryQuery;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceWeek;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
@@ -274,10 +274,10 @@ final readonly class DatabaseComplianceFactsReader implements ComplianceFactsRea
             previousLastOutAt: $reader->nullableInstant('previous_last_out_at'),
             totalMinutes: $reader->int('total_minutes'),
             hasOpenShift: $reader->bool('has_open_shift'),
-            longestClosedSegment: $longestUuid !== null
+            longestClosedEntry: $longestUuid !== null
                 && $longestIn instanceof DateTimeImmutable
                 && $longestOut instanceof DateTimeImmutable
-                    ? new ComplianceShiftSegment($longestUuid, $longestIn, $longestOut)
+                    ? new ComplianceShiftEntry($longestUuid, $longestIn, $longestOut)
                     : null,
             openingShiftEntryUuid: $reader->nullableString('opening_shift_entry_uuid'),
         );

@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Domain\Event;
 
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Se ha revocado una credencial (RF-QR-03).
@@ -30,7 +31,13 @@ final readonly class CredentialRevoked implements DomainEvent
         /** Quien la revoco, o `null` si fue un comando de consola sin persona detras. */
         public ?int $actorUserId,
         private DateTimeImmutable $occurredAt,
-    ) {}
+    ) {
+        // Es el `subject_id` del asiento: sin fila no hay sujeto, y un cero
+        // dejaria un asiento sobre el sujeto 0 en lugar de fallar (R1-AR-03).
+        if ($credentialId <= 0) {
+            throw new InvalidArgumentException('El hecho sobre la credencial necesita el identificador de su fila, y llego '.$credentialId.'.');
+        }
+    }
 
     public function eventName(): string
     {

@@ -8,7 +8,7 @@ use Tests\Architecture\Support\ModuleTree;
  * **UNA SOLA REGLA DE MINUTOS** (RN-09, RN-10; bloque 19 de la 2.2.1, ADR-055 §3).
  *
  * Los minutos entre dos instantes se calculaban en cinco sitios del dominio
- * —`TimeRange`, `ComplianceShiftSegment`, `ComplianceFacts`,
+ * —`TimeRange`, `ComplianceShiftEntry`, `ComplianceFacts`,
  * `AnomalyDetectionPolicy` y `WorkRecordReconciliation`— con la misma resta de
  * `getTimestamp()` dividida entre sesenta, y una prueba que ataba las copias.
  * Ahora la regla vive en `Shared\Domain\ValueObject\ElapsedMinutes` y esta

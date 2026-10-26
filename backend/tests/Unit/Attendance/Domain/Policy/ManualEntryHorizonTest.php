@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Domain\Exception\InstantIsNotUtc;
 use App\Modules\Attendance\Domain\Exception\InvalidFutureTolerance;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 
 /*
@@ -29,28 +29,28 @@ function instanteF1(string $iso): DateTimeImmutable
 }
 
 /** La excepcion que lanza `$accion`; si no lanza ninguna, la prueba falla. */
-function rechazoF1(Closure $accion): ShiftMarkInFuture
+function rechazoF1(Closure $accion): ShiftEntryMarkInFuture
 {
     try {
         $accion();
-    } catch (ShiftMarkInFuture $exception) {
+    } catch (ShiftEntryMarkInFuture $exception) {
         return $exception;
     }
 
-    throw new RuntimeException('Se esperaba ShiftMarkInFuture y no se lanzo nada.');
+    throw new RuntimeException('Se esperaba ShiftEntryMarkInFuture y no se lanzo nada.');
 }
 
 it('admite una marca exactamente en el limite y rechaza la del segundo siguiente', function (): void {
     $horizon = horizonteF1();
 
-    $horizon->assertTimesAllowed(ShiftTimes::open(instanteF1('2026-03-14T10:05:00Z')));
+    $horizon->assertTimesAllowed(ShiftEntryTimes::open(instanteF1('2026-03-14T10:05:00Z')));
 
-    expect(fn () => $horizon->assertTimesAllowed(ShiftTimes::open(instanteF1('2026-03-14T10:05:01Z'))))
-        ->toThrow(ShiftMarkInFuture::class);
+    expect(fn () => $horizon->assertTimesAllowed(ShiftEntryTimes::open(instanteF1('2026-03-14T10:05:01Z'))))
+        ->toThrow(ShiftEntryMarkInFuture::class);
 })->group('RF-PA-04', 'RL-04');
 
 it('dice cual de las dos marcas es la futura', function (string $in, string $out, FutureMark $esperada): void {
-    $exception = rechazoF1(fn () => horizonteF1()->assertTimesAllowed(ShiftTimes::closed(instanteF1($in), instanteF1($out))));
+    $exception = rechazoF1(fn () => horizonteF1()->assertTimesAllowed(ShiftEntryTimes::closed(instanteF1($in), instanteF1($out))));
 
     expect($exception->mark)->toBe($esperada)
         ->and($exception->translationKey)->toBe('attendance.errors.mark_in_future')
@@ -63,8 +63,8 @@ it('dice cual de las dos marcas es la futura', function (string $in, string $out
 it('admite un tramo cerrado del pasado y uno abierto que empezo hace un rato', function (): void {
     $horizon = horizonteF1();
 
-    $horizon->assertTimesAllowed(ShiftTimes::closed(instanteF1('2026-03-13T22:00:00Z'), instanteF1('2026-03-14T06:00:00Z')));
-    $horizon->assertTimesAllowed(ShiftTimes::open(instanteF1('2026-03-14T09:30:00Z')));
+    $horizon->assertTimesAllowed(ShiftEntryTimes::closed(instanteF1('2026-03-13T22:00:00Z'), instanteF1('2026-03-14T06:00:00Z')));
+    $horizon->assertTimesAllowed(ShiftEntryTimes::open(instanteF1('2026-03-14T09:30:00Z')));
 
     expect($horizon->latestAcceptable->format(DATE_ATOM))->toBe('2026-03-14T10:05:00+00:00');
 })->group('RF-PA-04', 'RL-04');
@@ -72,10 +72,10 @@ it('admite un tramo cerrado del pasado y uno abierto que empezo hace un rato', f
 it('con margen cero no admite ni un segundo por delante del servidor', function (): void {
     $horizon = horizonteF1(minutes: 0);
 
-    $horizon->assertTimesAllowed(ShiftTimes::open(instanteF1('2026-03-14T10:00:00Z')));
+    $horizon->assertTimesAllowed(ShiftEntryTimes::open(instanteF1('2026-03-14T10:00:00Z')));
 
-    expect(fn () => $horizon->assertTimesAllowed(ShiftTimes::open(instanteF1('2026-03-14T10:00:01Z'))))
-        ->toThrow(ShiftMarkInFuture::class);
+    expect(fn () => $horizon->assertTimesAllowed(ShiftEntryTimes::open(instanteF1('2026-03-14T10:00:01Z'))))
+        ->toThrow(ShiftEntryMarkInFuture::class);
 })->group('RF-PA-04', 'RL-04');
 
 it('rechaza un margen negativo al construirse', function (): void {
@@ -112,5 +112,5 @@ it('sin margen, la jornada de manana en la zona del centro todavia no ha empezad
     $horizon->assertWorkDateAllowed(WorkDate::fromIsoDate('2026-03-15', new DateTimeZone('Asia/Tokyo')));
 
     expect(fn () => $horizon->assertWorkDateAllowed(WorkDate::fromIsoDate('2026-03-15', new DateTimeZone('Europe/Madrid'))))
-        ->toThrow(ShiftMarkInFuture::class);
+        ->toThrow(ShiftEntryMarkInFuture::class);
 })->group('RF-PA-04', 'RN-04');

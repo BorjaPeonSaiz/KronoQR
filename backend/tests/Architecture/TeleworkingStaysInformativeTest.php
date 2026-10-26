@@ -43,7 +43,7 @@ const TELEWORKING_INFORMATIVE_ALLOWED = [
     'Workforce/Http/Request/UpdateEmployeeRequest.php' => 'la modificacion',
     'Workforce/Http/Resource/EmployeeResource.php' => 'la ficha en la API',
     'Compliance/Infrastructure/Listener/RecordWorkforceChange.php' => 'el asiento employee.hired',
-    'Product/Domain/ValueObject/DataExportCatalog.php' => 'la exportacion integra (RF-PD-14, RL-20)',
+    'Product/Domain/Support/DataExportCatalog.php' => 'la exportacion integra (RF-PD-14, RL-20)',
     'Product/Infrastructure/Persistence/DatabaseDataExportSource.php' => 'la exportacion integra (RF-PD-14, RL-20)',
 ];
 

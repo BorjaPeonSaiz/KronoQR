@@ -7,7 +7,7 @@ namespace App\Modules\Kiosk\Infrastructure\Persistence;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\ProvisionedDevice;
-use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
+use App\Modules\Shared\Domain\ValueObject\QueueStorage;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\QueryException;

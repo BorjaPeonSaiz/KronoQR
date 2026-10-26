@@ -79,7 +79,7 @@ final readonly class RevokeCredential
             $this->credentials->save($revoked);
 
             $this->events->publish(new CredentialRevoked(
-                credentialId: $revoked->id ?? 0,
+                credentialId: $revoked->persistedId(),
                 credentialUuid: $revoked->uuid,
                 employeeUuid: $employeeUuid,
                 reason: (string) $revoked->revokedReason,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Domain\ValueObject;
 
 use App\Modules\Workforce\Domain\Exception\InvalidEmployeeCode;
+use InvalidArgumentException;
 
 /**
  * El codigo de empleado: **opaco y aleatorio** (doc 01 §5.5, RF-ID-06).
@@ -21,7 +22,7 @@ use App\Modules\Workforce\Domain\Exception\InvalidEmployeeCode;
  * un codigo bien leido, y se ahorran las llamadas al responsable que ese
  * problema genera.
  *
- * **Generacion y lectura tienen reglas distintas, a proposito.** `generate()`
+ * **Generacion y lectura tienen reglas distintas, a proposito.** `fromRandomPicks()`
  * produce la forma canonica; `fromString()` acepta cualquier codigo alfanumerico
  * en mayusculas, porque tiene que poder leer los que ya existen en la base de
  * datos de una instalacion —importados de otro sistema o creados por una version
@@ -37,7 +38,10 @@ final readonly class EmployeeCode
     private const string ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     /** Longitud de la parte aleatoria. 31^9 combinaciones: ~2,6·10^13. */
-    private const int RANDOM_LENGTH = 9;
+    public const int RANDOM_LENGTH = 9;
+
+    /** Cuantos caracteres tiene el alfabeto: las posiciones van de 0 a 30. */
+    public const int ALPHABET_SIZE = 31;
 
     private const int MAX_LENGTH = 32;
 
@@ -66,26 +70,39 @@ final readonly class EmployeeCode
     }
 
     /**
-     * Un codigo nuevo, aleatorio y sin relacion con ningun dato de la persona.
+     * Un codigo nuevo a partir de las posiciones del alfabeto que le den: una
+     * por caracter de la parte aleatoria, de `0` a `ALPHABET_SIZE - 1`.
      *
-     * Usa `random_int`, que es el generador criptografico del sistema y no
-     * `rand()`: un codigo predecible se puede enumerar, y con el se puede pedir
-     * el registro horario de otra persona en el portal antes de que el PIN entre
-     * en juego.
+     * **La aleatoriedad no se genera aqui.** `random_int` es un efecto y el
+     * dominio es deterministico (la misma razon que la regla dura 2 con el
+     * reloj, H8): las produce el adaptador del puerto
+     * `Workforce\Application\Port\EmployeeCodeGenerator` con el generador
+     * criptografico del sistema, y no `rand()`: un codigo predecible se puede
+     * enumerar, y con el se puede pedir el registro horario de otra persona en
+     * el portal antes de que el PIN entre en juego. Aqui se decide solo la
+     * forma, y una prueba puede fijarla caracter a caracter.
      *
      * **No consulta si el codigo ya existe.** La unicidad la garantiza el UNIQUE
      * de `employees.employee_code`; un `SELECT` previo seria una condicion de
      * carrera con aspecto de comprobacion. Quien llama reintenta si la base de
      * datos rechaza el choque.
+     *
+     * @param  list<int>  $picks
      */
-    public static function generate(): self
+    public static function fromRandomPicks(array $picks): self
     {
-        $alphabet = self::ALPHABET;
-        $last = mb_strlen($alphabet) - 1;
+        if (\count($picks) !== self::RANDOM_LENGTH) {
+            throw new InvalidArgumentException('Un codigo de empleado nuevo lleva '.self::RANDOM_LENGTH.' caracteres aleatorios.');
+        }
+
         $code = 'E';
 
-        for ($i = 0; $i < self::RANDOM_LENGTH; $i++) {
-            $code .= $alphabet[random_int(0, $last)];
+        foreach ($picks as $pick) {
+            if ($pick < 0 || $pick >= self::ALPHABET_SIZE) {
+                throw new InvalidArgumentException('La posicion '.$pick.' no esta en el alfabeto del codigo de empleado.');
+            }
+
+            $code .= self::ALPHABET[$pick];
         }
 
         return new self($code);

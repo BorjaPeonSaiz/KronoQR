@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Controller;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Http\Request\VoidShiftEntryRequest;
 use App\Modules\Attendance\Http\Resource\CorrectedShiftEntryResource;
 use App\Modules\Attendance\Http\Support\CorrectionTelemetry;
@@ -38,7 +38,7 @@ final class VoidShiftEntryController extends Controller
     public function __invoke(
         VoidShiftEntryRequest $request,
         string $uuid,
-        VoidShiftHandler $handler,
+        VoidShiftEntryHandler $handler,
         CorrectionTelemetry $telemetry,
     ): JsonResponse {
         $command = $request->toCommand($uuid);

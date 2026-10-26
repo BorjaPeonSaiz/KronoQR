@@ -115,7 +115,7 @@ final readonly class ComplianceFinding
     public static function missingBreak(
         ComplianceEmployee $employee,
         string $workDate,
-        ComplianceShiftSegment $segment,
+        ComplianceShiftEntry $entry,
         int $thresholdMinutes,
         bool $hasOpenShift,
     ): self {
@@ -124,10 +124,10 @@ final readonly class ComplianceFinding
             employee: $employee,
             workDate: $workDate,
             week: null,
-            measuredMinutes: $segment->minutes(),
+            measuredMinutes: $entry->minutes(),
             thresholdMinutes: $thresholdMinutes,
-            differenceMinutes: $segment->minutes() - $thresholdMinutes,
-            shiftEntryUuid: $segment->uuid,
+            differenceMinutes: $entry->minutes() - $thresholdMinutes,
+            shiftEntryUuid: $entry->uuid,
             hasOpenShift: $hasOpenShift,
         );
     }

@@ -7,10 +7,13 @@ use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
+use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\QueryPlans;
+use Tests\Support\Database\RefreshDatabaseAsOwner;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -49,7 +52,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * unitaria tiene presupuesto de duracion y esto no cabria en el.
  */
 
-uses(RefreshDatabase::class);
+// En la sesion del rol dueño de las tablas y dentro de una transaccion que se
+// deshace: es lo que deja a `ANALYZE` ver lo sembrado sin que sus estadisticas
+// sobrevivan a la prueba (ver RefreshDatabaseAsOwner, que cuenta el fallo de
+// la CI de la 19a que lo motivo).
+uses(RefreshDatabaseAsOwner::class);
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS = 500;
@@ -138,15 +145,51 @@ function volumenDeInforme(string $primerDia = PRIMER_DIA, int $dias = DIAS): arr
     // Sin esto, el planificador trabaja con las estadisticas de una tabla vacia
     // y elige un plan que no tiene nada que ver con el de produccion: la prueba
     // mediria el plan equivocado y pasaria o fallaria por casualidad.
-    DB::statement('ANALYZE daily_totals');
-    DB::statement('ANALYZE employees');
-    DB::statement('ANALYZE employment_contracts');
+    //
+    // Con el rol de migracion, que es el dueño, y en la misma sesion que sembro
+    // (RefreshDatabaseAsOwner). {@see QueryPlans::analyze()} falla si no
+    // deja estadisticas, que es lo que pasaba en silencio con el de la aplicacion.
+    QueryPlans::analyze('daily_totals', 'employees', 'employment_contracts', 'departments');
 
     return [
         'site' => $site,
         'from' => '2026-01-01',
         'to' => '2026-01-31',
     ];
+}
+
+/**
+ * `EXPLAIN (ANALYZE, BUFFERS)` de una sentencia y el estado de las tablas del
+ * informe, como texto para la salida de la prueba: con el reloj solo se sabe
+ * que tardo; con esto, por que.
+ *
+ * @param  array<int, mixed>  $bindings
+ */
+function periodReportVolumeDiagnosis(string $sql, array $bindings): string
+{
+    $plan = array_map(static function (object $fila): string {
+        $linea = get_object_vars($fila)['QUERY PLAN'] ?? '';
+
+        return is_scalar($linea) ? (string) $linea : '';
+    }, DB::select('EXPLAIN (ANALYZE, BUFFERS) '.$sql, $bindings));
+
+    $tablas = array_map(static fn (object $fila): string => implode(' ', array_map(
+        static fn (mixed $valor): string => is_scalar($valor) ? (string) $valor : 'null',
+        get_object_vars($fila),
+    )), DB::select(<<<'SQL'
+        SELECT s.relname,
+               'live=' || s.n_live_tup AS live, 'dead=' || s.n_dead_tup AS dead,
+               'reltuples=' || c.reltuples AS reltuples, 'relpages=' || c.relpages AS relpages,
+               'analyze=' || COALESCE(s.last_analyze::text, '-') AS analyzed,
+               'autoanalyze=' || COALESCE(s.last_autoanalyze::text, '-') AS autoanalyzed,
+               'autovacuum=' || COALESCE(s.last_autovacuum::text, '-') AS autovacuumed
+          FROM pg_stat_user_tables s
+          JOIN pg_class c ON c.oid = s.relid
+         WHERE s.relname IN ('daily_totals', 'employees', 'employment_contracts', 'absences', 'departments', 'shift_entries')
+         ORDER BY s.relname
+        SQL));
+
+    return "RNF-P-05 plan:\n  ".implode("\n  ", $plan)."\nRNF-P-05 tablas:\n  ".implode("\n  ", $tablas)."\n";
 }
 
 it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-05', function (): void {
@@ -164,16 +207,59 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
         employeeUuid: null,
     );
 
+    // El desglose de lo medido, para que un fallo diga DONDE se fue el tiempo.
+    // En local el caso de uso entero cuesta ~0,07 s, y en la CI de la 19a cayo
+    // tres veces seguidas con 5,7-5,8 s y el mismo codigo: o espera
+    // PostgreSQL, o espera Redis (la metrica del caso de uso se escribe dentro
+    // de lo cronometrado), o es PHP. Escuchar no cambia lo medido: son quince
+    // sentencias y una observacion.
+    /** @var list<array{sql: string, bindings: array<int, mixed>, ms: float}> $sentencias */
+    $sentencias = [];
+    DB::listen(static function (QueryExecuted $sentencia) use (&$sentencias): void {
+        $sentencias[] = ['sql' => $sentencia->sql, 'bindings' => array_values($sentencia->bindings), 'ms' => $sentencia->time];
+    });
+
+    $metrica = 0.0;
+    $anotar = static function (float $segundos) use (&$metrica): void {
+        $metrica += $segundos;
+    };
+    app()->extend(UseCaseMetrics::class, static fn (UseCaseMetrics $real): UseCaseMetrics => new readonly class($real, $anotar) implements UseCaseMetrics
+    {
+        /** @param  Closure(float): void  $anotar */
+        public function __construct(private UseCaseMetrics $real, private Closure $anotar) {}
+
+        public function observe(string $useCase, string $outcome, float $seconds): void
+        {
+            $empezo = microtime(true);
+            $this->real->observe($useCase, $outcome, $seconds);
+            ($this->anotar)(microtime(true) - $empezo);
+        }
+    });
+
     $empezo = microtime(true);
     $informe = $caso->handle($consulta, maxRangeDays: 92, maxRows: 20000);
     $tardo = microtime(true) - $empezo;
 
     // La cifra medida se deja a mano con `KRONOQR_PRINT_PLAN=1`, igual que el
     // plan: es el numero que se pega en el informe de la tarea y el que hay que
-    // volver a mirar el dia que alguien toque la consulta.
-    if (getenv('KRONOQR_PRINT_PLAN') !== false) {
+    // volver a mirar el dia que alguien toque la consulta. Por encima del
+    // presupuesto sale siempre, con el desglose.
+    if (getenv('KRONOQR_PRINT_PLAN') !== false || $tardo >= 5.0) {
+        $sql = array_sum(array_column($sentencias, 'ms')) / 1000;
+        usort($sentencias, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
+        $lenta = $sentencias[0] ?? ['sql' => '-', 'bindings' => [], 'ms' => 0.0];
+
         fwrite(STDOUT, 'RNF-P-05: informe mensual de '.EMPLEADOS.' empleados en '
-            .round($tardo, 3)." s\n");
+            .round($tardo, 3).' s (SQL '.round($sql, 3).' s en '.\count($sentencias).' sentencias, la mas lenta '
+            .round($lenta['ms'], 1).' ms «'.mb_substr((string) preg_replace('/\s+/', ' ', $lenta['sql']), 0, 60).'»; '
+            .'metrica en Redis '.round($metrica, 3).' s; resto '
+            .round($tardo - $sql - $metrica, 3)." s)\n");
+
+        // Por encima del presupuesto, ademas, el plan de la sentencia mas lenta
+        // y el estado de las tablas que lee (y con `KRONOQR_PRINT_PLAN=1`).
+        if ($lenta['sql'] !== '-') {
+            fwrite(STDOUT, periodReportVolumeDiagnosis($lenta['sql'], $lenta['bindings']));
+        }
     }
 
     expect($informe->rowCount())->toBe(EMPLEADOS)

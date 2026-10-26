@@ -95,3 +95,55 @@ it('no conoce el puerto Clock desde el dominio', function (): void {
 
     expect($offenders)->toBe([]);
 })->group('RNF-M-03');
+
+it('no pasa un texto libre al analizador de fechas de PHP en el dominio (V1-AR-2)', function (): void {
+    // `new DateTimeImmutable($texto)` acepta `"now"`, `"tomorrow"` o `"+1 week"`
+    // y entonces lee el reloj del proceso aunque no lo parezca: el argumento es
+    // una variable y ni la lista de funciones de arriba ni Semgrep (que busca
+    // el `'now'` literal) lo ven. Un texto que llega de fuera se lee con
+    // `UtcInstant::parse()` o `createFromFormat('!…')`, que solo admiten un
+    // instante escrito. Lo que queda en el dominio compone la cadena con una
+    // fecha ya validada (`WorkDate`, `IsoWeek`…); que tambien pase a
+    // `createFromFormat('!…')` es de la tarea 19.4 (V1-AR-1).
+    $offenders = [];
+
+    foreach (domainFiles() as $file) {
+        $source = (string) file_get_contents($file);
+
+        if (preg_match('/new\s+\\\\?DateTime(?:Immutable)?\s*\(\s*\$\w+\s*[,)]|(?<![\w>:$])date_create(?:_immutable)?\s*\(/', $source) === 1) {
+            $offenders[] = ModuleTree::relative($file);
+        }
+    }
+
+    expect($offenders)->toBe([]);
+})->group('RNF-M-03');
+
+it('no produce aleatoriedad en el dominio (H8)', function (): void {
+    // El azar es un efecto, como el reloj: un dominio que lo produce por su
+    // cuenta no se puede probar caracter a caracter. Lo ponen los adaptadores de
+    // `CredentialSecretFactory` y `EmployeeCodeGenerator`. Se miran los tokens y
+    // no el texto, para que los comentarios que explican por que no se usa
+    // `random_int()` no cuenten como uso.
+    $forbidden = ['random_int', 'random_bytes', 'rand', 'mt_rand', 'mt_srand', 'srand', 'lcg_value', 'uniqid', 'shuffle', 'str_shuffle', 'array_rand'];
+    $offenders = [];
+
+    foreach (domainFiles() as $file) {
+        $tokens = array_values(array_filter(
+            PhpToken::tokenize((string) file_get_contents($file)),
+            static fn (PhpToken $token): bool => ! $token->isIgnorable(),
+        ));
+
+        foreach ($tokens as $i => $token) {
+            $previous = $tokens[$i - 1] ?? null;
+
+            if ($token->is([T_STRING, T_NAME_FULLY_QUALIFIED])
+                && \in_array(strtolower(ltrim($token->text, '\\')), $forbidden, true)
+                && ($tokens[$i + 1] ?? null)?->text === '('
+                && ! $previous?->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NEW])) {
+                $offenders[] = ModuleTree::relative($file).' llama a '.$token->text.'()';
+            }
+        }
+    }
+
+    expect($offenders)->toBe([]);
+})->group('RNF-M-03');

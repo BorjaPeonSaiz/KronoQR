@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -266,7 +266,7 @@ it('incluye las correcciones con su autor, su fecha y su motivo', function (): v
 
     $abierto = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-10', '2026-03-10 06:00', null);
 
-    $corregido = app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    $corregido = app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $abierto,
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-03-10 14:00'),
@@ -316,7 +316,7 @@ it('enseña los tramos anulados sin sumarlos al total de la jornada', function (
     tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-11', '2026-03-11 06:00', '2026-03-11 14:00');
     $duplicado = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-11', '2026-03-11 15:00', '2026-03-11 15:10');
 
-    app(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+    app(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
         shiftEntryUuid: $duplicado,
         reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
         performedByUserId: $contexto['author']->id,
@@ -487,7 +487,7 @@ it('escribe el mismo documento en ingles si la instalacion trabaja en ingles', f
 
     $tramo = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-18', '2026-03-18 06:00', null);
 
-    app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $tramo,
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-03-18 14:00'),
@@ -532,7 +532,7 @@ it('cuenta de antemano las mismas filas que recorre, con correcciones y anulados
     $employee = WorkforceFixtures::employee($contexto['site']);
 
     $abierto = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-10', '2026-03-10 06:00', null);
-    app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $abierto,
         clockedInAt: null,
         clockedOutAt: Instants::utc('2026-03-10 14:00'),
@@ -540,7 +540,7 @@ it('cuenta de antemano las mismas filas que recorre, con correcciones y anulados
         performedByUserId: $contexto['author']->id,
     ));
     $duplicado = tramoDeJornadaExportable($contexto['site'], $employee, '2026-03-11', '2026-03-11 15:00', '2026-03-11 15:10');
-    app(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+    app(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
         shiftEntryUuid: $duplicado,
         reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
         performedByUserId: $contexto['author']->id,

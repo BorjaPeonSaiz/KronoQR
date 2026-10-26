@@ -133,28 +133,38 @@ final readonly class ApplyEmployeeImport
             $departments = $this->directory->departmentsByNormalisedName();
             $this->parentRows->shareDepartments(array_values($departments));
 
-            return $this->applyRows($report, $departments);
-        });
+            $rows = $this->applyRows($report, $departments);
 
-        // El asiento del LOTE se publica DESPUES de confirmar, igual que el resto
-        // de eventos de este modulo: un asiento de una carga que luego revierte
-        // dejaria en el trail una plantilla que no existe. Los asientos de cada
-        // alta si van dentro, porque los publica `RegisterEmployeeHandler` en su
-        // propia transaccion anidada (ADR-027).
-        //
-        // De este evento cuelga ademas el **unico** conteo de uso del plan de la
-        // importacion (ADR-028): `created` es lo que de verdad entro, ya
-        // confirmado, y por eso es la cifra correcta contra la que comparar. Este
-        // modulo sigue sin saber nada de licencias — publica el hecho y quien
-        // cuenta es `Product` (doc 02 §1.6).
-        $this->events->publish(new EmployeesImported(
-            fileSha256: $report->sha256,
-            created: $report->countOf(ImportOutcome::CREATE),
-            updated: $report->countOf(ImportOutcome::UPDATE),
-            unchanged: $report->countOf(ImportOutcome::UNCHANGED),
-            rejected: $report->countOf(ImportOutcome::REJECT),
-            occurredAt: $this->clock->now(),
-        ));
+            // El asiento del LOTE va DENTRO de la transaccion, como el de cada
+            // alta (regla dura 6, ADR-010, V3-BE-1): o entran la plantilla y su
+            // asiento, o no entra ninguno. Publicado despues del commit, un
+            // fallo del asiento dejaba cuarenta altas confirmadas sin el
+            // «quien cargo que fichero»; y un asiento de una carga que revierte
+            // no puede quedar, porque revierte con ella.
+            //
+            // Las cifras salen del informe ya decidido, no de `$rows`: son las
+            // mismas, porque aqui se ejecuta lo que se simulo. Si el reintento
+            // de `EmployeeWriteRetry` repite la transaccion, el evento se
+            // vuelve a publicar en la nueva y el de la deshecha se deshace con
+            // ella.
+            //
+            // De este evento cuelga ademas el **unico** conteo de uso del plan de
+            // la importacion (ADR-028). Ese observador difiere su trabajo con
+            // `afterCommit`: publicar dentro no lo adelanta, y si el lote
+            // revierte no cuenta altas que no existen. Este modulo sigue sin
+            // saber nada de licencias — publica el hecho y quien cuenta es
+            // `Product` (doc 02 §1.6).
+            $this->events->publish(new EmployeesImported(
+                fileSha256: $report->sha256,
+                created: $report->countOf(ImportOutcome::CREATE),
+                updated: $report->countOf(ImportOutcome::UPDATE),
+                unchanged: $report->countOf(ImportOutcome::UNCHANGED),
+                rejected: $report->countOf(ImportOutcome::REJECT),
+                occurredAt: $this->clock->now(),
+            ));
+
+            return $rows;
+        });
 
         return $report->withRows($applied);
     }

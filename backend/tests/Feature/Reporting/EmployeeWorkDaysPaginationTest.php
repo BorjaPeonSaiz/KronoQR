@@ -17,6 +17,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -215,6 +216,14 @@ it('no cuesta mas consultas con un rango de cuarenta jornadas que con uno de sei
     // Una primera vuelta calienta lo que se resuelve una vez por proceso o por
     // token —instalacion, licencia, ultimo uso del token—, que no es el coste de
     // la consulta.
+    //
+    // El reloj se para antes de contar. Sanctum escribe `last_used_at` en cada
+    // peticion, pero Eloquent compara al segundo (`Y-m-d H:i:s`) y no lanza el
+    // UPDATE si el segundo no ha cambiado: con el reloj corriendo, que dos
+    // peticiones caigan o no en el mismo segundo es azar, y la CI veia 16
+    // consultas en una vuelta y 17 en la otra sin que la paginacion costara
+    // nada mas. Parado, el UPDATE sale solo en la vuelta de calentamiento.
+    FrozenTime::at(gmdate('Y-m-d H:i:s'));
     $consultas('2026-01-10');
 
     $seis = $consultas('2026-01-10');

@@ -14,6 +14,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Reporting\PersonalRecordCsvTable;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -121,18 +122,10 @@ it('cuadra la suma del CSV completo con los totales de las jornadas', function (
 
     $minutos = 0;
 
-    foreach (explode("\r\n", $csv) as $linea) {
-        if (! str_starts_with($linea, 'TRAMO;')) {
-            continue;
-        }
-
-        $columnas = explode(';', $linea);
-
-        // La columna `duration` es la sexta del orden declarado en
-        // `PersonalRecordCsv::COLUMNS`, y va como `HH:MM`.
-        [$horas, $resto] = explode(':', $columnas[5]);
-
-        $minutos += ((int) $horas * 60) + (int) $resto;
+    // La columna `duration` se busca por su rotulo, no por su posicion: la
+    // 19.2 añadio columnas antes de ella y la posicion dejo de valer.
+    foreach (PersonalRecordCsvTable::rowsOfType($csv, 'TRAMO') as $tramo) {
+        $minutos += PersonalRecordCsvTable::minutes($tramo['duration']);
     }
 
     // Noventa jornadas de ocho horas, escritas como numero y no calculadas por

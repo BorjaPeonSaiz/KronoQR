@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use Database\Seeders\Support\KioskClocking;
 use Database\Seeders\Support\KioskClockingAudit;
@@ -45,8 +45,8 @@ use RuntimeException;
  *
  * ## Las correcciones van por los casos de uso (bloque 11 de la 2.2.1)
  *
- * Corregir, anular y dar de alta lo hacen `CorrectShiftHandler`,
- * `VoidShiftHandler` y `AddShiftEntryHandler`, los mismos que usa el panel. Asi
+ * Corregir, anular y dar de alta lo hacen `CorrectShiftEntryHandler`,
+ * `VoidShiftEntryHandler` y `AddShiftEntryHandler`, los mismos que usa el panel. Asi
  * la version nueva, el puntero `superseded_by_id`, la fila de
  * `shift_corrections`, el recalculo de `daily_totals` y el asiento de
  * `audit_log` son los del producto, en su transaccion y con la cadena de hash
@@ -122,7 +122,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
         // Version 2: la salida rectificada a 22:00. 480 minutos, no 970. La
         // entrada la ficho la persona con su tarjeta y eso no deja de ser verdad:
         // solo la marca que cambia pasa a `manual_admin`.
-        resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+        resolve(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
             shiftEntryUuid: $original,
             clockedInAt: null,
             clockedOutAt: $this->toUtc('2026-03-20 22:00', $timezone),
@@ -154,7 +154,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
         // que solapa.
         $duplicate = $this->kioskEntry($employee, $siteId, '2026-03-21', '2026-03-21 13:45', '2026-03-21 14:00', 15, $timezone);
 
-        resolve(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+        resolve(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
             shiftEntryUuid: $duplicate,
             reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
             performedByUserId: $author,

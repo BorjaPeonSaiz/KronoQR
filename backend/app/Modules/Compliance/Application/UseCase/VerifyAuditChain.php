@@ -87,7 +87,7 @@ final readonly class VerifyAuditChain
                 // delante hubo una purga sellada, no hubo nada, o falta algo.
                 $expectedPrevious = $this->resolveChainStart(
                     $entry->previousHash,
-                    $entry->id ?? 0,
+                    $entry->persistedId(),
                     $sealedPurgeYears,
                     $breaks,
                 );
@@ -95,7 +95,7 @@ final readonly class VerifyAuditChain
 
             if (! AuditChain::matches($expectedPrevious, $entry->previousHash)) {
                 $breaks[] = new AuditChainBreak(
-                    $entry->id ?? 0,
+                    $entry->persistedId(),
                     AuditChainBreakKind::BrokenLink,
                     $expectedPrevious,
                     $entry->previousHash,
@@ -106,7 +106,7 @@ final readonly class VerifyAuditChain
 
             if (! AuditChain::matches($recomputed, $entry->hash)) {
                 $breaks[] = new AuditChainBreak(
-                    $entry->id ?? 0,
+                    $entry->persistedId(),
                     AuditChainBreakKind::ContentAltered,
                     $recomputed,
                     $entry->hash,

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;

@@ -10,6 +10,8 @@ use App\Modules\Kiosk\Application\Port\DeviceTokenRenewal;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Domain\ValueObject\RenewedDeviceToken;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -72,7 +74,7 @@ final readonly class IdentityDeviceTokenRenewal implements DeviceTokenRenewal
         $this->logger->info('kiosk.device_token_rotated', [
             'trace_id' => SpanScope::currentTraceId(),
             'device_id' => $deviceUuid,
-            'expires_at' => $token->expiresAt->format('Y-m-d\TH:i:s\Z'),
+            'expires_at' => UtcInstant::of($token->expiresAt, UtcPrecision::Seconds),
         ]);
 
         return $token;

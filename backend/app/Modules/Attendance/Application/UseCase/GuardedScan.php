@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Application\UseCase;
 use App\Modules\Attendance\Application\Command\RegisterPinScanCommand;
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\Port\ScanIntent;
-use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
+use App\Modules\Attendance\Domain\Support\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use DateTimeImmutable;
 use SensitiveParameter;

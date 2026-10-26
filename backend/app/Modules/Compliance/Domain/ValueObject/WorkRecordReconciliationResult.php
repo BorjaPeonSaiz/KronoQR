@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * El resultado de una pasada de la conciliacion (ADR-057 §4).
  *
@@ -60,7 +62,40 @@ final readonly class WorkRecordReconciliationResult
         public int $reviewedSiteTimezoneChanges = 0,
         /** Asientos `site.updated` sin firma dados por revisados (`audit:<id>`): aviso. */
         public int $reviewedSiteTimezoneEntries = 0,
-    ) {}
+    ) {
+        // Un resultado incoherente responderia `isConsistent()` con una
+        // discrepancia en la lista, y ese resultado es el que alimenta la
+        // metrica y la alerta de ADR-057 §4 (V1-AR-4).
+        if (array_keys($counts) !== array_keys(self::emptyCounts())) {
+            throw new InvalidArgumentException('Los recuentos de la conciliacion llevan todos los tipos de discrepancia, en su orden.');
+        }
+
+        foreach ([$entriesChecked, ...array_values($counts), $reviewedPurges, $reviewedPurgesExplainingDeletions, $unverifiableSiteTimezones, $unverifiableSiteTimezoneChanges, $reviewedSiteTimezoneChanges, $reviewedSiteTimezoneEntries] as $count) {
+            if ($count < 0) {
+                throw new InvalidArgumentException('Un recuento de la conciliacion no puede ser negativo, y llego '.$count.'.');
+            }
+        }
+
+        if ($reviewedPurgesExplainingDeletions > $reviewedPurges) {
+            throw new InvalidArgumentException('Las purgas revisadas que explican borrados son parte de las revisadas.');
+        }
+
+        $listed = array_fill_keys(array_keys($counts), 0);
+
+        foreach ($discrepancies as $discrepancy) {
+            $listed[$discrepancy->kind->value]++;
+        }
+
+        foreach ($listed as $kind => $howMany) {
+            if ($howMany > $counts[$kind]) {
+                throw new InvalidArgumentException('La conciliacion lista '.$howMany.' discrepancias '.$kind.' y solo cuenta '.$counts[$kind].'.');
+            }
+        }
+
+        if ($truncated !== (array_sum($counts) > \count($discrepancies))) {
+            throw new InvalidArgumentException('El detalle de la conciliacion esta truncado si, y solo si, cuenta mas de las que lista.');
+        }
+    }
 
     /** Revisadas que no explican ningun borrado. */
     public function reviewedPurgesNotExplainingDeletions(): int

@@ -5,12 +5,12 @@ declare(strict_types=1);
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryNotInWorkDay;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
@@ -33,7 +33,7 @@ use Tests\Support\Time\Instants;
  */
 
 /** Corrige un tramo dejando las marcas que se le digan. */
-function correcting(WorkDay $workDay, string $entryUuid, ShiftTimes $times): callable
+function correcting(WorkDay $workDay, string $entryUuid, ShiftEntryTimes $times): callable
 {
     return static fn (): ShiftEntry => $workDay->correctEntry(
         $entryUuid,
@@ -67,7 +67,7 @@ it('rechaza corregir un tramo que no es de esta jornada', function (): void {
         ->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')
         ->build();
 
-    expect(correcting($jornada, 'shift-entry-de-otro-dia', ShiftTimes::closed(
+    expect(correcting($jornada, 'shift-entry-de-otro-dia', ShiftEntryTimes::closed(
         Instants::utc('2026-03-14 07:00'),
         Instants::utc('2026-03-14 14:00'),
     )))->toThrow(ShiftEntryNotInWorkDay::class);
@@ -84,7 +84,7 @@ it('rechaza corregir un tramo ya anulado', function (): void {
     // Un tramo anulado es historia: no se corrige, y quien lo intente esta
     // trabajando sobre una version que ya no es la vigente (ADR-026). Es lo que
     // pasa cuando dos responsables tocan el mismo tramo a la vez.
-    expect(correcting($jornada, 'shift-entry-1', ShiftTimes::closed(
+    expect(correcting($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::utc('2026-03-14 07:00'),
         Instants::utc('2026-03-14 14:00'),
     )))->toThrow(ShiftEntryNotInWorkDay::class);
@@ -98,7 +98,7 @@ it('rechaza una correccion que pisaria a otro tramo vigente', function (): void 
         ->build();
 
     // Alargar el primero hasta las 13:00 lo mete dentro del segundo.
-    expect(correcting($jornada, 'shift-entry-1', ShiftTimes::closed(
+    expect(correcting($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::utc('2026-03-14 07:00'),
         Instants::utc('2026-03-14 13:00'),
     )))->toThrow(OverlappingShiftEntry::class);
@@ -118,7 +118,7 @@ it('permite que la correccion toque justo el borde del tramo siguiente', functio
     $corregido = $jornada->correctEntry(
         'shift-entry-1',
         'shift-entry-1-v2',
-        ShiftTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 12:00')),
+        ShiftEntryTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 12:00')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -138,8 +138,8 @@ it('rechaza una correccion que dejaria dos turnos abiertos', function (): void {
 
     // Quitarle la salida al primero lo dejaria abierto teniendo ya otro abierto:
     // la misma invariante que el indice unico parcial (RN-01).
-    expect(correcting($jornada, 'shift-entry-1', ShiftTimes::open(Instants::utc('2026-03-14 07:00'))))
-        ->toThrow(ShiftAlreadyOpen::class);
+    expect(correcting($jornada, 'shift-entry-1', ShiftEntryTimes::open(Instants::utc('2026-03-14 07:00'))))
+        ->toThrow(ShiftEntryAlreadyOpen::class);
 })->group('RN-01', 'RN-13');
 
 it('rechaza mover a otro dia la entrada que abre la jornada', function (): void {
@@ -154,7 +154,7 @@ it('rechaza mover a otro dia la entrada que abre la jornada', function (): void 
     // Las 00:30 del dia 15 en Madrid: la jornada pasaria a ser la del 15 y esas
     // ocho horas cambiarian de fila en `daily_totals`. Eso es mover el tramo a
     // otro agregado, y este no puede proteger las invariantes de aquel (RN-05).
-    expect(correcting($jornada, 'shift-entry-1', ShiftTimes::closed(
+    expect(correcting($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-15 00:30'),
         Instants::inMadrid('2026-03-15 06:00'),
     )))->toThrow(CorrectionWouldChangeWorkDate::class);
@@ -179,7 +179,7 @@ it('permite corregir la vuelta de una pausa de madrugada sin mover la jornada', 
     $corregido = $jornada->correctEntry(
         'shift-entry-2',
         'shift-entry-2-v2',
-        ShiftTimes::closed(
+        ShiftEntryTimes::closed(
             Instants::inMadrid('2026-03-15 02:45'),
             Instants::inMadrid('2026-03-15 06:00'),
         ),
@@ -212,7 +212,7 @@ it('deja la jornada intacta cuando la correccion se rechaza', function (): void 
         ->build();
 
     try {
-        correcting($jornada, 'shift-entry-1', ShiftTimes::closed(
+        correcting($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
             Instants::utc('2026-03-14 07:00'),
             Instants::utc('2026-03-14 13:00'),
         ))();

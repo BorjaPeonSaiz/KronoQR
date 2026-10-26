@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Resource;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Workforce\Application\Port\PinDeliveryRecord;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use Illuminate\Http\Request;
@@ -33,7 +35,7 @@ final class PinDeliveryResource extends JsonResource
 
         return [
             'employee_uuid' => $delivery->employeeUuid,
-            'delivered_at' => $delivery->deliveredAt->format('Y-m-d\TH:i:s.v\Z'),
+            'delivered_at' => UtcInstant::of($delivery->deliveredAt, UtcPrecision::Milliseconds),
             'delivered_by' => $delivery->deliveredByUserUuid,
             'pin_status' => PinStatus::Delivered->value,
         ];

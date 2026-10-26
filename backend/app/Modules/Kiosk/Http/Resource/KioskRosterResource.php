@@ -6,6 +6,8 @@ namespace App\Modules\Kiosk\Http\Resource;
 
 use App\Modules\Kiosk\Application\Query\KioskRoster;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -61,7 +63,7 @@ final class KioskRosterResource extends JsonResource
         }
 
         return [
-            'generated_at' => $roster->generatedAt->format('Y-m-d\TH:i:s.v\Z'),
+            'generated_at' => UtcInstant::of($roster->generatedAt, UtcPrecision::Milliseconds),
             'entries' => $entries,
             // Se resuelve del contenedor y no se inyecta en el constructor
             // porque un `JsonResource` lo construye Laravel con el recurso como

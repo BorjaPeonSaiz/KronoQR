@@ -41,7 +41,7 @@ enum CorrectionAction: string
      * que distingue `closed` de `modified`, y esa distincion es la que permite
      * contar cuantos olvidos de fichaje de salida hubo el mes pasado.
      */
-    public static function betweenTimes(ShiftTimes $before, ShiftTimes $after): self
+    public static function betweenTimes(ShiftEntryTimes $before, ShiftEntryTimes $after): self
     {
         return $before->isOpen() && ! $after->isOpen() ? self::CLOSED : self::MODIFIED;
     }

@@ -8,7 +8,7 @@ use App\Modules\Reporting\Application\Support\IssuedReportExportLink;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportProgress;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

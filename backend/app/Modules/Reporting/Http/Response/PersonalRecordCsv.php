@@ -4,21 +4,24 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Response;
 
-use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
-use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
-use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
-use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
-use App\Modules\Reporting\Infrastructure\Export\PersonalRecordRows;
+use App\Modules\Reporting\Infrastructure\Export\PersonalRecordFormat;
+use App\Modules\Reporting\Infrastructure\Export\PersonalRecordLayout;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
-use DateTimeImmutable;
-use DateTimeZone;
-use Illuminate\Support\Facades\Lang;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * El historico propio como fichero CSV (`GET /api/v1/me/export`, RF-ID-05,
  * RL-05).
+ *
+ * ## Las columnas y los valores son los del PDF
+ *
+ * Los decide {@see PersonalRecordLayout}, una sola definicion para los dos
+ * formatos del mismo registro (R1-RV-02): que columnas hay, que dice cada celda
+ * y en que desfase esta cada hora (R1-RV-01). Aqui solo queda lo que es del
+ * fichero: la cabecera de criterios, el dialecto y la respuesta en streaming.
+ * El CSV lleva todas las columnas; el PDF, todas menos las que solo sirven a
+ * una maquina (la zona IANA y las marcas en UTC).
  *
  * ## Por que no reutiliza el escritor de la exportacion legal
  *
@@ -63,60 +66,17 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * `lang/{es,en}/personal-record.php`. El idioma del documento es configuracion
  * de la instalacion (regla dura 13, ADR-017): un escritor con los rotulos
  * incrustados obligaria a tocar el repositorio para vender a un cliente que
- * trabaja en ingles.
+ * trabaja en ingles. Un rotulo que falta rompe la descarga en voz alta, como en
+ * el PDF, en lugar de imprimir la clave.
  */
 final readonly class PersonalRecordCsv
 {
-    /**
-     * Las columnas, en orden. La clave es la de `lang/*`.
-     *
-     * **Escritas una vez.** La cabecera y cada fila recorren esta misma lista,
-     * de modo que una columna nueva no puede quedar rotulada en un sitio y vacia
-     * en el otro.
-     *
-     * @var list<string>
-     */
-    private const array COLUMNS = [
-        'record_type',
-        'work_date',
-        'time_zone',
-        'local_in',
-        'local_out',
-        'duration',
-        'day_total',
-        'status',
-        'clock_in_source',
-        'clock_out_source',
-        'utc_in',
-        'utc_out',
-        'correction_local_at',
-        'correction_author',
-        'correction_action',
-        'correction_reason',
-        'correction_explanation',
-    ];
-
-    /** Los criterios que se imprimen antes de la tabla, en orden. */
-    private const array CRITERIA = ['entries', 'night', 'open', 'corrections', 'times', 'durations', 'file'];
-
-    /**
-     * Prefijos de fila. En ingles y sin traducir, igual que en la exportacion
-     * legal: quien cruce este fichero con otro tiene que ver la misma cadena en
-     * los dos. Lo que se traduce es lo que lee una persona, no lo que compara
-     * una maquina.
-     */
-    private const string SHIFT_ROW = 'TRAMO';
-
-    private const string CORRECTION_ROW = 'CORRECCION';
-
     public static function respond(WorkDayJournal $journal): StreamedResponse
     {
-        $filename = 'mi-registro-horario-'.$journal->range->isoFrom().'_'.$journal->range->isoTo().'.csv';
-
         // Las filas se componen ANTES de responder, porque su numero viaja en
         // `X-Kronoqr-Report-Rows` y las cabeceras salen antes que el cuerpo. El
         // volumen esta acotado por el techo de 366 dias de `DateRange`.
-        $rows = self::dataRows($journal);
+        $rows = PersonalRecordLayout::rows($journal, PersonalRecordFormat::Csv);
 
         return new StreamedResponse(
             static function () use ($journal, $rows): void {
@@ -141,7 +101,7 @@ final readonly class PersonalRecordCsv
             200,
             [
                 'Content-Type' => CsvDialect::CONTENT_TYPE,
-                'Content-Disposition' => 'attachment; filename='.$filename,
+                'Content-Disposition' => 'attachment; filename='.PersonalRecordLayout::filename($journal, 'csv'),
                 // El cuerpo es el registro horario de una persona: ni un proxy
                 // ni un navegador compartido pueden guardarlo.
                 'Cache-Control' => 'no-store, private',
@@ -164,171 +124,25 @@ final readonly class PersonalRecordCsv
      */
     private static function writeHeader($handle, WorkDayJournal $journal): void
     {
-        self::row($handle, [self::text('title')]);
-        self::row($handle, [self::label('period'), self::text('period_value', [
+        self::row($handle, [PersonalRecordLayout::csvText('title')]);
+        self::row($handle, [self::label('period'), PersonalRecordLayout::csvText('period_value', [
             'from' => $journal->range->isoFrom(),
             'to' => $journal->range->isoTo(),
         ])]);
         self::row($handle, [self::label('time_zone'), $journal->timeZone]);
-        self::row($handle, [self::label('legal_basis'), self::text('legal_basis_value')]);
+        self::row($handle, [self::label('legal_basis'), PersonalRecordLayout::csvText('legal_basis_value')]);
 
-        foreach (self::CRITERIA as $index => $criterion) {
-            self::row($handle, [
-                $index === 0 ? self::label('criteria') : '',
-                self::text('criteria.'.$criterion),
-            ]);
+        foreach (PersonalRecordLayout::criteria(PersonalRecordFormat::Csv) as $index => $criterion) {
+            self::row($handle, [$index === 0 ? self::label('criteria') : '', $criterion]);
         }
 
         self::row($handle, []);
-        self::row($handle, array_map(
-            static fn (string $column): string => self::text('columns.'.$column),
-            self::COLUMNS,
-        ));
-    }
-
-    /**
-     * Todas las filas de datos de la tabla, en el orden del registro.
-     *
-     * @return list<array<string, string>>
-     */
-    private static function dataRows(WorkDayJournal $journal): array
-    {
-        // Cuales filas hay —tramos, jornadas sin tramos, que no desaparecen
-        // (regla dura 5), y correcciones— lo decide PersonalRecordRows, el mismo
-        // recorrido que el PDF: asi los dos formatos cuentan lo mismo en
-        // `X-Kronoqr-Report-Rows`. Aqui solo se decide como se escribe cada tipo.
-        return PersonalRecordRows::map(
-            $journal,
-            static fn (JournalWorkDay $day, JournalShiftEntry $entry): array => self::shiftRow(
-                $day,
-                $entry,
-                self::duration($day->totalMinutes()),
-            ),
-            static fn (JournalWorkDay $day): array => self::emptyDayRow($day, self::duration($day->totalMinutes())),
-            static fn (JournalWorkDay $day, JournalCorrection $correction): array => self::correctionRow($day, $correction),
-        );
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function shiftRow(JournalWorkDay $day, JournalShiftEntry $entry, string $dayTotal): array
-    {
-        return self::fill([
-            'record_type' => self::SHIFT_ROW,
-            'work_date' => $day->workDate,
-            'time_zone' => $entry->timeZone,
-            'local_in' => self::local($entry->clockedInAt, $entry->timeZone),
-            'local_out' => self::localOrEmpty($entry->clockedOutAt, $entry->timeZone),
-            'duration' => self::duration($entry->contributedMinutes()),
-            'day_total' => $dayTotal,
-            'status' => self::text('status.'.$entry->status),
-            'clock_in_source' => $entry->clockInSource,
-            'clock_out_source' => $entry->clockOutSource ?? '',
-            'utc_in' => self::utc($entry->clockedInAt),
-            'utc_out' => self::utcOrEmpty($entry->clockedOutAt),
-        ]);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function emptyDayRow(JournalWorkDay $day, string $dayTotal): array
-    {
-        return self::fill([
-            'record_type' => self::SHIFT_ROW,
-            'work_date' => $day->workDate,
-            'time_zone' => $day->timeZone,
-            'duration' => self::duration(0),
-            'day_total' => $dayTotal,
-            'status' => self::text('status.none'),
-        ]);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function correctionRow(JournalWorkDay $day, JournalCorrection $correction): array
-    {
-        return self::fill([
-            'record_type' => self::CORRECTION_ROW,
-            'work_date' => $day->workDate,
-            'time_zone' => $day->timeZone,
-            'correction_local_at' => self::local($correction->performedAt, $day->timeZone),
-            // El nombre de quien firmo la correccion SI va (RN-13, RL-04): una
-            // rectificacion sin autor no explica nada, y es exactamente lo que la
-            // persona tiene derecho a poder mirar. Es el unico nombre de este
-            // fichero ademas del suyo, que ni siquiera aparece.
-            'correction_author' => $correction->performedBy->name,
-            'correction_action' => $correction->action,
-            'correction_reason' => $correction->reasonCode,
-            'correction_explanation' => $correction->reasonText ?? '',
-        ]);
-    }
-
-    /**
-     * Completa las columnas que la fila no usa, para que todas tengan la misma
-     * anchura. Una tabla con filas de distinta longitud no la abre bien ninguna
-     * hoja de calculo.
-     *
-     * @param  array<string, string>  $values
-     * @return array<string, string>
-     */
-    private static function fill(array $values): array
-    {
-        $row = [];
-
-        foreach (self::COLUMNS as $column) {
-            $row[$column] = $values[$column] ?? '';
-        }
-
-        return $row;
-    }
-
-    /**
-     * Duracion en `HH:MM`, nunca decimal. Ver el docblock de la clase.
-     *
-     * Lo formatea {@see ReportedDuration}, que es el objeto de valor del modulo
-     * para esto: tener un `sprintf` propio aqui era el tercer sitio del producto
-     * donde se decidia como se escribe una duracion, y el que se quedara atras en
-     * el siguiente cambio.
-     *
-     * **El `max(0, ...)` se conserva a proposito.** `ReportedDuration` admite
-     * negativos porque en un informe de periodo la desviacion frente a lo
-     * contratado puede serlo; en el registro personal no hay desviacion, solo
-     * duraciones trabajadas, y un negativo aqui solo podria venir de un dato
-     * corrupto. Un `-00:15` en el historico que descarga un empleado es una
-     * pregunta que nadie sabe responder: se publica `00:00` y el dato roto se
-     * investiga por su lado.
-     */
-    private static function duration(int $minutes): string
-    {
-        return ReportedDuration::ofMinutes(max(0, $minutes))->toClockText();
-    }
-
-    private static function local(DateTimeImmutable $instant, string $timeZone): string
-    {
-        return $instant->setTimezone(new DateTimeZone($timeZone))->format('Y-m-d H:i');
-    }
-
-    private static function localOrEmpty(?DateTimeImmutable $instant, string $timeZone): string
-    {
-        return $instant instanceof DateTimeImmutable ? self::local($instant, $timeZone) : '';
-    }
-
-    private static function utc(DateTimeImmutable $instant): string
-    {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
-    }
-
-    private static function utcOrEmpty(?DateTimeImmutable $instant): string
-    {
-        return $instant instanceof DateTimeImmutable ? self::utc($instant) : '';
+        self::row($handle, PersonalRecordLayout::header(PersonalRecordFormat::Csv));
     }
 
     /**
      * @param  resource  $handle
-     * @param  array<array-key, string>  $values
+     * @param  list<string>  $values
      */
     private static function row($handle, array $values): void
     {
@@ -338,18 +152,8 @@ final readonly class PersonalRecordCsv
         CsvDialect::writeRow($handle, $values);
     }
 
-    /**
-     * @param  array<string, string>  $replacements
-     */
-    private static function text(string $key, array $replacements = []): string
-    {
-        $text = Lang::get('personal-record.'.$key, $replacements);
-
-        return \is_string($text) ? $text : $key;
-    }
-
     private static function label(string $key): string
     {
-        return self::text('header.'.$key);
+        return PersonalRecordLayout::csvText('header.'.$key);
     }
 }

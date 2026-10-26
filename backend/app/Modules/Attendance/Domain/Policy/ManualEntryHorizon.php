@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\Exception\InvalidFutureTolerance;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateInterval;
@@ -67,7 +67,7 @@ final readonly class ManualEntryHorizon
      * instante admisible, **en la zona del centro** (RN-04): a las 23:58 del
      * dia 14 con cinco minutos de margen, la jornada del 15 ya se admite.
      *
-     * @throws ShiftMarkInFuture
+     * @throws ShiftEntryMarkInFuture
      */
     public function assertWorkDateAllowed(WorkDate $workDate): void
     {
@@ -75,7 +75,7 @@ final readonly class ManualEntryHorizon
 
         // `Y-m-d` ordena igual como cadena que como fecha.
         if ($workDate->isoDate > $latestDate) {
-            throw ShiftMarkInFuture::workDate($workDate->isoDate, $latestDate);
+            throw ShiftEntryMarkInFuture::workDate($workDate->isoDate, $latestDate);
         }
     }
 
@@ -83,9 +83,9 @@ final readonly class ManualEntryHorizon
      * La entrada y, si la hay, la salida no pueden quedar por delante del
      * ultimo instante admisible. Igual se admite: el limite es inclusivo.
      *
-     * @throws ShiftMarkInFuture
+     * @throws ShiftEntryMarkInFuture
      */
-    public function assertTimesAllowed(ShiftTimes $times): void
+    public function assertTimesAllowed(ShiftEntryTimes $times): void
     {
         $this->assertInstant(FutureMark::ClockIn, $times->clockedInAt);
 
@@ -97,7 +97,7 @@ final readonly class ManualEntryHorizon
     private function assertInstant(FutureMark $mark, DateTimeImmutable $instant): void
     {
         if ($instant > $this->latestAcceptable) {
-            throw ShiftMarkInFuture::instant($mark, $instant, $this->latestAcceptable, $this->toleranceMinutes);
+            throw ShiftEntryMarkInFuture::instant($mark, $instant, $this->latestAcceptable, $this->toleranceMinutes);
         }
     }
 }

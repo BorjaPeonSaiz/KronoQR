@@ -374,6 +374,26 @@ it('detecta que se ha borrado una fila por fuera de la aplicacion', function ():
         ->and($after->breaks[0]->kind)->toBe(AuditChainBreakKind::BrokenLink);
 })->group('RS-07');
 
+it('denuncia la fila con un hash mal formado y verifica las demas, sin lanzar', function (): void {
+    // Quien puede quitar el `CHECK` de la forma del hash puede dejar uno
+    // truncado o en mayusculas. Leer esa fila lanzaba y cortaba la verificacion
+    // (y la retencion, que lee igual) sin decir donde estaba la rotura.
+    [$before, $after] = tamperedChainVerification(
+        static function (Connection $connection, int $id): void {
+            $connection->statement('ALTER TABLE audit_log DROP CONSTRAINT audit_log_chk_hash_format');
+            $connection->statement('UPDATE audit_log SET hash = upper(hash) WHERE id = ?', [$id]);
+        },
+    );
+
+    expect($before->isIntact())->toBeTrue()
+        ->and($after->rowsVerified)->toBe(3)
+        ->and(array_map(static fn ($break): string => $break->kind->name, $after->breaks))
+        // La fila tocada no produce su hash, y la siguiente sigue apuntando al
+        // de antes; la primera verifica.
+        ->toBe([AuditChainBreakKind::ContentAltered->name, AuditChainBreakKind::BrokenLink->name])
+        ->and($after->breaks[0]->actualHash)->toMatch('/^[0-9A-F]{64}$/');
+})->group('RS-07');
+
 /**
  * Lee `audit_chain_verification_failures_total` del fichero que consume el
  * colector textfile de node-exporter.

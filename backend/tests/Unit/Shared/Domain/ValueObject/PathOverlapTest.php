@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Domain\ValueObject\PathOverlap;
+use App\Modules\Shared\Domain\Support\PathOverlap;
 
 /*
  * ¿Dos raices de clase se pisan? (ADR-045, condicion C3). Es lo que hace fallar

@@ -507,7 +507,7 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 
 ### 5.4 Eventos de dominio
 
-`EmployeeClockedIn`, `EmployeeClockedOut`, `ScanRejected`, `ShiftCorrected`, `IncidentRaised`, `IncidentResolved`, `CredentialIssued`, `CredentialPrinted`, `CredentialDelivered`, `CredentialRevoked`, `OfflineBatchSynced`, `DailyTotalsRecalculated`.
+`EmployeeClockedIn`, `EmployeeClockedOut`, `ScanRejected`, `ShiftEntryCorrected`, `IncidentRaised`, `IncidentResolved`, `CredentialIssued`, `CredentialPrinted`, `CredentialDelivered`, `CredentialRevoked`, `OfflineBatchSynced`, `DailyTotalsRecalculated`.
 
 > **`CredentialPrinted` y `CredentialDelivered` no son eventos nuevos del producto**, sino los dos actos que RF-QR-04 y RF-QR-06 ya exigían registrar y que faltaban en esta lista. `CredentialPrinted` es además el hecho con relevancia legal del ciclo: es el momento en que se acuña el QR y la tarjeta pasa a poder fichar ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)), y por eso es el que lleva el `key_id` — `CredentialIssued` no puede llevarlo, porque en la emisión todavía no hay clave elegida.
 

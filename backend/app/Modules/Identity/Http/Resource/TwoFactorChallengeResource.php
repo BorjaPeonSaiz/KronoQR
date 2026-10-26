@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Application\UseCase\LoginOutcome;
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -38,7 +40,7 @@ final class TwoFactorChallengeResource extends JsonResource
             'challenge_token' => $outcome->token->plainTextToken,
             'token_type' => 'Bearer',
             // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
-            'expires_at' => $outcome->token->expiresAt->format('Y-m-d\TH:i:s\Z'),
+            'expires_at' => UtcInstant::of($outcome->token->expiresAt, UtcPrecision::Seconds),
             'enrolment_required' => $outcome->enrolmentRequired,
         ];
     }

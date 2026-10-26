@@ -12,6 +12,7 @@ use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Contracts\Database\Query\Builder;
 use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
@@ -84,10 +85,20 @@ final readonly class SanctumDeviceTokenIssuer implements DeviceTokenIssuer
                 continue;
             }
 
+            $expiresAt = $token->expires_at?->toDateTimeImmutable();
+
+            if ($expiresAt instanceof DateTimeImmutable && $expiresAt <= $issuedAt) {
+                // Tampoco la que caduca al nacer o antes: ningun camino del
+                // producto la escribe y Sanctum ya no la acepta. La politica no
+                // tiene «80 % de vida» que medir (R1-AR-04), y si era la que
+                // firmo, no rota, como antes.
+                continue;
+            }
+
             $records[] = new DeviceTokenRecord(
                 id: (int) $key,
-                issuedAt: $issuedAt,
-                expiresAt: $token->expires_at?->toDateTimeImmutable(),
+                issuedAt: $issuedAt->setTimezone(new DateTimeZone('UTC')),
+                expiresAt: $expiresAt?->setTimezone(new DateTimeZone('UTC')),
             );
         }
 

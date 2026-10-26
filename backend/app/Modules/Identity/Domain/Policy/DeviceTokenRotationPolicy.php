@@ -113,13 +113,6 @@ final readonly class DeviceTokenRotationPolicy
 
     private function isDue(DateTimeImmutable $issuedAt, DateTimeImmutable $expiresAt, DateTimeImmutable $now): bool
     {
-        // Un token sin caducidad (filtrado por quien llama), o con una caducidad
-        // que no es posterior a su emision, no tiene «80 % de vida»: rotarlo por
-        // si acaso emitiria un token sin motivo.
-        if ($expiresAt <= $issuedAt) {
-            return false;
-        }
-
         return (new DeviceTokenLifetime($issuedAt, $expiresAt, $this->rotationThreshold))->isRotationDue($now);
     }
 

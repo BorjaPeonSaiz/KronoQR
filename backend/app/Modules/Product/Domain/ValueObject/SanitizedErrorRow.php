@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
+use App\Modules\Product\Domain\Support\ErrorColumnSanitizer;
+
 /**
  * Las columnas de texto de un grupo de `error_events`, ya saneadas por
  * {@see ErrorColumnSanitizer::row()} (ADR-048). Es lo que se guarda y lo que

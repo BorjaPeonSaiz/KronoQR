@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**
@@ -110,7 +111,7 @@ final readonly class BackupProbe implements DoctorProbe
             'hours' => intdiv($age, 3600),
             // Etiquetada como UTC en el texto, como `queue.worker`: el
             // contenedor vive en UTC (regla dura 3).
-            'verified_at' => new DateTimeImmutable('@'.$timestamp)->format('Y-m-d H:i'),
+            'verified_at' => UtcInstant::wallTime(new DateTimeImmutable('@'.$timestamp)),
         ];
 
         if ($age > self::MAX_VERIFIED_AGE_SECONDS) {

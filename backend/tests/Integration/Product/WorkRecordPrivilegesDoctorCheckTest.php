@@ -207,6 +207,8 @@ it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde s
             // El de `closed_by` (2.3.0) no es de la lista de guardas, pero un
             // trigger desactivado en el registro se avisa igual.
             'disabled_trigger:shift_entries_closed_by_default',
+            'disabled_trigger:shift_entries_guard_duration_close',
+            'disabled_trigger:shift_entries_guard_duration_insert',
             'disabled_trigger:shift_entries_guard_insert',
             'disabled_trigger:shift_entries_guard_transition',
             'disabled_trigger:shift_entries_superseded_is_linked',
@@ -219,6 +221,15 @@ it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde s
     'un trigger borrado' => [
         'DROP TRIGGER shift_entries_superseded_is_linked ON shift_entries',
         ['missing_trigger:shift_entries_superseded_is_linked'],
+    ],
+    // La duracion de un tramo, la de sus marcas (RN-06, migracion del 25-10).
+    'el trigger de la duracion al nacer borrado' => [
+        'DROP TRIGGER shift_entries_guard_duration_insert ON shift_entries',
+        ['missing_trigger:shift_entries_guard_duration_insert'],
+    ],
+    'el trigger de la duracion al cerrar borrado' => [
+        'DROP TRIGGER shift_entries_guard_duration_close ON shift_entries',
+        ['missing_trigger:shift_entries_guard_duration_close'],
     ],
     'la purga sin SECURITY DEFINER' => [
         'ALTER FUNCTION public.work_record_purge_batch(date, integer) SECURITY INVOKER',
@@ -368,6 +379,29 @@ it('no mira la guarda de la zona mientras su migracion no este aplicada', functi
 
     expect($details['guard_issues'])->toBe([]);
 })->group('RF-PD-13', 'RN-23');
+
+it('no exige los triggers de la duracion mientras su migracion no este aplicada', function (): void {
+    // Una 2.2.x tiene la migracion del bloque 7 pero no la del 25-10 hasta que
+    // migra: sin ella, que falten no es manipulacion.
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->table('migrations')->where('migration', ServiceInspector::WORK_RECORD_DURATION_GUARD_MIGRATION)->delete();
+        $migrator->statement('DROP TRIGGER shift_entries_guard_duration_insert ON shift_entries');
+        $migrator->statement('DROP TRIGGER shift_entries_guard_duration_close ON shift_entries');
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    // Por la sesion del propietario lo que sobra sale tambien (por eso no se
+    // mira el estado): lo que importa son las guardas.
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->details['guards_expected'])->toBeTrue()
+        ->and($findings[0]->details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RS-07', 'RN-06');
 
 it('avisa si la aplicacion recupera DELETE sobre el registro', function (): void {
     $migrator = privilegiosRegistroMigrador();

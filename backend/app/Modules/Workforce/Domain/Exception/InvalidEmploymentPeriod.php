@@ -22,7 +22,7 @@ use App\Modules\Shared\Domain\Exception\BusinessRejection;
  * - **Alta que no llego a empezar.** Con la fecha de alta aun por llegar, la
  *   unica fecha de cese posible es la del alta: es una baja sin efectos.
  *
- * Mismo criterio que `ShiftMarkInFuture`: `getMessage()` es tecnico y en ingles
+ * Mismo criterio que `ShiftEntryMarkInFuture`: `getMessage()` es tecnico y en ingles
  * —va al log, **sin datos personales** (regla dura 21)—; lo que ve una persona
  * sale de {@see self::$translationKey} y {@see self::$parameters}, que el borde
  * HTTP resuelve en el idioma negociado.

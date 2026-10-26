@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
@@ -51,7 +51,7 @@ use RuntimeException;
  * restricciones de PostgreSQL son la ultima linea de defensa (doc 02 §3.2) y
  * bajo concurrencia **saltan**: dos escaneos simultaneos del mismo empleado
  * llegan los dos a una jornada sin turno abierto. El caso de uso sabe que hacer
- * con `ShiftAlreadyOpen` —reintentar, y resolverlo por anti-rebote—, pero no con
+ * con `ShiftEntryAlreadyOpen` —reintentar, y resolverlo por anti-rebote—, pero no con
  * un `SQLSTATE 23505`.
  *
  * ## El tramo que se va a escribir se carga bloqueado
@@ -390,6 +390,13 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // esto, lo que ya estaba escrito se queda como estaba, que es lo que dice
         // el dominio.
         //
+        // Desde la 2.3.0 una fila asi ya no puede **nacer**: el *trigger*
+        // `shift_entries_guard_duration` (migracion `2026_10_25_100000`)
+        // rechaza con `23514` todo tramo que se inserte o se cierre con una
+        // duracion distinta de la de sus marcas. Este `CASE` queda para las
+        // filas anteriores, que no se reescriben (regla dura 5) y que la
+        // conciliacion de ADR-057 §4 denuncia.
+        //
         // **`clocked_out_at` no lleva ese `CASE`, a proposito.** Es la marca que
         // el agregado afirma y la que viaja en su evento y en su asiento. Si la
         // fila ya tiene otra, guardar en silencio la de la fila dejaria
@@ -626,12 +633,12 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      * Cualquier otro fallo de base de datos sube tal cual: convertirlo en un
      * conflicto de negocio ocultaria un problema real.
      */
-    private function translate(QueryException $exception, WorkDay $workDay): QueryException|ShiftAlreadyOpen|OverlappingShiftEntry
+    private function translate(QueryException $exception, WorkDay $workDay): QueryException|ShiftEntryAlreadyOpen|OverlappingShiftEntry
     {
         $message = $exception->getMessage();
 
         if (str_contains($message, 'one_open_shift_per_employee')) {
-            return ShiftAlreadyOpen::forEmployee($workDay->employeeUuid());
+            return ShiftEntryAlreadyOpen::forEmployee($workDay->employeeUuid());
         }
 
         if (str_contains($message, 'shift_entries_no_overlap')) {

@@ -10,6 +10,8 @@ use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\QueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 
 /**
  * Sondas `queue.*` de `product:doctor` (RF-PD-13).
@@ -161,6 +163,6 @@ final readonly class QueueProbe implements DoctorProbe
      */
     private function checkedAt(): string
     {
-        return $this->clock->now()->format('H:i');
+        return UtcInstant::wallTime($this->clock->now(), UtcWallTime::TimeOfDay);
     }
 }

@@ -98,7 +98,7 @@ final readonly class SurveyKioskAppVersions implements KioskAppVersions
         return new KioskAppVersionEntry(
             $device->uuid,
             $device->appVersion,
-            $device->queueStorage->value,
+            $device->queueStorage,
             $device->pendingQueueSize,
         );
     }

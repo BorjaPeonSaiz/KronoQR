@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Application\Query\ManagementAccountView;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use DateTimeInterface;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -43,16 +44,10 @@ final class ManagementAccountResource extends JsonResource
             'password_status' => $view->passwordStatus->value,
             // UTC con `Z` (regla dura 3): la conversion a la zona del centro es
             // cosa del panel.
-            'last_login_at' => $account->lastLoginAt === null ? null : $this->utc($account->lastLoginAt),
-            'created_at' => $this->utc($account->createdAt),
+            'last_login_at' => UtcInstant::format($account->lastLoginAt, UtcPrecision::Seconds),
+            'created_at' => UtcInstant::of($account->createdAt, UtcPrecision::Seconds),
             // ADR-060: lo que dice al panel que la cuenta esta minimizada.
-            'anonymized_at' => $account->anonymizedAt === null ? null : $this->utc($account->anonymizedAt),
+            'anonymized_at' => UtcInstant::format($account->anonymizedAt, UtcPrecision::Seconds),
         ];
-    }
-
-    /** Instante en UTC con sufijo `Z`, como `UtcTimestamp` del contrato. */
-    private function utc(DateTimeInterface $instant): string
-    {
-        return $instant->format('Y-m-d\TH:i:s\Z');
     }
 }

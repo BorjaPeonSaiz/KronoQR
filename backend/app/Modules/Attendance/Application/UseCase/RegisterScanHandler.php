@@ -20,17 +20,17 @@ use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
 use App\Modules\Attendance\Domain\Event\ScanRejected;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\Policy\WithdrawnCredentialPolicy;
+use App\Modules\Attendance\Domain\Support\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
-use App\Modules\Attendance\Domain\ValueObject\PayloadFingerprint;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
@@ -274,7 +274,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
                         previous: $replayed,
                     );
                 }
-            } catch (ShiftAlreadyOpen|OverlappingShiftEntry $race) {
+            } catch (ShiftEntryAlreadyOpen|OverlappingShiftEntry $race) {
                 if ($attempt >= self::MAX_ATTEMPTS) {
                     throw $race;
                 }

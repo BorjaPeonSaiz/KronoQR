@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\ValueObject\SupportGrantStatus;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * Una concesion de acceso de soporte: expresa, temporal, limitada, revocable y
@@ -230,6 +231,20 @@ final class SupportGrant
     }
 
     /** La misma concesion, ya persistida y con su clave interna. */
+    /**
+     * El identificador de la fila, que solo existe una vez guardada.
+     *
+     * Para los hechos que van a `audit_log`, cuyo `subject_id` es este entero:
+     * sin fila no hay sujeto, y un `?? 0` dejaria un asiento sobre el sujeto 0
+     * en lugar de fallar (R1-AR-03).
+     *
+     * @throws LogicException si todavia no se ha guardado
+     */
+    public function persistedId(): int
+    {
+        return $this->id ?? throw new LogicException('La concesion de soporte todavia no se ha guardado: no tiene identificador.');
+    }
+
     public function withId(int $id): self
     {
         return new self(

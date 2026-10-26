@@ -22,7 +22,9 @@ use App\Modules\Shared\Application\Authorization\ScopeGuard;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Shared\Domain\ValueObject\UtcWallTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -204,7 +206,7 @@ final class ReportExportController extends Controller
 
         return ProblemDetails::reportExportInProgress(
             'Espera a que termine el informe que pediste a las '
-            .$conflict->current->requestedAt->format('H:i').' UTC. '
+            .UtcInstant::wallTime($conflict->current->requestedAt, UtcWallTime::TimeOfDay).' UTC. '
             .'Podras descargarlo desde esta misma pantalla.',
             ReportExportResource::payload($conflict->current),
         );

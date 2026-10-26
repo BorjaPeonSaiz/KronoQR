@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Support;
 
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use RuntimeException;
 
@@ -26,10 +26,10 @@ final readonly class Corrections
     /**
      * @param  list<DomainEvent>  $events
      */
-    public static function in(array $events): ShiftCorrected
+    public static function in(array $events): ShiftEntryCorrected
     {
         foreach ($events as $event) {
-            if ($event instanceof ShiftCorrected) {
+            if ($event instanceof ShiftEntryCorrected) {
                 return $event;
             }
         }

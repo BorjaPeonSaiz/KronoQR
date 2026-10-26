@@ -6,13 +6,14 @@ namespace App\Modules\Compliance\Infrastructure\Listener;
 
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use UnhandledMatchError;
 
@@ -73,7 +74,7 @@ final readonly class RecordShiftEntryAudit
             'shift_entry_uuid' => $event->shiftEntryUuid,
             'site_id' => $event->siteId,
             'work_date' => $event->workDate->isoDate,
-            'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($event->clockedInAt),
             'origin' => $event->origin->value,
             // **Que abrio el tramo**: `clock_in` o `break_end` (RF-AT-12,
             // ADR-024). No es redundante con `scan_events.result`: esa tabla no
@@ -96,8 +97,8 @@ final readonly class RecordShiftEntryAudit
             'shift_entry_uuid' => $event->shiftEntryUuid,
             'site_id' => $event->siteId,
             'work_date' => $event->workDate->isoDate,
-            'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
-            'clocked_out_at' => $event->clockedOutAt->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($event->clockedInAt),
+            'clocked_out_at' => UtcInstant::of($event->clockedOutAt),
             'origin' => $event->origin->value,
             // **Que lo cerro**: `clock_out` o `break_start` (RF-AT-12, ADR-024).
             // Sin esto, el asiento de una pausa de las 15:00 afirmaria que esa
@@ -114,7 +115,7 @@ final readonly class RecordShiftEntryAudit
             'daily_total_minutes' => $event->dailyTotal->minutes,
             // `array_column` y no un `array_map` con el tipo del enum: `Compliance`
             // solo puede alcanzar `Attendance\Domain\Event` (doc 02 §1.6), asi que
-            // nombrar `ShiftAnomaly` aqui seria la frontera que este listener
+            // nombrar `ShiftEntryAnomaly` aqui seria la frontera que este listener
             // existe para respetar. Los valores respaldados del enum son ya los de
             // `incidents.type`, que es lo que la Fase 2 necesita leer.
             'anomalies' => array_column($event->anomalies, 'value'),
@@ -151,7 +152,7 @@ final readonly class RecordShiftEntryAudit
      * de hoy, y las horas van dentro, en `before` y `after`. Es la unica lectura
      * que permite responder «que se toco esta semana».
      */
-    public function corrected(ShiftCorrected $event): void
+    public function corrected(ShiftEntryCorrected $event): void
     {
         $this->append(self::actionFor($event->action->value), $event->occurredAt(), [
             'employee_uuid' => $event->employeeUuid,
@@ -173,7 +174,7 @@ final readonly class RecordShiftEntryAudit
             'performed_by_user_id' => $event->correction->performedByUserId,
             'daily_total_minutes' => $event->dailyTotal->minutes,
             // Ver el metodo `clockedOut()`: `Compliance` solo alcanza
-            // `Attendance\Domain\Event`, asi que nombrar `ShiftAnomaly` aqui
+            // `Attendance\Domain\Event`, asi que nombrar `ShiftEntryAnomaly` aqui
             // seria la frontera que este listener existe para respetar.
             'anomalies' => array_column($event->anomalies, 'value'),
         ]);
@@ -183,13 +184,13 @@ final readonly class RecordShiftEntryAudit
      * Las marcas de una version, o `null` cuando esa version no existe: no hay
      * `before` en un alta ni `after` en una anulacion.
      *
-     * **Recibe los dos instantes sueltos y no el objeto de valor `ShiftTimes`**,
+     * **Recibe los dos instantes sueltos y no el objeto de valor `ShiftEntryTimes`**,
      * y no es descuido: `Compliance` solo puede alcanzar
      * `Attendance\Domain\Event` (doc 02 §1.6, verificado por Deptrac). Nombrar
      * aqui un objeto de `Attendance\Domain\ValueObject` seria justo la frontera
      * que este listener existe para respetar; leer sus propiedades publicas
      * desde el evento, no. Es la misma tecnica que usa `clockedOut()` con
-     * `ShiftAnomaly`.
+     * `ShiftEntryAnomaly`.
      *
      * Se serializa aqui porque el payload de `audit_log` es JSON canonico y
      * tiene que ser reproducible byte a byte para que la cadena de hash
@@ -206,8 +207,8 @@ final readonly class RecordShiftEntryAudit
         }
 
         return [
-            'clocked_in_at' => $clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
-            'clocked_out_at' => $clockedOutAt?->format('Y-m-d\TH:i:s.u\Z'),
+            'clocked_in_at' => UtcInstant::of($clockedInAt),
+            'clocked_out_at' => UtcInstant::format($clockedOutAt),
             // Como termino (RN-05, 2.3.0): una correccion que solo declara la
             // pausa cambia esto y nada mas, y el asiento tiene que decirlo.
             'closed_by' => $closedBy,

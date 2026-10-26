@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Domain\ValueObject;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Un token vivo de un quiosco, tal como lo ve la politica de rotacion
@@ -26,5 +27,21 @@ final readonly class DeviceTokenRecord
         public int $id,
         public DateTimeImmutable $issuedAt,
         public ?DateTimeImmutable $expiresAt,
-    ) {}
+    ) {
+        // La politica mide la vida del token restando estas dos marcas: un token
+        // que caduca al nacer o antes no tiene 80 % que medir, y una marca con
+        // desfase seria otro instante si alguien la formatea (regla dura 3,
+        // R1-AR-04).
+        if ($id <= 0) {
+            throw new InvalidArgumentException('Un token de quiosco tiene un identificador positivo, y llego '.$id.'.');
+        }
+
+        if ($issuedAt->getOffset() !== 0 || ($expiresAt instanceof DateTimeImmutable && $expiresAt->getOffset() !== 0)) {
+            throw new InvalidArgumentException('Las marcas de un token de quiosco van en UTC.');
+        }
+
+        if ($expiresAt instanceof DateTimeImmutable && $expiresAt <= $issuedAt) {
+            throw new InvalidArgumentException('Un token de quiosco caduca despues de emitirse.');
+        }
+    }
 }

@@ -203,7 +203,7 @@ final readonly class MintCards
             }
 
             $this->events->publish(new CredentialPrinted(
-                credentialId: $printed->id ?? 0,
+                credentialId: $printed->persistedId(),
                 credentialUuid: $printed->uuid,
                 employeeUuid: $item['target']->holder->employeeUuid,
                 keyId: $key->id,

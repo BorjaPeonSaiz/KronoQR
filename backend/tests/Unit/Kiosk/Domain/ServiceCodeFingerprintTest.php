@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
+use App\Modules\Kiosk\Domain\Support\ServiceCodeFingerprint;
 
 /*
  * La huella del codigo de servicio con el que se abre la pantalla de

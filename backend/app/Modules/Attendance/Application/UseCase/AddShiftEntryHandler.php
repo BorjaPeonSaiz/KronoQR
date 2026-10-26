@@ -8,7 +8,7 @@ use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\EventPublisher;
-use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryCorrectionLedger;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
@@ -18,8 +18,8 @@ use App\Modules\Attendance\Application\Support\Corrections;
 use App\Modules\Attendance\Application\Support\ManualEntryRecheck;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
@@ -27,7 +27,7 @@ use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
@@ -83,7 +83,7 @@ final readonly class AddShiftEntryHandler
     public function __construct(
         private ConnectionInterface $connection,
         private WorkDayRepository $workDays,
-        private ShiftCorrectionLedger $ledger,
+        private ShiftEntryCorrectionLedger $ledger,
         private EmployeeDirectory $employees,
         private SiteCalendar $calendar,
         private OperationalSettingsProvider $settings,
@@ -95,18 +95,18 @@ final readonly class AddShiftEntryHandler
 
     /**
      * @throws EmployeeCannotBeClocked el empleado no existe, no puede fichar o su centro no tiene zona
-     * @throws ShiftMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
+     * @throws ShiftEntryMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
      * @throws WorkDateOutsideEmployment la persona esta de baja y la jornada cae fuera de su periodo de empleo
-     * @throws ShiftMarkAfterTermination la persona esta de baja y una marca pasa de la cota de su dia de cese (RN-05)
+     * @throws ShiftEntryMarkAfterTermination la persona esta de baja y una marca pasa de la cota de su dia de cese (RN-05)
      * @throws CorrectionWouldChangeWorkDate el tramo abriria la jornada en otro dia civil (RN-05)
      * @throws EntryDoesNotContinueWorkDay el tramo es de otro dia civil y no continua la jornada (RN-05)
      */
-    public function handle(AddShiftEntryCommand $command): CorrectedShift
+    public function handle(AddShiftEntryCommand $command): CorrectedShiftEntry
     {
-        return UseCaseInstrumentation::run('attendance.add_shift_entry', fn (): CorrectedShift => $this->doHandle($command));
+        return UseCaseInstrumentation::run('attendance.add_shift_entry', fn (): CorrectedShiftEntry => $this->doHandle($command));
     }
 
-    private function doHandle(AddShiftEntryCommand $command): CorrectedShift
+    private function doHandle(AddShiftEntryCommand $command): CorrectedShiftEntry
     {
         $performedAt = $this->clock->now();
 
@@ -119,15 +119,15 @@ final readonly class AddShiftEntryHandler
         }
 
         return $this->connection->transaction(
-            fn (): CorrectedShift => $this->add($command, $employee, $performedAt),
+            fn (): CorrectedShiftEntry => $this->add($command, $employee, $performedAt),
         );
     }
 
     /**
      * @throws EmployeeCannotBeClocked
-     * @throws ShiftMarkInFuture
+     * @throws ShiftEntryMarkInFuture
      * @throws WorkDateOutsideEmployment
-     * @throws ShiftMarkAfterTermination
+     * @throws ShiftEntryMarkAfterTermination
      * @throws CorrectionWouldChangeWorkDate
      * @throws EntryDoesNotContinueWorkDay
      */
@@ -135,7 +135,7 @@ final readonly class AddShiftEntryHandler
         AddShiftEntryCommand $command,
         EmployeeSnapshot $employee,
         DateTimeImmutable $performedAt,
-    ): CorrectedShift {
+    ): CorrectedShiftEntry {
         // RN-23 (ADR-056): la zona se lee DENTRO de la transaccion y con la fila
         // del centro compartida hasta confirmar. Leida fuera, un alta manual que
         // fuera el primer tramo podia atribuirse con la zona vieja justo cuando
@@ -149,7 +149,7 @@ final readonly class AddShiftEntryHandler
         $workDate = WorkDate::fromIsoDate($command->workDate, $timezone);
         // RN-05 (2.3.0): un tramo cerrado termina en salida salvo que se declare
         // la pausa; declararla sin salida es un estado imposible (`422`).
-        $times = ShiftTimes::of(
+        $times = ShiftEntryTimes::of(
             $command->clockedInAt,
             $command->clockedOutAt,
             $command->endsInBreak ? EntryClosure::BREAK_START : null,
@@ -203,6 +203,6 @@ final readonly class AddShiftEntryHandler
         // RN-14 y RN-05: la ficha otra vez, con la cadena tomada.
         $this->recheck->afterAudit($employee->employeeUuid, $workDate, $times, $continuation, true);
 
-        return CorrectedShift::of($workDay, $entry, $correction);
+        return CorrectedShiftEntry::of($workDay, $entry, $correction);
     }
 }

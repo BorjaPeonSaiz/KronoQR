@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
+use App\Modules\Shared\Domain\ValueObject\HoursAndMinutes;
 
 /**
  * Una duracion tal y como se escribe en la exportacion legal: **`HH:MM`, nunca
@@ -31,6 +32,11 @@ use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
  * Un tramo abierto —alguien que todavia esta trabajando— no tiene duracion, y no
  * tiene cero: escribir `00:00` afirmaria que no trabajo nada. `absent()` produce
  * cadena vacia, que en una tabla es «no consta», que es la verdad.
+ *
+ * ## El texto lo escribe `Shared`
+ *
+ * {@see HoursAndMinutes}, el mismo formateador que los informes: aqui solo se
+ * decide que no hay negativos y que «no consta» es la cadena vacia.
  */
 final readonly class ExportedDuration
 {
@@ -63,6 +69,6 @@ final readonly class ExportedDuration
             return '';
         }
 
-        return sprintf('%02d:%02d', intdiv($this->minutes, 60), $this->minutes % 60);
+        return HoursAndMinutes::ofMinutes($this->minutes)->toClockText();
     }
 }

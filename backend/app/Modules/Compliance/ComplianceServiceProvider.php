@@ -9,7 +9,7 @@ use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
 use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Compliance\Application\Port\AuditChainHead;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
@@ -714,7 +714,7 @@ final class ComplianceServiceProvider extends ServiceProvider
          * fuera de la base de datos —no envia nada, no escribe ficheros—, que es
          * la condicion para poder correr dentro de la transaccion.
          */
-        Event::listen(ShiftCorrected::class, [RecordShiftEntryAudit::class, 'corrected']);
+        Event::listen(ShiftEntryCorrected::class, [RecordShiftEntryAudit::class, 'corrected']);
 
         // La reconciliacion nocturna que corrige un agregado deja asiento con el
         // antes y el despues (regla dura 6, RF-PR-02, tarea 2.7). Sincrono y

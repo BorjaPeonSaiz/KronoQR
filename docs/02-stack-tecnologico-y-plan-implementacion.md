@@ -247,7 +247,7 @@ fichaje-hotel/
 │   │   │   │   │   ├── Policy/      #    ClockingPolicy
 │   │   │   │   │   └── Exception/
 │   │   │   │   ├── Application/
-│   │   │   │   │   ├── UseCase/     #    RegisterScanHandler, CorrectShiftHandler
+│   │   │   │   │   ├── UseCase/     #    RegisterScanHandler, CorrectShiftEntryHandler
 │   │   │   │   │   ├── Port/        #    Interfaces (repositorios, reloj, bus, policy)
 │   │   │   │   │   ├── Command/     #    DTOs de entrada
 │   │   │   │   │   └── Query/       #    Lecturas del módulo

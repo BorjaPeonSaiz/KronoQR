@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\HoursAndMinutes;
+
 /**
  * Una duracion tal y como se escribe en un informe: **`HH:MM`, nunca decimal**
  * (`/informe-nuevo`, paso 6; RL-06).
@@ -33,10 +35,9 @@ namespace App\Modules\Reporting\Domain\ValueObject;
  * forma honesta de escribirlo. El signo va delante y el resto se formatea sobre
  * el valor absoluto, para que no salga `-12:-30`.
  *
- * Escrita aqui y no reutilizada de `Compliance` porque el §1.6 no concede esa
- * arista: los dos modulos resuelven el mismo problema de presentacion y ninguno
- * puede importar al otro. La alternativa —subirla a `Shared`— convertiria un
- * detalle de formato en vocabulario compartido de todo el producto.
+ * El texto lo escribe {@see HoursAndMinutes}, en `Shared`, el mismo que usa la
+ * exportacion legal: el §1.6 no deja que un modulo importe al otro, y dos
+ * formateadores del mismo dato legal acaban escribiendo cosas distintas.
  *
  * ## Quien la usa dentro del modulo
  *
@@ -59,9 +60,6 @@ final readonly class ReportedDuration
 
     public function toClockText(): string
     {
-        $absolute = abs($this->minutes);
-        $sign = $this->minutes < 0 ? '-' : '';
-
-        return $sign.sprintf('%02d:%02d', intdiv($absolute, 60), $absolute % 60);
+        return HoursAndMinutes::ofMinutes($this->minutes)->toClockText();
     }
 }

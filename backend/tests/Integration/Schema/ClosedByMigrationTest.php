@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -79,7 +79,7 @@ it('rellena closed_by desde los escaneos por estirpe y su down() la retira', fun
 
     // Se corrige la salida del tramo de la pausa: la version nueva no tiene
     // escaneos, pero su estirpe si.
-    $corregido = app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    $corregido = app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $pausa['first'],
         clockedInAt: null,
         clockedOutAt: Instants::inMadrid('2026-03-14 11:55'),

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Http\Resource;
 
-use App\Modules\Attendance\Application\UseCase\CorrectedShift;
+use App\Modules\Attendance\Application\UseCase\CorrectedShiftEntry;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,7 +30,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * y por eso viaja: quien anula un tramo tiene que ver en el acto que el dia se
  * queda con menos minutos (RN-06, regla dura 7).
  *
- * @property-read CorrectedShift $resource
+ * @property-read CorrectedShiftEntry $resource
  */
 final class CorrectedShiftEntryResource extends JsonResource
 {
@@ -40,7 +41,7 @@ final class CorrectedShiftEntryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var CorrectedShift $corrected */
+        /** @var CorrectedShiftEntry $corrected */
         $corrected = $this->resource;
 
         return [
@@ -66,6 +67,6 @@ final class CorrectedShiftEntryResource extends JsonResource
      */
     private static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 }

@@ -218,7 +218,7 @@ it('deja el tramo abierto fuera del camino de apertura, porque eso es una carrer
     // DELIBERADO. Un tramo ABIERTO en la jornada cargada, en el camino de
     // apertura, no describe un fichaje irreconciliable: describe la carrera de
     // diez personas pasando la tarjeta a la vez en el cambio de turno. Esa la
-    // resuelve RN-01 —`ShiftAlreadyOpen`, reintento, y en el segundo intento el
+    // resuelve RN-01 —`ShiftEntryAlreadyOpen`, reintento, y en el segundo intento el
     // perdedor ve el tramo del ganador y sale por el anti-rebote (RF-AT-06)—, y
     // convertirla en RN-18 dejaria sin fichar a quien llego segundo.
     $workDay = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 09:00')->reconstituted();

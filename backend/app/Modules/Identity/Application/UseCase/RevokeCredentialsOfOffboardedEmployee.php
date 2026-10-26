@@ -128,7 +128,7 @@ final readonly class RevokeCredentialsOfOffboardedEmployee
         $this->credentials->save($revoked);
 
         $this->events->publish(new CredentialRevoked(
-            credentialId: $revoked->id ?? 0,
+            credentialId: $revoked->persistedId(),
             credentialUuid: $revoked->uuid,
             employeeUuid: $employeeUuid,
             reason: self::REASON,

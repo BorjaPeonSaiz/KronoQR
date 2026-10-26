@@ -6,7 +6,7 @@ namespace App\Modules\Reporting;
 
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Reporting\Application\Generation\AdoptionReportExportGeneration;
 use App\Modules\Reporting\Application\Generation\LegalReportExportGeneration;
 use App\Modules\Reporting\Application\Generation\PeriodReportExportGeneration;
@@ -844,7 +844,7 @@ final class ReportingServiceProvider extends ServiceProvider
      * todavia puede revertir y meteria dos viajes de red en el camino critico
      * (RNF-P-02, reglas duras 15 y 19).
      *
-     * **Solo `EmployeeClockedOut`.** `ShiftCorrected` no entra: un contador solo
+     * **Solo `EmployeeClockedOut`.** `ShiftEntryCorrected` no entra: un contador solo
      * puede crecer, asi que una anulacion no se puede restar y una correccion
      * sumaria las mismas horas dos veces. La consecuencia —que esta serie no
      * refleja las correcciones— esta escrita en el docblock del puerto para que
@@ -871,7 +871,7 @@ final class ReportingServiceProvider extends ServiceProvider
      * todavia puede revertir y ademas metaria una llamada de red en el camino
      * critico (RNF-P-02, reglas duras 15 y 19).
      *
-     * **`ShiftCorrected` esta en la lista y cubre las cuatro acciones**: alta
+     * **`ShiftEntryCorrected` esta en la lista y cubre las cuatro acciones**: alta
      * manual, cambio de hora, cierre de un turno olvidado y anulacion. Cualquiera
      * de las cuatro puede cambiar quien esta dentro, y una anulacion que no
      * difundiera dejaria el panel enseñando dentro a alguien cuyo tramo se acaba
@@ -881,7 +881,7 @@ final class ReportingServiceProvider extends ServiceProvider
     {
         Event::listen(EmployeeClockedIn::class, [BroadcastPresenceChange::class, 'clockedIn']);
         Event::listen(EmployeeClockedOut::class, [BroadcastPresenceChange::class, 'clockedOut']);
-        Event::listen(ShiftCorrected::class, [BroadcastPresenceChange::class, 'corrected']);
+        Event::listen(ShiftEntryCorrected::class, [BroadcastPresenceChange::class, 'corrected']);
     }
 
     /**

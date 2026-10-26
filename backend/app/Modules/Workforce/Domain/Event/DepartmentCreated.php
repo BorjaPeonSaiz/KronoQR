@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Domain\Event;
 
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Se ha dado de alta un departamento (RF-GP-02, AUD-2).
@@ -23,7 +24,13 @@ final readonly class DepartmentCreated implements DomainEvent
         public int $departmentId,
         public int $siteId,
         private DateTimeImmutable $occurredAt,
-    ) {}
+    ) {
+        // Es el `subject_id` del asiento: sin fila no hay sujeto, y un cero
+        // dejaria un asiento sobre el sujeto 0 en lugar de fallar (R1-AR-03).
+        if ($departmentId <= 0) {
+            throw new InvalidArgumentException('El hecho sobre el departamento necesita el identificador de su fila, y llego '.$departmentId.'.');
+        }
+    }
 
     public function eventName(): string
     {

@@ -10,7 +10,7 @@ use App\Modules\Attendance\Domain\ValueObject\CredentialScan;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
 /**

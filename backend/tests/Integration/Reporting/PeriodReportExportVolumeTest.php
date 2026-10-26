@@ -16,7 +16,8 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\QueryPlans;
+use Tests\Support\Database\RefreshDatabaseAsOwner;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -55,7 +56,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * Queda dicho aqui para que nadie lea la ausencia como un olvido.
  */
 
-uses(RefreshDatabase::class);
+// En la sesion del rol dueño de las tablas: sin ella `ANALYZE` no hace nada
+// y el plan depende del autovacuum (ver RefreshDatabaseAsOwner).
+uses(RefreshDatabaseAsOwner::class);
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS_EXPORTADOS = 500;
@@ -123,8 +126,7 @@ function volumenDeExportacion(): array
          CROSS JOIN generate_series(DATE '2026-01-01', DATE '2026-01-31', interval '1 day') AS d
         SQL);
 
-    DB::statement('ANALYZE daily_totals');
-    DB::statement('ANALYZE employees');
+    QueryPlans::analyze('daily_totals', 'employees');
 
     return ['from' => '2026-01-01', 'to' => '2026-01-31'];
 }

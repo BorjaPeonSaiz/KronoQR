@@ -27,7 +27,7 @@ use DateTimeImmutable;
  * ## Por que vive en `Shared`
  *
  * La aplicaban por separado `Attendance` (`TimeRange`, la deteccion de RN-10),
- * `Reporting` (`ComplianceShiftSegment`, `ComplianceFacts`) y `Compliance` (la
+ * `Reporting` (`ComplianceShiftEntry`, `ComplianceFacts`) y `Compliance` (la
  * conciliacion del registro con la auditoria), con una prueba que ataba las
  * copias. Ninguno de esos modulos puede importar el dominio de otro (doc 02
  * §1.6), y la regla tiene que ser identica en todos: es el caso de ADR-055 §3.

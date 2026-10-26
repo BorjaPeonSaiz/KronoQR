@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Domain\ValueObject;
 
 use App\Modules\Identity\Domain\Exception\MalformedQrPayload;
-use App\Modules\Shared\Domain\ValueObject\Base64Url;
+use App\Modules\Shared\Domain\Support\Base64Url;
 use SensitiveParameter;
 
 /**

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Infrastructure\GeneratedFiles;
 
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Domain\Support\PathOverlap;
 use App\Modules\Shared\Domain\ValueObject\FileTimestamps;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileEntry;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileRemoval;
-use App\Modules\Shared\Domain\ValueObject\PathOverlap;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;

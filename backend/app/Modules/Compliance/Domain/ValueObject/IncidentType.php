@@ -14,7 +14,7 @@ use App\Modules\Compliance\Domain\Exception\UnknownIncidentType;
  * `Attendance` —el §1.6 no concede esa arista y Deptrac la verifica—, asi que el
  * hallazgo llega por un evento de dominio con su tipo como cadena y se traduce
  * aqui. Lo que ata las dos listas no es la buena fe: es una prueba, y el mismo
- * criterio que ya siguen `ShiftAnomaly` y `AuditAction`.
+ * criterio que ya siguen `ShiftEntryAnomaly` y `AuditAction`.
  *
  * Este catalogo es **mas ancho** que el de `Attendance` a proposito: dos de sus
  * valores no los produce la deteccion automatica.

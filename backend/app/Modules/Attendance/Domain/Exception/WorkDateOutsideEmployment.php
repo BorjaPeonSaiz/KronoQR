@@ -16,7 +16,7 @@ use App\Modules\Shared\Domain\Exception\BusinessRejection;
  * tarde—; fuera de ese periodo, esas horas serian de alguien que no trabajaba
  * en el hotel.
  *
- * Mismo criterio que {@see ShiftMarkInFuture}: `getMessage()` es tecnico y en
+ * Mismo criterio que {@see ShiftEntryMarkInFuture}: `getMessage()` es tecnico y en
  * ingles —va al log, **sin datos personales** (regla dura 21)—; lo que ve una
  * persona sale de {@see self::$translationKey} y {@see self::$parameters}, que
  * el borde HTTP cuelga de `errors.work_date` en el idioma negociado. Solo la

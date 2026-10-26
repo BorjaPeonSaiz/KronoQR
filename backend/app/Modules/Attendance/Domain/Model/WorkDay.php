@@ -7,13 +7,13 @@ namespace App\Modules\Attendance\Domain\Model;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
-use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\Exception\CorrectionChangesNothing;
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\NoOpenShiftEntry;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryDoesNotBelongToWorkDay;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryNotInWorkDay;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
@@ -25,9 +25,9 @@ use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
@@ -271,14 +271,14 @@ final class WorkDay
      * salida del tramo anterior, la misma que acota la vuelta de una pausa en el
      * quiosco (`$continuation`, 2.3.0).
      *
-     * @throws ShiftAlreadyOpen dejaria dos turnos abiertos (RN-01)
+     * @throws ShiftEntryAlreadyOpen dejaria dos turnos abiertos (RN-01)
      * @throws OverlappingShiftEntry pisaria a otro tramo vigente (RN-02)
      * @throws CorrectionWouldChangeWorkDate el alta abriria la jornada en otro dia civil (RN-05)
      * @throws EntryDoesNotContinueWorkDay el tramo es de otro dia civil y no continua la jornada (RN-05)
      */
     public function addEntry(
         string $entryUuid,
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ScanOrigin $source,
         Correction $correction,
         ClockingPolicy $policy,
@@ -325,14 +325,14 @@ final class WorkDay
      * @throws ShiftEntryNotInWorkDay el tramo no es de esta jornada, o ya fue anulado o sustituido
      * @throws CorrectionChangesNothing las marcas nuevas son las mismas
      * @throws CorrectionWouldChangeWorkDate la correccion moveria la jornada a otro dia civil (RN-05)
-     * @throws ShiftAlreadyOpen dejaria dos turnos abiertos (RN-01)
+     * @throws ShiftEntryAlreadyOpen dejaria dos turnos abiertos (RN-01)
      * @throws OverlappingShiftEntry pisaria a otro tramo vigente (RN-02)
      * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
     public function correctEntry(
         string $entryUuid,
         string $replacementUuid,
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ScanOrigin $source,
         Correction $correction,
         ClockingPolicy $policy,
@@ -575,7 +575,7 @@ final class WorkDay
      * **Solo mira los tramos CERRADOS, y es deliberado.** Un tramo abierto en
      * esta jornada, en el camino de apertura, no describe un fichaje
      * irreconciliable: describe la carrera de diez personas pasando la tarjeta a
-     * la vez en un cambio de turno. Esa la resuelve RN-01 —`ShiftAlreadyOpen`,
+     * la vez en un cambio de turno. Esa la resuelve RN-01 —`ShiftEntryAlreadyOpen`,
      * el caso de uso reintenta y en el segundo intento el perdedor ya ve el
      * tramo del ganador y sale por el anti-rebote (RF-AT-06)— y convertirla en
      * RN-18 dejaria sin fichar a quien llego segundo, que es exactamente lo que
@@ -676,18 +676,18 @@ final class WorkDay
      * se olvidara de la segunda y `daily_totals` se quedara contando lo de antes
      * (RN-06, regla dura 7).
      *
-     * @param  list<ShiftAnomaly>  $anomalies
+     * @param  list<ShiftEntryAnomaly>  $anomalies
      */
     private function recordCorrection(
         CorrectionAction $action,
         ShiftEntry $entry,
         ?ShiftEntry $replacement,
-        ?ShiftTimes $before,
-        ?ShiftTimes $after,
+        ?ShiftEntryTimes $before,
+        ?ShiftEntryTimes $after,
         Correction $correction,
         array $anomalies,
     ): void {
-        $this->record(new ShiftCorrected(
+        $this->record(new ShiftEntryCorrected(
             employeeUuid: $this->employeeUuid,
             siteId: $this->siteId,
             workDate: $this->workDate,
@@ -719,7 +719,7 @@ final class WorkDay
      *
      * Un tramo abierto no se clasifica: todavia no tiene duracion.
      *
-     * @return list<ShiftAnomaly>
+     * @return list<ShiftEntryAnomaly>
      */
     private function classify(ShiftEntry $entry, ClockingPolicy $policy): array
     {
@@ -781,7 +781,7 @@ final class WorkDay
      * solapar consigo mismo, porque en cuanto la correccion se aplique dejara de
      * ser vigente. En un alta manual no hay ninguno.
      */
-    private function guardTimesFit(ShiftTimes $times, ?ShiftEntry $excluding): void
+    private function guardTimesFit(ShiftEntryTimes $times, ?ShiftEntry $excluding): void
     {
         foreach ($this->entries as $entry) {
             if ($entry === $excluding) {
@@ -791,7 +791,7 @@ final class WorkDay
             // RN-01: un solo turno abierto por empleado. La misma invariante que
             // el indice unico parcial, aqui con el lenguaje del negocio.
             if ($times->isOpen() && $entry->isOpen()) {
-                throw ShiftAlreadyOpen::forEmployee($this->employeeUuid);
+                throw ShiftEntryAlreadyOpen::forEmployee($this->employeeUuid);
             }
 
             if ($this->overlaps($times, $entry)) {
@@ -804,7 +804,7 @@ final class WorkDay
      * RN-02 entre unas marcas y un tramo, con la semantica `[inicio, fin)` de la
      * restriccion de exclusion. Un tramo sin salida llega hasta el infinito.
      */
-    private function overlaps(ShiftTimes $times, ShiftEntry $entry): bool
+    private function overlaps(ShiftEntryTimes $times, ShiftEntry $entry): bool
     {
         $period = $times->period();
         $entryPeriod = $entry->period();
@@ -836,7 +836,7 @@ final class WorkDay
      * por eso se niega: se anula aqui y se da de alta alla, dos acciones
      * explicitas y auditadas.
      */
-    private function guardOpeningStaysOnThisWorkDate(ShiftTimes $times, ?ShiftEntry $excluding): void
+    private function guardOpeningStaysOnThisWorkDate(ShiftEntryTimes $times, ?ShiftEntry $excluding): void
     {
         $opening = $times->clockedInAt;
 
@@ -900,7 +900,7 @@ final class WorkDay
      * @throws EntryDoesNotContinueWorkDay
      */
     private function guardContinuesWorkDay(
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ?ShiftEntry $excluding,
         ContinuationCeiling $continuation,
     ): void {
@@ -936,7 +936,7 @@ final class WorkDay
      * `$replacingUuid` es el tramo que estas marcas sustituyen en una
      * correccion; en un alta, ninguno.
      */
-    public function continuationGapFor(ShiftTimes $times, ?string $replacingUuid = null): ?TimeRange
+    public function continuationGapFor(ShiftEntryTimes $times, ?string $replacingUuid = null): ?TimeRange
     {
         $excluding = $replacingUuid === null ? null : $this->entry($replacingUuid);
         $marks = $this->marksWith($times, $excluding);
@@ -1003,9 +1003,9 @@ final class WorkDay
      *
      * @return list<array{in: DateTimeImmutable, out: ?DateTimeImmutable, breaks: bool, written: bool}>
      */
-    private function marksWith(?ShiftTimes $written, ?ShiftEntry $excluding): array
+    private function marksWith(?ShiftEntryTimes $written, ?ShiftEntry $excluding): array
     {
-        $marks = $written instanceof ShiftTimes
+        $marks = $written instanceof ShiftEntryTimes
             ? [['in' => $written->clockedInAt, 'out' => $written->clockedOutAt, 'breaks' => $written->endsInBreak(), 'written' => true]]
             : [];
 
@@ -1195,7 +1195,7 @@ final class WorkDay
     private function guardNoOpenEntry(): void
     {
         if ($this->hasOpenEntry()) {
-            throw ShiftAlreadyOpen::forEmployee($this->employeeUuid);
+            throw ShiftEntryAlreadyOpen::forEmployee($this->employeeUuid);
         }
     }
 
@@ -1241,7 +1241,7 @@ final class WorkDay
         }
 
         if ($open > 1) {
-            throw ShiftAlreadyOpen::forEmployee($this->employeeUuid);
+            throw ShiftEntryAlreadyOpen::forEmployee($this->employeeUuid);
         }
     }
 

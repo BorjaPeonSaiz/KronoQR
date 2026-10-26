@@ -1033,6 +1033,9 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         grep -q "zz_sites_guard_timezone" "${d}/sql.txt" && grep -q "2026_10_18_120000_guard_site_timezone_in_database" "${d}/sql.txt" && printf 'con-guarda-de-zona\n'
         grep -q "site_correct_timezone" "${d}/repara.txt" && printf 'repara-la-zona\n'
         grep -q "zz_sites_guard_timezone" "${d}/sql-b6.txt" || printf 'b6-sin-guarda-de-zona\n'
+        grep -q "trigger:shift_entries_guard_duration_insert:AUSENTE" "${d}/sql.txt" && grep -q "trigger:shift_entries_guard_duration_close:AUSENTE" "${d}/sql.txt" && grep -q "2026_10_25_100000_guard_shift_entry_duration_in_database" "${d}/sql.txt" && printf 'con-guarda-de-duracion\n'
+        grep -q "shift_entries_guard_duration" "${d}/sql-b6.txt" || printf 'b6-sin-guarda-de-duracion\n'
+        work_record_privileges_tampered "trigger:shift_entries_guard_duration_close:AUSENTE" && printf 'duracion-manipulada\n'
         compose_new() { cat >/dev/null; return 0; }
         deriva=ok; r=0; repair_work_record_privileges || r=$?; printf 'reparado=%s\n' "${r}"
         deriva=sites:INSERT; r=0; repair_work_record_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
@@ -1077,6 +1080,9 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('con-guarda-de-zona')
         ->and($proceso->getOutput())->toContain('repara-la-zona')
         ->and($proceso->getOutput())->toContain('b6-sin-guarda-de-zona')
+        ->and($proceso->getOutput())->toContain('con-guarda-de-duracion')
+        ->and($proceso->getOutput())->toContain('b6-sin-guarda-de-duracion')
+        ->and($proceso->getOutput())->toContain('duracion-manipulada')
         ->and($proceso->getOutput())->toContain('reparado=0')
         ->and($proceso->getOutput())->toContain('sigue-pudiendo=1')
         ->and($proceso->getOutput())->toContain('nombre-raro=1');

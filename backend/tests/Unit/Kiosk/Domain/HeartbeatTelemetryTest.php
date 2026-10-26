@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
-use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
+use App\Modules\Shared\Domain\ValueObject\QueueStorage;
 
 /*
  * Lo que un quiosco declara de si mismo en cada latido (**RF-PA-07**, tarea

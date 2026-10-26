@@ -157,6 +157,49 @@ it('no arrastra el hallazgo a la entrada siguiente, que esta intacta', function 
     expect($result->failureCount())->toBe(1);
 })->group('RS-07');
 
+it('denuncia en su fila un hash mal formado y sigue verificando las demas', function (string $malformed): void {
+    // Alguien quito el `CHECK` y reescribio el hash de la fila 2. Antes, leerla
+    // lanzaba y la verificacion se cortaba ahi, sin decir que fila ni mirar las
+    // siguientes. Ahora es una rotura de contenido en la 2 y, como la 3 sigue
+    // apuntando al hash de verdad, un eslabon roto en la 3; la 4 verifica.
+    $chain = intactChain(4);
+
+    $tampered = new AuditEntry($chain[1]->draft, $chain[1]->previousHash, $malformed, 2);
+    $reader = new InMemoryAuditChainReader([$chain[0], $tampered, $chain[2], $chain[3]]);
+
+    $result = verifierFor($reader, new RecordingAuditMetrics)->handle();
+
+    expect($result->rowsVerified)->toBe(4)
+        ->and(array_map(
+            static fn ($break): array => [$break->entryId, $break->kind, $break->actualHash],
+            $result->breaks,
+        ))->toBe([
+            [2, AuditChainBreakKind::ContentAltered, $malformed],
+            [3, AuditChainBreakKind::BrokenLink, $chain[2]->previousHash],
+        ]);
+})->with([
+    'truncado' => [str_repeat('a', 40)],
+    'en mayusculas' => [str_repeat('A', 64)],
+    'vacio' => [''],
+])->group('RS-07');
+
+it('denuncia en su fila un eslabon anterior mal formado', function (): void {
+    $chain = intactChain(3);
+
+    $tampered = new AuditEntry($chain[1]->draft, 'NO-ES-UN-HASH', $chain[1]->hash, 2);
+    $reader = new InMemoryAuditChainReader([$chain[0], $tampered, $chain[2]]);
+
+    $result = verifierFor($reader, new RecordingAuditMetrics)->handle();
+
+    // El eslabon no casa y el hash ya no se recalcula igual: dos hallazgos en la
+    // fila 2, ninguno en la 3, que apunta al hash escrito de la 2.
+    expect($result->rowsVerified)->toBe(3)
+        ->and(array_map(static fn ($break): array => [$break->entryId, $break->kind], $result->breaks))->toBe([
+            [2, AuditChainBreakKind::BrokenLink],
+            [2, AuditChainBreakKind::ContentAltered],
+        ]);
+})->group('RS-07');
+
 it('detecta que falta una entrada entre dos eslabones', function (): void {
     $chain = intactChain(3);
 

@@ -103,7 +103,7 @@ final readonly class GrantSupportAccessHandler
             $token = $this->tokens->issueFor($stored);
 
             $this->events->publish(new SupportAccessGranted(
-                grantId: $stored->id ?? 0,
+                grantId: $stored->persistedId(),
                 grantUuid: $stored->uuid,
                 scope: $stored->scope->value,
                 hours: $command->hours,

@@ -21,9 +21,9 @@ use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
@@ -871,7 +871,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * es lo correcto: agotar tres reintentos por colision es un fallo del
          * servidor, no una peticion mal hecha.
          */
-        $exceptions->render(static fn (ShiftAlreadyOpen $exception, Request $request): mixed => $request->routeIs('attendance.shift-entries.*')
+        $exceptions->render(static fn (ShiftEntryAlreadyOpen $exception, Request $request): mixed => $request->routeIs('attendance.shift-entries.*')
             ? ProblemDetails::shiftAlreadyOpen('Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.')
             : null);
 
@@ -949,7 +949,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * falta: solo `ManualEntryHorizon` la lanza, y el camino de fichaje no
          * pasa por ella (regla dura 19).
          */
-        $exceptions->render(static fn (ShiftMarkInFuture $exception): mixed => ProblemDetails::validationFailed([
+        $exceptions->render(static fn (ShiftEntryMarkInFuture $exception): mixed => ProblemDetails::validationFailed([
             $exception->mark->value => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
@@ -1136,7 +1136,7 @@ return Application::configure(basePath: dirname(__DIR__))
             )],
         ]));
 
-        $exceptions->render(static fn (ShiftMarkAfterTermination $exception): mixed => ProblemDetails::validationFailed([
+        $exceptions->render(static fn (ShiftEntryMarkAfterTermination $exception): mixed => ProblemDetails::validationFailed([
             $exception->mark->value => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,

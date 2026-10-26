@@ -12,16 +12,16 @@ use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 /**
  * Lo que la revision diaria del registro horario encuentra raro (RF-PR-01).
  *
- * **Por que no es {@see ShiftAnomaly}.** Aquel enum responde a una pregunta mas
+ * **Por que no es {@see ShiftEntryAnomaly}.** Aquel enum responde a una pregunta mas
  * estrecha —«¿que tiene de raro la duracion de un tramo que se acaba de
  * cerrar?»— y viaja dentro de `EmployeeClockedOut`. Este responde a la de la
  * tarea programada, que mira ademas turnos todavia abiertos, jornadas enteras,
  * el hueco entre dos jornadas y los escaneos marcados para revision. Ampliar
- * `ShiftAnomaly` con `insufficient_rest` habria obligado a cada fichaje a
+ * `ShiftEntryAnomaly` con `insufficient_rest` habria obligado a cada fichaje a
  * transportar un valor que en ese momento no se puede evaluar.
  *
  * Los valores respaldados son los de `incidents.type` (doc 01 §5.5), igual que
- * en `ShiftAnomaly`, para que `Compliance` abra la incidencia **sin volver a
+ * en `ShiftEntryAnomaly`, para que `Compliance` abra la incidencia **sin volver a
  * calcular nada ni conocer los umbrales**: `Attendance` emite la conclusion y
  * ellos reaccionan (doc 02 §1.6).
  *

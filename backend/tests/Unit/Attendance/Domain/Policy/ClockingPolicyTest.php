@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Domain\Exception\InvalidClockingPolicy;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use Tests\Support\Factory\ClockingPolicyFactory;
@@ -65,13 +65,13 @@ it('no clasifica como anomalo un tramo de duracion corriente', function (): void
 it('devuelve el tramo corto como anomalia y no lo descarta', function (): void {
     $policy = ClockingPolicyFactory::new()->withMinimumComputableMinutes(1)->build();
 
-    expect($policy->anomaliesFor(WorkedDuration::ofMinutes(0)))->toBe([ShiftAnomaly::SHORT_SHIFT]);
+    expect($policy->anomaliesFor(WorkedDuration::ofMinutes(0)))->toBe([ShiftEntryAnomaly::SHORT_SHIFT]);
 })->group('RN-07');
 
 it('devuelve el tramo largo como anomalia', function (): void {
     $policy = ClockingPolicyFactory::new()->withAnomalousAfterHours(12)->build();
 
-    expect($policy->anomaliesFor(WorkedDuration::ofMinutes(721)))->toBe([ShiftAnomaly::LONG_SHIFT]);
+    expect($policy->anomaliesFor(WorkedDuration::ofMinutes(721)))->toBe([ShiftEntryAnomaly::LONG_SHIFT]);
 })->group('RN-08');
 
 it('rechaza una politica cuyo minimo computable supera el umbral anomalo', function (): void {
@@ -96,7 +96,7 @@ it('aplica los umbrales que recibe y no unos de serie escritos en el codigo', fu
     // aqui y corriente en el perfil de serie.
     $tenHourSite = ClockingPolicyFactory::new()->withAnomalousAfterHours(10)->build();
 
-    expect($tenHourSite->anomaliesFor(WorkedDuration::ofMinutes(601)))->toBe([ShiftAnomaly::LONG_SHIFT])
+    expect($tenHourSite->anomaliesFor(WorkedDuration::ofMinutes(601)))->toBe([ShiftEntryAnomaly::LONG_SHIFT])
         ->and(ClockingPolicyFactory::standard()->anomaliesFor(WorkedDuration::ofMinutes(601)))->toBe([]);
 })->group('RN-08');
 

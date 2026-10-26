@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\QueueStorage;
 use DateTimeImmutable;
 use InvalidArgumentException;
 

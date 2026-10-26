@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
-use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -51,9 +51,9 @@ final class VoidShiftEntryRequest extends FormRequest
         });
     }
 
-    public function toCommand(string $shiftEntryUuid): VoidShiftCommand
+    public function toCommand(string $shiftEntryUuid): VoidShiftEntryCommand
     {
-        return new VoidShiftCommand(
+        return new VoidShiftEntryCommand(
             shiftEntryUuid: $shiftEntryUuid,
             reason: $this->correctionReason(),
             performedByUserId: $this->performedByUserId(),

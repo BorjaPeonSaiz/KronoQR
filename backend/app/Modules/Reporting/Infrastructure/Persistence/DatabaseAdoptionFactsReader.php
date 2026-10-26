@@ -116,7 +116,7 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      * con averias que nadie sufrio.
      *
      * Son cadenas y no un enumerado importado porque `Reporting` no puede importar
-     * de `Shared\Domain\ValueObject\ClientErrorCode`… en realidad si podria, y aun
+     * de `Shared\Domain\Support\ClientErrorCode`… en realidad si podria, y aun
      * asi no se hace: lo que hay que declarar aqui no es «que codigos existen» sino
      * **cual de ellos significa un intento perdido**, que es una decision de este
      * indicador y no del catalogo. La prueba de integracion del lector es lo que

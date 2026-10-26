@@ -8,7 +8,7 @@ use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyClosed;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
@@ -110,7 +110,7 @@ final class ShiftEntry
         string $uuid,
         string $employeeUuid,
         WorkDate $workDate,
-        ShiftTimes $times,
+        ShiftEntryTimes $times,
         ScanOrigin $source,
     ): self {
         return new self(
@@ -232,7 +232,7 @@ final class ShiftEntry
      *
      * @internal Solo lo llama WorkDay::correctEntry().
      */
-    public function nextVersion(string $uuid, ShiftTimes $times, ScanOrigin $source): self
+    public function nextVersion(string $uuid, ShiftEntryTimes $times, ScanOrigin $source): self
     {
         $clockInChanged = $times->clockedInAt->getTimestamp() !== $this->clockedInAt->getTimestamp();
         // Cambiar como termino el tramo es cambiar su salida (RN-05, 2.3.0).
@@ -365,9 +365,9 @@ final class ShiftEntry
      * Las dos marcas de este tramo como objeto de valor: lo que una correccion
      * recibe, compara y sustituye.
      */
-    public function times(): ShiftTimes
+    public function times(): ShiftEntryTimes
     {
-        return ShiftTimes::of($this->clockedInAt, $this->clockedOutAt, $this->closure);
+        return ShiftEntryTimes::of($this->clockedInAt, $this->clockedOutAt, $this->closure);
     }
 
     /**

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Support\Network\BoundedReachability;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -61,8 +61,10 @@ final readonly class ServiceInspector
     public const string WORK_RECORD_GUARD_MIGRATION = '2026_10_14_100000_work_record_trigger_and_purge_function';
 
     /**
-     * Los *triggers* de esa migracion, los mismos que mira
-     * `infra/scripts/lib/work-record-privileges.sh`.
+     * Los *triggers* de {@see self::WORK_RECORD_GUARD_MIGRATION}, los mismos
+     * que `KQ_WORK_RECORD_TRIGGERS` de
+     * `infra/scripts/lib/work-record-privileges.sh` (lo ata
+     * `WorkRecordGuardListsParityTest`).
      *
      * @var list<string>
      */
@@ -72,6 +74,25 @@ final readonly class ServiceInspector
         'shift_entries_guard_insert',
         'shift_entries_guard_transition',
         'shift_entries_superseded_is_linked',
+    ];
+
+    /**
+     * La migracion que congela en el motor la duracion de un tramo: la de sus
+     * marcas (RN-06, RN-09, ADR-057 §2, 2.3.0). Una instalacion 2.2.x la
+     * aplica al actualizar, asi que sus *triggers* solo se exigen con ella en
+     * `migrations`, igual que la zona del centro.
+     */
+    public const string WORK_RECORD_DURATION_GUARD_MIGRATION = '2026_10_25_100000_guard_shift_entry_duration_in_database';
+
+    /**
+     * Los *triggers* de {@see self::WORK_RECORD_DURATION_GUARD_MIGRATION}, los
+     * mismos que `KQ_WORK_RECORD_DURATION_TRIGGERS` del script.
+     *
+     * @var list<string>
+     */
+    public const array WORK_RECORD_DURATION_GUARD_TRIGGERS = [
+        'shift_entries_guard_duration_close',
+        'shift_entries_guard_duration_insert',
     ];
 
     /**
@@ -398,7 +419,9 @@ final readonly class ServiceInspector
      * Las guardas del registro (ADR-057 §2 y §3), mirando lo mismo que `update.sh` y `doctor.sh`
      * (`infra/scripts/lib/work-record-privileges.sh`):
      *
-     * - que existan los cinco *triggers* de {@see self::WORK_RECORD_GUARD_TRIGGERS};
+     * - que existan los *triggers* de {@see self::WORK_RECORD_GUARD_TRIGGERS} y,
+     *   con su migracion aplicada, los de
+     *   {@see self::WORK_RECORD_DURATION_GUARD_TRIGGERS};
      * - que **ningun** *trigger* no interno de `shift_entries` o `incidents`
      *   este desactivado (`tgenabled <> 'O'`): `ALTER TABLE … DISABLE TRIGGER`
      *   con el rol de migracion los apaga sin borrarlos, y un *trigger* que se
@@ -414,6 +437,12 @@ final readonly class ServiceInspector
      */
     private function workRecordGuards(): array
     {
+        $triggers = self::WORK_RECORD_GUARD_TRIGGERS;
+
+        if ($this->database->table('migrations')->where('migration', self::WORK_RECORD_DURATION_GUARD_MIGRATION)->exists()) {
+            $triggers = [...$triggers, ...self::WORK_RECORD_DURATION_GUARD_TRIGGERS];
+        }
+
         /** @var object{missing: string, disabled: string, deletable: string} $row */
         $row = $this->database->selectOne(
             <<<'SQL'
@@ -442,7 +471,7 @@ final readonly class ServiceInspector
                 ), '') AS deletable
             SQL,
             [
-                '{'.implode(',', self::WORK_RECORD_GUARD_TRIGGERS).'}',
+                '{'.implode(',', $triggers).'}',
                 '{'.implode(',', self::WORK_RECORD_NO_DELETE).'}',
             ],
         );

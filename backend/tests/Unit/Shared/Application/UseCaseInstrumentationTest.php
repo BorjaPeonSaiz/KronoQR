@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Kiosk\Application\Exception\PairingCapacityExhausted;
 use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
@@ -244,7 +244,7 @@ it('observa rejected con una excepcion de negocio y la relanza igual', function 
 })->with([
     // Lo declara la excepcion con `BusinessRejection`, viva donde viva.
     'Compliance\Application\Exception' => [IncidentNotFound::withId(7)],
-    'Attendance\Domain\Exception' => [ShiftAlreadyOpen::forEmployee('0199a1f0-0000-7000-8000-000000000000')],
+    'Attendance\Domain\Exception' => [ShiftEntryAlreadyOpen::forEmployee('0199a1f0-0000-7000-8000-000000000000')],
 ])->group('RQ-06', 'RNF-D-01');
 
 it('una averia es error y no rejected, aunque viva en una carpeta de excepciones de un modulo', function (Throwable $fallo): void {

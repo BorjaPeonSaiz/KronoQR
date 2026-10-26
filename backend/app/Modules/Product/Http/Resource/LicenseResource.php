@@ -8,8 +8,8 @@ use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseOverview;
 use App\Modules\Product\Domain\ValueObject\PlanUsage;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

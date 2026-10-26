@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\ResanitizeErrorHistory;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 use Tests\Support\Observability\RecordingLogger;
 use Tests\Support\Product\InMemoryErrorHistory;

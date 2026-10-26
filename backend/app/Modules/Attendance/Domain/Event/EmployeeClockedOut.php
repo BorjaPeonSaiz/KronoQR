@@ -6,7 +6,7 @@ namespace App\Modules\Attendance\Domain\Event;
 
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Domain\Event\DomainEvent;
@@ -32,7 +32,7 @@ use DateTimeImmutable;
 final readonly class EmployeeClockedOut implements DomainEvent
 {
     /**
-     * @param  list<ShiftAnomaly>  $anomalies  Vacia en el caso normal.
+     * @param  list<ShiftEntryAnomaly>  $anomalies  Vacia en el caso normal.
      */
     public function __construct(
         public string $employeeUuid,

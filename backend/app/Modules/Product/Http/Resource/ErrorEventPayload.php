@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * La forma del esquema `ErrorEvent` del contrato, en un solo sitio (RF-PD-15).
@@ -90,6 +90,6 @@ final readonly class ErrorEventPayload
     /** ISO-8601 en UTC con microsegundos, el esquema `UtcTimestamp`. */
     public static function utc(DateTimeImmutable $instant): string
     {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::of($instant);
     }
 }

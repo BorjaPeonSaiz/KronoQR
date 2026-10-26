@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Application\UseCase\CredentialView;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -57,6 +57,6 @@ final class CredentialResource extends JsonResource
      */
     private static function utc(?DateTimeImmutable $instant): ?string
     {
-        return $instant?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::format($instant);
     }
 }

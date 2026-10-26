@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use App\Modules\Compliance\Domain\Support\WorkRecordInstant;
+
 /**
  * Lo que **los asientos** `shift_entry.*` de un tramo dicen que ese tramo tiene
  * que ser (ADR-057 §4, RL-04).

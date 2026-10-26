@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Domain\ValueObject\CanonicalJson;
+use App\Modules\Product\Domain\Support\CanonicalJson;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;

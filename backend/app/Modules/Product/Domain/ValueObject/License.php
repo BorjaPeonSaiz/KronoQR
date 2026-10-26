@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
@@ -174,7 +176,7 @@ final readonly class License
             throw InvalidLicenseKey::fieldNotADate($field);
         }
 
-        $parsed = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $raw, new DateTimeZone('UTC'));
+        $parsed = DateTimeImmutable::createFromFormat(UtcPrecision::Seconds->value, $raw, new DateTimeZone('UTC'));
 
         if ($parsed === false) {
             throw InvalidLicenseKey::fieldNotADate($field);
@@ -183,7 +185,7 @@ final readonly class License
         // `createFromFormat` acepta el 31 de febrero y lo desplaza a marzo. Una
         // fecha de caducidad desplazada en silencio es exactamente el error que
         // no se descubre hasta que alguien discute una factura.
-        if ($parsed->format('Y-m-d\TH:i:s\Z') !== $raw) {
+        if (UtcInstant::of($parsed, UtcPrecision::Seconds) !== $raw) {
             throw InvalidLicenseKey::fieldNotADate($field);
         }
 

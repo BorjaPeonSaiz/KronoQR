@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
-use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
-use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Domain\Exception\ShiftMarkAfterTermination;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkAfterTermination;
 use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
@@ -203,7 +203,7 @@ it('deshace el alta de un tramo que pasa tres dias del cese si la baja confirmo 
         clockedOutAt: new DateTimeImmutable('2026-09-28T06:00:00Z'),
         reason: CorrectionReason::of(CorrectionReasonCode::OLVIDO_FICHAJE_ENTRADA),
         performedByUserId: $responsable->id,
-    )))->toThrow(ShiftMarkAfterTermination::class);
+    )))->toThrow(ShiftEntryMarkAfterTermination::class);
 
     expect($baja->outcome())->toBe(EmployeeWriteInOtherSession::COMMITTED)
         ->and(DB::table('shift_entries')->count())->toBe(0)
@@ -236,13 +236,13 @@ it('deshace la correccion de un tramo que pasa tres dias del cese si la baja con
         $baja->run(...),
     ));
 
-    expect(fn () => app(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+    expect(fn () => app(CorrectShiftEntryHandler::class)->handle(new CorrectShiftEntryCommand(
         shiftEntryUuid: $tramo->shiftEntryUuid,
         clockedInAt: null,
         clockedOutAt: new DateTimeImmutable('2026-09-28T06:00:00Z'),
         reason: CorrectionReason::of(CorrectionReasonCode::AJUSTE_ACORDADO_CON_RRHH),
         performedByUserId: $responsable->id,
-    )))->toThrow(ShiftMarkAfterTermination::class);
+    )))->toThrow(ShiftEntryMarkAfterTermination::class);
 
     // La baja confirmo y sus asientos estan; el de la correccion, no.
     expect($baja->outcome())->toBe(EmployeeWriteInOtherSession::COMMITTED)

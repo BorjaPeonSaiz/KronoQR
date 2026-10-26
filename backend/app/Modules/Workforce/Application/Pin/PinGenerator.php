@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\Pin;
 
 use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
+use App\Modules\Workforce\Application\Port\PinCandidateSource;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use Random\RandomException;
 use RuntimeException;
@@ -13,7 +14,8 @@ use RuntimeException;
 /**
  * Genera el PIN, de 6 u 8 cifras segun la instalacion (RF-ID-09, ADR-050).
  *
- * **`random_int` y nunca `rand` ni `mt_rand`.** Mersenne Twister es predecible:
+ * **`random_int` y nunca `rand` ni `mt_rand`**, a traves de
+ * {@see PinCandidateSource} (H8). Mersenne Twister es predecible:
  * observando unas cuantas salidas se reconstruye su estado y, con el, todas las
  * siguientes. Aqui la salida es la llave del registro horario personal de una
  * persona (RL-05) y del fichaje de respaldo (RF-AT-11), asi que la fuente tiene
@@ -41,6 +43,8 @@ use RuntimeException;
  * se quiere estar.
  *
  * **Sin estado y sin reloj**: dos llamadas seguidas no tienen relacion entre si.
+ * El azar entra por el puerto para que una prueba pueda dar primero un PIN
+ * excluido y ver que se descarta y se reintenta.
  */
 final readonly class PinGenerator
 {
@@ -55,6 +59,7 @@ final readonly class PinGenerator
     public function __construct(
         private PinPolicyProvider $policies,
         private PinLengthProvider $lengths,
+        private PinCandidateSource $candidates,
     ) {}
 
     /**
@@ -87,6 +92,6 @@ final readonly class PinGenerator
      */
     private function digits(PinLength $length): string
     {
-        return str_pad((string) random_int(0, $length->maximum()), $length->value, '0', STR_PAD_LEFT);
+        return str_pad((string) $this->candidates->pick($length->maximum()), $length->value, '0', STR_PAD_LEFT);
     }
 }

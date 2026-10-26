@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Http\Resource;
 
 use App\Modules\Kiosk\Application\UseCase\HeartbeatOutcome;
-use DateTimeZone;
+use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -74,7 +75,7 @@ final class KioskHeartbeatResource extends JsonResource
         $outcome = $this->resource;
 
         return [
-            'server_time' => $outcome->seenAt->format('Y-m-d\TH:i:s.v\Z'),
+            'server_time' => UtcInstant::of($outcome->seenAt, UtcPrecision::Milliseconds),
             'client_errors_accepted' => $outcome->clientErrorsAccepted,
             // **La huella, nunca el codigo** (RF-KI-08, tarea 3.3). Va siempre,
             // tambien cuando vale `null`: el contrato la declara obligatoria
@@ -111,9 +112,7 @@ final class KioskHeartbeatResource extends JsonResource
             ...($outcome->rotatedToken === null ? [] : [
                 'rotated_token' => [
                     'value' => $outcome->rotatedToken->value,
-                    'expires_at' => $outcome->rotatedToken->expiresAt
-                        ->setTimezone(new DateTimeZone('UTC'))
-                        ->format('Y-m-d\TH:i:s\Z'),
+                    'expires_at' => UtcInstant::of($outcome->rotatedToken->expiresAt, UtcPrecision::Seconds),
                 ],
             ]),
             // **La version minima de la PWA** (RF-KI-07, RF-PA-07, 2.2.1). Se

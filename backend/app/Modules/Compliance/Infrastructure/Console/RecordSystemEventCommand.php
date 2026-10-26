@@ -9,6 +9,7 @@ use App\Modules\Compliance\Application\UseCase\RecordSystemEvent as RecordSystem
 use App\Modules\Compliance\Domain\Exception\ComplianceDomainException;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Console\Command;
 use JsonException;
 use Throwable;
@@ -118,7 +119,7 @@ final class RecordSystemEventCommand extends Command
             'action' => $action->value,
             'hash' => $entry->hash,
             'prev_hash' => $entry->previousHash,
-            'occurred_at' => $entry->draft->occurredAt->format('Y-m-d\TH:i:s.u\Z'),
+            'occurred_at' => UtcInstant::of($entry->draft->occurredAt),
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
 
         return self::SUCCESS;

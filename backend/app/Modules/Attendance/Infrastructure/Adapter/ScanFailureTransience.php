@@ -41,7 +41,7 @@ use Throwable;
  * ## Los desenlaces
  *
  * Una `BusinessRejection` en cualquier eslabon: la carrera de RN-01 tras sus
- * reintentos (`ShiftAlreadyOpen`, `OverlappingShiftEntry`), el reenvio
+ * reintentos (`ShiftEntryAlreadyOpen`, `OverlappingShiftEntry`), el reenvio
  * (`ScanAlreadyRecorded`) y cualquier otra regla que dice que no.
  *
  * Solo clasifica: no escribe ni informa. El mensaje de la excepcion solo se lee

@@ -13,6 +13,7 @@ use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordDigest;
+use App\Modules\Reporting\Infrastructure\Export\PersonalRecordFormat;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordLayout;
 use App\Modules\Reporting\Infrastructure\Export\PersonalRecordPdfWriter;
 use Illuminate\Support\Facades\App;
@@ -202,7 +203,7 @@ it('lleva los tramos, el turno de noche entero, la correccion y el total del per
     expect($html)->toContain('16:00');
     expect($html)->not->toContain('16,0');
     expect(PersonalRecordLayout::totalMinutes($registro))->toBe(960);
-    expect(PersonalRecordLayout::rows($registro))->toHaveCount(3);
+    expect(PersonalRecordLayout::rows($registro, PersonalRecordFormat::Pdf))->toHaveCount(3);
 })->group('RF-ID-05', 'RL-05', 'RN-05', 'RN-13');
 
 it('cambia la huella cuando cambia un solo minuto del registro', function (): void {

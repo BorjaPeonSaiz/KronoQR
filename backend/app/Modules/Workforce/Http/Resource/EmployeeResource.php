@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Resource;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
-use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -75,7 +75,7 @@ final class EmployeeResource extends JsonResource
             // ADR-060: cuando se minimizo la ficha, en UTC; `null` si se conserva
             // entera. Es lo que dice que la ficha esta minimizada, no los nombres
             // vacios. Lo reciben los dos esquemas, tambien el del responsable.
-            'anonymized_at' => $employee->anonymizedAt?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z'),
+            'anonymized_at' => UtcInstant::format($employee->anonymizedAt),
         ];
     }
 }

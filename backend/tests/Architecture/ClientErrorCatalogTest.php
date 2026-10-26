@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
+use App\Modules\Shared\Domain\Support\ClientErrorCode;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 use Tests\Architecture\Support\Repo;

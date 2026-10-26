@@ -5,27 +5,43 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
+use App\Modules\Workforce\Application\Port\PinCandidateSource;
 use App\Modules\Workforce\Application\Port\PinPolicy;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
+use App\Modules\Workforce\Infrastructure\Adapter\RandomPinCandidateSource;
+use Tests\Support\Workforce\ScriptedPinCandidates;
 
 /*
  * El generador de PIN (RF-ID-09), probado sin base de datos ni framework.
  *
  * QUE SE COMPRUEBA AQUI Y QUE NO. Que un generador es aleatorio no se demuestra
  * con una prueba: se demuestra con la fuente que usa, y esa decision la fija el
- * codigo —`random_int`— y la vigila la revision. Lo que si se puede comprobar, y
- * es lo que rompe de verdad, es la FORMA y las EXCLUSIONES: seis digitos
- * siempre, ceros a la izquierda incluidos, y ningun PIN de la lista que la
- * instalacion excluye.
+ * adaptador —`random_int`— y la vigila la revision. Lo que si se puede
+ * comprobar, y es lo que rompe de verdad, es la FORMA y las EXCLUSIONES: seis
+ * digitos siempre, ceros a la izquierda incluidos, y ningun PIN de la lista que
+ * la instalacion excluye.
+ *
+ * Las exclusiones se prueban con una fuente guionizada (`candidatosDePin`): la
+ * prueba decide que candidatos salen, da primero uno excluido y ve que el
+ * generador lo descarta y reintenta. Con el azar de verdad, un generador que no
+ * excluyera nada pasaria casi siempre.
  *
  * La politica entra por un doble y no por `config()`: es lo que hace que estas
  * pruebas corran en la suite Unit, sin aplicacion levantada.
  */
 
 /**
+ * @param  non-empty-list<int>  $picks
+ */
+function candidatosDePin(array $picks): ScriptedPinCandidates
+{
+    return new ScriptedPinCandidates($picks);
+}
+
+/**
  * @param  list<string>  $forbidden
  */
-function pinGeneratorWith(array $forbidden, PinLength $length = PinLength::SIX): PinGenerator
+function pinGeneratorWith(array $forbidden, PinLength $length = PinLength::SIX, ?PinCandidateSource $candidates = null): PinGenerator
 {
     return new PinGenerator(
         new class($forbidden) implements PinPolicyProvider
@@ -49,6 +65,7 @@ function pinGeneratorWith(array $forbidden, PinLength $length = PinLength::SIX):
                 return $this->length;
             }
         },
+        $candidates ?? new RandomPinCandidateSource,
     );
 }
 
@@ -80,38 +97,64 @@ it('no descarta los PIN con ceros a la izquierda', function (): void {
     );
 })->group('RF-ID-09');
 
-it('nunca emite un PIN excluido por la configuracion', function (): void {
-    // El escenario real: los patrones triviales del `.env` de serie. Se excluyen
-    // TODOS menos uno, de modo que el generador solo puede devolver ese: si la
-    // exclusion no funcionara, la prueba lo veria en el primer intento.
-    $onlyAdmissible = '483920';
+it('descarta el PIN excluido que sale y emite el siguiente admisible', function (): void {
+    // La fuente da primero dos excluidos (`000000` y `123456`, de los triviales
+    // de serie) y despues uno admisible: el generador tiene que tirar los dos y
+    // devolver el tercero, no «arreglar» el primero ni rendirse.
+    $candidates = candidatosDePin([0, 123456, 483920]);
 
-    $forbidden = [];
+    $pin = pinGeneratorWith(['000000', '123456'], candidates: $candidates)->generate();
 
-    for ($pin = 0; $pin < 1000000; $pin++) {
-        $candidate = str_pad((string) $pin, 6, '0', STR_PAD_LEFT);
+    expect($pin)->toBe('483920')
+        ->and($candidates->calls)->toBe(3)
+        // Cada candidato se pide en todo el espacio de seis cifras.
+        ->and($candidates->maximums)->toBe([999999, 999999, 999999]);
+})->group('RF-ID-09', 'RS-12');
 
-        if ($candidate !== $onlyAdmissible) {
-            $forbidden[] = $candidate;
-        }
-    }
+it('no pide mas candidatos de los necesarios', function (): void {
+    // El primero admisible se emite tal cual: un generador que siguiera tirando
+    // gastaria entropia y cambiaria la distribucion por nada.
+    $candidates = candidatosDePin([42]);
 
-    // Con 999.999 exclusiones el generador tiene que reintentar hasta dar con el
-    // unico admisible; el limite de intentos hace que, si no lo encuentra, falle
-    // en voz alta en vez de colgarse.
-    expect(pinGeneratorWith(array_slice($forbidden, 0, 999))->generate())
-        ->not->toBeIn(array_slice($forbidden, 0, 999));
+    expect(pinGeneratorWith(['000000'], candidates: $candidates)->generate())->toBe('000042')
+        ->and($candidates->calls)->toBe(1);
+})->group('RF-ID-09');
+
+it('pide los candidatos de ocho cifras cuando la instalacion usa PIN de ocho', function (): void {
+    $candidates = candidatosDePin([0, 7]);
+
+    expect(pinGeneratorWith(['00000000'], PinLength::EIGHT, $candidates)->generate())->toBe('00000007')
+        ->and($candidates->maximums)->toBe([99999999, 99999999]);
+})->group('RF-ID-09');
+
+it('falla en voz alta tras veinte candidatos excluidos seguidos', function (): void {
+    // Una lista que excluyera todo lo que sale no puede colgar el alta: tras el
+    // tope de intentos, error legible que nombra el ajuste a revisar.
+    $candidates = candidatosDePin([0]);
+
+    expect(static fn (): string => pinGeneratorWith(['000000'], candidates: $candidates)->generate())
+        ->toThrow(RuntimeException::class, 'identity.pin.forbidden')
+        ->and($candidates->calls)->toBe(20);
+})->group('RF-ID-09');
+
+it('admite el ultimo intento antes del tope', function (): void {
+    // Diecinueve excluidos y un admisible en el vigesimo: el tope incluye ese
+    // intento, no se queda uno corto.
+    $candidates = candidatosDePin([...array_fill(0, 19, 0), 5]);
+
+    expect(pinGeneratorWith(['000000'], candidates: $candidates)->generate())->toBe('000005')
+        ->and($candidates->calls)->toBe(20);
 })->group('RF-ID-09');
 
 it('rechaza los patrones triviales que la instalacion excluye de serie', function (string $trivial): void {
     // Un espacio de 10^6 con los tres primeros intentos evidentes no es un
     // espacio de 10^6: con cinco intentos antes del bloqueo (RS-12), estos son
     // los que un atacante prueba primero.
-    $generator = pinGeneratorWith([$trivial]);
+    // La fuente da justo ese patron y despues otro: tiene que salir el otro.
+    $candidates = candidatosDePin([(int) $trivial, 271828]);
 
-    for ($i = 0; $i < 300; $i++) {
-        expect($generator->generate())->not->toBe($trivial);
-    }
+    expect(pinGeneratorWith([$trivial], candidates: $candidates)->generate())->toBe('271828')
+        ->and($candidates->calls)->toBe(2);
 })->with([
     '000000',
     '111111',
@@ -157,11 +200,12 @@ it('con ocho cifras descarta los excluidos de ocho y no le afectan los de seis',
     // La lista de serie lleva las dos longitudes; el generador solo puede
     // coincidir con las de la suya. Aqui se excluye un PIN de 8 concreto y se
     // comprueba que no sale, y que tener excluidos de 6 no impide emitir.
-    $generator = pinGeneratorWith(['12345678', '123456', '000000'], PinLength::EIGHT);
+    // `00123456` acaba en un excluido de seis, pero es otro PIN: sale tal cual.
+    $candidates = candidatosDePin([12345678, 123456]);
 
-    for ($i = 0; $i < 300; $i++) {
-        expect($generator->generate())->not->toBe('12345678')->toMatch('/^[0-9]{8}$/');
-    }
+    expect(pinGeneratorWith(['12345678', '123456', '000000'], PinLength::EIGHT, $candidates)->generate())
+        ->toBe('00123456')
+        ->and($candidates->calls)->toBe(2);
 })->group('RF-ID-09', 'RS-12');
 
 it('la lista de excluidos admite seis u ocho cifras y rechaza siete', function (): void {

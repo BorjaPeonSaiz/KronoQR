@@ -95,7 +95,9 @@ function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?
         'work_date' => $workDate,
         'clocked_in_at' => $clockedInAt.'+00',
         'clocked_out_at' => $clockedOutAt === null ? null : $clockedOutAt.'+00',
-        'duration_minutes' => $clockedOutAt === null ? null : 240,
+        // La de sus marcas: el motor no admite otra al nacer (migracion
+        // `2026_10_25_100000`).
+        'duration_minutes' => $clockedOutAt === null ? null : intdiv(strtotime($clockedOutAt.'+00') - strtotime($clockedInAt.'+00'), 60),
         'status' => $clockedOutAt === null ? 'open' : 'closed',
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
@@ -413,7 +415,7 @@ it('devuelve el tramo del break_start aunque una correccion lo haya sustituido',
 
     $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::BREAK_START, '2026-03-14 01:00:00', $original));
 
-    // La correccion, tal y como la escribe `CorrectShiftHandler`: primero la
+    // La correccion, tal y como la escribe `CorrectShiftEntryHandler`: primero la
     // version anterior pasa a `superseded` —si no, la sucesora chocaria contra
     // `shift_entries_no_overlap`, que es exactamente lo que ese estado existe
     // para permitir (ADR-026)— y despues se enlazan.

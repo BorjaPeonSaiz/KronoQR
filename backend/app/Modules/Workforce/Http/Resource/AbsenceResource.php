@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Resource;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Workforce\Application\Port\AbsenceView;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -71,9 +72,9 @@ final class AbsenceResource extends JsonResource
             'change_reason' => $absence->changeReason,
             // En UTC con microsegundos, como el resto de instantes de la API
             // (regla dura 3). La conversion a la zona del centro es del cliente.
-            'voided_at' => $absence->voidedAt?->format('Y-m-d\TH:i:s.u\Z'),
+            'voided_at' => UtcInstant::format($absence->voidedAt),
             'void_reason' => $absence->voidReason,
-            'created_at' => $view->createdAt->format('Y-m-d\TH:i:s.u\Z'),
+            'created_at' => UtcInstant::of($view->createdAt),
         ];
     }
 }

@@ -13,51 +13,6 @@ use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
  * gente trabaja en el hotel y permitiria adivinar codigos ajenos contando.
  */
 
-it('genera codigos distintos en cada llamada', function (): void {
-    $codes = [];
-
-    for ($i = 0; $i < 200; $i++) {
-        $codes[] = EmployeeCode::generate()->value;
-    }
-
-    expect(array_unique($codes))->toHaveCount(200);
-})->group('RF-GP-01', 'RF-ID-06');
-
-it('no genera codigos correlativos', function (): void {
-    // La prueba del requisito: dos codigos consecutivos no se parecen. Si
-    // alguien sustituyera la generacion por un contador, la distancia entre dos
-    // codigos consecutivos seria minima y esto lo delataria.
-    $first = EmployeeCode::generate()->value;
-    $second = EmployeeCode::generate()->value;
-
-    $shared = 0;
-
-    for ($i = 0; $i < mb_strlen($first); $i++) {
-        if (mb_substr($first, $i, 1) === mb_substr($second, $i, 1)) {
-            $shared++;
-        }
-    }
-
-    // Con 31 simbolos por posicion, compartir mas de la mitad de las posiciones
-    // es practicamente imposible por azar.
-    expect($shared)->toBeLessThan((int) (mb_strlen($first) / 2));
-})->group('RF-GP-01', 'RF-ID-06');
-
-it('evita los caracteres que se confunden al leer una tarjeta', function (): void {
-    // Alguien teclea este codigo en el portal desde una tarjeta desgastada
-    // (RF-ID-06). Sin 0/O ni 1/I/L no hay forma de teclear mal un codigo bien
-    // leido.
-    for ($i = 0; $i < 100; $i++) {
-        $code = mb_substr(EmployeeCode::generate()->value, 1);
-
-        expect($code)->not->toContain('0')
-            ->and($code)->not->toContain('O')
-            ->and($code)->not->toContain('1')
-            ->and($code)->not->toContain('I')
-            ->and($code)->not->toContain('L');
-    }
-})->group('RF-ID-06');
-
 it('normaliza a mayusculas el codigo que lee', function (): void {
     // La columna es `citext`: `e7qk2mxpr` y `E7QK2MXPR` son el mismo codigo, y
     // el objeto de valor tiene que decir lo mismo que la base de datos.
@@ -81,4 +36,37 @@ it('rechaza un codigo vacio o con caracteres que no puede llevar', function (str
     'con espacio' => 'E7QK 2MXPR',
     'con guion' => 'RECEPCION-01',
     'demasiado largo' => 'E123456789012345678901234567890123',
+])->group('RF-GP-01');
+
+it('compone el codigo nuevo con las posiciones que le dan, sin azar propio (H8)', function (): void {
+    // El azar lo pone el adaptador del puerto: con las posiciones fijadas, el
+    // codigo es el mismo siempre, caracter a caracter.
+    expect(EmployeeCode::fromRandomPicks([0, 1, 2, 3, 4, 5, 6, 7, 8])->value)->toBe('EABCDEFGHJ')
+        ->and(EmployeeCode::fromRandomPicks([30, 29, 28, 27, 26, 25, 24, 23, 22])->value)->toBe('E98765432Z');
+})->group('RF-GP-01', 'RF-ID-06');
+
+it('el alfabeto del codigo nuevo no tiene los caracteres que se confunden al leer una tarjeta', function (): void {
+    // Alguien teclea este codigo en el portal desde una tarjeta desgastada
+    // (RF-ID-06). Sin 0/O ni 1/I/L no hay forma de teclear mal un codigo bien
+    // leido. Se recorren todas las posiciones del alfabeto.
+    $alphabet = '';
+
+    for ($pick = 0; $pick < EmployeeCode::ALPHABET_SIZE; $pick++) {
+        $alphabet .= mb_substr(EmployeeCode::fromRandomPicks(array_fill(0, EmployeeCode::RANDOM_LENGTH, $pick))->value, 1, 1);
+    }
+
+    expect(mb_strlen($alphabet))->toBe(31)
+        ->and(count(array_unique(mb_str_split($alphabet))))->toBe(31)
+        ->and($alphabet)->not->toMatch('/[01OIL]/');
+})->group('RF-ID-06');
+
+it('rechaza unas posiciones que no forman un codigo nuevo', function (array $picks): void {
+    /** @var list<int> $picks */
+    expect(static fn (): EmployeeCode => EmployeeCode::fromRandomPicks($picks))->toThrow(InvalidArgumentException::class);
+})->with([
+    'una de menos' => [[0, 0, 0, 0, 0, 0, 0, 0]],
+    'una de mas' => [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+    'ninguna' => [[]],
+    'negativa' => [[0, 0, 0, 0, 0, 0, 0, 0, -1]],
+    'fuera del alfabeto' => [[0, 0, 0, 0, 0, 0, 0, 0, 31]],
 ])->group('RF-GP-01');

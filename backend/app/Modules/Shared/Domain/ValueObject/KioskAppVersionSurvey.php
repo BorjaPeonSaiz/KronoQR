@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use InvalidArgumentException;
+
 /**
  * Que version de la PWA declaran los quioscos que estan latiendo, frente a la
  * del servidor (RF-KI-07, RF-PD-13).
@@ -33,7 +35,22 @@ final readonly class KioskAppVersionSurvey
         public int $examined = 0,
         public array $behind = [],
         public array $ahead = [],
-    ) {}
+    ) {
+        // Un sondeo que compara menos quioscos de los que lista, o que lista sin
+        // version con la que comparar, daria en `product:doctor` un recuento
+        // imposible (V21-1-AR-4).
+        if ($examined < 0) {
+            throw new InvalidArgumentException('El sondeo de versiones no compara '.$examined.' quioscos.');
+        }
+
+        if (\count($behind) + \count($ahead) > $examined) {
+            throw new InvalidArgumentException('El sondeo de versiones no lista mas quioscos de los que ha comparado.');
+        }
+
+        if ($minimumAppVersion === null && $examined > 0) {
+            throw new InvalidArgumentException('Sin version del servidor no se compara ningun quiosco.');
+        }
+    }
 
     /** Un servidor sin version comparable no juzga a nadie. */
     public static function unchecked(): self

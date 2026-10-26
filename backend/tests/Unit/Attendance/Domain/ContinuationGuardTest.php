@@ -5,13 +5,13 @@ declare(strict_types=1);
 use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
-use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\ShiftEntry;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\EntryClosure;
 use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
-use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
@@ -40,8 +40,8 @@ function continuacionAlta(WorkDay $workDay, string $desdeMadrid, ?string $hastaM
     return $workDay->addEntry(
         'shift-entry-nuevo-'.$desdeMadrid,
         $hastaMadrid === null
-            ? ShiftTimes::open(Instants::inMadrid($desdeMadrid))
-            : ShiftTimes::closed(
+            ? ShiftEntryTimes::open(Instants::inMadrid($desdeMadrid))
+            : ShiftEntryTimes::closed(
                 Instants::inMadrid($desdeMadrid),
                 Instants::inMadrid($hastaMadrid),
                 $terminaEnPausa ? EntryClosure::BREAK_START : EntryClosure::CLOCK_OUT,
@@ -54,7 +54,7 @@ function continuacionAlta(WorkDay $workDay, string $desdeMadrid, ?string $hastaM
 }
 
 /** Corrige un tramo de la jornada con la cota de 12 h. */
-function continuacionCorreccion(WorkDay $workDay, string $entryUuid, ShiftTimes $times): ShiftEntry
+function continuacionCorreccion(WorkDay $workDay, string $entryUuid, ShiftEntryTimes $times): ShiftEntry
 {
     return $workDay->correctEntry(
         $entryUuid,
@@ -124,7 +124,7 @@ it('rechaza dar de alta un tramo que pisa a otro y un abierto sobre otro abierto
         ->build();
 
     expect(fn (): ShiftEntry => continuacionAlta($abierta, '2026-03-14 06:00', null))
-        ->toThrow(ShiftAlreadyOpen::class);
+        ->toThrow(ShiftEntryAlreadyOpen::class);
 })->group('RN-01', 'RN-02', 'RF-PA-04');
 
 it('admite la entrada del dia siguiente un segundo antes de la cota y la rechaza en la cota', function (): void {
@@ -160,7 +160,7 @@ it('rechaza colgar de la jornada del 10 un tramo del 13, en el alta y en la corr
     // Con un solo tramo, moverlo al 13 es mover la apertura de la jornada.
     $unico = continuacionJornadaDelDiez();
 
-    expect(fn (): ShiftEntry => continuacionCorreccion($unico, 'shift-entry-1', ShiftTimes::closed(
+    expect(fn (): ShiftEntry => continuacionCorreccion($unico, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-10-13 08:00'),
         Instants::inMadrid('2026-10-13 15:00'),
     )))->toThrow(CorrectionWouldChangeWorkDate::class);
@@ -178,7 +178,7 @@ it('rechaza colgar de la jornada del 10 un tramo del 13, en el alta y en la corr
         ))
         ->build();
 
-    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionCorreccion($dos, 'shift-entry-2', ShiftTimes::closed(
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionCorreccion($dos, 'shift-entry-2', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-10-13 08:00'),
         Instants::inMadrid('2026-10-13 15:00'),
     )));
@@ -219,7 +219,7 @@ it('rechaza acortar una salida si la vuelta del dia siguiente queda en la cota o
         ))
         ->build();
 
-    $correccion = fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-1', ShiftTimes::closed(
+    $correccion = fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-14 08:00'),
         Instants::inMadrid($salida),
         EntryClosure::BREAK_START,
@@ -264,7 +264,7 @@ it('rechaza mover un tramo si el que venia detras deja de continuar la jornada',
         )->endingInBreak())
         ->build();
 
-    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-2', ShiftTimes::closed(
+    $rechazo = continuacionRechazo(fn (): ShiftEntry => continuacionCorreccion($jornada, 'shift-entry-2', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-15 05:00'),
         Instants::inMadrid('2026-03-15 06:00'),
     )));
@@ -302,7 +302,7 @@ it('no tropieza con un dato antiguo que ya violaba la cota mas adelante en la jo
 
     // Acortar el primero no cambia el anterior de nadie, asi que el tramo del
     // 16 no se vuelve a juzgar.
-    $corregido = continuacionCorreccion($jornada, 'shift-entry-1', ShiftTimes::closed(
+    $corregido = continuacionCorreccion($jornada, 'shift-entry-1', ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-14 08:00'),
         Instants::inMadrid('2026-03-14 11:00'),
     ));
@@ -341,7 +341,7 @@ it('mide la cota en horas reales la noche del cambio de hora de octubre', functi
 
     $alta = fn (): ShiftEntry => $jornada->addEntry(
         'shift-entry-nuevo',
-        ShiftTimes::closed(Instants::utc($vueltaUtc), Instants::utc('2026-10-25 14:00')),
+        ShiftEntryTimes::closed(Instants::utc($vueltaUtc), Instants::utc('2026-10-25 14:00')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -367,7 +367,7 @@ it('aplica la cota del perfil, no una constante', function (): void {
 
     $rechazo = continuacionRechazo(fn (): ShiftEntry => $jornada->addEntry(
         'shift-entry-nuevo',
-        ShiftTimes::closed(Instants::inMadrid('2026-10-11 01:30'), Instants::inMadrid('2026-10-11 03:00')),
+        ShiftEntryTimes::closed(Instants::inMadrid('2026-10-11 01:30'), Instants::inMadrid('2026-10-11 03:00')),
         ScanOrigin::MANUAL_ADMIN,
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
@@ -527,7 +527,7 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
         ))
         ->build();
 
-    $hueco = $jornada->continuationGapFor(ShiftTimes::closed(
+    $hueco = $jornada->continuationGapFor(ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-15 05:00'),
         Instants::inMadrid('2026-03-15 07:00'),
     ));
@@ -535,7 +535,7 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
     expect($hueco?->start)->toEqual(Instants::inMadrid('2026-03-15 03:00'))
         ->and($hueco?->end)->toEqual(Instants::inMadrid('2026-03-15 05:00'))
         // Un tramo del dia de la jornada no continua nada: no tiene hueco.
-        ->and($jornada->continuationGapFor(ShiftTimes::closed(
+        ->and($jornada->continuationGapFor(ShiftEntryTimes::closed(
             Instants::inMadrid('2026-03-14 18:00'),
             Instants::inMadrid('2026-03-14 20:00'),
         )))->toBeNull()
@@ -548,7 +548,7 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
     expect($anulandoElPrimero)->toBeNull();
 
     // Corregir el segundo: el hueco se mide contra el primero.
-    $corrigiendo = $jornada->continuationGapFor(ShiftTimes::closed(
+    $corrigiendo = $jornada->continuationGapFor(ShiftEntryTimes::closed(
         Instants::inMadrid('2026-03-15 01:30'),
         Instants::inMadrid('2026-03-15 03:00'),
     ), 'shift-entry-2');

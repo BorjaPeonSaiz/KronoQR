@@ -154,7 +154,7 @@ final readonly class KioskVersionProbe implements DoctorProbe
         return array_map(static fn (KioskAppVersionEntry $entry): array => [
             'device' => $entry->deviceUuid,
             'app_version' => $entry->appVersion,
-            'queue_storage' => $entry->queueStorage,
+            'queue_storage' => $entry->queueStorage->value,
             'pending_queue_size' => $entry->pendingQueueSize,
             'ready' => $entry->isReadyToReload(),
         ], $entries);
@@ -172,7 +172,7 @@ final readonly class KioskVersionProbe implements DoctorProbe
             '%s (%s, queue=%s, pending=%s)',
             $entry->deviceUuid,
             $entry->appVersion ?? '-',
-            $entry->queueStorage,
+            $entry->queueStorage->value,
             $entry->pendingQueueSize ?? '-',
         ), $entries));
     }

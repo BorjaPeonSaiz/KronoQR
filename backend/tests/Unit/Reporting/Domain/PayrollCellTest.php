@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Reporting\Domain\ValueObject\PayrollCell;
+use App\Modules\Reporting\Domain\Support\PayrollCell;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
 use App\Modules\Shared\Domain\ValueObject\PayrollColumn;

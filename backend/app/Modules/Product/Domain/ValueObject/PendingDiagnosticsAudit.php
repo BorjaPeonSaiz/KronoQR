@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
-use App\Modules\Shared\Domain\ValueObject\UtcInstant;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use DateTimeZone;
 

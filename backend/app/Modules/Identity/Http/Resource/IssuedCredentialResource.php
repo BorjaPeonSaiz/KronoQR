@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Application\UseCase\IssuedCredential;
-use DateTimeZone;
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -40,9 +40,7 @@ final class IssuedCredentialResource extends JsonResource
             // emitir, para que una tarjeta emitida antes de una rotacion e
             // impresa despues salga firmada con la clave nueva (§5.3).
             'key_id' => null,
-            'issued_at' => $credential->issuedAt
-                ->setTimezone(new DateTimeZone('UTC'))
-                ->format('Y-m-d\TH:i:s.u\Z'),
+            'issued_at' => UtcInstant::of($credential->issuedAt),
             'printed_at' => null,
             'delivered_at' => null,
             'revoked_at' => null,

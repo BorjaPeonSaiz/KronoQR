@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\Exception;
 
+use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Modules\Shared\Domain\ValueObject\FeatureAvailability;
 use App\Modules\Shared\Domain\ValueObject\FeatureRestriction;
 use DateTimeImmutable;
-use DateTimeZone;
 use RuntimeException;
 
 /**
@@ -90,7 +90,7 @@ final class FeatureNotLicensed extends RuntimeException implements BusinessRejec
      */
     public function sinceUtc(): ?string
     {
-        return $this->since?->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::format($this->since);
     }
 
     /**
