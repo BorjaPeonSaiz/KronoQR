@@ -28,7 +28,7 @@ use Throwable;
  * no.** Es deliberado y viene de fuera: las reglas de alerta de A09 estan
  * escritas contra `kronoqr_auth_attempts_total` y renombrarlo aqui las dejaria
  * sin datos en silencio, que es la peor forma de perder una alerta de seguridad.
- * La invariante que si se respeta es la que la tarea 3.1 necesita: **el sufijo de
+ * La invariante que si se respeta es la que `/metrics` necesita: **el sufijo de
  * la clave de Redis es, literalmente, el nombre de la metrica expuesta**, de modo
  * que el publicador las reune con un solo `SCAN` sin traducir nada.
  *
@@ -37,7 +37,7 @@ use Throwable;
  */
 final readonly class RedisAuthenticationMetrics implements AuthenticationMetrics
 {
-    /** Mismo prefijo que el resto de metricas para que la tarea 3.1 las reuna con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas para que `/metrics` las reuna con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string AUTH_ATTEMPTS_TOTAL = self::KEY_PREFIX.'kronoqr_auth_attempts_total';

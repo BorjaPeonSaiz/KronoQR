@@ -80,7 +80,7 @@ final readonly class GeneratedFileHousekeeping
 
     /**
      * Marca una fila cuyo fichero desaparecio antes de caducar y, **solo si fue
-     * esta llamada quien la marco**, publica el hecho y sube la metrica (C5).
+     * esta llamada quien la marco**, publica el hecho y sube la metrica (ADR-045 C5).
      *
      * Es la regla comun de las dos purgas, en un solo sitio:
      *
@@ -184,7 +184,7 @@ final readonly class GeneratedFileHousekeeping
      *
      * Un `Refused` —la fila apunta fuera de su raiz— deja log y metrica y **no
      * borra nada**: puede ser una fila alterada que pretende que la purga se
-     * lleve una copia de `BACKUP_PATH` (C3).
+     * lleve una copia de `BACKUP_PATH` (ADR-045 C3).
      */
     public function discardRecorded(GeneratedFileArea $area, string $recordedPath): GeneratedFileRemoval
     {
@@ -217,7 +217,7 @@ final readonly class GeneratedFileHousekeeping
     }
 
     /**
-     * El fichero de una fila desaparecio antes de caducar (C5). Metrica y log
+     * El fichero de una fila desaparecio antes de caducar (ADR-045 C5). Metrica y log
      * de aviso, sin `uuid`: el `uuid` va al asiento, que lo escribe el modulo.
      */
     public function fileMissing(GeneratedFileClass $class): void

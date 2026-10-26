@@ -28,7 +28,7 @@ interface GeneratedFileMetrics
 
     /**
      * `generated_files_missing_total{class}`: una fila `completed` cuyo fichero
-     * desaparecio **antes** de su `expires_at`. Evento de seguridad (C5).
+     * desaparecio **antes** de su `expires_at`. Evento de seguridad (ADR-045 C5).
      */
     public function missing(GeneratedFileClass $class): void;
 

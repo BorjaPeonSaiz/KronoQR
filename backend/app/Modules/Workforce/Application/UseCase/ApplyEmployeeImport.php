@@ -55,8 +55,7 @@ use App\Modules\Workforce\Domain\ValueObject\ImportRow;
  * Se declaran distintas dos cosas, cada una por su nombre:
  *
  * - el **origen** (`viaImport`), para que el uso del plan se cuente **una vez
- *   por importacion** y no una vez por fila (ADR-028, H-04 de la revision de la
- *   3.8);
+ *   por importacion** y no una vez por fila (ADR-028);
  * - el **PIN, pendiente** ({@see PinProvisioning::DeferredToCardHandover}).
  *   Mas abajo, el porque.
  *

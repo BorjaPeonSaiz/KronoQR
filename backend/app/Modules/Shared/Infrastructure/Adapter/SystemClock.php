@@ -13,8 +13,8 @@ use DateTimeZone;
  *
  * Es el unico punto de todo el backend autorizado a preguntar la hora al
  * sistema operativo. Si aparece una segunda implementacion de este adaptador,
- * ADR-021 ha dejado de cumplirse: la prueba de arquitectura de la tarea 0.3
- * comprueba que solo existe una declaracion del puerto y una del adaptador.
+ * ADR-021 ha dejado de cumplirse: una prueba de arquitectura comprueba que
+ * solo existe una declaracion del puerto y una del adaptador.
  */
 final class SystemClock implements Clock
 {

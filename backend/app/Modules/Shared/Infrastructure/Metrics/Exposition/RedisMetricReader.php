@@ -359,7 +359,7 @@ final readonly class RedisMetricReader
     private function scan(Connection $connection, string $key): array
     {
         $keys = [];
-        // NULL y no CERO en la primera vuelta. `phpredis` recibe el cursor por
+        // NULL y no CERO en la primera iteracion. `phpredis` recibe el cursor por
         // referencia y trata un `0` de entrada como «el recorrido ya termino»:
         // devuelve `false` sin mirar una sola clave. Con `null` empieza de
         // verdad. Es la segunda trampa de esta clase, y no da ningun error —solo

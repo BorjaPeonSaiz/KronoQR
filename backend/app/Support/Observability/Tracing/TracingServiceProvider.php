@@ -27,7 +27,7 @@ use OpenTelemetry\SDK\Trace\TracerProvider;
 use Throwable;
 
 /**
- * Instrumentacion transversal de la tarea 3.1 (doc 02 §8.1): trazas. Vive fuera
+ * Instrumentacion transversal (doc 02 §8.1): trazas. Vive fuera
  * de los modulos a proposito: es infraestructura de TODO el proceso, no de un
  * dominio.
  *

@@ -25,8 +25,8 @@ interface OperationalSettingsProvider
     /**
      * Configuracion operativa vigente para el centro indicado.
      *
-     * El adaptador resuelve la cascada de `installation_settings`, que desde la
-     * tarea 5.1 tiene **dos escalones**: la fila de la instalacion si existe, y
+     * El adaptador resuelve la cascada de `installation_settings`, que tiene
+     * **dos escalones**: la fila de la instalacion si existe, y
      * si no el valor por defecto del catalogo en codigo. El ambito `site` se
      * retiro con la migracion de contraccion `2026_09_05_100000` porque hay
      * exactamente un centro por instalacion (ADR-040): un escalon que siempre

@@ -125,8 +125,8 @@ final readonly class RegisterEmployeeHandler
                 throw new RuntimeException('El alta no ha podido emitir el PIN del empleado '.$employee->uuid.'.');
             }
 
-            // Dentro de la transaccion, al contrario que antes de la tarea 1.13:
-            // el asiento de `audit_log` del alta y el del PIN son sincronos y
+            // Dentro de la transaccion: el asiento de `audit_log` del alta y el
+            // del PIN son sincronos y
             // tienen que poder impedir el alta si fallan (ADR-027, regla dura 6).
             $this->events->publish(new EmployeeHired(
                 employeeUuid: $employee->uuid,
@@ -134,7 +134,7 @@ final readonly class RegisterEmployeeHandler
                 departmentId: $employee->departmentId,
                 occurredAt: $this->clock->now(),
                 // Se propaga tal cual: decide quien cuenta el uso del plan —una
-                // vez por lote y no una por fila (ADR-028, H-04 de la 3.8)—. Que
+                // vez por lote y no una por fila (ADR-028)—. Que
                 // el alta importada no deje `pin.issued` ya cuenta en el trail
                 // que su PIN quedo pendiente.
                 viaImport: $command->viaImport,

@@ -41,7 +41,7 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * puerta se defienda sola y que un compromiso no escale.
  *
  * `PinOrigin` nace con sus dos casos aunque hoy solo fiche el quiosco. Es
- * deliberado: la tarea 1.11 reutiliza este mismo mecanismo pasando
+ * deliberado: el portal del empleado reutiliza este mismo mecanismo pasando
  * `PinOrigin::PORTAL` y **no tiene que volver a tocar ni el puerto, ni la cache,
  * ni la prueba de escalones**. Anadir el parametro despues habria significado
  * cambiar la firma con contadores vivos en produccion, y el efecto de eso es

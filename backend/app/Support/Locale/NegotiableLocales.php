@@ -14,8 +14,8 @@ use App\Support\Health\LicenseStateProbe;
  *
  * Porque su consumidor es {@see NegotiateLocale}, que esta
  * **fuera de los modulos y no puede depender de ninguno**: Deptrac no deja que
- * `AppFramework` alcance `App\Modules\*`, y esa frontera lleva intacta desde la
- * tarea 0.2. La direccion que si esta admitida es la contraria —un modulo
+ * `AppFramework` alcance `App\Modules\*`, y esa frontera no se ha roto nunca.
+ * La direccion que si esta admitida es la contraria —un modulo
  * alcanza el armazon—, que es exactamente la que ya usa
  * {@see LicenseStateProbe} para el estado de licencia de
  * `GET /health`.

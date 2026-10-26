@@ -50,7 +50,7 @@ use Throwable;
 final readonly class LicenseStateProbe
 {
     /**
-     * Clave versionada, como las de la tarea 5.1: si algun dia cambia lo que se
+     * Clave versionada, como las de la configuracion: si algun dia cambia lo que se
      * guarda, la clave nueva no se encuentra con el valor viejo de un despliegue
      * anterior.
      */

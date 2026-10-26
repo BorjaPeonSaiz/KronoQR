@@ -16,8 +16,8 @@ namespace App\Support\Health;
  *
  * Aqui viajaba `$exception->getMessage()`, y de ahi iba al log. Un mensaje de
  * conexion de PDO lleva host, puerto y **usuario de base de datos**
- * (`SQLSTATE[08006] … user "fichaje_app" … host "postgres" port 5432`), y desde
- * la tarea 3.1 el log tecnico no se queda en el fichero del servidor: se empuja
+ * (`SQLSTATE[08006] … user "fichaje_app" … host "postgres" port 5432`), y el
+ * log tecnico no se queda en el fichero del servidor: se empuja
  * a Loki y se conserva 90 dias (RL-11). Publicar la topologia y las credenciales
  * de conexion en un almacen consultable, cada pocos segundos mientras dura una
  * averia, no es lo que hace falta para diagnosticarla.

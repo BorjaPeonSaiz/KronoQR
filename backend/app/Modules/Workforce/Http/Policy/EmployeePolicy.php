@@ -12,8 +12,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * **Dos conjuntos y no uno**, tal y como los nombra el Anexo B:
  *
- *   - `manager+` puede **leer**: `{admin, rrhh, responsable_departamento}` desde
- *     la tarea 2.1. El responsable entra aqui porque el Anexo B lo mete en
+ *   - `manager+` puede **leer**: `{admin, rrhh, responsable_departamento}`.
+ *     El responsable entra aqui porque el Anexo B lo mete en
  *     «manager+», y **no le da la plantilla entera**: su alcance lo acota
  *     `AccessScope` —en la consulta para el listado, y con `ScopeGuard` para la
  *     ficha—, que es lo que RF-ID-03 exige.

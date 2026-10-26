@@ -130,7 +130,7 @@ final class GeneratedFileAreas
      * si no la hay).
      *
      * Es lo que comprueba `product:doctor`: ninguna puede coincidir con otra ni
-     * contenerla, ni ser `storage/app` ni estar dentro de `BACKUP_PATH` (C3).
+     * contenerla, ni ser `storage/app` ni estar dentro de `BACKUP_PATH` (ADR-045 C3).
      *
      * @return array<string, string>
      */

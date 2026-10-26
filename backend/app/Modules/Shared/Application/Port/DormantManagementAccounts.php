@@ -6,7 +6,7 @@ namespace App\Modules\Shared\Application\Port;
 
 /**
  * Cuantas cuentas de gestion activas llevan sin entrar mas de N dias, por rol
- * (ADR-060, tarea 11.3 B). Solo numeros: ni quienes ni sus correos.
+ * (ADR-060). Solo numeros: ni quienes ni sus correos.
  *
  * **En Shared y no en Identity** porque la leen dos modulos con una sola
  * consulta: Identity, para la metrica `management_accounts_dormant`, y Product,

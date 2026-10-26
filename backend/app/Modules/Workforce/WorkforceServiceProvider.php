@@ -96,9 +96,9 @@ final class WorkforceServiceProvider extends ServiceProvider
     {
         $this->app->bind(EmployeeRepository::class, EloquentEmployeeRepository::class);
 
-        // H8: el azar del codigo de empleado, fuera del dominio y probado aparte.
+        // El azar del codigo de empleado, fuera del dominio y probado aparte (regla dura 2).
         $this->app->bind(EmployeeCodeGenerator::class, RandomEmployeeCodeGenerator::class);
-        // H8: el azar de los PIN candidatos, con el mismo criterio.
+        // El azar de los PIN candidatos, con el mismo criterio.
         $this->app->bind(PinCandidateSource::class, RandomPinCandidateSource::class);
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
@@ -188,13 +188,13 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeePinVerifier::class, HashedEmployeePinVerifier::class);
 
         // Y la SESION que se abre cuando ese PIN acierta en el portal (RF-ID-05,
-        // RF-ID-07, RL-05, tarea 1.11). Mismo reparto que el verificador y por
+        // RF-ID-07, RL-05). Mismo reparto que el verificador y por
         // la misma razon: quien decide si se abre sesion es `Identity`, y quien
         // puede acuñar un token colgado de una persona es este modulo, porque el
         // `tokenable` es la fila de `employees`. Que el token cuelgue del
         // empleado y no de una cuenta de gestion es lo que evita una cuenta
         // espejo por persona —con correo obligatorio (regla dura 12), politica
-        // de contraseña y el 2FA de la tarea 2.1— para algo cuya credencial es
+        // de contraseña y el segundo factor— para algo cuya credencial es
         // un PIN de seis digitos.
         $this->app->bind(PortalSessionIssuer::class, SanctumPortalSessionIssuer::class);
 

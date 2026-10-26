@@ -14,7 +14,7 @@ use Monolog\Level;
 use Throwable;
 
 /**
- * Instrumentacion transversal de la tarea 3.1 (doc 02 §8.1): logs. Vive fuera de
+ * Instrumentacion transversal (doc 02 §8.1): logs. Vive fuera de
  * los modulos a proposito: es infraestructura de TODO el proceso, no de un
  * dominio.
  *

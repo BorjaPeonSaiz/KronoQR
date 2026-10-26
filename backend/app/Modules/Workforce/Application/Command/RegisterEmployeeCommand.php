@@ -41,7 +41,7 @@ final readonly class RegisterEmployeeCommand
          *
          * Viaja hasta `EmployeeHired` y decide quien cuenta el uso del plan: con
          * el lote, la cuenta la hace una sola vez el evento de la importacion
-         * (ADR-028, H-04 de la 3.8), en vez de una vez por fila bajo el candado
+         * (ADR-028), en vez de una vez por fila bajo el candado
          * global de `audit_log` (ADR-010). La persona entra igual, con su codigo
          * y su asiento; lo que pasa con su PIN lo dice {@see self::$pin}, no
          * esta marca.

@@ -23,7 +23,7 @@ use DateTimeImmutable;
  * **El `tokenable` es el empleado y no una cuenta de `users`**, y no es un
  * detalle. Meter a la plantilla en la tabla de gestion habria significado
  * fabricar una cuenta por persona —con correo obligatorio, politica de
- * contraseña y el 2FA de la tarea 2.1 encima—, y el producto no puede exigir
+ * contraseña y el segundo factor encima—, y el producto no puede exigir
  * correo a nadie (regla dura 12, ADR-015). Es la misma decision que tomo el
  * token de quiosco al colgar de `devices`: quien tiene sesion es quien existe,
  * no una cuenta espejo que alguien tiene que acordarse de dar de baja.

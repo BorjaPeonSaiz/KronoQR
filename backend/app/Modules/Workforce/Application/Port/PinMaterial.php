@@ -12,7 +12,7 @@ use SensitiveParameter;
  * ## Por que existe: bcrypt no cabe dentro de una transaccion larga
  *
  * El hash de un PIN cuesta unos **160 ms** con el coste 12 de produccion
- * (medido en el contenedor de la 5.5). Es deliberado y es correcto: encarece el
+ * (medido en el contenedor de la aplicacion). Es deliberado y es correcto: encarece el
  * ataque por fuerza bruta contra `pin_hash`. Pero convierte una importacion de
  * 500 personas en **80 segundos de calculo**, y ese calculo ocurria **dentro**
  * de la transaccion del lote, con dos consecuencias serias:

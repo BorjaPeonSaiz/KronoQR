@@ -368,7 +368,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
      * como cadena en memoria mas alla de la llamada, y porque es el mismo
      * algoritmo que usa el resto del producto para esta columna.
      *
-     * ## Se NORMALIZA antes de hashear, y esa es la correccion de la 5.5
+     * ## Se NORMALIZA antes de hashear
      *
      * Un hash no admite comparaciones aproximadas: `12345678-Z` y `12345678Z`
      * dan digests distintos y, para la base de datos, son dos personas. El alta
