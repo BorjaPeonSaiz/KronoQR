@@ -18,9 +18,9 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
-use Illuminate\Support\Str;
 
 /**
  * Emision y reemision de una credencial (RF-QR-01, RF-QR-03).
@@ -62,6 +62,7 @@ final readonly class IssueCredential
         private CredentialIssuancePolicy $issuance,
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -116,7 +117,7 @@ final readonly class IssueCredential
             $this->guardHasNoCardInHand($command, $employeeId);
 
             $credential = Credential::issue(
-                uuid: Str::uuid7()->toString(),
+                uuid: $this->uuids->next(),
                 employeeId: $employeeId,
                 issuedAt: $now,
             );

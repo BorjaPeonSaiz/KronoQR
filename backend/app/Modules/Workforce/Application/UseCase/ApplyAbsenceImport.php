@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
@@ -18,7 +19,6 @@ use App\Modules\Workforce\Domain\ValueObject\AbsenceImportRow;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
 use App\Modules\Workforce\Domain\ValueObject\ImportedAbsence;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * Escribe lo que {@see PlanAbsenceImport} decidio (**RF-GP-04**, fase de
@@ -70,6 +70,7 @@ final readonly class ApplyAbsenceImport
         private Clock $clock,
         private ConnectionInterface $connection,
         private AbsenceEmploymentRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     public function handle(AbsenceImportReport $report, ?int $importedByUserId): AbsenceImportReport
@@ -200,7 +201,7 @@ final readonly class ApplyAbsenceImport
         }
 
         return new Absence(
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             employeeUuid: $employeeUuid,
             type: $type,
             startsOn: RegisterAbsenceHandler::asDate($this->isoDateOf($imported->startsOn)),

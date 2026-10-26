@@ -38,6 +38,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
@@ -47,7 +48,6 @@ use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -202,6 +202,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         private EventPublisher $events,
         private ScanMetrics $metrics,
         private Clock $clock,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -610,7 +611,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
             // `audit_log` tiene que poder distinguir una entrada de una vuelta
             // de pausa, y `scan_events` no es solo-append (ADR-024, RL-04).
             $entry = $workDay->clockIn(
-                Str::uuid7()->toString(),
+                $this->uuids->next(),
                 $command->occurredAt,
                 $command->origin,
                 $resolution->action,

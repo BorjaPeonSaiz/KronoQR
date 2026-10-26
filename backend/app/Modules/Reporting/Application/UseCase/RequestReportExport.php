@@ -13,9 +13,9 @@ use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -79,6 +79,7 @@ final readonly class RequestReportExport
          * tocar el estado global del proceso.
          */
         private int $staleAfterSeconds,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -101,7 +102,7 @@ final readonly class RequestReportExport
          * aleatorios del `uuid` v7 —48 de sus 122 son marca de tiempo y por tanto
          * adivinables— mas los 256 bits del token, y un solo uso.
          */
-        $uuid = Str::uuid7()->toString();
+        $uuid = $this->uuids->next();
 
         /*
          * SE DESATASCA ANTES DE INTENTAR CREAR.

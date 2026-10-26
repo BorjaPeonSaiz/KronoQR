@@ -194,6 +194,7 @@ use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
@@ -893,6 +894,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
                 maximumHours: max(1, Config::integer('product.support_grant_max_hours', 72)),
+                uuids: $app->make(UuidGenerator::class),
             ),
         );
 
@@ -982,6 +984,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
                 staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
+                uuids: $app->make(UuidGenerator::class),
             ),
         );
 

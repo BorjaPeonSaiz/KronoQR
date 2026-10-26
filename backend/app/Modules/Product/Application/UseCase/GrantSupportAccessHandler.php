@@ -12,9 +12,9 @@ use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Exception\InvalidSupportGrant;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 use LogicException;
 use RuntimeException;
 
@@ -60,6 +60,7 @@ final readonly class GrantSupportAccessHandler
         private Clock $clock,
         private ConnectionInterface $connection,
         private int $maximumHours,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -87,7 +88,7 @@ final readonly class GrantSupportAccessHandler
             // UUID v7 como el resto de los identificadores publicos del producto:
             // ordenado en el tiempo, asi que el indice de la clave publica no se
             // fragmenta, y sin decir nada de cuantas concesiones hay.
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             grantedBy: $author,
             reason: $command->reason,
             scope: $command->scope,

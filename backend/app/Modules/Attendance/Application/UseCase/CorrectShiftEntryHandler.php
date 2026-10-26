@@ -27,11 +27,11 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * **Rectifica el registro horario de una persona conservando lo que decia
@@ -100,6 +100,7 @@ final readonly class CorrectShiftEntryHandler
         private EmployeeDirectory $employees,
         private CompliancePolicyProvider $compliance,
         private ManualEntryRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -166,7 +167,7 @@ final readonly class CorrectShiftEntryHandler
             // `shift_entries.uuid` es unico, asi que la version corregida tiene
             // identificador propio. Lo genera el caso de uso porque lleva la
             // hora dentro y el dominio no pregunta la hora (regla dura 2).
-            Str::uuid7()->toString(),
+            $this->uuids->next(),
             $times,
             // La marca que cambia pasa a `manual_admin`; la que no, conserva su
             // origen. Ese reparto lo hace el tramo al crear su version

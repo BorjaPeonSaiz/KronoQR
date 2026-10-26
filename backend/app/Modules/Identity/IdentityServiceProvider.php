@@ -114,6 +114,7 @@ use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -589,6 +590,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 serialized: $app->make(SerializedLedgerWrite::class),
                 telemetry: $app->make(CredentialTelemetry::class),
                 employmentStatus: $app->make(EmploymentStatusLookup::class),
+                uuids: $app->make(UuidGenerator::class),
             ),
         );
 

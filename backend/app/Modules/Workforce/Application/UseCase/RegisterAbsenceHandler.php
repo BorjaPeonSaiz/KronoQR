@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\RegisterAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
@@ -18,7 +19,6 @@ use App\Modules\Workforce\Domain\Model\Absence;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * Registra una ausencia (**RF-GP-04**).
@@ -63,6 +63,7 @@ final readonly class RegisterAbsenceHandler
         private Clock $clock,
         private ConnectionInterface $connection,
         private AbsenceEmploymentRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -91,7 +92,7 @@ final readonly class RegisterAbsenceHandler
         $employee->assertAcceptsPersonnelRecords();
 
         $absence = new Absence(
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             employeeUuid: $command->employeeUuid,
             type: $command->type,
             startsOn: self::asDate($command->startsOn),

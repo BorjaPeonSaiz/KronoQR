@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
@@ -20,7 +21,6 @@ use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
-use Illuminate\Support\Str;
 use Random\RandomException;
 use RuntimeException;
 
@@ -71,6 +71,7 @@ final readonly class RegisterEmployeeHandler
         private IssueEmployeePinHandler $pins,
         private EmployeeWriteRetry $retry,
         private EmployeeCodeGenerator $codes,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -173,7 +174,7 @@ final readonly class RegisterEmployeeHandler
         return Employee::hire(
             // UUID v7 y no v4: es ordenable temporalmente, lo que mantiene la
             // localidad de los indices que lo referencian (doc 02 §6).
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             code: $code,
             firstName: $command->firstName,
             lastName: $command->lastName,

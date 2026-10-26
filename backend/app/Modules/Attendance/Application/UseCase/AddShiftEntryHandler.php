@@ -32,12 +32,12 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * **Da de alta un tramo que nunca se ficho** (RF-PA-04, accion `created`).
@@ -91,6 +91,7 @@ final readonly class AddShiftEntryHandler
         private EventPublisher $events,
         private Clock $clock,
         private ManualEntryRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -181,7 +182,7 @@ final readonly class AddShiftEntryHandler
         $gap = $workDay->continuationGapFor($times);
 
         $entry = $workDay->addEntry(
-            Str::uuid7()->toString(),
+            $this->uuids->next(),
             $times,
             ScanOrigin::MANUAL_ADMIN,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),

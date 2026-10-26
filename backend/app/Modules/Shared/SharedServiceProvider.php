@@ -14,12 +14,14 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UseCaseMetrics;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\ConfigDeployedVersionProvider;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
+use App\Modules\Shared\Infrastructure\Adapter\TimeOrderedUuidGenerator;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
@@ -50,6 +52,11 @@ final class SharedServiceProvider extends ServiceProvider
         // Singleton y no bind: el reloj no tiene estado y se resuelve en cada
         // caso de uso. En las pruebas se sustituye por un reloj fijo.
         $this->app->singleton(Clock::class, SystemClock::class);
+
+        // Los identificadores de los registros nuevos (RV-3). Un UUID v7 lleva
+        // la hora dentro: por eso entra por un puerto, como el reloj, y no con
+        // `Str::uuid7()` en cada caso de uso.
+        $this->app->singleton(UuidGenerator::class, TimeOrderedUuidGenerator::class);
 
         // La version desplegada (DC8). Vive aqui porque la leen `Kiosk` —la
         // salud de cada tablet y el `minimum_app_version` del latido— y

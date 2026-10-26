@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\CorrectAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
@@ -16,7 +17,6 @@ use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\OverlappingAbsence;
 use App\Modules\Workforce\Domain\Model\Absence;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * Corrige una ausencia creando una **version nueva** (**RN-13**, regla dura 5).
@@ -56,6 +56,7 @@ final readonly class CorrectAbsenceHandler
         private Clock $clock,
         private ConnectionInterface $connection,
         private AbsenceEmploymentRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -94,7 +95,7 @@ final readonly class CorrectAbsenceHandler
             }
 
             $corrected = $previous->correctedWith(
-                uuid: Str::uuid7()->toString(),
+                uuid: $this->uuids->next(),
                 type: $command->type,
                 startsOn: $command->startsOn === null ? null : RegisterAbsenceHandler::asDate($command->startsOn),
                 endsOn: $command->endsOn === null ? null : RegisterAbsenceHandler::asDate($command->endsOn),

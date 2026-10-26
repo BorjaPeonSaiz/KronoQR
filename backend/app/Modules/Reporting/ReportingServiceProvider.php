@@ -131,6 +131,7 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -634,6 +635,7 @@ final class ReportingServiceProvider extends ServiceProvider
                 $app->make(Clock::class),
                 $app->make(ConnectionInterface::class),
                 Config::integer('reporting.export.stale_after_seconds'),
+                $app->make(UuidGenerator::class),
             ),
         );
 

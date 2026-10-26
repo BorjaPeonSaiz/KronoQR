@@ -2,15 +2,29 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Attendance\AttendanceServiceProvider;
 use App\Modules\Compliance\ComplianceServiceProvider;
+use App\Modules\Identity\Application\UseCase\IssueCredential;
+use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Identity\IdentityServiceProvider;
 use App\Modules\Kiosk\KioskServiceProvider;
+use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
+use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\ProductServiceProvider;
+use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\ReportingServiceProvider;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
+use App\Modules\Shared\Infrastructure\Adapter\TimeOrderedUuidGenerator;
 use App\Modules\Shared\SharedServiceProvider;
+use App\Modules\Workforce\Application\UseCase\ApplyAbsenceImport;
+use App\Modules\Workforce\Application\UseCase\CorrectAbsenceHandler;
+use App\Modules\Workforce\Application\UseCase\RegisterAbsenceHandler;
+use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
 use App\Modules\Workforce\WorkforceServiceProvider;
 
 /*
@@ -55,3 +69,29 @@ it('arranca la aplicacion con la zona horaria en UTC', function (): void {
     expect(config('app.timezone'))->toBe('UTC')
         ->and(date_default_timezone_get())->toBe('UTC');
 })->group('RNF-M-03');
+
+it('resuelve el puerto UuidGenerator a su unico adaptador', function (): void {
+    expect(app(UuidGenerator::class))->toBeInstanceOf(TimeOrderedUuidGenerator::class);
+})->group('RNF-M-03');
+
+// RV-3: los casos de uso que crean registros piden el identificador al puerto.
+// Cuatro se construyen a mano en su provider: si alguno olvida pasarlo, el
+// contenedor falla aqui y no en la primera alta de produccion.
+it('construye los casos de uso que generan identificadores', function (string $handler): void {
+    assert(class_exists($handler));
+
+    expect(app($handler))->toBeInstanceOf($handler);
+})->with([
+    AddShiftEntryHandler::class,
+    CorrectShiftEntryHandler::class,
+    RegisterScanHandler::class,
+    IssueCredential::class,
+    RotateSigningKey::class,
+    GrantSupportAccessHandler::class,
+    RequestDataExportHandler::class,
+    RequestReportExport::class,
+    ApplyAbsenceImport::class,
+    CorrectAbsenceHandler::class,
+    RegisterAbsenceHandler::class,
+    RegisterEmployeeHandler::class,
+])->group('RNF-M-03');
