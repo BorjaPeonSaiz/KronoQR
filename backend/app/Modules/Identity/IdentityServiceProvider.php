@@ -203,7 +203,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(ManagementAccountRegistry::class, EloquentManagementAccountRegistry::class);
 
         /*
-         * Baja de la cuenta y sustitucion de su contrasena (RS-05, ASVS V3).
+         * Baja de la cuenta y sustitucion de su contrasena (RS-05).
          *
          * TERCER puerto sobre la misma tabla, y no dos metodos mas en los otros
          * dos. `UserAccounts` es «las cuentas vistas por quien autentica» y no

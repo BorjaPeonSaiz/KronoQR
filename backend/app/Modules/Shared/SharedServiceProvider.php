@@ -43,7 +43,7 @@ use Psr\Log\LoggerInterface;
  * Modulo Shared — objetos de valor comunes, tipos base y contratos
  * transversales (doc 02 §1.6). No depende de ningun otro modulo.
  *
- * Enlaces pendientes de las tareas que los declaran:
+ * Puertos de este modulo que enlaza otro modulo:
  *   - CompliancePolicyProvider  -> Product/Infrastructure/Adapter (ADR-025)
  *   - OperationalSettingsProvider -> Product/Infrastructure/Adapter (ADR-025)
  * Los declara este modulo y los enlaza ProductServiceProvider, que es quien
