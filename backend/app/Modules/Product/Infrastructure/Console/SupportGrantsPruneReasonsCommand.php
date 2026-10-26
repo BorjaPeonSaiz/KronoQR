@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\UseCase\PruneSupportGrantReasons;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -27,6 +28,11 @@ use Throwable;
  */
 final class SupportGrantsPruneReasonsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Clave de `lang/*\/support.php` con los textos de esta orden. */
+    private const string TEXTS = 'support.prune';
+
     protected $signature = 'product:support-grants:prune-reasons
         {--dry-run : Cuenta lo que se vaciaria y no vacia nada}';
 
@@ -36,30 +42,20 @@ final class SupportGrantsPruneReasonsCommand extends Command
     {
         try {
             if ($this->option('dry-run') === true) {
-                $this->line(self::text('support.prune.dry_run', ['rows' => $prune->pending(), 'days' => $prune->retentionDays()]));
+                $this->line($this->text('dry_run', ['rows' => $prune->pending(), 'days' => $prune->retentionDays()]));
 
                 return self::SUCCESS;
             }
 
-            $this->line(self::text('support.prune.done', ['rows' => $prune->handle(), 'days' => $prune->retentionDays()]));
+            $this->line($this->text('done', ['rows' => $prune->handle(), 'days' => $prune->retentionDays()]));
 
             return self::SUCCESS;
         } catch (Throwable $failure) {
             // La CLASE y nunca el mensaje: un `QueryException` lleva la
             // sentencia, y la sentencia no lleva nada que el log necesite.
-            $this->line(self::text('support.prune.failed', ['failure' => $failure::class]));
+            $this->line($this->text('failed', ['failure' => $failure::class]));
 
             return self::FAILURE;
         }
-    }
-
-    /**
-     * @param  array<string, string|int>  $parameters
-     */
-    private static function text(string $key, array $parameters = []): string
-    {
-        $text = __($key, $parameters);
-
-        return \is_string($text) ? $text : $key;
     }
 }

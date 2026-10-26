@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Infrastructure\Console;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand as CorrectSiteTimezone;
 use App\Modules\Workforce\Application\Support\SiteMaintainers;
 use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
@@ -49,6 +50,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class CorrectSiteTimezoneCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Clave de `lang/*\/site.php` con los textos de esta orden. */
+    private const string TEXTS = 'site.correct_timezone';
+
     protected $signature = 'workforce:correct-site-timezone
         {timezone : Zona horaria IANA correcta, por ejemplo Atlantic/Canary}
         {--reason= : Que se configuro mal y como se supo, de 10 a 1000 caracteres. Obligatorio}
@@ -105,7 +111,7 @@ final class CorrectSiteTimezoneCommand extends Command
             'responsible_uuid' => $responsible->uuid,
         ]);
 
-        $this->info(__('site.correct_timezone.done', [
+        $this->info($this->text('done', [
             'previous' => (string) $report->currentTimezone,
             'timezone' => $report->newTimezone,
         ]));
@@ -125,7 +131,7 @@ final class CorrectSiteTimezoneCommand extends Command
         $responsibleOption = $this->stringOption('responsible');
 
         if ($reason === null || $responsibleOption === null) {
-            $this->error(__('site.correct_timezone.missing_options'));
+            $this->error($this->text('missing_options'));
 
             return self::INVALID;
         }
@@ -165,9 +171,9 @@ final class CorrectSiteTimezoneCommand extends Command
         try {
             return $step();
         } catch (UnknownTimezone) {
-            $this->error(__('site.correct_timezone.invalid_timezone', ['value' => (string) $this->argument('timezone')]));
+            $this->error($this->text('invalid_timezone', ['value' => (string) $this->argument('timezone')]));
         } catch (InvalidSiteTimezoneCorrection $invalid) {
-            $this->error(__($invalid->translationKey, $invalid->parameters));
+            $this->error($this->installationText($invalid->translationKey, $invalid->parameters));
         }
 
         return self::INVALID;
@@ -184,36 +190,36 @@ final class CorrectSiteTimezoneCommand extends Command
         $force = (bool) $this->option('force');
 
         if (! $force && ! $this->input->isInteractive()) {
-            $this->error(__('site.correct_timezone.needs_force'));
+            $this->error($this->text('needs_force'));
 
             return self::INVALID;
         }
 
-        return ConsoleResponsible::confirm($this, $responsible, __('site.correct_timezone.confirm'), $force);
+        return ConsoleResponsible::confirm($this, $responsible, $this->text('confirm'), $force);
     }
 
     private function explain(SiteTimezoneCorrectionReport $report): int
     {
         return match ($report->outcome) {
             SiteTimezoneCorrectionOutcome::SameTimezone => $this->done(
-                __('site.correct_timezone.same_timezone', ['timezone' => $report->newTimezone]),
+                $this->text('same_timezone', ['timezone' => $report->newTimezone]),
             ),
-            SiteTimezoneCorrectionOutcome::NoSite => $this->refused(__('site.correct_timezone.no_site')),
+            SiteTimezoneCorrectionOutcome::NoSite => $this->refused($this->text('no_site')),
             SiteTimezoneCorrectionOutcome::NoWorkRecord,
-            SiteTimezoneCorrectionOutcome::Corrected => $this->refused(__('site.correct_timezone.no_work_record')),
+            SiteTimezoneCorrectionOutcome::Corrected => $this->refused($this->text('no_work_record')),
         };
     }
 
     private function printSummary(SiteTimezoneCorrectionReport $report): void
     {
-        $this->line(__('site.correct_timezone.summary_current', ['timezone' => (string) $report->currentTimezone]));
-        $this->line(__('site.correct_timezone.summary_new', ['timezone' => $report->newTimezone]));
-        $this->line(__('site.correct_timezone.summary_entries', [
+        $this->line($this->text('summary_current', ['timezone' => (string) $report->currentTimezone]));
+        $this->line($this->text('summary_new', ['timezone' => $report->newTimezone]));
+        $this->line($this->text('summary_entries', [
             'count' => (string) $report->shiftEntryCount,
             'first' => (string) $report->extent?->firstWorkDate,
             'last' => (string) $report->extent?->lastWorkDate,
         ]));
-        $this->warn(__('site.correct_timezone.warning'));
+        $this->warn($this->text('warning'));
     }
 
     private function done(string $message): int
