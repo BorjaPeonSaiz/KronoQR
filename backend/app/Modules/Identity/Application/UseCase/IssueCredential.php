@@ -49,8 +49,8 @@ use DateTimeImmutable;
  * baja nunca queda con una tarjeta activa por una emision simultanea.
  *
  * **Lo que este caso de uso NO hace.** No decide el estado laboral —lo decide
- * `Workforce`; aqui solo se lee—. Tampoco imprime ni entrega: eso es la tarea
- * 1.10.
+ * `Workforce`; aqui solo se lee—. Tampoco imprime ni entrega: eso son
+ * `PrintCredentialBatch` y la entrega.
  */
 final readonly class IssueCredential
 {

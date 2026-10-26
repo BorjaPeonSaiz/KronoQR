@@ -42,7 +42,7 @@ use DateTimeImmutable;
  * campos», que es lo que hace falta para reconstruir el hecho sin copiar datos
  * personales a otra tabla.
  *
- * **Dos excepciones, con sus dos valores**: el traslado de
+ * **Dos excepciones, con sus dos valores**: el cambio de
  * departamento lleva `previous_department_id` y `department_id`, y el
  * renombrado de un departamento, `previous_name` y `name`. Las dos son datos de
  * la organizacion, no de la persona, y sin ellos el asiento no dice de cual a

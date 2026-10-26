@@ -12,8 +12,8 @@ use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * Las cuentas de gestion por la barrera de la base de datos (ADR-060, tarea
- * 11.3 B): la simulacion cuenta con `management_account_retention_candidates`
+ * Las cuentas de gestion por la barrera de la base de datos (ADR-060):
+ * la simulacion cuenta con `management_account_retention_candidates`
  * y la ejecucion llama a `management_account_anonymize_batch`, que calcula su
  * propio corte maximo y rechaza uno posterior con `42501`.
  */

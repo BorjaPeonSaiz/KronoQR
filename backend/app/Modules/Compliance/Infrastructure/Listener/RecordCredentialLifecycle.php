@@ -29,7 +29,7 @@ use App\Modules\Identity\Domain\Event\SigningKeyRotated;
  * evento de dominio; este listener —que si puede conocer los eventos de otros
  * modulos, porque esa es exactamente su funcion— lo traduce al vocabulario
  * cerrado de {@see AuditAction}. Es la via que el propio puerto `AuditTrail`
- * nombra para las tareas 1.5 y 1.13.
+ * nombra para los eventos de credencial y de PIN.
  *
  * **Sincrono y dentro de la transaccion de quien publica.** No implementa
  * `ShouldQueue` y no debe hacerlo: si el asiento falla, la emision o la
@@ -59,7 +59,7 @@ final readonly class RecordCredentialLifecycle
                 'employee_uuid' => $event->employeeUuid,
                 // Sin `key_id`: en la emision todavia no hay ninguno. El token y
                 // su firma se acuñan al imprimir (ADR-034), y es el asiento de
-                // `credential.printed` —tarea 1.10— el que lo lleva.
+                // `credential.printed` el que lo lleva.
             ]),
             occurredAt: $event->occurredAt(),
         ));

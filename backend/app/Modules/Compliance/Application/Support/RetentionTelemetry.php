@@ -67,8 +67,8 @@ final readonly class RetentionTelemetry
     }
 
     /**
-     * La foto de una ficha ya minimizada no se pudo borrar (ADR-060, tarea
-     * 11.3 A). La ficha ya no la apunta, asi que el fichero queda huerfano y
+     * La foto de una ficha ya minimizada no se pudo borrar (ADR-060). La ficha
+     * ya no la apunta, asi que el fichero queda huerfano y
      * esto es lo unico que lo dice. Solo el `employee_uuid`: ni la ruta ni el
      * nombre (regla dura 21). Lo recoge Loki con el evento
      * `retention.personnel_photo_orphaned`.

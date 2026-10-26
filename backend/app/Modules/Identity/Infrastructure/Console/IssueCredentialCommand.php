@@ -22,7 +22,7 @@ use Illuminate\Console\Command;
  * pueda divergir.
  *
  * **Este comando no enseña ningun QR, y no puede** (ADR-034). El token se acuña
- * al imprimir la tarjeta —`credentials:print`, tarea 1.10—, no aqui. La version
+ * al imprimir la tarjeta —`credentials:print`—, no aqui. La version
  * anterior volcaba el payload en la terminal con un aviso; el aviso no evitaba
  * que quedara en el historial del interprete, en el buffer de la sesion SSH y en
  * el registro de cualquier guion que lo llamara. Emitir es ahora una anotacion

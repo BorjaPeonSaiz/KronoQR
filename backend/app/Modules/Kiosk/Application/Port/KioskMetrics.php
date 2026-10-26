@@ -12,7 +12,7 @@ namespace App\Modules\Kiosk\Application\Port;
  * Es un puerto y no una llamada directa por el mismo motivo que
  * `Attendance\Application\Port\ScanMetrics`: quien mide no sabe si detras hay un
  * contador en Redis, un fichero para el colector *textfile* o nada. El endpoint
- * `/metrics` que las publica es de la tarea 3.1; en las pruebas es un doble que
+ * `/metrics` las publica; en las pruebas es un doble que
  * cuenta.
  *
  * **Son dos gauges, no dos contadores**, y esa es la diferencia que las hace

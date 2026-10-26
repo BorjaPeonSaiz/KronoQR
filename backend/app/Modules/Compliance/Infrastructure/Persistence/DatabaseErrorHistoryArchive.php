@@ -31,7 +31,7 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Que el almacen no este instalado se dice, no se supone
  *
- * `error_events` la crea la migracion de la tarea 5.12, asi que en una
+ * `error_events` la crea su migracion, asi que en una
  * instalacion con las migraciones aplicadas la tabla esta siempre. La rama
  * «no instalado» -{@see RetentionTally::unavailable()}- solo es alcanzable **sin
  * migraciones**: una base a medio montar, o un informe pedido antes de

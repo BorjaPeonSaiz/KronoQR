@@ -233,7 +233,7 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
          * generacion en diferido si (`REPORTING_EXPORT_TIMEOUT_SECONDS`, 600 de
          * serie): una consulta que nadie espera no puede ocupar indefinidamente
          * la base que atiende el fichaje, tampoco despues de que alguien la
-         * cancele (revision de seguridad del bloque 14). `SET LOCAL` lo acota a la
+         * cancele. `SET LOCAL` lo acota a la
          * transaccion de la exportacion, que es la que exige el cursor.
          */
         private int $statementTimeoutSeconds = 0,
@@ -294,7 +294,7 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
      *
      * El nombre lleva un sufijo aleatorio porque un cursor es un objeto **de la
      * sesion**: dos exportaciones que compartieran conexion —el trabajador de
-     * colas de la tarea 3.9 las hara asincronas— chocarian por nombre. El sufijo
+     * colas las genera en diferido— chocarian por nombre. El sufijo
      * es hexadecimal, asi que nunca necesita comillas ni escapado.
      */
     private function declareCursor(LegalExportPeriod $period, LegalExportScope $scope): string

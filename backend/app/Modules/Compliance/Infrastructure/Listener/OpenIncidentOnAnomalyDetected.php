@@ -9,7 +9,7 @@ use App\Modules\Compliance\Application\Command\OpenIncidentCommand;
 use App\Modules\Compliance\Application\UseCase\OpenIncident;
 
 /**
- * Convierte un hallazgo de la revision diaria en una incidencia asignada
+ * Convierte lo que encuentra la revision diaria en una incidencia asignada
  * (RF-PR-01, doc 01 §5.1: `Incident` es de `Compliance`).
  *
  * ## Por que un listener y no una llamada

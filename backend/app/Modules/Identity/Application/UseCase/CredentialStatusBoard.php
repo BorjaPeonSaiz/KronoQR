@@ -190,7 +190,7 @@ final readonly class CredentialStatusBoard
     }
 
     /**
-     * HC1: lo que sale es la pagina, no la plantilla. El filtro y el recuento se
+     * Lo que sale es la pagina, no la plantilla. El filtro y el recuento se
      * hacen sobre todas, para que `meta.total` diga cuantas cumplen el filtro y
      * `summary` siga siendo la plantilla entera. Sin pagina —la consola—, todas.
      *

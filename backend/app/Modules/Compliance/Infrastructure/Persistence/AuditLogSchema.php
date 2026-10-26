@@ -56,7 +56,7 @@ final class AuditLogSchema
     public const string DEFINER_SEARCH_PATH = 'pg_catalog, pg_temp';
 
     /**
-     * El `search_path` con el que la migracion de la tarea 2.10 creo la funcion
+     * El `search_path` con el que la migracion original creo la funcion
      * de purga. Solo lo usa el `down()` de la migracion que la alinea con
      * {@see self::DEFINER_SEARCH_PATH}.
      */
@@ -102,7 +102,7 @@ final class AuditLogSchema
         // esquivar a `sprintf` convierte una funcion legible en un jeroglifico
         // que nadie revisa. Las marcas salen de constantes de esta clase.
         //
-        // El `search_path` de abajo es el historico de la tarea 2.10 y NO se
+        // El `search_path` de abajo es el historico de la migracion original y NO se
         // cambia aqui: la migracion 2026_09_29_100000 lo alinea con
         // `DEFINER_SEARCH_PATH` mediante `ALTER FUNCTION`, para las instalaciones
         // nuevas y las existentes por igual, y su `down()` lo devuelve

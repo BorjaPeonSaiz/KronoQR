@@ -19,7 +19,7 @@ use DateTimeImmutable;
  * errores que la tablet adjunto, y los dos datos tienen que viajar juntos:
  * `client_errors_accepted` es lo que la PWA usa para vaciar de su buffer **solo
  * lo confirmado** (`acknowledge(n)`), de modo que lo que no se pudo guardar
- * vuelve en el latido siguiente en vez de perderse (decision 7 de la ficha).
+ * vuelve en el latido siguiente en vez de perderse.
  *
  * ## `clientErrorsAccepted` es un prefijo, no un total
  *

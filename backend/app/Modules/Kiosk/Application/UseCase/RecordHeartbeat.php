@@ -65,7 +65,7 @@ use Throwable;
  * que es por donde le llega —como huella, nunca en claro— el codigo con el que
  * se abre su pantalla de diagnostico. **Nunca puede tumbar un latido**: el
  * adaptador del puerto devuelve `null` si la configuracion no se puede leer, y
- * sin huella la pantalla se abre sin codigo (decision 7 de la ficha).
+ * sin huella la pantalla se abre sin codigo.
  *
  * ## La ventana de actualizacion (RF-KI-07)
  *

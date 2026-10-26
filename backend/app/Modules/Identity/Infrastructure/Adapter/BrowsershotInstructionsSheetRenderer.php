@@ -66,7 +66,7 @@ final readonly class BrowsershotInstructionsSheetRenderer implements Instruction
      * texto que se lee de pie, y un texto pegado al borde se lee mal aunque se
      * imprima entero.
      *
-     * **De 14 a 12 mm en la tarea 3.5**: la hoja gana tres parrafos —como fichar
+     * **De 14 a 12 mm**: la hoja gana tres parrafos —como fichar
      * la pausa y que significan «Pausa» y «Vuelta» (RF-AT-12)— y una cara A4 no
      * es negociable. Se recorto el margen y se apreto
      * la tipografia de la plantilla antes que partir la hoja en dos, porque la

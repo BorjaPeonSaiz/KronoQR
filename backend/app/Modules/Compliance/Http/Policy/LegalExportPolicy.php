@@ -20,10 +20,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *   un hotel. Lleva `reports:*`, la familia entera.
  * - **`admin`.** Administrador de la instalacion; lleva las dos.
  *
- * El plan de la tarea 1.17 lo escribe como «`auditor|rrhh`» y anota que el
- * alcance propio del `auditor` es de la tarea 2.1. **Aqui se declara ya**, y no
- * se pospone: dejar el rol fuera hoy significaria que la 2.1 tiene que acordarse
- * de volver, y una autorizacion que se amplia despues es la clase de cambio que
+ * El contrato lo escribe como «`auditor|rrhh`». **Aqui se declaran los dos**, y
+ * no se pospone ninguno: dejar un rol fuera significaria que alguien tiene que
+ * acordarse de volver, y una autorizacion que se amplia despues es la clase de cambio que
  * nadie revisa. El catalogo de permisos ya le concede `reports:legal`, asi que
  * omitirlo aqui habria dejado a las dos mitades diciendo cosas distintas.
  *

@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Config;
  * (`docs/runbooks/ataque-a-credenciales.md` §4.3 explica como recalcularlo). El
  * fabricante, que no tiene la clave, no puede reconstruir nada.
  *
- * **De ahi una obligacion de la tarea 5.9**: el paquete de diagnostico no puede
+ * **De ahi una obligacion del paquete de diagnostico** (ADR-020): no puede
  * incluir jamas `APP_KEY`, ni directamente ni por un volcado de configuracion.
  * Con la clave dentro, esto deja de ser un seudonimo.
  *

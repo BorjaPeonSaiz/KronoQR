@@ -18,8 +18,8 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
  * (**RS-05**, regla dura 6, ADR-010).
  *
  * **Es la arista de ADR-025 de este modulo**: el puerto lo declara quien lo
- * necesita —hoy `Kiosk`, mañana el panel de la tarea 1.16 y la exportacion legal
- * de la 1.17— en `Shared/Application/Port`, y lo implementa `Compliance`, que es
+ * necesita —el padron del quiosco, el detalle de jornada del panel o la
+ * exportacion legal— en `Shared/Application/Port`, y lo implementa `Compliance`, que es
  * quien tiene la cadena de hash. Nadie importa `Compliance` para dejar traza.
  *
  * **La accion la decide este adaptador y no quien llama.** Siempre

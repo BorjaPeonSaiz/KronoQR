@@ -21,8 +21,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * en `Identity/Domain` y en su adaptador.
  *
  * **La respuesta no lleva ningun QR** (ADR-034): emitir deja la credencial
- * pendiente de imprimir y el token se acuña dentro del PDF de la tarjeta, que es
- * de la tarea 1.10. Se conserva `Cache-Control: no-store` de todos modos: es
+ * pendiente de imprimir y el token se acuña dentro del PDF de la tarjeta
+ * (ADR-034). Se conserva `Cache-Control: no-store` de todos modos: es
  * gestion de credenciales de personas identificadas y no tiene ningun sentido
  * que se quede en la cache de un proxy.
  */

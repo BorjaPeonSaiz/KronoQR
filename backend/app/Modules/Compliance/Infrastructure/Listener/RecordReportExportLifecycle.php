@@ -113,8 +113,8 @@ final readonly class RecordReportExportLifecycle
             ]),
         ));
 
-        // La LECTURA, con su propio asiento y a nombre de quien la pidio (tarea
-        // 11.4, V4-BE-5; RS-05, RL-15). Antes la escribia el trabajo en la cola
+        // La LECTURA, con su propio asiento y a nombre de quien la pidio
+        // (RS-05, RL-15). Antes la escribia el trabajo en la cola
         // a nombre de `system`, y «quien se llevo estas horas» se respondia con
         // la maquina. Mismo contenido que la descarga sincrona —el contexto lo
         // resuelve `GeneratePeriodReport::compose()`—, mas el informe del que

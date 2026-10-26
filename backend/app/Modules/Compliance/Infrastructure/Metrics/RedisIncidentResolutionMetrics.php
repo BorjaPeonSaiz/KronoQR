@@ -29,7 +29,7 @@ use Throwable;
  * `kronoqr:metrics:` esta escrito aqui igual que en las otras cinco clases que
  * publican por Redis. Importar la constante de `Attendance` seria una arista
  * entre modulos que el §1.6 no concede, y un prefijo distinto dejaria la serie
- * fuera del `SCAN` con el que el endpoint `/metrics` de la tarea 3.1 las recoge
+ * fuera del `SCAN` con el que el endpoint `/metrics` las recoge
  * todas. Lo ata una prueba, no la buena fe.
  *
  * ## Los cubos estan puestos donde cambia la interpretacion

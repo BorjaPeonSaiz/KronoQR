@@ -13,7 +13,7 @@ use Illuminate\Database\ConnectionInterface;
 use Throwable;
 
 /**
- * Las fichas por la barrera de la base de datos (ADR-060, tarea 11.3 A): la
+ * Las fichas por la barrera de la base de datos (ADR-060): la
  * simulacion cuenta con `personnel_record_retention_candidates` y la ejecucion
  * llama a `personnel_record_anonymize_batch`, que calcula su propio corte
  * maximo y rechaza uno posterior con `42501`.

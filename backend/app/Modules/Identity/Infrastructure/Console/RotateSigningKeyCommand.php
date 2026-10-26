@@ -29,7 +29,7 @@ use Illuminate\Console\Command;
  * `ps`, en el historial y en el registro de cualquier guion que lo llame. Lo que
  * hace es **comprobar** que la configuracion esta en estado de solape y reemitir.
  *
- * ## Y no hay endpoint, tampoco (decision de la tarea 2.12)
+ * ## Y no hay endpoint, tampoco
  *
  * Rotar la clave no es una accion de panel: es un acto operativo con semanas de
  * logistica de reimpresion detras que empieza en el gestor de secretos del

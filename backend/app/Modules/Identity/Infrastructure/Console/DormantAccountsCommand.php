@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Config;
 
 /**
  * `php artisan identity:dormant-accounts` — cuenta las cuentas de gestion
- * activas sin uso y publica `management_accounts_dormant{role}` (ADR-060, tarea
- * 11.3 B).
+ * activas sin uso y publica `management_accounts_dormant{role}` (ADR-060).
  *
  * **No desactiva ni borra nada.** Una cuenta activa no se purga: puede ser de
  * alguien de baja medica o de vacaciones. Lo que hace falta es que alguien lo

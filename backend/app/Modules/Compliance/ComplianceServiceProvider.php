@@ -502,7 +502,7 @@ final class ComplianceServiceProvider extends ServiceProvider
      *
      * Siete puertos, y ninguno lo conoce `Attendance`: el nucleo emite hallazgos
      * y este modulo decide severidad, responsable, aviso y metrica (doc 01 §5.1,
-     * doc 02 §1.6). Los dos ultimos son de la bandeja de la tarea 2.5: el lado de
+     * doc 02 §1.6). Los dos ultimos son de la bandeja (RF-PA-05): el lado de
      * **lectura**, separado del libro que escribe, y el histograma de resolucion,
      * separado del gauge de abiertas porque uno se observa y el otro se
      * recalcula.
@@ -584,8 +584,8 @@ final class ComplianceServiceProvider extends ServiceProvider
 
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
 
-        // La misma exportacion, escrita por la cola de informes de `Reporting`
-        // (V5-PA-4). Puerto de `Shared`: ningun modulo importa clases de otro.
+        // La misma exportacion, escrita por la cola de informes de `Reporting`.
+        // Puerto de `Shared`: ningun modulo importa clases de otro.
         $this->app->bind(LegalRecordFileWriter::class, QueuedLegalRecordFiles::class);
 
         // Con el techo de sentencia del diferido (`REPORTING_EXPORT_TIMEOUT_SECONDS`):
@@ -728,7 +728,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de `audit_log` de la tarea 1.5 (regla dura 6).
+     * El mapa evento -> asiento de `audit_log` de las credenciales (regla dura 6).
      *
      * **Se escribe aqui y no en `Identity`.** El modulo que produce el hecho no
      * tiene que saber quien lo apunta; el que audita si tiene que saber que
@@ -742,14 +742,14 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordCredentialAndDeviceLifecycle(): void
     {
         Event::listen(CredentialIssued::class, [RecordCredentialLifecycle::class, 'handleCredentialIssued']);
-        // Imprimir y entregar son de la tarea 1.10. El primero es el momento en
+        // Imprimir y entregar. El primero es el momento en
         // que una persona pasa a poder fichar (ADR-034) y el segundo distingue
         // «se perdio antes de darsela» de «la perdio el empleado» (§5.5): los dos
         // son hechos con relevancia legal y los dos dejan asiento.
         Event::listen(CredentialPrinted::class, [RecordCredentialLifecycle::class, 'handleCredentialPrinted']);
         Event::listen(CredentialDelivered::class, [RecordCredentialLifecycle::class, 'handleCredentialDelivered']);
         Event::listen(CredentialRevoked::class, [RecordCredentialLifecycle::class, 'handleCredentialRevoked']);
-        // Rotar y retirar la clave de firma son de la tarea 2.12: el ciclo de
+        // Rotar y retirar la clave de firma: el ciclo de
         // vida de todas las tarjetas a la vez (RF-QR-07, §5.3).
         Event::listen(SigningKeyRotated::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRotated']);
         Event::listen(SigningKeyRetired::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRetired']);
@@ -784,7 +784,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordDeviceProvisioning(): void
     {
         Event::listen(DeviceProvisioned::class, [RecordDeviceProvisioning::class, 'handle']);
-        // V6-KI-02: la recogida repetida del emparejamiento, con su propio asiento.
+        // La recogida repetida del emparejamiento, con su propio asiento.
         Event::listen(PairingReclaimed::class, [RecordDeviceProvisioning::class, 'reclaimed']);
     }
 
@@ -857,9 +857,8 @@ final class ComplianceServiceProvider extends ServiceProvider
      * a que jornada va cada tramo, asi que crearlo o cambiarlo mueve horas de un
      * dia a otro sin tocar un fichaje.
      *
-     * **Cierra una deuda de la tarea 1.6**: `UpdateSiteHandler` decia por escrito
-     * que su cambio quedaba auditado «por el oyente de `Compliance`», y ese
-     * oyente no existia.
+     * **Es el oyente que `UpdateSiteHandler` da por hecho**: su cambio queda
+     * auditado «por el oyente de `Compliance`», y este es ese oyente.
      *
      * Sincrono, sin `ShouldQueue` y sin `afterCommit` (ADR-027): si el asiento
      * falla, el centro no se crea ni se modifica.
@@ -1049,7 +1048,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(DataExportRequested::class, [RecordDataExportRequested::class, 'handle']);
         Event::listen(DataExportGenerated::class, [RecordDataExportGenerated::class, 'handle']);
         Event::listen(DataExportDownloaded::class, [RecordDataExportDownloaded::class, 'handle']);
-        // ADR-045 §d (C5): el ZIP desaparecio antes de caducar.
+        // ADR-045 §d, condicion C5: el ZIP desaparecio antes de caducar.
         Event::listen(DataExportFileMissing::class, [RecordGeneratedFileMissing::class, 'dataExport']);
     }
 
@@ -1086,7 +1085,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
         Event::listen(ReportExportCancelled::class, [RecordReportExportLifecycle::class, 'cancelled']);
         Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
-        // ADR-045 §d (C5). Actor `system` y no la cuenta que lo pidio: lo detecta
+        // ADR-045 §d, condicion C5. Actor `system` y no la cuenta que lo pidio: lo detecta
         // la purga diaria. Por eso va en su propio listener y no en el de arriba.
         Event::listen(ReportExportFileMissing::class, [RecordGeneratedFileMissing::class, 'reportExport']);
     }
@@ -1144,8 +1143,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(TwoFactorReset::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorReset']);
         Event::listen(ManagementRoleAssigned::class, [RecordManagementAccountLifecycle::class, 'handleRoleAssigned']);
 
-        // La baja de la cuenta y la sustitucion de su contrasena (tarea 3.8,
-        // H-03 de la revision interna ASVS). Sincronos como los tres de arriba:
+        // La baja de la cuenta y la sustitucion de su contrasena (RS-05).
+        // Sincronos como los tres de arriba:
         // si el asiento falla, la cuenta sigue activa y la contrasena sigue
         // siendo la anterior. Una baja sin traza es el hecho que alguien querria
         // que no constara.

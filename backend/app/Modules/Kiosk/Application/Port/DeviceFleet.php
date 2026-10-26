@@ -32,7 +32,7 @@ interface DeviceFleet
      * dispositivo, sin conciliarlos con nada.
      *
      * **La telemetria viaja en un objeto y no en escalares sueltos**: ya eran
-     * tres y la tarea 3.3 anadio dos mas, y cinco parametros posicionales de
+     * tres y la telemetria de salud anadio dos mas, y cinco parametros posicionales de
      * tipos primitivos son un sitio donde cruzar la cola con la bateria sin que
      * el tipado lo note. Ver {@see HeartbeatTelemetry}.
      *

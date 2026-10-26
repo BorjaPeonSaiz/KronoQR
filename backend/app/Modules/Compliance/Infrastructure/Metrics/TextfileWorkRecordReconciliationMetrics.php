@@ -62,7 +62,7 @@ final readonly class TextfileWorkRecordReconciliationMetrics implements WorkReco
         $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="true"} '.$result->reviewedPurgesExplainingDeletions;
         $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="false"} '.$result->reviewedPurgesNotExplainingDeletions();
 
-        // RN-23, bloque 2 de la 2.3.0. Las discrepancias de la zona del centro
+        // RN-23. Las discrepancias de la zona del centro
         // dadas por revisadas: no suman en `discrepancies`, pero una revision
         // nueva tiene que verse: `target="change"` (una fila de la traza) dispara
         // `CambioDeZonaRevisado`, critica; `target="audit"`, `DiscrepanciaDeZonaRevisada`.
@@ -71,7 +71,7 @@ final readonly class TextfileWorkRecordReconciliationMetrics implements WorkReco
         $lines[] = 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="'.$scope.'",target="change"} '.$result->reviewedSiteTimezoneChanges;
         $lines[] = 'work_record_reconciliation_reviewed_site_timezone_discrepancies{scope="'.$scope.'",target="audit"} '.$result->reviewedSiteTimezoneEntries;
 
-        // RN-23, bloque 2 de la 2.3.0. Lo que la comprobacion de la zona del
+        // RN-23. Lo que la comprobacion de la zona del
         // centro no ha podido mirar: un centro sin asiento `site.*` o filas de
         // la traza de años cuya auditoria se purgo. Informativo, no integridad:
         // no suma en `discrepancies` ni tiene alerta; las dos series siempre.

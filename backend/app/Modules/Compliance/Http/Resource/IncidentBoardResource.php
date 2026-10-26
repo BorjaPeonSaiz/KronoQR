@@ -23,10 +23,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * viaja por lo mismo que en el resto de la API (regla dura 3): el cliente no la
  * adivina ni usa la suya.
  *
- * **La zona es la del centro de la instalacion y hay exactamente uno** (ADR-040).
- * Aqui no se repite por fila, al contrario que en el detalle de jornada: alli un
- * tramo fichado en otro centro conserva su zona porque un traslado no reescribe
- * el pasado, y aqui no hay tramos de otro sitio.
+ * **La zona es la del centro de la instalacion y hay exactamente uno** (ADR-040,
+ * ADR-056), asi que viaja una sola vez y no se repite por fila.
  */
 final class IncidentBoardResource extends JsonResource
 {

@@ -77,7 +77,7 @@ final readonly class RecordComplianceProfileChange
                 // busca una o la otra: «¿cambio esto que alertas saltan?» y
                 // «¿cambio esto que se puede borrar?».
                 'affects_incident_detection' => $event->affectsIncidentDetection,
-                // La tercera consecuencia, de la tarea 3.4: hay umbrales legales
+                // La tercera consecuencia: hay umbrales legales
                 // que mueven los avisos que RRHH revisa **sin** abrir ninguna
                 // incidencia. RN-17 es el caso —el art. 34.1 ET fija la jornada
                 // semanal en computo anual—, y sin esta linea el asiento de un

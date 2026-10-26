@@ -6,7 +6,7 @@ namespace App\Modules\Identity\Application\Port;
 
 use DateTimeImmutable;
 
-/** Publica `management_accounts_dormant{role}` (ADR-060, tarea 11.3 B). */
+/** Publica `management_accounts_dormant{role}` (ADR-060). */
 interface DormantAccountMetrics
 {
     /**

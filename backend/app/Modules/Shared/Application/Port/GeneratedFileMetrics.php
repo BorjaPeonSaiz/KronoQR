@@ -7,7 +7,8 @@ namespace App\Modules\Shared\Application\Port;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 
 /**
- * Las cuatro series de los ficheros generados (ADR-045 §e, §f, §h; C5, C10).
+ * Las cuatro series de los ficheros generados (ADR-045 §e, §f y §h;
+ * condiciones C5 y C10).
  *
  * **Una sola etiqueta, `class`, del catalogo cerrado** {@see GeneratedFileClass}.
  * Nunca `uuid`, nombre ni ruta (regla dura 21): por eso la firma solo admite el

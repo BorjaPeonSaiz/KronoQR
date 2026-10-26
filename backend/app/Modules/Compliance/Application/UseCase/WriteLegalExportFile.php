@@ -28,8 +28,8 @@ use Illuminate\Database\ConnectionInterface;
  * exige—. Lo unico que falta es `legal_export.generated`: en diferido lo
  * escribe `Reporting` al cerrar la fila, a nombre de quien la pidio y en la
  * misma transaccion que `report_export.generated`. Aqui, en el trabajo de
- * cola, el contexto de auditoria diria `system`, y eso es justo lo que el
- * bloque 11 corrigio para los informes.
+ * cola, el contexto de auditoria diria `system`, que es justo lo que no puede
+ * firmar una lectura de datos personales (RS-05).
  *
  * ## El avance sale de recorrer, no de suponer
  *

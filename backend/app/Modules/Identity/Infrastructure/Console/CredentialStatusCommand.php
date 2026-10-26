@@ -147,8 +147,8 @@ final class CredentialStatusCommand extends Command
 
         if ($coverage->unknownKeyCards !== []) {
             // Primero y en rojo: es lo unico de esta salida que significa que
-            // hay gente que NO PUEDE FICHAR ahora mismo (revision de seguridad
-            // de la 2.12). Lo demas son procesos en marcha.
+            // hay gente que NO PUEDE FICHAR ahora mismo. Lo demas son procesos
+            // en marcha.
             foreach ($coverage->unknownKeyIds() as $keyId) {
                 $this->error(sprintf(
                     'AVISO: %d tarjeta(s) activa(s) firmada(s) con la clave %s, que ya no esta configurada. '

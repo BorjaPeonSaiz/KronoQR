@@ -47,7 +47,7 @@ use DateTimeImmutable;
  * **El contador de intentos no se toca desde aqui**, y es deliberado: lo lleva
  * el verificador, con `PinOrigin::PORTAL`, que es lo que garantiza que las dos
  * puertas —quiosco y portal— no puedan implementar la mitad cada una. El puerto
- * `Shared\Application\Port\PinAttempts` de la tarea 1.12 se reutiliza **entero y
+ * `Shared\Application\Port\PinAttempts` del quiosco se reutiliza **entero y
  * sin tocarlo**: sus tres escalones, su ventana deslizante y su clave con origen
  * ya estaban preparados para esto.
  *

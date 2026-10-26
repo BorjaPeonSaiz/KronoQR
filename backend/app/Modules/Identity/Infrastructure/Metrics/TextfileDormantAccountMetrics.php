@@ -10,7 +10,7 @@ use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
 
 /**
- * `kronoqr_management_accounts.prom` (ADR-060, tarea 11.3 B). Una serie por cada
+ * `kronoqr_management_accounts.prom` (ADR-060). Una serie por cada
  * rol de gestion, tambien a cero: una serie que desaparece no se distingue de
  * una tarea que dejo de correr.
  */

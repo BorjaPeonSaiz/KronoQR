@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Request;
  * (doc 02 §1.6, verificado por Deptrac), y tampoco deberia — la clase puede
  * cambiar de nombre, la tabla no, porque `audit_log.actor_id` es una clave
  * foranea logica hacia ella. Esto funciona sin cambios con los tokens de
- * dispositivo que emite la tarea 1.5.
+ * dispositivo que emite el emparejamiento.
  *
  * **Sin peticion, `system()`.** El scheduler, las colas y los comandos de
  * consola no tienen a nadie detras, y decir «usuario desconocido» seria peor que
