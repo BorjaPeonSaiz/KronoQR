@@ -54,11 +54,22 @@ parameters:
       collectors:
         - type: classNameRegex
           value: '#^Illuminate\\Database\\Eloquent\\#'
+    # Lo UNICO del framework que admiten las capas `*Application`: el contrato
+    # de la conexion, con el que el caso de uso abre su transaccion y toma su
+    # cerrojo, y la excepcion de consulta mientras Application siga
+    # distinguiendo un fallo de base de datos. Ni `Str`, ni `Collection`, ni
+    # `Carbon` de Laravel, ni contratos de cola o de cache: lo que el caso de uso
+    # necesita del mundo entra por un puerto (ADR-002 §Verificacion, nota del
+    # 26-10-2026; RV-3). El resto de capas la tienen junto a `Laravel`.
+    - name: LaravelConnection
+      collectors:
+        - type: classNameRegex
+          value: '#^Illuminate\\Database\\(ConnectionInterface|QueryException)$#'
     # El resto del framework: contratos, colecciones, cola, HTTP.
     - name: Laravel
       collectors:
         - type: classNameRegex
-          value: '#^(Illuminate\\(?!Support\\Facades\\|Database\\Eloquent\\)|Laravel\\)#'
+          value: '#^(Illuminate\\(?!Support\\Facades\\|Database\\Eloquent\\|Database\\(ConnectionInterface|QueryException)$)|Laravel\\)#'
 
     # Cualquier otra libreria de terceros: Carbon, Symfony, Psr, Ramsey,
     # Spatie, OpenTelemetry... El `must_not` de php_internal deja fuera las
@@ -520,7 +531,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
 
     AttendancePersistence:
@@ -535,6 +546,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -551,6 +563,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -580,6 +593,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -602,6 +616,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -642,7 +657,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
       - AttendanceDomainEvent
 
@@ -658,6 +673,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -684,6 +700,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -738,6 +755,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -761,6 +779,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -815,7 +834,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
 
     WorkforcePersistence:
@@ -830,6 +849,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -849,6 +869,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -870,6 +891,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -894,6 +916,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -934,7 +957,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
 
     IdentityPersistence:
@@ -949,6 +972,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -968,6 +992,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1000,6 +1025,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1024,6 +1050,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1068,7 +1095,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
       - AttendanceDomainEvent
       - ComplianceDomainEvent
@@ -1089,6 +1116,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1108,6 +1136,7 @@ parameters:
       - SharedApplicationPort
       - SharedExport
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - ExternalCode
 
@@ -1124,6 +1153,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1168,6 +1198,7 @@ parameters:
       # siguen fuera del alcance de Http.
       - ReportingExport
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1191,6 +1222,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1239,7 +1271,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
       - AttendanceApplication
       # `IdentityApplication` entra con la tarea 5.6 (RF-PD-06) y por la misma
@@ -1268,6 +1300,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1284,6 +1317,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1313,6 +1347,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1336,6 +1371,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1382,7 +1418,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - SharedApplicationPort
-      - Laravel
+      - LaravelConnection
       - ExternalCode
 
     ProductPersistence:
@@ -1397,6 +1433,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1416,6 +1453,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1469,6 +1507,7 @@ parameters:
       - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1497,6 +1536,7 @@ parameters:
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1525,7 +1565,7 @@ parameters:
       - SharedDomainEvent
       - SharedApplicationPort
       - SharedTracingSupport
-      - Laravel
+      - LaravelConnection
       - ExternalCode
 
     # SpanScope, TraceparentHeader y ConstantTimeFloor. Solo objetos de valor de
@@ -1559,6 +1599,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1575,6 +1616,7 @@ parameters:
     # el catalogo a los emisores es una prueba de arquitectura, no un `use`.
     SharedMetricsExposition:
       - Laravel
+      - LaravelConnection
       - ExternalCode
 
     SharedHttp:
@@ -1584,6 +1626,7 @@ parameters:
       - SharedApplication
       - SharedTracingSupport
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - ExternalCode
       - AppFramework
@@ -1598,6 +1641,7 @@ parameters:
       - SharedInfrastructure
       - SharedHttp
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - ExternalCode
       - AppFramework
@@ -1607,6 +1651,7 @@ parameters:
     # Sin ningun modulo: el arranque no conoce el dominio.
     AppFramework:
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
@@ -1629,6 +1674,7 @@ parameters:
 
     AppEloquentModels:
       - Laravel
+      - LaravelConnection
       - LaravelFacade
       - Eloquent
       - ExternalCode
