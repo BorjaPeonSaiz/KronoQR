@@ -23,7 +23,6 @@ use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\OpenIncidentCount;
 use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PersonalRecordHolderDirectory;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
@@ -91,7 +90,6 @@ use App\Modules\Reporting\Infrastructure\Export\PeriodReportCriteriaNarrator;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportPdfWriter;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
-use App\Modules\Reporting\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisQueuedJobFailureMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
@@ -129,6 +127,7 @@ use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UuidGenerator;
@@ -525,7 +524,8 @@ final class ReportingServiceProvider extends ServiceProvider
         // *textfile*, como sus hermanas: `HINCRBY` es atomico y dos procesos PHP
         // no pueden pisarse reescribiendo el mismo fichero.
         $this->app->bind(ReportExportMetrics::class, RedisReportExportMetrics::class);
-        $this->app->bind(PdfRenderingMetrics::class, RedisPdfRenderingMetrics::class);
+        // `PdfRenderingMetrics` lo enlaza `SharedServiceProvider`, con el tope
+        // de Chromium que comparten Reporting e Identity.
 
         /*
          * Los criterios de inclusion ya traducidos (RF-IN-06, RF-IN-07).

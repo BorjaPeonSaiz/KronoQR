@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;

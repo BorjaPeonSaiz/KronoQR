@@ -267,8 +267,10 @@ return [
     | Cada PDF arranca un Chromium: un año del registro propio llega a unos
     | 700 MiB de memoria en su pico (medido en el bloque 23 de la 2.2.1). El
     | limite por tasa de cada ruta no acota cuantos corren A LA VEZ; esto si,
-    | para todas las rutas que componen PDF con este motor y para el informe en
-    | diferido. El CSV queda fuera de este tope (RL-05).
+    | para todas las rutas que componen PDF con Chromium —informes, registro
+    | propio, tarjetas y hoja de instrucciones— y para el informe en diferido.
+    | El tope es uno para toda la instalacion (Shared\PdfRenderingSlots). El
+    | CSV queda fuera de este tope (RL-05).
     */
     'pdf' => [
         /*

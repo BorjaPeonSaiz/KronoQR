@@ -2006,6 +2006,17 @@ Only from the same network address and if the tablet never used the first
 token; after that minute, the tablet asks for a
 new code as always.
 
+**When updating to 2.3.0: cards and the instructions sheet respect the limit
+of simultaneous PDFs.** `REPORTING_PDF_MAX_CONCURRENT` already limited reports
+and the personal record; it now also counts card printing (single or in
+batches) and the instructions sheet, because each one starts the same
+Chromium. If they coincide with other PDFs and no slot frees up within a few
+seconds (`REPORTING_PDF_WAIT_SECONDS`), the panel tells you to try again in a
+moment: **the card is not marked as printed** and can be printed as soon as a
+slot is free. And if Redis does not respond, printing cards fails just like a
+report PDF, instead of starting Chromium without a limit. If it happens often,
+raise the limit only if the server has memory for one more Chromium.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet

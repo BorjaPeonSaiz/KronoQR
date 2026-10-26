@@ -47,7 +47,7 @@ it('exige PHPStan en el nivel maximo', function (): void {
 })->group('RNF-M-02');
 
 it('analiza con PHPStan tambien bootstrap y config', function (): void {
-    // RNF-M-02 y R1-BE-02. config/ es la unica capa que lee env(), cuyo tipo
+    // RNF-M-02. config/ es la unica capa que lee env(), cuyo tipo
     // es mixed: fuera del analisis, un rtrim(env(...)) sin cast pasaba verde.
     $neon = repoContents('backend/phpstan.neon');
 

@@ -58,6 +58,8 @@ use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
 use App\Modules\Identity\Infrastructure\Adapter\CachePortalOriginAttempts;
+use App\Modules\Identity\Infrastructure\Adapter\ConcurrencyLimitedCardRenderer;
+use App\Modules\Identity\Infrastructure\Adapter\ConcurrencyLimitedInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredPortalAddress;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredQrKeyProvider;
 use App\Modules\Identity\Infrastructure\Adapter\EloquentCredentialFingerprints;
@@ -111,6 +113,7 @@ use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
+use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
@@ -497,8 +500,13 @@ final class IdentityServiceProvider extends ServiceProvider
     {
         $this->app->bind(
             InstructionsSheetRenderer::class,
-            static fn (Application $app): BrowsershotInstructionsSheetRenderer => new BrowsershotInstructionsSheetRenderer(
-                $app->make(BrandingLogoReader::class),
+            // Detras del tope de Chromium de toda la instalacion.
+            static fn (Application $app): ConcurrencyLimitedInstructionsSheetRenderer => new ConcurrencyLimitedInstructionsSheetRenderer(
+                new BrowsershotInstructionsSheetRenderer(
+                    $app->make(BrandingLogoReader::class),
+                ),
+                $app->make(PdfRenderingSlots::class),
+                Config::integer('reporting.pdf.wait_seconds'),
             ),
         );
 
@@ -548,12 +556,18 @@ final class IdentityServiceProvider extends ServiceProvider
          */
         $this->app->bind(
             CardRenderer::class,
-            static fn (Application $app): BrowsershotCardRenderer => new BrowsershotCardRenderer(
-                new EndroidQrEncoder(
-                    Config::string('identity.credentials.card.error_correction', 'Q'),
+            // Detras del tope de Chromium de toda la instalacion:
+            // un lote de tarjetas es un Chromium mas, como un informe en PDF.
+            static fn (Application $app): ConcurrencyLimitedCardRenderer => new ConcurrencyLimitedCardRenderer(
+                new BrowsershotCardRenderer(
+                    new EndroidQrEncoder(
+                        Config::string('identity.credentials.card.error_correction', 'Q'),
+                    ),
+                    $app->make(BrandingProvider::class),
+                    $app->make(BrandingLogoReader::class),
                 ),
-                $app->make(BrandingProvider::class),
-                $app->make(BrandingLogoReader::class),
+                $app->make(PdfRenderingSlots::class),
+                Config::integer('reporting.pdf.wait_seconds'),
             ),
         );
 

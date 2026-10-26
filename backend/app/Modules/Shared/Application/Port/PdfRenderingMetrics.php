@@ -2,14 +2,18 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Reporting\Application\Port;
+namespace App\Modules\Shared\Application\Port;
 
 /**
  * `reporting_pdf_rendering_rejected_total{reason}` (doc 02 §8.2): PDF que el
- * tope de composiciones simultaneas no dejo componer.
+ * tope de composiciones simultaneas no dejo componer, venga de donde venga
+ * —informes, registro propio, tarjetas u hoja de instrucciones— porque el tope
+ * es uno para toda la instalacion ({@see PdfRenderingSlots}). El nombre conserva
+ * el prefijo `reporting_` con el que nacio: cambiarlo dejaria huerfanas las
+ * alertas y los paneles que ya lo leen.
  *
  * - `busy`: todos los huecos ocupados tras la espera; quien lo pidio recibio
- *   `503` con `Retry-After` y la salida en CSV.
+ *   `503` con `Retry-After`.
  * - `limiter`: Redis no respondio para repartir los huecos y se fallo cerrado.
  *
  * Un `busy` sostenido es la senal de que `REPORTING_PDF_MAX_CONCURRENT` se ha

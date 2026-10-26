@@ -14061,6 +14061,42 @@ export interface components {
             };
         };
         /**
+         * @description La tarjeta o la hoja de instrucciones no se puede componer ahora. No es
+         *     culpa de quien la pide y **ninguna credencial queda marcada como
+         *     impresa**: el PDF se compone antes de confirmar la impresion, asi que
+         *     reintentar es seguro. `problem+json`, nunca un `500` opaco. Dos `type`:
+         *
+         *     - `urn:kronoqr:problem:service-unavailable` — falta configuracion del
+         *       servidor (no hay clave de firma de credenciales; solo al imprimir), o
+         *       Redis no responde para repartir los turnos del motor de PDF, que
+         *       falla cerrado. Lo arregla quien administra el servidor; el `detail`
+         *       dice que falta, nunca un valor secreto. Sin `Retry-After`.
+         *     - `urn:kronoqr:problem:pdf-rendering-busy` — el motor de PDF esta, pero
+         *       todas sus composiciones simultaneas estan ocupadas. El tope
+         *       (`REPORTING_PDF_MAX_CONCURRENT`; cada composicion es un Chromium) es
+         *       uno para toda la instalacion: lo comparten estas rutas con los
+         *       informes y el registro propio. Se ha esperado unos segundos
+         *       (`REPORTING_PDF_WAIT_SECONDS`) a que quedara un hueco. Reintentar
+         *       pasado `Retry-After` tiene sentido.
+         *
+         *     La base de datos inalcanzable tiene su propia respuesta,
+         *     `DependencyUnavailable`, con `Retry-After`.
+         */
+        CredentialDocumentUnavailable: {
+            headers: {
+                /**
+                 * @description Solo con `urn:kronoqr:problem:pdf-rendering-busy`. Segundos que
+                 *     conviene esperar antes de volver a pedir el documento.
+                 * @example 3
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La instalacion no esta en condiciones de atender la operacion, y no es
          *     culpa de quien la pide: falta configuracion del servidor. Lo produce la
          *     emision de credenciales cuando no hay clave de firma configurada (doc 02
@@ -17174,7 +17210,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     printCredential: {
@@ -17235,7 +17271,7 @@ export interface operations {
             };
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     deliverCredential: {
@@ -17319,7 +17355,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     addShiftEntry: {

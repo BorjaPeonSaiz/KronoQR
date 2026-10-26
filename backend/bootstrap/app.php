@@ -67,6 +67,8 @@ use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Reporting\Http\Controller\ChannelAuthorizationController;
+use App\Modules\Shared\Application\Exception\PdfRenderingSlotsBusy;
+use App\Modules\Shared\Application\Exception\PdfRenderingSlotsUnavailable;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\BusinessRejection;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
@@ -1067,6 +1069,25 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (ReportRenderingBusy $exception): mixed => ProblemDetails::pdfRenderingBusy(
             $exception->getMessage(),
             $exception->retryAfterSeconds,
+        ));
+
+        /*
+         * El mismo tope, desde las tarjetas y la hoja de instrucciones. Las
+         * mismas respuestas que el informe, sin el CSV en el
+         * `detail`, porque una tarjeta no tiene otro formato: ocupado es
+         * `503 pdf-rendering-busy` con `Retry-After`; sin Redis, `503
+         * service-unavailable` (falla cerrado). Antes de la transaccion de la
+         * impresion: ninguna credencial queda marcada como impresa.
+         */
+        $exceptions->dontReport(PdfRenderingSlotsBusy::class);
+
+        $exceptions->render(static fn (PdfRenderingSlotsBusy $exception): mixed => ProblemDetails::pdfRenderingBusy(
+            $exception->getMessage(),
+            $exception->retryAfterSeconds,
+        ));
+
+        $exceptions->render(static fn (PdfRenderingSlotsUnavailable $exception): mixed => ProblemDetails::serviceUnavailable(
+            $exception->getMessage(),
         ));
 
         /*

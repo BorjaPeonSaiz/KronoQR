@@ -9,6 +9,8 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
@@ -19,16 +21,19 @@ use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\ConfigDeployedVersionProvider;
+use App\Modules\Shared\Infrastructure\Adapter\RedisPdfRenderingSlots;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use App\Modules\Shared\Infrastructure\Adapter\TimeOrderedUuidGenerator;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -133,6 +138,22 @@ final class SharedServiceProvider extends ServiceProvider
             ),
         );
         $this->app->singleton(GeneratedFileMetrics::class, RedisGeneratedFileMetrics::class);
+
+        // El tope de Chromium simultaneos de TODA la instalacion:
+        // informes y registro propio (`Reporting`), tarjetas y hoja de
+        // instrucciones (`Identity`). Uno solo, porque protege la memoria del
+        // servidor; la espera la pone cada llamada. La configuracion sigue en
+        // `reporting.pdf` para no cambiar las variables del `.env`.
+        $this->app->bind(PdfRenderingMetrics::class, RedisPdfRenderingMetrics::class);
+        $this->app->bind(
+            PdfRenderingSlots::class,
+            static fn (Application $app): RedisPdfRenderingSlots => new RedisPdfRenderingSlots(
+                $app->make(Redis::class),
+                $app->make(LoggerInterface::class),
+                $app->make(PdfRenderingMetrics::class),
+                Config::integer('reporting.pdf.max_concurrent'),
+            ),
+        );
 
         // La cuenta que firma una accion de consola con relevancia legal: la
         // revision de una purga (`Compliance`) y la correccion de la zona del

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportPdfWriter;
-use App\Modules\Reporting\Infrastructure\Metrics\RedisPdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;

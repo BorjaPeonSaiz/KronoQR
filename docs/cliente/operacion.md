@@ -1986,6 +1986,17 @@ desvincule. Solo desde la misma dirección de red y si la tablet no llegó a usa
 el primer token; pasado ese minuto, la tablet
 pide otro código como siempre.
 
+**Al actualizar a la 2.3.0: las tarjetas y la hoja de instrucciones respetan
+el tope de PDF simultáneos.** `REPORTING_PDF_MAX_CONCURRENT` ya limitaba los
+informes y el registro propio; ahora cuenta también la impresión de tarjetas
+(una o por lotes) y la hoja de instrucciones, porque cada una arranca el mismo
+Chromium. Si coinciden con otros PDF y no queda hueco tras unos segundos
+(`REPORTING_PDF_WAIT_SECONDS`), el panel avisa de que lo vuelvas a intentar
+pasado un momento: **la tarjeta no se da por impresa** y se puede imprimir en
+cuanto haya hueco. Y si Redis no responde, imprimir tarjetas falla igual que
+un PDF de informe, en lugar de arrancar Chromium sin límite. Si te ocurre a
+menudo, súbelo solo si el servidor tiene memoria para un Chromium más.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la
