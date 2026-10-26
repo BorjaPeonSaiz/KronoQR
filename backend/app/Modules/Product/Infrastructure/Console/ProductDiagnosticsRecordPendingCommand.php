@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -33,6 +34,11 @@ use Illuminate\Console\Command;
  */
 final class ProductDiagnosticsRecordPendingCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.product_diagnostics_record_pending';
+
     protected $signature = 'product:diagnostics:record-pending';
 
     protected $description = 'Escribe en la auditoria los asientos de paquetes de diagnostico generados con la base de datos caida';
@@ -49,17 +55,18 @@ final class ProductDiagnosticsRecordPendingCommand extends Command
         }
 
         if ($result['recorded'] > 0) {
-            $this->line('Asientos de diagnostico pendientes escritos: '.$result['recorded'].'.');
+            $this->line($this->text('recorded', ['count' => $result['recorded']]));
         }
 
         if ($result['remaining'] === 0) {
             return self::SUCCESS;
         }
 
-        $this->line('Asientos de diagnostico que siguen pendientes: '.$result['remaining']
-            .' (error '.($result['failure'] ?? 'desconocido').').');
-        $this->line('Se reintentara en la siguiente pasada. Si la base de datos responde y esto se repite,');
-        $this->line('ejecuta php artisan product:doctor y revisa las comprobaciones database.*.');
+        $this->line($this->text('remaining', [
+            'count' => $result['remaining'],
+            'error' => $result['failure'] ?? $this->text('unknown_error'),
+        ]));
+        $this->paragraph('retry');
 
         return self::FAILURE;
     }

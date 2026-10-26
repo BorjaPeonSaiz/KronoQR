@@ -13,7 +13,7 @@ use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Domain\Support\UtcInstant;
-use App\Modules\Shared\Infrastructure\Console\InstallationText;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;
 use Throwable;
@@ -75,6 +75,11 @@ use Throwable;
  */
 final class ProductExportAllCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.product_export_all';
+
     protected $signature = 'product:export-all
         {--purge : No genera nada: borra los ficheros caducados, marca sus filas y concilia fila y fichero}';
 
@@ -96,14 +101,12 @@ final class ProductExportAllCommand extends Command
                 requestedByUserId: null,
             ));
         } catch (DataExportAlreadyInProgress $conflict) {
-            $this->line('Ya hay una exportacion integra en curso ('.($conflict->current->uuid ?? 'sin identificar').').');
-            $this->line('Espera a que termine y vuelve a ejecutarlo, o miralas con:');
-            $this->line('  php artisan tinker --execute="dump(DB::table(\'data_exports\')->latest(\'id\')->first());"');
+            $this->paragraph('in_progress', ['uuid' => $conflict->current->uuid ?? $this->text('unidentified')]);
 
             return 2;
         }
 
-        $this->line('Generando la exportacion integra. Recorre todas las tablas: puede tardar varios minutos.');
+        $this->line($this->text('generating'));
 
         try {
             $export = $generate->handle($requested->uuid);
@@ -111,10 +114,7 @@ final class ProductExportAllCommand extends Command
             // La clase y no el mensaje, por lo mismo que en la columna
             // `failure_reason`: un error de base de datos puede llevar dentro el
             // valor de una fila (regla dura 21).
-            $this->line('No se pudo generar la exportacion integra: '.$failure::class.'.');
-            $this->line('La causa mas frecuente es falta de espacio en disco o permisos del directorio de');
-            $this->line('exportaciones. Compruebalos con «df -h» y «ls -ld» sobre PRODUCT_DATA_EXPORT_PATH,');
-            $this->line('y ejecuta «php artisan product:doctor» para ver el resto del estado de la instalacion.');
+            $this->paragraph('failed', ['error' => $failure::class]);
 
             return self::FAILURE;
         }
@@ -125,36 +125,33 @@ final class ProductExportAllCommand extends Command
     private function report(DataExport $export): int
     {
         if ($export->filePath === null || $export->fileName === null) {
-            $this->line('La exportacion termino sin fichero. Revisa el estado con «php artisan product:doctor».');
+            $this->line($this->text('without_file'));
 
             return self::FAILURE;
         }
 
         $this->newLine();
-        $this->line('Exportacion integra generada.');
+        $this->line($this->text('report.title'));
         $this->newLine();
-        $this->line('  Fichero:    '.$export->filePath);
-        $this->line('  Tamaño:     '.ByteSize::human($export->sizeBytes ?? 0));
-        $this->line('  SHA-256:    '.($export->sha256 ?? ''));
-        $this->line('  Identificador: '.$export->uuid);
-        $this->line('  Caduca:     '.($export->expiresAt === null ? '' : UtcInstant::wallTime($export->expiresAt)).' UTC');
+        $this->line($this->text('report.file', ['path' => $export->filePath]));
+        $this->line($this->text('report.size', ['size' => ByteSize::human($export->sizeBytes ?? 0)]));
+        $this->line($this->text('report.digest', ['digest' => $export->sha256 ?? '']));
+        $this->line($this->text('report.uuid', ['uuid' => $export->uuid]));
+        $this->line($this->text('report.expires', ['at' => $export->expiresAt === null ? '' : UtcInstant::wallTime($export->expiresAt)]));
         $this->newLine();
 
-        $this->line('Filas por fichero:');
+        $this->line($this->text('report.rows'));
 
         foreach ($export->rowCounts as $file => $rows) {
             $this->line('  '.str_pad($file, 28).number_format($rows, 0, ',', '.'));
         }
 
         $this->newLine();
-        $this->line('Para sacarlo del contenedor, desde el directorio de la instalacion y en el servidor:');
-        $this->line('  docker compose cp app:'.$export->filePath.' ./'.$export->fileName);
+        $this->paragraph('report.copy_out', ['path' => $export->filePath, 'name' => $export->fileName]);
         $this->newLine();
-        $this->line('Para comprobar que llego entero:');
-        $this->line('  sha256sum ./'.$export->fileName);
+        $this->paragraph('report.check', ['name' => $export->fileName]);
         $this->newLine();
-        $this->line('El fichero contiene TODOS los datos personales de la plantilla. Guardalo donde guardas');
-        $this->line('el resto de la informacion laboral. Aqui se borra solo al caducar.');
+        $this->paragraph('report.personal_data');
 
         return self::SUCCESS;
     }
@@ -165,8 +162,8 @@ final class ProductExportAllCommand extends Command
         $bundles = $diagnostics->handle();
 
         $this->line($report->purged === 0
-            ? self::text('generated-files.data_exports.nothing_expired')
-            : self::text('generated-files.data_exports.purged', ['count' => $report->purged]));
+            ? $this->installationText('generated-files.data_exports.nothing_expired')
+            : $this->installationText('generated-files.data_exports.purged', ['count' => $report->purged]));
 
         if ($report->released > 0) {
             /*
@@ -175,12 +172,12 @@ final class ProductExportAllCommand extends Command
              * el producto se ha desbloqueado solo —y que si se repite cada hora,
              * lo que hay que mirar es el trabajador de cola—.
              */
-            $this->line(self::text('generated-files.data_exports.released', ['count' => $report->released]));
+            $this->line($this->installationText('generated-files.data_exports.released', ['count' => $report->released]));
         }
 
         if ($report->orphans > 0) {
             // Sin nombres ni rutas, igual que el log: solo la cifra (regla dura 21).
-            $this->line(self::text('generated-files.data_exports.orphans', ['count' => $report->orphans]));
+            $this->line($this->installationText('generated-files.data_exports.orphans', ['count' => $report->orphans]));
         }
 
         if ($report->missing > 0) {
@@ -190,25 +187,14 @@ final class ProductExportAllCommand extends Command
              * alguien lo borro o se lo llevo, y el asiento de auditoria es lo
              * que permite acotar cuando.
              */
-            $this->line(self::text('generated-files.data_exports.missing', ['count' => $report->missing]));
+            $this->line($this->installationText('generated-files.data_exports.missing', ['count' => $report->missing]));
         }
 
         if ($bundles > 0) {
             // Solo la cifra: ni nombres de fichero ni rutas (regla dura 21).
-            $this->line(self::text('generated-files.data_exports.diagnostics', ['count' => $bundles]));
+            $this->line($this->installationText('generated-files.data_exports.diagnostics', ['count' => $bundles]));
         }
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Un texto de `lang/*\/generated-files.php` en el idioma de la INSTALACION,
-     * no en `APP_LOCALE` (ver `InstallationText`).
-     *
-     * @param  array<string, int>  $replace
-     */
-    private static function text(string $key, array $replace = []): string
-    {
-        return app(InstallationText::class)->line($key, $replace);
     }
 }

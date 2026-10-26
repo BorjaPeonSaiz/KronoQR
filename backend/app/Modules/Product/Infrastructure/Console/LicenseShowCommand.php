@@ -9,10 +9,10 @@ use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseOverview;
 use App\Modules\Product\Domain\ValueObject\LicenseState;
-use App\Modules\Product\Domain\ValueObject\PlanUsage;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Modules\Shared\Domain\ValueObject\FeatureAvailability;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -63,8 +63,13 @@ use Illuminate\Console\Command;
  */
 final class LicenseShowCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
     /** «Hay algo que mirar», distinto del `1` de una excepcion no capturada. */
     public const int ATTENTION = 3;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.license_show';
 
     protected $signature = 'license:show';
 
@@ -77,13 +82,11 @@ final class LicenseShowCommand extends Command
         } catch (LicenseUnavailable) {
             // No saber no es «no hay». Sin consejo de reactivarla.
             $this->line('');
-            $this->line('Licencia de KronoQR');
-            $this->line('===================');
+            $this->title();
             $this->line('');
-            $this->line('Estado: DESCONOCIDO (la base de datos no responde; el sistema sigue funcionando)');
+            $this->line($this->text('unknown.state'));
             $this->line('');
-            $this->line('No significa que no haya licencia. No la reactives: arregla primero la base de datos');
-            $this->line('(`docker compose exec app php artisan product:doctor`) y vuelve a mirar.');
+            $this->paragraph('unknown.advice');
             $this->line('');
 
             return self::ATTENTION;
@@ -92,8 +95,7 @@ final class LicenseShowCommand extends Command
         $status = $overview->status;
 
         $this->line('');
-        $this->line('Licencia de KronoQR');
-        $this->line('===================');
+        $this->title();
         $this->line('');
 
         $this->summary($overview);
@@ -112,37 +114,57 @@ final class LicenseShowCommand extends Command
             : self::ATTENTION;
     }
 
+    private function title(): void
+    {
+        $this->heading($this->text('title'), '=');
+    }
+
+    /** Un encabezado subrayado a su propia medida, en cualquier idioma. */
+    private function heading(string $text, string $rule = '-'): void
+    {
+        $this->line($text);
+        $this->line(str_repeat($rule, mb_strlen($text)));
+    }
+
     private function summary(LicenseOverview $overview): void
     {
         $status = $overview->status;
         $license = $status->license;
 
-        $this->line('Estado: '.self::stateLabel($overview));
+        $this->line($this->text('summary.state', ['state' => $this->text('states.'.$status->state->value)]));
 
         if (! $license instanceof License) {
-            $this->line('Cliente: —');
-            $this->line('Plan:    —');
+            $this->line($this->text('summary.customer', ['customer' => '—']));
+            $this->line($this->text('summary.plan', ['plan' => '—']));
         } else {
-            $this->line('Cliente: '.$license->customerName);
-            $this->line('Plan:    '.$license->plan);
-            $this->line('Vigencia: del '.self::day($license->validFrom).' al '.self::day($license->validUntil).' (UTC)');
+            $this->line($this->text('summary.customer', ['customer' => $license->customerName]));
+            $this->line($this->text('summary.plan', ['plan' => $license->plan]));
+            $this->line($this->text('summary.validity', [
+                'from' => self::day($license->validFrom),
+                'until' => self::day($license->validUntil),
+            ]));
 
             $remaining = $status->daysUntilExpiry();
             $elapsed = $status->daysSinceExpiry();
 
             if ($elapsed !== null) {
-                $this->line('Caduco hace '.$elapsed.' dia(s).');
+                $this->line($this->text('summary.expired_ago', ['days' => $elapsed]));
             } elseif ($remaining !== null) {
-                $this->line('Le quedan '.$remaining.' dia(s). Aviso a partir de los '
-                    .$status->expiryWarningDays.' dias.');
+                $this->line($this->text('summary.remaining', [
+                    'days' => $remaining,
+                    'warning' => $status->expiryWarningDays,
+                ]));
             }
         }
 
         if ($overview->stored instanceof StoredLicense) {
-            $this->line('Clave activada el '.self::day($overview->stored->activatedAt)
-                .', huella '.$overview->stored->fingerprint());
-            $this->line('Ultima verificacion correcta: '
-                .($overview->stored->lastVerifiedAt === null ? '—' : self::day($overview->stored->lastVerifiedAt)));
+            $this->line($this->text('summary.activated', [
+                'day' => self::day($overview->stored->activatedAt),
+                'fingerprint' => $overview->stored->fingerprint(),
+            ]));
+            $this->line($this->text('summary.last_verified', [
+                'day' => $overview->stored->lastVerifiedAt === null ? '—' : self::day($overview->stored->lastVerifiedAt),
+            ]));
         }
     }
 
@@ -156,31 +178,29 @@ final class LicenseShowCommand extends Command
      */
     private function plan(LicenseOverview $overview): void
     {
-        $this->line('Plan contratado frente a uso real');
-        $this->line('---------------------------------');
+        $this->heading($this->text('plan.title'));
 
         foreach ($overview->usage as $usage) {
             $this->line(\sprintf(
-                '%-22s contratado: %-6s  real: %-6s %s',
-                self::limitLabel($usage),
-                $usage->contracted === null ? '—' : (string) $usage->contracted,
-                (string) $usage->actual,
-                $usage->isExceeded() ? '  ← SUPERADO en '.$usage->excess() : '',
+                '%-22s %s',
+                $this->text('limits.'.($usage->limit->value === 'max_employees' ? 'max_employees' : 'max_devices')),
+                $this->text('plan.row', [
+                    'contracted' => \sprintf('%-6s', $usage->contracted === null ? '—' : (string) $usage->contracted),
+                    'actual' => \sprintf('%-6s', (string) $usage->actual),
+                    'exceeded' => $usage->isExceeded() ? $this->text('plan.exceeded', ['excess' => $usage->excess()]) : '',
+                ]),
             ));
         }
 
         if ($overview->exceeded() !== []) {
             $this->line('');
-            $this->line('El exceso NO ha impedido ningun alta ni ningun emparejamiento, y no lo hara.');
-            $this->line('Queda constancia en el registro de auditoria con la fecha exacta; hablalo con');
-            $this->line('el proveedor para ampliar el plan.');
+            $this->paragraph('plan.not_blocking');
         }
     }
 
     private function degradation(LicenseOverview $overview): void
     {
-        $this->line('Funcionalidades accesorias');
-        $this->line('--------------------------');
+        $this->heading($this->text('degradation.title'));
 
         $degraded = array_values(array_filter(
             $overview->status->degradedFeatures(),
@@ -188,7 +208,7 @@ final class LicenseShowCommand extends Command
         ));
 
         if ($degraded === []) {
-            $this->line('Todo lo contratado esta disponible.');
+            $this->line($this->text('degradation.none'));
 
             return;
         }
@@ -196,7 +216,7 @@ final class LicenseShowCommand extends Command
         foreach ($degraded as $feature) {
             $availability = $overview->status->availabilityOf($feature);
 
-            $this->line('- '.self::featureLabel($feature).': '.self::restrictionLabel($availability));
+            $this->line('- '.$this->text('features.'.$feature->value).': '.$this->restrictionLabel($availability));
         }
 
         $pending = array_values(array_filter(
@@ -206,8 +226,7 @@ final class LicenseShowCommand extends Command
 
         if ($pending !== []) {
             $this->line('');
-            $this->line('(Otras '.\count($pending).' funcionalidad(es) del catalogo todavia no existen en esta');
-            $this->line(' version, asi que no se pierde nada con ellas.)');
+            $this->paragraph('degradation.pending', ['count' => \count($pending)]);
         }
     }
 
@@ -222,128 +241,38 @@ final class LicenseShowCommand extends Command
      */
     private function neverDegraded(): void
     {
-        $this->line('Lo que NUNCA depende de la licencia');
-        $this->line('-----------------------------------');
-        $this->line('Fichaje por QR y por PIN, sincronizacion de la cola del quiosco, consulta de');
-        $this->line('jornadas y tramos, portal del empleado, exportacion para la Inspeccion,');
-        $this->line('correcciones con su motivo, registro de auditoria, copias de seguridad y su');
-        $this->line('restauracion, y las sondas de salud.');
-        $this->line('Funcionan con la licencia caducada, ausente o ilegible. Es una promesa del');
-        $this->line('producto, no una casualidad de esta version.');
+        $this->heading($this->text('never_degraded.title'));
+        $this->paragraph('never_degraded.body');
     }
 
     private function whatToDo(LicenseOverview $overview): void
     {
-        $this->line('Que hacer');
-        $this->line('---------');
+        $this->heading($this->text('what_to_do.title'));
 
-        $lines = match ($overview->status->state) {
-            LicenseState::Valid => ['Nada. Vuelve a mirar cuando se acerque la fecha de caducidad.'],
-            LicenseState::ExpiringSoon => [
-                'Pide la renovacion al proveedor. Cuando te llegue la clave nueva:',
-                '    php artisan license:activate "KQL1...."',
-                'o pegala en el panel, en Configuracion > Licencia.',
-            ],
-            LicenseState::Expired => [
-                'Pide la renovacion al proveedor y activa la clave nueva:',
-                '    php artisan license:activate "KQL1...."',
-                'Mientras tanto se sigue fichando y se puede exportar el registro con normalidad.',
-            ],
-            LicenseState::Absent => [
-                'Activa la clave que te entrego el proveedor:',
-                '    php artisan license:activate "KQL1...."',
-                'Si no la encuentras, pidesela: es una cadena que empieza por KQL1.',
-            ],
-            LicenseState::NotYetValid => [
-                'La clave es correcta pero su vigencia empieza mas adelante. No hay que hacer nada:',
-                'las funcionalidades accesorias se activan solas ese dia.',
-            ],
-            LicenseState::Unverifiable => self::unverifiableAdvice($overview),
-        };
+        $state = $overview->status->state;
 
-        foreach ($lines as $line) {
-            $this->line($line);
+        if ($state === LicenseState::Unverifiable) {
+            $rejection = $overview->status->rejection?->value;
+            $known = ['malformed', 'bad_signature', 'invalid_payload', 'no_public_key'];
+
+            $this->paragraph('unverifiable.'.(\in_array($rejection, $known, true) ? $rejection : 'other'));
+        } else {
+            $this->paragraph('what_to_do.'.$state->value);
         }
 
         if ($overview->exceeded() !== []) {
             $this->line('');
-            $this->line('Ademas, estas por encima de alguna cifra del plan. No corre prisa y no bloquea');
-            $this->line('nada: contacta con el proveedor para ampliarlo cuando te venga bien.');
+            $this->paragraph('what_to_do.exceeded');
         }
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function unverifiableAdvice(LicenseOverview $overview): array
+    private function restrictionLabel(FeatureAvailability $availability): string
     {
-        return match ($overview->status->rejection?->value) {
-            'malformed' => [
-                'La clave guardada esta incompleta o cortada. Suele pasar al copiarla de un correo.',
-                'Vuelve a copiarla entera —empieza por KQL1. y no lleva espacios— y activala otra vez.',
-            ],
-            'bad_signature' => [
-                'La clave guardada no la emitio el fabricante de esta version, o se ha modificado.',
-                'Pide una clave nueva al proveedor y activala.',
-            ],
-            'invalid_payload' => [
-                'La clave esta firmada pero le falta informacion. Es un fallo de emision, no tuyo:',
-                'avisa al proveedor con la huella que aparece arriba y pide una clave nueva.',
-            ],
-            'no_public_key' => [
-                'Esta instalacion no lleva la clave publica del fabricante, asi que no puede verificar',
-                'ninguna licencia. No es un problema de tu clave: es del despliegue.',
-                'Avisa al proveedor indicando la version que devuelve GET /api/v1/health.',
-            ],
-            default => ['Avisa al proveedor: la licencia guardada no se puede verificar.'],
-        };
-    }
+        $since = $availability->since === null ? '' : $this->text('restrictions.since', ['day' => self::day($availability->since)]);
+        $known = ['license_expired', 'license_absent', 'license_unverifiable', 'license_not_yet_valid', 'not_in_plan'];
+        $restriction = $availability->restriction?->value;
 
-    private static function stateLabel(LicenseOverview $overview): string
-    {
-        return match ($overview->status->state) {
-            LicenseState::Valid => 'VIGENTE',
-            LicenseState::ExpiringSoon => 'VIGENTE, caduca pronto',
-            LicenseState::Expired => 'CADUCADA (el sistema sigue funcionando)',
-            LicenseState::Absent => 'SIN LICENCIA (el sistema sigue funcionando)',
-            LicenseState::NotYetValid => 'TODAVIA NO VIGENTE',
-            LicenseState::Unverifiable => 'NO SE PUEDE VERIFICAR (el sistema sigue funcionando)',
-        };
-    }
-
-    private static function limitLabel(PlanUsage $usage): string
-    {
-        return match ($usage->limit->value) {
-            'max_employees' => 'Personas en plantilla',
-            default => 'Quioscos activos',
-        };
-    }
-
-    private static function featureLabel(Feature $feature): string
-    {
-        return match ($feature) {
-            Feature::AdvancedReports => 'Informes por periodo y comparativa con lo contratado',
-            Feature::ImpactDashboard => 'Cuadro de impacto y adopcion',
-            Feature::PayrollExport => 'Exportacion para nomina',
-            Feature::WeeklyEmailSummary => 'Resumen semanal por correo',
-            Feature::RealtimePresence => 'Presencia en tiempo real (pasa a actualizarse por sondeo)',
-            Feature::WhiteLabel => 'Marca propia (vuelve a la marca del producto)',
-            Feature::Telemetry => 'Telemetria opcional',
-        };
-    }
-
-    private static function restrictionLabel(FeatureAvailability $availability): string
-    {
-        $since = $availability->since === null ? '' : ' (desde el '.self::day($availability->since).')';
-
-        return match ($availability->restriction?->value) {
-            'license_expired' => 'no disponible por licencia caducada'.$since,
-            'license_absent' => 'no disponible: no hay licencia activada',
-            'license_unverifiable' => 'no disponible: la licencia no se puede verificar',
-            'license_not_yet_valid' => 'no disponible hasta que empiece la vigencia'.$since,
-            'not_in_plan' => 'no incluida en el plan contratado',
-            default => 'no disponible',
-        };
+        return $this->text('restrictions.'.(\in_array($restriction, $known, true) ? $restriction : 'other'), ['since' => $since]);
     }
 
     private static function day(\DateTimeImmutable $instant): string

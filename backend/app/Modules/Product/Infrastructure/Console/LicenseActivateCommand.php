@@ -9,6 +9,7 @@ use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
 use App\Modules\Product\Domain\ValueObject\LicenseState;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 
@@ -53,8 +54,13 @@ use Illuminate\Support\Facades\Config;
  */
 final class LicenseActivateCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
     /** No se activo nada: la clave no verifica o no hay clave que activar. */
     private const int EXIT_NOT_ACTIVATED = 2;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.license_activate';
 
     protected $signature = 'license:activate
         {key? : La clave firmada, entre comillas. Si se omite, se toma LICENSE_KEY del entorno}';
@@ -66,9 +72,8 @@ final class LicenseActivateCommand extends Command
         $key = $this->keyArgument();
 
         if ($key === '') {
-            $this->error('No has indicado ninguna clave y LICENSE_KEY esta vacia en el entorno.');
-            $this->line('Uso:  php artisan license:activate "KQL1...."');
-            $this->line('La clave te la entrega el proveedor: es una cadena que empieza por KQL1.');
+            $this->error($this->text('no_key.title'));
+            $this->paragraph('no_key.advice');
 
             return self::EXIT_NOT_ACTIVATED;
         }
@@ -79,47 +84,54 @@ final class LicenseActivateCommand extends Command
             // forma honesta de distinguir esto de una activacion desde el panel.
             $status = $activate->handle(new ActivateLicenseCommand($key));
         } catch (LicenseKeyRejected $rejected) {
-            $this->error('La clave NO se ha activado. La licencia anterior sigue como estaba.');
+            $this->error($this->text('rejected.title'));
             $this->line('');
 
-            foreach (self::adviceFor($rejected->rejection->value) as $line) {
-                $this->line($line);
-            }
+            $this->paragraph('rejected.'.$rejected->rejection->value);
 
             $this->line('');
-            $this->line('Nada de esto afecta al fichaje ni al acceso al registro: siguen funcionando.');
+            $this->line($this->text('rejected.clocking_unaffected'));
 
             return self::EXIT_NOT_ACTIVATED;
         } catch (InvalidLicenseKey $invalid) {
             // La firma cuadro y la carga util no sirve: es un fallo de emision.
-            $this->error('La clave esta firmada pero le falta informacion. Es un fallo de emision.');
-            $this->line('Detalle tecnico para el proveedor: '.$invalid->getMessage());
+            $this->error($this->text('invalid.title'));
+            $this->line($this->text('invalid.detail', ['detail' => $invalid->getMessage()]));
 
             return self::EXIT_NOT_ACTIVATED;
         }
 
-        $this->info('Licencia activada.');
-        $this->line('Cliente: '.($status->license->customerName ?? '—'));
-        $this->line('Plan:    '.($status->license->plan ?? '—'));
-        $this->line('Estado:  '.$status->state->value);
+        $this->info($this->text('activated.title'));
+        $this->line($this->text('activated.customer', ['customer' => $status->license->customerName ?? '—']));
+        $this->line($this->text('activated.plan', ['plan' => $status->license->plan ?? '—']));
+        $this->line($this->text('activated.state', ['state' => $status->state->value]));
         $this->line('');
-        $this->line('Ejecuta  php artisan license:show  para ver el detalle completo.');
+        $this->line($this->text('activated.next'));
 
-        if ($status->state === LicenseState::Expired) {
-            $this->warn('Ojo: esta clave YA ESTA CADUCADA. Se ha guardado igualmente y consta en el');
-            $this->warn('registro de auditoria. Las funcionalidades accesorias siguen degradadas.');
+        return $this->warnUnlessActive($status->state);
+    }
 
-            return self::FAILURE;
+    /**
+     * Guardada no es lo mismo que en vigor: una clave caducada o que todavia no
+     * ha empezado se guarda igual, pero quien la pego tiene que saberlo.
+     */
+    private function warnUnlessActive(LicenseState $state): int
+    {
+        $warning = match ($state) {
+            LicenseState::Expired => 'activated.already_expired',
+            LicenseState::NotYetValid => 'activated.not_yet_valid',
+            default => null,
+        };
+
+        if ($warning === null) {
+            return self::SUCCESS;
         }
 
-        if ($status->state === LicenseState::NotYetValid) {
-            $this->warn('Ojo: la vigencia de esta clave empieza mas adelante. Se ha guardado y se');
-            $this->warn('activara sola ese dia.');
-
-            return self::FAILURE;
+        foreach ($this->texts($warning) as $line) {
+            $this->warn($line);
         }
 
-        return self::SUCCESS;
+        return self::FAILURE;
     }
 
     private function keyArgument(): string
@@ -132,32 +144,5 @@ final class LicenseActivateCommand extends Command
 
         // El unico sitio del producto que lee `LICENSE_KEY`. Ver el docblock.
         return trim(Config::string('license.bootstrap_key', ''));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function adviceFor(string $rejection): array
-    {
-        return match ($rejection) {
-            'malformed' => [
-                'La clave esta incompleta o cortada. Suele pasar al copiarla de un correo.',
-                'Copiala entera: empieza por KQL1. y no lleva espacios ni saltos de linea.',
-            ],
-            'bad_signature' => [
-                'La firma no cuadra: la clave no la emitio el fabricante de esta version, o se ha',
-                'modificado. Pide una clave nueva al proveedor.',
-            ],
-            'invalid_payload' => [
-                'La clave esta firmada pero su contenido no sirve. Es un fallo de emision:',
-                'avisa al proveedor y pide una clave nueva.',
-            ],
-            'no_public_key' => [
-                'Esta instalacion no lleva la clave publica del fabricante, asi que no puede',
-                'verificar ninguna licencia. No es un problema de tu clave, es del despliegue:',
-                'avisa al proveedor indicando la version que devuelve GET /api/v1/health.',
-            ],
-            default => ['Avisa al proveedor: la clave no se ha podido verificar.'],
-        };
     }
 }

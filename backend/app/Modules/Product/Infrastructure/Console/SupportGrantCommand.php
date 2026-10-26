@@ -10,6 +10,7 @@ use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Domain\Exception\InvalidSupportGrant;
 use App\Modules\Product\Domain\ValueObject\SupportGrantAuthor;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use DateTimeInterface;
 use DateTimeZone;
 use Illuminate\Console\Command;
@@ -54,6 +55,11 @@ use Illuminate\Support\Facades\Config;
  */
 final class SupportGrantCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.support_grant';
+
     protected $signature = 'support:grant
         {--reason= : Obligatorio. El incidente que motiva el acceso (3 a 200 caracteres, sin nombres, correos, DNI ni telefonos; para una persona, su uuid)}
         {--hours= : Duracion en horas. Por defecto PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS}
@@ -67,15 +73,15 @@ final class SupportGrantCommand extends Command
         $scope = SupportScope::tryFrom($this->stringOption('scope'));
 
         if (! $scope instanceof SupportScope) {
-            $this->error('El alcance «'.$this->stringOption('scope').'» no existe.');
-            $this->line('Alcances validos: '.implode(', ', SupportScope::names()).'.');
+            $this->error($this->text('unknown_scope', ['scope' => $this->stringOption('scope')]));
+            $this->line($this->text('valid_scopes', ['scopes' => implode(', ', SupportScope::names())]));
 
             return self::FAILURE;
         }
 
         // Antes de conceder, el recordatorio de que el motivo va
         // tal cual a la auditoria y no puede llevar datos personales.
-        $this->line(self::text('support.reason_hint'));
+        $this->line($this->installationText('support.reason_hint'));
 
         $author = $this->resolveAuthor($grants);
 
@@ -91,33 +97,35 @@ final class SupportGrantCommand extends Command
                 grantedByUserId: $author->id,
             ));
         } catch (InvalidSupportGrant $invalid) {
-            $this->error('No se ha concedido nada.');
+            $this->error($this->text('not_granted'));
             $this->line($invalid->getMessage());
             // El porque, en el idioma de la instalacion.
-            $this->line(self::text($invalid->translationKey, $invalid->parameters));
+            $this->line($this->installationText($invalid->translationKey, $invalid->parameters));
             $this->line('');
-            $this->line('Uso:  php artisan support:grant --reason="Incidencia #123" --hours=24');
+            $this->line($this->text('usage'));
 
             return self::FAILURE;
         }
 
-        $this->info('Acceso de soporte concedido.');
-        $this->line('Concesion: '.$issued->grant->uuid);
-        $this->line('Alcance:   '.$scope->value);
-        $this->line('A nombre de: '.$author->name);
-        $this->line('Caduca:    '.$issued->grant->expiresAt->setTimezone(new DateTimeZone('UTC'))->format(DateTimeInterface::ATOM).' (UTC)');
+        $this->info($this->text('granted.title'));
+        $this->line($this->text('granted.grant', ['uuid' => $issued->grant->uuid]));
+        $this->line($this->text('granted.scope', ['scope' => $scope->value]));
+        $this->line($this->text('granted.author', ['name' => $author->name]));
+        $this->line($this->text('granted.expires', [
+            'at' => $issued->grant->expiresAt->setTimezone(new DateTimeZone('UTC'))->format(DateTimeInterface::ATOM),
+        ]));
         $this->line('');
 
         // El aviso ANTES del token, no despues: quien copia lo primero que ve
         // pega el token y cierra la terminal.
-        $this->warn('ESTE TOKEN SE MUESTRA UNA SOLA VEZ. No se guarda en ningun sitio y no se');
-        $this->warn('puede volver a pedir. Si lo pierdes, revoca esta concesion y crea otra.');
+        foreach ($this->texts('granted.shown_once') as $line) {
+            $this->warn($line);
+        }
+
         $this->line('');
         $this->line($issued->token);
         $this->line('');
-        $this->line('Entregalo por el canal de soporte de tu contrato. Para retirarlo antes de');
-        $this->line('tiempo:  php artisan support:revoke '.$issued->grant->uuid);
-        $this->line('La concesion, su uso y su revocacion quedan en el registro de auditoria.');
+        $this->paragraph('granted.delivery', ['uuid' => $issued->grant->uuid]);
 
         return self::SUCCESS;
     }
@@ -133,7 +141,7 @@ final class SupportGrantCommand extends Command
             $author = $grants->authorByEmail($email);
 
             if (! $author instanceof SupportGrantAuthor) {
-                $this->error('No hay ninguna cuenta de gestion activa con el correo «'.$email.'».');
+                $this->error($this->text('author.not_found', ['email' => $email]));
 
                 return null;
             }
@@ -144,16 +152,15 @@ final class SupportGrantCommand extends Command
         $sole = $grants->soleAuthor();
 
         if (! $sole instanceof SupportGrantAuthor) {
-            $this->error('Hay varias cuentas de gestion (o ninguna) y hay que decir a nombre de cual se concede.');
-            $this->line('Autorizar la entrada del fabricante es un acto de una persona concreta, y eso');
-            $this->line('queda escrito en el registro de auditoria.');
+            $this->error($this->text('author.ambiguous.title'));
+            $this->paragraph('author.ambiguous.why');
             $this->line('');
-            $this->line('Uso:  php artisan support:grant --reason="..." --as=persona@hotel.example');
+            $this->line($this->text('author.ambiguous.usage'));
 
             return null;
         }
 
-        $this->line('Se concede a nombre de la unica cuenta de gestion activa: '.$sole->name.'.');
+        $this->line($this->text('author.sole', ['name' => $sole->name]));
 
         return $sole;
     }
@@ -182,15 +189,5 @@ final class SupportGrantCommand extends Command
         $value = $this->option($name);
 
         return \is_string($value) ? trim($value) : '';
-    }
-
-    /**
-     * @param  array<string, string|int>  $parameters
-     */
-    private static function text(string $key, array $parameters = []): string
-    {
-        $text = __($key, $parameters);
-
-        return \is_string($text) ? $text : $key;
     }
 }

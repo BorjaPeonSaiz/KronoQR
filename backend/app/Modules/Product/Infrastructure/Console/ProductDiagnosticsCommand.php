@@ -20,6 +20,7 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository as Config;
 use Throwable;
@@ -73,6 +74,11 @@ use Throwable;
  */
 final class ProductDiagnosticsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.product_diagnostics';
+
     protected $signature = 'product:diagnostics
         {--anonymized : Alias explicito del comportamiento por defecto: sin datos personales}
         {--with-personal-data : Incluye plantilla, fichajes e incidencias. Accion distinta y auditada (RL-19)}
@@ -156,11 +162,10 @@ final class ProductDiagnosticsCommand extends Command
         try {
             return $delivery->handle($bundle, is_string($output) && $output !== '' ? $output : null);
         } catch (DiagnosticsAuditNotDeferred $failure) {
-            $this->line('No se ha generado el paquete: la base de datos no responde y no se ha podido');
-            $this->line('guardar la constancia de su generacion para escribirla en la auditoria despues.');
+            $this->paragraph('deliver.not_deferred');
             $this->line($failure->getMessage());
         } catch (Throwable $failure) {
-            $this->line('No se ha podido escribir el paquete.');
+            $this->line($this->text('deliver.not_written'));
             $this->line($failure->getMessage());
         }
 
@@ -179,19 +184,13 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('');
 
         if ($databaseDown && $options->includePersonalData) {
-            $this->line('No se ha generado el paquete CON DATOS PERSONALES: la base de datos no responde y');
-            $this->line('ese paquete no se genera porque no se puede auditar (RL-19). No se ha escrito nada.');
+            $this->paragraph('not_audited.personal_data_without_database');
             $this->line('');
-            $this->line('Si necesitas el paquete ya, genera el anonimizado, que si se puede generar sin base:');
-            $this->line('  php artisan product:diagnostics');
-            $this->line('Cuando la base vuelva, repite este comando si sigues necesitando los datos personales.');
+            $this->paragraph('not_audited.personal_data_alternative');
         } else {
             // Con la base caida y el paquete anonimizado no se llega aqui: el
             // caso de uso aplaza el asiento en lugar de lanzar (ADR-020).
-            $this->line('No se ha generado el paquete: no se ha podido dejar constancia de su generacion en');
-            $this->line('la auditoria (error '.$failure::class.'). No se ha escrito nada.');
-            $this->line('Ejecuta php artisan product:doctor y revisa las comprobaciones database.*; si todas');
-            $this->line('estan en verde, avisa a soporte con esa salida.');
+            $this->paragraph('not_audited.other', ['error' => $failure::class]);
         }
 
         $this->line('');
@@ -214,8 +213,7 @@ final class ProductDiagnosticsCommand extends Command
         }
 
         if ($result['recorded'] > 0) {
-            $this->line('Se han escrito en la auditoria '.$result['recorded'].' asiento(s) pendiente(s) de paquetes');
-            $this->line('generados mientras la base de datos no respondia.');
+            $this->paragraph('pending_recorded', ['count' => $result['recorded']]);
             $this->line('');
         }
     }
@@ -231,9 +229,7 @@ final class ProductDiagnosticsCommand extends Command
         $days = is_numeric($requested) ? (int) $requested : DiagnosticsOptions::DEFAULT_PERIOD_DAYS;
 
         if ($days < 1 || $days > $maximum) {
-            $this->line('El periodo tiene que estar entre 1 y '.$maximum.' dias; has pedido '.$days.'.');
-            $this->line('Vuelve a ejecutarlo con, por ejemplo: php artisan product:diagnostics '
-                .'--with-personal-data --period-days=7');
+            $this->paragraph('period_out_of_range', ['maximum' => $maximum, 'days' => $days]);
 
             return null;
         }
@@ -266,7 +262,7 @@ final class ProductDiagnosticsCommand extends Command
         return ConsoleResponsible::confirm(
             $this,
             $responsible,
-            '¿Seguro que quieres incluir los datos personales?',
+            $this->text('confirm_personal_data'),
             ! $this->input->isInteractive(),
         ) ?? $responsible;
     }
@@ -287,23 +283,16 @@ final class ProductDiagnosticsCommand extends Command
      */
     private function warnAboutPersonalData(DiagnosticsOptions $options): void
     {
+        $title = $this->text('personal_data_warning.title');
+
         $this->line('');
-        $this->line('ATENCION: vas a generar un paquete CON DATOS PERSONALES.');
-        $this->line('----------------------------------------------------');
-        $this->line('Ademas de la informacion tecnica de siempre, el fichero incluira:');
-        $this->line('  - La plantilla: nombre, codigo de empleado, estado y departamento.');
-        $this->line('  - Los fichajes y los tramos de los ultimos '.$options->periodDays.' dias.');
-        $this->line('  - Las incidencias abiertas.');
+        $this->line($title);
+        $this->line(str_repeat('-', mb_strlen($title)));
+        $this->paragraph('personal_data_warning.contents', ['days' => $options->periodDays]);
         $this->line('');
-        $this->line('Que implica:');
-        $this->line('  - El fichero deja de estar anonimizado y no se debe enviar sin necesidad.');
-        $this->line('  - La accion queda registrada en el registro de auditoria, firmada por la cuenta');
-        $this->line('    de --responsible.');
-        $this->line('  - Si se lo envias al proveedor, este actua como encargado del tratamiento');
-        $this->line('    para ese supuesto (RGPD art. 28). Necesitas el contrato de encargo firmado.');
+        $this->paragraph('personal_data_warning.implications');
         $this->line('');
-        $this->line('Si solo quieres diagnosticar un problema tecnico, no hace falta: ejecuta');
-        $this->line('  php artisan product:diagnostics');
+        $this->paragraph('personal_data_warning.alternative');
         $this->line('');
     }
 
@@ -316,45 +305,36 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('');
 
         if ($purged > 0) {
-            $this->line('Se han borrado '.$purged.' paquete(s) anterior(es) por antiguedad. Un paquete de');
-            $this->line('diagnostico es material caducado en cuanto se envia, y el que lleva datos');
-            $this->line('personales no debe quedarse en el disco (RL-19).');
+            $this->paragraph('report.purged', ['count' => $purged]);
             $this->line('');
         }
 
-        $this->line('Paquete de diagnostico generado.');
+        $this->line($this->text('report.title'));
         $this->line('');
-        $this->line('  Fichero:  '.$path);
-        $this->line('  Tamaño:   '.number_format((float) \strlen($bundle->toJson()) / 1024, 1).' KB');
-        $this->line('  Huella:   '.$bundle->manifest->sha256);
-        $this->line('  Contiene: '.implode(', ', $bundle->manifest->sections));
-        $this->line('  Anonimo:  '.($bundle->manifest->anonymized ? 'si' : 'NO — lleva datos personales'));
+        $this->line($this->text('report.file', ['path' => $path]));
+        $this->line($this->text('report.size', ['size' => number_format((float) \strlen($bundle->toJson()) / 1024, 1)]));
+        $this->line($this->text('report.digest', ['digest' => $bundle->manifest->sha256]));
+        $this->line($this->text('report.sections', ['sections' => implode(', ', $bundle->manifest->sections)]));
+        $this->line($this->text('report.anonymous', ['answer' => $this->anonymousAnswer($bundle->manifest->anonymized)]));
         $this->line('');
 
         if ($bundle->generationEntryPending()) {
             // ADR-020, enmienda del 14-10-2026: se entrega antes que su asiento,
             // y quien lo genera tiene que saberlo y saber que no ha de hacer nada.
-            $this->line('La base de datos no responde: el asiento de este paquete en la auditoria queda');
-            $this->line('PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).');
-            $this->line('El propio paquete lo dice en audit.generation_entry, dentro de su huella.');
-            $this->line('Las secciones que dependen de la base salen como "unavailable".');
+            $this->paragraph('report.entry_pending');
             $this->line('');
         }
-        $this->line('Antes de enviarlo, abrelo y comprueba que no lleva nada que no quieras enviar:');
-        $this->line('  less '.$path);
+        $this->paragraph('report.check_before_sending', ['path' => $path]);
         $this->line('');
-        $this->line('Quien lo reciba puede comprobar que no se ha alterado por el camino con:');
-        $this->line('  php artisan product:diagnostics --verify='.$path);
+        $this->paragraph('report.verify_hint', ['path' => $path]);
 
         if (! $options->includePersonalData) {
             $this->line('');
             // ADR-048: lo que dice aqui es lo que comprueba la prueba sembrada
-            // del paquete, ni mas ni menos. Va en los dos idiomas porque quien
-            // lo ejecuta puede ser el IT del hotel o el soporte del fabricante.
-            $this->line('Anonimizado: sin nombres, documentos ni identificadores de empleado; el texto');
-            $this->line('de los errores, solo con palabras técnicas. Ábrelo antes de enviarlo.');
-            $this->line('Anonymised: no names, documents or employee identifiers; error text reduced');
-            $this->line('to technical words. Open it before sending.');
+            // del paquete, ni mas ni menos. Va en los dos idiomas, en los dos
+            // catalogos, porque quien lo lee puede ser el IT del hotel o el
+            // soporte del fabricante.
+            $this->paragraph('report.anonymized_scope');
         }
 
         $this->line('');
@@ -399,9 +379,7 @@ final class ProductDiagnosticsCommand extends Command
         $document = $writer->read($path);
 
         if ($document === null) {
-            $this->line('No se ha podido leer un paquete de diagnostico en '.$path.'.');
-            $this->line('Comprueba que la ruta existe, que es legible y que el fichero es el JSON completo:');
-            $this->line('un fichero cortado por el correo no se puede verificar.');
+            $this->paragraph('verify.unreadable', ['path' => $path]);
 
             return 2;
         }
@@ -409,11 +387,9 @@ final class ProductDiagnosticsCommand extends Command
         $check = DiagnosticsBundle::checkDigest($document);
 
         if (! $check->matches()) {
-            $this->line('LA HUELLA NO COINCIDE: '.$path);
+            $this->line($this->text('verify.mismatch.title', ['path' => $path]));
             $this->line('');
-            $this->line('El fichero no es el que se genero, o le falta parte. La causa mas frecuente es');
-            $this->line('que se corto al enviarlo por correo. Pide al cliente que lo vuelva a generar y');
-            $this->line('lo envie comprimido, o por el portal de tickets.');
+            $this->paragraph('verify.mismatch.advice');
 
             return 2;
         }
@@ -421,21 +397,28 @@ final class ProductDiagnosticsCommand extends Command
         /** @var array<string, mixed> $manifest */
         $manifest = is_array($document['manifest'] ?? null) ? $document['manifest'] : [];
 
-        $this->line('Paquete integro: '.$path);
-        $this->line('  Version:   '.self::text($manifest, 'product_version'));
-        $this->line('  Generado:  '.self::text($manifest, 'generated_at').' por '.self::text($manifest, 'generated_by'));
-        $this->line('  Anonimo:   '.(($manifest['anonymized'] ?? null) === true ? 'si' : 'NO — lleva datos personales'));
-        $this->line('  Huella:    '.self::text($manifest, 'sha256'));
+        $this->line($this->text('verify.intact', ['path' => $path]));
+        $this->line($this->text('verify.version', ['version' => self::manifestValue($manifest, 'product_version')]));
+        $this->line($this->text('verify.generated', [
+            'at' => self::manifestValue($manifest, 'generated_at'),
+            'by' => self::manifestValue($manifest, 'generated_by'),
+        ]));
+        $this->line($this->text('verify.anonymous', ['answer' => $this->anonymousAnswer(($manifest['anonymized'] ?? null) === true)]));
+        $this->line($this->text('verify.digest', ['digest' => self::manifestValue($manifest, 'sha256')]));
 
         if ($check === DiagnosticsDigestCheck::IntactWithoutManifest) {
             // Paquete de `schema_version: 1`, anterior a la 2.3.0.
-            $this->line('             huella sin manifiesto: cubre las secciones, no la cabecera. Que diga');
-            $this->line('             «anonimo» no esta comprobado; mira las secciones antes de darlo por anonimo.');
+            $this->paragraph('verify.without_manifest');
         }
 
-        $this->line('  Asiento:   '.self::generationEntry($document));
+        $this->line($this->text('verify.entry', ['entry' => $this->generationEntry($document)]));
 
         return self::SUCCESS;
+    }
+
+    private function anonymousAnswer(bool $anonymized): string
+    {
+        return $this->text($anonymized ? 'anonymous.yes' : 'anonymous.no');
     }
 
     /**
@@ -445,19 +428,19 @@ final class ProductDiagnosticsCommand extends Command
      *
      * @param  array<string, mixed>  $document
      */
-    private static function generationEntry(array $document): string
+    private function generationEntry(array $document): string
     {
         $audit = $document['audit'] ?? null;
 
-        return is_array($audit) && is_array($audit[DiagnosticsBundle::GENERATION_ENTRY] ?? null)
-            ? 'PENDIENTE: la base de datos no respondia al generarlo; se escribe solo al volver'
-            : 'escrito en la auditoria al generarlo';
+        return $this->text(is_array($audit) && is_array($audit[DiagnosticsBundle::GENERATION_ENTRY] ?? null)
+            ? 'verify.entry_pending'
+            : 'verify.entry_written');
     }
 
     /**
      * @param  array<string, mixed>  $manifest
      */
-    private static function text(array $manifest, string $key): string
+    private static function manifestValue(array $manifest, string $key): string
     {
         $value = $manifest[$key] ?? null;
 

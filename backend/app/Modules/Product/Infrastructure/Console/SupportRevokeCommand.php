@@ -9,6 +9,7 @@ use App\Modules\Product\Application\Port\SupportGrantRepository;
 use App\Modules\Product\Application\UseCase\RevokeSupportAccessHandler;
 use App\Modules\Product\Domain\ValueObject\SupportRevocationOutcome;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -44,6 +45,11 @@ use Illuminate\Console\Command;
  */
 final class SupportRevokeCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.support_revoke';
+
     protected $signature = 'support:revoke
         {uuid? : La concesion a revocar. Sin argumento, usa --all}
         {--all : Revoca TODAS las concesiones activas}';
@@ -58,9 +64,8 @@ final class SupportRevokeCommand extends Command
         $uuid = $this->uuidArgument();
 
         if ($uuid === '' && $this->option('all') !== true) {
-            $this->error('Indica la concesion que quieres revocar, o usa --all para revocarlas todas.');
-            $this->line('Uso:  php artisan support:revoke 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60');
-            $this->line('      php artisan support:revoke --all');
+            $this->error($this->text('missing.title'));
+            $this->paragraph('missing.usage');
 
             return self::FAILURE;
         }
@@ -91,41 +96,41 @@ final class SupportRevokeCommand extends Command
         $active = $grants->active($clock->now());
 
         if ($active === []) {
-            $this->info('No hay ningun acceso de soporte activo. Nada que revocar.');
+            $this->info($this->text('none_active'));
 
             return self::SUCCESS;
         }
 
         foreach ($active as $grant) {
             $revoke->handle(new RevokeSupportAccessCommand($grant->uuid, null));
-            $this->line('Revocado: '.$grant->uuid.'  ('.$grant->scope->value.')');
+            $this->line($this->text('all.one', ['uuid' => $grant->uuid, 'scope' => $grant->scope->value]));
         }
 
-        $this->info(\count($active).' acceso(s) de soporte revocado(s). Sus tokens dejan de valer ya.');
-        $this->line('Las concesiones se conservan con su fecha de revocacion, y consta en auditoria.');
+        $this->info($this->text('all.title', ['count' => \count($active)]));
+        $this->line($this->text('all.kept'));
 
         return self::SUCCESS;
     }
 
     private function reportRevoked(): int
     {
-        $this->info('Acceso revocado. Su token deja de valer en la peticion siguiente.');
-        $this->line('La concesion se conserva con su fecha de revocacion (nada se borra).');
+        $this->info($this->text('one.revoked'));
+        $this->line($this->text('one.kept'));
 
         return self::SUCCESS;
     }
 
     private function reportAlreadyRevoked(): int
     {
-        $this->info('Esa concesion ya estaba revocada. No habia nada que hacer.');
+        $this->info($this->text('one.already_revoked'));
 
         return self::SUCCESS;
     }
 
     private function reportNotFound(string $uuid): int
     {
-        $this->error('No hay ninguna concesion con el identificador «'.$uuid.'».');
-        $this->line('Los identificadores de las concesiones activas los da el panel, en Soporte.');
+        $this->error($this->text('one.not_found', ['uuid' => $uuid]));
+        $this->line($this->text('one.where'));
 
         return self::FAILURE;
     }
