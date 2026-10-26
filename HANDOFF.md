@@ -89,9 +89,9 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (24-10-2026):** bloques 0 a 18 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19** en curso (`refactor/deuda-backend-2.3.0`).
+**Estado de la 2.3.0 (26-10-2026):** bloques 0 a 18 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** (19.4, 19.5, 19.7, 19.8, 19.9) en curso en `refactor/deuda-backend-19b`.
 
-Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
+Lo que conviene saber del bloque 19 (19a integrada; 19b en curso):
 
 - **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` (hoy en `Shared/Domain/Support`, también lo usa `kiosk:health`), comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
 - **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
@@ -101,7 +101,7 @@ Lo que conviene saber del bloque 19 (en curso, `refactor/deuda-backend-2.3.0`):
   - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
   - seis `new DateTimeImmutable($fecha.' 00:00:00')` del dominio a `createFromFormat('!…')` (19.4);
   - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
-  - Redis local con el AOF corrupto: Feature/Integration/Contract solo en la CI hasta que el propietario decida repararlo.
+  - Redis local reparado el 26-10 (`redis-check-aof --fix`, como indica `doctor.sh`; se perdieron 1 122 bytes de la cola del AOF). Se ha corrompido dos veces (25-10 y 26-10) por apagar el portÃ¡til con Docker en marcha: parar con `make down` antes.
 
 Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
 
