@@ -140,7 +140,15 @@ parameters:
     - name: AttendanceApplication
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Attendance\\Application\\(?!Port\\)#'
+          value: '#^App\\Modules\\Attendance\\Application\\(?!Port\\|UseCase\\|Command\\)#'
+    # Los casos de uso del modulo y sus comandos: lo unico de su Application
+    # que otro modulo puede alcanzar (doc 02 §1.6, «via caso de uso»). Capa
+    # aparte para que esa arista no conceda tambien Support, Query ni las
+    # excepciones internas.
+    - name: AttendanceUseCase
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Application\\(UseCase|Command)\\#'
     - name: AttendancePersistence
       collectors:
         - type: classNameRegex
@@ -251,7 +259,15 @@ parameters:
     - name: IdentityApplication
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Identity\\Application\\(?!Port\\)#'
+          value: '#^App\\Modules\\Identity\\Application\\(?!Port\\|UseCase\\|Command\\)#'
+    # Los casos de uso del modulo y sus comandos: lo unico de su Application
+    # que otro modulo puede alcanzar (doc 02 §1.6, «via caso de uso»). Capa
+    # aparte para que esa arista no conceda tambien Support, Query ni las
+    # excepciones internas.
+    - name: IdentityUseCase
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Application\\(UseCase|Command)\\#'
     - name: IdentityPersistence
       collectors:
         - type: classNameRegex
@@ -533,12 +549,28 @@ parameters:
       - SharedApplicationPort
       - LaravelConnection
       - ExternalCode
+      - AttendanceUseCase
+
+    # Los casos de uso publicos ven lo mismo que el resto de su Application.
+    AttendanceUseCase:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedTracingSupport
+      - SharedApplicationPort
+      - LaravelConnection
+      - ExternalCode
+      - AttendanceApplication
 
     AttendancePersistence:
       - AttendanceDomain
       - AttendanceDomainEvent
       - AttendanceApplicationPort
       - AttendanceApplication
+      - AttendanceUseCase
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
@@ -556,6 +588,7 @@ parameters:
       - AttendanceDomainEvent
       - AttendanceApplicationPort
       - AttendanceApplication
+      - AttendanceUseCase
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
@@ -586,6 +619,7 @@ parameters:
       - AttendanceDomainEvent
       - AttendanceApplicationPort
       - AttendanceApplication
+      - AttendanceUseCase
       - AttendancePersistence
       - SharedDomain
       - SharedDomainEvent
@@ -606,6 +640,7 @@ parameters:
       - AttendanceDomainEvent
       - AttendanceApplicationPort
       - AttendanceApplication
+      - AttendanceUseCase
       - AttendancePersistence
       - AttendanceInfrastructure
       - AttendanceHttp
@@ -959,12 +994,28 @@ parameters:
       - SharedApplicationPort
       - LaravelConnection
       - ExternalCode
+      - IdentityUseCase
+
+    # Los casos de uso publicos ven lo mismo que el resto de su Application.
+    IdentityUseCase:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedTracingSupport
+      - SharedApplicationPort
+      - LaravelConnection
+      - ExternalCode
+      - IdentityApplication
 
     IdentityPersistence:
       - IdentityDomain
       - IdentityDomainEvent
       - IdentityApplicationPort
       - IdentityApplication
+      - IdentityUseCase
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
@@ -985,6 +1036,7 @@ parameters:
       - IdentityDomainEvent
       - IdentityApplicationPort
       - IdentityApplication
+      - IdentityUseCase
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
@@ -1018,6 +1070,7 @@ parameters:
       - IdentityDomainEvent
       - IdentityApplicationPort
       - IdentityApplication
+      - IdentityUseCase
       - IdentityPersistence
       - SharedDomain
       - SharedDomainEvent
@@ -1040,6 +1093,7 @@ parameters:
       - IdentityDomainEvent
       - IdentityApplicationPort
       - IdentityApplication
+      - IdentityUseCase
       - IdentityPersistence
       - IdentityInfrastructure
       - IdentityHttp
@@ -1260,8 +1314,11 @@ parameters:
     # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
     # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
     # Doc 02 §1.6: Kiosk usa Attendance *via caso de uso*. Alcanza
-    # Attendance/Application (casos de uso y sus comandos) y nada mas: ni
-    # Domain, ni Persistence.
+    # `AttendanceUseCase` (Attendance/Application/UseCase y Command) y nada mas:
+    # ni Support, ni Query, ni las excepciones internas, ni Domain, ni
+    # Persistence. Hoy Kiosk no importa nada de Attendance —el fichaje entra por
+    # el Http de Attendance—; la arista se mantiene porque el mapa de modulos la
+    # autoriza, pero acotada a lo publico.
     KioskApplication:
       - KioskDomain
       - KioskDomainEvent
@@ -1273,9 +1330,9 @@ parameters:
       - SharedApplicationPort
       - LaravelConnection
       - ExternalCode
-      - AttendanceApplication
-      # `IdentityApplication` entra con la tarea 5.6 (RF-PD-06) y por la misma
-      # via y con la misma restriccion que `AttendanceApplication`: *via caso de
+      - AttendanceUseCase
+      # `IdentityUseCase` entra con la tarea 5.6 (RF-PD-06) y por la misma
+      # via y con la misma restriccion que `AttendanceUseCase`: *via caso de
       # uso publico*. El emparejamiento termina emitiendo un token de dispositivo
       # y la desvinculacion revocandolo, y el doc 01 §5.5 dice que esa capacidad
       # «se expone a Kiosk por caso de uso publico explicito».
@@ -1284,9 +1341,11 @@ parameters:
       # declarado en Kiosk e implementado en Identity añadiria una interfaz, un
       # adaptador y un `bind` para envolver una llamada que el §1.6 ya autoriza,
       # y ADR-025 no pide invertir lo que el mapa de modulos permite directo.
-      # Alcanza Identity/Application y nada mas: ni Domain, ni Persistence, ni
-      # Infrastructure.
-      - IdentityApplication
+      # Alcanza Identity/Application/UseCase y Command y nada mas: ni Support,
+      # ni Query, ni las excepciones internas de Identity (hoy no captura
+      # ninguna), ni Domain, ni Persistence, ni Infrastructure. Lo que usa hoy:
+      # `IssueDeviceToken`, `RevokeDeviceToken` y sus dos comandos.
+      - IdentityUseCase
 
     KioskPersistence:
       - KioskDomain
@@ -1325,12 +1384,13 @@ parameters:
       # RF-ID-04, ADR-044. `IdentityDeviceTokenRenewal` implementa el puerto
       # `DeviceTokenRenewal` llamando al caso de uso publico
       # `RotateDeviceTokenIfDue`. No es una arista nueva entre modulos —la de
-      # `KioskApplication -> IdentityApplication` ya existe desde la tarea 5.6—
+      # `KioskApplication -> IdentityUseCase` ya existe desde la tarea 5.6—
       # sino la misma, un piso mas abajo: el puerto existe para que el latido
       # tenga un colaborador que NO LANZA (regla dura 19), y quien captura la
-      # excepcion tiene que ser infraestructura. Mismo limite: ni Domain, ni
-      # Persistence, ni Infrastructure de Identity.
-      - IdentityApplication
+      # excepcion tiene que ser infraestructura. Mismo limite: el caso de uso y
+      # su comando; ni Support, ni Query, ni Domain, ni Persistence, ni
+      # Infrastructure de Identity.
+      - IdentityUseCase
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -1352,7 +1412,7 @@ parameters:
       - Eloquent
       - ExternalCode
       - AppFramework
-      - AttendanceApplication
+      - AttendanceUseCase
 
     # El proveedor es la raiz de composicion del modulo: enlaza puerto con
     # adaptador y registra rutas, listeners y comandos.
@@ -1376,13 +1436,13 @@ parameters:
       - Eloquent
       - ExternalCode
       - AppFramework
-      # `IdentityApplication` entra con la tarea 5.6 y **solo por el `bind`**:
+      # `IdentityUseCase` entra con la tarea 5.6 y **solo por el `bind`**:
       # `ClaimPairing` recibe `IssueDeviceToken` por constructor, y la raiz de
       # composicion tiene que nombrarlo para construirlo con la configuracion ya
       # resuelta. Es la misma arista que se le concede a `KioskApplication`, con
       # el mismo alcance —casos de uso publicos de `Identity` y nada mas— y por
       # el mismo motivo (doc 01 §5.5, doc 02 §1.6).
-      - IdentityApplication
+      - IdentityUseCase
 
     # --------------------------------------------------------------- Product
 
