@@ -2,14 +2,15 @@
 #
 # KronoQR — lectura de un fichero .env, UNA sola vez para todos los scripts.
 #
-# NO SE EJECUTA SOLO: lo cargan install.sh y lib/backup-common.sh (y por el,
-# backup.sh, restore.sh y restore-drill.sh).
+# NO SE EJECUTA SOLO: lo cargan install.sh, update.sh, doctor.sh y
+# lib/backup-common.sh (y por el, backup.sh, restore.sh, restore-drill.sh y
+# wal-metrics.sh). Quien cambie como se lee un valor los prueba todos.
 #
 # POR QUE NO SE HACE `source .env`. Seria ejecucion de codigo arbitrario con
 # los permisos de quien instala o de quien lanza la copia nocturna. Aqui se
 # parsea linea a linea y no se ejecuta nada.
 #
-# POR QUE ESTA EN UN FICHERO PROPIO. Hasta la tarea 5.4 habia DOS lectores:
+# POR QUE ESTA EN UN FICHERO PROPIO. Antes habia DOS lectores:
 # `env_value` en install.sh y `load_env_file` en backup-common.sh, y no leian
 # igual. Dos ejemplos medidos sobre el mismo fichero:
 #
