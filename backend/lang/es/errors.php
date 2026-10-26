@@ -34,6 +34,7 @@ return [
         'none' => 'No hay ningun error abierto en este periodo.',
         'found' => 'Se muestran :shown grupo(s) de :total. Un grupo son todas las veces que ha pasado '
             .'el mismo error.',
+        'empty_message' => '(sin mensaje)',
         'tag_error' => 'error',
         'tag_critical' => 'CRITICO',
         'seen' => 'Ha pasado :count vez/veces. Primera: :first. Ultima: :last.',

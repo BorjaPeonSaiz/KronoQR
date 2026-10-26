@@ -15,6 +15,7 @@ return [
         'title' => 'KronoQR errors since :since',
         'none' => 'No open errors in this period.',
         'found' => 'Showing :shown group(s) of :total. A group is every time the same error happened.',
+        'empty_message' => '(no message)',
         'tag_error' => 'error',
         'tag_critical' => 'CRITICAL',
         'seen' => 'Happened :count time(s). First: :first. Last: :last.',

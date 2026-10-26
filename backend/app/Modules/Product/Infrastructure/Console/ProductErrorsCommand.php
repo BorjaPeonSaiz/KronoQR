@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\ListErrorEvents;
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorEventPage;
 use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
@@ -381,7 +382,11 @@ final class ProductErrorsCommand extends Command
             : '['.$this->say($translator, 'tag_error').']   ';
 
         $this->line('  '.$tag.' #'.$row->id.' '.$row->source->value.($row->code === null ? '' : ' · '.$row->code));
-        $this->line('      '.$row->message);
+        // El marcador de «no quedo nada que guardar» se guarda tal cual —agrupa
+        // por el y viaja asi al fabricante— y se traduce al enseñarlo.
+        $this->line('      '.($row->message === ErrorMessageSanitizer::EMPTY_MESSAGE
+            ? $this->say($translator, 'empty_message')
+            : $row->message));
         $this->line('      '.$this->say($translator, 'seen', [
             'count' => $row->occurrences,
             'first' => self::utc($row->firstSeenAt),

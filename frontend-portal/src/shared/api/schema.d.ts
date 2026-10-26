@@ -12758,7 +12758,9 @@ export interface components {
              *     de palabras tecnicas (ADR-048): toda palabra fuera del vocabulario
              *     cerrado del producto aparece como `…`, y las cifras con forma de
              *     documento, telefono, cuenta, NAF, codigo de empleado, fecha, hora o
-             *     IP como un marcador (`[n]`, `[id]`, `[time]`…).
+             *     IP como un marcador (`[n]`, `[id]`, `[time]`…). Si del mensaje no
+             *     queda nada, sale el aviso «sin mensaje» en el idioma de la
+             *     respuesta (`(sin mensaje)`, `(no message)`).
              * @example SQLSTATE[08006] connection to server at '…' failed
              */
             message: string;
