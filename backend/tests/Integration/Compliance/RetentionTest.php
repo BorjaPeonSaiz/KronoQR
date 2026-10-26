@@ -303,7 +303,7 @@ function retentionUsing(ConnectionInterface $connection, string $now, ?Responsib
         new DatabaseAuditChainReader($connection),
         $technicalLog,
         $errorHistory,
-        new FileRetentionReportStore,
+        app(FileRetentionReportStore::class),
         new TextfileRetentionMetrics,
         new RecordAuditEntry(new DatabaseAuditTrail($connection), $clock),
         new RetentionTelemetry(app(LoggerInterface::class)),
