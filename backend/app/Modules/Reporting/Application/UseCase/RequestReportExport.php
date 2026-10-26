@@ -20,7 +20,7 @@ use Throwable;
 
 /**
  * Pide un informe en diferido: crea la fila, deja el asiento y encola el trabajo
- * (**RF-IN-06**, RS-05, ficha 3.9).
+ * (**RF-IN-06**, RS-05).
  *
  * ## Lo que este caso de uso NO hace
  *
@@ -53,13 +53,13 @@ use Throwable;
  * {@see ReportExportAlreadyInProgress} la lanza el repositorio cuando el
  * `INSERT` choca con el indice unico parcial, no un `SELECT` previo: con dos
  * pestañas pulsando el boton a la vez, la comprobacion en PHP dejaria pasar las
- * dos. Y el limite es **por persona** (decision 2): dos responsables generando a
+ * dos. Y el limite es **por persona**: dos responsables generando a
  * la vez no se estorban.
  *
  * ## La licencia no se comprueba aqui
  *
  * Se comprueba **al pedir**, en el controlador, porque es ahi donde la
- * degradacion tiene que verse (`402`, decision 6). Un trabajo ya encolado
+ * degradacion tiene que verse (`402`). Un trabajo ya encolado
  * termina aunque la licencia caduque entre medias: un fichero a medias no le
  * sirve a nadie, y borrarlo por una fecha del fabricante seria castigar a quien
  * ya habia pedido el informe.

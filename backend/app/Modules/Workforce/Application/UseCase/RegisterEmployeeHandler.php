@@ -139,7 +139,7 @@ final readonly class RegisterEmployeeHandler
                 // que su PIN quedo pendiente.
                 viaImport: $command->viaImport,
                 // El valor inicial, para que el asiento del alta diga con que
-                // marca nacio la ficha (RF-GP-01, AUD-2).
+                // marca nacio la ficha (RF-GP-01).
                 teleworking: $employee->teleworking,
             ));
 

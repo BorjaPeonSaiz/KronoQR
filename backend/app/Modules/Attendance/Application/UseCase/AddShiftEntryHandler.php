@@ -65,7 +65,7 @@ use Illuminate\Database\ConnectionInterface;
  * recibe es un responsable autenticado, no una pantalla en un pasillo (RS-03 y
  * la regla dura 17 hablan del escaneo).
  *
- * **Nada en el futuro** (F1, RL-01, RL-04). La jornada y las dos marcas se
+ * **Nada en el futuro** (RL-01, RL-04). La jornada y las dos marcas se
  * comparan con la hora del servidor mas `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`
  * ({@see ManualEntryHorizon}) antes de tocar el agregado: rellenar la jornada
  * teorica por adelantado o dejar escrita la salida «prevista» es un `422`.

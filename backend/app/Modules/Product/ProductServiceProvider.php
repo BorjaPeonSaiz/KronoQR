@@ -289,8 +289,7 @@ final class ProductServiceProvider extends ServiceProvider
     private const int CLIENT_ERRORS_IP_BUDGET_FACTOR = 4;
 
     /**
-     * La conexion por la que se ESCRIBE el historico de errores (RF-PD-15,
-     * decision 6 de la ficha 5.12).
+     * La conexion por la que se ESCRIBE el historico de errores (RF-PD-15).
      *
      * Misma base, mismo rol y **otra sesion de PostgreSQL**: es lo que hace que
      * guardar un error no dependa del estado de la transaccion que acaba de
@@ -364,7 +363,7 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         /*
-         * La plantilla de la salida a nomina (RF-IN-07, tarea 3.9).
+         * La plantilla de la salida a nomina (RF-IN-07).
          *
          * **El puerto vive en `Shared` y el adaptador aqui**, igual que los
          * umbrales operativos y por el mismo motivo: quien escribe el fichero es
@@ -385,7 +384,7 @@ final class ProductServiceProvider extends ServiceProvider
 
         /*
          * El codigo de servicio de la pantalla de diagnostico del quiosco
-         * (RF-KI-08, tarea 3.3).
+         * (RF-KI-08).
          *
          * `bind` y no `scoped`: se pide una vez por latido —una por minuto y por
          * quiosco— y no en cada escaneo, asi que una memoria por peticion seria
@@ -404,7 +403,7 @@ final class ProductServiceProvider extends ServiceProvider
 
         /*
          * El interruptor del resumen semanal por correo (RF-PR-05,
-         * `WEEKLY_SUMMARY_EMAIL`, tarea 3.12).
+         * `WEEKLY_SUMMARY_EMAIL`).
          *
          * Mismo reparto que el de arriba —puerto en `Shared`, adaptador aqui—
          * porque `Reporting` tampoco puede importar `Product`. `bind` y no
@@ -489,7 +488,7 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         /*
-         * El mismo perfil, pero para EDITARLO (tarea 5.2).
+         * El mismo perfil, pero para EDITARLO.
          *
          * Dos objetos y no uno: el de arriba esta en el camino de fichaje y
          * devuelve minutos sin nombre ni identificador; este devuelve lo que el
@@ -532,7 +531,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El historico de errores agrupado por huella (**RF-PD-15**, tarea 5.12).
+     * El historico de errores agrupado por huella (**RF-PD-15**).
      *
      * ## Las DOS conexiones, que es lo unico raro de este metodo
      *
@@ -590,7 +589,7 @@ final class ProductServiceProvider extends ServiceProvider
                 // que es lo unico que seguro sigue funcionando.
                 logger: Log::channel(),
                 /*
-                 * El techo de grupos abiertos por origen (decision 14). Entra
+                 * El techo de grupos abiertos por origen. Entra
                  * resuelto, como el resto de la configuracion del modulo (regla
                  * dura 14): el caso de uso no lee `config()`, y por eso una
                  * prueba puede bajarlo a dos sin tocar el estado del proceso.
@@ -647,8 +646,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La captacion de los cuatro origenes de servidor (RF-PD-15, tarea 5.12,
-     * decision 2).
+     * La captacion de los cuatro origenes de servidor (RF-PD-15).
      *
      * ## Un solo enganche, y desde aqui
      *
@@ -737,7 +735,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La telemetria opcional (tarea 5.10, **RF-PD-12**, ADR-020, ADR-023).
+     * La telemetria opcional (**RF-PD-12**, ADR-020, ADR-023).
      *
      * ## Todo lo del entorno se resuelve AQUI
      *
@@ -827,7 +825,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los accesos temporales de soporte (tarea 5.9, **RF-PD-11**, RL-18,
+     * Los accesos temporales de soporte (**RF-PD-11**, RL-18,
      * ADR-020).
      *
      * ## Los tres umbrales se leen AQUI, en el borde
@@ -912,7 +910,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La exportacion integra de los datos del cliente (tarea 5.10, **RF-PD-14**,
+     * La exportacion integra de los datos del cliente (**RF-PD-14**,
      * RL-20).
      *
      * ## Los dos umbrales se leen AQUI, en el borde
@@ -1018,7 +1016,7 @@ final class ProductServiceProvider extends ServiceProvider
                 events: $app->make(ProductEventPublisher::class),
                 clock: $app->make(Clock::class),
                 // Cadena de `audit_log` y despues fila, el orden de toda
-                // escritura auditada: la purga toma los dos igual (ADR-045, C5).
+                // escritura auditada: la purga toma los dos igual (ADR-045 C5).
                 serialized: $app->make(SerializedLedgerWrite::class),
                 files: $app->make(GeneratedFileHousekeeping::class),
                 archives: GeneratedFileAreas::dataExportArchives(Config::string('product.data_export_path')),
@@ -1057,7 +1055,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El logotipo del cliente (tarea 5.8, RF-PD-08).
+     * El logotipo del cliente (RF-PD-08).
      *
      * ## Los tres limites se leen AQUI, en el borde
      *
@@ -1103,7 +1101,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los idiomas de la instalacion (tarea 5.8, RF-PD-01).
+     * Los idiomas de la instalacion (RF-PD-01).
      *
      * ## Un objeto y DOS enlaces, a proposito
      *
@@ -1147,7 +1145,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La licencia (tarea 5.3, RF-PD-04, ADR-018, ADR-023, ADR-028).
+     * La licencia (RF-PD-04, ADR-018, ADR-023, ADR-028).
      *
      * ## El verificador recibe la clave publica ya resuelta
      *
@@ -1282,7 +1280,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El asistente de puesta en marcha (tarea 5.5, RF-PD-03).
+     * El asistente de puesta en marcha (RF-PD-03).
      *
      * Los dos adaptadores van sobre `DB::connection()` y no sobre un modelo
      * Eloquent: `setup_progress` es una tabla de nueve filas como mucho, y
@@ -1469,7 +1467,7 @@ final class ProductServiceProvider extends ServiceProvider
         Gate::policy(DiagnosticsBundle::class, DiagnosticsPolicy::class);
 
         /*
-         * `throttle:data-export` (RF-PD-14, tarea 5.10).
+         * `throttle:data-export` (RF-PD-14).
          *
          * 30 POR MINUTO Y NO 3 COMO EL DIAGNOSTICO, y la diferencia no es un
          * descuido. El limitador cubre las tres rutas, y **el panel sondea
@@ -1616,7 +1614,7 @@ final class ProductServiceProvider extends ServiceProvider
                 LicenseShowCommand::class,
                 LicenseActivateCommand::class,
                 /*
-                 * Los dos del acceso de soporte (Anexo C, RF-PD-11, tarea 5.9).
+                 * Los dos del acceso de soporte (Anexo C, RF-PD-11).
                  *
                  * **Tampoco se programan**, y aqui importa mas: una tarea
                  * nocturna que concediera o revocara accesos por su cuenta seria
@@ -1631,8 +1629,7 @@ final class ProductServiceProvider extends ServiceProvider
                 SupportGrantCommand::class,
                 SupportRevokeCommand::class,
                 /*
-                 * Los dos del diagnostico (Anexo C, RF-PD-09, RF-PD-13, tarea
-                 * 5.9).
+                 * Los dos del diagnostico (Anexo C, RF-PD-09, RF-PD-13).
                  *
                  * **`product:doctor` es el unico comando del producto que
                  * ejecutan OTROS PROGRAMAS**: `install.sh` en su fase de
@@ -1652,7 +1649,7 @@ final class ProductServiceProvider extends ServiceProvider
                 // enmienda del 14-10-2026). Lo programa `routes/console.php`.
                 ProductDiagnosticsRecordPendingCommand::class,
                 /*
-                 * La exportacion integra (RF-PD-14, RL-20, tarea 5.10).
+                 * La exportacion integra (RF-PD-14, RL-20).
                  *
                  * **La parte `--purge` se programa; el comando entero no.**
                  * `routes/console.php` ejecuta `product:export-all --purge` cada
@@ -1670,7 +1667,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductExportAllCommand::class,
                 /*
-                 * La telemetria opcional (Anexo C, RF-PD-12, tarea 5.10).
+                 * La telemetria opcional (Anexo C, RF-PD-12).
                  *
                  * **El unico que se programa entero**: `routes/console.php` lo
                  * ejecuta con `--send` los lunes a las 05:40 UTC, y eso es todo
@@ -1688,8 +1685,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductTelemetryCommand::class,
                 /*
-                 * Los dos del historico de errores (Anexo C, RF-PD-15, tarea
-                 * 5.12).
+                 * Los dos del historico de errores (Anexo C, RF-PD-15).
                  *
                  * **La purga se programa; el listado no.** `routes/console.php`
                  * ejecuta `product:errors:prune` a diario a las 03:35 UTC,
@@ -1756,7 +1752,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El observador de los limites del plan (**ADR-028**, tarea 5.3).
+     * El observador de los limites del plan (**ADR-028**).
      *
      * ## Escucha altas, no las intercepta
      *
@@ -1814,7 +1810,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * `product:doctor` y el paquete de diagnostico (tarea 5.9, **RF-PD-09**,
+     * `product:doctor` y el paquete de diagnostico (**RF-PD-09**,
      * **RF-PD-13**, ADR-020).
      *
      * ## Todo lo del entorno se resuelve AQUI, en el borde
@@ -1917,7 +1913,7 @@ final class ProductServiceProvider extends ServiceProvider
                         environment: Config::string('app.env'),
                     ),
                     /*
-                     * A quien llegan las alertas (tarea 3.2, decision 5). Va
+                     * A quien llegan las alertas. Va
                      * pegada a `MailProbe` porque el orden de esta lista ES el
                      * del informe: quien acaba de leer «el SMTP responde» es
                      * quien tiene que leer a continuacion «y las alertas no
@@ -2039,8 +2035,8 @@ final class ProductServiceProvider extends ServiceProvider
                         maintenance: $app->maintenanceMode(),
                     ),
                     /*
-                     * El tamano del historico de errores (RF-PD-15, decision
-                     * 14). Va en la familia `app` y detras de `ApplicationProbe`
+                     * El tamano del historico de errores (RF-PD-15).
+                     * Va en la familia `app` y detras de `ApplicationProbe`
                      * porque el orden de esta lista ES el del informe, y lo que
                      * impide fichar se lee antes que lo que degrada el
                      * diagnostico.
@@ -2055,7 +2051,7 @@ final class ProductServiceProvider extends ServiceProvider
                     ),
                     /*
                      * El codigo de servicio de la pantalla de diagnostico de las
-                     * tablets (RF-KI-08, tarea 3.3, decision 7). Detras de
+                     * tablets (RF-KI-08). Detras de
                      * `SettingsProbe` porque el orden de esta lista ES el del
                      * informe: primero si la configuracion se aplica, y despues
                      * que dice una de sus claves.
@@ -2081,7 +2077,7 @@ final class ProductServiceProvider extends ServiceProvider
                     ),
                     /*
                      * El cupo de descartes del servidor por encima de su techo
-                     * (ADR-061, A6). Aviso: el servidor aplica el techo.
+                     * (ADR-061). Aviso: el servidor aplica el techo.
                      */
                     new ScanDiscardBudgetProbe(
                         Config::get('attendance.scan_discard.daily_budget'),

@@ -41,8 +41,8 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Lo que si se comprueba antes, y por que
  *
- * Que la ausencia **toque al menos un dia de la relacion laboral** (decision 2
- * de la ficha 3.10). Eso no lo puede declarar el esquema —depende de dos
+ * Que la ausencia **toque al menos un dia de la relacion laboral**.
+ * Eso no lo puede declarar el esquema —depende de dos
  * columnas de otra tabla— y sin ello se podrian registrar vacaciones de alguien
  * para el año anterior a su alta, que no justifican nada y ensucian el informe.
  * El solape **parcial** si se admite: el informe cuenta solo los dias de alta.

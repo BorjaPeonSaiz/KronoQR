@@ -27,8 +27,7 @@ use Throwable;
  *
  * No genera nada. Termina en milisegundos y devuelve la fila en `pending`, que
  * es lo que el contrato promete en el `202`. La generacion recorre todas las
- * tablas de la instalacion y no cabe en una peticion HTTP (decision 4 de la
- * ficha 5.10).
+ * tablas de la instalacion y no cabe en una peticion HTTP.
  *
  * ## El asiento se escribe al PEDIRLA, dentro de la transaccion
  *

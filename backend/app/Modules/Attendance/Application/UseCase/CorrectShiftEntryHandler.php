@@ -105,7 +105,7 @@ final readonly class CorrectShiftEntryHandler
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya no es vigente
-     * @throws ShiftEntryMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
+     * @throws ShiftEntryMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen
      * @throws ShiftEntryMarkAfterTermination la persona esta de baja y una marca resultante pasa de la cota de su dia de cese (RN-05)
      * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */

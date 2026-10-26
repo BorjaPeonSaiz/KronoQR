@@ -47,8 +47,8 @@ use Illuminate\Database\ConnectionInterface;
  * `employee.imported` con las cifras. La razon es que alli **cada alta deja
  * ademas su propio rastro** por el camino de siempre, y aqui no hay ningun otro:
  * sin un `absence.registered` por linea, una carga de cuarenta bajas seria una
- * sola fila del trail y no habria forma de responder «¿quien registro esta?»
- * (decision 6 de la ficha 3.10). Cada evento lleva `source: import` y la huella
+ * sola fila del trail y no habria forma de responder «¿quien registro esta?».
+ * Cada evento lleva `source: import` y la huella
  * del fichero, que es lo que ata las cuarenta entre si.
  *
  * ## Por que no reutiliza `RegisterAbsenceHandler`
@@ -212,7 +212,7 @@ final readonly class ApplyAbsenceImport
 
     /**
      * La ausencia tiene que tocar la relacion laboral, igual que en el alta
-     * individual (decision 2 de la ficha 3.10).
+     * individual.
      */
     private function fallsWithinEmployment(Absence $absence): bool
     {
