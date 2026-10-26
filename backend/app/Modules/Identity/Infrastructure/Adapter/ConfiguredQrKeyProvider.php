@@ -61,7 +61,7 @@ final class ConfiguredQrKeyProvider implements QrKeyProvider
         try {
             return QrSigningKey::fromBase64($id, $secret);
         } catch (InvalidSigningKey $exception) {
-            // El `key_id` y la clase; nunca el mensaje (L6) ni la clave.
+            // El `key_id` y la clase; nunca el mensaje ni la clave.
             Log::error('qr_signing_key_invalid', [
                 'slot' => $slot,
                 'key_id' => $id,

@@ -18,7 +18,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * Envuelve el caso de uso **entero**, verificacion del PIN incluida: el veneno
  * puede estar en abrir el sobre o en comprobar el PIN tanto como en el registro.
  * Un reenvio de un fichaje ya descartado no llega a comprobar el PIN: lo
- * resuelve antes {@see RegisterScanHandler::replayOf()} (PIN-02).
+ * resuelve antes {@see RegisterScanHandler::replayOf()}.
  */
 final readonly class GuardedPinScanRegistration
 {

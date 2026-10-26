@@ -10,7 +10,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * Un idioma que **la instalacion tiene activo** (`LOCALE_AVAILABLE`; RF-KI-05,
- * regla dura 13, bloque 26 de la 2.2.1).
+ * regla dura 13).
  *
  * ## Una sola regla para todo lo que fija un idioma
  *

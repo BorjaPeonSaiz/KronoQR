@@ -16,7 +16,7 @@ use App\Modules\Product\Domain\ValueObject\SettingsDrift;
  *
  * ## `settings.invalid_keys`: el sistema esta funcionando con OTRO valor
  *
- * La resolucion de configuracion es tolerante a proposito (tarea 5.1): una fila
+ * La resolucion de configuracion es tolerante a proposito: una fila
  * corrupta se descarta, rige el valor de serie y se sigue fichando. Eso es lo
  * correcto —parar el fichaje por un ajuste ilegible seria mucho peor— pero deja
  * un hueco peligroso: el cliente cree que tiene puesto 8 y el sistema calcula

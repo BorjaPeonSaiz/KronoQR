@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Reconoce las excepciones de CONEXION de los dos servicios de los que dependen
- * las sondas (PR2).
+ * las sondas.
  *
  * - **Redis**: `RedisException` de `phpredis`, el cliente del producto. La de
  *   Predis se nombra como texto para no depender de un paquete que no se instala.

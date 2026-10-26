@@ -48,7 +48,7 @@ use DateTimeZone;
  * Y por eso, al contrario que {@see ReadComplianceSummary} y que
  * {@see GeneratePeriodReport}, aqui **no se llama a `PersonalDataAccessLog`**. Lo
  * que sale son doce agregados de la instalacion entera: ni un `employee_uuid`, ni
- * un nombre, ni un departamento (regla dura 21, decision 5 de la ficha 3.13). Un
+ * un nombre, ni un departamento (regla dura 21). Un
  * asiento `personal_data.accessed` por cada apertura de esta pantalla llenaria el
  * trail —que tiene cuatro años de retencion (RL-02)— de filas que no describen
  * ninguna divulgacion, y con ello haria mas dificil encontrar las que si.
@@ -65,8 +65,8 @@ use DateTimeZone;
  * `daily_totals` aqui daria un segundo total de horas de la instalacion, y el dia
  * que los dos no coincidieran nadie sabria cual creer.
  *
- * Se llama a `compose()` y no a `handle()` **para no escribir asiento** (decision
- * 13 de la ficha 3.12): el cuadro solo usa los totales del informe, y un
+ * Se llama a `compose()` y no a `handle()` **para no escribir asiento**:
+ * el cuadro solo usa los totales del informe, y un
  * `personal_data.accessed` por abrir una pantalla de agregados es justo lo que el
  * parrafo anterior descarta. El contexto de divulgacion que `compose()` devuelve se
  * ignora a proposito.

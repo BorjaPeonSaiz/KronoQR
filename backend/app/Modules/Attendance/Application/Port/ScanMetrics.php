@@ -46,7 +46,7 @@ interface ScanMetrics
 
     /**
      * Un lote de la cola offline sincronizado: `sync_delay_seconds{device}` y su
-     * tamano (§8.2, tarea 1.7).
+     * tamano (§8.2).
      *
      * **`delaySeconds` no mide lo que tardo el servidor**, sino cuanto tiempo
      * estuvo el fichaje mas antiguo del lote esperando en la tablet. Es la unica
@@ -67,7 +67,7 @@ interface ScanMetrics
     public function batchSynchronised(string $deviceUuid, int $size, int $delaySeconds): void;
 
     /**
-     * `pin_fallback_scans_total{site}` (§8.2, RF-AT-11, tarea 1.12).
+     * `pin_fallback_scans_total{site}` (§8.2, RF-AT-11).
      *
      * **Es un termometro, no una alarma.** El §8.2 lo dice: *«una subida indica
      * un problema con la emision, el estado de las tarjetas o la disciplina de
@@ -89,7 +89,7 @@ interface ScanMetrics
     public function pinFallbackScan(int $siteId): void;
 
     /**
-     * `scans_by_origin_total{origin}` (§8.2, RF-IN-08, tarea 3.1).
+     * `scans_by_origin_total{origin}` (§8.2, RF-IN-08).
      *
      * **Es la metrica de adopcion, no una segunda `scans_total`.** Aquella
      * cuenta por quiosco y por desenlace y sirve para operar; esta contesta la

@@ -13,7 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use DateTimeImmutable;
 
 /**
- * La huella SHA-256 **del contenido** del registro propio (PR19, RF-ID-05).
+ * La huella SHA-256 **del contenido** del registro propio (RF-ID-05).
  *
  * Mismo criterio que {@see PeriodReportDigest}, y por los mismos motivos: se
  * resume una serializacion canonica de lo que el documento **afirma**, no el
@@ -25,7 +25,7 @@ use DateTimeImmutable;
  * ## El formato canonico
  *
  * UTF-8, lineas separadas por `\n`, campos por `\x1F`. Dentro de cada campo se
- * escapan la barra invertida, `\x1F`, `\n` y `\r` (R7-RV-03): un motivo libre
+ * escapan la barra invertida, `\x1F`, `\n` y `\r`: un motivo libre
  * no puede partir su campo ni su linea. Los instantes en UTC con
  * segundos —lo almacenado (regla dura 3)— y las duraciones en minutos enteros:
  * el texto `HH:MM` es presentacion.
@@ -47,7 +47,7 @@ final readonly class PersonalRecordDigest
 {
     /**
      * Version del formato canonico. Subirla si cambia lo que entra o como se
-     * escribe: la 2 escapa los separadores dentro de cada campo (R7-RV-03).
+     * escribe: la 2 escapa los separadores dentro de cada campo.
      */
     private const string VERSION = 'kronoqr-personal-record/2';
 
@@ -61,7 +61,7 @@ final readonly class PersonalRecordDigest
      * de una correccion tambien lo escribe una persona: sin escapar, un motivo
      * con un `\x1F` o un salto de linea dentro partiria su campo en dos y dos
      * registros distintos podrian dar el mismo texto canonico, y por tanto la
-     * misma huella (R7-RV-03). La barra invertida se duplica: es lo que hace
+     * misma huella. La barra invertida se duplica: es lo que hace
      * que la codificacion sea reversible y, por tanto, inyectiva. `strtr`
      * sustituye en una sola pasada, asi que el orden de las claves no importa.
      *

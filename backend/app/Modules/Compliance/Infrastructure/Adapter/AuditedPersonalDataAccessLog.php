@@ -59,7 +59,7 @@ final readonly class AuditedPersonalDataAccessLog implements PersonalDataAccessL
     /**
      * El mismo asiento a nombre de un actor que **no** es el de la peticion en
      * curso: la lectura diferida de un informe, que escribe el trabajo de la
-     * cola pero pidio una cuenta (tarea 11.4, V4-BE-5). Un solo sitio construye
+     * cola pero pidio una cuenta. Un solo sitio construye
      * el `payload` de `personal_data.accessed`, con las claves canonicas al
      * final.
      *

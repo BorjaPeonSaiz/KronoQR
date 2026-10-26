@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Port;
 
 /**
- * Quien recibe el resumen semanal (**RF-PR-05**, decision 2 de la ficha 3.12).
+ * Quien recibe el resumen semanal (**RF-PR-05**).
  *
  * Los `responsable_departamento` **activos y con direccion de correo**, uno por
  * cuenta y con su alcance ya resuelto. La lista la sirve `Identity` a traves del

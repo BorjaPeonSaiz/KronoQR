@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * `POST /api/v1/client-errors` — el panel y el portal vacian su buffer de
- * errores (**RF-PD-15**, decision 7 de la ficha 5.12).
+ * errores (**RF-PD-15**).
  *
  * ## `202` y no `201`, y el cuerpo es solo un numero
  *

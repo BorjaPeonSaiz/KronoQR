@@ -25,7 +25,7 @@ use Throwable;
 
 /**
  * Registra el latido de un quiosco (`POST /api/v1/kiosk/heartbeat`, RF-PA-07) y
- * acusa recibo de los errores que la tablet adjunta (RF-PD-15, tarea 5.12).
+ * acusa recibo de los errores que la tablet adjunta (RF-PD-15).
  *
  * ## Sin transaccion, y es correcto
  *
@@ -33,8 +33,7 @@ use Throwable;
  * que proteger ni proyeccion que mantener. Abrir una transaccion aqui seria
  * ceremonia; lo que si hace falta —y lo hace el adaptador— es que la escritura sea
  * una sola sentencia. El historico de errores tampoco entra en ella: escribe por
- * su propia conexion precisamente para no depender del estado de otra (decision 6
- * de la ficha 5.12).
+ * su propia conexion precisamente para no depender del estado de otra.
  *
  * ## Sin auditoria, y tambien es una decision
  *
@@ -60,7 +59,7 @@ use Throwable;
  * (regla dura 19): si el historico no responde, el latido responde `200` con
  * `client_errors_accepted: 0` y la tablet conserva su buffer para el siguiente.
  *
- * ## La huella del codigo de servicio sale de aqui (RF-KI-08, tarea 3.3)
+ * ## La huella del codigo de servicio sale de aqui (RF-KI-08)
  *
  * El latido es el unico canal autenticado que la tablet repite cada minuto, asi
  * que es por donde le llega —como huella, nunca en claro— el codigo con el que
@@ -84,7 +83,7 @@ use Throwable;
  * autenticado que la tablet repite cada minuto, y la tablet los guarda en local
  * para que el boton «Pausa» y el aviso de desfase sigan funcionando sin red. El
  * primero gobierna **la pantalla**, no al servidor: una intencion declarada se
- * honra siempre (decision 1 de la ficha 3.5). El segundo sustituye a la
+ * honra siempre. El segundo sustituye a la
  * constante de 15 minutos que el quiosco llevaba escrita, para que la tablet y
  * el servidor no puedan discrepar sobre cuando un reloj esta desviado.
  *
@@ -180,7 +179,7 @@ final readonly class RecordHeartbeat
             // segundos en el contrato porque es lo que la tablet compara con su
             // propio reloj. La conversion vive en un solo sitio.
             $settings->maximumClockSkewMinutes * 60,
-            // RF-KI-07 (tarea 3.12). La ventana de actualizacion viaja tal cual:
+            // RF-KI-07. La ventana de actualizacion viaja tal cual:
             // aqui no se decide nada sobre ella —el servidor no sabe si la
             // tablet tiene una version pendiente ni cuando fue su ultimo
             // escaneo—, se transporta la configuracion del centro para que la

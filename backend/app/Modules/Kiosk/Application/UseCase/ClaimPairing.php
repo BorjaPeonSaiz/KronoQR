@@ -63,7 +63,7 @@ use Psr\Log\LoggerInterface;
  * **Nunca en la respuesta** (regla dura 17) y **nunca con datos personales**
  * (regla dura 21): un emparejamiento no conoce a nadie.
  *
- * ## Salvo la recogida repetida (V6-KI-02, 2.3.0)
+ * ## Salvo la recogida repetida (2.3.0)
  *
  * Si la respuesta `paired` se pierde, la tablet puede repetir la recogida entre
  * los 10 y los 60 segundos siguientes, desde el mismo origen: se reemite el token
@@ -218,7 +218,7 @@ final readonly class ClaimPairing
     }
 
     /**
-     * La recogida repetida (V6-KI-02): la respuesta de la primera se perdio.
+     * La recogida repetida: la respuesta de la primera se perdio.
      *
      * **Solo si el token anterior nunca se uso** (`last_used_at` nulo): lo
      * decide el agregado con el hecho que se le pasa.

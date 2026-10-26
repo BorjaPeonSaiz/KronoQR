@@ -35,7 +35,7 @@ final readonly class AnomalyScanResult
          * Se cuenta y no se traga: el comando termina con codigo distinto de
          * cero, pero lo que si se abrio queda abierto.
          *
-         * **Adonde llega esta cifra** (tarea 3.2): se publica como
+         * **Adonde llega esta cifra**: se publica como
          * `incident_detection_last_failures` en el colector *textfile*
          * (`IncidentDetectionMetrics`), la regla `DeteccionDeIncidenciasConFallos`
          * la evalua con `> 0` y el `->onFailure()` de `routes/console.php` deja

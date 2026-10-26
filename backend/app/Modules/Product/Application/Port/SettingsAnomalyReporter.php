@@ -21,7 +21,7 @@ use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
  * **No decide como se anuncia.** El adaptador registra un `warning` sin datos
  * personales y lo agrupa por ventana, porque quien lee la configuracion es el
  * camino de fichaje y un aviso por escaneo seria cincuenta por segundo. El
- * paquete de diagnostico (ADR-020) y `doctor` (tarea 5.9) beben de ahi.
+ * paquete de diagnostico (ADR-020) y `doctor` beben de ahi.
  *
  * **No puede romper nada.** Si el adaptador falla, la lectura sigue: perder un
  * aviso es infinitamente mas barato que perder un fichaje.

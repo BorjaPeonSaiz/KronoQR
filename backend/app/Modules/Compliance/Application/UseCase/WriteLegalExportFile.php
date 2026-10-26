@@ -19,7 +19,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * Escribe la exportacion para la Inspeccion **para la cola de informes**
- * (**RF-IN-05**, RL-06, V5-PA-4).
+ * (**RF-IN-05**, RL-06).
  *
  * ## Es {@see GenerateLegalExport} sin el asiento
  *

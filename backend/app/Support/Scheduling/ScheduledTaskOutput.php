@@ -35,7 +35,7 @@ use Illuminate\Log\LogManager;
  * La salida de una tarea es texto libre y puede llevar un dato personal en
  * algun mensaje. No hay lista de comandos «seguros» que mantener: **cada linea
  * se escribe como el MENSAJE del apunte**, y el mensaje pasa por la lista
- * blanca por palabra del saneador de Monolog (L1, ADR-048), que quita un nombre
+ * blanca por palabra del saneador de Monolog (ADR-048), que quita un nombre
  * sin comillas. En el contexto solo van claves que escribe este codigo
  * (nombre de la tarea, numero de linea, recuentos), porque el contexto se sanea
  * solo por patrones y un nombre ahi pasaria. `ScheduledTaskOutputReachesTheContainerLogTest`

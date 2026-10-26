@@ -18,8 +18,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 use RuntimeException;
 
 /**
- * El informe por periodo y la nomina en diferido (**RF-IN-06**, **RF-IN-07**,
- * decision 4 de la ficha 3.9).
+ * El informe por periodo y la nomina en diferido (**RF-IN-06**, **RF-IN-07**).
  *
  * ## No calcula nada nuevo: es **la misma** consulta del panel
  *
@@ -37,9 +36,9 @@ use RuntimeException;
  * ## El alcance se aplica tal cual, nunca se recalcula
  *
  * Sale de la columna `scope`, que es la instantanea del momento en que se
- * autorizo (decision 1).
+ * autorizo.
  *
- * ## `compose()` y no `handle()` (tarea 11.4, V4-BE-5)
+ * ## `compose()` y no `handle()`
  *
  * El asiento `personal_data.accessed` NO se escribe aqui, en el trabajo y a
  * nombre de `system`, sino al cerrar, a nombre de quien lo pidio. Si la

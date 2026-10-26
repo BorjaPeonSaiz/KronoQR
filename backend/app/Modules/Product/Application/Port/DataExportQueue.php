@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\Port;
 
 /**
- * Quien pone la generacion en la cola (**RF-PD-14**, decision 4 de la ficha
- * 5.10).
+ * Quien pone la generacion en la cola (**RF-PD-14**).
  *
  * ## Por que la generacion es asincrona desde el panel
  *

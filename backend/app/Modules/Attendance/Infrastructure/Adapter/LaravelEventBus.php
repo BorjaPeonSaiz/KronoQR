@@ -28,7 +28,7 @@ use Illuminate\Contracts\Events\Dispatcher;
  * que no ocurre, porque el segundo se puede corregir (ADR-027).
  *
  * > **Un listener con efectos fuera de la base de datos tiene que ser encolado
- * > con `$afterCommit`.** Difundir por Reverb al panel en vivo (tarea 1.11),
+ * > con `$afterCommit`.** Difundir por Reverb al panel en vivo,
  * > enviar una notificacion o llamar a un sistema externo desde un listener
  * > sincrono significa hacerlo sobre una escritura que todavia puede revertir, y
  * > el panel acabaria mostrando un fichaje que no ocurrio. Laravel lo resuelve

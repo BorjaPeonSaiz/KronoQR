@@ -33,7 +33,7 @@ final class AuditLogSchema
     public const string ANCHORS_TABLE = 'audit_chain_anchors';
 
     /**
-     * La funcion que suelta una particion ya sellada (tarea 2.10). El nombre
+     * La funcion que suelta una particion ya sellada. El nombre
      * vive aqui porque lo nombran tres sitios: la migracion que la crea, el
      * adaptador que la invoca y la prueba que comprueba quien puede ejecutarla.
      */
@@ -77,7 +77,7 @@ final class AuditLogSchema
     }
 
     /**
-     * La funcion que suelta una particion ya sellada (tarea 2.10, ADR-027).
+     * La funcion que suelta una particion ya sellada (ADR-027).
      *
      * Es `SECURITY DEFINER` y pertenece al **propietario** de `audit_log`, que
      * es el rol de migracion. `ALTER TABLE … DETACH PARTITION` exige ser
@@ -328,7 +328,7 @@ final class AuditLogSchema
      *    `TRUNCATE`.
      *
      * El rol de mantenimiento recibe `SELECT`: para sellar un ancla antes de
-     * soltar la particion (tarea 2.10) tiene que poder leerla y verificar su
+     * soltar la particion tiene que poder leerla y verificar su
      * cadena. `DELETE` tampoco lo recibe: la purga es `DROP PARTITION`.
      *
      * @return list<string>

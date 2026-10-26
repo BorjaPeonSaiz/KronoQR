@@ -45,7 +45,7 @@ final readonly class CurrentAuditContext
 
     /**
      * La concesion de acceso de soporte que esta autenticada (RF-PD-11, RL-18,
-     * ADR-020, tarea 5.9).
+     * ADR-020).
      *
      * **Es un `tokenable` mas, y por eso entra por el mismo sitio.** Sin esta
      * rama, todo lo que hiciera una sesion de soporte quedaria firmado como

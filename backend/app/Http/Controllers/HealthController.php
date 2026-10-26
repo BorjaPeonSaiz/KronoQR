@@ -14,7 +14,7 @@ use Illuminate\Http\JsonResponse;
  * esta desplegado** y **en que estado esta su licencia**. La version es lo que
  * permite correlacionar una incidencia con una version concreta cuando el
  * cliente llama por telefono; el estado de licencia es lo que permite a
- * `doctor` y al paquete de diagnostico informarlo (RF-PD-09, tarea 5.9).
+ * `doctor` y al paquete de diagnostico informarlo (RF-PD-09).
  *
  * ## No toca ninguna dependencia, y esa es toda la decision
  *

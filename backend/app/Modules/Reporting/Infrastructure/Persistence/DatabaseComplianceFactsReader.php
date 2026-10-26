@@ -45,7 +45,7 @@ use Throwable;
  *     ventana no se evaluaria — y no fallaria nada: el aviso simplemente no
  *     saldria. Se resuelve con `lag()` sobre las jornadas de cada persona.
  *   - **Hacia los dos lados, hasta completar las semanas del borde.** Toda semana
- *     que toque el rango se evalua sobre sus siete dias (decision 6). Lo calcula
+ *     que toque el rango se evalua sobre sus siete dias. Lo calcula
  *     {@see ComplianceWeek} con `week_starts_on`, no un `date_trunc('week')`, que
  *     solo sabe empezar en lunes.
  *

@@ -33,7 +33,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * La retencion del modulo `Compliance` (RL-02, RL-11, RF-PR-03, tarea 2.10).
+ * La retencion del modulo `Compliance` (RL-02, RL-11, RF-PR-03).
  *
  * ## Por que va en un proveedor propio
  *

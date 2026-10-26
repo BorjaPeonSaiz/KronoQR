@@ -148,7 +148,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
     }
 
     /**
-     * La jornada que contiene un tramo **vigente** (RF-PA-04, tarea 1.15).
+     * La jornada que contiene un tramo **vigente** (RF-PA-04).
      *
      * Se entra por el tramo y no por la fecha porque el panel solo conoce el
      * identificador del tramo, y porque deducir la jornada de la hora de entrada
@@ -175,7 +175,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
 
     /**
      * La jornada que contiene un tramo, **vigente o retirado** (RF-AT-12,
-     * ADR-024, tarea 3.5).
+     * ADR-024).
      *
      * La misma consulta que {@see findWorkDayOfShiftEntry()} **sin el filtro de
      * estado**, y esa diferencia de una linea es toda la razon de ser del

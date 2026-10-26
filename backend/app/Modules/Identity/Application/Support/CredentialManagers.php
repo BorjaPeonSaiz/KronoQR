@@ -13,7 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * Una sola lista para los tres caminos —`CredentialPolicy` en el panel,
  * `credentials:deliver` en la consola y la comprobacion de `DeliverCredential`
  * con la cadena tomada—, de modo que la consola nunca permita lo que la API
- * niega (2.3.0 bloque 3, doc 01 §7.2).
+ * niega (doc 01 §7.2).
  */
 final class CredentialManagers
 {

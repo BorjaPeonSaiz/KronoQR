@@ -16,7 +16,7 @@ use App\Modules\Shared\Infrastructure\Export\CsvDialect;
  *
  * El contenido lo escribe {@see PeriodReportCsvWriter}, que vive en
  * `Infrastructure/Export` y es **el mismo** que usa la generacion en diferido de
- * RF-IN-06 (tarea 3.9). Con dos implementaciones, el fichero que llega por el
+ * RF-IN-06. Con dos implementaciones, el fichero que llega por el
  * enlace de descarga y el que se descarga desde la pantalla podrian discrepar, y
  * el que se creeria seria el equivocado — el mismo argumento por el que esta
  * descarga reutiliza la consulta del panel en lugar de tener una SQL propia.

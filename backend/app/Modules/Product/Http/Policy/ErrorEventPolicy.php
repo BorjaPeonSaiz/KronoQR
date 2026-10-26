@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Quien lee el historico de errores, quien lo resuelve y quien puede reportar
- * (RF-PD-15, regla dura 18, decision 8 de la ficha 5.12).
+ * (RF-PD-15, regla dura 18).
  *
  * ## `view`: `admin`, **y tambien un acceso de soporte**
  *
@@ -55,7 +55,7 @@ use Illuminate\Database\Eloquent\Model;
  * distingue porque el `ManagementActor` no sabe con que token se presenta.
  *
  * **Un token de dispositivo recibe `403`**, y no por desconfianza: el quiosco
- * **tiene su canal**, dentro del latido (decision 7), y abrirle un segundo
+ * **tiene su canal**, dentro del latido, y abrirle un segundo
  * competiria con la cola de fichajes por la misma red que ya le falla — que es
  * justo cuando mas errores tiene que reportar (regla dura 19). Dos caminos para
  * lo mismo ademas harian que `source: kiosk` pudiera llegar por una ruta en la

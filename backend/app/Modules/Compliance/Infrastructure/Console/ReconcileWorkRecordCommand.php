@@ -266,7 +266,7 @@ final class ReconcileWorkRecordCommand extends Command
 
     /**
      * `--acknowledge-site-change=change:<id>|audit:<id>`: da por revisada una
-     * discrepancia de la zona del centro (RN-23, bloque 2 de la 2.3.0). No
+     * discrepancia de la zona del centro (RN-23). No
      * concilia. Mismos codigos que `--acknowledge`:
      *
      * - con `--full`, `--days` o `--acknowledge`, o un objetivo o un

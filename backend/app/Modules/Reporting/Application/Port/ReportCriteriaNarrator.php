@@ -9,11 +9,11 @@ use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 
 /**
  * Traduce los criterios de inclusion de un informe a lineas legibles
- * (**RF-IN-06**, decision 1 de la ficha 3.9).
+ * (**RF-IN-06**).
  *
  * ## Por que los criterios se guardan traducidos en la fila
  *
- * Porque el fichero de **nomina no los lleva dentro** (decision 5): una fila de
+ * Porque el fichero de **nomina no los lleva dentro**: una fila de
  * comentario al principio del CSV rompe la importacion de la herramienta de
  * nomina. Y un informe de horas sin sus criterios es una tabla de numeros que
  * cada persona interpreta a su manera — el paso 1 de `/informe-nuevo` lo pide

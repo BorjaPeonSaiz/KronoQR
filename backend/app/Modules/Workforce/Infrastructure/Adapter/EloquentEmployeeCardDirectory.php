@@ -117,7 +117,7 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
                 'employees.site_id',
                 'sites.name as site_name',
                 'departments.name as department_name',
-                // El departamento por su clave (2.3.0, HC1): el tablero de
+                // El departamento por su clave (2.3.0): el tablero de
                 // credenciales filtra por el en el servidor, y el nombre no es
                 // unico ni estable.
                 'employees.department_id',

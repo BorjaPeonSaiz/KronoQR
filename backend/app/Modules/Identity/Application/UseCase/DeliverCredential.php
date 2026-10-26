@@ -41,8 +41,8 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * responde `409`. Sobrescribirla cambiaria el responsable y el momento que ya
  * constan en la auditoria, que es exactamente lo que la regla dura 5 prohibe.
  *
- * **Y es el acto que cierra el relevo de una rotacion de clave** (RF-QR-07,
- * tarea 2.12): al entregar la tarjeta nueva se revoca la que esa persona tenia
+ * **Y es el acto que cierra el relevo de una rotacion de clave** (RF-QR-07):
+ * al entregar la tarjeta nueva se revoca la que esa persona tenia
  * firmada con la clave saliente. Ver {@see revokeSupersededCards()}.
  */
 final readonly class DeliverCredential
@@ -104,7 +104,7 @@ final readonly class DeliverCredential
                 // Con la cadena tomada, la cuenta que firma no puede darse de
                 // baja hasta que esto confirme (ADR-051 §6). Por los dos caminos:
                 // la consola ya la comprobo al preguntar y el panel al autorizar,
-                // pero lo que vale es lo de ahora (2.3.0 bloque 3).
+                // pero lo que vale es lo de ahora.
                 if (! $this->accounts->isActiveManagementAccount($command->deliveredByUserId, CredentialManagers::ROLES)) {
                     throw new CredentialDeliverySignerNotAllowed;
                 }

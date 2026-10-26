@@ -12,8 +12,7 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * `POST /api/v1/reports/legal-export/employees/search` — la persona de la
- * exportacion para la Inspeccion, por su nombre o su DNI (RF-IN-05,
- * V21-3-PA-1).
+ * exportacion para la Inspeccion, por su nombre o su DNI (RF-IN-05).
  *
  * Recibe el criterio ya autorizado y validado, invoca el caso de uso —que mide,
  * busca y deja el asiento antes de devolver nada— y responde con el Resource.

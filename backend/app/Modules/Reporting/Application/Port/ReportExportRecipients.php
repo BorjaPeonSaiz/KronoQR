@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Port;
 
 /**
- * A quien se avisa de que su informe esta listo (**RF-IN-06**, decision 8 de la
- * ficha 3.9).
+ * A quien se avisa de que su informe esta listo (**RF-IN-06**).
  *
  * ## Por que un puerto y no el modelo `User`
  *

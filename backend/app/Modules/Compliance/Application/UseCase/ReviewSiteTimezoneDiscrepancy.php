@@ -22,7 +22,7 @@ use App\Modules\Shared\Domain\ValueObject\SignOffReasonViolation;
 
 /**
  * Da por revisada una discrepancia de la zona del centro que la conciliacion
- * no puede dejar de contar (RN-23, ADR-056; bloque 2 de la 2.3.0): una fila de
+ * no puede dejar de contar (RN-23, ADR-056): una fila de
  * la traza `site_timezone_changes` sin su asiento firmado, o un `site.updated`
  * que cambio la zona sin firma.
  *

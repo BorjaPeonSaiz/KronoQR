@@ -98,7 +98,7 @@ final readonly class RecordProjectionReconciliationAudit
                 // que es la unica copia de lo que la proyeccion afirmaba que ya
                 // no se puede tocar (ADR-027).
                 //
-                // **Los seis campos comparados, no dos** (tarea 3.6). Con el
+                // **Los seis campos comparados, no dos**. Con el
                 // total y el numero de tramos no se puede reconstruir la fila que
                 // decia `has_open_shift = true` sobre un turno ya cerrado, que es
                 // la divergencia que la prueba de carga destapo; y desde que la

@@ -46,7 +46,7 @@ use Illuminate\Support\Facades\Config;
  * cuatro casos: la instalacion lo ha apagado, no hay clave de Reverb configurada
  * —no hay a que conectarse—, el difusor no es de tiempo real (`null`, `log`, que
  * es lo que pasa en la suite de pruebas) o **la licencia no lo concede**
- * (tarea 5.3, ADR-023).
+ * (ADR-023).
  *
  * ## Y `key` y `channels` no se sirven cuando esta apagado
  *
@@ -82,8 +82,8 @@ final readonly class RealtimeSubscription
         public array $channels,
         public int $pollIntervalSeconds,
         /**
-         * Por que no hay tiempo real, cuando la causa es la licencia (ADR-023,
-         * tarea 5.3). `null` cuando lo hay, y tambien cuando lo que falta es la
+         * Por que no hay tiempo real, cuando la causa es la licencia (ADR-023).
+         * `null` cuando lo hay, y tambien cuando lo que falta es la
          * configuracion de Reverb: eso ultimo lo arregla quien despliega, no
          * quien renueva, y el panel ya sabia decirlo.
          */
@@ -114,7 +114,7 @@ final readonly class RealtimeSubscription
             // tiempo real.
             //
             // **La negativa de verdad no esta aqui**: la da `routes/channels.php`,
-            // que no firma la suscripcion (tarea 5.3). Esto es coherencia de la
+            // que no firma la suscripcion. Esto es coherencia de la
             // respuesta, no el control. `path` y `auth_endpoint` si se sirven:
             // son dos rutas estaticas del propio origen del panel, no dan acceso
             // a nada y quitarlas obligaria a hacer nulable en el contrato un

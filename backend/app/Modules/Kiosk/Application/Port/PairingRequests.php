@@ -8,8 +8,7 @@ use App\Modules\Kiosk\Domain\Model\PairingRequest;
 use DateTimeImmutable;
 
 /**
- * La persistencia de las solicitudes de emparejamiento (**RF-PD-06**, tarea
- * 5.6).
+ * La persistencia de las solicitudes de emparejamiento (**RF-PD-06**).
  *
  * ## EL ADAPTADOR ARBITRA LA CONCURRENCIA, NO EL AGREGADO
  *
@@ -121,7 +120,7 @@ interface PairingRequests
      * simultaneos entran los dos, y solo uno cambia una fila.
      *
      * Guarda ademas la huella opaca del origen (`$origin`) para la recogida
-     * repetida (V6-KI-02); nula si no se conoce.
+     * repetida; nula si no se conoce.
      *
      * @return bool `false` si otro sondeo llego antes. El caso de uso degrada a rechazo.
      */
@@ -131,7 +130,7 @@ interface PairingRequests
      * Cuenta una recogida repetida, **solo si nadie se adelanto**: el contador
      * tiene que seguir en `$expectedReclaims`, el valor que se leyo. Dos
      * recogidas repetidas simultaneas entran las dos y solo una cambia la fila,
-     * asi que solo una emite token (V6-KI-02).
+     * asi que solo una emite token.
      *
      * @return bool `false` si otra recogida llego antes. El caso de uso degrada a rechazo.
      */

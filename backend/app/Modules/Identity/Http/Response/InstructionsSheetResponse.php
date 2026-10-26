@@ -8,8 +8,7 @@ use App\Modules\Identity\Application\UseCase\InstructionsSheet;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * La respuesta que **transmite** la hoja de instrucciones del empleado (tarea
- * 5.11b, RL-05).
+ * La respuesta que **transmite** la hoja de instrucciones del empleado (RL-05).
  *
  * Hermana de {@see PrintedCardsResponse} y con las mismas cabeceras, por motivos
  * distintos que conviene no confundir:

@@ -30,7 +30,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *
  * ## No es la exportacion legal, y la diferencia importa
  *
- * `GET /api/v1/reports/legal-export` (RF-IN-05, tarea 1.17) la genera RRHH o
+ * `GET /api/v1/reports/legal-export` (RF-IN-05) la genera RRHH o
  * auditoria ante un requerimiento, abarca a terceros, lleva manifiesto con base
  * legal y deja asiento en `audit_log`. Esta la genera la persona sobre sus
  * propios datos. Mismo rigor en las horas —`HH:MM`, nunca decimal— y otro
@@ -49,7 +49,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * temporal solo añadiria un fichero con el registro horario de alguien esperando
  * a que alguien se olvide de borrarlo.
  *
- * El PDF (`?format=pdf`, PR19) tampoco toca el disco: el motor devuelve los bytes
+ * El PDF (`?format=pdf`) tampoco toca el disco: el motor devuelve los bytes
  * en memoria y se emiten tal cual. Lo compone {@see PersonalRecordPdf} con las
  * plantillas y el sello del informe por periodo.
  */
@@ -68,7 +68,7 @@ final class MyWorkDayExportController extends Controller
             static fn () => $workDays->handle($query),
         );
 
-        // Los dos formatos sobre el MISMO registro (PR19): lo que la persona
+        // Los dos formatos sobre el MISMO registro: lo que la persona
         // presenta en papel y lo que se lleva en una hoja de calculo no pueden
         // decir cosas distintas.
         return $request->wantsPdf()

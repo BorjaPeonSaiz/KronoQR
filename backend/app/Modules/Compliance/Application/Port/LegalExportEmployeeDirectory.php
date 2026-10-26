@@ -7,8 +7,7 @@ namespace App\Modules\Compliance\Application\Port;
 use App\Modules\Compliance\Domain\ValueObject\EmployeeSearch;
 
 /**
- * Busca a la persona que nombra un requerimiento de la Inspeccion (RF-IN-05,
- * V21-3-PA-1).
+ * Busca a la persona que nombra un requerimiento de la Inspeccion (RF-IN-05).
  *
  * ## Por que un puerto de `Compliance` y no el directorio de `Workforce`
  *

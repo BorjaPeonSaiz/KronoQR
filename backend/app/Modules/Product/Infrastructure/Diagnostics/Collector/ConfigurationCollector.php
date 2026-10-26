@@ -16,7 +16,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
 /**
  * Seccion `configuration`: el `.env` **filtrado por lista de permitidos**, los
  * ajustes guardados en base de datos que pasan su propia lista de permitidos
- * (`installation_settings`, PR14), las filas de configuracion que no se pudieron aplicar y las claves en las que el
+ * (`installation_settings`), las filas de configuracion que no se pudieron aplicar y las claves en las que el
  * `.env` y la base de datos dicen cosas distintas (RF-PD-09, RS-08).
  *
  * ## Las tres cosas responden a la misma pregunta

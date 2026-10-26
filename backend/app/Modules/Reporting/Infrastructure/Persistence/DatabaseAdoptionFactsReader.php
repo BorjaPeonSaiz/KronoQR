@@ -41,8 +41,7 @@ use Throwable;
  *
  * **No define «jornada completa».** La define {@see WorkDayCompletionReader}, que
  * es el mismo lector que publica `workdays_complete_ratio{site}`: con dos
- * consultas, Grafana y el cuadro darian dos porcentajes para la misma semana
- * (decision 8 de la ficha 3.13).
+ * consultas, Grafana y el cuadro darian dos porcentajes para la misma semana.
  *
  * ## Dias civiles de la zona del centro, convertidos a instantes ANTES de filtrar
  *

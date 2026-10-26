@@ -55,7 +55,7 @@ final class ErrorEventController extends Controller
             $errors->handle($request->toQuery()),
             // Un acceso de soporte no ve QUIEN dio un fallo por atendido: es la
             // unica columna del historico con un nombre de persona dentro, y el
-            // paquete de diagnostico ya la excluia por lo mismo (decision 14).
+            // paquete de diagnostico ya la excluia por lo mismo.
             withResolver: ! self::isSupport($request),
         ))->response();
     }

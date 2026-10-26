@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Application\UseCase;
 use App\Modules\Reporting\Application\Support\WeeklySummaryReason;
 
 /**
- * Como termino una pasada de {@see SendWeeklySummaries} (RF-PR-05, tarea 3.12).
+ * Como termino una pasada de {@see SendWeeklySummaries} (RF-PR-05).
  *
  * **Recuentos y un motivo, nunca nombres ni direcciones** (regla dura 21): esto
  * es lo que acaba escrito en `reporting.weekly_summary`, y ese log viaja al

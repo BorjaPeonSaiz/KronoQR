@@ -126,7 +126,7 @@ final readonly class GeneratedFileHousekeeping
      */
     public function sweepOrphans(GeneratedFileArea $area, callable $minimumAgeSeconds, DateTimeImmutable $now): int
     {
-        // La medida comun (V1-RV-03): span activo, duracion y desenlace. Los
+        // La medida comun: span activo, duracion y desenlace. Los
         // recuentos se cuentan dentro y van al cierre del span.
         $counts = UseCaseInstrumentation::run(
             'shared.sweep_generated_files',

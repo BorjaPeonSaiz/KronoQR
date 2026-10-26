@@ -16,7 +16,7 @@ use Throwable;
 
 /**
  * `php artisan compliance:record-system-event` — el asiento de auditoria que
- * deja el instalador (**RF-PD-10**, RL-04, RS-07, regla dura 6, tarea 5.7).
+ * deja el instalador (**RF-PD-10**, RL-04, RS-07, regla dura 6).
  *
  * ## Quien lo llama y por que existe
  *

@@ -82,7 +82,7 @@ final class CredentialStatusCommand extends Command
                 : $board->handle($query);
         } catch (InstallationSiteMissing) {
             // Antes del asistente de puesta en marcha no hay centro, y sin centro
-            // no hay ninguna credencial que contar (I11). Es un estado de la
+            // no hay ninguna credencial que contar. Es un estado de la
             // instalacion, no un fallo: ni excepcion en pantalla ni linea ERROR en
             // el log, y 0 para que la tarea programada no lo cuente como fallida.
             $this->line('La instalacion todavia no tiene centro: completa antes el asistente de puesta en marcha, en el panel. Hasta entonces no hay credenciales que mostrar.');

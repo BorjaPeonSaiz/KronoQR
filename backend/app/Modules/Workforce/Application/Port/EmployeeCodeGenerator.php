@@ -9,7 +9,7 @@ use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 /**
  * Produce el codigo de un empleado nuevo (RF-GP-01, RF-ID-06).
  *
- * **Es un puerto por la misma razon que `Clock`** (regla dura 2, H8): la
+ * **Es un puerto por la misma razon que `Clock`** (regla dura 2): la
  * aleatoriedad es un efecto, y un dominio que la produce por su cuenta no se
  * puede probar. El dominio decide la forma del codigo
  * ({@see EmployeeCode::fromRandomPicks()}); el adaptador pone el azar.

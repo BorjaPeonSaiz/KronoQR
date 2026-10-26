@@ -6,13 +6,13 @@ namespace App\Modules\Product\Application\Port;
 
 /**
  * Publica el estado de la licencia donde la **sonda de vida** pueda leerlo sin
- * tocar dependencias (doc 02 §10.5, paso 9 de la tarea 5.3).
+ * tocar dependencias (doc 02 §10.5).
  *
  * ## Por que existe este puerto
  *
  * `GET /api/v1/health` no puede consultar la base de datos: una sonda de vida
  * que lo hiciera haria que Docker reiniciara el contenedor de PHP cuando lo
- * caido es PostgreSQL (tarea 1.7). Asi que el estado se publica **cuando ya se
+ * caido es PostgreSQL. Asi que el estado se publica **cuando ya se
  * ha calculado por otro motivo** —una pantalla del panel, `license:show`, una
  * activacion— y la sonda lee esa copia.
  *

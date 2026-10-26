@@ -14,7 +14,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Deja asiento de que la instalacion se ha actualizado o de que se ha restaurado
- * una copia previa (**RF-PD-10**, RL-04, RS-07, regla dura 6, tarea 5.7).
+ * una copia previa (**RF-PD-10**, RL-04, RS-07, regla dura 6).
  *
  * ## Que agujero cierra
  *

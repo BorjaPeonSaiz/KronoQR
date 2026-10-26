@@ -14,7 +14,7 @@ use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
 
 /**
- * «Tu informe esta listo» (**RF-IN-06**, decision 8 de la ficha 3.9).
+ * «Tu informe esta listo» (**RF-IN-06**).
  *
  * ## NUNCA lleva el enlace de descarga
  *
@@ -57,7 +57,7 @@ use Illuminate\Support\Facades\Lang;
 final class ReportExportReadyNotification extends Notification
 {
     /**
-     * @param  string  $brandName  El nombre de la instalacion (R6-PL-07): va en el
+     * @param  string  $brandName  El nombre de la instalacion: va en el
      *                             asunto, la cabecera, la despedida y el pie.
      *                             Nunca `APP_NAME`.
      */
@@ -67,7 +67,7 @@ final class ReportExportReadyNotification extends Notification
         private readonly string $brandName,
     ) {
         // El idioma del destinatario tambien para lo que Laravel pinta al
-        // enviar, no solo para las lineas del cuerpo (V6-PL-05).
+        // enviar, no solo para las lineas del cuerpo.
         $this->locale = $recipient->locale;
     }
 
@@ -87,7 +87,7 @@ final class ReportExportReadyNotification extends Notification
             ->subject(Lang::get('report-exports.mail.subject', ['app_name' => $this->brandName], $locale))
             ->greeting(Lang::get('report-exports.mail.greeting', ['name' => $this->recipient->name], $locale))
             // Que se genero, con su nombre: «el informe de horas» de una
-            // exportacion para la Inspeccion seria una frase falsa (V5-PA-4).
+            // exportacion para la Inspeccion seria una frase falsa.
             ->line(Lang::get(match ($this->export->kind) {
                 ReportExportKind::Legal => 'report-exports.mail.intro_legal',
                 ReportExportKind::Adoption => 'report-exports.mail.intro_adoption',

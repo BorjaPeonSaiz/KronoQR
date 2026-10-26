@@ -39,7 +39,7 @@ interface CorrectionMetrics
     public function correctionRecorded(string $reasonCode): void;
 
     /**
-     * `scans_by_origin_total{origin="manual"}` (§8.2, RF-IN-08, tarea 3.1).
+     * `scans_by_origin_total{origin="manual"}` (§8.2, RF-IN-08).
      *
      * **Solo cuando se AÑADE un tramo, nunca al corregir uno existente**, y la
      * distincion es toda la razon de que este metodo sea suyo y no una rama de

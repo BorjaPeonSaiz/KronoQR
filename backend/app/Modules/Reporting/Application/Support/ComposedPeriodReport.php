@@ -8,7 +8,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 
 /**
  * Un informe por periodo **con su asiento de divulgacion todavia sin escribir**
- * (RS-05, decision 13 de la ficha 3.12).
+ * (RS-05).
  *
  * ## Por que existe, en una frase
  *

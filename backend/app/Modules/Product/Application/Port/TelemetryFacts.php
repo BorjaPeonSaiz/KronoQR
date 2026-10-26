@@ -20,7 +20,7 @@ namespace App\Modules\Product\Application\Port;
  *
  * `SELECT version()` de PostgreSQL devuelve tambien el compilador y **rutas de
  * compilacion del servidor**, y las rutas del servidor no salen de la
- * instalacion (ficha 5.10 punto 8). De ahi sale `17.2` y nada mas.
+ * instalacion. De ahi sale `17.2` y nada mas.
  *
  * ## Nunca lanza
  *

@@ -16,7 +16,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Los contratos de una persona: consultarlos y registrar uno nuevo
- * (**RF-GP-02**, tarea 2.8).
+ * (**RF-GP-02**).
  *
  * Delgado como el resto: valida y autoriza el `FormRequest`, invoca el caso de
  * uso y serializa el `Resource`. **Ninguna decision vive aqui**: el cierre del

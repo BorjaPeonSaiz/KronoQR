@@ -42,7 +42,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * informe caduco hace tres dias» en «aqui no ha pasado nada», que es la peor
  * respuesta para quien vuelve a buscar el fichero que pidio la semana pasada.
  *
- * ## Con el avance de las que se estan generando (V5-PA-4)
+ * ## Con el avance de las que se estan generando
  *
  * Solo de las `running`, y leido aparte de la fila
  * (`ReportExportProgressBoard`): es lo que la pantalla sondea mientras espera,

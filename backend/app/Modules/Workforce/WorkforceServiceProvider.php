@@ -115,7 +115,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(WorkRecordPresence::class, DatabaseWorkRecordPresence::class);
 
         /*
-         * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
+         * Importacion masiva de plantilla (RF-GP-05).
          *
          * El lector va sobre `spatie/simple-excel` (doc 02 §3.1) y **no es
          * `singleton`**: guarda si la ultima lectura se trunco, y compartirlo
@@ -138,7 +138,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(WorkforceEventPublisher::class, LaravelWorkforceEventPublisher::class);
 
         /*
-         * Ausencias (RF-GP-04, tarea 3.10).
+         * Ausencias (RF-GP-04).
          *
          * El repositorio recibe el puerto `Clock` —`created_at` y el momento de
          * la anulacion salen de ahi y no del reloj del proceso (regla dura 2)— y
@@ -154,7 +154,7 @@ final class WorkforceServiceProvider extends ServiceProvider
          */
         $this->app->bind(AbsenceRepository::class, EloquentAbsenceRepository::class);
 
-        // Contratos historizados (RF-GP-02, tarea 2.8). Es lo que permite al
+        // Contratos historizados (RF-GP-02). Es lo que permite al
         // informe de RF-IN-03 comparar cada dia contra lo que estaba pactado
         // **ese** dia; sin el, no hay «horas contratadas» que comparar.
         $this->app->bind(EmploymentContractRepository::class, EloquentEmploymentContractRepository::class);
@@ -222,7 +222,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         // identificadores «y nada mas».
         $this->app->bind(EmployeeScopeDirectory::class, EloquentEmployeeScopeDirectory::class);
 
-        // Y el padron minimo que consume el quiosco (RF-KI-03, tarea 1.7). Mismo
+        // Y el padron minimo que consume el quiosco (RF-KI-03). Mismo
         // patron y misma razon: lo declara `Shared` porque lo necesita `Kiosk`,
         // que es otro satelite, y lo implementa este modulo, que es donde estan
         // los nombres y la situacion laboral que decide quien aparece (RN-14).

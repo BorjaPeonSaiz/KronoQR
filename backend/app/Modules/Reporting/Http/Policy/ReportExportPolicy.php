@@ -67,7 +67,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## La licencia no se comprueba aqui
  *
- * Se comprueba en el controlador, al pedir (decision 6): `Feature::AdvancedReports`
+ * Se comprueba en el controlador, al pedir: `Feature::AdvancedReports`
  * para `period` y `Feature::PayrollExport` para `payroll`. Una policy que
  * consultara la licencia devolveria `403` donde el contrato promete `402`, y
  * quien lo recibiera creeria que le falta un permiso cuando lo que falta es una
@@ -77,7 +77,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * modelo Eloquent**, igual que las hermanas de este directorio: asi la
  * autorizacion se decide **antes** de tocar la base de datos.
  *
- * ## Desde la 2.3.0, dos clases mas y el auditor (V5-PA-4)
+ * ## Desde la 2.3.0, dos clases mas y el auditor
  *
  * - `requestLegal` — la exportacion para la Inspeccion en diferido: el mismo
  *   conjunto que `LegalExportPolicy::generate()` de la sincrona,
@@ -145,7 +145,7 @@ final class ReportExportPolicy
     }
 
     /**
-     * `POST /api/v1/reports/exports/{uuid}/cancel` (V5-PA-4).
+     * `POST /api/v1/reports/exports/{uuid}/cancel`.
      *
      * Como `view`: la puerta previa de rol. Que la exportacion sea **suya** lo
      * decide la consulta, y la ajena responde `404`.

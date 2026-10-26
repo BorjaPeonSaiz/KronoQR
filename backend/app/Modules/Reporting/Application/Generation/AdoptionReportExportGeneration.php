@@ -12,7 +12,7 @@ use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 
 /**
- * El cuadro de impacto y adopcion en diferido (**RF-IN-08**, V5-PA-4).
+ * El cuadro de impacto y adopcion en diferido (**RF-IN-08**).
  *
  * ## El mismo cuadro que la descarga sincrona
  *

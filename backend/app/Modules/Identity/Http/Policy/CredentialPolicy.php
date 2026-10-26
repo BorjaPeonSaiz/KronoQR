@@ -25,7 +25,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * **Cada acto tiene su propia habilidad, aunque hoy las seis resuelvan al mismo
  * conjunto.** Emitir una tarjeta, **acuñar su QR**, firmar que se entrego, dejar
  * a alguien sin poder fichar, leer la lista nominal de quien no tiene tarjeta y
- * descargar la hoja que se entrega con ella (tarea 5.11b) son seis
+ * descargar la hoja que se entrega con ella son seis
  * responsabilidades distintas. El dia que se repartan —un recepcionista
  * que solo registra entregas, un rol que solo lee el panel—, una sola lista
  * obligaria a separarlas justo cuando se cometen los errores. Escribirlas
@@ -76,14 +76,13 @@ final class CredentialPolicy
     }
 
     /**
-     * Descargar la hoja de instrucciones que se entrega con la tarjeta (tarea
-     * 5.11b, RL-05).
+     * Descargar la hoja de instrucciones que se entrega con la tarjeta (RL-05).
      *
      * **Los mismos roles que la habilidad `print`, y no es pereza.** La hoja no lleva
      * ningun dato de nadie ni ningun secreto —es el mismo documento para toda la
      * plantilla— asi que la lista no la decide lo que revela, sino **con quien va
      * en el mismo acto**: se imprime a la vez que la tarjeta y se entrega en la
-     * misma conversacion que la tarjeta y el PIN (tareas 1.10 y 1.13). Quien no
+     * misma conversacion que la tarjeta y el PIN. Quien no
      * puede imprimir una tarjeta no tiene ningun momento en el que necesitar esta
      * hoja.
      *

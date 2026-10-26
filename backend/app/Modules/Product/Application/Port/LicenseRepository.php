@@ -34,7 +34,7 @@ interface LicenseRepository
      *
      * Si no se ha podido leer, el adaptador lanza `LicenseUnavailable`, de
      * `Application\Exception` (nombrada en prosa: un puerto no depende de esa
-     * capa, Deptrac). No saber no es «no hay» (V21-4-PL-1).
+     * capa, Deptrac). No saber no es «no hay».
      */
     public function current(): ?StoredLicense;
 

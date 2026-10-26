@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Gate;
 
 /**
  * Quien puede suscribirse a la presencia en vivo por Reverb, y el asiento de
- * esa suscripcion (bloque 11 de la 2.3.0, tarea 11.4, R4-BE-05; RS-05, RL-15,
+ * esa suscripcion (RS-05, RL-15,
  * ADR-011, enmienda de ADR-037).
  *
  * ## Por que deja asiento

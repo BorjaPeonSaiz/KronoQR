@@ -13,8 +13,7 @@ use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
 
 /**
- * Las consultas que producen la exportacion integra (**RF-PD-14**, RL-20,
- * decision 3 de la ficha 5.10).
+ * Las consultas que producen la exportacion integra (**RF-PD-14**, RL-20).
  *
  * ## SQL escrito a mano, y no Eloquent
  *
@@ -355,7 +354,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         SQL;
 
     /*
-     * Ausencias (RF-GP-04, tarea 3.10).
+     * Ausencias (RF-GP-04).
      *
      * **TODAS LAS VERSIONES, tambien las supersedidas y las anuladas** (regla
      * dura 5, RL-04), con su `version`, su `supersedes_uuid`, su motivo de
@@ -685,7 +684,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         SQL;
 
     /*
-     * Los informes generados en segundo plano (RF-IN-06, tarea 3.9).
+     * Los informes generados en segundo plano (RF-IN-06).
      *
      * Sale el **registro** de que se generaron y no los ficheros: el contenido de
      * cada informe ya esta en este mismo ZIP, en `shift_entries`, `daily_totals` y
@@ -734,7 +733,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         SQL;
 
     /*
-     * Los resumenes semanales que salieron por correo (RF-PR-05, tarea 3.12).
+     * Los resumenes semanales que salieron por correo (RF-PR-05).
      *
      * El hecho del envio y nada mas: a que cuenta de gestion, de que semana y
      * cuantas lineas llevaba. **El contenido no esta** —las horas que iban

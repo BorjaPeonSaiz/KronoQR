@@ -22,7 +22,7 @@ use DateTimeImmutable;
 
 /**
  * Sella en `audit_log` el alta, la modificacion y la baja de cada persona de la
- * plantilla, y el alta y el cambio de cada departamento (**AUD-2**, RF-GP-01,
+ * plantilla, y el alta y el cambio de cada departamento (RF-GP-01,
  * RF-GP-02, RF-GP-03, RN-14, regla dura 6, RL-04, RS-05).
  *
  * ## Por que tiene relevancia legal
@@ -42,7 +42,7 @@ use DateTimeImmutable;
  * campos», que es lo que hace falta para reconstruir el hecho sin copiar datos
  * personales a otra tabla.
  *
- * **Dos excepciones, con sus dos valores** (R4-SC-05, R7-RV-02): el traslado de
+ * **Dos excepciones, con sus dos valores**: el traslado de
  * departamento lleva `previous_department_id` y `department_id`, y el
  * renombrado de un departamento, `previous_name` y `name`. Las dos son datos de
  * la organizacion, no de la persona, y sin ellos el asiento no dice de cual a
@@ -100,7 +100,7 @@ final readonly class RecordWorkforceChange
             'changed_fields' => $event->changedFields,
         ];
 
-        // De cual a cual (R4-SC-05): solo si cambio, para que la ausencia de las
+        // De cual a cual: solo si cambio, para que la ausencia de las
         // dos claves diga «no se movio» sin tener que mirar la lista.
         if ($event->changedDepartment()) {
             $payload['previous_department_id'] = $event->previousDepartmentId;
@@ -132,7 +132,7 @@ final readonly class RecordWorkforceChange
     {
         $this->record(AuditAction::DepartmentRenamed, AuditSubject::of('department', $event->departmentId), [
             'changed_fields' => $event->changedFields,
-            // De cual a cual (R7-RV-02). El nombre de un departamento es de la
+            // De cual a cual. El nombre de un departamento es de la
             // organizacion, no de una persona: no le alcanza la regla dura 21.
             'previous_name' => $event->previousName,
             'name' => $event->name,

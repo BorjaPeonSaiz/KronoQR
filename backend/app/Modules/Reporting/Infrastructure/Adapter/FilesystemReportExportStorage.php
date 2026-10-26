@@ -13,8 +13,7 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStor
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 
 /**
- * Los informes en diferido, en el sistema de ficheros local (**RF-IN-06**,
- * decision 4 de la ficha 3.9).
+ * Los informes en diferido, en el sistema de ficheros local (**RF-IN-06**).
  *
  * ## Por que el disco local y no `Storage::disk()`
  *
@@ -81,7 +80,7 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
         return $path;
     }
 
-    /** Confinado como el borrado (ADR-045, C3/F3): fuera de la raiz no «existe». */
+    /** Confinado como el borrado (ADR-045 C3): fuera de la raiz no «existe». */
     public function exists(string $path): bool
     {
         return $path !== '' && $this->files->locate($this->area(), $path) === RecordedFileLocation::Present;
@@ -128,7 +127,7 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
     }
 
     /**
-     * Un nivel, **sin recursion y sin seguir enlaces** (ADR-045, C3).
+     * Un nivel, **sin recursion y sin seguir enlaces** (ADR-045 C3).
      *
      * El arbol que este adaptador crea es exactamente `<raiz>/<uuid>/<fichero>`.
      * Solo se borra un directorio cuyo nombre es un `uuid` v7, dentro de
@@ -143,7 +142,7 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
 
     /**
      * Borra el fichero de una fila **solo si cae dentro de su clase**: bajo
-     * `REPORTING_EXPORT_PATH`, en un `<uuid>/` y sin enlaces (ADR-045, C3). Una
+     * `REPORTING_EXPORT_PATH`, en un `<uuid>/` y sin enlaces (ADR-045 C3). Una
      * fila que apunte a cualquier otro sitio no borra nada. Y el subdirectorio
      * de la exportacion, si queda vacio; nunca recursivamente.
      */

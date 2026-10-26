@@ -45,7 +45,7 @@ use App\Modules\Workforce\Domain\Event\EmployeesImported;
  * lote antes de confirmarla: si este asiento falla, la plantilla no entra; si
  * algo falla despues de el, el asiento revierte con la plantilla. Nunca queda
  * una carga sin su «quien, cuando y con que fichero», ni el resumen de una carga
- * que no llego a existir (V3-BE-1, tarea 19.6 de la 2.3.0).
+ * que no llego a existir.
  */
 final readonly class RecordEmployeeImport
 {

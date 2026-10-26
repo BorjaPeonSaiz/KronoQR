@@ -8,7 +8,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 
 /**
  * La orden que ejecuta una purga simulada, tal como la imprimen la consola y
- * el informe: una sola redaccion para los dos (2.3.0 bloque 3). Lleva la
+ * el informe: una sola redaccion para los dos. Lleva la
  * frase del informe y `--responsible`, que la purga exige desde la 2.3.0
  * (doc 01 RF-PR-03, §7.2 «Firmas por consola»).
  *

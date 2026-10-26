@@ -47,7 +47,7 @@ use App\Modules\Shared\Application\Port\Clock;
  * ejecuciones, y ademas es lo correcto cuando el exceso se corrige y se vuelve a
  * producir: son dos cruces y los dos merecen su asiento con fecha.
  *
- * ## Una evaluacion por OPERACION, no por unidad (H-04, tarea 3.8)
+ * ## Una evaluacion por OPERACION, no por unidad (H-04)
  *
  * {@see self::handle()} es el alta de una en una y {@see self::handleBatch()} la
  * importacion de plantilla (RF-GP-05), que entra **entera** con una sola

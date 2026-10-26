@@ -56,7 +56,7 @@ use Illuminate\Support\Facades\Config;
  * desde la 2.3.0), tanto al simular como al ejecutar, o si sin terminal falta o
  * no cuadra `--responsible-confirm`: no se simula ni se borra nada.
  *
- * ## Quien firma (2.3.0 bloque 3)
+ * ## Quien firma
  *
  * Ejecutar exige `--responsible` y, antes de borrar, enseña la cuenta que firma
  * y pide confirmarla ({@see ConsoleResponsible}; doc 01 RF-PR-03 y §7.2). La

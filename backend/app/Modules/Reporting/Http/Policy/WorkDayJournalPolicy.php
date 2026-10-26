@@ -29,7 +29,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *     lo es (RF-ID-03, RS-05).
  *   - **`self`** no entra por aqui. El propio empleado consulta lo suyo en
  *     `GET /api/v1/me/workdays`, con sesion de portal y ambito `self:read`
- *     (ADR-015, RF-ID-07, tarea 1.11), que es lo que el contrato dice en la
+ *     (ADR-015, RF-ID-07), que es lo que el contrato dice en la
  *     descripcion de este endpoint. Un token de portal ni siquiera alcanza esta
  *     ruta: le falta `attendance:read`, que el middleware `ability` comprueba
  *     antes. **No hay aqui una rama «o es el mismo empleado»** porque no habria
@@ -43,7 +43,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * rechaza ademas por rol, porque un token emitido antes del cambio conserva
  * `attendance:read` hasta que caduca (doc 02 §7.3: dos comprobaciones). Lo que
  * ese rol necesita —el registro para un requerimiento— se sirve por
- * `GET /api/v1/reports/legal-export`, que es suyo (`auditor|rrhh`, tarea 1.17) y
+ * `GET /api/v1/reports/legal-export`, que es suyo (`auditor|rrhh`) y
  * queda auditado como exportacion legal, no como consulta de pantalla.
  *
  * ## La policy es la mitad de la autorizacion

@@ -8,7 +8,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 
 /**
  * Lectura de la proyeccion `daily_totals` para contrastarla con sus eventos
- * origen (RF-PR-02, ADR-007, tarea 2.7).
+ * origen (RF-PR-02, ADR-007).
  *
  * **Solo lee, y es deliberado.** La proyeccion tiene un unico camino de
  * escritura —el listener `DailyTotalsProjector`, que reescribe la fila entera

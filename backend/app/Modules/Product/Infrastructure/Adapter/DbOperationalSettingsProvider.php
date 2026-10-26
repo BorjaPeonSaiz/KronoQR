@@ -105,7 +105,7 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             debounceSeconds: $settings->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS),
             maximumClockSkewMinutes: $settings->integer(SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES),
             minimumTransitSeconds: $settings->integer(SettingKey::ATTENDANCE_MIN_TRANSIT_SECONDS),
-            // RF-PR-06 (tarea 3.11). Los dos que faltaban para que la deteccion
+            // RF-PR-06. Los dos que faltaban para que la deteccion
             // de patrones tenga sus tres umbrales fuera del codigo: el tercero
             // es el transito minimo de la linea de arriba, que existia desde la
             // 5.1 sin que lo consumiera nadie.
@@ -118,7 +118,7 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // RN-12 sigue suspendida y nadie recibe incidencias por una pausa
             // que su hotel no ficha.
             breakClockingEnabled: $settings->text(SettingKey::ATTENDANCE_BREAK_CLOCKING) === 'enabled',
-            // RF-KI-07 (tarea 3.12). Los dos que el servidor **no consume**: los
+            // RF-KI-07. Los dos que el servidor **no consume**: los
             // lleva el latido a la tablet, que es quien decide con ellos. El
             // parseo no puede fallar aqui —`ResolvedSettings` ya descarto la fila
             // que no cumpla el patron de la clave y habra caido al valor de
@@ -127,7 +127,7 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // que lanza (regla dura 19).
             kioskUpdateWindow: KioskUpdateWindow::fromRange($settings->text(SettingKey::KIOSK_UPDATE_WINDOW)),
             kioskUpdateQuietMinutes: $settings->integer(SettingKey::KIOSK_UPDATE_QUIET_MINUTES),
-            // RF-IN-08 (tarea 3.13). La tercera que el servidor NO consume en
+            // RF-IN-08. La tercera que el servidor NO consume en
             // ningun camino de fichaje: la lee el cuadro de impacto y nadie mas.
             // Entra por aqui porque es configuracion operativa del centro y ya se
             // resuelve en esta cascada; un proveedor aparte para una sola clave

@@ -31,8 +31,8 @@ use Illuminate\Support\Facades\Gate;
  *
  * `period` es `ReportExportPolicy::request`, `payroll` es
  * `ReportExportPolicy::requestPayroll` (Anexo B: la nomina es rol `rrhh`), y
- * desde la 2.3.0 `legal` es `requestLegal` y `adoption` es `requestAdoption`
- * (V5-PA-4). Con `legal` y `adoption` solo valen `from`, `to` y —en la legal—
+ * desde la 2.3.0 `legal` es `requestLegal` y `adoption` es `requestAdoption`.
+ * Con `legal` y `adoption` solo valen `from`, `to` y —en la legal—
  * `employee_uuid`; la legal no tiene techo de dias, como la sincrona. Se
  * resuelve en `authorize()` y no en el controlador porque es lo que decide si la
  * peticion llega a existir, y porque asi la prueba de autorizacion negativa
@@ -46,7 +46,7 @@ use Illuminate\Support\Facades\Gate;
  * ## `format` es obligatorio y depende de `kind`
  *
  * **Sin valor por omision.** Suponer CSV porque es el mas comun seria decidir por
- * quien descarga. Y `payroll` **no admite PDF** (decision 5): un programa de
+ * quien descarga. Y `payroll` **no admite PDF**: un programa de
  * nomina no importa un PDF, y ofrecerlo produciria descargas inservibles cuyo
  * unico desenlace es una llamada de soporte. La lista la da
  * {@see ReportExportKind::allows()}, que es tambien de donde se compone el
@@ -240,7 +240,7 @@ final class RequestReportExportRequest extends FormRequest
      * Los parametros del informe, sin el alcance: ese lo pone el servidor.
      *
      * Se construyen aqui y no con `toQuery()` porque lo que se guarda en la fila
-     * es **lo que se pidio**, y el alcance viaja por separado (decision 1). Con
+     * es **lo que se pidio**, y el alcance viaja por separado. Con
      * `legal` y `adoption`, solo el periodo y —en la legal— la persona: ver
      * {@see ReportExportParameters::span()}.
      */

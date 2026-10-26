@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Log;
  * exportacion para la Inspeccion tiene su propia limpieza y su propio criterio
  * (aquella es la copia que se entrega a un tercero y la custodia quien la
  * genero). Solo actua sobre directorios `<uuid>/` de un nivel bajo
- * `REPORTING_EXPORT_PATH`, sin seguir enlaces (ADR-045, C3).
+ * `REPORTING_EXPORT_PATH`, sin seguir enlaces (ADR-045 C3).
  *
  * ## Y concilia fila y fichero (ADR-045)
  *

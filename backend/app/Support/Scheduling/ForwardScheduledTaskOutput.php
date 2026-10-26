@@ -41,7 +41,7 @@ use Throwable;
  * ## Que NO escribe
  *
  * El texto de la salida en el contexto. El contexto se sanea solo por patrones
- * (ADR-048, D3) y un nombre sin comillas pasaria.
+ * (ADR-048) y un nombre sin comillas pasaria.
  */
 final readonly class ForwardScheduledTaskOutput
 {

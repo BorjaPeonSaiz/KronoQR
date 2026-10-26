@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * **El limitador del fichaje y del portal falla ABIERTO si su almacen no
- * responde** (CH1, ADR-059 §3, regla dura 19, RS-02).
+ * responde** (ADR-059 §3, regla dura 19, RS-02).
  *
  * Vive en `App\Http\Middleware` y no en `Attendance`: la zona `portal` es de
  * `Identity`, y un middleware de un modulo no puede ser la pieza que comparten

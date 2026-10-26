@@ -30,7 +30,7 @@ use Throwable;
 
 /**
  * La reconciliacion de `daily_totals` con sus eventos origen (RF-PR-02,
- * ADR-007, tarea 2.7).
+ * ADR-007).
  *
  * ## Que es esto y que no es
  *
@@ -628,7 +628,7 @@ final readonly class ReconcileDailyTotals
      * apagar el planificador seria la forma mas comoda de que la alerta de
      * divergencia no volviera a sonar nunca.
      *
-     * Los fallos van con el resto (tarea 3.2): `projection_reconciliation_last_failures`
+     * Los fallos van con el resto: `projection_reconciliation_last_failures`
      * es lo que distingue «anoche no habia nada que corregir» de «anoche hubo
      * algo y no se pudo corregir», que hasta ahora solo se podia leer en el
      * codigo de salida del comando.

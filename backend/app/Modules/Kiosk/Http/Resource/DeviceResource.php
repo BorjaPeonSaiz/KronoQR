@@ -25,7 +25,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * **El veredicto viene calculado, no se decide aqui.** `health` sale de
  * `KioskHealthRow`, la misma clase de dominio que usa `php artisan kiosk:health`
- * y con los umbrales de la instalacion (tarea 3.3, decision 2). Un `Resource`
+ * y con los umbrales de la instalacion. Un `Resource`
  * que dedujera el color de la fila seria una segunda regla de salud, y la
  * primera conversacion al encontrar una discrepancia seria cual de las dos
  * miente.

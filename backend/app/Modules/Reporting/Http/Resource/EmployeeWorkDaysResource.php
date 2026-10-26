@@ -61,7 +61,7 @@ final class EmployeeWorkDaysResource extends JsonResource
      * @param  WorkDayJournal  $resource
      * @param  string  $today  El dia civil de hoy en la zona del centro, tal como
      *                         lo resuelve `ReadEmployeeWorkDays::todayIn()`.
-     * @param  WorkDayJournalPage|null  $page  La pagina, en la ruta del panel (V5-PA-2). Sin ella
+     * @param  WorkDayJournalPage|null  $page  La pagina, en la ruta del panel. Sin ella
      *                                         —el portal—, `meta` solo lleva el total.
      */
     public function __construct($resource, private readonly string $today, private readonly ?WorkDayJournalPage $page = null)

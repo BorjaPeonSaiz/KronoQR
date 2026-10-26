@@ -13,7 +13,7 @@ use Throwable;
 
 /**
  * Suma a `worked_minutes_total{site,department}` los minutos de cada tramo que
- * se cierra (doc 02 §8.2, doc 01 §9.2, tarea 2.8).
+ * se cierra (doc 02 §8.2, doc 01 §9.2).
  *
  * ## Por que aqui y no al leer el informe
  *
@@ -61,7 +61,7 @@ final class RecordWorkedMinutes implements ShouldQueue
     public bool $afterCommit = true;
 
     /**
-     * La cola que no tumba el fichaje (CH1): ver `resilient` en
+     * La cola que no tumba el fichaje: ver `resilient` en
      * `config/queue.php` y el mismo campo en `BroadcastPresenceChange`.
      */
     public string $connection = 'resilient';

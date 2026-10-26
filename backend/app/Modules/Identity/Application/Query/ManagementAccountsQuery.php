@@ -16,8 +16,8 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * Las cuentas de gestion vistas por quien las administra (**RF-ID-10**;
  * `GET /api/v1/management-accounts` e `identity:list-users`).
  *
- * **El listado deja asiento** (bloque 11 de la 2.3.0, tarea 11.4, V4-BE-4;
- * RS-05, enmienda de ADR-037): lo que lista —nombre, correo y rol de quien entra
+ * **El listado deja asiento** (RS-05, enmienda de ADR-037):
+ * lo que lista —nombre, correo y rol de quien entra
  * al panel— son datos personales de terceros, aunque no sean de la plantilla.
  * `personal_data.accessed` con conjunto `management_accounts`, el numero de
  * cuentas entregadas y los filtros, **nunca el termino buscado** (solo si lo
@@ -32,7 +32,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  */
 final readonly class ManagementAccountsQuery
 {
-    /** El conjunto del asiento de lectura (tarea 11.4). */
+    /** El conjunto del asiento de lectura. */
     public const string DATASET = 'management_accounts';
 
     public function __construct(

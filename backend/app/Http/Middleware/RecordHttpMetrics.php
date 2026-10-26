@@ -73,8 +73,8 @@ final readonly class RecordHttpMetrics
      * Un umbral solo es exacto si coincide con un cubo: entre dos cubos,
      * `histogram_quantile` interpola y una alerta a 2 s con cubos 1 y 3 saltaba
      * con un PIN de 1,2 s; y por encima del ultimo cubo finito todo cae en
-     * `+Inf`, asi que un lote a 10 s era inalcanzable (bloque 9 y tarea 10.8 de
-     * la 2.3.0). Los cubos que ya existian se conservan: quitar uno romperia las
+     * `+Inf`, asi que un lote a 10 s era inalcanzable.
+     * Los cubos que ya existian se conservan: quitar uno romperia las
      * consultas y los paneles que lo leen. Un cubo nuevo es una serie nueva por
      * ruta, y estas rutas son decenas, no miles.
      *

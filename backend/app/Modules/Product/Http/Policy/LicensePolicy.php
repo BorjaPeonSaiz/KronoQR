@@ -49,7 +49,7 @@ final class LicensePolicy
 
     /**
      * Administrador **del cliente**, no un acceso de soporte que actua como tal
-     * (**RF-PD-11**, ADR-020, tarea 5.9).
+     * (**RF-PD-11**, ADR-020).
      *
      * Los tres alcances de una concesion de soporte se presentan como `admin`
      * ante las policies —es lo que les permite llegar a las pantallas que si les

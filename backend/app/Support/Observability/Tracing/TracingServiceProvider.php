@@ -253,7 +253,7 @@ final class TracingServiceProvider extends ServiceProvider
     }
 
     /**
-     * Un span y un `trace_id` por orden de Artisan y por trabajo de cola (L2).
+     * Un span y un `trace_id` por orden de Artisan y por trabajo de cola.
      */
     private function listenToWorkUnits(): void
     {

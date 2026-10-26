@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Observability\Logging;
 
 /**
- * El unico viaje a la red del canal de log (decision 8 de la ficha 3.1).
+ * El unico viaje a la red del canal de log.
  *
  * Existe para que {@see LokiHandler} —donde vive lo que hay que probar: el
  * formato del envio, la agrupacion y que un fallo no se propague— pueda probarse

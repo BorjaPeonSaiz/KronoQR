@@ -23,8 +23,7 @@ use OpenTelemetry\SemConv\ResourceAttributes;
 use Throwable;
 
 /**
- * Arranca el SDK de OpenTelemetry **solo si hay a donde exportar** (doc 02 §8.1,
- * decision 5 de la ficha 3.1).
+ * Arranca el SDK de OpenTelemetry **solo si hay a donde exportar** (doc 02 §8.1).
  *
  * ## Sin endpoint no se construye nada
  *

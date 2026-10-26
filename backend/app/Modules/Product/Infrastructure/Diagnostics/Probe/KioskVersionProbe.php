@@ -17,7 +17,7 @@ use Throwable;
  * ## Que responde
  *
  * «¿Hay alguna tablet que siga con la aplicacion de la version anterior, y se
- * la puede tocar ya?». Quiosco y servidor salen del mismo `VERSION` (DC8): una
+ * la puede tocar ya?». Quiosco y servidor salen del mismo `VERSION`: una
  * tablet que declara una version mas antigua corre una PWA que su *service
  * worker* no ha renovado. Se nombra cada tablet por su `uuid` para encontrarla
  * en el panel.

@@ -11,8 +11,8 @@ use Throwable;
 
 /**
  * El log de una pasada de retencion (doc 02 §8.1). El span y la duracion los
- * pone el caso de uso con {@see UseCaseInstrumentation}, la medida comun
- * (V1-RV-03); aqui se le añaden los ambitos y recuentos del acto.
+ * pone el caso de uso con {@see UseCaseInstrumentation}, la medida comun;
+ * aqui se le añaden los ambitos y recuentos del acto.
  *
  * **En `Application` y no en el borde**, por la misma razon que
  * `Identity\Application\Support\CredentialTelemetry`: este acto solo entra por

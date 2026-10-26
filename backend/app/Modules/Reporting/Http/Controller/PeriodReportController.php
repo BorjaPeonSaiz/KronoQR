@@ -55,7 +55,7 @@ use Illuminate\Support\Facades\Config;
  * Ninguna respuesta de este endpoint cambia el registro. Que quede auditado
  * (RS-05) no lo convierte en una escritura, igual que en la exportacion legal.
  *
- * ## Es funcionalidad ACCESORIA, y se degrada (tarea 5.3)
+ * ## Es funcionalidad ACCESORIA, y se degrada
  *
  * [ADR-023](../../../../../../docs/adr/ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md)
  * lo clasifica como degradable: *«informes avanzados y comparacion entre

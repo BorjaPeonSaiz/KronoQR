@@ -18,7 +18,7 @@ use DateTimeImmutable;
  *
  * ## No hay `delete()`, y no es un olvido
  *
- * **En ninguna capa** (decision 4 de la ficha 3.10, regla dura 5). Corregir es
+ * **En ninguna capa** (regla dura 5). Corregir es
  * {@see self::add()} de una version nueva mas {@see self::markSuperseded()} de
  * la anterior; quitar una ausencia es {@see self::markVoided()}, que es un hecho
  * con autor, momento y motivo. Un metodo de borrado aqui seria la unica pieza

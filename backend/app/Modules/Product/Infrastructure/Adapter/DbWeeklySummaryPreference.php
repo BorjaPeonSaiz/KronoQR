@@ -10,7 +10,7 @@ use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 
 /**
  * Si la instalacion quiere el resumen semanal por correo, resuelto desde
- * `installation_settings` (**RF-PR-05**, `WEEKLY_SUMMARY_EMAIL`, tarea 3.12).
+ * `installation_settings` (**RF-PR-05**, `WEEKLY_SUMMARY_EMAIL`).
  *
  * Hermano de {@see DbKioskServiceCodeProvider} y de
  * {@see DbOperationalSettingsProvider}: misma cascada —fila de la instalacion,

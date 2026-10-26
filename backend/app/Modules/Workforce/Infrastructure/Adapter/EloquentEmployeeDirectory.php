@@ -38,7 +38,7 @@ final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
 
     public function findByCode(string $employeeCode): ?EmployeeSnapshot
     {
-        // La misma consulta, exista o no el codigo (F5): un acceso al indice
+        // La misma consulta, exista o no el codigo: un acceso al indice
         // UNIQUE de `employee_code` y nada mas.
         return $this->snapshotOf(
             Employee::query()->select(self::COLUMNS)->where('employee_code', $employeeCode)->first(),

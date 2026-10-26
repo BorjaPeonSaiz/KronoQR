@@ -15,7 +15,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * El estado de un informe en diferido y, si esta listo, **un enlace de descarga
- * nuevo** (**RF-IN-06**, ADR-041, decision 3 de la ficha 3.9).
+ * nuevo** (**RF-IN-06**, ADR-041).
  *
  * ## Consultar el estado EMITE el enlace, y eso es lo que lo hace seguro
  *
@@ -56,7 +56,7 @@ use Illuminate\Database\ConnectionInterface;
  *
  * `findByUuidFor()` acota por `requested_by_user_id`, asi que la exportacion de
  * otra persona **no existe** para quien pregunta: `404` y no `403`, para no
- * confirmar que existe (decision 2).
+ * confirmar que existe.
  */
 final readonly class ShowReportExport
 {
@@ -107,7 +107,7 @@ final readonly class ShowReportExport
          * estar contada, o peor, la fila resucitaba el `file_path` de un fichero
          * que ya no existe y el panel ofrecia una descarga que responde `404`.
          *
-         * El dueño entra en la misma consulta que el bloqueo (decision 2): la
+         * El dueño entra en la misma consulta que el bloqueo: la
          * exportacion de otra persona **no existe** para quien pregunta, y eso es
          * lo que produce el `404` del contrato en lugar de un `403` que
          * confirmaria que existe.

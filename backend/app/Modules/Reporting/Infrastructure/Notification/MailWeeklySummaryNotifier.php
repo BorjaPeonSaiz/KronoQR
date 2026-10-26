@@ -42,7 +42,7 @@ use Throwable;
  */
 final readonly class MailWeeklySummaryNotifier implements WeeklySummaryMailer
 {
-    /** La marca por el puerto, como la tarjeta y los PDF (R6-PL-07). */
+    /** La marca por el puerto, como la tarjeta y los PDF. */
     public function __construct(private BrandingProvider $branding) {}
 
     public function send(WeeklySummaryRecipient $recipient, WeeklySummary $summary): bool

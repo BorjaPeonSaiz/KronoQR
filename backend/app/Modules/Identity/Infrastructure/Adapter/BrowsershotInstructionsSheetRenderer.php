@@ -15,7 +15,7 @@ use Spatie\LaravelPdf\PdfBuilder;
 
 /**
  * La hoja de instrucciones del empleado, con `spatie/laravel-pdf` sobre
- * Browsershot (doc 02 §3.1, tarea 5.11b, **RL-05**).
+ * Browsershot (doc 02 §3.1, **RL-05**).
  *
  * Mismo motor y mismas decisiones que {@see BrowsershotCardRenderer}, con las
  * diferencias que impone el documento:
@@ -23,7 +23,7 @@ use Spatie\LaravelPdf\PdfBuilder;
  * ## A4 vertical y **una sola cara**
  *
  * La hoja se entrega en la mano junto con la tarjeta y el PIN, en un unico acto
- * presencial (ficha 5.11b, decision 1): dos caras significan que la mitad de las
+ * presencial: dos caras significan que la mitad de las
  * veces se lee solo una. Los margenes son de 14 mm —lo que cualquier impresora
  * de oficina imprime sin recortar— y el contenido esta dimensionado para caber
  * con holgura; que quepa de verdad lo comprueba
@@ -68,7 +68,7 @@ final readonly class BrowsershotInstructionsSheetRenderer implements Instruction
      *
      * **De 14 a 12 mm en la tarea 3.5**: la hoja gana tres parrafos —como fichar
      * la pausa y que significan «Pausa» y «Vuelta» (RF-AT-12)— y una cara A4 no
-     * es negociable (ficha 5.11b, decision 1). Se recorto el margen y se apreto
+     * es negociable. Se recorto el margen y se apreto
      * la tipografia de la plantilla antes que partir la hoja en dos, porque la
      * segunda cara es la que la mitad de la gente no lee. Sigue muy por encima
      * de los 8 mm de recorte y la prueba que cuenta paginas con Chromium real lo
@@ -113,11 +113,11 @@ final readonly class BrowsershotInstructionsSheetRenderer implements Instruction
             'brand' => [
                 'name' => $brand->applicationName,
                 'logo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
-                // Dos colores y no uno (V1-UX-1): el filete de la cabecera y las
+                // Dos colores y no uno: el filete de la cabecera y las
                 // vinetas son decoracion y llevan el acento tal cual; lo que se
                 // LEE —nombre de la instalacion, titulos y pictogramas— lleva el
                 // acento oscurecido hasta 4,5:1 sobre el papel blanco, como los
-                // PDF sellados (MB3). Lo calcula el dominio, no la plantilla.
+                // PDF sellados. Lo calcula el dominio, no la plantilla.
                 'accent' => $brand->accentColor,
                 'accentText' => $brand->accentForTextOnWhite(),
             ],

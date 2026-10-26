@@ -7,8 +7,7 @@ namespace App\Modules\Reporting\Application\Port;
 use DateTimeImmutable;
 
 /**
- * La metrica de ausencias del cuadro «Negocio» (doc 02 §8.2, decision 8 de la
- * ficha 3.10).
+ * La metrica de ausencias del cuadro «Negocio» (doc 02 §8.2).
  *
  * ```
  * absences_current{type}   gauge

@@ -13,7 +13,7 @@ use Throwable;
 
 /**
  * Cuantos años se conserva el registro de jornada, para el aviso de privacidad
- * (`GET /api/v1/branding`, `privacy_notice.retention_years`; 2.3.0, bloque 8).
+ * (`GET /api/v1/branding`, `privacy_notice.retention_years`; 2.3.0).
  *
  * El art. 13.2.a RGPD obliga a decir el plazo de conservacion en el aviso, y el
  * quiosco lo tenia escrito en sus textos («4 años»). El plazo es el

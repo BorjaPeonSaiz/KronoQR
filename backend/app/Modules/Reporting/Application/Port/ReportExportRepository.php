@@ -14,7 +14,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use DateTimeImmutable;
 
 /**
- * La tabla `report_exports` (**RF-IN-06**, decision 1 de la ficha 3.9).
+ * La tabla `report_exports` (**RF-IN-06**).
  *
  * ## La exclusion mutua la resuelve el indice, no un `SELECT`
  *
@@ -84,7 +84,7 @@ interface ReportExportRepository
      * La fila por su identificador publico **y su dueño**.
      *
      * Devuelve nulo para la exportacion de otra persona, que es lo que produce el
-     * `404` del contrato: `403` confirmaria que existe (decision 2).
+     * `404` del contrato: `403` confirmaria que existe.
      */
     public function findByUuidFor(string $uuid, int $requestedByUserId): ?ReportExport;
 
@@ -113,7 +113,7 @@ interface ReportExportRepository
 
     /**
      * El estado de la fila **tal como esta confirmado ahora**, sin bloquearla y
-     * sin hidratar nada mas (V5-PA-4).
+     * sin hidratar nada mas.
      *
      * Lo pregunta el trabajo de cola entre fases y cada pocos cientos de filas
      * para saber si alguien cancelo la exportacion. Es una lectura de una

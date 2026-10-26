@@ -8,7 +8,7 @@ use DateTimeImmutable;
 
 /**
  * El rastro de que la deteccion de patrones anomalos se ejecuta, y de si dejo
- * algo sin hacer (doc 02 §8.2, RF-PR-06, tarea 3.11).
+ * algo sin hacer (doc 02 §8.2, RF-PR-06).
  *
  * ## Hermana de `IncidentDetectionMetrics`, y por el mismo motivo
  *

@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 /**
  * `php artisan compliance:incident-metrics` — publica `incidents_open{type,severity}`
- * (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
+ * (doc 02 §8.2, doc 01 §9.2).
  *
  * Lo ejecuta el planificador (`routes/console.php`). A mano sirve para comprobar
  * que el fichero del colector *textfile* se escribe donde debe, que es el fallo

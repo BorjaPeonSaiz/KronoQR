@@ -11,8 +11,7 @@ use Illuminate\Database\ConnectionInterface;
 use Throwable;
 
 /**
- * Sondas `app.error_history` de `product:doctor` (RF-PD-13, RF-PD-15,
- * decision 14).
+ * Sondas `app.error_history` de `product:doctor` (RF-PD-13, RF-PD-15).
  *
  * ## Que responde, y por que no basta con la pantalla
  *

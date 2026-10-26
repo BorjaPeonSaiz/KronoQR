@@ -31,7 +31,7 @@ use Throwable;
  * cadena: en una instalacion interna el certificado es autofirmado a proposito y
  * validarlo fallaria siempre.
  *
- * ## Un nombre que el contenedor no resuelve no es un borde caido (I6)
+ * ## Un nombre que el contenedor no resuelve no es un borde caido
  *
  * La sonda corre DENTRO del contenedor `app`, y el contenedor no ve el
  * `/etc/hosts` del servidor. Con `APP_URL` resuelta solo ahi —lo normal en una

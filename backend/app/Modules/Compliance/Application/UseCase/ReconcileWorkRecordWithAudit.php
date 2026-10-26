@@ -77,7 +77,7 @@ final readonly class ReconcileWorkRecordWithAudit
             ? WorkRecordReconciliationWindow::full()
             : WorkRecordReconciliationWindow::recent($now, $windowDays);
 
-        // La medida comun (V1-RV-03): span, duracion y desenlace. Los recuentos
+        // La medida comun: span, duracion y desenlace. Los recuentos
         // del resultado van al cierre del span; `outcome` es el de la medida
         // (`ok`/`error`) y el veredicto de la conciliacion va aparte.
         return UseCaseInstrumentation::run(

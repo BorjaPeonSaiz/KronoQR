@@ -28,8 +28,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La deteccion de **patrones anomalos de uso de credencial** (RF-PR-06, RN-16,
- * tarea 3.11).
+ * La deteccion de **patrones anomalos de uso de credencial** (RF-PR-06, RN-16).
  *
  * Es la contrapartida explicita de haber descartado la biometria (ADR-009,
  * regla dura 20): el prestamo fisico de la tarjeta es el unico fraude que la

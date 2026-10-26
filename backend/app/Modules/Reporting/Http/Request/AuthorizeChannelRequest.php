@@ -18,8 +18,8 @@ use Illuminate\Support\Facades\Gate;
  * El `BroadcastController` del framework no valida nada: pasa `socket_id` y
  * `channel_name` tal cual a la libreria de Pusher. Un `socket_id` que no tiene la
  * forma `123.456` —o que falta— revienta dentro de ella como `500`, y cada uno
- * deja una fila en `error_events` por una peticion mal formada (B3, bloque 12
- * de la 2.3.0). Aqui se rechaza antes con `422`, como cualquier otra ruta.
+ * deja una fila en `error_events` por una peticion mal formada.
+ * Aqui se rechaza antes con `422`, como cualquier otra ruta.
  *
  * Y rechaza lo desconocido: el controlador del framework responde **JSONP** si
  * llega un `callback`, una forma de respuesta que el contrato no declara y que

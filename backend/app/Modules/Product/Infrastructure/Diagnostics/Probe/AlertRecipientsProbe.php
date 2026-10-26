@@ -9,8 +9,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 
 /**
- * Sonda `mail.alert_recipients` de `product:doctor` (RF-PD-13, tarea 3.2,
- * decisiones 5 y 17i).
+ * Sonda `mail.alert_recipients` de `product:doctor` (RF-PD-13).
  *
  * ## La pregunta que responde
  *

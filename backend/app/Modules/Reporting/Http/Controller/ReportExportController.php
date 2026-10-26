@@ -34,7 +34,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Las tres rutas de gestion de `/api/v1/reports/exports` (**RF-IN-06**,
- * **RF-IN-07**, ficha 3.9).
+ * **RF-IN-07**).
  *
  * Delgado como el resto: autoriza, invoca el caso de uso y serializa. **Ninguna
  * decision de negocio vive aqui.** La exclusion mutua la resuelve un indice
@@ -43,7 +43,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  *
  * ## Lo que el controlador si decide: la licencia
  *
- * Y la decide **al pedir**, no al generar (decision 6, ADR-023):
+ * Y la decide **al pedir**, no al generar (ADR-023):
  * `Feature::AdvancedReports` para `kind: period` —la misma que protege
  * `GET /reports/period` y su descarga, porque lo que sale es lo mismo— y
  * `Feature::PayrollExport` para `kind: payroll`, que estrena consumidor con esta
@@ -96,7 +96,7 @@ final class ReportExportController extends Controller
                 parameters: $request->toParameters(),
                 // RF-ID-03: el alcance lo resuelve el servidor a partir del token y
                 // queda congelado en la fila. Quien pide no puede elegirlo ni
-                // ampliarlo, y el trabajo no lo recalcula (decision 1).
+                // ampliarlo, y el trabajo no lo recalcula.
                 scope: $scope->scopeOf($request->user()),
                 requestedByUserId: self::actorUserId($request),
             ));
@@ -132,7 +132,7 @@ final class ReportExportController extends Controller
 
     /**
      * `POST /api/v1/reports/exports/{uuid}/cancel` — detiene una exportacion en
-     * curso (V5-PA-4).
+     * curso.
      *
      * `200` con la fila ya `cancelled` —tambien si ya lo estaba: es idempotente—,
      * `404` si no existe o es de otra persona, y `409` con la fila dentro si ya

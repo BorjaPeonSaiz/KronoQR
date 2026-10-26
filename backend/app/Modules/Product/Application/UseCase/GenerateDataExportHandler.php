@@ -29,7 +29,7 @@ use Throwable;
 
 /**
  * Escribe el ZIP con **todos** los datos de la instalacion (**RF-PD-14**,
- * RL-20, decisiones 1 a 3 de la ficha 5.10).
+ * RL-20).
  *
  * ## Streaming de verdad, no «que no reviente»
  *

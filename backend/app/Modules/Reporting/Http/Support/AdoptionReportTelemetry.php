@@ -15,7 +15,7 @@ use Psr\Log\LoggerInterface;
  * El log del cuadro de impacto y adopcion (doc 02 §8.1, **RF-IN-08**).
  *
  * En el borde, junto al controlador. El span del acto lo abre el caso de uso
- * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * con `UseCaseInstrumentation`, la medida comun; aqui se añaden al
  * span en curso los atributos que solo conoce la peticion y se escribe el log
  * con su `trace_id`.
  *
@@ -26,8 +26,8 @@ use Psr\Log\LoggerInterface;
  * cuadro vacio —instalacion recien puesta en marcha— de una consulta mal escrita, y
  * se ve si esta pantalla aguanta en una instalacion real sin preguntarle a nadie.
  *
- * **No lleva ni una cifra del cuadro**, y esa es la correccion de la segunda vuelta
- * (decision 20 de la ficha 3.13). La tentacion era dejar los dos ratios con
+ * **No lleva ni una cifra del cuadro**, y esa es la correccion de la segunda vuelta.
+ * La tentacion era dejar los dos ratios con
  * objetivo —jornadas completas y disponibilidad— para poder contrastar una queja
  * sin pedir una captura. No entran, porque **un ratio sin su denominador es un dato
  * de una persona en cuanto el denominador es pequeño**: `workdays_complete_ratio:

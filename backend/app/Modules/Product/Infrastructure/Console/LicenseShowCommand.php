@@ -48,7 +48,7 @@ use Illuminate\Console\Command;
  * **Hasta la 2.3.0 «hay algo que mirar» era `1`**, el mismo codigo que una
  * excepcion no capturada, y quien llamaba (install.sh, update.sh) no podia
  * distinguir «sin licencia», que es lo normal recien instalado, de «la consulta ha
- * fallado» (revision del bloque 7). Quien lo consume es el `install.sh` y el
+ * fallado». Quien lo consume es el `install.sh` y el
  * `update.sh` del MISMO paquete (lo ejecutan contra su propia imagen), asi que el
  * cambio no rompe nada entre versiones.
  *

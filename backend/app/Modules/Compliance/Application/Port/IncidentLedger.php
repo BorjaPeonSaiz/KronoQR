@@ -38,8 +38,8 @@ interface IncidentLedger
      * Que devuelva `null` en vez de fallar es lo que hace idempotente al
      * comando: repetir la pasada no crea nada y tampoco es un error.
      *
-     * **Pero no todo conflicto es idempotencia** (decision 13d de la ficha
-     * 3.11). Desde `anomalous_pattern`, el tipo dejo de describir el hallazgo
+     * **Pero no todo conflicto es idempotencia**.
+     * Desde `anomalous_pattern`, el tipo dejo de describir el hallazgo
      * entero: dos indicios distintos de la misma persona y el mismo dia
      * comparten cuadrupla con `shift_entry_id` nulo. Cuando la fila que ya
      * estaba describe **otro** hallazgo —distinto `context.pattern` o distinta
@@ -56,8 +56,8 @@ interface IncidentLedger
      *
      * Alimenta el gauge `incidents_open{type,severity}` (doc 02 §8.2) y se lee
      * **de la base de datos**, no de lo que acabe de detectarse: la cifra tiene
-     * que bajar cuando alguien resuelve una incidencia desde la bandeja
-     * (tarea 2.5), no solo subir cuando la deteccion encuentra algo.
+     * que bajar cuando alguien resuelve una incidencia desde la bandeja,
+     * no solo subir cuando la deteccion encuentra algo.
      *
      * @return list<IncidentTally>
      */
@@ -65,7 +65,7 @@ interface IncidentLedger
 
     /**
      * Escribe la **resolucion** de una incidencia y dice si de verdad la escribio
-     * (tarea 2.5, RF-PA-05).
+     * (RF-PA-05).
      *
      * Devuelve `false` cuando la fila ya no estaba abierta. Lo decide un
      * `UPDATE ... WHERE id = ? AND status = 'open'` y no un `SELECT` previo, por

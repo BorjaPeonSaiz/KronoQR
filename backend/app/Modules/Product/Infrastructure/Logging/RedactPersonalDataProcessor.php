@@ -12,7 +12,7 @@ use Throwable;
 
 /**
  * El saneador de `error_events`, aplicado a **cada linea del log tecnico**
- * (L1, regla dura 21, RF-PD-15, RL-08, RL-19).
+ * (regla dura 21, RF-PD-15, RL-08, RL-19).
  *
  * ## El hueco que cierra
  *
@@ -149,7 +149,7 @@ final readonly class RedactPersonalDataProcessor implements ProcessorInterface
     }
 
     /**
-     * Un valor de texto del contexto: solo patrones (D3). Lo escribe el codigo
+     * Un valor de texto del contexto: solo patrones. Lo escribe el codigo
      * del producto, y el vocabulario estropearia rutas, clases y nombres de
      * trabajo en un log que no sale de la instalacion.
      */

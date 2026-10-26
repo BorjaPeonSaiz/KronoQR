@@ -34,7 +34,7 @@ use Psr\Log\LoggerInterface;
  * no puede alcanzar ningun modulo, y el processor es de `Product`. La registra
  * `ProductServiceProvider` como el singleton `log`, sustituyendo al de
  * `LogServiceProvider`; una prueba comprueba que `app('log')` y la fachada
- * resuelven esta clase tras arrancar (H8).
+ * resuelven esta clase tras arrancar.
  *
  * ## Por que no es `final`
  *

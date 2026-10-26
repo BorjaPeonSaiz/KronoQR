@@ -72,7 +72,7 @@ interface ManagementActor
 
     /**
      * Si quien actua es un **acceso temporal del fabricante** y no una cuenta de
-     * la organizacion del cliente (**RF-PD-11**, ADR-020, tarea 5.9).
+     * la organizacion del cliente (**RF-PD-11**, ADR-020).
      *
      * ## Por que no basta con mirar el rol
      *

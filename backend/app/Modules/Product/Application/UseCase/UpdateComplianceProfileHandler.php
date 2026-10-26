@@ -88,7 +88,7 @@ final readonly class UpdateComplianceProfileHandler
         private ConnectionInterface $connection,
         /**
          * Los ajustes operativos de la instalacion, de los que sale si el
-         * fichaje de pausa esta activado (RF-AT-12, decision 8 de la ficha 3.5).
+         * fichaje de pausa esta activado (RF-AT-12).
          *
          * `Product` implementa este puerto —{@see \App\Modules\Product\
          * Infrastructure\Adapter\DbOperationalSettingsProvider}— y aqui lo

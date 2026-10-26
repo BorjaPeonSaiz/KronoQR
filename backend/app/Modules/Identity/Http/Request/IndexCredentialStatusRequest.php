@@ -52,7 +52,7 @@ final class IndexCredentialStatusRequest extends FormRequest
             // encuentra a nadie. Validarla contra el llavero convertiria el
             // parametro en un oraculo de que claves hay configuradas.
             'key_id' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{2}$/'],
-            // Los filtros y la pagina del tablero, en el servidor (2.3.0, HC1).
+            // Los filtros y la pagina del tablero, en el servidor (2.3.0).
             // `department_id` sin `exists`, por lo mismo que `employee_uuid`:
             // uno que no existe devuelve `data: []`, no `422`.
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -69,7 +69,7 @@ final class IndexCredentialStatusRequest extends FormRequest
 
     /**
      * La consulta del panel, **siempre paginada**: el tablero ya no sirve la
-     * plantilla entera (HC1). El comando de consola construye la suya sin
+     * plantilla entera. El comando de consola construye la suya sin
      * pagina.
      */
     public function toQuery(): CredentialStatusQuery

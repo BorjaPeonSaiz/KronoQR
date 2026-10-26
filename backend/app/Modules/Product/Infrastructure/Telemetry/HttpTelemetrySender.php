@@ -11,8 +11,7 @@ use Illuminate\Http\Client\Factory as HttpClient;
 use Throwable;
 
 /**
- * **El unico cliente HTTP saliente de `app/`** (**RF-PD-12**, ADR-020, ficha
- * 5.10 punto 8).
+ * **El unico cliente HTTP saliente de `app/`** (**RF-PD-12**, ADR-020).
  *
  * `tests/Architecture/OutboundChannelsTest.php` comprueba que ningun otro
  * fichero de `app/` nombra el cliente HTTP de Laravel, Guzzle, `curl_*` ni

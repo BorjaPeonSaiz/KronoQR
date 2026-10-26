@@ -8,7 +8,7 @@ use App\Modules\Identity\Http\Policy\PortalSessionPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * `POST /api/v1/me/logout` — cierre de la sesion del portal (RF-ID-05, PO1).
+ * `POST /api/v1/me/logout` — cierre de la sesion del portal (RF-ID-05).
  *
  * **Solo autoriza.** No hay nada que validar: la sesion que se cierra es la del
  * token que trae la peticion, nunca una que se indique en el cuerpo.

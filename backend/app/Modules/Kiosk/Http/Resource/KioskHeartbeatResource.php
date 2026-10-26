@@ -14,7 +14,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Serializa el `200` de `POST /api/v1/kiosk/heartbeat`: el esquema
  * `KioskHeartbeat`.
  *
- * ## La huella del codigo de servicio, y solo la huella (RF-KI-08, tarea 3.3)
+ * ## La huella del codigo de servicio, y solo la huella (RF-KI-08)
  *
  * `service_code_hash` es `sha256("{uuid del dispositivo}:{codigo}")`. **El codigo
  * nunca viaja en claro** y no puede: la tablet lo guarda en `localStorage` para
@@ -30,18 +30,18 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   fichar: el desfase se registra escaneo a escaneo en
  *   `scan_events.clock_skew_seconds` y se resuelve despues (regla dura 19).
  * - `client_errors_accepted` es el acuse de los errores que la tablet adjunto
- *   (RF-PD-15, tarea 5.12). **Va siempre, tambien cuando vale `0`**: el contrato
+ *   (RF-PD-15). **Va siempre, tambien cuando vale `0`**: el contrato
  *   lo declara obligatorio porque un campo ausente y un cero significan cosas
  *   distintas para `acknowledge(n)`, y un cliente que tuviera que distinguirlos
  *   acabaria tirando errores que nadie guardo.
  * - `break_clocking_enabled` y `clock_skew_tolerance_seconds` son los dos
  *   ajustes que la pantalla de fichaje necesita para funcionar **sin red**
- *   (RF-AT-12, RF-AT-10, tarea 3.5): con el primero la tablet enseña u oculta el
+ *   (RF-AT-12, RF-AT-10): con el primero la tablet enseña u oculta el
  *   boton «Pausa», y con el segundo decide cuando avisar de que su reloj esta
  *   desviado — el mismo umbral con el que el servidor marca el escaneo, de modo
  *   que las dos pantallas no puedan contar historias distintas.
  * - `update_window` es la franja en la que la tablet **puede** aplicar una
- *   version nueva (RF-KI-07, tarea 3.12), en hora local del centro, mas los
+ *   version nueva (RF-KI-07), en hora local del centro, mas los
  *   minutos de silencio que exige ademas. La declara el cliente en
  *   `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES`; el producto no infiere
  *   el cambio de turno (regla dura 13). Fuera de ella el quiosco sigue fichando
@@ -77,7 +77,7 @@ final class KioskHeartbeatResource extends JsonResource
         return [
             'server_time' => UtcInstant::of($outcome->seenAt, UtcPrecision::Milliseconds),
             'client_errors_accepted' => $outcome->clientErrorsAccepted,
-            // **La huella, nunca el codigo** (RF-KI-08, tarea 3.3). Va siempre,
+            // **La huella, nunca el codigo** (RF-KI-08). Va siempre,
             // tambien cuando vale `null`: el contrato la declara obligatoria
             // porque un campo ausente y un `null` significan cosas distintas
             // para la tablet —«esta version del servidor no lo manda» frente a
@@ -91,7 +91,7 @@ final class KioskHeartbeatResource extends JsonResource
             // constante de 15 minutos que esta tarea vino a retirar.
             'break_clocking_enabled' => $outcome->breakClockingEnabled,
             'clock_skew_tolerance_seconds' => $outcome->clockSkewToleranceSeconds,
-            // **La ventana de actualizacion** (RF-KI-07, tarea 3.12), tambien
+            // **La ventana de actualizacion** (RF-KI-07), tambien
             // obligatoria y por lo mismo: sin ella la tablet tendria que elegir
             // una por su cuenta, y eso es volver a las tres franjas de cambio de
             // turno que esta tarea vino a retirar del codigo (regla dura 13).

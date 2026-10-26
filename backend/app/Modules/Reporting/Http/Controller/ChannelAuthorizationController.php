@@ -31,7 +31,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * `private-presence.all` o `private-presence.department.<digitos>`; cualquier
  * otro nombre es el mismo `403` que un canal ajeno, **antes** de llegar al
  * difusor y sin asiento: no es un acceso a datos de nadie, es un nombre que no
- * existe (bloque 12 de la 2.3.0).
+ * existe.
  */
 final class ChannelAuthorizationController extends Controller
 {

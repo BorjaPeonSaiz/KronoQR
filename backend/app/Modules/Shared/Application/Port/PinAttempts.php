@@ -12,9 +12,9 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  *
  * **Por que vive en `Shared` y no en el modulo que lo consume.** Lo tocan tres
  * partes que no pueden importarse entre si (doc 02 §1.6): `Workforce` lo
- * **limpia** al restablecer el PIN (RF-ID-09, tarea 1.13), el fichaje de
- * respaldo del quiosco lo **incrementa** al fallar (RF-AT-11, tarea 1.12) y el
- * acceso al portal hace lo mismo (RF-ID-06, tarea 1.11). Un puerto por modulo
+ * **limpia** al restablecer el PIN (RF-ID-09), el fichaje de
+ * respaldo del quiosco lo **incrementa** al fallar (RF-AT-11) y el
+ * acceso al portal hace lo mismo (RF-ID-06). Un puerto por modulo
  * daria tres contadores distintos, y entonces «restablecer desbloquea»
  * dependeria de por cual de las tres puertas se estuviera fallando.
  *

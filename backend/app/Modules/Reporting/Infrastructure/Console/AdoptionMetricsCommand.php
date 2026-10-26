@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 /**
  * `reporting:adoption-metrics` — recalcula `workdays_complete_ratio{site}`
- * (doc 02 §8.2, RF-IN-08, tarea 3.1).
+ * (doc 02 §8.2, RF-IN-08).
  *
  * Misma mecanica que `reporting:presence-metrics` y por el mismo motivo: la
  * cifra se **recalcula entera** desde los datos y se publica por fichero para el

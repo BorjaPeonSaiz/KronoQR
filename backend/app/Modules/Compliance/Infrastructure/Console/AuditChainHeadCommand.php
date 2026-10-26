@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 /**
  * `php artisan compliance:audit-chain-head` — imprime la punta de la cadena de
- * auditoria (RS-07, RF-PD-10, tarea 5.7).
+ * auditoria (RS-07, RF-PD-10).
  *
  * ## Por que hace falta un comando de lectura
  *

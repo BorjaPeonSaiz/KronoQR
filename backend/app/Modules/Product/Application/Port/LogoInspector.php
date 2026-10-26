@@ -8,7 +8,7 @@ use App\Modules\Product\Domain\ValueObject\LogoInspection;
 
 /**
  * Dice si un fichero del servidor sirve como logotipo de la instalacion
- * (RF-PD-08, tarea 5.8).
+ * (RF-PD-08).
  *
  * ## Por que es un puerto y no una clase que se instancie donde haga falta
  *

@@ -59,7 +59,7 @@ use Illuminate\Validation\Rule;
  *
  * ## La UNICA comprobacion que mira fuera del catalogo: el fichero del logotipo
  *
- * `BRANDING_LOGO_PATH` es la excepcion, y esta razonada (tarea 5.8, RF-PD-08).
+ * `BRANDING_LOGO_PATH` es la excepcion, y esta razonada (RF-PD-08).
  * El catalogo puede decir que es texto de hasta 512 caracteres, y nada mas: si
  * ese texto apunta a un fichero que existe, que es una imagen y que esta dentro
  * del directorio de marca es una pregunta sobre el DISCO, y el dominio no tiene
@@ -109,7 +109,7 @@ final class UpdateSettingsRequest extends FormRequest
         // Por el enum y no como cadena suelta: si alguien renombrara la clave,
         // esto deja de compilar en lugar de convertirse en una guarda muda.
         SettingKey::ATTENDANCE_BREAK_CLOCKING->value,
-        // RF-PR-05 (tarea 3.12): encenderla hace que cada lunes salgan por SMTP
+        // RF-PR-05: encenderla hace que cada lunes salgan por SMTP
         // nombres y horas de la plantilla hacia los buzones de sus responsables
         // —una copia fuera del producto, cuyo plazo fija ese buzon—. Quien
         // decide que los datos de su gente salgan de la instalacion es el
@@ -118,7 +118,7 @@ final class UpdateSettingsRequest extends FormRequest
         // Y apagarla tampoco: dejaria sin un aviso que el hotel decidio tener,
         // en silencio y desde fuera.
         SettingKey::WEEKLY_SUMMARY_EMAIL->value,
-        // RF-IN-08 (tarea 3.13): es el DENOMINADOR DECLARADO del objetivo comercial
+        // RF-IN-08: es el DENOMINADOR DECLARADO del objetivo comercial
         // «−80 % de carga administrativa» del §1.3, y describe el proceso manual del
         // hotel **anterior a la instalacion**, que el sistema no puede medir ni
         // comprobar.
@@ -129,7 +129,7 @@ final class UpdateSettingsRequest extends FormRequest
         // y la regla dura 16 reservan al cliente — con el agravante de que aqui el
         // fabricante no la estaria interpretando, la estaria escribiendo.
         SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH->value,
-        // RF-PR-06 (tarea 3.11): la coincidencia de quiosco es LA MITIGACION QUE
+        // RF-PR-06: la coincidencia de quiosco es LA MITIGACION QUE
         // COMPENSA EL DESCARTE DE LA BIOMETRIA (ADR-009). Con la tarjeta fisica
         // nada impide que una persona fiche por otra, y lo unico que lo detecta es
         // el patron: dos fichajes de personas distintas separados por segundos en
@@ -167,7 +167,7 @@ final class UpdateSettingsRequest extends FormRequest
 
         /*
          * La segunda puerta, y solo se abre si la peticion toca una clave
-         * CONFIDENCIAL (tarea 3.3).
+         * CONFIDENCIAL.
          *
          * Se comprueba aqui y no en la policy porque la policy responde «¿puede
          * escribir configuracion?» y esto es «¿puede escribir ESTA?»: la
@@ -186,8 +186,7 @@ final class UpdateSettingsRequest extends FormRequest
         }
 
         /*
-         * La tercera puerta (tarea 3.5, RF-AT-12; ampliada en la 3.12, RF-PR-05,
-         * en la 3.13, RF-IN-08, y en el cierre de la Fase 3, RF-PR-06): las claves
+         * La tercera puerta (RF-AT-12, RF-PR-05, RF-IN-08, RF-PR-06): las claves
          * **reservadas al cliente**.
          *
          * Mismo mecanismo y mismo motivo que la anterior, con otra pregunta

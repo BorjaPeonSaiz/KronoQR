@@ -42,7 +42,7 @@ use Throwable;
  * correo), enseña quien firma y pide confirmacion antes de nada —sin terminal,
  * `--responsible-confirm=<correo>` de esa cuenta—, avisa en texto llano de que
  * se incluye y deja un asiento propio en `audit_log` **firmado por esa cuenta**,
- * no por `system` (2.3.0 bloque 3, PR17; doc 01 §7.2). Nunca es un efecto
+ * no por `system` (doc 01 §7.2). Nunca es un efecto
  * secundario de otra opcion.
  *
  * ## `--verify=RUTA` no genera nada
@@ -278,7 +278,7 @@ final class ProductDiagnosticsCommand extends Command
      *
      * Con `--no-interaction` no hay nadie a quien preguntar. El aviso se
      * imprime igual, porque acaba en el registro de quien lanzo el script, y
-     * la confirmacion es el correo de la cuenta que firma (2.3.0 bloque 3).
+     * la confirmacion es el correo de la cuenta que firma.
      *
      * Y RL-19 se sigue cumpliendo entero: la accion **es** distinta —hay que
      * escribir `--with-personal-data`, que nunca es el valor por defecto ni el
@@ -428,7 +428,7 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('  Huella:    '.self::text($manifest, 'sha256'));
 
         if ($check === DiagnosticsDigestCheck::IntactWithoutManifest) {
-            // Paquete de `schema_version: 1`, anterior a la 2.3.0 (PR16).
+            // Paquete de `schema_version: 1`, anterior a la 2.3.0.
             $this->line('             huella sin manifiesto: cubre las secciones, no la cabecera. Que diga');
             $this->line('             «anonimo» no esta comprobado; mira las secciones antes de darlo por anonimo.');
         }

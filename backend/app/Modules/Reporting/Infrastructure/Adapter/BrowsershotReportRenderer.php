@@ -97,7 +97,7 @@ final readonly class BrowsershotReportRenderer implements ReportDocumentRenderer
                 ->generatePdfContent();
         } catch (Throwable $failure) {
             Log::error('reporting.pdf_engine_unavailable', [
-                // La clase y nunca el mensaje (L6): el de Browsershot puede
+                // La clase y nunca el mensaje: el de Browsershot puede
                 // arrastrar la salida del informe, con nombres.
                 'exception' => $failure::class,
             ]);

@@ -39,7 +39,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  * a `null` porque su navegador no implementa la Battery Status API —solo Chrome
  * en Android la ofrece—. Los dos casos significan «no lo se» y ninguno es un
  * error de forma: rechazar el latido de una tablet por no saber su bateria seria
- * apagar la unica senal de que sigue viva (regla dura 19, tarea 3.3). El rango
+ * apagar la unica senal de que sigue viva (regla dura 19). El rango
  * 0..100 si se exige, porque un numero fuera de el acabaria en la metrica
  * `kiosk_battery_level` y en la columna del panel.
  *
@@ -58,13 +58,13 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## `client_errors`: el cuarto campo, y el unico que se persiste
  *
- * Los errores de la propia tablet suben **dentro del latido** (RF-PD-15, tarea
- * 5.12, decision 7). Aqui se comprueba la **forma** —techo de 50, instante en
+ * Los errores de la propia tablet suben **dentro del latido** (RF-PD-15).
+ * Aqui se comprueba la **forma** —techo de 50, instante en
  * UTC, contexto de doce claves escalares— y, sobre todo, que el `code` este en
  * el **catalogo cerrado del quiosco** ({@see ClientErrorCode}); despues se
  * convierte cada elemento en un {@see ErrorReport}. Lo que NO se hace aqui es
  * sanear: el saneado es del servidor y ocurre al persistir, porque no se confia
- * en que el cliente lo haya hecho (decision 5).
+ * en que el cliente lo haya hecho.
  *
  * **Tres campos los pone el servidor y no el cuerpo**: el `source` (`kiosk`, que
  * lo decide el tipo de token), el `device_id` (el UUID publico del dispositivo
@@ -74,7 +74,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * El texto del error viaja en `context.message` y **se eleva a la columna
  * `message`**, retirandolo del contexto: es la clave canonica que comparten los
- * tres reporters y `/api/v1/client-errors` (decision 5).
+ * tres reporters y `/api/v1/client-errors`.
  *
  * ## `400`, no `422`
  *
@@ -133,7 +133,7 @@ final class KioskHeartbeatRequest extends FormRequest
             'oldest_pending_at' => ['sometimes', 'string', 'regex:'.self::UTC_INSTANT],
             // `nullable` porque el contrato admite explicitamente `null`: una
             // tablet cuyo navegador no implementa la Battery Status API manda
-            // `null` y eso NO es un error de forma (tarea 3.3, decision 1). El
+            // `null` y eso NO es un error de forma. El
             // rango es el mismo del contrato y el de la columna: un `-1` o un
             // `300` acabarian en la metrica `kiosk_battery_level` y en el panel.
             'battery_level' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100'],
@@ -194,7 +194,7 @@ final class KioskHeartbeatRequest extends FormRequest
         return new RecordHeartbeatCommand(
             deviceId: $device->id,
             deviceUuid: $device->uuid,
-            // Del token, como los dos de arriba (tarea 3.5): con el se resuelven
+            // Del token, como los dos de arriba: con el se resuelven
             // los dos ajustes que la respuesta devuelve.
             siteId: $device->siteId,
             telemetry: new HeartbeatTelemetry(
@@ -284,7 +284,7 @@ final class KioskHeartbeatRequest extends FormRequest
 
         /*
          * `message` es la CLAVE CANONICA del texto del error y se ELEVA a la
-         * columna `message` (decision 5). Se retira del contexto en el mismo
+         * columna `message`. Se retira del contexto en el mismo
          * gesto: repetido en los dos sitios ocuparia dos veces el mismo dato,
          * gastaria una de las doce claves permitidas y obligaria a sanearlo dos
          * veces con dos reglas distintas -la del mensaje admite 1 000 caracteres
@@ -300,7 +300,7 @@ final class KioskHeartbeatRequest extends FormRequest
         unset($context['message']);
 
         return new ErrorReport(
-            // Lo decide el TIPO DE TOKEN y no el cuerpo (decision 7): quien llega
+            // Lo decide el TIPO DE TOKEN y no el cuerpo: quien llega
             // por aqui se autentico como dispositivo.
             source: ErrorSource::Kiosk,
             // Con el ORIGEN delante (decision 3, revision de seguridad): solo un
@@ -328,7 +328,7 @@ final class KioskHeartbeatRequest extends FormRequest
      * El contexto tal cual lo mando la tablet, quedandose solo con los escalares.
      *
      * **No filtra por nombre de clave y no es un olvido**: la lista de permitidos
-     * es del servidor y vive en el saneado de `Product` (decision 5), que es quien
+     * es del servidor y vive en el saneado de `Product`, que es quien
      * tiene que decidirla para los tres clientes a la vez. Aqui solo se descarta
      * lo que no cabe en la columna —una estructura anidada—, que es lo que el
      * tipo de {@see ErrorReport} exige.

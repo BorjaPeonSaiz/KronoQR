@@ -16,7 +16,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * {@see SiteTimezoneAuditReader} sobre `sites`, `site_timezone_changes`,
- * `site_timezone_audit_baseline` y `audit_log` (RN-23, bloque 2 de la 2.3.0).
+ * `site_timezone_audit_baseline` y `audit_log` (RN-23).
  * Que cuadra lo decide el dominio ({@see AuditedSiteTimezone}).
  *
  * Un centro por instalacion (ADR-040): una fila, unos pocos asientos —uno por

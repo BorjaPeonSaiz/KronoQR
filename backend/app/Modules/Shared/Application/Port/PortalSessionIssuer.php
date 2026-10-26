@@ -67,7 +67,7 @@ interface PortalSessionIssuer
     ): ?PortalSession;
 
     /**
-     * Cierra **todas** las sesiones del portal de este empleado (RN-14, N1).
+     * Cierra **todas** las sesiones del portal de este empleado (RN-14).
      *
      * La baja ya impide abrir una nueva; esto cubre la que estaba abierta, que
      * de otro modo seguiria valiendo hasta caducar. Un empleado desconocido no

@@ -20,7 +20,7 @@ use Throwable;
 
 /**
  * `php artisan product:export-all` — la exportacion integra desde la consola
- * (**RF-PD-14**, RL-20, tarea 5.10).
+ * (**RF-PD-14**, RL-20).
  *
  * ## Existe porque el panel no siempre sirve
  *

@@ -14,8 +14,7 @@ use Prometheus\RenderTextFormat;
 use Throwable;
 
 /**
- * `GET /metrics` — el formato de exposicion de Prometheus (doc 02 §8.1 y §8.2,
- * decisiones 1 a 3 de la ficha 3.1).
+ * `GET /metrics` — el formato de exposicion de Prometheus (doc 02 §8.1 y §8.2).
  *
  * ## Fuera de `/api/v1` y fuera del contrato OpenAPI, a proposito
  *

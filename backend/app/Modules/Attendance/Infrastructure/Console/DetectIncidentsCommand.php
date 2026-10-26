@@ -75,7 +75,7 @@ final class DetectIncidentsCommand extends Command
 
         $result = $detect->handle(new DetectAnomaliesCommand(
             $days,
-            // RN-22 (F6): la ventana de fechas creible de un fichaje descartado.
+            // RN-22: la ventana de fechas creible de un fichaje descartado.
             Config::integer('attendance.discard_review_window_days', 31),
         ));
 

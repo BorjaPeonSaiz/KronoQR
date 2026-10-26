@@ -9,8 +9,8 @@ use App\Modules\Shared\Domain\Event\DomainEvent;
 /**
  * Publica los eventos que el agregado ha ido registrando.
  *
- * Lo implementa `Attendance/Infrastructure/Adapter` sobre el bus de Laravel
- * (tarea 1.4). El puerto existe para que el caso de uso no importe el
+ * Lo implementa `Attendance/Infrastructure/Adapter` sobre el bus de Laravel.
+ * El puerto existe para que el caso de uso no importe el
  * framework: `Application` no puede usar facades (doc 02 §3.5) y Deptrac lo
  * verifica.
  *

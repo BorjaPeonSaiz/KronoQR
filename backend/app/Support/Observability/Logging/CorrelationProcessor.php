@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * `trace_id`, `scan_id`, `device_id` y `employee_uuid` en **todas** las lineas
- * del log tecnico (doc 02 §8.1, doc 01 §9.4, decision 9 de la ficha 3.1).
+ * del log tecnico (doc 02 §8.1, doc 01 §9.4).
  *
  * ## Por que un processor y no seguir poniendolo a mano
  *

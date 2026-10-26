@@ -12,8 +12,7 @@ use Throwable;
 
 /**
  * Un span `CLIENT` por consulta SQL: el ultimo tramo de la promesa del §8.1,
- * *«desde el `fetch` del navegador del quiosco hasta la consulta SQL»*
- * (decision 6 de la ficha 3.1).
+ * *«desde el `fetch` del navegador del quiosco hasta la consulta SQL»*.
  *
  * ## Los valores enlazados NO entran, y no es una precaucion generica
  *

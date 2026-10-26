@@ -20,7 +20,7 @@ final readonly class CredentialStatusReport
     public function __construct(
         public array $rows,
         public SiteCredentialCoverage $coverage,
-        /** Cuantas filas pasan los filtros, en todas las paginas (2.3.0, HC1). */
+        /** Cuantas filas pasan los filtros, en todas las paginas (2.3.0). */
         public int $total = 0,
         public int $page = 1,
         public int $perPage = 1,

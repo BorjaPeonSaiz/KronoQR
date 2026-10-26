@@ -13,8 +13,7 @@ use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * Los usos de credencial en un quiosco, leidos hacia atras (RF-PR-06, RN-16,
- * tarea 3.11).
+ * Los usos de credencial en un quiosco, leidos hacia atras (RF-PR-06, RN-16).
  *
  * **Devuelve hechos, no veredictos.** Aqui no hay ninguna comparacion contra un
  * umbral: quien decide si dos escaneos coinciden o si un transito es imposible
@@ -79,7 +78,7 @@ final readonly class EloquentCredentialScans implements CredentialScans
             ->whereIn('scan_events.origin', ['qr_kiosk', 'pin_kiosk'])
             // La lista de lo que NO entra, escrita entera: con un `NOT LIKE
             // 'rejected%'` el anti-rebote se caia dentro sin que nadie lo
-            // decidiera, y ahi estaba el agujero de RN-16 (decision 15). El
+            // decidiera, y ahi estaba el agujero de RN-16. El
             // descarte del servidor (ADR-061) tampoco es un uso de la credencial
             // que el servidor decidiera: no entra.
             ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'discarded_unprocessable'])
@@ -96,7 +95,7 @@ final readonly class EloquentCredentialScans implements CredentialScans
                 'scan_events.occurred_at',
                 'scan_events.scan_id',
                 'shift_entries.uuid as shift_entry_uuid',
-                // El DESFASE, no la marca (decision 16): `flagged_for_review` es
+                // El DESFASE, no la marca: `flagged_for_review` es
                 // verdadera para todo fichaje por PIN, y filtrar por ella dejaba
                 // sin RN-16 justo al camino que mas facil es prestar.
                 'scan_events.clock_skew_seconds',

@@ -97,7 +97,7 @@ final readonly class RecordDeviceProvisioning
     }
 
     /**
-     * `device.pairing_reclaimed` (V6-KI-02): la tablet repitio la recogida y
+     * `device.pairing_reclaimed`: la tablet repitio la recogida y
      * recibio otro token. Actor `system`, como la recogida: el `claim` es
      * anonimo. La emision en si ya deja `device.paired`; este dice por que.
      */

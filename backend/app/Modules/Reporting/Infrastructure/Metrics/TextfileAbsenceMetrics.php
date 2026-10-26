@@ -11,7 +11,7 @@ use DateTimeZone;
 
 /**
  * Publica `absences_current{type}` para el colector *textfile* de
- * `node-exporter` (doc 02 §8.2, decision 8 de la ficha 3.10).
+ * `node-exporter` (doc 02 §8.2).
  *
  * ```
  * absences_current{type="sick_leave"}

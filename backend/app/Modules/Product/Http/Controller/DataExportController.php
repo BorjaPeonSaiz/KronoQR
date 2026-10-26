@@ -92,7 +92,7 @@ final class DataExportController extends Controller
             $export = $exports->handle(
                 uuid: $uuid,
                 // El caso de uso decide si el ZIP se puede entregar, con el
-                // localizador confinado de su clase (ADR-045, F3): presente
+                // localizador confinado de su clase (ADR-045): presente
                 // dentro de su raiz, con su patron y sin enlaces. El controlador
                 // ya no mira el disco.
                 downloadedByUserId: self::actorUserId($request),

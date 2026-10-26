@@ -10,8 +10,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 
 /**
- * Los usos de credencial **en un quiosco** de una ventana (RF-PR-06, RN-16,
- * tarea 3.11).
+ * Los usos de credencial **en un quiosco** de una ventana (RF-PR-06, RN-16).
  *
  * **Lee hacia atras lo que el fichaje ya escribio**, como {@see FlaggedScans} y
  * {@see OutOfOrderScans}: no hay proceso nuevo ni evento nuevo en el camino de

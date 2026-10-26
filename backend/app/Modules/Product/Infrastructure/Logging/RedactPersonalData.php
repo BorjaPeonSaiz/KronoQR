@@ -9,7 +9,7 @@ use Monolog\Logger as Monolog;
 
 /**
  * El *tap* que monta {@see RedactPersonalDataProcessor} en un canal de log, **el
- * ultimo de su cadena** (L1, regla dura 21).
+ * ultimo de su cadena** (regla dura 21).
  *
  * ## Por que un tap y no la clave `processors`
  *

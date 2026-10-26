@@ -17,7 +17,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La tabla `license`, con **lectura tolerante y escritura estricta** (tarea 5.3).
+ * La tabla `license`, con **lectura tolerante y escritura estricta**.
  *
  * ## La lectura no puede fallar
  *
@@ -33,7 +33,7 @@ use Throwable;
  * PostgreSQL** (circuito abierto o conexion perdida, `DependencyFailure`), lanza
  * {@see LicenseUnavailable}, que cada consumidor traduce a `unknown` —no degrada
  * nada, no avisa de nada—: `null` significa «sin licencia», y con PostgreSQL
- * caido eso era mentira (V21-4-PL-1).
+ * caido eso era mentira.
  *
  * **Cualquier otro fallo sigue siendo `null`**, como antes de la 2.3.0: un
  * permiso retirado (`42501`), una tabla renombrada (`42P01`). Con PostgreSQL

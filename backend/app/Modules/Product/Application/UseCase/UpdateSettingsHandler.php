@@ -41,7 +41,7 @@ use Illuminate\Database\ConnectionInterface;
  *    segun el orden en que se escriban. **Antes de tocar ninguna fila.**
  * 5. **Se descarta lo que no cambia.** Y sobre lo que queda se comprueba que un
  *    acento nuevo sin contraste sobre las superficies claras venga confirmado
- *    ({@see AccentContrastPolicy}, MB2): solo lo que cambia, para que guardar
+ *    ({@see AccentContrastPolicy}): solo lo que cambia, para que guardar
  *    otra clave no vuelva a pedir confirmacion de un color ya aceptado. Abrir la pantalla y pulsar «guardar» no
  *    escribe ni una fila ni un asiento. Sin esto, el trail se llenaria de
  *    entradas que dicen «alguien miro la configuracion», y la señal que de
@@ -119,7 +119,7 @@ final readonly class UpdateSettingsHandler
     /**
      * @throws UnknownSettingKey cuando una clave no esta en el catalogo
      * @throws InvalidSettingValue cuando un valor no cumple lo que su clave declara
-     * @throws LowContrastAccentColor cuando un acento nuevo no llega a 4,5:1 sobre las superficies claras y no viene confirmado (MB2)
+     * @throws LowContrastAccentColor cuando un acento nuevo no llega a 4,5:1 sobre las superficies claras y no viene confirmado
      */
     public function handle(UpdateSettingsCommand $command): ResolvedSettings
     {
@@ -187,7 +187,7 @@ final readonly class UpdateSettingsHandler
             // Una clave `confidential` —hoy `KIOSK_SERVICE_CODE`— no entrega sus
             // valores al evento: el secreto **no se transporta** para confiar
             // despues en que nadie lo escriba. El asiento dira que cambio, quien
-            // y cuando (tarea 3.3, decision 6).
+            // y cuando.
             $redacted = $value->key->definition()->confidential;
 
             $events[] = new InstallationSettingChanged(

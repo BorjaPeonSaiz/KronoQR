@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `Cache-Control: no-store, private` en todas las respuestas de un grupo de
- * rutas (alias `no-store`; 2.3.0, bloque 8).
+ * rutas (alias `no-store`; 2.3.0).
  *
  * Lo llevan las rutas cuyo cuerpo es una credencial: `/api/v1/auth/*` —el token
  * de sesion del acceso y del segundo factor, el secreto TOTP del alta, los

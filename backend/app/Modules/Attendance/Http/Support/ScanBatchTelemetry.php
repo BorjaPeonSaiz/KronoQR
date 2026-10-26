@@ -20,8 +20,8 @@ use Throwable;
  *
  * Los contadores por escaneo —`scans_total`, `scan_processing_duration_seconds`—
  * los emite el caso de uso, que es quien mide cada elemento. El span del lote y
- * el de cada escaneo los abre {@see UseCaseInstrumentation} en los casos de uso
- * (V1-RV-03): `attendance.sync_scan_batch` con un `attendance.register_scan` por
+ * el de cada escaneo los abre {@see UseCaseInstrumentation} en los casos de uso:
+ * `attendance.sync_scan_batch` con un `attendance.register_scan` por
  * elemento, que es lo que ya cuenta el histograma y lo que ya producen sus
  * consultas. Lo que solo existe aqui es lo de la **peticion**: el tamaño del
  * lote y el `device.id` se añaden al span de servidor, que cuelga del
@@ -58,7 +58,7 @@ final readonly class ScanBatchTelemetry
             'device.id' => $deviceUuid,
         ]);
         // Y en el `Context` de Laravel, para que lo lleve TODA linea de log de
-        // esta peticion, no solo las de aqui (tarea 3.1, decision 9).
+        // esta peticion, no solo las de aqui.
         $this->correlate($deviceUuid);
 
         $startedAt = microtime(true);

@@ -45,7 +45,7 @@ final readonly class RedisKioskMetrics implements KioskMetrics
     public const string QUEUE_SIZE = self::KEY_PREFIX.'kiosk_offline_queue_size';
 
     /**
-     * `kiosk_battery_level{device}` (RF-PA-07, tarea 3.3, doc 02 §8.2).
+     * `kiosk_battery_level{device}` (RF-PA-07, doc 02 §8.2).
      *
      * Gauge como los dos de arriba y por lo mismo: lo que interesa es el nivel
      * de AHORA, no cuantas veces se midio. **Solo se publica cuando el

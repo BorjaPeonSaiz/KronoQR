@@ -41,7 +41,7 @@ use DateTimeImmutable;
  * **La transaccion de cada una dura lo que dura su sentencia.** El envio queda
  * fuera de todas: con el dentro, la transaccion del asiento retenia el candado
  * de la cadena de auditoria —el mismo por el que pasa cada fichaje, ADR-010—
- * durante una conversacion SMTP completa (decision 13).
+ * durante una conversacion SMTP completa.
  */
 interface WeeklySummaryDeliveries
 {

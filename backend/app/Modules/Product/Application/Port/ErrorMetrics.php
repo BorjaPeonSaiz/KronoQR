@@ -8,8 +8,7 @@ use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 
 /**
- * `application_errors_total{source,level}` (doc 02 §8.2, decision 11 de la ficha
- * 5.12).
+ * `application_errors_total{source,level}` (doc 02 §8.2).
  *
  * ## Por que hay una metrica ademas de la tabla
  *
@@ -50,7 +49,7 @@ interface ErrorMetrics
 
     /**
      * Un **grupo** nuevo o reabierto:
-     * `application_error_groups_opened_total{source,level}` (decision 14).
+     * `application_error_groups_opened_total{source,level}`.
      *
      * ## Es la serie de la alerta, y la de arriba no
      *

@@ -25,13 +25,13 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * sin fecha.
  *
  * Publica que campos cambiaron, **no sus valores**: la lista basta para que la
- * auditoria diga que se toco (`employee.updated`, AUD-2) sin que el nombre o el
+ * auditoria diga que se toco (`employee.updated`) sin que el nombre o el
  * correo de una persona acaben copiados en ningun sitio mas (regla dura 21). La
  * adscripcion si va con sus dos valores, el departamento de antes y el de
- * despues (R4-SC-05): son identificadores de la organizacion y dicen quien
+ * despues: son identificadores de la organizacion y dicen quien
  * tuvo autoridad sobre su jornada y desde cuando (RF-ID-03).
  *
- * **En una transaccion con el evento dentro** (AUD-2): el listener sincrono de
+ * **En una transaccion con el evento dentro**: el listener sincrono de
  * `Compliance` escribe el asiento, y si falla la modificacion no se confirma
  * (ADR-027). Dentro de una importacion la transaccion es anidada: un punto de
  * guardado dentro de la del lote.
@@ -125,7 +125,7 @@ final readonly class UpdateEmployeeHandler
     {
         $changed = [];
 
-        // EL PUNTO DE EXTENSION DEL ASIENTO `employee.updated` (AUD-2). Un campo
+        // EL PUNTO DE EXTENSION DEL ASIENTO `employee.updated`. Un campo
         // editable nuevo de la ficha —el teletrabajo, por ejemplo—
         // entra aqui con su nombre de columna y queda trazado sin tocar el
         // evento ni el listener de `Compliance`: el asiento lleva esta lista.

@@ -36,8 +36,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Genera el fichero de un informe en diferido (**RF-IN-06**, **RF-IN-07**,
- * decision 4 de la ficha 3.9; **V5-PA-4** desde la 2.3.0).
+ * Genera el fichero de un informe en diferido (**RF-IN-06**, **RF-IN-07**).
  *
  * ## Cuatro clases de informe, un solo ciclo de vida
  *
@@ -56,7 +55,7 @@ use Throwable;
  * esta `pending` —cancelada, dada por muerta, o un reintento del trabajador—
  * no se hace nada.
  *
- * ## Se puede cancelar mientras corre (V5-PA-4)
+ * ## Se puede cancelar mientras corre
  *
  * Cada fase pregunta a la fila si sigue `running`
  * ({@see ReportExportProgressTracker}), y la exportacion legal ademas cada 500
@@ -81,12 +80,12 @@ use Throwable;
  * —`personal_data.accessed` del informe, `legal_export.generated` de la
  * exportacion legal, `adoption_report.exported` del cuadro— se escriben en la
  * transaccion que cierra la fila (regla dura 6, ADR-027), con el solicitante
- * como actor y no `system` (bloque 11, V4-BE-5).
+ * como actor y no `system`.
  *
  * ## El aviso va DESPUES de cerrar la fila, y fuera de su transaccion
  *
  * Porque un SMTP lento o caido no puede impedir que un informe generado conste
- * como generado (regla dura 12, decision 8).
+ * como generado (regla dura 12).
  */
 final readonly class GenerateReportExportHandler
 {
@@ -362,7 +361,7 @@ final readonly class GenerateReportExportHandler
         return match (true) {
             $failure instanceof ReportTooLargeForSynchronousDelivery => ReportExportFailure::QueryTimeout,
             // `query_canceled` por `statement_timeout`: la exportacion legal en cola
-            // lleva el techo del diferido y su origen no lo traduce (V5-PA-4).
+            // lleva el techo del diferido y su origen no lo traduce.
             $failure instanceof QueryException
                 && ($failure->errorInfo[0] ?? null) === self::QUERY_CANCELED => ReportExportFailure::QueryTimeout,
             $failure instanceof ReportExportWriteFailed => ReportExportFailure::WriteFailed,

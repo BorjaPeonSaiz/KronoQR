@@ -19,7 +19,7 @@ use Throwable;
 
 /**
  * Engancha la peticion con la traza que **abrio el cliente**, abre el span de
- * servidor y deja la correlacion a mano del log (doc 02 §8.1, tarea 3.1).
+ * servidor y deja la correlacion a mano del log (doc 02 §8.1).
  *
  * ## Que problema resuelve
  *

@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * La traza cruza la cola: lo que hace el *worker* cuelga de la peticion que
- * encolo el trabajo (doc 02 §8.1, decision 6 de la ficha 3.1).
+ * encolo el trabajo (doc 02 §8.1).
  *
  * ## Como viaja
  *

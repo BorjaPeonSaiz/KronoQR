@@ -65,7 +65,7 @@ final class PeriodReportExportController extends Controller
     ): StreamedResponse {
         /*
          * MISMA COMPROBACION DE LICENCIA QUE LA CONSULTA, y tiene que serlo: lo
-         * que sale es exactamente lo mismo (ADR-023, tarea 5.3). Un endpoint de
+         * que sale es exactamente lo mismo (ADR-023). Un endpoint de
          * descarga con la degradacion mas floja que su consulta es la forma
          * habitual de que la degradacion no sirva de nada — el mismo argumento
          * por el que comparte ambito, policy y limitador.

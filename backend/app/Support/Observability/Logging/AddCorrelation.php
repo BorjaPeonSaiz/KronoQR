@@ -9,7 +9,7 @@ use Monolog\Logger as Monolog;
 
 /**
  * El *tap* que engancha los dos processors de correlacion a un canal de log
- * (`config/logging.php`, decision 9 de la ficha 3.1).
+ * (`config/logging.php`).
  *
  * ## Por que un tap y no la clave `processors`
  *

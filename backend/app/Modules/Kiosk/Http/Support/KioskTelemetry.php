@@ -14,7 +14,7 @@ use Psr\Log\LoggerInterface;
  * la lista de dispositivos del panel (doc 02 §8.1, **RF-PA-07**).
  *
  * En el borde, junto al controlador. El span del acto lo abre el caso de uso
- * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * con `UseCaseInstrumentation`, la medida comun; aqui se añaden al
  * span en curso los atributos que solo conoce la peticion y se escribe el log
  * con su `trace_id`.
  *
@@ -29,7 +29,7 @@ use Psr\Log\LoggerInterface;
  * `service_code: configured` en cada latido seria un inventario de que
  * instalaciones tienen la pantalla de diagnostico protegida, escrito en el sitio
  * que sale de la instalacion. Que lo hay o no lo dice `product:doctor`, donde
- * sirve para algo (tarea 3.3, decision 6).
+ * sirve para algo.
  *
  * La bateria si entra: es una cifra de un aparato, no de una persona, y es la
  * mitad del diagnostico de «la tablet se apago a media tarde».

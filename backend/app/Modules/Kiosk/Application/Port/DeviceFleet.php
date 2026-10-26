@@ -24,7 +24,7 @@ interface DeviceFleet
 {
     /**
      * Registra el latido de un quiosco: `last_seen_at` y toda la telemetria que
-     * el dispositivo declara de si mismo (doc 01 §5.5, tarea 3.3).
+     * el dispositivo declara de si mismo (doc 01 §5.5).
      *
      * **Todo lo que llega aqui es informacion operativa, no autoridad.** Ningun
      * campo influye en el registro horario: un dispositivo que mienta sobre su

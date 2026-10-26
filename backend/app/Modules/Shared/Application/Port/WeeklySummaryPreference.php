@@ -6,7 +6,7 @@ namespace App\Modules\Shared\Application\Port;
 
 /**
  * Si la instalacion quiere el **resumen semanal por correo** (`WEEKLY_SUMMARY_EMAIL`,
- * RF-PR-05, tarea 3.12).
+ * RF-PR-05).
  *
  * ## Por que un puerto de una sola pregunta
  *

@@ -13,7 +13,7 @@ use Throwable;
 
 /**
  * **El unico sitio donde se decide si un fichero sirve como logotipo**
- * (RF-PD-08, tarea 5.8, regla dura 13).
+ * (RF-PD-08, regla dura 13).
  *
  * ## Uno solo, y esa es toda la idea
  *

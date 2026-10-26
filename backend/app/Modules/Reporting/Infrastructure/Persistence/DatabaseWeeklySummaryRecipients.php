@@ -13,7 +13,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * Los destinatarios del resumen semanal, leidos de la base de datos
- * (**RF-PR-05**, **RF-ID-03**, decision 2 de la ficha 3.12).
+ * (**RF-PR-05**, **RF-ID-03**).
  *
  * ## Quien entra, en una frase
  *

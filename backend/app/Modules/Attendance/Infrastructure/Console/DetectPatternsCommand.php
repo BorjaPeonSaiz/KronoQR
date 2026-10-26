@@ -53,7 +53,7 @@ final class DetectPatternsCommand extends Command
         $days = $this->lookbackDays();
 
         if ($days === null || $days < 1) {
-            // `< 1` tambien aqui y no solo en el comando de dominio (decision 17):
+            // `< 1` tambien aqui y no solo en el comando de dominio:
             // dejarselo a la excepcion del `DetectPatternsCommand` de aplicacion
             // convertia un `--days=0` escrito de mas en una traza de PHP en el log
             // del planificador, y una traza no dice que corregir.

@@ -27,7 +27,7 @@ use Throwable;
  * producto instalado en la red del cliente, eso es la fuga completa en una sola
  * peticion.
  *
- * **`app.maintenance_mode`** (V21-3-PL-02). La aplicacion en mantenimiento
+ * **`app.maintenance_mode`**. La aplicacion en mantenimiento
  * (`php artisan down`) responde 503 a todo: el quiosco encola y no pierde nada
  * (regla dura 19), pero el panel, el portal y la exportacion del registro para la
  * Inspeccion se quedan sin servicio, y **nada mas lo dice**. Es el estado en que

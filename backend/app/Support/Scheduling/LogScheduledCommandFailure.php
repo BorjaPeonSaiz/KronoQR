@@ -12,7 +12,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * El apunte `scheduler.command_failed` de una tarea programada que termina con
- * codigo distinto de cero (doc 02 §8.2, tarea 3.2, paso 9).
+ * codigo distinto de cero (doc 02 §8.2).
  *
  * ## El hueco que cierra
  *

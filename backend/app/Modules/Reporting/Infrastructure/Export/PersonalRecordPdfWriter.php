@@ -84,7 +84,7 @@ final readonly class PersonalRecordPdfWriter
         return View::make('pdf.period-report', [
             'title' => PersonalRecordLayout::text('title'),
             'brandName' => $brand->applicationName,
-            // Oscurecido hasta 4,5:1 sobre el papel (MB3): es texto de 10 pt.
+            // Oscurecido hasta 4,5:1 sobre el papel: es texto de 10 pt.
             'brandAccent' => $brand->accentForTextOnWhite(),
             'brandLogo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
             'metadata' => PersonalRecordLayout::metadata($journal, $holderName, $digest, $generatedAt),

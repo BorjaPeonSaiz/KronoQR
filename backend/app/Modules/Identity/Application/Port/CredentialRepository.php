@@ -122,7 +122,7 @@ interface CredentialRepository
      * orden ascendente.
      *
      * Es la seleccion del barrido de bajas anteriores a la 2.2.0
-     * (`credentials:revoke-offboarded`, R3-AR-07): quien filtra por estado
+     * (`credentials:revoke-offboarded`): quien filtra por estado
      * laboral es el caso de uso, con {@see EmploymentStatusLookup}.
      *
      * @return list<int>

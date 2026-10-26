@@ -12,8 +12,7 @@ use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
- * **La hoja que se entrega con la tarjeta** (tarea 5.11b, **RL-05**, RF-QR-06,
- * ficha 5.11b decision 1).
+ * **La hoja que se entrega con la tarjeta** (**RL-05**, RF-QR-06).
  *
  * ## Que hace, y por que es tan poco
  *
@@ -29,7 +28,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * - **Sin asiento en `audit_log`**, porque no hay acto con relevancia legal que
  *   registrar: descargar este PDF no dice nada de nadie. Lo que si se audita es
  *   la ENTREGA de la credencial (`credential.delivered`), que es el acto en el
- *   que esta hoja cambia de manos (tarea 1.10).
+ *   que esta hoja cambia de manos.
  * - **Sin evento de dominio**, por lo mismo.
  *
  * Si alguna vez llevara el nombre de alguien, las tres ausencias dejarian de

@@ -17,8 +17,8 @@ use Illuminate\Contracts\Events\Dispatcher;
  * simplemente recuerde lo publicado.
  *
  * **El evento se despacha por su clase**, que es lo que permite a `Identity`
- * (revocacion de credencial, tarea 1.5), `Compliance` (asiento de `audit_log`,
- * tarea 1.14) y `Reporting` suscribirse sin que este modulo sepa que existen.
+ * (revocacion de credencial), `Compliance` (asiento de `audit_log`)
+ * y `Reporting` suscribirse sin que este modulo sepa que existen.
  */
 final readonly class LaravelWorkforceEventPublisher implements WorkforceEventPublisher
 {

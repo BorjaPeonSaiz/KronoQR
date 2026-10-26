@@ -9,7 +9,7 @@ use App\Modules\Reporting\Domain\Model\ReportExport;
 
 /**
  * Una generacion en curso: la fila arrancada, su avance y **el fichero que
- * esta escribiendo** (V5-PA-4).
+ * esta escribiendo**.
  *
  * El fichero se anota aqui antes de escribir la primera linea, y no al
  * terminar, porque quien tiene que borrarlo si algo sale mal —un fallo, una

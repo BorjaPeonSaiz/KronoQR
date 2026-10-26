@@ -14,7 +14,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * `storage/app/telemetry/state.json` (**RF-PD-12**, ficha 5.10 punto 8).
+ * `storage/app/telemetry/state.json` (**RF-PD-12**).
  *
  * ## Un fichero y no una tabla
  *

@@ -40,7 +40,7 @@ use Illuminate\Support\Facades\Config;
  *
  * El riesgo que esto deja abierto —una cola que no drena porque arrastra un
  * elemento imposible— es real y se resuelve **en el quiosco**, que ante un `400`
- * no debe reintentar el mismo lote sin cambios (tarea 1.9). Queda escrito aqui y
+ * no debe reintentar el mismo lote sin cambios. Queda escrito aqui y
  * en el contrato para que sea una decision y no un descubrimiento.
  *
  * ## La cabecera es del lote, no de ningun escaneo

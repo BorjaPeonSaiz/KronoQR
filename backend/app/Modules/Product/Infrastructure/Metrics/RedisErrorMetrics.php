@@ -11,8 +11,7 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
 /**
- * `application_errors_total{source,level}` sobre Redis (doc 02 §8.2, decision 11
- * de la ficha 5.12).
+ * `application_errors_total{source,level}` sobre Redis (doc 02 §8.2).
  *
  * **Por que Redis y no el colector *textfile*.** El hecho medido ocurre en el
  * camino de una peticion que ya ha fallado, y puede ocurrir muchas veces por
@@ -47,8 +46,7 @@ final readonly class RedisErrorMetrics implements ErrorMetrics
     public const string ERRORS_TOTAL = self::KEY_PREFIX.'application_errors_total';
 
     /**
-     * Grupos nuevos o reabiertos: la serie de la alerta `ErroresCriticosNuevos`
-     * (decision 14).
+     * Grupos nuevos o reabiertos: la serie de la alerta `ErroresCriticosNuevos`.
      *
      * Separada de la anterior porque una camara de quiosco rota emite el mismo
      * error cada pocos segundos durante dias: con la serie de ocurrencias, la

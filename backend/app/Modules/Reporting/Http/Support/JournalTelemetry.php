@@ -15,7 +15,7 @@ use Psr\Log\LoggerInterface;
  * RF-PA-03).
  *
  * En el borde, junto al controlador. El span del acto lo abre el caso de uso
- * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * con `UseCaseInstrumentation`, la medida comun; aqui se añaden al
  * span en curso los atributos que solo conoce la peticion y se escribe el log
  * con su `trace_id`.
  *
@@ -70,7 +70,7 @@ final readonly class JournalTelemetry
     }
 
     /**
-     * Lo mismo para una pagina del registro (V5-PA-2): el span y el log cuentan
+     * Lo mismo para una pagina del registro: el span y el log cuentan
      * las jornadas **servidas**, y el span lleva ademas cuantas habia en el
      * rango, que es lo que dice si la paginacion esta haciendo su trabajo.
      *

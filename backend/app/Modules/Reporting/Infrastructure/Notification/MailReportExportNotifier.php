@@ -14,8 +14,7 @@ use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 /**
- * Entrega el aviso por correo si la instalacion tiene por donde (**RF-IN-06**,
- * decision 8 de la ficha 3.9).
+ * Entrega el aviso por correo si la instalacion tiene por donde (**RF-IN-06**).
  *
  * ## Tres condiciones, y si falta una el canal es `panel`
  *
@@ -75,7 +74,7 @@ final readonly class MailReportExportNotifier implements ReportExportNotifier
         private ReportExportRecipients $recipients,
         /** `MAIL_MAILER` ya resuelto (regla dura 14): el adaptador no lee configuracion. */
         private string $mailer,
-        /** La marca por el puerto, como la tarjeta y los PDF (R6-PL-07). */
+        /** La marca por el puerto, como la tarjeta y los PDF. */
         private BrandingProvider $branding,
     ) {}
 

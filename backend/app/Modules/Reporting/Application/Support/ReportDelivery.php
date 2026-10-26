@@ -40,8 +40,7 @@ enum ReportDelivery: string
     case Pdf = 'pdf';
 
     /**
-     * El cuerpo de un correo: hoy solo el resumen semanal (RF-PR-05, tarea
-     * 3.12).
+     * El cuerpo de un correo: hoy solo el resumen semanal (RF-PR-05).
      *
      * **No es un formato de fichero y por eso no aparece en ningun `format=` de
      * la API**: ni `ExportPeriodReportRequest` ni `ExportPayrollRequest` lo

@@ -25,7 +25,7 @@ final readonly class ClaimPairingCommand
         public string $secret,
         /**
          * Huella opaca del origen de la peticion —un HMAC de la direccion, nunca
-         * la direccion—, para la recogida repetida (V6-KI-02). Nula si no se
+         * la direccion—, para la recogida repetida. Nula si no se
          * conoce: entonces no se puede repetir.
          */
         public ?string $origin = null,

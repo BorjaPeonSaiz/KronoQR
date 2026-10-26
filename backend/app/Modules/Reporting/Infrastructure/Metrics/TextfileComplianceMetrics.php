@@ -11,7 +11,7 @@ use DateTimeZone;
 
 /**
  * Publica las dos metricas de cumplimiento para el colector *textfile* de
- * `node-exporter` (doc 02 §8.2, decision 10 de la ficha 3.4).
+ * `node-exporter` (doc 02 §8.2).
  *
  * ```
  * compliance_findings_last_week{rule="insufficient_rest"}

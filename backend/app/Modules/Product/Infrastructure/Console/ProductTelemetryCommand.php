@@ -18,7 +18,7 @@ use Throwable;
 
 /**
  * `php artisan product:telemetry` - ensena el documento que se enviaria y, con
- * `--send`, lo envia (**RF-PD-12**, ADR-020, ADR-023, ficha 5.10 punto 8).
+ * `--send`, lo envia (**RF-PD-12**, ADR-020, ADR-023).
  *
  * ## Sin banderas NO envia nada, y ese es el uso principal
  *

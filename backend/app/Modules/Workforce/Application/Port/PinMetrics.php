@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\Port;
 
 /**
- * `pin_resets_total{site}` (doc 02 §8.2, tarea 1.13).
+ * `pin_resets_total{site}` (doc 02 §8.2).
  *
  * **Que dice esta metrica.** Una subida sostenida de restablecimientos no es un
  * problema tecnico: es que los PIN no llegan a la gente, o que nadie ha

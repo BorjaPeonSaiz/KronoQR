@@ -33,7 +33,7 @@ interface EmployeeImportDirectory
 
     /**
      * UUID publico de quien tiene ese codigo de empleado, o `null`
-     * (tarea 3.10, RF-GP-04).
+     * (RF-GP-04).
      *
      * **Lo usa la carga de ausencias y no la de plantilla**, y la asimetria es
      * deliberada: el codigo lo genera el servidor y es opaco (doc 01 §5.5), asi

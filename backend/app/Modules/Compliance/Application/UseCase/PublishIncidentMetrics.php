@@ -15,7 +15,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  *
  * **Se recalcula entera desde la base de datos, nunca se incrementa** (regla
  * dura 7 aplicada a la instrumentacion). Es la diferencia entre un gauge que
- * baja cuando alguien resuelve una incidencia desde la bandeja (tarea 2.5) y un
+ * baja cuando alguien resuelve una incidencia desde la bandeja y un
  * contador que solo sube y que, a la semana, no describe nada.
  *
  * Por eso es una tarea programada y no un efecto de la deteccion: asi la cifra

@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Application\Generation;
 use App\Modules\Reporting\Domain\Exception\ReportExportWasCancelled;
 
 /**
- * Como se escribe el fichero de una clase de informe en diferido (V5-PA-4).
+ * Como se escribe el fichero de una clase de informe en diferido.
  *
  * Tres implementaciones —el informe por periodo y la nomina, la exportacion
  * para la Inspeccion y el cuadro de impacto— y un solo caso de uso que arranca

@@ -10,13 +10,13 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 
 /**
- * La linea de log de la composicion del PDF del registro propio (PR19).
+ * La linea de log de la composicion del PDF del registro propio.
  *
  * La consulta ya la mide su caso de uso (`reporting.read_employee_work_days`).
  * Lo que este añade es lo que solo ocurre con el PDF: arrancar Chromium, que es
  * la parte lenta y la que puede fallar. Sin su propio span, una descarga de
  * cuatro segundos se veria en la traza como una consulta lenta. El span lo abre
- * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03): renderizar no es un
+ * {@see UseCaseInstrumentation}, la medida comun: renderizar no es un
  * caso de uso de `Application`, pero es un acto con su duracion y su desenlace.
  *
  * **Sin metrica propia, y es deliberado.** `report_exports_total{format}` cuenta

@@ -13,8 +13,7 @@ use OpenTelemetry\API\Trace\SpanKind;
 use Throwable;
 
 /**
- * Un span y un `trace_id` por orden de Artisan y por trabajo de cola (L2,
- * tarea 10.6, doc 02 §8.1).
+ * Un span y un `trace_id` por orden de Artisan y por trabajo de cola (doc 02 §8.1).
  *
  * ## Lo que faltaba
  *

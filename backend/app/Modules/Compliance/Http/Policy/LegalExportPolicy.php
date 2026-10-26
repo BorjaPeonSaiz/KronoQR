@@ -69,8 +69,7 @@ final class LegalExportPolicy
     }
 
     /**
-     * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05,
-     * V21-3-PA-1).
+     * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05).
      *
      * **Los mismos tres roles que la exportacion, y tiene que ser asi**: quien
      * puede exportar a una persona tiene que poder elegirla, y quien no puede

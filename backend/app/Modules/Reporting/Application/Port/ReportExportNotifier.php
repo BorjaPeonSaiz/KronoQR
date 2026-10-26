@@ -8,8 +8,7 @@ use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportNotificationChannel;
 
 /**
- * Avisa a quien lo pidio de que el informe esta listo (**RF-IN-06**, decision 8
- * de la ficha 3.9).
+ * Avisa a quien lo pidio de que el informe esta listo (**RF-IN-06**).
  *
  * ## El panel siempre; el correo si hay salida
  *

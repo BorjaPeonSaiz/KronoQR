@@ -42,8 +42,8 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  *
  * **Reutilizar y no copiar es la decision importante de esta clase.** Un segundo
  * camino de fichaje seria un segundo sitio donde equivocarse con cualquiera de
- * esas seis cosas, y con `worked_minutes` en el reenvio ya se fallo una vez
- * (tarea 1.7): un fichaje por PIN reenviado desde la cola offline devolvia el
+ * esas seis cosas, y con `worked_minutes` en el reenvio ya se fallo una vez:
+ * un fichaje por PIN reenviado desde la cola offline devolvia el
  * acumulado de hoy en lugar del que tenia cuando ocurrio. Compartiendo el
  * metodo, ese arreglo vale para las dos vias sin que nadie tenga que acordarse.
  *

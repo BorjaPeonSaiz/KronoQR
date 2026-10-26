@@ -7,8 +7,8 @@ namespace App\Modules\Compliance\Application\Port;
 use App\Modules\Compliance\Domain\ValueObject\AuditedSiteTimezone;
 
 /**
- * La zona horaria de cada centro con su auditoria (RN-23, ADR-056; bloque 2 de
- * la 2.3.0): lo que necesitan la conciliacion y la revision de una de sus
+ * La zona horaria de cada centro con su auditoria (RN-23, ADR-056):
+ * lo que necesitan la conciliacion y la revision de una de sus
  * discrepancias (`compliance:reconcile-work-record --acknowledge-site-change`).
  *
  * **Solo lee.** Quien llama decide en que transaccion: la conciliacion lo lee

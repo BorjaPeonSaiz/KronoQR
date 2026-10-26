@@ -44,7 +44,7 @@ use Illuminate\Contracts\Translation\Translator;
 final readonly class TranslatedDataExportGuide implements DataExportGuide
 {
     /**
-     * La marca entra por el puerto (R6-PL-07): el titulo dice de QUE instalacion
+     * La marca entra por el puerto: el titulo dice de QUE instalacion
      * son los datos —«Hotel Marina», no el producto—, que es lo que busca quien
      * abre el ZIP dentro de dos años. «KronoQR» solo aparece donde se habla del
      * producto («no necesitas KronoQR para leerlo»).

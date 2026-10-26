@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 /**
  * `php artisan reporting:presence-metrics` — publica `open_shifts_current` y
- * `websocket_connections_active` (doc 02 §8.2, doc 01 §9.2, tarea 2.4).
+ * `websocket_connections_active` (doc 02 §8.2, doc 01 §9.2).
  *
  * Lo ejecuta el planificador cada minuto (`routes/console.php`). A mano sirve
  * para comprobar que el fichero del colector *textfile* se escribe donde debe,

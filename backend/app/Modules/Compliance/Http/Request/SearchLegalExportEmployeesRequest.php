@@ -15,7 +15,7 @@ use Illuminate\Validation\Validator;
 use LogicException;
 
 /**
- * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05, V21-3-PA-1).
+ * `POST /api/v1/reports/legal-export/employees/search` (RF-IN-05).
  *
  * ## La autorizacion va antes que la validacion, y no es un detalle
  *

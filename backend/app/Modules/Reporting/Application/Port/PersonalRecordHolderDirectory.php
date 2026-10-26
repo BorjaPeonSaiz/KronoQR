@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Port;
 
 /**
- * El **nombre de la persona** cuyo registro propio se imprime (PR19, RF-ID-05).
+ * El **nombre de la persona** cuyo registro propio se imprime (RF-ID-05).
  *
  * ## Por que un nombre, si la regla dura 21 los prohibe
  *

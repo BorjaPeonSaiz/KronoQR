@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 /**
  * `php artisan reporting:compliance-metrics` — publica
  * `compliance_findings_last_week` y `compliance_employees_affected_last_week`
- * (doc 02 §8.2, decision 10 de la ficha 3.4).
+ * (doc 02 §8.2).
  *
  * Lo ejecuta el planificador cada noche **despues** de
  * `attendance:detect-incidents`: la vista enlaza cada hallazgo con la incidencia

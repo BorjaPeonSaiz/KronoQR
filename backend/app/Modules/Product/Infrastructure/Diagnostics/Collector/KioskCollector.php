@@ -23,7 +23,7 @@ use Illuminate\Database\ConnectionInterface;
  * dispositivo en el resto del paquete —las metricas `kiosk_*` van etiquetadas
  * por el— y es lo unico que soporte necesita para seguirle la pista.
  *
- * ## Lo que hace falta para «el quiosco no sincroniza» (PR13)
+ * ## Lo que hace falta para «el quiosco no sincroniza»
  *
  * La causa mas probable de esa incidencia es un token caducado o a punto de
  * caducar (F1-1), y sin estos campos no se ve:

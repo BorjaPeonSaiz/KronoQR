@@ -33,7 +33,7 @@ use Illuminate\Console\Command;
  * dejaria el suceso solo en la metrica; con este queda ademas en el log del
  * planificador y lo ve cualquiera que encadene el comando en un script.
  *
- * **Que hace ese codigo de salida** (tarea 3.2). Tres cosas, y las tres
+ * **Que hace ese codigo de salida**. Tres cosas, y las tres
  * hacen falta porque cada una falla de una forma distinta:
  *
  *   · `projection_divergence_total` sube y la regla `absent()` sobre el sello de

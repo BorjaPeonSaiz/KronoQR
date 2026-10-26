@@ -22,7 +22,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * `POST /api/v1/client-errors` — el buffer de errores del panel y del portal
- * (contrato `ClientErrorBatch`, **RF-PD-15**, decision 7 de la ficha 5.12).
+ * (contrato `ClientErrorBatch`, **RF-PD-15**).
  *
  * ## EL SERVIDOR DECIDE EL ORIGEN, no el cuerpo
  *

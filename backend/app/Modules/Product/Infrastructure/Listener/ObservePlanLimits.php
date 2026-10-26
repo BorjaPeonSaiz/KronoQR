@@ -92,7 +92,7 @@ final readonly class ObservePlanLimits
         /**
          * La conexion concreta y no `ConnectionInterface`: `afterCommit()` lo
          * declara `Connection`, no la interfaz. Mismo motivo que en
-         * `CachedSettingsRepository` (tarea 5.1).
+         * `CachedSettingsRepository`.
          */
         private Connection $connection,
     ) {}

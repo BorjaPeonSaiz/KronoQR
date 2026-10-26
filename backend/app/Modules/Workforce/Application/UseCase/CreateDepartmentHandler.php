@@ -23,7 +23,7 @@ use Illuminate\Database\ConnectionInterface;
  * El centro no viene en el comando: lo resuelve este caso de uso. Sin centro no
  * hay alta posible, porque `departments.site_id` es obligatorio.
  *
- * **Deja asiento** (AUD-2, regla dura 6): un departamento es un ambito de
+ * **Deja asiento** (regla dura 6): un departamento es un ambito de
  * autoridad —decide que responsable ve y corrige la jornada de quien
  * (RF-ID-03)—. `DepartmentCreated` se publica dentro de la transaccion y el
  * listener sincrono de `Compliance` escribe `department.created`: si el asiento

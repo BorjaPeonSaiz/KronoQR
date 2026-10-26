@@ -94,7 +94,7 @@ final readonly class LicenseCollector implements DiagnosticsCollector
     }
 
     /**
-     * La seccion cuando la licencia no se ha podido leer (V21-4-PL-1): `unknown`
+     * La seccion cuando la licencia no se ha podido leer: `unknown`
      * y ningun dato, ni siquiera `degraded_features`, porque no se sabe que
      * esta degradado. Mismas claves que la seccion normal, para que quien lee
      * el paquete no tenga dos formas.

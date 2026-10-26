@@ -24,7 +24,7 @@ use DateTimeZone;
 
 /**
  * El mantenimiento diario de los informes en diferido: **desatasca, purga y
- * concilia** (**RF-IN-06**, RL-15, regla dura 5, decision 3 de la ficha 3.9;
+ * concilia** (**RF-IN-06**, RL-15, regla dura 5;
  * ADR-045).
  *
  * ## Por que el fichero caduca

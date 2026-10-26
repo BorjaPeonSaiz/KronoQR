@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * El log tecnico llega a Loki **desde el propio proceso**, agrupado y a prueba de
- * fallos (doc 02 §8.1 y §8.2.1, decision 8 de la ficha 3.1).
+ * fallos (doc 02 §8.1 y §8.2.1).
  *
  * ## Por que no hay agente de recoleccion
  *

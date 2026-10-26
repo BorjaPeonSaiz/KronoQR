@@ -150,7 +150,7 @@ final readonly class RecordCredentialLifecycle
     }
 
     /**
-     * **La apertura de una rotacion de clave** (RF-QR-07, tarea 2.12).
+     * **La apertura de una rotacion de clave** (RF-QR-07).
      *
      * Sujeto `signing_key` sin identificador: no recae sobre ninguna fila, recae
      * sobre el material con el que se firman todas las tarjetas. La reemision de

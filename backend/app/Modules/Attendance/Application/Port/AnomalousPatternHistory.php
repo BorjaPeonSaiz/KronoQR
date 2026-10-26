@@ -7,8 +7,7 @@ namespace App\Modules\Attendance\Application\Port;
 use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
 
 /**
- * Que se ha hecho ya con los indicios de patron de cada persona (RF-PR-06,
- * decision 13c de la ficha 3.11).
+ * Que se ha hecho ya con los indicios de patron de cada persona (RF-PR-06).
  *
  * ## Por que la deteccion tiene que mirar la bandeja
  *

@@ -28,7 +28,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceSummaryQuery;
  *     demas. Sin eso, el primer dia de cualquier ventana nunca alertaria de
  *     descanso, y nadie lo notaria: el aviso simplemente no saldria.
  *   - **Los dias de fuera que completan las semanas del borde**, porque toda
- *     semana que toque el rango se evalua sobre sus siete dias (decision 6). Una
+ *     semana que toque el rango se evalua sobre sus siete dias. Una
  *     semana recortada daria un total que no suma lo que la persona ve en su
  *     registro.
  *

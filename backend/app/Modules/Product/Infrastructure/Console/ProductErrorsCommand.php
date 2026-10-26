@@ -25,7 +25,7 @@ use Throwable;
 
 /**
  * `php artisan product:errors` — que esta fallando, desde la consola (Anexo C
- * del doc 01, **RF-PD-15**, decision 10 de la ficha 5.12).
+ * del doc 01, **RF-PD-15**).
  *
  * ## Para quien esta escrito
  *

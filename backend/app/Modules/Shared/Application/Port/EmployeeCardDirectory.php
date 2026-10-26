@@ -70,7 +70,7 @@ interface EmployeeCardDirectory
     /**
      * Las claves internas de la plantilla de alta cuyo nombre, apellidos,
      * nombre completo o codigo contienen `$search`, sin distinguir mayusculas
-     * ni acentos (2.3.0, HC1).
+     * ni acentos (2.3.0).
      *
      * **Con la misma busqueda que el directorio de plantilla, las cuentas y la
      * exportacion legal** (`PersonNameSearch`: `unaccent()` en PostgreSQL y

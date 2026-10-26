@@ -175,8 +175,7 @@ final class SpanScope
     }
 
     /**
-     * Deja constancia de que el acto fallo, antes de {@see self::end()}
-     * (V21-4-BE-2).
+     * Deja constancia de que el acto fallo, antes de {@see self::end()}.
      *
      * Un evento `exception` con `exception.type` = la clase, y **nada mas**. No
      * es `recordException()` a proposito: ese metodo del SDK añade por su

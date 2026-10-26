@@ -58,7 +58,7 @@ final class ScanPolicy
     }
 
     /**
-     * `POST /api/v1/scan/batch` — sincronizar la cola offline (tarea 1.7).
+     * `POST /api/v1/scan/batch` — sincronizar la cola offline.
      *
      * Misma respuesta que {@see record()} y **metodo propio de todos modos**: la
      * regla dura 18 pide una policy por endpoint, y un endpoint que reutiliza el
@@ -75,8 +75,7 @@ final class ScanPolicy
     }
 
     /**
-     * `POST /api/v1/scan/pin` — fichaje de respaldo por PIN (RF-AT-11, tarea
-     * 1.12).
+     * `POST /api/v1/scan/pin` — fichaje de respaldo por PIN (RF-AT-11).
      *
      * Misma respuesta que {@see record()} y **metodo propio de todos modos**,
      * por lo mismo que {@see sync()}: la regla dura 18 pide una policy por

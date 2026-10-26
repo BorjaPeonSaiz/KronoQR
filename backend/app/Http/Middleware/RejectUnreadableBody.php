@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Un cuerpo que el servidor no puede leer se rechaza; nunca se responde como si
- * se hubiera guardado (D6, V21-3-BE-3, F4a-4).
+ * se hubiera guardado (F4a-4).
  *
  * Hasta la 2.3.0, un `PATCH /site` con JSON mal formado respondia `200` sin
  * cambiar nada: Laravel trata un JSON que no decodifica como un cuerpo vacio, y

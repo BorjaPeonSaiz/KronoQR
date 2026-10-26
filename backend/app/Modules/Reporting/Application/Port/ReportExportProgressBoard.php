@@ -7,8 +7,7 @@ namespace App\Modules\Reporting\Application\Port;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportProgress;
 
 /**
- * Donde se anota y se lee por donde va cada exportacion en curso
- * (**V5-PA-4**).
+ * Donde se anota y se lee por donde va cada exportacion en curso.
  *
  * ## Fuera de la fila, a proposito
  *

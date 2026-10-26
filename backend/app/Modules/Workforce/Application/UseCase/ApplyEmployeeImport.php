@@ -136,7 +136,7 @@ final readonly class ApplyEmployeeImport
             $rows = $this->applyRows($report, $departments);
 
             // El asiento del LOTE va DENTRO de la transaccion, como el de cada
-            // alta (regla dura 6, ADR-010, V3-BE-1): o entran la plantilla y su
+            // alta (regla dura 6, ADR-010): o entran la plantilla y su
             // asiento, o no entra ninguno. Publicado despues del commit, un
             // fallo del asiento dejaba cuarenta altas confirmadas sin el
             // «quien cargo que fichero»; y un asiento de una carga que revierte

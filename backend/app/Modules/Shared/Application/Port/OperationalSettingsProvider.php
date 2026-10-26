@@ -18,7 +18,7 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  *
  * **Vive en Shared** (ADR-025) porque lo consumen Attendance —RN-08— y Kiosk
  * —RF-AT-10, la tolerancia de desfase de reloj—. Su adaptador es
- * `Product/Infrastructure/Adapter/DbOperationalSettingsProvider` (tarea 5.1).
+ * `Product/Infrastructure/Adapter/DbOperationalSettingsProvider`.
  */
 interface OperationalSettingsProvider
 {

@@ -40,7 +40,7 @@ use Throwable;
 
 /**
  * El resumen semanal por correo al responsable de cada departamento
- * (**RF-PR-05**, tarea 3.12).
+ * (**RF-PR-05**).
  *
  * ## Que manda y que no
  *

@@ -14,7 +14,7 @@ use OpenTelemetry\API\Trace\SpanKind;
 use Throwable;
 
 /**
- * Un span por comando programado (doc 02 §8.1, decision 6 de la ficha 3.1).
+ * Un span por comando programado (doc 02 §8.1).
  *
  * ## Por que el planificador tambien
  *

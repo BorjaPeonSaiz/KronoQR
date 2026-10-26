@@ -44,7 +44,7 @@ use Throwable;
  * ## Salvo cuando la licencia no se ha podido LEER: `unknown`
  *
  * Con la base de datos caida, {@see LicenseUnavailable} no dice que la licencia
- * sea mala: dice que no se sabe (V21-4-PL-1). Degradar ahi castigaria a un
+ * sea mala: dice que no se sabe. Degradar ahi castigaria a un
  * hotel con licencia valida por una caida de su base, y una funcionalidad
  * accesoria que necesita la base tampoco podria servirse sin ella, asi que no
  * hay nada que regalar. Se concede, sin aviso de licencia y **sin memorizarlo**:

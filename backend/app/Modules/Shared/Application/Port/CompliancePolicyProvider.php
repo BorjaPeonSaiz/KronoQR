@@ -17,7 +17,7 @@ use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
  * modulos —Attendance, Compliance y Reporting— y no representa una regla de
  * negocio de ninguno: es el criterio de admision que ADR-021 fijo para `Clock`.
  * Su adaptador es `Product/Infrastructure/Adapter/DbCompliancePolicyProvider`,
- * que es donde esta `compliance_profiles` (tarea 5.2). Hoy solo existe la
+ * que es donde esta `compliance_profiles`. Hoy solo existe la
  * interfaz: adelantar el puerto cuesta un fichero y evita que el dominio nazca
  * leyendo constantes que habria que extraer dos fases mas tarde.
  *

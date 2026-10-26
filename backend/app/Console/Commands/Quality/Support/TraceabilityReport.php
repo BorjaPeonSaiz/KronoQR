@@ -22,7 +22,7 @@ final readonly class TraceabilityReport
      * evidencia de que «cada obligacion tiene una prueba automatica que la
      * verifica EN CADA CAMBIO», y de k6 eso es falso: la prueba de carga dura
      * minutos, necesita la pila levantada y corre a mano y en la etiqueta de
-     * cada version mayor (RQ-08, decision 12 de la tarea 3.6). Una entrada de
+     * cada version mayor (RQ-08). Una entrada de
      * k6 acredita que el umbral se midio en la ultima version mayor, no que se
      * este verificando hoy, y quien lee la matriz tiene que poder distinguirlo
      * sin salir de la fila.

@@ -12,7 +12,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Busca a la persona que nombra un requerimiento de la Inspeccion, por su nombre
- * o por su DNI, y deja constancia de la busqueda (RF-IN-05, V21-3-PA-1, ADR-037
+ * o por su DNI, y deja constancia de la busqueda (RF-IN-05, ADR-037
  * enmienda del 18-10-2026, RS-05).
  *
  * ## Por que existe

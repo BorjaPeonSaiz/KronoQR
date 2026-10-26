@@ -221,7 +221,7 @@ final readonly class PermissionsProbe implements DoctorProbe
 
         if (! is_dir($this->brandingLogoRoot) || ! is_readable($this->brandingLogoRoot)) {
             // `warning` y no `failure`: sin logotipo se pinta la marca del
-            // producto y todo lo demas funciona (tarea 5.8).
+            // producto y todo lo demas funciona.
             return DoctorFinding::warning(
                 'permissions.branding_root',
                 params: ['path' => $this->brandingLogoRoot],
@@ -266,7 +266,7 @@ final readonly class PermissionsProbe implements DoctorProbe
      * Agrupa los nueve motivos en los tres «que hacer» distintos que existen.
      *
      * Antes el aviso imprimia el codigo en bruto —«(missing)»— y mandaba subir
-     * el logotipo desde el panel, cosa que no se puede hacer (DC6). Cada grupo
+     * el logotipo desde el panel, cosa que no se puede hacer. Cada grupo
      * lleva a una accion concreta: mover el fichero a la carpeta de marca,
      * comprobar que esta y se puede leer, o sustituirlo por uno admitido.
      */

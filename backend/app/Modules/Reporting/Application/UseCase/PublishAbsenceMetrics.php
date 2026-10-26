@@ -14,8 +14,7 @@ use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeZone;
 
 /**
- * Publica `absences_current{type}` del cuadro «Negocio» (doc 02 §8.2, decision 8
- * de la ficha 3.10, RF-GP-04).
+ * Publica `absences_current{type}` del cuadro «Negocio» (doc 02 §8.2, RF-GP-04).
  *
  * ```
  * absences_current{type}   gauge

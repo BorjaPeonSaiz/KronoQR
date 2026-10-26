@@ -31,7 +31,7 @@ use DateTimeImmutable;
  * rechazaria. Es el fallo tipico de esta clase de mapas y por eso se fuerza
  * aqui, donde se ve.
  *
- * ## `resolved_by` NO se sirve a un actor de soporte (decision 14)
+ * ## `resolved_by` NO se sirve a un actor de soporte
  *
  * Es la unica columna del historico que lleva **un nombre de persona**: la
  * cuenta de gestion del hotel que dio el fallo por atendido. El paquete de

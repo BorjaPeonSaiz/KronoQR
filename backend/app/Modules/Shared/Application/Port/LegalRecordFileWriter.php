@@ -9,7 +9,7 @@ use Closure;
 
 /**
  * Escribe la exportacion para la Inspeccion en un fichero, para la generacion
- * en diferido (**RF-IN-05**, RL-06, V5-PA-4).
+ * en diferido (**RF-IN-05**, RL-06).
  *
  * ## Por que un puerto de `Shared`
  *

@@ -26,7 +26,7 @@ use Illuminate\Http\JsonResponse;
  * que cambia es que sale del conjunto vigente.
  *
  * **Aqui NO se comprueba el alcance por departamento, y no es un olvido**
- * (RF-ID-03, tarea 2.1). Anular es `rrhh+` —`{admin, rrhh}`— y esos dos roles
+ * (RF-ID-03). Anular es `rrhh+` —`{admin, rrhh}`— y esos dos roles
  * alcanzan toda la plantilla por definicion: la comprobacion seria una rama
  * inalcanzable, que no protege nada y ademas no se puede probar. Al
  * `responsable_departamento` lo deja fuera la policy, y **eso** si tiene su

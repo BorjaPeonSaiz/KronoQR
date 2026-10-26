@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * El codigo de servicio del quiosco, resuelto desde `installation_settings`
- * (**RF-KI-08**, tarea 3.3, regla dura 13, ADR-025).
+ * (**RF-KI-08**, regla dura 13, ADR-025).
  *
  * Hermano de {@see DbOperationalSettingsProvider}: mismo modulo, misma cascada
  * —fila de la instalacion, y si no el valor de serie del catalogo— y la misma

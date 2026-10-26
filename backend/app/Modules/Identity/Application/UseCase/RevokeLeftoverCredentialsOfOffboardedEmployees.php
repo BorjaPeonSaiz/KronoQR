@@ -14,8 +14,7 @@ use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use Throwable;
 
 /**
- * **Las tarjetas que se quedaron activas en bajas anteriores a la 2.2.0**
- * (R3-AR-07, R4-SC-11; tarea 12.4 de la 2.3.0).
+ * **Las tarjetas que se quedaron activas en bajas anteriores a la 2.2.0**.
  *
  * Desde la 2.2.0 la baja revoca sus tarjetas en la misma transaccion
  * ({@see RevokeCredentialsOfOffboardedEmployee}). Las bajas registradas antes

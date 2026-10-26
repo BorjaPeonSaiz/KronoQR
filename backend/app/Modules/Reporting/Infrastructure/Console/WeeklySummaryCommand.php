@@ -113,7 +113,7 @@ final class WeeklySummaryCommand extends Command
      * «¿Por que no me llega el resumen?» tiene cinco respuestas y las cinco se
      * tocan en sitios distintos. Un «no se envio nada» a secas obligaria a
      * revisarlos todos. «El plan no lo incluye» y «la licencia no esta en vigor»
-     * son dos (V4-PL-4): la primera se arregla ampliando el plan y la segunda
+     * son dos: la primera se arregla ampliando el plan y la segunda
      * renovando. Los textos, en `lang/{es,en}/reports.php`.
      */
     private function explain(WeeklySummaryReason $reason): string

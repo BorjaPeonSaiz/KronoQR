@@ -87,7 +87,7 @@ final readonly class RecordComplianceProfileChange
                 // Explica el `false` de arriba cuando el campo SI gobierna una
                 // regla legal: RN-12 se evalua y tiene sus pruebas, pero su
                 // apertura de incidencia esta suspendida hasta que el quiosco
-                // registre la pausa declarada (ADR-024, tarea 3.5). Sin este
+                // registre la pausa declarada (ADR-024). Sin este
                 // dato, este asiento seria indistinguible del de un cambio de
                 // nombre del convenio.
                 'detection_suspended' => $event->detectionSuspended,

@@ -8,8 +8,7 @@ use App\Http\Middleware\NegotiateLocale;
 use App\Support\Health\LicenseStateProbe;
 
 /**
- * Los idiomas con los que el borde HTTP negocia cada respuesta (RF-PD-08,
- * tarea 5.8).
+ * Los idiomas con los que el borde HTTP negocia cada respuesta (RF-PD-08).
  *
  * ## Por que existe esta interfaz teniendo ya `LocalePolicyProvider`
  *

@@ -59,7 +59,7 @@ use Illuminate\Support\Facades\Lang;
 final class WeeklySummaryNotification extends Notification
 {
     /**
-     * @param  string  $brandName  El nombre de la instalacion (R6-PL-07): va en el
+     * @param  string  $brandName  El nombre de la instalacion: va en el
      *                             asunto, la cabecera, la despedida y el pie.
      *                             Nunca `APP_NAME`.
      */
@@ -69,7 +69,7 @@ final class WeeklySummaryNotification extends Notification
         private readonly string $brandName,
     ) {
         // El idioma del destinatario tambien para lo que Laravel pinta al
-        // enviar, no solo para las lineas del cuerpo (V6-PL-05).
+        // enviar, no solo para las lineas del cuerpo.
         $this->locale = $recipient->locale;
     }
 

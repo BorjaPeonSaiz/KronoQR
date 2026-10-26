@@ -7,8 +7,7 @@ namespace App\Modules\Reporting\Application\Port;
 use DateTimeImmutable;
 
 /**
- * Publica el desenlace de la pasada del resumen semanal (doc 02 §8.2, decision 8
- * de la ficha 3.12).
+ * Publica el desenlace de la pasada del resumen semanal (doc 02 §8.2).
  *
  * ```
  * weekly_summary_last_run_timestamp_seconds   gauge

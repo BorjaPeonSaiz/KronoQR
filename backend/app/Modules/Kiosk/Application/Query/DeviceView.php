@@ -8,8 +8,7 @@ use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 
 /**
- * Un quiosco con su veredicto: el esquema `Device` del contrato (**RF-PA-07**,
- * tarea 3.3).
+ * Un quiosco con su veredicto: el esquema `Device` del contrato (**RF-PA-07**).
  *
  * ## Por que la fila y el veredicto viajan juntos y no fundidos
  *

@@ -144,7 +144,7 @@ final readonly class CredentialStatusBoard
     }
 
     /**
-     * Los filtros del panel (2.3.0, HC1): texto, departamento y estado, con Y
+     * Los filtros del panel (2.3.0): texto, departamento y estado, con Y
      * logico. **Ninguno toca la cobertura**, que ya esta calculada sobre la
      * plantilla: el denominador es la plantilla, no lo que se ve.
      *

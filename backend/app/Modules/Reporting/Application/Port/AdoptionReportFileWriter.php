@@ -9,7 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\WrittenAdoptionReport;
 
 /**
  * Escribe el cuadro de impacto en un fichero, para la generacion en diferido
- * (**RF-IN-08**, V5-PA-4).
+ * (**RF-IN-08**).
  *
  * **El mismo documento** que `GET /reports/adoption/export`: el mismo bloque de
  * criterios, la misma huella del contenido y, en PDF, el mismo sello. Lo unico

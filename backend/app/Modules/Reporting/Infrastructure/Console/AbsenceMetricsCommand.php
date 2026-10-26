@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 
 /**
  * `php artisan reporting:absence-metrics` — publica `absences_current{type}`
- * (doc 02 §8.2, decision 8 de la ficha 3.10, RF-GP-04).
+ * (doc 02 §8.2, RF-GP-04).
  *
  * Lo ejecuta el planificador cada noche, con la misma cadencia que
  * `reporting:compliance-metrics`. A mano sirve para comprobar que el fichero del

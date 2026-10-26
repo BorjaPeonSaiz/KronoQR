@@ -8,7 +8,7 @@ use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmploy
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
 
 /**
- * Escucha la baja de una persona y le retira la credencial (RN-14, N1).
+ * Escucha la baja de una persona y le retira la credencial (RN-14).
  *
  * `Workforce` decide el estado laboral y no puede importar `Identity`; `Identity`
  * es la duena de las credenciales y lee el EVENTO, nada mas (misma arista de

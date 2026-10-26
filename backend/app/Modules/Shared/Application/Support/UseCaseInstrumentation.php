@@ -38,8 +38,8 @@ use Throwable;
  * Que es «de negocio» lo decide {@see self::isRejection()}: la excepcion lo
  * declara implementando {@see BusinessRejection}. Lo que no lo declara es una
  * averia, aunque viva en una carpeta de excepciones de un modulo: el disco
- * lleno de una exportacion o el SMTP caido no son reglas que dicen que no
- * (V21-1-AR-1). `BusinessRejectionClassificationTest` exige que cada excepcion
+ * lleno de una exportacion o el SMTP caido no son reglas que dicen que no.
+ * `BusinessRejectionClassificationTest` exige que cada excepcion
  * del producto este en un lado o en otro a proposito.
  *
  * ## El span: activo, y marcado como error cuando es una averia
@@ -50,7 +50,7 @@ use Throwable;
  * {@see SpanScope::currentTraceId()} sin tener el span a mano.
  *
  * Una averia cierra el span con `status=error` y un evento `exception` con
- * `exception.type` = la clase, **sin el mensaje ni la traza** (V21-4-BE-2, regla
+ * `exception.type` = la clase, **sin el mensaje ni la traza** (regla
  * dura 21): el mensaje de una `QueryException` lleva el SQL con sus valores y el
  * host. Un rechazo **no lleva ni el evento ni el estado**: no es una averia, y
  * buscar `status=error` en Tempo tiene que dar solo averias. Y la clase de un

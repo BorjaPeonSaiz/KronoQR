@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * `credentials:revoke-offboarded`: revoca las tarjetas que siguen activas de
- * personas ya dadas de baja (R3-AR-07, R4-SC-11; tarea 12.4 de la 2.3.0).
+ * personas ya dadas de baja.
  *
  * La lanza `update.sh` despues de las migraciones; se puede repetir a mano sin
  * efecto. **La salida solo lleva recuentos** (regla dura 21), en una linea que

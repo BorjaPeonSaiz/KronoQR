@@ -251,7 +251,7 @@ final readonly class PlanEmployeeImport
 
     /**
      * **Un idioma que la instalacion no tiene activo no rechaza la linea**
-     * (bloque 26 de la 2.2.1, regla dura 13).
+     * (regla dura 13).
      *
      * Se trata como una celda vacia —el alta toma el idioma de la instalacion
      * (`LOCALE_DEFAULT`) y una ficha que ya existe conserva el suyo— y se dice

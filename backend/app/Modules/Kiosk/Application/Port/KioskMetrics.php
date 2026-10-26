@@ -18,7 +18,7 @@ namespace App\Modules\Kiosk\Application\Port;
  * **Son dos gauges, no dos contadores**, y esa es la diferencia que las hace
  * utiles: lo que interesa no es cuantos latidos hubo, sino **cual fue el ultimo**
  * y **cuanto queda en la cola ahora**. Sobre la primera se construye la alerta
- * «quiosco sin latido > 10 min» del doc 01 §9.3 (tarea 3.2), que es lo que hace
+ * «quiosco sin latido > 10 min» del doc 01 §9.3, que es lo que hace
  * visible una tablet averiada antes de que alguien reclame una jornada que falta.
  *
  * **`sync_delay_seconds` no esta aqui**: lo emite `Attendance` al sincronizar un
@@ -48,7 +48,7 @@ interface KioskMetrics
      *                                      `null` si no lo sabe (cola fuera de IndexedDB, ADR-047).
      *                                      **Con `null` la serie se retira**, no se deja con el ultimo
      *                                      valor: un cero o un numero viejo apagarian la alerta de cola
-     *                                      atascada justo cuando hay fichajes que no se ven (F12).
+     *                                      atascada justo cuando hay fichajes que no se ven.
      * @param  int|null  $batteryLevel  Nivel de bateria en tanto por ciento, o `null`.
      *                                  **Con `null` no se publica la serie**, y esa es la
      *                                  decision: un cero de relleno pondria en rojo cualquier
@@ -89,7 +89,7 @@ interface KioskMetrics
 
     /**
      * Una tablet ha repetido la recogida dentro de la ventana corta y ha
-     * recibido otro token para el mismo quiosco (V6-KI-02). `result=reclaimed`:
+     * recibido otro token para el mismo quiosco. `result=reclaimed`:
      * un quiosco que lo hace a menudo pierde respuestas, y uno que lo hace sin
      * haberlas perdido es la firma de alguien con el secreto.
      */

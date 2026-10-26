@@ -12,7 +12,7 @@ use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
  *
  * Lo implementa un adaptador sobre Laravel Sanctum (doc 02 §3.1). El puerto
  * existe porque el caso de uso no puede conocer el mecanismo: el dia que la
- * sesion de gestion pase a llevar segundo factor (tarea 2.1) lo que cambia es
+ * sesion de gestion pase a llevar segundo factor lo que cambia es
  * quien emite el token, no que se emita uno al autenticarse.
  */
 interface AccessTokenIssuer

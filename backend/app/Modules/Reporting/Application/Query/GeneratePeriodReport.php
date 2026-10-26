@@ -63,8 +63,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
  * un `COUNT` sobre `employees`. Los dos se saben **sin** ejecutar el informe. El
  * tercer limite —el `statement_timeout`— es el unico que se descubre
  * ejecutando, y lo aplica el adaptador en PostgreSQL. Los tres desembocan en la
- * misma respuesta: `422` que remite a la generacion en diferido de RF-IN-06
- * (tarea 3.9).
+ * misma respuesta: `422` que remite a la generacion en diferido de RF-IN-06.
  *
  * ## La constancia
  *
@@ -183,8 +182,7 @@ final readonly class GeneratePeriodReport
     }
 
     /**
-     * El mismo informe, **con el asiento calculado y sin escribir** (decision 13
-     * de la ficha 3.12).
+     * El mismo informe, **con el asiento calculado y sin escribir**.
      *
      * ## Un solo llamante, y por un motivo muy concreto
      *

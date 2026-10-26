@@ -14,7 +14,7 @@ use Psr\Log\LoggerInterface;
  * RF-PA-04).
  *
  * En el borde, junto al controlador. El span del acto lo abre el caso de uso
- * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * con `UseCaseInstrumentation`, la medida comun; aqui se añaden al
  * span en curso los atributos que solo conoce la peticion y se escribe el log
  * con su `trace_id`.
  *
@@ -72,7 +72,7 @@ final readonly class CorrectionTelemetry
 
         $this->metrics->correctionRecorded($reasonCode);
 
-        // `scans_by_origin_total{origin="manual"}` (RF-IN-08, tarea 3.1).
+        // `scans_by_origin_total{origin="manual"}` (RF-IN-08).
         //
         // SOLO EL ALTA. `add` crea un tramo que no existia —una jornada que el
         // sistema no capturo sola—; `correct` y `void` operan sobre uno que ya

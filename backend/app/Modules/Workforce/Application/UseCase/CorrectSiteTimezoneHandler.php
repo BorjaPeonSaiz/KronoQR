@@ -71,7 +71,7 @@ use Illuminate\Database\ConnectionInterface;
  * *trigger* `zz_sites_guard_timezone` niega cualquier `UPDATE` de la zona con la
  * credencial del runtime; la unica puerta es la funcion `SECURITY DEFINER`
  * `site_correct_timezone`, que llama `SiteRepository::saveTimezoneCorrection()`
- * con la zona de partida (migracion `2026_10_18_120000`, bloque 2 de la 2.3.0).
+ * con la zona de partida (migracion `2026_10_18_120000`).
  *
  * **Mientras el centro esta bloqueado, los fichajes esperan** (leen la zona con
  * `FOR KEY SHARE`). Por eso dentro solo va lo imprescindible para el asiento:
@@ -165,7 +165,7 @@ final readonly class CorrectSiteTimezoneHandler
                     return $report;
                 }
 
-                // La firma primero: sin ella el dominio no corrige (V21-1-AR-5).
+                // La firma primero: sin ella el dominio no corrige.
                 $correction = SiteTimezoneCorrection::of($reason, $count, $command->responsibleUserId);
                 $corrected = $current->correctTimezone($requested, $correction);
 

@@ -75,11 +75,11 @@ use Throwable;
  * con datos personales o desde el panel— sube tal cual: sin asiento no hay
  * paquete.
  *
- * ## Por consola, los datos personales los firma una cuenta (2.3.0 bloque 3)
+ * ## Por consola, los datos personales los firma una cuenta
  *
  * El paquete con datos personales pedido por consola lleva la cuenta `admin`
  * que lo autoriza (`--responsible`), y sus dos asientos son de esa cuenta, no
- * de `system` (PR17; doc 01 §7.2, «Firmas por consola»). Sin ella no se
+ * de `system` (doc 01 §7.2, «Firmas por consola»). Sin ella no se
  * genera, y la cuenta se vuelve a comprobar aqui aunque la consola ya la haya
  * resuelto: es la comprobacion que vale si la cuenta se da de baja entre la
  * pregunta y la generacion. El manifiesto sigue diciendo `console` y nada mas

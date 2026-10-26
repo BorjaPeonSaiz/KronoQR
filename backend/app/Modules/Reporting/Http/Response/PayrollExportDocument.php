@@ -31,7 +31,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * ni acentos ni saltos de linea, y los criterios llevan los dos. Se decodifica y
  * se parte por `\n`.
  *
- * Y van fuera del fichero a proposito (decision 5 de la ficha 3.9): una fila de
+ * Y van fuera del fichero a proposito: una fila de
  * comentario antes de la cabecera rompe la importacion del programa de nomina.
  * Esta es la diferencia deliberada con `/reports/period/export`, cuyo fichero
  * abre una persona y por eso los lleva dentro, en celdas visibles.

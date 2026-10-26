@@ -108,7 +108,7 @@ final readonly class DatabaseLivePresenceReader implements LivePresenceReader
         // `e.status = 'active'` tambien aqui, y no es un detalle: la metrica y el
         // panel tienen que contestar lo mismo a «cuanta gente hay dentro». Un
         // tramo abierto a nombre de alguien ya cesado es una anomalia que abre
-        // incidencia (RN-14, tarea 2.6), no una persona trabajando.
+        // incidencia (RN-14), no una persona trabajando.
         // **Se enumeran los departamentos, no los turnos.** Una cocina sin nadie
         // dentro tiene que publicar un cero y no desaparecer: en Prometheus, una
         // serie que se esfuma es indistinguible de una que nunca existio, y ahi

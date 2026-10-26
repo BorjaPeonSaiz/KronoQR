@@ -420,7 +420,7 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
 
     /*
      * ---------------------------------------------------------------------
-     * ErrorHistoryRewriter (ADR-048, H6): el saneado de las filas anteriores a
+     * ErrorHistoryRewriter (ADR-048): el saneado de las filas anteriores a
      * la 2.2.0. Lo lanza una migracion de datos con UNA conexion —la de la
      * migracion— para las dos, asi que todo lo de aqui va por `$reads`.
      * ---------------------------------------------------------------------

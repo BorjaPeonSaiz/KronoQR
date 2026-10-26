@@ -37,7 +37,7 @@ final readonly class HeartbeatOutcome
         public int $clientErrorsAccepted,
         /**
          * La huella del codigo de servicio de la pantalla de diagnostico
-         * (RF-KI-08, tarea 3.3), o `null` si la instalacion no tiene codigo.
+         * (RF-KI-08), o `null` si la instalacion no tiene codigo.
          *
          * **Viaja en el latido y no en el padron** porque el padron es «dos
          * campos y ni uno mas» (RL-12) y el latido es el unico canal autenticado
@@ -52,8 +52,8 @@ final readonly class HeartbeatOutcome
          *
          * Con `true` la tablet enseña el boton «Pausa» que arma la intencion
          * `break_start` del siguiente escaneo; con `false` lo oculta. **No
-         * gobierna al servidor**: una intencion declarada se honra siempre
-         * (decision 1 de la ficha 3.5). Viaja por el latido y no por el padron
+         * gobierna al servidor**: una intencion declarada se honra siempre.
+         * Viaja por el latido y no por el padron
          * por lo mismo que la huella del codigo de servicio, y la tablet lo
          * guarda en local para que el boton siga estando cuando no hay red.
          *
@@ -81,7 +81,7 @@ final readonly class HeartbeatOutcome
         public int $clockSkewToleranceSeconds,
         /**
          * RF-KI-07: la franja en la que la tablet **puede** aplicar una version
-         * nueva de la PWA (`KIOSK_UPDATE_WINDOW`, tarea 3.12).
+         * nueva de la PWA (`KIOSK_UPDATE_WINDOW`).
          *
          * Viaja por el latido por lo mismo que los dos de arriba: es el unico
          * canal autenticado que la tablet repite cada minuto, y la tablet la

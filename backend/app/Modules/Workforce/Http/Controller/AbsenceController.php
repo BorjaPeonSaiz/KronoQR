@@ -29,7 +29,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Ausencias: listado, detalle con historial, alta, correccion y anulacion
- * (**RF-GP-04**, tarea 3.10).
+ * (**RF-GP-04**).
  *
  * Delgado como el resto: valida y autoriza el `FormRequest`, invoca el caso de
  * uso y serializa el `Resource` (doc 02 §3.5). **Ninguna decision vive aqui**:

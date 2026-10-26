@@ -9,7 +9,7 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
 /**
- * `pin_resets_total{site}` sobre Redis (doc 02 §8.2, tarea 1.13).
+ * `pin_resets_total{site}` sobre Redis (doc 02 §8.2).
  *
  * **Redis y no el colector *textfile*, por lo mismo que
  * `Attendance\Infrastructure\Metrics\RedisScanMetrics`** —nombrado en prosa y no

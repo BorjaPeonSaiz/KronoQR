@@ -31,7 +31,7 @@ use Illuminate\Database\ConnectionInterface;
  * ## Asientos (regla dura 6)
  *
  * - **Nombre**: `DepartmentRenamed` con la lista de campos tocados y el
- *   nombre anterior y el nuevo (R7-RV-02), y `Compliance` escribe
+ *   nombre anterior y el nuevo, y `Compliance` escribe
  *   `department.renamed`.
  * - **Responsable**: `DepartmentManagerChanged` y `Compliance` escribe un
  *   `role_assignment.changed` por cada cuenta afectada, la que sale y la que
