@@ -326,7 +326,7 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | RN-13 | Ningún registro de fichaje se **borra ni se sobrescribe**. Las correcciones generan una nueva versión y conservan la anterior con su autor, momento y motivo. |
 | RN-14 | Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados. **La baja es efectiva en el momento en que se registra**, también el mismo día del cese, y nada la deshace. Por eso **la fecha de cese nunca es posterior a hoy**, entendido como la fecha civil en la zona del centro en el instante en que el servidor recibe la baja: una fecha futura se rechaza. Tampoco puede ser anterior a la fecha de alta; si la fecha de alta aún no ha llegado, la única fecha de cese admitida es la de alta. **Tras la baja, los días trabajados hasta el cese se pueden completar a mano** (RF-PA-04); el escaneo, no. Ver la nota de más abajo. |
 | RN-15 | El horario de un fichaje offline es el `occurred_at` del dispositivo, marcado con su retraso de sincronización. Si supera el umbral, requiere validación del responsable. |
-| RN-16 | **Secuencia imposible de credencial**: dos escaneos de la misma credencial en **dispositivos distintos** separados por menos del tiempo mínimo de tránsito entre ellos (configurable, `ATTENDANCE_MIN_TRANSIT_SECONDS`). Genera incidencia `anomalous_pattern` para revisión humana. **Nunca anula el fichaje ni concluye que ha habido fraude** (RF-PR-06). **No se evalúa** si alguno de los dos escaneos tiene incidencia `clock_skew` (RF-AT-10) o llegó en un lote cuyo retraso de sincronización supera el umbral (RN-15). |
+| RN-16 | **Secuencia imposible de credencial**: dos escaneos de la misma credencial en **dispositivos distintos** separados por menos del tiempo mínimo de tránsito entre ellos (configurable, `ATTENDANCE_MIN_TRANSIT_SECONDS`). Genera incidencia `anomalous_pattern` para revisión humana. **Nunca anula el fichaje ni concluye que ha habido fraude** (RF-PR-06). **No se evalúa sobre un escaneo con la hora en duda**: el que llega con un desfase entre `occurred_at` y `recorded_at` mayor que la tolerancia de RF-AT-10 (`ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`). Se mide igual si la causa es un reloj desviado o un retraso de la cola offline (RN-15), porque el servidor ve el mismo número en los dos casos y no los distingue. Lo que decide es el desfase, no que exista la incidencia `clock_skew` ni la marca de revisión. Ese escaneo se quita antes de formar los pares. |
 | RN-17 | **Jornada semanal ordinaria**: se señala si la suma de las jornadas de una semana supera la **jornada semanal ordinaria** del perfil de cumplimiento del centro (`max_weekly_hours`; **40 h** en `ES-hosteleria`, art. 34.1 ET). La semana son **siete fechas civiles** (`work_date`) a partir del día que fija el perfil (`week_starts_on`, ISO 8601: 1 lunes … 7 domingo), y se evalúa completa aunque el periodo consultado la corte. El límite es abierto: 40 h exactas no se señalan y 40 h 1 min sí. **Es informativa y no abre incidencia** — ver la nota de más abajo. |
 | RN-18 | **Fichaje irreconciliable**: un fichaje que **no puede encajar en la jornada** no produce tramo. Son dos situaciones: su hora real (`occurred_at`) **no es posterior** a la entrada del turno que el empleado tiene abierto, o **abriría un tramo solapado** con otro ya cerrado de esa persona que termina después de esa hora. Se registra igualmente en el log de escaneos con resultado propio —`rejected_out_of_order`, sin tramo asociado— y **marcado para revisión**, y abre incidencia `out_of_order_scan` para que una persona lo resuelva con una corrección (RN-13). **No se reintenta**: el quiosco recibe el mismo rechazo genérico que cualquier otro (RS-03) y vacía ese fichaje de su cola. Nunca se descarta en silencio, nunca bloquea al quiosco y nunca anula lo que el empleado sí fichó. |
 | RN-19 | **Fichaje por PIN no registrado**: un intento de fichar por PIN en el quiosco (RF-AT-11) que el servidor rechaza —PIN incorrecto, PIN no emitido o bloqueo por intentos activo (RS-12)— y cuyo código de empleado corresponde a una **persona que puede fichar** abre incidencia `rejected_pin_scan` para revisión humana **si no queda subsanado**: está subsanado cuando esa misma persona tiene un fichaje aceptado —por cualquier vía, incluido el anti-rebote (ADR-031) o un fichaje irreconciliable de RN-18— cuya hora real (`occurred_at`) cae **entre la del intento y 10 minutos después**, ambos incluidos. Una incidencia por persona y jornada. **La respuesta al quiosco no cambia**: sigue siendo el rechazo genérico y de tiempo constante de RS-03. Los códigos que no corresponden a nadie, a una persona de baja o suspendida, y el sobre que no abre, **no abren nada**. La regla nunca crea ni rectifica un tramo, nunca desbloquea el PIN y nunca cambia el recuento de intentos de RS-12. |
@@ -1013,10 +1013,10 @@ El conjunto completo vive junto al código como pruebas ejecutables.
 Escenario: Alta de empleado y emisión de credencial
   Dado que RRHH da de alta al empleado "Youssef", sin dirección de correo
   Cuando se confirma el alta
-  Entonces el alta se completa sin error
-  Y se emite su credencial QR
+  Entonces el alta se completa sin error y todavía no hay ninguna credencial
+  Cuando RRHH emite su credencial QR
+  Entonces el panel de estado la muestra como "pendiente de imprimir"
   Y queda disponible para imprimir en PDF, en formato tarjeta y en hoja A4
-  Y el panel de estado la muestra como "pendiente de imprimir"
 
 Escenario: Entrega registrada de la tarjeta
   Dada una credencial impresa y pendiente de entregar
@@ -1051,6 +1051,14 @@ Escenario: Cambio de hora de otoño
   Y un empleado que ficha entrada el 25 de octubre a las 01:30 CEST
   Cuando ficha salida ese mismo día a las 03:00 CET
   Entonces la duración calculada es de 150 minutos
+
+Escenario: Cambio de hora de primavera
+  Dado un centro con zona horaria "Europe/Madrid"
+  Y un empleado que ficha entrada el 29 de marzo a las 01:30 CET
+  Cuando ficha salida ese mismo día a las 04:00 CEST
+  Entonces la duración calculada es de 90 minutos
+  Y un turno de 22:00 del 28 a 06:00 del 29 dura 420 minutos, atribuido a la jornada del 28
+  Y el informe por periodo cuenta siete horas en ese turno, no ocho
 
 Escenario: Anti-rebote
   Dado un empleado que acaba de fichar entrada hace 20 segundos
@@ -1136,6 +1144,31 @@ Escenario: Patrón anómalo de uso de credencial
   Entonces se crea una incidencia de tipo anomalous_pattern
   Y se asigna al responsable del departamento
   Y el sistema no marca el fichaje como fraudulento ni lo anula
+
+Escenario: Secuencia imposible de credencial
+  Dado un tránsito mínimo entre quioscos de 120 segundos
+  Y "Ana", que ficha su entrada a las 06:00:00 en el quiosco de Recepción
+  Cuando su misma tarjeta se presenta a las 06:00:30 en el quiosco de Cocina
+  Y se ejecuta la detección de patrones
+  Entonces se abre una incidencia anomalous_pattern asignada al responsable de su departamento, con los dos quioscos y los 30 segundos
+  Y ningún fichaje se anula, se cierra ni se marca como fraude
+  Y con 120 segundos exactos entre los dos escaneos no se abre nada
+  Y dos escaneos en el mismo quiosco no son una secuencia imposible
+  Y si uno de los dos llegó con el reloj desviado más allá de la tolerancia, no se evalúa
+
+# RN-19: este escenario describe lo que hace HOY el código (2.3.0, antes de la tarea 20.3).
+# La 20.3 hará que la revisión espere a que cierre la ventana de 600 s y que la subsanación
+# cierre la incidencia; entonces cambia el último paso, y con él su prueba
+# («hoy abre la incidencia si la pasada llega con la ventana abierta…»).
+Escenario: Fichaje por PIN no registrado
+  Dada "Lucía", con su PIN emitido, de un departamento con responsable
+  Cuando teclea en el quiosco un PIN erróneo a las 07:02 y no ficha por ninguna vía en los 10 minutos siguientes
+  Entonces el quiosco recibe el mismo rechazo genérico que con un código que no es de nadie
+  Y la revisión diaria abre una incidencia rejected_pin_scan para esa jornada, asignada al responsable
+  Y una sola por persona y jornada, aunque falle dos veces y la revisión se repita
+  Pero si ficha con el PIN correcto a las 07:02:30 no se abre nada
+  Y el código de una persona de baja no abre nada
+  Y hoy, si la revisión corre a las 04:30 tras un intento de las 04:25, abre la incidencia aunque Lucía fiche bien a las 04:31, y la incidencia sigue abierta
 
 Escenario: Turno olvidado
   Dado un tramo abierto desde hace 13 horas
@@ -1295,7 +1328,7 @@ Escenario: Fichaje anterior a la retirada de la tarjeta
   Y el quiosco lo saca de su cola
   Y el escaneo queda atribuido a Nadia y marcado para revisión, sin crear ni cerrar ningún tramo
   Y la revisión diaria abre una única incidencia scan_before_revocation para esa jornada
-  Y un escaneo de su tarjeta con hora real 16:30 se rechaza igual, sin atribuir ni abrir nada
+  Y un escaneo de su tarjeta con hora real 16:30 se rechaza igual y queda atribuido a Nadia, sin marcar para revisión ni abrir nada
   Y si Nadia estuviera suspendida en vez de dada de baja, no se atribuiría ni se abriría nada
 
 Escenario: Un fichaje no adelanta a otro anterior que sigue sin decidir
@@ -1343,6 +1376,16 @@ Escenario: El turno de Nochevieja no se toma por un tramo inventado
   Entonces no se denuncia
   Y un tramo corriente de un año sellado, o uno con la entrada en 2022 y la jornada en 2026, sí sale como entry_without_audit
 
+Escenario: La zona del centro queda fija con el primer tramo
+  Dado un centro en "Europe/Madrid" sin ningún tramo
+  Cuando el administrador cambia su zona a "Atlantic/Canary" desde el panel
+  Entonces el cambio se aplica y queda su asiento site.updated
+  Cuando ya existe un tramo, en cualquier estado, y se intenta cambiar la zona desde el panel o la API
+  Entonces se rechaza con 409 sin cambiar la zona, ni el nombre si viajaba en la misma petición, y sin asiento
+  Y renombrar el centro sí se puede, con su asiento
+  Y si el cambio de zona y el primer fichaje llegan a la vez, el que espera ve al otro: o el fichaje se atribuye con la zona nueva o el cambio se niega
+  Y corregirla es una orden de consola con motivo, firmada por una cuenta admin o rrhh, que no recalcula ningún tramo ni ningún total
+
 Escenario: La zona del centro no cambia por fuera del producto
   Dado un centro de Madrid con fichajes hechos
   Cuando alguien, con la credencial de la aplicación, cambia la zona con un UPDATE directo de sites
@@ -1354,22 +1397,58 @@ Escenario: La zona del centro no cambia por fuera del producto
   Y una discrepancia ya investigada se da por revisada con --acknowledge-site-change y deja de contarse, con su propio aviso
 ```
 
-**Escenarios añadidos en la 2.2.1 y en la 2.3.0, y sus pruebas** (V3-QA-1, bloque 19 de la 2.2.1; bloque 2 de la 2.3.0). Cada prueba lleva el grupo de su requisito, así que `qa:traceability` las encuentra por él; esta tabla dice además qué escenario sostiene cada una. Se citan por fichero y descripción, no por línea, para que no envejezcan con cada cambio.
+**Escenarios y sus pruebas.** Cada escenario de arriba tiene su fila. Cada prueba lleva el grupo de su requisito, así que `qa:traceability` las encuentra por él; esta tabla dice además qué escenario sostiene cada una. Se citan por fichero y descripción, no por línea, para que no envejezcan con cada cambio.
 
 | Escenario | Requisitos | Pruebas (`backend/tests/` salvo indicación) |
-|---|---|---|
+| Alta de empleado y emisión de credencial | RF-GP-01, RF-QR-01, RF-QR-04, RF-QR-08 | `Feature/Identity/HireAndIssueCredentialScenarioTest.php` (las cuatro: alta sin correo y sin credencial, pendiente de imprimir en el panel, PDF de tarjeta y hoja A4) · `Integration/Workforce/EmployeeSchemaTest.php` («admite toda la plantilla sin correo») · `Feature/Identity/CredentialEndpointsTest.php` («emite una credencial y la deja pendiente de imprimir…») · `frontend-admin/tests/unit/EmployeeListView.spec.ts` (el alta en el panel) |
+| Entrega registrada de la tarjeta | RF-QR-06, RS-07, RL-04 | `Feature/Identity/DeliverCredentialEndpointTest.php` («registra la fecha, el empleado y el responsable…», «deja el asiento credential.delivered a nombre de quien entrega…») · `Feature/Identity/DeliverCredentialCommandTest.php` (la misma entrega por consola) |
+| Primer fichaje de la jornada | RF-AT-01, RF-AT-02, RF-AT-05 | `Feature/Attendance/RegisterScanTest.php` («abre un tramo en el primer fichaje de la jornada») · `Unit/Attendance/Domain/Event/AttendanceEventsTest.php` · `frontend-kiosk/tests/unit/ScanConfirmationPanel.spec.ts` («reproduce el ejemplo del documento 01…») |
+| Cierre de turno con acumulado | RF-AT-03, RF-AT-05, RN-06 | `Feature/Attendance/RegisterScanTest.php` («cierra el turno y devuelve el acumulado recalculado del dia») · `frontend-kiosk/tests/unit/ScanConfirmationPanel.spec.ts` («reproduce el segundo…») |
+| Turno nocturno que cruza la medianoche | RN-05 | `Unit/Attendance/Domain/MidnightShiftTest.php` («no parte un turno que cruza la medianoche», «no fabrica ningun tramo artificial a las 23:59», «atribuye el turno de noche entero…») · `Feature/Attendance/RegisterScanTest.php` («cierra a las 06:00 el turno que entro a las 22:00 sin partirlo») |
+| Cambio de hora de otoño | RN-09, RN-05 | `Unit/Attendance/Domain/DaylightSavingTest.php` («mide 150 minutos entre las 01:30 CEST y las 03:00 CET…», «mide 540 minutos en el turno de noche…») · `Integration/Reporting/PeriodReportDaylightSavingTest.php` («cuenta nueve horas en el turno que cruza el salto de otono») |
+| Cambio de hora de primavera | RN-09, RN-05 | `Unit/Attendance/Domain/DaylightSavingTest.php` («mide 90 minutos entre las 01:30 CET y las 04:00 CEST…», «mide 420 minutos en el turno de noche que atraviesa el adelanto de marzo», «no abre una incidencia falsa en el turno de 12 h…») · `Integration/Reporting/PeriodReportDaylightSavingTest.php` («cuenta siete horas en el turno que cruza el salto de primavera») |
+| Anti-rebote | RF-AT-06 | `Feature/Attendance/RegisterScanTest.php` («descarta el segundo escaneo dentro del periodo de gracia») · `frontend-kiosk/tests/unit/ScanConfirmationPanel.spec.ts` («avisa del anti-rebote con el texto del documento 01 §11») |
+| QR falsificado | RF-QR-02, RS-03 | `Feature/Attendance/RegisterScanTest.php` («rechaza un QR falsificado con una respuesta generica») · `Integration/Identity/CredentialSignatureVerificationTest.php` («rechaza un payload con la firma manipulada») |
+| Tarjeta no disponible | RF-AT-11, RS-12 | `Feature/Attendance/PinScanTest.php` («ficha con el PIN cuando no hay tarjeta») · `Feature/Attendance/PinScanOriginTest.php` · `Feature/Attendance/PinScanOpenPortalTest.php` (8 cifras) · `frontend-kiosk/tests/e2e/pin.spec.ts` |
+| Tarjeta deteriorada | RF-QR-05 | `frontend-kiosk/tests/e2e/worn.spec.ts` · `frontend-kiosk/tests/e2e/degraded.spec.ts` |
+| Reemisión por pérdida | RF-QR-03, RS-07 | `Feature/Identity/CredentialEndpointsTest.php` («reemite revocando la anterior en la misma transaccion») · `Integration/Identity/CredentialSignatureVerificationTest.php` («deja de aceptar la credencial anterior en cuanto se reemite») |
+| Fichaje offline y sincronización posterior | RF-KI-03, RF-KI-04, RF-AT-09, RN-15 | `frontend-kiosk/tests/e2e/offline.spec.ts` (IndexedDB y `occurred_at` original) · `Feature/Attendance/RegisterScanTest.php` («respeta el occurred_at de un escaneo sincronizado once horas despues») |
+| Idempotencia ante reintento | RF-AT-07 | `Feature/Attendance/RegisterScanTest.php` («devuelve la respuesta original ante un reenvio con el mismo scan_id», «distingue un reenvio de un escaneo nuevo…») |
+| Reloj del quiosco desviado | RF-AT-10 | `Feature/Attendance/RegisterScanTest.php` («acepta el fichaje aunque el reloj del quiosco vaya adelantado») · `Feature/Attendance/ClockSkewIncidentTest.php` («registra el fichaje del quiosco desviado y abre la incidencia de la noche», «no marca ni abre nada por un desfase que se queda en el umbral») |
+| Fichaje irreconciliable en un lote de la cola offline | RN-18, RF-KI-04 | `Feature/Attendance/OutOfOrderScanTest.php` («registra los demas elementos del lote y saca el imposible con un 422», «deja el turno abierto exactamente como estaba») · `Integration/Compliance/IncidentDetectionTest.php` (`out_of_order_scan`) · `frontend-kiosk/tests/unit/syncRunner.spec.ts` |
+| Fichaje irreconciliable por una entrada que llega tarde | RN-18 | `Feature/Attendance/OutOfOrderScanTest.php` («saca del lote la entrada que pisa un tramo ya fichado en otro quiosco», «deja abrir un tramo nuevo justo en la salida del anterior») · `Integration/Compliance/IncidentDetectionTest.php` |
+| Patrón anómalo de uso de credencial | RF-PR-06 | `Integration/Attendance/CredentialPatternDetectionTest.php` («abre las dos incidencias del par, asignadas a sus responsables, SIN tocar ningun fichaje») · `Unit/Attendance/Domain/Policy/CredentialPatternPolicyTest.php` |
+| Secuencia imposible de credencial | RN-16, RF-PR-06 | `Integration/Attendance/CredentialPatternDetectionTest.php` («abre la incidencia de RN-16 sobre dos fichajes REALES en dos quioscos sin tiempo de transito») · `Unit/Attendance/Domain/Policy/CredentialPatternPolicyTest.php` («afirma la secuencia imposible por debajo del transito minimo y no en el limite», «no afirma nada cuando los dos escaneos son del mismo quiosco», «no evalua RN-16 sobre una hora en duda por el reloj») |
+| Fichaje por PIN no registrado | RN-19, RS-03, RS-12 | `Feature/Attendance/RejectedPinScanTest.php` («responde igual a un PIN erroneo que a un codigo inexistente…», «abre una incidencia por la cola de PIN…», «no abre nada si el PIN correcto llega treinta segundos despues», «no anota ni abre nada con el codigo de alguien de baja», «abre una sola por persona y dia…», «hoy abre la incidencia si la pasada llega con la ventana abierta…») · `Unit/Attendance/Application/RejectedPinScanDetectionTest.php` · `Unit/Attendance/Domain/Policy/PinAttemptRecoveryPolicyTest.php` (bordes de los 600 s) |
+| Turno olvidado | RN-08, RF-PR-01 | `Integration/Compliance/IncidentDetectionTest.php` («abre la incidencia del turno olvidado, la asigna y NO cierra el tramo») · `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («no cierra el tramo abierto al detectarlo») |
+| Descanso insuficiente entre dos jornadas | RN-10 | `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («detecta el descanso insuficiente entre el turno anterior y el siguiente», con 11:59, 12:00 y 13:00) |
 | Descanso medido por encima de una jornada anulada entera | RN-10, RF-PA-06, RF-PR-01 | `Integration/Reporting/ComplianceSummaryMatchesDetectionTest.php` (`escenarioN5`: jornada anulada en medio y antes de la ventana, y descanso de cero minutos) · las unitarias de RN-10 en `AnomalyDetectionPolicyTest` y `ComplianceEvaluationTest` |
+| Tramo demasiado corto para computar | RN-07 | `Unit/Attendance/Domain/ShiftDurationBoundariesTest.php` («marca como incidencia el tramo de 59 segundos», «no marca como incidencia el tramo de 60 segundos») · `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («conserva el tramo corto con sus dos marcas») |
+| Jornada diaria por encima de la ordinaria | RN-11 | `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («detecta la jornada por encima de la ordinaria sobre la SUMA de los tramos») |
+| Jornada continuada sin pausa | RN-12 | `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («detecta el tramo continuo por encima del maximo sin pausa») · `Integration/Compliance/IncidentDetectionTest.php` (`missing_break` con y sin fichaje de pausa) |
+| Corrección manual trazada | RN-13, RN-06, RF-PA-04, RF-ID-03 | `Feature/Attendance/ShiftCorrectionByDepartmentManagerTest.php` (las cuatro: el responsable cierra a las 15:00 el tramo de su departamento, la corrección con valor anterior, autor y motivo, el original consultable y el total recalculado, y el `403` fuera de su departamento) · `Feature/Attendance/ShiftCorrectionTest.php` («cierra un turno olvidado y devuelve los dos identificadores») |
+| Aislamiento por departamento | RF-ID-03, RS-05 | `Feature/Identity/DepartmentScopeTest.php` («deniega al responsable de Cocina la ficha de alguien de Recepcion y lo deja en auditoria») |
+| El empleado consulta su propio registro | RF-ID-05, RF-ID-06, RF-ID-07, RF-ID-08 | `Feature/Reporting/SelfScopeIsolationTest.php` · `Feature/Reporting/MyWorkDaysPdfTest.php` · `Feature/Identity/PortalLoginTest.php` · `frontend-portal/tests/e2e/my-records.spec.ts` |
+| Licencia caducada | ADR-019, ADR-023 | `Feature/Product/LicenseDoesNotBlockTest.php` («CON LA LICENCIA CADUCADA se ficha y el tramo queda registrado» y el resto de «CON LA LICENCIA CADUCADA…») · `Feature/Product/LicenseDegradesAccessoriesTest.php` («CON LA LICENCIA CADUCADA el informe por periodo responde con el aviso de licencia») · `frontend-admin/tests/unit/LicenseNotice.spec.ts` |
+| Acceso de soporte del fabricante | RF-PD-11, RL-17, RL-18 | `Feature/Product/SupportAccessScenarioTest.php` («deja un asiento de uso con la concesion como actor por cada ventana de 900 s», «enseña al administrador del cliente el ultimo acceso del soporte», «deja de funcionar a las 24 horas sin intervencion de nadie») · `Integration/Product/SupportAccessAuditTrailTest.php` |
+| Perfil de cumplimiento distinto | RN-10, RF-PD-07 | `Unit/Attendance/Domain/Policy/AnomalyDetectionPolicyTest.php` («cambia de veredicto con el perfil de cumplimiento, sin tocar el codigo», con 10 h y 12 h) |
+| Semana por encima de la jornada ordinaria | RN-17, RF-PA-06 | `Feature/Reporting/WeeklyExcessScenarioTest.php` («enseña al responsable la semana del 9 al 15 con 41 horas…», «no abre ninguna incidencia por la semana excedida al ejecutar la deteccion», y su control) · `Feature/Reporting/ComplianceSummaryTest.php` («señala la semana entera aunque el rango la corte») |
+| Alta de una cuenta de gestión sin correo de invitación | RF-ID-10, RF-ID-02, RF-ID-03 | `Feature/Identity/ManagementAccountScenariosTest.php` («da de alta a un responsable de departamento con la temporal y su caducidad a 72 horas», «no envia ningun correo…», «deja al responsable recien creado sin departamentos…») · `Feature/Identity/ManagementAccountsApiTest.php` («da de alta una cuenta con contrasena temporal de un solo uso…»: los dos asientos sin nombre ni correo) · `Feature/Identity/ManagementAccountsContractTest.php` · `frontend-admin/tests/e2e/management-accounts.spec.ts` |
+| Primer acceso con contraseña temporal | RF-ID-10, RF-ID-01, RS-06 | `Feature/Identity/ManagementAccountScenariosTest.php` («tras activar el segundo factor con la temporal, la sesion solo sirve para cambiarla», «…fijar la suya con la temporal como actual abre la sesion») · `Feature/Identity/PasswordChangeSessionRoutesTest.php` (todas las rutas autenticadas) · `Feature/Identity/OwnPasswordApiTest.php` |
+| Baja de la cuenta de quien deja el hotel | RF-ID-10, RL-16, RN-13 | `Feature/Identity/ManagementAccountScenariosTest.php` («mantiene en la lista como dada de baja…», «deja lo que firmo la cuenta dada de baja atribuido a ella») · `Feature/Identity/ManagementAccountsApiTest.php` («da de baja, cierra sus sesiones…», «responde el mismo 404 a una cuenta inexistente y a una ya de baja, sin asiento») · `Feature/Identity/ManagementAccountLifecycleCommandsTest.php` |
+| La instalación nunca se queda sin administrador | RF-ID-10 | `Feature/Identity/ManagementAccountsApiTest.php` («no deja darse de baja a si misma ni deja la instalacion sin admin») · `Feature/Identity/ManagementAccountLifecycleCommandsTest.php` («no da de baja la ultima admin activa…») · `Feature/Identity/ManagementAccountsConcurrencyTest.php` |
 | La baja se registra cuando ya ha ocurrido | RN-14, RF-GP-03 | `Feature/Workforce/OffboardingDateRuleTest.php` («rechaza un cese posterior a hoy…», «resuelve hoy con la fecha civil del centro…», «a una persona que aun no ha empezado…») · `Feature/Workforce/OffboardingDateBoundariesTest.php` (las dos fronteras de la medianoche) · `Feature/Identity/OffboardingRevokesCredentialTest.php` («tras la baja el QR deja de valer…», «revoca todas las credenciales activas…») |
 | Completar a mano los días trabajados hasta el cese | RN-14, RF-PA-04 | `Feature/Attendance/ShiftEntryForOffboardedEmployeeTest.php` (las cinco: jornada del cese, del alta, posterior al cese, anterior al alta y persona suspendida) |
 | Las horas escritas a mano no pasan del cese | RN-05, RF-PA-04, RN-14 | `Feature/Attendance/ShiftEntryForOffboardedEmployeeTest.php` (el alta y la corrección que entran el 13, el turno de noche del día del cese y la vuelta de la pausa) · `Unit/Attendance/Domain/ContinuationGuardTest.php` (la cota exacta, el turno de noche, la salida que rompe la vuelta y el cambio de hora) · `Unit/Attendance/Domain/Policy/ManualEntryEligibilityTest.php` (el límite del día del cese, también el del cambio de hora) · `Integration/Attendance/ContinuationAcrossWorkDaysTest.php` (la jornada interrumpida por otra) · `Integration/Workforce/RecheckAfterAuditInterleavingTest.php` (la baja simultánea en el alta y en la corrección) · `Unit/Attendance/Domain/ContinuationGuardTest.php` (solo continúa una pausa, como mucho hasta el día siguiente) · `Integration/Schema/ClosedByMigrationTest.php` (`closed_by`) |
 | Fichaje anterior a la retirada de la tarjeta | RN-20, RS-03 | `Feature/Attendance/ScanBeforeRevocationTest.php` («rechaza igual antes y despues de la retirada…», «compara con la recepcion…», «no atribuye ni marca nada a una persona suspendida», «marca y atribuye el escaneo de la carrera…») · `Integration/Attendance/WithdrawnAndDiscardedScanReviewTest.php` («abre una sola scan_before_revocation…», «dice offboarding…») · `Unit/Attendance/Domain/Policy/WithdrawnCredentialPolicyTest.php` |
 | Un fichaje no adelanta a otro anterior que sigue sin decidir | RN-21, RF-KI-04 | `Unit/Attendance/Application/ScanBatchHeldBackTest.php` · `Feature/Attendance/ScanBatchTest.php` («aplaza la salida si la entrada no se pudo procesar…») · `frontend-kiosk/tests/e2e/offline.spec.ts` (`@RN-21`: «un fichaje en vuelo no lo adelanta…» y «la salida de las 15:00 no se registra antes que la entrada de las 07:00…») |
 | Fichajes que el servidor ya no entiende tras una actualización | RN-22, RF-KI-04, RF-PA-07 | `Feature/Attendance/DiscardedScanReportTest.php` («acusa todos los avisos y atribuye solo…», «acusa igual un aviso repetido…», «acusa y marca como ya registrado…») · `Integration/Attendance/WithdrawnAndDiscardedScanReviewTest.php` («abre una sola discarded_scan…», «no abre nada sin dueño…») · `Unit/Attendance/Domain/Policy/DiscardedScanReviewPolicyTest.php` · `frontend-kiosk/tests/e2e/offline.spec.ts` (`@RN-22`: los 40 fichajes en tandas de 10 y el acuse parcial) |
-| El registro horario cuadra con su auditoría | RL-04, RS-07 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («da cero discrepancias con el uso normal del producto…») |
-| Una manipulación directa del registro se detecta | RL-04, RS-07, RN-13 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («detecta las cuatro manipulaciones…», «vuelve a cuadrar cuando se remedia desde el panel…», «la ventana diaria no mira lo antiguo y la pasada completa si») |
-| Una purga legal no es un borrado, y un asiento falso no la imita | RL-02, RL-04 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («no confunde una purga de retencion auditada con un borrado…», «un asiento de purga con corte futuro…», «denuncia una purga española a tres años…») |
-| El turno de Nochevieja no se toma por un tramo inventado | RL-04, RL-02, RS-07 (ADR-027) | `Unit/Compliance/Domain/WorkRecordReconciliationTest.php` («no denuncia el turno de la noche del 31 de diciembre…», «no deja que un año sellado tape un tramo inventado…») |
-| La zona del centro no cambia por fuera del producto (2.3.0, bloque 2) | RN-23, RL-04, RS-07 (ADR-056, ADR-057 §4) | `Integration/Schema/SiteTimezoneGuardTest.php` («niega a la aplicacion cambiar la zona con un UPDATE directo…», «la funcion de la correccion cambia la zona con registro horario…») · `Feature/Workforce/CorrectSiteTimezoneCommandTest.php` · `Integration/Compliance/WorkRecordReconciliationTest.php` («denuncia la zona del centro cambiada por la funcion de la correccion…») · `Unit/Compliance/Domain/AuditedSiteTimezoneTest.php` |
+| El registro horario cuadra con su auditoría | RL-04, RS-07, RS-14 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («da cero discrepancias con el uso normal del producto…») |
+| Una manipulación directa del registro se detecta | RL-04, RS-07, RS-14, RN-13 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («detecta las cuatro manipulaciones…», «vuelve a cuadrar cuando se remedia desde el panel…», «la ventana diaria no mira lo antiguo y la pasada completa si») |
+| Una purga legal no es un borrado, y un asiento falso no la imita | RL-02, RL-04, RS-14 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («no confunde una purga de retencion auditada con un borrado…», «un asiento de purga con corte futuro…», «denuncia una purga española a tres años…») |
+| El turno de Nochevieja no se toma por un tramo inventado | RL-04, RL-02, RS-07, RS-14 (ADR-027) | `Integration/Compliance/WorkRecordReconciliationTest.php` («no denuncia el turno de Nochevieja cuyo año de auditoria esta sellado en PostgreSQL», «denuncia el mismo turno de Nochevieja si su año de auditoria no esta sellado», «no deja que un año sellado en PostgreSQL tape un tramo inventado») · `Unit/Compliance/Domain/WorkRecordReconciliationTest.php` («no denuncia el turno de la noche del 31 de diciembre…», «no deja que un año sellado tape un tramo inventado…») |
+| La zona del centro queda fija con el primer tramo | RN-23, RF-PD-03 | `Feature/Workforce/SiteTimezoneLockTest.php` («sin registro horario cambia la zona…», «con un tramo responde 409 con su type…», «con nombre y zona nueva responde 409 y deja el nombre intacto», «renombra el centro aunque haya registro horario…») · `Integration/Workforce/SiteTimezoneFirstScanRaceTest.php` (las cuatro carreras) · `Feature/Workforce/CorrectSiteTimezoneCommandTest.php` («corrige la zona sin tocar ni un tramo ni un total…», «deja site.updated con el motivo, el recuento y la cuenta que responde…») · `Unit/Workforce/Domain/SiteTimezoneLockTest.php` |
+| La zona del centro no cambia por fuera del producto | RN-23, RL-04, RS-07, RS-14 (ADR-056, ADR-057 §4) | `Integration/Schema/SiteTimezoneGuardTest.php` («niega a la aplicacion cambiar la zona con un UPDATE directo…», «la funcion de la correccion cambia la zona con registro horario…») · `Feature/Workforce/CorrectSiteTimezoneCommandTest.php` · `Integration/Compliance/WorkRecordReconciliationTest.php` («denuncia la zona del centro cambiada por la funcion de la correccion…») · `Unit/Compliance/Domain/AuditedSiteTimezoneTest.php` |
 
 ---
 
