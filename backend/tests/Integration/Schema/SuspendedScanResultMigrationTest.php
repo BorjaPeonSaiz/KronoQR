@@ -91,14 +91,25 @@ it('se niega a deshacerse con rechazos de personas suspendidas escritos', functi
     /** @var Migration $migracion */
     $migracion = require database_path('migrations/'.SUSPENDED_SCAN_RESULT_MIGRATION.'.php');
 
-    expect(static function () use ($migracion): void {
-        if (! method_exists($migracion, 'down')) {
-            throw new LogicException('La migracion no tiene down().');
-        }
+    // Con el rol de migracion, como en un `migrate:rollback`: la comprobacion va
+    // despues del primer ALTER TABLE, y el rol de la aplicacion no puede hacerlo.
+    $porDefecto = DB::getDefaultConnection();
+    DB::setDefaultConnection(config()->string('database.migrations.connection'));
 
-        $migracion->down();
-    })->toThrow(RuntimeException::class, 'regla dura 5');
+    try {
+        expect(static function () use ($migracion): void {
+            if (! method_exists($migracion, 'down')) {
+                throw new LogicException('La migracion no tiene down().');
+            }
 
-    // Y la restriccion sigue admitiendo el valor: no se toco nada antes de negarse.
-    expect(definicionDeRechazoSuspendido('scan_events_chk_result'))->toContain('rejected_suspended');
+            $migracion->down();
+        })->toThrow(RuntimeException::class, 'regla dura 5');
+    } finally {
+        DB::setDefaultConnection($porDefecto);
+    }
+
+    // Y las dos restricciones siguen admitiendo el valor: el DROP anterior a la
+    // comprobacion se deshizo con la transaccion.
+    expect(definicionDeRechazoSuspendido('scan_events_chk_result'))->toContain('rejected_suspended')
+        ->and(definicionDeRechazoSuspendido('scan_events_chk_worked_minutes'))->toContain('rejected_suspended');
 })->group('RN-25', 'RL-04');

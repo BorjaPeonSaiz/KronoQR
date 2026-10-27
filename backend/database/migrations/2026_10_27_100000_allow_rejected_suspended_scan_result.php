@@ -57,6 +57,18 @@ use Illuminate\Support\Facades\DB;
  * `rejected_revoked` devolveria al registro el error que esta migracion
  * corrige. Quien revierta con esas filas decide a mano.
  *
+ * **Atomico, a diferencia de `up()`.** La comprobacion va dentro de la
+ * transaccion y despues del primer `ALTER TABLE`, que ya tiene `ACCESS
+ * EXCLUSIVE`: entre la comprobacion y el `COMMIT` nadie puede escribir una
+ * fila nueva, y si la hay se lanza ahi mismo y el `ROLLBACK` deja las dos
+ * restricciones como estaban. Las restricciones anteriores se crean **sin**
+ * `NOT VALID`, validadas en la misma transaccion: si la validacion falla —el
+ * `statement_timeout` de 30 s sobre un `scan_events` enorme—, la reversion se
+ * deshace entera y se reintenta, en vez de quedar confirmada con las
+ * restricciones `NOT VALID` y la migracion aun anotada. El precio es que el
+ * recorrido bloquea el fichaje mientras dura; una reversion es excepcional y se
+ * hace en una ventana tranquila. `MigrationSafetyTest` solo examina `up()`.
+ *
  * Se prueba en `tests/Integration/Schema/SuspendedScanResultMigrationTest.php`,
  * ademas del ciclo completo de `MigrationsRoundTripTest`.
  */
@@ -64,7 +76,7 @@ return new class extends Migration
 {
     use LimitsMigrationLocks;
 
-    /** Ver el docblock: la validacion va fuera de la transaccion que crea las restricciones. */
+    /** Ver el docblock: en `up()`, la validacion va fuera de la transaccion que crea las restricciones. */
     public $withinTransaction = false;
 
     /**
@@ -108,19 +120,28 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Antes de tocar nada: con filas escritas, la reversion se niega y deja
-        // las restricciones como estaban. Ver el docblock.
-        if (DB::table('scan_events')->where('result', 'rejected_suspended')->exists()) {
-            throw new RuntimeException(
-                'scan_events tiene rechazos rejected_suspended (RN-25): el log no se reescribe (regla dura 5). '
-                .'Revertir esta migracion exige decidir a mano que hacer con esas filas.'
-            );
-        }
-
+        // Todo en una transaccion: la comprobacion, las dos restricciones y su
+        // validacion. Ver el docblock, «`down()` verificado».
         DB::transaction(function (): void {
             $this->limitLockWait();
 
+            // El primer ALTER toma ACCESS EXCLUSIVE sobre scan_events hasta el
+            // final de la transaccion: desde aqui nadie escribe una fila nueva.
             DB::statement('ALTER TABLE scan_events DROP CONSTRAINT IF EXISTS scan_events_chk_worked_minutes');
+
+            // Comprobada con la tabla ya bloqueada, la respuesta no puede
+            // cambiar antes del COMMIT. Si hay filas, lanzar aqui deshace el
+            // DROP de arriba: las restricciones quedan como estaban.
+            if (DB::table('scan_events')->where('result', 'rejected_suspended')->exists()) {
+                throw new RuntimeException(
+                    'scan_events tiene rechazos rejected_suspended (RN-25): el log no se reescribe (regla dura 5). '
+                    .'Revertir esta migracion exige decidir a mano que hacer con esas filas.'
+                );
+            }
+
+            // Sin NOT VALID a proposito: la validacion va dentro, para que un
+            // fallo —el statement_timeout en una tabla enorme— deshaga la
+            // reversion entera en vez de dejarla confirmada a medias.
             DB::statement(<<<'SQL'
                 ALTER TABLE scan_events
                     ADD CONSTRAINT scan_events_chk_worked_minutes
@@ -130,7 +151,6 @@ return new class extends Migration
                             'rejected_out_of_order', 'discarded_unprocessable'
                         )) = (worked_minutes IS NULL)
                     )
-                    NOT VALID
             SQL);
 
             DB::statement('ALTER TABLE scan_events DROP CONSTRAINT IF EXISTS scan_events_chk_result');
@@ -142,13 +162,7 @@ return new class extends Migration
                         'rejected_unknown', 'rejected_revoked', 'rejected_debounce', 'rejected_signature',
                         'rejected_out_of_order', 'discarded_unprocessable'
                     ))
-                    NOT VALID
             SQL);
         });
-
-        // Se valida tambien: si una fila se escribio entre la comprobacion de
-        // arriba y la transaccion, esto falla y la reversion se detiene.
-        $this->validateConstraint('scan_events', 'scan_events_chk_result');
-        $this->validateConstraint('scan_events', 'scan_events_chk_worked_minutes');
     }
 };
