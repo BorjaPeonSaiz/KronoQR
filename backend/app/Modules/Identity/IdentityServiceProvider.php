@@ -1101,7 +1101,7 @@ final class IdentityServiceProvider extends ServiceProvider
         // que `FrozenTime` detiene en las pruebas. Con `time()`, una prueba que
         // dejara pasar las 24 horas de la concesion veia el token caducado desde
         // el primer minuto en cuanto el calendario real pasaba de esa fecha
-        // (G5 de la verificacion 2.1.0, `SupportAccessScenarioTest`).
+        // (`SupportAccessScenarioTest`).
         return $expiresAt->getTimestamp() > Carbon::now()->getTimestamp();
     }
 
