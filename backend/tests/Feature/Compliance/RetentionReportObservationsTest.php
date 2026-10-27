@@ -7,6 +7,7 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionNote;
 use App\Modules\Compliance\Domain\ValueObject\RetentionPolicySnapshot;
 use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
+use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 
@@ -15,6 +16,10 @@ use Tests\Support\Shared\GeneratedFilesSandbox;
  * (RF-PR-03, RF-KI-05). El caso de uso guarda que paso y con que cifras
  * (`RetentionNote`); la frase la pone quien escribe el informe.
  */
+
+// `InstallationLocale` escribe `installation_settings`: sin la transaccion de
+// cada prueba, el idioma ingles quedaria activo para el resto de la suite.
+uses(RefreshDatabase::class);
 
 afterEach(function (): void {
     GeneratedFilesSandbox::cleanUp();
