@@ -417,9 +417,9 @@ it('cuenta como fallo, y lo dice en el log, el indicio que choca con otro distin
 
 it('no mira los escaneos que no son un uso de credencial en quiosco', function (): void {
     // Decision 4 de la ficha, corregida por la 15. Lo que queda fuera son los
-    // TRES rechazos de verdad —desconocido, revocado y firma mala: ninguno es
-    // una tarjeta valida presentada por alguien, y muchos ni siquiera resuelven
-    // a una persona— y los origenes que no pasan por una tablet. Si un fichaje
+    // CUATRO rechazos de credencial —desconocido, revocado, firma mala y
+    // persona suspendida (RN-25): ninguno es un fichaje que la tarjeta pudiera
+    // hacer, y muchos ni siquiera resuelven a una persona— y los origenes que no pasan por una tablet. Si un fichaje
     // manual entrara, una correccion administrativa hecha en dos minutos abriria
     // un indicio contra la persona corregida.
     //
@@ -429,7 +429,7 @@ it('no mira los escaneos que no son un uso de credencial en quiosco', function (
 
     $scenario = patternScenario();
 
-    foreach (['rejected_unknown', 'rejected_revoked', 'rejected_signature'] as $index => $rechazo) {
+    foreach (['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'rejected_suspended'] as $index => $rechazo) {
         for ($day = 10; $day <= 14; $day++) {
             $date = sprintf('2026-03-%02d', $day);
             $hora = sprintf('%02d', 6 + $index * 2);
@@ -444,7 +444,7 @@ it('no mira los escaneos que no son un uso de credencial en quiosco', function (
 
     expect(runPatternDetection())->toBe(0)
         ->and(DB::table('incidents')->count())->toBe(0);
-})->group('RF-PR-06');
+})->group('RF-PR-06', 'RN-25');
 
 it('no escribe ningun nombre en el log tecnico ni en el historico de errores', function (): void {
     // Regla dura 21 y RF-PD-15. El log viaja a Loki y de ahi al paquete de

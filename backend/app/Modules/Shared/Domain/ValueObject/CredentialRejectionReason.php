@@ -27,4 +27,12 @@ enum CredentialRejectionReason: string
 
     /** La firma HMAC no verifica, o el `key_id` no es una clave vigente (RF-QR-02). */
     case INVALID_SIGNATURE = 'invalid_signature';
+
+    /**
+     * La credencial es autentica y **esta vigente**, y su titular esta
+     * suspendido (RN-25). La suspension no revoca la tarjeta: al levantarla
+     * vuelve a fichar con la misma. Por eso no es `REVOKED`, que diria del
+     * registro algo que no ha ocurrido. Hacia fuera, el mismo rechazo (RS-03).
+     */
+    case HOLDER_SUSPENDED = 'holder_suspended';
 }

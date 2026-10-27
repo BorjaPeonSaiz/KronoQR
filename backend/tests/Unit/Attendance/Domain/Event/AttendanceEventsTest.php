@@ -127,7 +127,8 @@ it('traduce cada motivo de rechazo de credencial a su motivo de escaneo', functi
     'desconocida' => [CredentialRejectionReason::UNKNOWN, ScanRejectionReason::UNKNOWN_CREDENTIAL],
     'revocada' => [CredentialRejectionReason::REVOKED, ScanRejectionReason::REVOKED_CREDENTIAL],
     'mala firma' => [CredentialRejectionReason::INVALID_SIGNATURE, ScanRejectionReason::INVALID_SIGNATURE],
-])->group('RS-03');
+    'titular suspendido' => [CredentialRejectionReason::HOLDER_SUSPENDED, ScanRejectionReason::HOLDER_SUSPENDED],
+])->group('RS-03', 'RN-25');
 
 it('guarda el valor de columna de cada motivo de escaneo', function (ScanRejectionReason $reason, string $stored): void {
     // Son los de scan_events.result. El anti-rebote esta entre ellos porque el
@@ -137,8 +138,9 @@ it('guarda el valor de columna de cada motivo de escaneo', function (ScanRejecti
     'desconocida' => [ScanRejectionReason::UNKNOWN_CREDENTIAL, 'rejected_unknown'],
     'revocada' => [ScanRejectionReason::REVOKED_CREDENTIAL, 'rejected_revoked'],
     'mala firma' => [ScanRejectionReason::INVALID_SIGNATURE, 'rejected_signature'],
+    'titular suspendido' => [ScanRejectionReason::HOLDER_SUSPENDED, 'rejected_suspended'],
     'anti-rebote' => [ScanRejectionReason::DEBOUNCE, 'rejected_debounce'],
-])->group('RS-03', 'RF-AT-06');
+])->group('RS-03', 'RF-AT-06', 'RN-25');
 
 it('guarda el valor de columna de cada origen de marca', function (ScanOrigin $origin, string $stored): void {
     expect($origin->value)->toBe($stored);

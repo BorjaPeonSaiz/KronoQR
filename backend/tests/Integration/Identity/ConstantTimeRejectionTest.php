@@ -12,7 +12,7 @@ use Tests\Support\Time\Samples;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * RS-03, RS-02 y regla dura 17: **los seis rechazos son indistinguibles desde
+ * RS-03, RS-02 y regla dura 17: **los siete rechazos son indistinguibles desde
  * fuera**, en respuesta y en tiempo.
  *
  * `php artisan test --filter=ConstantTimeRejection` es una de las dos ordenes de
@@ -39,7 +39,8 @@ uses(RefreshDatabase::class);
 
 /**
  * Los rechazos del §5.2, cada uno con su payload. Son seis desde la tarea
- * 2.12, que añadio el de la tarjeta cuya clave se retiro (RF-QR-07).
+ * 2.12, que añadio el de la tarjeta cuya clave se retiro (RF-QR-07), y siete
+ * desde que la persona suspendida tiene motivo propio (RN-25).
  *
  * @return array<string, string>
  */
@@ -77,20 +78,28 @@ function fourRejections(): array
     $rotadoId = DB::table('employees')->where('uuid', $rotado)->value('id');
     $claveRetirada = Credentials::issueFor($rotadoId, Credentials::retiredKey());
 
+    // 5. Persona suspendida con la tarjeta vigente (RN-25): motivo propio en
+    //    `scan_events`, el mismo «no» y el mismo trabajo hacia fuera.
+    $suspendido = WorkforceFixtures::employee($site, null, 'suspended');
+    /** @var int $suspendidoId */
+    $suspendidoId = DB::table('employees')->where('uuid', $suspendido)->value('id');
+    $deSuspendido = Credentials::issueFor($suspendidoId);
+
     return [
         'firma invalida' => $firmaInvalida->toString(),
         'key_id desconocido' => Credentials::signedWithUnknownKey()->toString(),
         'clave retirada' => $claveRetirada->toString(),
         'credencial revocada' => $revocada->toString(),
         'empleado de baja' => $deBaja->toString(),
+        'persona suspendida' => $deSuspendido->toString(),
         // Y el que no tiene ni forma de payload: tiene que costar lo mismo.
         'token inexistente' => Credentials::payloadFor()->toString(),
     ];
 }
 
-it('devuelve el mismo rechazo en los seis casos y solo atribuye la tarjeta autentica retirada', function (): void {
+it('devuelve el mismo rechazo en los siete casos y solo atribuye la tarjeta autentica retirada', function (): void {
     // RS-03 y regla dura 17, reescrita para RN-20 (F3 del dictamen del bloque
-    // 18). Hacia fuera, los seis son el mismo «no»: ninguno resuelve y ninguno
+    // 18). Hacia fuera, los siete son el mismo «no»: ninguno resuelve y ninguno
     // da `employeeUuid()`, tampoco cuando el servidor sabe de quien era la
     // tarjeta. Hacia dentro, desde la 2.2.0 dos de ellos —la tarjeta revocada y
     // la de la persona de baja, ambas con FIRMA VALIDA— llevan a su titular para
@@ -120,7 +129,7 @@ it('devuelve el mismo rechazo en los seis casos y solo atribuye la tarjeta auten
         'credencial revocada' => '2026-08-15 06:00:00',
         'empleado de baja' => null,
     ]);
-})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07', 'RN-20');
+})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07', 'RN-20', 'RN-25');
 
 it('no atribuye una tarjeta real revocada si su firma no verifica', function (): void {
     // F3: el resolutor busca la credencial aunque la firma falle (para igualar
@@ -161,7 +170,7 @@ it('ejecuta el mismo numero de consultas en todos los rechazos', function (): vo
 
     expect(array_unique(array_values($consultas)))
         ->toHaveCount(1, 'Los rechazos no cuestan lo mismo: '.json_encode($consultas));
-})->group('RS-03', 'RF-QR-02');
+})->group('RS-03', 'RF-QR-02', 'RN-25');
 
 it('hace el mismo trabajo en un rechazo que en una aceptacion', function (): void {
     // Que el rechazo cueste MENOS que la aceptacion tambien seria un canal:
@@ -190,7 +199,7 @@ it('hace el mismo trabajo en un rechazo que en una aceptacion', function (): voi
     expect($rechazado)->toBe($aceptado);
 })->group('RS-03');
 
-it('consume el mismo tiempo en los seis rechazos', function (): void {
+it('consume el mismo tiempo en los siete rechazos', function (): void {
     // La comprobacion que exige el §9.4: «medir que los cuatro rechazos consumen
     // el mismo tiempo». El suelo configurado —25 ms de serie— absorbe la
     // varianza de PostgreSQL, que es lo que sin el hace que un acierto de indice

@@ -217,10 +217,17 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
             return CredentialRejectionReason::UNKNOWN;
         }
 
+        if ($employee->status === EmploymentStatus::SUSPENDED) {
+            // RN-25: la tarjeta sigue vigente y no se revoca. Escribirlo como
+            // revocada haria mentir a `scan_events`. Sin consulta nueva: el
+            // estado ya esta cargado, y hacia fuera es el mismo rechazo.
+            return CredentialRejectionReason::HOLDER_SUSPENDED;
+        }
+
         if (! $employee->canClock()) {
-            // Un empleado de baja con la tarjeta todavia activa. RN-14 hara que
-            // la baja revoque la credencial (Fase 2); hasta entonces, y tambien
-            // despues, esta comprobacion es la que impide que fiche.
+            // Un empleado de baja con la tarjeta todavia activa. RN-14 hace que
+            // la baja revoque la credencial; aun asi, esta comprobacion es la
+            // que impide que fiche si la baja y el escaneo se cruzan.
             return CredentialRejectionReason::REVOKED;
         }
 
@@ -287,6 +294,7 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
             CredentialRejectionReason::UNKNOWN => 'rejected_unknown',
             CredentialRejectionReason::REVOKED => 'rejected_revoked',
             CredentialRejectionReason::INVALID_SIGNATURE => 'rejected_signature',
+            CredentialRejectionReason::HOLDER_SUSPENDED => 'rejected_suspended',
         };
 
         Log::warning('credential_rejected', [

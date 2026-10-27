@@ -27,9 +27,9 @@ use Illuminate\Database\ConnectionInterface;
  *   PIN de emergencia (RF-AT-11) entra porque tambien es una credencial
  *   personal, y se presta con mas facilidad que la tarjeta. `manual_admin` e
  *   `import` no pasan por ningun quiosco: no hay tarjeta que prestar.
- * - **`result` sin los tres rechazos de verdad** —`rejected_unknown`,
- *   `rejected_revoked` y `rejected_signature`—, que no son un uso de credencial
- *   y muchos ni siquiera resuelven a una persona.
+ * - **`result` sin los cuatro rechazos de credencial** —`rejected_unknown`,
+ *   `rejected_revoked`, `rejected_signature` y `rejected_suspended` (RN-25)—,
+ *   que no son un uso de credencial y muchos ni siquiera resuelven a una persona.
  *
  * ## `rejected_debounce` SI entra, y es lo que hace ver a RN-16
  *
@@ -81,7 +81,7 @@ final readonly class EloquentCredentialScans implements CredentialScans
             // decidiera, y ahi estaba el agujero de RN-16. El
             // descarte del servidor (ADR-061) tampoco es un uso de la credencial
             // que el servidor decidiera: no entra.
-            ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'discarded_unprocessable'])
+            ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'rejected_suspended', 'discarded_unprocessable'])
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),
                 $to->format('Y-m-d H:i:s.uP'),

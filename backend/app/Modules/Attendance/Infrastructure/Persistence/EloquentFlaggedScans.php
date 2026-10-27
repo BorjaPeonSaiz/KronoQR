@@ -46,6 +46,7 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
                 ScanResult::REJECTED_UNKNOWN->value,
                 ScanResult::REJECTED_REVOKED->value,
                 ScanResult::REJECTED_SIGNATURE->value,
+                ScanResult::REJECTED_SUSPENDED->value,
             ])
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),

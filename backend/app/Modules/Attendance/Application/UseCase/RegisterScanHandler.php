@@ -1108,6 +1108,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
             ScanResult::REJECTED_SIGNATURE => ScanRejectionReason::INVALID_SIGNATURE,
             ScanResult::REJECTED_DEBOUNCE => ScanRejectionReason::DEBOUNCE,
             ScanResult::REJECTED_OUT_OF_ORDER => ScanRejectionReason::OUT_OF_ORDER,
+            ScanResult::REJECTED_SUSPENDED => ScanRejectionReason::HOLDER_SUSPENDED,
             default => ScanRejectionReason::UNKNOWN_CREDENTIAL,
         };
     }
