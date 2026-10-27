@@ -89,7 +89,7 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). **En curso:** `chore/deps-octubre` (Dependabot #208 y #209, ver Pendiente del bloque 19). **Siguiente acción:** integrarla y abrir el bloque 20.
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** en curso en `docs/especificacion-2.3.0`.
 
 Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 
@@ -100,7 +100,7 @@ Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 - **Pendiente:**
   - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
   - **19b:** `CivilDate::midnight()` para las fechas civiles; puerto `UuidGenerator`; Semgrep `--strict`; Deptrac limita Kiosk y Application; la consola habla el idioma de la instalación (`SpeaksInstallationLanguage`, `lang/*/console.php`; la ayuda de Artisan y las líneas clave=valor que leen los scripts siguen fijas); `model_type` de las cuentas por el puerto `ManagementAccountMorphType` sin `morphMap` (ADR-025, nota del 26-10); comentarios de `app/` y `lang/` sin referencias al plan, con guarda (`PendingDomainCommentCleanup` lista los de `Domain/` que faltan; solo encoge).
-  - **Dependabot (27-10):** #204, #205 y #207 integradas. #208 rompe ① (`simple-excel` 3.11 trae un OpenSpout sin `setFreezeRow`/`setFontBold`; larastan 3.13.1 marca dos `->warn()` sobre `Command|null`) y #209 rompe ⑥ y ⑦ (`/vue-virtual` 3.13.47 pinta 0 filas en `useVirtualRows`/`VirtualizedTables`; axe 4.14 encuentra `label-content-name-mismatch` real en los botones de Cuentas). Van juntas en una rama `chore/deps-octubre` tras integrar el 19b. #149 sigue aparcada (bloque 31).
+  - **Dependabot (27-10):** #204, #205 y #207 integradas; #208 y #209 en #211 (OpenSpout 5: la cabecera XLSX sale en negrita por primera vez; vue-virtual 3.19 mide con `clientHeight`; axe 4.14 `label-content-name-mismatch` corregido en Cuentas y en el reloj del quiosco). #149 sigue aparcada (bloque 31).
   - unas 200 líneas de `lang/es` (console, data-export, doctor…) siguen sin tildes; algunas las citan pruebas o scripts: cambiarlas a la vez;
   - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
   - Redis local reparado el 26-10 (`redis-check-aof --fix`, como indica `doctor.sh`; se perdieron 1 122 bytes de la cola del AOF). Se ha corrompido dos veces (25-10 y 26-10) por apagar el portÃ¡til con Docker en marcha: parar con `make down` antes.
