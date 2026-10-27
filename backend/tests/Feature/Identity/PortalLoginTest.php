@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spectator\Spectator;
@@ -134,23 +135,67 @@ it('no distingue un codigo inexistente de un PIN incorrecto', function (array $c
     'codigo inexistente' => [['code' => 'ENOEXISTE1', 'pin' => PortalLogins::PIN]],
 ])->group('RS-03', 'RF-ID-06');
 
-it('no deja entrar a quien no esta en alta, y con el mismo rechazo', function (string $status): void {
+it('no deja entrar a una persona de baja, y con el mismo rechazo que un codigo inexistente', function (): void {
     // RN-14. Una persona de baja conserva su historial —nada se borra, regla
     // dura 5— pero no entra al portal, y no lo hace **por el mismo camino y con
     // el mismo valor** que un codigo inexistente: el estado de una persona no
-    // puede deducirse desde fuera.
-    $empleado = empleadoConPortal($status);
+    // puede deducirse desde fuera (RS-03).
+    $empleado = empleadoConPortal('terminated');
 
-    Api::guest()->post('/api/v1/me/login', [
+    $deBaja = Api::guest()->post('/api/v1/me/login', [
         'employee_code' => $empleado['code'],
         'pin' => PortalLogins::PIN,
-    ])
-        ->assertValidResponse(401)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:invalid-credentials');
-})->with([
-    'suspendido' => 'suspended',
-    'de baja' => 'terminated',
-])->group('RN-25', 'RN-14', 'RS-03');
+    ]);
+
+    $deBaja->assertValidResponse(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:invalid-credentials')
+        ->assertJsonPath('detail', 'El codigo de empleado o el PIN no son correctos.');
+
+    $inexistente = Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => 'ENOEXISTE1',
+        'pin' => PortalLogins::PIN,
+    ]);
+
+    expect($deBaja->getContent())->toBe($inexistente->getContent());
+})->group('RN-25', 'RN-14', 'RS-03');
+
+it('deja entrar a la persona suspendida, solo para consultar su registro', function (): void {
+    // RN-25, decision del propietario del 27-10-2026: la suspension impide
+    // fichar, no consultar el propio registro (RL-05). Entra con su codigo y
+    // su PIN de siempre, con `self:read` y nada mas (RF-ID-07).
+    $empleado = empleadoConPortal('suspended');
+
+    $respuesta = Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => $empleado['code'],
+        'pin' => PortalLogins::PIN,
+    ]);
+
+    $respuesta->assertValidRequest()->assertValidResponse(200);
+
+    $token = $respuesta->json('token');
+
+    expect($token)->toBeString();
+
+    /** @var string $token */
+    $fila = PersonalAccessToken::findToken($token);
+
+    expect($fila?->abilities)->toBe(['self:read']);
+
+    Api::as($token)->get('/api/v1/me/workdays')->assertStatus(200);
+})->group('RN-25', 'RL-05', 'RF-ID-05', 'RF-ID-07');
+
+it('rechaza a la persona suspendida con el PIN erroneo igual que a cualquiera', function (): void {
+    // Que la suspendida entre no abre ningun oraculo: con el PIN equivocado
+    // recibe el mismo rechazo generico que un codigo inexistente (RS-03).
+    $empleado = empleadoConPortal('suspended');
+
+    $suspendida = Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => '999111']);
+    $inexistente = Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE1', 'pin' => '999111']);
+
+    $suspendida->assertValidResponse(401)->assertJsonPath('type', 'urn:kronoqr:problem:invalid-credentials');
+
+    expect($suspendida->getContent())->toBe($inexistente->getContent());
+})->group('RN-25', 'RS-03');
 
 it('no deja entrar a quien no tiene PIN emitido', function (): void {
     // El alta de un empleado no emite PIN: lo hace RRHH en un acto propio
@@ -265,6 +310,18 @@ it('deja de valer la sesion en cuanto se da de baja a la persona', function (): 
 
     Api::as($token)->get('/api/v1/me/workdays')->assertStatus(401);
 })->group('RN-14', 'RF-ID-07');
+
+it('mantiene la sesion abierta cuando se suspende a la persona', function (): void {
+    // RN-25: suspender no es dar de baja. La sesion sigue valiendo para leer su
+    // registro mientras dura la suspension (RL-05); lo que la suspension cierra
+    // es el fichaje.
+    $empleado = empleadoConPortal();
+    $token = PortalLogins::tokenFor($empleado['code']);
+
+    DB::table('employees')->where('uuid', $empleado['uuid'])->update(['status' => 'suspended']);
+
+    Api::as($token)->get('/api/v1/me/workdays')->assertStatus(200);
+})->group('RN-25', 'RL-05', 'RF-ID-07');
 
 it('no deja una linea ERROR por un rechazo y apunta el acceso con employee_uuid (V4-BE-2, R4-BE-04)', function (): void {
     $empleado = empleadoConPortal();

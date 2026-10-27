@@ -179,8 +179,9 @@ it('da el mismo 401 para las cinco causas de rechazo con Redis caido', function 
 
     $activo = portalSinRedisEmpleado('Hotel A');
     $bloqueado = portalSinRedisEmpleado('Hotel B');
-    $suspendido = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel C'), null, 'suspended');
-    EmployeePins::issue($suspendido, PortalLogins::PIN);
+    // De baja y no suspendida: la suspendida entra al portal (RN-25).
+    $deBaja = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel C'), null, 'terminated');
+    EmployeePins::issue($deBaja, PortalLogins::PIN);
     $sinPin = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel D'));
 
     RedisOutage::begin();
@@ -192,7 +193,7 @@ it('da el mismo 401 para las cinco causas de rechazo con Redis caido', function 
     $causas = [
         'PIN incorrecto' => ['employee_code' => $activo['code'], 'pin' => '999111'],
         'codigo inexistente' => ['employee_code' => 'ENOEXISTE1', 'pin' => PortalLogins::PIN],
-        'no en alta' => ['employee_code' => EmployeePins::codeOf($suspendido), 'pin' => PortalLogins::PIN],
+        'de baja' => ['employee_code' => EmployeePins::codeOf($deBaja), 'pin' => PortalLogins::PIN],
         'sin PIN emitido' => ['employee_code' => EmployeePins::codeOf($sinPin), 'pin' => PortalLogins::PIN],
         'bloqueado' => ['employee_code' => $bloqueado['code'], 'pin' => PortalLogins::PIN],
     ];

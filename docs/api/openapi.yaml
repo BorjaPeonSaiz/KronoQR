@@ -3270,6 +3270,10 @@ paths:
         propio bloqueo en un oraculo. Quien necesite saber por que no entra
         pregunta a RRHH, que es quien puede restablecer el PIN.
 
+        **Una persona suspendida si entra** (RN-25, RL-05): la suspension
+        impide fichar, no consultar el propio registro, y la sesion que tuviera
+        abierta sigue valiendo. La de baja no entra (RN-14).
+
         **Bloqueo creciente por empleado y por canal** (RS-12, §7.5): 3 fallos
         bloquean 5 min, 5 fallos 15 min y 10 fallos 60 min, con la cuenta a cero
         tras 24 h sin fallar. El contador del portal es **distinto** del del

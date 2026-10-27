@@ -68,7 +68,8 @@ use SensitiveParameter;
  * ## Cuatro rechazos, un solo valor hacia arriba de `CredentialResolution`
  *
  * Codigo inexistente, PIN incorrecto, PIN nunca emitido y empleado de baja
- * (RN-14) devuelven todos `PinVerification::rejected()`: sin `employeeUuid()` y
+ * (RN-14) —o suspendido, solo en el quiosco (RN-25)— devuelven todos
+ * `PinVerification::rejected()`: sin `employeeUuid()` y
  * con `isVerified()` falso. **Desde RN-19 (ADR-043) el rechazo lleva ademas un
  * `PinClaim` interno** cuando el codigo es de alguien que puede fichar —PIN
  * incorrecto, no emitido o bloqueo—, y nunca con codigo inexistente, baja o
@@ -166,7 +167,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         // alguien no cambie el tiempo de respuesta de su codigo. Y el codigo
         // inexistente entra por esta misma rama, contra el señuelo, para que el
         // trabajo restante sea el mismo.
-        if ($employee === null || $this->isRejected($employee, $matches)) {
+        if ($employee === null || $this->isRejected($employee, $matches, $origin)) {
             $this->journal->failed($channel, null, AuthFailureReason::INVALID_CREDENTIALS);
 
             // El fallo ya quedo anotado al reservar. El asiento del bloqueo, **en
@@ -298,11 +299,17 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * RN-14 se evalua la ultima a proposito: dar de baja a alguien no puede
      * cambiar el tiempo de respuesta de su codigo.
      *
+     * **Quien puede usar su PIN depende de la puerta** (RN-25, decision del
+     * propietario del 27-10-2026): en el quiosco, solo quien puede fichar; en el
+     * portal, tambien la persona suspendida, que puede consultar su registro
+     * aunque no pueda fichar (RL-05). La baja no entra por ninguna. Lo decide
+     * `EmploymentStatus::admitsPinFrom()`, no este adaptador.
+     *
      * @param  array{uuid: string, status: string, pin_hash: string|null}  $employee
      */
-    private function isRejected(array $employee, bool $matches): bool
+    private function isRejected(array $employee, bool $matches, PinOrigin $origin): bool
     {
-        return ! $matches || ! EmploymentStatus::from($employee['status'])->canClock();
+        return ! $matches || ! EmploymentStatus::from($employee['status'])->admitsPinFrom($origin);
     }
 
     /**

@@ -227,7 +227,7 @@ it('la tabla del ADR se lee entera, con las reglas que se habian colado', functi
     // daria por consultas lo que son reglas, o al reves. Una fila con miembros
     // admite esos miembros y no un `canWork` nuevo de la misma clase.
     expect(reglasAdmitidasPorElAdr())
-        ->toHaveKey('ValueObject\EmploymentStatus', ['canClock'])
+        ->toHaveKey('ValueObject\EmploymentStatus', ['canClock', 'canSignInToPortal', 'admitsPinFrom'])
         ->toHaveKey('ValueObject\EmployeeSnapshot', ['canClock'])
         ->toHaveKey('ValueObject\LegalRetentionFloor', ['admits'])
         ->toHaveKey('ValueObject\SignOffReason', ['MIN_LENGTH', 'MAX_LENGTH'])

@@ -27,4 +27,29 @@ enum EmploymentStatus: string
     {
         return $this === self::ACTIVE;
     }
+
+    /**
+     * RN-25 y RL-05: entra al portal personal quien sigue en plantilla, activa
+     * **o suspendida**. La suspension impide fichar, no consultar el propio
+     * registro (decision del propietario del 27-10-2026). La baja (RN-14) no
+     * entra: su derecho de acceso se atiende por la solicitud del RGPD.
+     */
+    public function canSignInToPortal(): bool
+    {
+        return $this !== self::TERMINATED;
+    }
+
+    /**
+     * Si un PIN correcto vale para esta persona en esa puerta: en el quiosco,
+     * {@see canClock()}; en el portal, {@see canSignInToPortal()}. Un solo
+     * verificador sirve a las dos puertas (RS-12), y la diferencia entre ellas
+     * es solo esta.
+     */
+    public function admitsPinFrom(PinOrigin $origin): bool
+    {
+        return match ($origin) {
+            PinOrigin::KIOSK => $this->canClock(),
+            PinOrigin::PORTAL => $this->canSignInToPortal(),
+        };
+    }
 }

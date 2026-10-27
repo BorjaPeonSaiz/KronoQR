@@ -1111,9 +1111,11 @@ final class IdentityServiceProvider extends ServiceProvider
      * Dos condiciones, y las dos tienen que valer **en cada peticion**, no solo
      * al emitir el token:
      *
-     * 1. **RN-14: la persona sigue en alta.** Es la misma regla con la que su PIN
-     *    deja de verificar, asi que dar una baja cierra las dos puertas a la vez
-     *    y en la peticion siguiente, no cuando caduque la sesion.
+     * 1. **RN-14: la persona no esta de baja.** Es la misma regla con la que su
+     *    PIN deja de verificar en el portal, asi que dar una baja cierra la
+     *    puerta en la peticion siguiente, no cuando caduque la sesion. **La
+     *    suspension no la cierra** (RN-25, decision del propietario del
+     *    27-10-2026): impide fichar, no consultar el propio registro (RL-05).
      * 2. **El PIN no se ha restablecido despues de abrirla.** Sin esto,
      *    restablecer el PIN de alguien que perdio el movil no serviria de nada:
      *    el token que quedo abierto en ese telefono seguiria leyendo su registro
@@ -1131,7 +1133,7 @@ final class IdentityServiceProvider extends ServiceProvider
     {
         $status = $employee->getAttribute('status');
 
-        if (! \is_string($status) || EmploymentStatus::tryFrom($status)?->canClock() !== true) {
+        if (! \is_string($status) || EmploymentStatus::tryFrom($status)?->canSignInToPortal() !== true) {
             return false;
         }
 
