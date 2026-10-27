@@ -64,6 +64,9 @@ const BUSINESS_REJECTION_FAILURES = [
     'Modules\Reporting\Domain\Exception\WeeklySummaryNotDelivered' => 'el SMTP no envio el correo',
     'Modules\Workforce\Application\Exception\ImportFileUnavailable' => 'el temporal subido no se puede leer del disco: averia, no contenido',
     'Modules\Workforce\Domain\Exception\AbsenceWriteFailed' => 'la escritura fallo en el motor sin ser un caso de negocio',
+    'Modules\Shared\Application\Port\DatabaseFailure' => 'la base rechazo la operacion: el caso de uso que la espera la traduce a su rechazo',
+    'Modules\Shared\Application\Port\PdfRenderingSlotsBusy' => 'todos los huecos del tope de PDF de la instalacion ocupados',
+    'Modules\Shared\Application\Port\PdfRenderingSlotsUnavailable' => 'el tope de PDF no responde: Redis caido',
 
     // --- El armazon, fuera de los modulos.
     'Support\Database\DatabaseUnavailable' => 'PostgreSQL inalcanzable',

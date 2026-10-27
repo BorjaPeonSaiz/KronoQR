@@ -479,6 +479,7 @@ final readonly class ErrorVocabulary
         'cae',
         'calculation',
         'calendar',
+        'calendario',
         'call',
         'callable',
         'callback',
