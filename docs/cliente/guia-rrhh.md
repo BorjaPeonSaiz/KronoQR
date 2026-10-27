@@ -331,7 +331,7 @@ resolver solo. Se llena sola cada madrugada, al revisar el registro.
 | **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Se abre solo si el hotel tiene activado el fichaje de pausa.** Sin él, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó», y no avisa de ninguna |
 | **Fichaje fuera de orden** | Media | Llegó un fichaje que no cabe en el registro de esa persona: una **salida** con hora anterior a la entrada que ya estaba abierta, o una **entrada** que caería dentro o antes de un tramo ya cerrado —aunque el tramo sea de otra jornada, como después de un turno de noche— | Casi siempre, una tablet que estuvo sin red: su cola llegó con retraso y desordenada. **El fichaje queda guardado y señalado para revisión, y la jornada no cambia sola** (§4.4) |
 | **Patrón anómalo de uso de la credencial** | Alta | Dos tarjetas de dos personas distintas se pasan **en la misma tablet con segundos de diferencia varios días** (3 de serie), o la **misma tarjeta** se pasa en **dos tablets distintas** antes de lo que se tarda en ir de una a otra | Casi siempre, dos compañeros que entran juntos, o dos tablets demasiado cerca. **Es un indicio para que lo mire una persona, no una conclusión.** No cambia ningún fichaje y no lo ve nadie fuera de la bandeja (§4.5) |
-| **Fichaje por PIN no registrado** | Media | Alguien intentó fichar en la tablet con **el código de una persona que puede fichar** y el PIN no se aceptó —equivocado, sin PIN emitido o bloqueado por intentos—, y esa persona **no fichó por ninguna vía** en los 10 minutos siguientes | Casi siempre, un PIN mal tecleado y la persona se fue creyendo que había fichado. **El fichaje no está en el registro**: si trabajó, se completa a mano (§5). La tablet le mostró el mismo mensaje que a cualquier intento fallido, a propósito |
+| **Fichaje por PIN no registrado** | Media | Alguien intentó fichar en la tablet con **el código de una persona que puede fichar** y el PIN no se aceptó —equivocado, sin PIN emitido o bloqueado por intentos—, y esa persona **no fichó por ninguna vía** en los 10 minutos siguientes | Casi siempre, un PIN mal tecleado y la persona se fue creyendo que había fichado. **El fichaje no está en el registro**: si trabajó, se completa a mano (§5). La tablet le mostró el mismo mensaje que a cualquier intento fallido, a propósito. **Se cierra sola** si la persona ficha bien (tarjeta, o código y PIN) dentro de los 10 minutos siguientes al intento, salvo que el PIN se bloqueara: entonces queda abierta, para hablar con la persona y restablecerle el PIN. Si después aparece otro intento sin subsanar, **se reabre sola** |
 | **Fichaje anterior a la retirada de la credencial** | Media | Llegó al servidor el fichaje de una **tarjeta auténtica que valía cuando se pasó**, pero que ya estaba retirada cuando llegó: por la baja de su titular, por reemisión o por pérdida | Casi siempre, **el último día de alguien que se dio de baja** con la tablet sin red. **El fichaje no se registró**: hay que completar ese día con una corrección (§4.6) |
 | **Fichaje descartado por el quiosco** | Media | La tablet envió un fichaje que **el servidor no aceptó como válido** y lo apartó de su cola, avisando de ello | Casi siempre, **una tablet con la aplicación desactualizada** después de actualizar el servidor. **El fichaje no se registró**: se revisa y se corrige a mano (§4.7) |
 
@@ -1918,6 +1918,12 @@ PIN en la tablet** mientras se averigua qué pasa: eso no espera. Si le ocurre a
 varias personas a la vez, o el tablero avisa de que hay tarjetas firmadas con
 una clave que el servidor ya no reconoce, **es cosa de IT**:
 [`operacion.md`](operacion.md).
+
+Si en su ficha consta **Suspendido**, no es un fallo: una persona suspendida no puede fichar,
+ni con la tarjeta ni con su código y su PIN, y su intento no deja incidencia.
+**Sí puede consultar su registro en el portal** con su código y su PIN de siempre.
+Al levantar la suspensión desde su ficha vuelve a fichar con la misma tarjeta y
+el mismo PIN.
 
 ### …alguien no puede entrar al portal
 
