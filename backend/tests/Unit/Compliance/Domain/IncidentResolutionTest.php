@@ -315,3 +315,47 @@ it('no la cierra antes de detectarla ni con un instante fuera de UTC', function 
     'antes de detectarse' => [Instants::utc('2026-03-15 04:29')],
     'fuera de UTC' => [new DateTimeImmutable('2026-03-16 05:30', Instants::madrid())],
 ])->group('RN-19');
+
+/**
+ * @param  array<string, int|string>  $context
+ */
+function incidenciaDePinConContexto(array $context): Incident
+{
+    return Incident::open(
+        type: IncidentType::RejectedPinScan,
+        employeeUuid: 'employee-1',
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 04:30'),
+        assignedToUserId: 7,
+        context: $context,
+    );
+}
+
+it('no se cierra sola si algun intento abrio o encontro el bloqueo de PIN', function (int|string $lockouts): void {
+    $bloqueada = incidenciaDePinConContexto(['scan_id' => 'scan-1', 'attempts' => 3, 'lockout_attempts' => $lockouts]);
+
+    expect($bloqueada->closesWhenRecovered())->toBeFalse()
+        ->and(fn (): Incident => $bloqueada->closedAsRecovered(Instants::utc('2026-03-16 04:30')))
+        ->toThrow(InvalidIncident::class, 'restablecerle el PIN');
+})->with([
+    'un bloqueo' => [1],
+    'varios' => [2],
+    // Un contexto que no se entiende no se cierra sin persona.
+    'valor que no es entero' => ['1'],
+])->group('RN-19', 'RS-12');
+
+it('se cierra sola con cero bloqueos de PIN o sin recuento de bloqueos', function (array $context): void {
+    $abierta = incidenciaDePinConContexto($context);
+
+    expect($abierta->closesWhenRecovered())->toBeTrue()
+        ->and($abierta->closedAsRecovered(Instants::utc('2026-03-16 04:30'))->status)->toBe(IncidentStatus::Resolved);
+})->with([
+    'cero bloqueos' => [['scan_id' => 'scan-1', 'attempts' => 1, 'lockout_attempts' => 0]],
+    'sin la clave' => [['scan_id' => 'scan-1', 'attempts' => 1]],
+])->group('RN-19', 'RS-12');
+
+it('no dice que se cierre sola una incidencia de otro tipo aunque no tenga bloqueo', function (): void {
+    expect(incidenciaAbierta(IncidentType::OutOfOrderScan)->closesWhenRecovered())->toBeFalse();
+})->group('RN-19', 'RN-13');

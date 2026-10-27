@@ -37,6 +37,8 @@ use Illuminate\Database\ConnectionInterface;
  *   descartada conserva su desenlace y su nota: el puerto solo devuelve las
  *   abiertas, y el `UPDATE ... WHERE status = 'open'` lo garantiza aunque un
  *   responsable la cierre a la vez.
+ * - **No cierra la que tuvo bloqueo de PIN** ({@see Incident::closesWhenRecovered()}):
+ *   esa la cierra quien hable con la persona y le restablezca el PIN.
  * - **No falla si no hay nada que cerrar**, que es lo normal: la mayoria de las
  *   jornadas subsanadas nunca llegaron a abrir incidencia.
  * - **No observa `incident_resolution_seconds`**, que mide el trabajo de las
@@ -79,6 +81,12 @@ final readonly class CloseRecoveredIncident
         $row = $this->board->row($incidentId);
 
         if (! $row instanceof IncidentBoardRow || ! $row->incident->status->isOpen()) {
+            return null;
+        }
+
+        if (! $row->incident->closesWhenRecovered()) {
+            // Con bloqueo de PIN la cierra una persona, despues de hablar con
+            // quien lo sufrio (RN-19). No es un fallo de la pasada.
             return null;
         }
 

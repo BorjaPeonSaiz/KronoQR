@@ -30,7 +30,7 @@ use DateTimeZone;
  * **Nace abierta y no se cierra sola.** La resolucion es un acto de una persona
  * con su motivo y su traza (tarea 2.5): {@see self::resolvedBy()} exige quien,
  * cuando y por que. **La unica excepcion es RN-19**: una `rejected_pin_scan`
- * abierta se cierra cuando la persona subsana el fichaje
+ * abierta y sin bloqueo de PIN se cierra cuando la persona subsana el fichaje
  * ({@see self::closedAsRecovered()}), sin autor y con asiento de `system`. El
  * instante llega **de fuera** —del puerto `Clock` que inyecta el caso de uso—
  * porque el dominio no lee el reloj (regla dura 2).
@@ -47,6 +47,9 @@ use DateTimeZone;
  */
 final readonly class Incident
 {
+    /** Clave del contexto de `rejected_pin_scan` con los intentos que tocaron el bloqueo (RN-19). */
+    private const string PIN_LOCKOUT_ATTEMPTS = 'lockout_attempts';
+
     /**
      * @param  array<string, int|string>  $context  Los hechos que lo sostienen: minutos, umbral o el `scan_id` de RN-18. Nunca datos personales.
      */
@@ -311,11 +314,15 @@ final readonly class Incident
      * 2. **Solo lo que sigue abierto.** Una incidencia que alguien ya resolvio o
      *    descarto conserva su desenlace y su nota: el sistema no corrige a una
      *    persona.
-     * 3. **Queda como `resolved` sin autor ni nota.** «Habia algo y se arreglo»
+     * 3. **Nunca con bloqueo de PIN** ({@see self::closesWhenRecovered()}): si
+     *    algun intento abrio o encontro el bloqueo de RS-12, RN-19 pide hablar
+     *    con la persona y restablecerle el PIN, y el fichaje bueno no hace
+     *    ninguna de las dos cosas.
+     * 4. **Queda como `resolved` sin autor ni nota.** «Habia algo y se arreglo»
      *    es justo lo que paso; `resolvedByUserId` nulo es lo que distingue este
      *    cierre del de una persona, y lo que explica el asiento de `system` que
      *    escribe el caso de uso (regla dura 6).
-     * 4. **No antes de detectarse**, como cualquier cierre.
+     * 5. **No antes de detectarse**, como cualquier cierre.
      *
      * @throws IncidentAlreadyClosed si ya estaba cerrada
      * @throws InvalidIncident si el tipo no se cierra al subsanarse
@@ -328,6 +335,10 @@ final readonly class Incident
 
         if (! $this->type->closesWhenRecovered()) {
             throw InvalidIncident::withoutClosureOnRecovery($this->type->value);
+        }
+
+        if ($this->hadPinLockout()) {
+            throw InvalidIncident::withPinLockoutAwaitingReview();
         }
 
         self::guardUtc($at);
@@ -353,6 +364,18 @@ final readonly class Incident
             resolvedAt: $at,
             deviceUuid: $this->deviceUuid,
         );
+    }
+
+    /**
+     * Si la revision diaria puede cerrarla porque la persona lo subsano
+     * (RN-19): de un tipo que lo admite y **sin bloqueo de PIN**.
+     *
+     * Es la pregunta que hace el caso de uso antes de cerrar: una incidencia que
+     * no se cierra sola no es un fallo de la pasada, es trabajo de una persona.
+     */
+    public function closesWhenRecovered(): bool
+    {
+        return $this->type->closesWhenRecovered() && ! $this->hadPinLockout();
     }
 
     /**
@@ -383,6 +406,24 @@ final readonly class Incident
     public function isAboutASingleShiftEntry(): bool
     {
         return $this->shiftEntryUuid !== null;
+    }
+
+    /**
+     * Algun intento de la incidencia abrio o encontro el bloqueo de RS-12
+     * (`lockout_attempts` del contexto de `rejected_pin_scan`, doc 01 §5.5).
+     *
+     * Un valor que no es un entero cuenta como bloqueo: ante la duda, la mira
+     * una persona, que es el lado seguro de RN-19.
+     */
+    private function hadPinLockout(): bool
+    {
+        if (! \array_key_exists(self::PIN_LOCKOUT_ATTEMPTS, $this->context)) {
+            return false;
+        }
+
+        $lockouts = $this->context[self::PIN_LOCKOUT_ATTEMPTS];
+
+        return ! \is_int($lockouts) || $lockouts > 0;
     }
 
     /**

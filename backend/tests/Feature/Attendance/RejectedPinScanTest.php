@@ -343,6 +343,38 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
         ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(1);
 })->group('RN-19', 'RF-PR-01', 'RL-01');
 
+it('no cierra sola la incidencia con bloqueo de PIN aunque la persona acabe fichando a tiempo', function (): void {
+    // Tres PIN erroneos en un quiosco con red abren el bloqueo (RS-12); el
+    // bueno, a las 07:05 en otro quiosco sin red, llega al dia siguiente. La
+    // jornada queda subsanada, pero RN-19 pide hablar con la persona y
+    // restablecerle el PIN: la incidencia sigue abierta para quien la revisa.
+    $scenario = rejectedPinScenario('2026-03-14 07:02:00');
+
+    foreach (['07:02:00', '07:02:20', '07:02:40'] as $at) {
+        FrozenTime::at('2026-03-14 '.$at);
+        rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T'.$at.'Z')->assertStatus(422);
+    }
+
+    rejectedPinDetect('2026-03-15 03:30:00');
+
+    $incident = DB::table('incidents')->where('type', 'rejected_pin_scan')->first();
+
+    /** @var array<string, int|string> $context */
+    $context = json_decode((string) $incident?->context, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($incident?->status)->toBe('open')
+        ->and($context['lockout_attempts'])->toBeGreaterThan(0);
+
+    // El reenvio de la tablet sin red: su hora real esta dentro de la ventana
+    // de los tres intentos. El bloqueo ya expiro cuando llega.
+    FrozenTime::at('2026-03-15 10:00:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    expect(DB::table('incidents')->where('id', $incident?->id)->value('status'))->toBe('open')
+        ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(0);
+})->group('RN-19', 'RS-12', 'RF-PR-01');
+
 it('no toca la incidencia que una persona ya descarto aunque la subsanacion llegue despues', function (): void {
     $scenario = rejectedPinScenario('2026-03-14 07:02:00');
     rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T07:02:00Z')->assertStatus(422);

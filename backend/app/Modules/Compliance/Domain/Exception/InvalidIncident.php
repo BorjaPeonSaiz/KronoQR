@@ -81,6 +81,14 @@ final class InvalidIncident extends ComplianceDomainException
         );
     }
 
+    public static function withPinLockoutAwaitingReview(): self
+    {
+        return new self(
+            'Una rejected_pin_scan con intentos bloqueados no se cierra sin persona: RN-19 pide hablar con ella '
+            .'y restablecerle el PIN (RF-ID-09), y su fichaje no hace ninguna de las dos cosas.'
+        );
+    }
+
     public static function withResolutionBeforeDetection(string $resolvedAt, string $detectedAt): self
     {
         return new self(
