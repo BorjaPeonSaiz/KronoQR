@@ -74,7 +74,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
         $siteId = $this->madridSite();
 
         if ($siteId === null) {
-            $this->command->warn('CorrectionSeeder: no hay ningun centro en '.self::TIMEZONE.'; no se siembra nada.');
+            $this->command?->warn('CorrectionSeeder: no hay ningun centro en '.self::TIMEZONE.'; no se siembra nada.');
 
             return;
         }
@@ -82,7 +82,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
         $author = $this->author();
 
         if ($author === null) {
-            $this->command->warn('CorrectionSeeder: no hay ninguna cuenta de gestion que firme; no se siembra nada.');
+            $this->command?->warn('CorrectionSeeder: no hay ninguna cuenta de gestion que firme; no se siembra nada.');
 
             return;
         }
@@ -98,7 +98,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
         // doble escaneo entra despues de la anulacion y por fuera de ellos.
         $this->projectDailyTotals();
 
-        $this->command->info('CorrectionSeeder: 3 correcciones sembradas, con sus versiones anteriores.');
+        $this->command?->info('CorrectionSeeder: 3 correcciones sembradas, con sus versiones anteriores.');
     }
 
     /**
