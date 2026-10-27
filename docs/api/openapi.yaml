@@ -19960,10 +19960,13 @@ components:
         `IncidentStatus` menos `open`: no hay forma de reabrir desde la API, y no
         es un olvido — cerrar es final.
 
-        **La deteccion tampoco la reabre.** La restriccion
-        `one_incident_per_finding` cubre todos los estados, asi que el mismo
-        hallazgo —mismo empleado, misma jornada, mismo tipo y mismo tramo— no
-        vuelve a entrar aunque la jornada siga dentro de la ventana de revision.
+        **La deteccion tampoco reabre lo que cerro una persona.** La
+        restriccion `one_incident_per_finding` cubre todos los estados, asi que
+        el mismo hallazgo —mismo empleado, misma jornada, mismo tipo y mismo
+        tramo— no vuelve a entrar aunque la jornada siga dentro de la ventana de
+        revision. La unica vuelta atras es de la revision y sobre su propio
+        cierre: una `rejected_pin_scan` que cerro el sistema se reabre si llega
+        despues otro intento de esa jornada sin subsanar (RN-19, ADR-057 §2).
         Lo que si abre fila nueva es un hecho realmente nuevo: una correccion
         estrena identificador de tramo (ADR-035), asi que la cuadrupla es otra.
       enum: [resolved, dismissed]
@@ -20252,8 +20255,12 @@ components:
             llega tarde de la cola offline de otro quiosco— (RN-19). Entonces
             `resolved_by` y `resolution_note` son `null` con `resolved_at`
             relleno, y el cierre deja su asiento `incident.resolved` con actor
-            `system`. Ninguna otra incidencia se cierra sola, y una que ya
-            trabajo una persona no la toca nadie.
+            `system`. Si despues llega otro intento de esa jornada sin
+            subsanar, la revision la reabre: vuelve a `open` con `resolved_at`,
+            `resolved_by` y `resolution_note` a `null`, el `context` del intento
+            nuevo y el asiento `incident.reopened` de actor `system`. Ninguna
+            otra incidencia se cierra ni se reabre sola, y una que ya trabajo
+            una persona no la toca nadie.
           oneOf:
             - $ref: '#/components/schemas/IncidentUser'
             - type: 'null'

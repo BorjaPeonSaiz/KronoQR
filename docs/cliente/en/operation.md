@@ -1306,8 +1306,10 @@ up in the inbox without anything to switch on; HR has the explanation of each in
 - **"PIN clocking not recorded"**: a PIN clocking attempt that was not accepted
   and that the person did not repeat. It closes itself if the person clocks in
   correctly within the 10 minutes after the attempt, unless the PIN got locked:
-  then it stays open so you can talk to the person and reset it. And it reopens
-  itself if another attempt appears without being made good.
+  then it stays open so you can talk to the person and reset it. And if, after
+  closing itself, another attempt from that same day arrives without being made
+  good —from another tablet that was offline—, it reopens itself. One closed or
+  dismissed by a person is never reopened.
 
 **The incidents open from what arrives after the update**, not over history:
 what happened before is not reprocessed. **What does not change**: a late PIN
