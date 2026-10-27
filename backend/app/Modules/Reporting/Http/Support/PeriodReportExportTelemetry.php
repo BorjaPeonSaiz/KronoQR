@@ -37,9 +37,8 @@ use Psr\Log\LoggerInterface;
  * cuando alguien pide un rango imposible tres veces seguidas.
  *
  * Lo que **no** se cuenta aqui es el fallo del motor de PDF: eso ocurre despues,
- * al componer el documento, y su sitio es el log de error del adaptador. Cuando
- * la tarea 3.1 publique `/metrics` sera el momento de decidir si merece serie
- * propia.
+ * al componer el documento, y su sitio es el log de error del adaptador. Si
+ * mereciera serie propia, iria al catalogo de `/metrics`.
  *
  * ## Que lleva el log y que no
  *

@@ -9,7 +9,7 @@ use Throwable;
 
 /**
  * El estado de la licencia para `GET /api/v1/health`, **sin tocar la base de
- * datos** (doc 02 §10.5, ADR-018, paso 9 de la tarea 5.3).
+ * datos** (doc 02 §10.5, ADR-018).
  *
  * ## Por que no lee la tabla `license`
  *
@@ -50,7 +50,7 @@ use Throwable;
 final readonly class LicenseStateProbe
 {
     /**
-     * Clave versionada, como las de la tarea 5.1: si algun dia cambia lo que se
+     * Clave versionada, como las de la configuracion: si algun dia cambia lo que se
      * guarda, la clave nueva no se encuentra con el valor viejo de un despliegue
      * anterior.
      */

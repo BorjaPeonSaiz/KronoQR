@@ -69,11 +69,11 @@ return [
      */
     'strict_integer' => 'El valor de :attribute debe ser un número entero, sin comillas.',
 
-    // MB2: `confirm_low_contrast` es booleano estricto, como los enteros.
+    // `confirm_low_contrast` es booleano estricto, como los enteros.
     'strict_boolean' => 'El valor de :attribute debe ser true o false.',
 
     /*
-     * Por que no vale el fichero de `BRANDING_LOGO_PATH` (RF-PD-08, tarea 5.8).
+     * Por que no vale el fichero de `BRANDING_LOGO_PATH` (RF-PD-08).
      *
      * CADA MENSAJE DICE QUE HACER, no solo que ha fallado. Quien lee esto es
      * personal de IT de un hotel al que no conocemos y que no tiene al fabricante
@@ -116,28 +116,28 @@ return [
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => 'tránsito mínimo entre dos quioscos (segundos)',
         'ATTENDANCE_PATTERN_WINDOW_SECONDS' => 'ventana de coincidencia en el mismo quiosco (segundos)',
         'ATTENDANCE_PATTERN_MIN_REPEATS' => 'días con coincidencia antes de abrir incidencia',
-        /* El fichaje de pausa (RF-AT-12, tarea 3.5). */
+        /* El fichaje de pausa (RF-AT-12). */
         'ATTENDANCE_BREAK_CLOCKING' => 'fichaje de la pausa en el quiosco',
         'BRANDING_APP_NAME' => 'nombre de la aplicación',
         'BRANDING_LOGO_PATH' => 'ruta del logotipo en el servidor',
         'BRANDING_ACCENT_COLOR' => 'color de acento',
         'LOCALE_DEFAULT' => 'idioma por defecto',
         'LOCALE_AVAILABLE' => 'idiomas disponibles',
-        /* El código de servicio de la pantalla de diagnóstico (RF-KI-08, tarea 3.3). */
+        /* El código de servicio de la pantalla de diagnóstico (RF-KI-08). */
         'KIOSK_SERVICE_CODE' => 'código de servicio del quiosco',
-        /* La salida a nómina (RF-IN-07, tarea 3.9). */
+        /* La salida a nómina (RF-IN-07). */
         'PAYROLL_EXPORT_COLUMNS' => 'columnas del fichero de nómina',
         'PAYROLL_EXPORT_DELIMITER' => 'separador del fichero de nómina',
         'PAYROLL_EXPORT_HOURS_FORMAT' => 'formato de las horas en el fichero de nómina',
         'PAYROLL_EXPORT_DATE_FORMAT' => 'formato de las fechas en el fichero de nómina',
         'PAYROLL_EXPORT_ENCODING' => 'codificación del fichero de nómina',
         'PAYROLL_EXPORT_HEADER_ROW' => 'fila de cabecera del fichero de nómina',
-        /* El resumen semanal por correo (RF-PR-05, tarea 3.12). */
+        /* El resumen semanal por correo (RF-PR-05). */
         'WEEKLY_SUMMARY_EMAIL' => 'resumen semanal por correo al responsable de cada departamento',
-        /* La ventana de actualización del quiosco (RF-KI-07, tarea 3.12). */
+        /* La ventana de actualización del quiosco (RF-KI-07). */
         'KIOSK_UPDATE_WINDOW' => 'franja en la que la tablet puede actualizarse (HH:MM-HH:MM, hora local)',
         'KIOSK_UPDATE_QUIET_MINUTES' => 'minutos sin escaneos antes de actualizar la tablet',
-        /* La línea base del cuadro de impacto (RF-IN-08, tarea 3.13). */
+        /* La línea base del cuadro de impacto (RF-IN-08). */
         'BASELINE_MANUAL_HOURS_PER_MONTH' => 'horas al mes consolidando hojas de horas antes de instalar el sistema',
         'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => 'margen de futuro del alta y la corrección manuales (minutos)',
         /* El aviso de privacidad del quiosco (RF-KI-09, RL-09, 2.2.0). */

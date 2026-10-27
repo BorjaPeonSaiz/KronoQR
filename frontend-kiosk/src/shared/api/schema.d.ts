@@ -7953,6 +7953,8 @@ export interface components {
              * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              * @example es
              */
             locale?: string;
@@ -8423,6 +8425,8 @@ export interface components {
              * @description Idioma de la persona, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              */
             locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
@@ -8450,7 +8454,8 @@ export interface components {
             /**
              * @description Idioma de la persona, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, no cambia. Fuera de la
-             *     lista es `422`.
+             *     lista es `422`. Sin distinguir mayusculas: `ES` se acepta y se
+             *     guarda como `es`, igual que en la importacion de plantilla.
              */
             locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
@@ -9588,7 +9593,10 @@ export interface components {
             revoked_at: components["schemas"]["UtcTimestamp"] | null;
             /**
              * @description Motivo de la revocacion, escrito por quien la ordeno. **No se
-             *     escriben nombres**: el titular ya viaja como `employee_uuid`.
+             *     escriben nombres**: el titular ya viaja como `employee_uuid`. El
+             *     que pone el sistema al dar de baja a la persona (RN-14) sale en el
+             *     idioma de la respuesta («Baja del empleado (RN-14)», «Employee left
+             *     (RN-14)»); en el registro y en la auditoria se guarda siempre igual.
              */
             revoked_reason: string | null;
             status: components["schemas"]["CredentialStatus"];
@@ -12753,7 +12761,9 @@ export interface components {
              *     de palabras tecnicas (ADR-048): toda palabra fuera del vocabulario
              *     cerrado del producto aparece como `…`, y las cifras con forma de
              *     documento, telefono, cuenta, NAF, codigo de empleado, fecha, hora o
-             *     IP como un marcador (`[n]`, `[id]`, `[time]`…).
+             *     IP como un marcador (`[n]`, `[id]`, `[time]`…). Si del mensaje no
+             *     queda nada, sale el aviso «sin mensaje» en el idioma de la
+             *     respuesta (`(sin mensaje)`, `(no message)`).
              * @example SQLSTATE[08006] connection to server at '…' failed
              */
             message: string;
@@ -13473,6 +13483,8 @@ export interface components {
              * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
              *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
              *     la lista es `422`.
+             *     Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+             *     que en la importacion de plantilla.
              */
             locale?: string;
             /**
@@ -14053,6 +14065,42 @@ export interface components {
         DependencyUnavailable: {
             headers: {
                 /** @description Segundos hasta el siguiente intento, minimo 1. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La tarjeta o la hoja de instrucciones no se puede componer ahora. No es
+         *     culpa de quien la pide y **ninguna credencial queda marcada como
+         *     impresa**: el PDF se compone antes de confirmar la impresion, asi que
+         *     reintentar es seguro. `problem+json`, nunca un `500` opaco. Dos `type`:
+         *
+         *     - `urn:kronoqr:problem:service-unavailable` — falta configuracion del
+         *       servidor (no hay clave de firma de credenciales; solo al imprimir), o
+         *       Redis no responde para repartir los turnos del motor de PDF, que
+         *       falla cerrado. Lo arregla quien administra el servidor; el `detail`
+         *       dice que falta, nunca un valor secreto. Sin `Retry-After`.
+         *     - `urn:kronoqr:problem:pdf-rendering-busy` — el motor de PDF esta, pero
+         *       todas sus composiciones simultaneas estan ocupadas. El tope
+         *       (`REPORTING_PDF_MAX_CONCURRENT`; cada composicion es un Chromium) es
+         *       uno para toda la instalacion: lo comparten estas rutas con los
+         *       informes y el registro propio. Se ha esperado unos segundos
+         *       (`REPORTING_PDF_WAIT_SECONDS`) a que quedara un hueco. Reintentar
+         *       pasado `Retry-After` tiene sentido.
+         *
+         *     La base de datos inalcanzable tiene su propia respuesta,
+         *     `DependencyUnavailable`, con `Retry-After`.
+         */
+        CredentialDocumentUnavailable: {
+            headers: {
+                /**
+                 * @description Solo con `urn:kronoqr:problem:pdf-rendering-busy`. Segundos que
+                 *     conviene esperar antes de volver a pedir el documento.
+                 * @example 3
+                 */
                 "Retry-After"?: number;
                 [name: string]: unknown;
             };
@@ -15960,7 +16008,9 @@ export interface operations {
                     /**
                      * @description Adjunto, con un nombre de fichero que no lleva ningun nombre de
                      *     persona ni ningun codigo de empleado: solo el periodo y la
-                     *     extension (`.csv` o `.pdf`).
+                     *     extension (`.csv` o `.pdf`). El comienzo va en el idioma de la
+                     *     instalacion, como el documento: `mi-registro-horario-…` o
+                     *     `my-time-record-…`.
                      */
                     "Content-Disposition"?: string;
                     /** @description Siempre `no-store`: el cuerpo es el registro horario de una persona. */
@@ -17174,7 +17224,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     printCredential: {
@@ -17235,7 +17285,7 @@ export interface operations {
             };
             422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     deliverCredential: {
@@ -17319,7 +17369,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            503: components["responses"]["CredentialDocumentUnavailable"];
         };
     };
     addShiftEntry: {

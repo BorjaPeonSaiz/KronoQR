@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * **El escaneo no se ha podido procesar y sigue pendiente** (esquema
- * `ScanNotProcessed`, tarea 1.7).
+ * `ScanNotProcessed`).
  *
  * No es un rechazo y la diferencia es la de perder o no perder una jornada. Un
  * rechazo dice «esta tarjeta no vale» y el quiosco saca el elemento de la cola

@@ -10,6 +10,15 @@ declare(strict_types=1);
 return [
 
     /*
+     * El motivo que escribe el sistema al revocar la tarjeta de quien causa
+     * baja (RN-14). Se guarda siempre con el mismo texto —es el del registro
+     * legal y el del asiento— y se traduce al enseñarlo.
+     */
+    'revoked_reason' => [
+        'offboarded' => 'Baja del empleado (RN-14)',
+    ],
+
+    /*
      * RV-2: el titulo del PDF de credenciales. Va al metadato del documento y
      * al historial de descargas del navegador, asi que nunca lleva nombres
      * (regla dura 21).

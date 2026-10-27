@@ -30,7 +30,7 @@ use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
  *
  * Antes la decidia el comando con `time()` y `filemtime()`. Ahora es la de la
  * conciliacion compartida: `max(mtime, ctime)`, y `ctime` si `mtime` esta en el
- * futuro (C9). Un `touch -d` hacia atras ya no adelanta un borrado, y uno hacia
+ * futuro (ADR-045 C9). Un `touch -d` hacia atras ya no adelanta un borrado, y uno hacia
  * delante ya no lo impide.
  */
 final readonly class SweepLegalExportFiles

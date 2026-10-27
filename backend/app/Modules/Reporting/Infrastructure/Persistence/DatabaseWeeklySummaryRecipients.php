@@ -13,7 +13,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * Los destinatarios del resumen semanal, leidos de la base de datos
- * (**RF-PR-05**, **RF-ID-03**, decision 2 de la ficha 3.12).
+ * (**RF-PR-05**, **RF-ID-03**).
  *
  * ## Quien entra, en una frase
  *
@@ -21,7 +21,7 @@ use Illuminate\Database\ConnectionInterface;
  * sin ningun rol de alcance global**.
  *
  * Las dos primeras condiciones son obvias; las dos ultimas no, y son las que
- * sostienen la decision 2:
+ * deciden quien recibe el resumen:
  *
  * - **Con el rol, no «quien dirige un departamento».** Podria parecer lo mismo
  *   —el alcance sale de `departments.manager_user_id`— y no lo es: una cuenta de

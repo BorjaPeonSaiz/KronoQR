@@ -106,7 +106,7 @@ final readonly class RecordDiagnosticsBundleGenerated
             // sesion, y eso tambien es informacion: distingue «lo genero Marta
             // desde el panel» de «lo genero alguien por SSH». Salvo el paquete
             // con datos personales de consola, que firma la cuenta admin de
-            // `--responsible` (2.3.0 bloque 3, PR17).
+            // `--responsible`.
             actor: $event->responsibleUserId === null
                 ? $this->context->actor()
                 : AuditActor::user($event->responsibleUserId),

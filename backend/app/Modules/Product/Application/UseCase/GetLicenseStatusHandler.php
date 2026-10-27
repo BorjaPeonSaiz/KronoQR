@@ -19,7 +19,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * ## Es el unico sitio donde se resuelve
  *
  * Igual que `GetSettingsHandler` es el unico punto de resolucion de la
- * configuracion (tarea 5.1), este lo es de la licencia. El `FeatureGate`, el
+ * configuracion, este lo es de la licencia. El `FeatureGate`, el
  * endpoint, los dos comandos de consola y la sonda de salud salen todos de aqui;
  * si cada uno leyera la tabla por su cuenta, tendriamos cuatro respuestas
  * posibles a la misma pregunta y la prueba de arquitectura de ADR-023 no

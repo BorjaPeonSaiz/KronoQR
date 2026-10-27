@@ -19,6 +19,7 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
 use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -48,6 +49,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class ReconcileWorkRecordCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.reconcile_work_record';
+
     protected $signature = 'compliance:reconcile-work-record
         {--full : Todo el registro y toda la auditoria viva, no solo la ventana de los ultimos dias}
         {--days= : Dias de la ventana diaria. Por defecto, compliance.work_record_reconciliation.window_days}
@@ -83,7 +89,7 @@ final class ReconcileWorkRecordCommand extends Command
         $days = $this->windowDays();
 
         if ($days < 1) {
-            $this->error('La ventana tiene que cubrir al menos un dia (--days o compliance.work_record_reconciliation.window_days).');
+            $this->error($this->text('window_too_short'));
 
             return self::INVALID;
         }
@@ -92,13 +98,13 @@ final class ReconcileWorkRecordCommand extends Command
         $result = $reconcile->handle($scope, $days, $chunk > 0 ? $chunk : 500);
 
         $coverage = $scope === WorkRecordReconciliationScope::Full
-            ? 'registro completo'
-            : 'ultimos '.$days.' dias';
+            ? $this->text('coverage.full')
+            : $this->text('coverage.recent', ['days' => $days]);
 
         $this->printNotCounted($result);
 
         if ($result->isConsistent()) {
-            $this->info('Registro y auditoria cuadran ('.$coverage.'): '.$result->entriesChecked.' tramos conciliados.');
+            $this->info($this->text('consistent', ['coverage' => $coverage, 'count' => $result->entriesChecked]));
 
             return self::SUCCESS;
         }
@@ -116,19 +122,23 @@ final class ReconcileWorkRecordCommand extends Command
     private function printNotCounted(WorkRecordReconciliationResult $result): void
     {
         if ($result->reviewedPurges > 0) {
-            $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
+            $this->line($this->text('not_counted.reviewed_purges', ['count' => $result->reviewedPurges]));
         }
 
         if ($result->reviewedSiteTimezoneChanges + $result->reviewedSiteTimezoneEntries > 0) {
-            $this->line('discrepancias de la zona del centro revisadas: '.$result->reviewedSiteTimezoneChanges.' de la traza, '
-                .$result->reviewedSiteTimezoneEntries.' de asientos sin firma (no cuentan)');
+            $this->line($this->text('not_counted.reviewed_site_timezone', [
+                'changes' => $result->reviewedSiteTimezoneChanges,
+                'entries' => $result->reviewedSiteTimezoneEntries,
+            ]));
         }
 
         // RN-23: lo que no se ha podido comparar con ningun asiento. Informa,
         // no falla: no es una discrepancia.
         if ($result->unverifiableSiteTimezones > 0 || $result->unverifiableSiteTimezoneChanges > 0) {
-            $this->line('zona del centro no verificable: '.$result->unverifiableSiteTimezones.' centro(s) sin asiento site.*, '
-                .$result->unverifiableSiteTimezoneChanges.' cambio(s) de zona anteriores a la auditoria conservada o a la linea base (no cuentan)');
+            $this->line($this->text('not_counted.unverifiable_site_timezone', [
+                'sites' => $result->unverifiableSiteTimezones,
+                'changes' => $result->unverifiableSiteTimezoneChanges,
+            ]));
         }
     }
 
@@ -167,11 +177,14 @@ final class ReconcileWorkRecordCommand extends Command
      */
     private function printMismatch(WorkRecordReconciliationResult $result, string $coverage): void
     {
-        $this->error(
-            'EL REGISTRO HORARIO NO CUADRA CON SU AUDITORIA ('.$coverage.'): '
-            .$result->discrepancyCount().' discrepancia(s) sobre '.$result->entriesChecked.' tramos.'
-        );
+        $this->error($this->text('mismatch', [
+            'coverage' => $coverage,
+            'count' => $result->discrepancyCount(),
+            'entries' => $result->entriesChecked,
+        ]));
 
+        // `  <clase>: <n>`, sin traducir: `update.sh` lee el recuento por clase
+        // con ese patron, en cualquier idioma de la instalacion.
         foreach ($result->counts as $kind => $count) {
             if ($count > 0) {
                 $this->line('  '.$kind.': '.$count);
@@ -183,10 +196,10 @@ final class ReconcileWorkRecordCommand extends Command
         }
 
         if ($result->truncated) {
-            $this->line('  (se listan las primeras '.\count($result->discrepancies).'; los recuentos de arriba son completos)');
+            $this->line($this->text('truncated', ['count' => \count($result->discrepancies)]));
         }
 
-        $this->error('Posible incidente de seguridad. Procedimiento: docs/runbooks/discrepancia-registro-auditoria.md');
+        $this->error($this->text('incident'));
     }
 
     /**
@@ -210,7 +223,7 @@ final class ReconcileWorkRecordCommand extends Command
     private function acknowledge(ReviewOutOfBoundsPurge $review, string $acknowledge, ResponsibleAccounts $accounts): int
     {
         if ((bool) $this->option('full') || $this->stringOption('days') !== null) {
-            $this->error(__('work-record-review.incompatible_options'));
+            $this->error($this->installationText('work-record-review.incompatible_options'));
 
             return self::INVALID;
         }
@@ -220,7 +233,7 @@ final class ReconcileWorkRecordCommand extends Command
         $purgeId = ConsoleIds::positive($acknowledge);
 
         if ($purgeId === null) {
-            $this->error(__('work-record-review.invalid_purge_id', ['value' => $acknowledge]));
+            $this->error($this->installationText('work-record-review.invalid_purge_id', ['value' => $acknowledge]));
 
             return self::INVALID;
         }
@@ -236,12 +249,12 @@ final class ReconcileWorkRecordCommand extends Command
             if ($reason === null || ! $responsible instanceof ResponsibleAccount) {
                 $preview = $review->preview($purgeId, $responsible?->id);
                 $this->printReview($purgeId, $preview->violations, $preview->explainsDeletions, $preview->cutoffDate, $preview->siteId);
-                $this->error(__('work-record-review.missing_options', ['id' => $purgeId]));
+                $this->error($this->installationText('work-record-review.missing_options', ['id' => $purgeId]));
 
                 return self::INVALID;
             }
 
-            $declined = $this->confirmSignature($responsible, __('work-record-review.confirm_purge', ['id' => $purgeId]));
+            $declined = $this->confirmSignature($responsible, $this->installationText('work-record-review.confirm_purge', ['id' => $purgeId]));
 
             if ($declined !== null) {
                 return $declined;
@@ -258,7 +271,7 @@ final class ReconcileWorkRecordCommand extends Command
             'explains_deletions' => $outcome->explainsDeletions,
         ]);
 
-        $this->info(__('work-record-review.done', ['id' => $outcome->purgeAuditEntryId, 'review' => $outcome->reviewAuditEntryId]));
+        $this->info($this->installationText('work-record-review.done', ['id' => $outcome->purgeAuditEntryId, 'review' => $outcome->reviewAuditEntryId]));
         $this->printReview($purgeId, $outcome->violations, $outcome->explainsDeletions, $outcome->cutoffDate, $outcome->siteId);
 
         return self::SUCCESS;
@@ -266,7 +279,7 @@ final class ReconcileWorkRecordCommand extends Command
 
     /**
      * `--acknowledge-site-change=change:<id>|audit:<id>`: da por revisada una
-     * discrepancia de la zona del centro (RN-23, bloque 2 de la 2.3.0). No
+     * discrepancia de la zona del centro (RN-23). No
      * concilia. Mismos codigos que `--acknowledge`:
      *
      * - con `--full`, `--days` o `--acknowledge`, o un objetivo o un
@@ -286,7 +299,7 @@ final class ReconcileWorkRecordCommand extends Command
     private function siteChangeTarget(string $value): SiteTimezoneReviewTarget|int
     {
         if ((bool) $this->option('full') || $this->stringOption('days') !== null || $this->stringOption('acknowledge') !== null) {
-            $this->error(__('work-record-review.site_change_incompatible'));
+            $this->error($this->installationText('work-record-review.site_change_incompatible'));
 
             return self::INVALID;
         }
@@ -294,7 +307,7 @@ final class ReconcileWorkRecordCommand extends Command
         $target = SiteTimezoneReviewTarget::parse($value);
 
         if ($target === null) {
-            $this->error(__('work-record-review.invalid_site_change', ['value' => $value]));
+            $this->error($this->installationText('work-record-review.invalid_site_change', ['value' => $value]));
 
             return self::INVALID;
         }
@@ -320,13 +333,13 @@ final class ReconcileWorkRecordCommand extends Command
         try {
             if ($reason === null || ! $responsible instanceof ResponsibleAccount) {
                 $site = $review->preview($target, $responsible?->id);
-                $this->line('  '.__('work-record-review.site_change_preview', ['target' => $target->label(), 'site' => $site]));
-                $this->error(__('work-record-review.site_change_missing_options', ['target' => $target->label()]));
+                $this->line('  '.$this->installationText('work-record-review.site_change_preview', ['target' => $target->label(), 'site' => $site]));
+                $this->error($this->installationText('work-record-review.site_change_missing_options', ['target' => $target->label()]));
 
                 return self::INVALID;
             }
 
-            $declined = $this->confirmSignature($responsible, __('work-record-review.confirm_site_change', ['target' => $target->label()]));
+            $declined = $this->confirmSignature($responsible, $this->installationText('work-record-review.confirm_site_change', ['target' => $target->label()]));
 
             if ($declined !== null) {
                 return $declined;
@@ -334,7 +347,7 @@ final class ReconcileWorkRecordCommand extends Command
 
             $reviewId = $review->handle(new ReviewSiteTimezoneDiscrepancyCommand($target, $reason, $responsible->id));
         } catch (SiteTimezoneReviewRejected $rejected) {
-            $this->error(__($rejected->translationKey, $rejected->parameters));
+            $this->error($this->installationText($rejected->translationKey, $rejected->parameters));
 
             return $rejected->translationKey === SiteTimezoneReviewRejected::RESPONSIBLE_NOT_ACTIVE ? self::INVALID : self::FAILURE;
         }
@@ -344,7 +357,7 @@ final class ReconcileWorkRecordCommand extends Command
             'review_entry_id' => $reviewId,
         ]);
 
-        $this->info(__('work-record-review.site_change_done', ['target' => $target->label(), 'review' => $reviewId]));
+        $this->info($this->installationText('work-record-review.site_change_done', ['target' => $target->label(), 'review' => $reviewId]));
 
         return self::SUCCESS;
     }
@@ -355,7 +368,7 @@ final class ReconcileWorkRecordCommand extends Command
      */
     private function rejected(PurgeReviewRejected $rejected): int
     {
-        $this->error(__($rejected->translationKey, $rejected->parameters));
+        $this->error($this->installationText($rejected->translationKey, $rejected->parameters));
 
         return $rejected->translationKey === PurgeReviewRejected::RESPONSIBLE_NOT_ACTIVE
             ? self::INVALID
@@ -369,8 +382,8 @@ final class ReconcileWorkRecordCommand extends Command
     {
         $this->line('  retention.purge_executed #'.$purgeId.': '.implode(', ', $violations));
         $this->line('  '.($explains
-            ? __('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
-            : __('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
+            ? $this->installationText('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
+            : $this->installationText('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
     }
 
     /**

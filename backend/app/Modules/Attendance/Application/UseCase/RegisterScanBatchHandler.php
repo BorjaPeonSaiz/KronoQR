@@ -156,7 +156,7 @@ final readonly class RegisterScanBatchHandler
 
     private function process(RegisterScanCommand $scan): ScanBatchOutcome
     {
-        $startedAt = microtime(true);
+        $startedAt = hrtime(true);
 
         try {
             $result = $this->scans->handle($scan);
@@ -178,7 +178,7 @@ final readonly class RegisterScanBatchHandler
             return ScanBatchOutcome::notProcessed($scan->scanId);
         }
 
-        $this->metrics->scanProcessed($scan->deviceUuid, $result->result, microtime(true) - $startedAt);
+        $this->metrics->scanProcessed($scan->deviceUuid, $result->result, (hrtime(true) - $startedAt) / 1_000_000_000);
 
         return ScanBatchOutcome::processed($result);
     }

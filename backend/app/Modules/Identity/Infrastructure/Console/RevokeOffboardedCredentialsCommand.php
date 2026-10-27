@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Identity\Application\UseCase\RevokeLeftoverCredentialsOfOffboardedEmployees;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Throwable;
 
 /**
  * `credentials:revoke-offboarded`: revoca las tarjetas que siguen activas de
- * personas ya dadas de baja (R3-AR-07, R4-SC-11; tarea 12.4 de la 2.3.0).
+ * personas ya dadas de baja.
  *
  * La lanza `update.sh` despues de las migraciones; se puede repetir a mano sin
  * efecto. **La salida solo lleva recuentos** (regla dura 21), en una linea que
@@ -30,9 +31,14 @@ use Throwable;
  */
 final class RevokeOffboardedCredentialsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:revoke-offboarded';
 
-    protected $description = 'Revoca, con su asiento, las tarjetas que siguen activas de personas dadas de baja (R3-AR-07).';
+    protected $description = 'Revoca, con su asiento, las tarjetas que siguen activas de personas dadas de baja (RN-14).';
 
     public function handle(RevokeLeftoverCredentialsOfOffboardedEmployees $sweep): int
     {
@@ -41,14 +47,14 @@ final class RevokeOffboardedCredentialsCommand extends Command
         } catch (Throwable $exception) {
             // La seleccion misma fallo: no se ha revocado nada.
             report($exception);
-            $this->error('No se han podido revocar las tarjetas de las bajas: '.$this->describe($exception));
+            $this->error($this->text('revoke_offboarded.failed', ['error' => $this->describe($exception)]));
 
             return self::FAILURE;
         }
 
         foreach ($result['failures'] as $failure) {
             report($failure);
-            $this->error('No se ha podido revocar una de las bajas: '.$this->describe($failure));
+            $this->error($this->text('revoke_offboarded.one_failed', ['error' => $this->describe($failure)]));
         }
 
         $this->line(\sprintf(
@@ -65,6 +71,6 @@ final class RevokeOffboardedCredentialsCommand extends Command
     {
         $sqlState = $failure instanceof QueryException ? (string) $failure->getCode() : '';
 
-        return $failure::class.($sqlState !== '' ? ' (SQLSTATE '.$sqlState.')' : '');
+        return $failure::class.($sqlState !== '' ? \sprintf(' (SQLSTATE %s)', $sqlState) : '');
     }
 }

@@ -6,8 +6,7 @@ namespace App\Support\Scheduling;
 
 /**
  * El latido del planificador: un fichero cuya hora de modificacion dice cuando
- * se ejecuto por ultima vez el bucle de `schedule:work` (bloque 9 de la 2.3.0,
- * O1).
+ * se ejecuto por ultima vez el bucle de `schedule:work`.
  *
  * ## Por que existe
  *

@@ -17,7 +17,7 @@ use Throwable;
  * gestion (RF-ID-10, doc 02 §8).
  *
  * - **El span y la duracion** los pone el caso de uso con
- *   {@see UseCaseInstrumentation}, que es la medida comun (V1-RV-03): aqui solo
+ *   {@see UseCaseInstrumentation}, que es la medida comun: aqui solo
  *   se le añaden `user_uuid`, `actor_uuid` y `account.outcome`.
  * - **Log** `identity.account.<accion>` con `user_uuid`, `actor_uuid`,
  *   `outcome` y `trace_id`. **Nunca el nombre ni el correo** (regla dura 21):

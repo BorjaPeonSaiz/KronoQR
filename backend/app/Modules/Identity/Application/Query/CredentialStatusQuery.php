@@ -29,7 +29,7 @@ final readonly class CredentialStatusQuery
         public ?string $keyId = null,
         /**
          * Subcadena del nombre completo o del codigo de empleado, sin distinguir
-         * mayusculas ni acentos (2.3.0, HC1). **Nunca llega al asiento**: el
+         * mayusculas ni acentos (2.3.0). **Nunca llega al asiento**: el
          * termino puede ser un nombre (regla dura 21).
          */
         public ?string $search = null,

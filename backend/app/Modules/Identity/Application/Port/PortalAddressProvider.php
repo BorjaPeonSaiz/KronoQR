@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Application\Port;
 
 /**
- * La direccion del portal del empleado de ESTA instalacion (tarea 5.11b, RL-05,
+ * La direccion del portal del empleado de ESTA instalacion (RL-05,
  * ADR-015).
  *
  * ## Por que un puerto para una cadena

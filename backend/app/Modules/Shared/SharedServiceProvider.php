@@ -6,27 +6,36 @@ namespace App\Modules\Shared;
 
 use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UseCaseMetrics;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\ConfigDeployedVersionProvider;
+use App\Modules\Shared\Infrastructure\Adapter\RedisPdfRenderingSlots;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
+use App\Modules\Shared\Infrastructure\Adapter\TimeOrderedUuidGenerator;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
+use App\Modules\Shared\Infrastructure\Persistence\PostgresFailureTranslator;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -36,10 +45,10 @@ use Psr\Log\LoggerInterface;
  * Modulo Shared — objetos de valor comunes, tipos base y contratos
  * transversales (doc 02 §1.6). No depende de ningun otro modulo.
  *
- * Enlaces pendientes de las tareas que los declaran:
- *   - CompliancePolicyProvider  -> Product/Infrastructure/Adapter (tarea 5.1, ADR-025)
- *   - OperationalSettingsProvider -> Product/Infrastructure/Adapter (tarea 5.1, ADR-025)
- * Los declara la tarea 1.1 y los enlaza ProductServiceProvider, que es quien
+ * Puertos de este modulo que enlaza otro modulo:
+ *   - CompliancePolicyProvider  -> Product/Infrastructure/Adapter (ADR-025)
+ *   - OperationalSettingsProvider -> Product/Infrastructure/Adapter (ADR-025)
+ * Los declara este modulo y los enlaza ProductServiceProvider, que es quien
  * tiene las tablas: el enlace puerto->adaptador se declara siempre en el
  * ServiceProvider de quien implementa (ADR-025, restriccion 3).
  */
@@ -51,7 +60,12 @@ final class SharedServiceProvider extends ServiceProvider
         // caso de uso. En las pruebas se sustituye por un reloj fijo.
         $this->app->singleton(Clock::class, SystemClock::class);
 
-        // La version desplegada (DC8). Vive aqui porque la leen `Kiosk` —la
+        // Los identificadores de los registros nuevos (RV-3). Un UUID v7 lleva
+        // la hora dentro: por eso entra por un puerto, como el reloj, y no con
+        // `Str::uuid7()` en cada caso de uso.
+        $this->app->singleton(UuidGenerator::class, TimeOrderedUuidGenerator::class);
+
+        // La version desplegada. Vive aqui porque la leen `Kiosk` —la
         // salud de cada tablet y el `minimum_app_version` del latido— y
         // `Product` —la sonda de version de `product:doctor`—, que no pueden
         // importarse entre si. El dato es de configuracion, no de un modulo.
@@ -68,7 +82,7 @@ final class SharedServiceProvider extends ServiceProvider
         // al servidor (RF-AT-11, RL-12). Vive aqui, junto al contador de
         // intentos y al verificador, porque los tres son piezas del mismo PIN y
         // los tocan modulos que no pueden importarse entre si: el quiosco lo
-        // abre al fichar (tarea 1.12) y `Kiosk` publica su clave publica en el
+        // abre al fichar y `Kiosk` publica su clave publica en el
         // padron para que la tablet pueda cerrarlo sin red.
         $this->app->singleton(SealedPinOpener::class, SodiumSealedPinOpener::class);
 
@@ -90,7 +104,7 @@ final class SharedServiceProvider extends ServiceProvider
         UseCaseMetricsRegistry::resolveWith(static fn (): UseCaseMetrics => $app->make(UseCaseMetrics::class));
 
         // El orden de candados de toda escritura que se audita (ADR-010,
-        // ADR-027, tarea 3.6). Vive aqui, y no en `Compliance`, porque lo
+        // ADR-027). Vive aqui, y no en `Compliance`, porque lo
         // necesita `Attendance` —la reconciliacion de `daily_totals` corrige una
         // fila y deja asiento— y `Attendance` no puede importar `Compliance`
         // (doc 02 §1.6). La clave del candado es la MISMA que usa el escritor de
@@ -98,7 +112,7 @@ final class SharedServiceProvider extends ServiceProvider
         // ordenes de adquisicion y el mismo abrazo mortal por otra puerta.
         $this->app->singleton(SerializedLedgerWrite::class, ChainLockedWrite::class);
 
-        // El suelo de tiempo de todo camino de rechazo (RS-03, tarea 5.6).
+        // El suelo de tiempo de todo camino de rechazo (RS-03).
         // Vive aqui por el mismo motivo que el contador de intentos: lo aplican
         // dos modulos que no pueden importarse entre si —la resolucion de una
         // credencial en `Identity` y la recogida de un emparejamiento en
@@ -117,7 +131,7 @@ final class SharedServiceProvider extends ServiceProvider
         // Los ficheros que genera el producto en el volumen `app-storage`
         // (ADR-045). Vive aqui porque los purgan tres modulos que no pueden
         // importarse entre si —`Product`, `Reporting` y `Compliance`— y el
-        // confinamiento (C3) tiene que ser el MISMO para los tres: una copia por
+        // confinamiento (ADR-045 C3) tiene que ser el MISMO para los tres: una copia por
         // modulo seria tres sitios donde olvidarse de no seguir un enlace.
         $this->app->singleton(
             GeneratedFileStore::class,
@@ -126,6 +140,26 @@ final class SharedServiceProvider extends ServiceProvider
             ),
         );
         $this->app->singleton(GeneratedFileMetrics::class, RedisGeneratedFileMetrics::class);
+
+        // Los fallos de la base de datos, en el vocabulario de los casos de
+        // uso: `Application` no lee SQLSTATE ni nombra los tipos del driver.
+        $this->app->singleton(DatabaseFailureTranslator::class, PostgresFailureTranslator::class);
+
+        // El tope de Chromium simultaneos de TODA la instalacion:
+        // informes y registro propio (`Reporting`), tarjetas y hoja de
+        // instrucciones (`Identity`). Uno solo, porque protege la memoria del
+        // servidor; la espera la pone cada llamada. La configuracion sigue en
+        // `reporting.pdf` para no cambiar las variables del `.env`.
+        $this->app->bind(PdfRenderingMetrics::class, RedisPdfRenderingMetrics::class);
+        $this->app->bind(
+            PdfRenderingSlots::class,
+            static fn (Application $app): RedisPdfRenderingSlots => new RedisPdfRenderingSlots(
+                $app->make(Redis::class),
+                $app->make(LoggerInterface::class),
+                $app->make(PdfRenderingMetrics::class),
+                Config::integer('reporting.pdf.max_concurrent'),
+            ),
+        );
 
         // La cuenta que firma una accion de consola con relevancia legal: la
         // revision de una purga (`Compliance`) y la correccion de la zona del

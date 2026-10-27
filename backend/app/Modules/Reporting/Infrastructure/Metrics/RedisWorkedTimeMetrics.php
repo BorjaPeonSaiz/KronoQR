@@ -39,7 +39,7 @@ use Throwable;
  */
 final readonly class RedisWorkedTimeMetrics implements WorkedTimeMetrics
 {
-    /** El mismo prefijo que el resto de las series, para que la tarea 3.1 las encuentre con un `SCAN`. */
+    /** El mismo prefijo que el resto de las series, para que `/metrics` las encuentre con un `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string WORKED_MINUTES_TOTAL = self::KEY_PREFIX.'worked_minutes_total';

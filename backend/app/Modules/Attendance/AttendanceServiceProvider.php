@@ -91,7 +91,7 @@ use Illuminate\Support\ServiceProvider;
  *   - `ScanMetrics`       -> `Infrastructure/Metrics`
  *
  * Los que sirve un satelite los enlaza el satelite, no este proveedor:
- * `CredentialResolver` en `IdentityServiceProvider` (tarea 1.5);
+ * `CredentialResolver` en `IdentityServiceProvider`;
  * `EmployeeDirectory` y `SiteCalendar` en `WorkforceServiceProvider`;
  * `Clock` en `SharedServiceProvider`; `OperationalSettingsProvider` en
  * `ProductServiceProvider`. **`Attendance` no sabe quien le resuelve una
@@ -127,10 +127,10 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ScanFailureLedger::class, DatabaseScanFailureLedger::class);
         $this->app->bind(ScanFailureClassifier::class, ScanFailureTransience::class);
         $this->app->bind(ScanDiscardSettings::class, ConfiguredScanDiscardSettings::class);
-        // A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
+        // ADR-061 A2: el titular de una tarjeta sin atribuir, por la huella de su contenido.
         $this->app->bind(CardFingerprintOwners::class, DatabaseCardFingerprintOwners::class);
 
-        // Correcciones (tarea 1.15). Las dos las sirve este mismo modulo:
+        // Correcciones. Las dos las sirve este mismo modulo:
         // `shift_corrections` es parte del registro horario —se consulta al
         // pintar una jornada y se exporta con el registro legal—, no auditoria
         // de otro modulo.
@@ -138,7 +138,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ShiftEntryHistory::class, EloquentShiftEntryHistory::class);
 
         /*
-         * La revision diaria (RF-PR-01, tarea 2.6). Dos puertos de **solo
+         * La revision diaria (RF-PR-01). Dos puertos de **solo
          * lectura**, y que lo sean es la garantia estructural de RN-08: el
          * detector no tiene por donde cerrar un tramo aunque alguien quisiera.
          *
@@ -180,7 +180,7 @@ final class AttendanceServiceProvider extends ServiceProvider
                 2 * max(0, Config::integer('security.rejection_floor_ms', 25)),
             ));
 
-        // RF-PR-06 y RN-16 (tarea 3.11): los usos de credencial en quiosco sobre
+        // RF-PR-06 y RN-16: los usos de credencial en quiosco sobre
         // los que la deteccion de patrones busca coincidencias sistematicas y
         // secuencias imposibles. Tercer puerto de lectura de `scan_events` y no
         // un metodo mas de los otros dos: aquellos traen escaneos SENALADOS —por
@@ -189,7 +189,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(CredentialScans::class, EloquentCredentialScans::class);
 
         // Que hay ya en la bandeja sobre los indicios de patron de cada persona
-        // (decision 13c de la ficha 3.11). Es el unico puerto del modulo cuyo
+        // (RF-PR-06). Es el unico puerto del modulo cuyo
         // adaptador lee una tabla de otro —`incidents`, de `Compliance`—, y esa
         // excepcion acotada esta razonada en su propio docblock: Deptrac no le
         // concede a `Compliance` la capa `Attendance\Application\Port`, asi que
@@ -202,7 +202,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ShiftEntrySubject::class, EloquentShiftEntrySubject::class);
 
         /*
-         * La reconciliacion nocturna (RF-PR-02, ADR-007, tarea 2.7).
+         * La reconciliacion nocturna (RF-PR-02, ADR-007).
          *
          * `DailyTotalsProjection` lee la proyeccion y **no la escribe**: la
          * escritura sigue teniendo un solo camino, el listener
@@ -218,7 +218,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->singleton(CorrectionMetrics::class, RedisCorrectionMetrics::class);
 
         /*
-         * `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2, tarea 3.1).
+         * `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2).
          *
          * En Redis y no por fichero, al contrario que la de abajo: es un
          * contador PURO que solo suma, no una cifra que se reescriba entera cada
@@ -241,8 +241,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->singleton(ProjectionMetrics::class, TextfileProjectionMetrics::class);
 
         /*
-         * El desenlace de la revision diaria, tambien por fichero (doc 02 §8.2,
-         * tarea 3.2).
+         * El desenlace de la revision diaria, tambien por fichero (doc 02 §8.2).
          *
          * Convive con `AnomalyMetrics` y no lo sustituye: aquel cuenta hallazgos
          * por tipo y es una serie de tendencia; este responde «¿corrio anoche?» y
@@ -254,7 +253,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->singleton(IncidentDetectionMetrics::class, TextfileIncidentDetectionMetrics::class);
 
         /*
-         * El desenlace de la deteccion de patrones (doc 02 §8.2, tarea 3.11).
+         * El desenlace de la deteccion de patrones (doc 02 §8.2).
          *
          * Fichero propio —`kronoqr_pattern_detection.prom`— y no dos series mas
          * en el de las incidencias: son dos pasadas distintas, a horas
@@ -340,7 +339,7 @@ final class AttendanceServiceProvider extends ServiceProvider
      *   contador habria que elegir entre asfixiar el drenaje de la cola o dejar
      *   el endpoint individual practicamente sin techo.
      * - `scan-pin` no frena un ritmo de fichaje, frena **fuerza bruta** sobre un
-     *   espacio de 10^6 (RS-12, tarea 1.12). Sus numeros razonables son dos
+     *   espacio de 10^6 (RS-12). Sus numeros razonables son dos
      *   ordenes de magnitud mas bajos: una persona teclea un codigo y seis
      *   digitos en decenas de segundos.
      *
@@ -385,7 +384,7 @@ final class AttendanceServiceProvider extends ServiceProvider
             Config::integer('kiosk.rate_limits.pin_scan_per_ip', 60),
         ));
 
-        // RN-22 (ADR-047, F8): los avisos de fichaje descartado. Zona propia,
+        // RN-22 (ADR-047): los avisos de fichaje descartado. Zona propia,
         // que no consume la de los escaneos; 6 por minuto y dispositivo vacian
         // una lista de 40 en una pasada, y cada aviso paga el suelo de RS-03.
         RateLimiter::for('scan-discarded', static fn (Request $request): array => KioskRateLimit::of(

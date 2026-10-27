@@ -22,7 +22,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * `POST /api/v1/client-errors` — el buffer de errores del panel y del portal
- * (contrato `ClientErrorBatch`, **RF-PD-15**, decision 7 de la ficha 5.12).
+ * (contrato `ClientErrorBatch`, **RF-PD-15**).
  *
  * ## EL SERVIDOR DECIDE EL ORIGEN, no el cuerpo
  *
@@ -39,8 +39,8 @@ use Illuminate\Validation\Rule;
  *
  * ## El codigo se valida contra el catalogo cerrado DE SU ORIGEN
  *
- * {@see ClientErrorCode} y no solo el patron del contrato, y es la correccion de
- * la revision de seguridad. Con el patron a secas pasaban dos cosas:
+ * {@see ClientErrorCode} y no solo el patron del contrato. Con el patron a
+ * secas pasaban dos cosas:
  *
  * 1. **Una sesion de portal podia enviar `kiosk.camera.unavailable`** y fabricar
  *    filas `critical` que disparan la alerta al IT del cliente de madrugada.

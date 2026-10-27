@@ -113,7 +113,7 @@ final readonly class ServiceInspector
 
     /**
      * La migracion que fija la zona del centro tambien en la base de datos
-     * (RN-23, ADR-056, bloque 2 de la 2.3.0): el *trigger* de `sites` y la
+     * (RN-23, ADR-056): el *trigger* de `sites` y la
      * funcion de la correccion de consola. Sin ella aplicada no se vigilan.
      */
     public const string SITE_TIMEZONE_GUARD_MIGRATION = '2026_10_18_120000_guard_site_timezone_in_database';
@@ -235,7 +235,7 @@ final readonly class ServiceInspector
     }
 
     /**
-     * Si Reverb responde (V4-PL-2): sin esto, «la presencia en vivo no se
+     * Si Reverb responde: sin esto, «la presencia en vivo no se
      * actualiza» no distinguia un Reverb parado de una licencia caducada sin
      * pedir una segunda ronda.
      *

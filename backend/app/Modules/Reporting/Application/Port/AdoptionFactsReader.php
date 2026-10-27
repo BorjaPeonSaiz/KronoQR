@@ -19,7 +19,7 @@ use App\Modules\Reporting\Domain\ValueObject\AdoptionReportQuery;
  * de `Domain` desde un puerto de `Application` esta bien, pero el argumento cabe
  * mejor aqui—: es lo que permite verificar «doce de trece jornadas son 92,31 %» en
  * una prueba unitaria de cinco lineas en lugar de sembrando trece jornadas en
- * PostgreSQL (decision 1 de la ficha 3.13).
+ * PostgreSQL.
  *
  * ## Los dos periodos en la misma llamada, y no dos llamadas
  *

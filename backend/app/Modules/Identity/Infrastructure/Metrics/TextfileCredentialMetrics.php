@@ -78,8 +78,8 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
         $lines[] = '# TYPE credentials_pending_reprint gauge';
         $lines[] = 'credentials_pending_reprint'.$this->reprintLabels($coverage).' '.$coverage->pendingReprint;
 
-        // **La serie que siempre deberia valer cero** (revision de seguridad de
-        // la 2.12): tarjetas vivas firmadas con una clave que la instalacion ya
+        // **La serie que siempre deberia valer cero**: tarjetas vivas firmadas
+        // con una clave que la instalacion ya
         // no reconoce. Quien lleve una de esas no puede fichar, y el panel no lo
         // delata porque su fila se ve entregada. Se escribe una linea por clave
         // huerfana y, cuando no hay ninguna, un cero con `key_id=""`: una serie

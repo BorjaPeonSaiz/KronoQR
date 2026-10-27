@@ -9,7 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 
 /**
  * Escribe el fichero del informe en diferido **en una ruta del disco**
- * (**RF-IN-06**, **RF-IN-07**, decision 4 de la ficha 3.9).
+ * (**RF-IN-06**, **RF-IN-07**).
  *
  * ## Es el mismo escritor que la descarga sincrona, y eso es el requisito
  *

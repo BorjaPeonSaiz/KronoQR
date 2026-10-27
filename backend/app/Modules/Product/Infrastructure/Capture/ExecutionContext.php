@@ -18,7 +18,7 @@ use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 
 /**
- * Donde esta el proceso ahora mismo (RF-PD-15, tarea 5.12, decision 2).
+ * Donde esta el proceso ahora mismo (RF-PD-15).
  *
  * ## Por que hace falta
  *
@@ -63,7 +63,7 @@ use Illuminate\Queue\Events\JobProcessing;
  */
 final class ExecutionContext
 {
-    /** Prefijo de las rutas de fichaje: cualquier fallo en ellas es `critical` (decision 3). */
+    /** Prefijo de las rutas de fichaje: cualquier fallo en ellas es `critical`. */
     public const string CLOCKING_ROUTE_PREFIX = '/api/v1/scan';
 
     private ?ExecutionFrame $job = null;
@@ -108,7 +108,7 @@ final class ExecutionContext
                 $this->job = null;
             },
             // Agoto sus intentos: nadie lo esta mirando y el resultado ya no
-            // llegara (decision 3). Se dispara ANTES del informe, de modo que la
+            // llegara. Se dispara ANTES del informe, de modo que la
             // severidad ya esta puesta cuando el error se persiste.
             JobFailed::class => function (object $event): void {
                 $this->job = $this->jobFrame($event, critical: true);
@@ -157,7 +157,7 @@ final class ExecutionContext
     /**
      * Toda tarea del planificador es `critical`: la reconciliacion nocturna o la
      * purga que fallan **cuando no hay nadie mirando** son justo lo que la alerta
-     * del doc 01 §9.3 tiene que sacar a la luz (decision 3).
+     * del doc 01 §9.3 tiene que sacar a la luz.
      */
     private function scheduledTaskFrame(object $event): ExecutionFrame
     {

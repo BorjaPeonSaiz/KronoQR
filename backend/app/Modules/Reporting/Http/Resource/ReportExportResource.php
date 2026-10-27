@@ -37,7 +37,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * ## Los criterios van dentro
  *
- * Porque el fichero de **nomina** no los lleva (decision 5): una fila de
+ * Porque el fichero de **nomina** no los lleva: una fila de
  * comentario rompe la importacion del programa de nomina. Aqui es donde la
  * pantalla los puede enseñar junto a la descarga, que es lo que exige el paso 1
  * de `/informe-nuevo`: los criterios visibles para quien lo lee.
@@ -121,7 +121,7 @@ final class ReportExportResource extends JsonResource
             'notified_at' => UtcInstant::format($export->notifiedAt),
             'notification_channel' => $export->notificationChannel?->value,
             // Solo de una `running`: el avance anotado antes de una cancelacion
-            // no describe nada (V5-PA-4).
+            // no describe nada.
             'progress' => $progress === null || $export->status !== ReportExportStatus::Running
                 ? null
                 : self::progressPayload($progress),

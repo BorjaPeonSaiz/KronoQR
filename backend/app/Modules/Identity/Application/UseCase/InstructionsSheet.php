@@ -6,7 +6,7 @@ namespace App\Modules\Identity\Application\UseCase;
 
 /**
  * La hoja de instrucciones ya compuesta: los bytes del PDF y el idioma en el que
- * salio (tarea 5.11b, RL-05).
+ * salio (RL-05).
  *
  * **El idioma viaja con el documento** porque el nombre del fichero lo lleva
  * —`hoja-empleado-es.pdf`— y quien imprime las dos versiones necesita
@@ -15,7 +15,7 @@ namespace App\Modules\Identity\Application\UseCase;
  * cuando no se pidio ninguno.
  *
  * **Ningun dato personal, y por eso el nombre del fichero es fijo.** Es la misma
- * hoja para toda la plantilla (ficha 5.11b, decision 1), asi que aqui no hay que
+ * hoja para toda la plantilla, asi que aqui no hay que
  * cuidar lo que cuida {@see PrintedCards}: no hay titular al que nombrar.
  */
 final readonly class InstructionsSheet

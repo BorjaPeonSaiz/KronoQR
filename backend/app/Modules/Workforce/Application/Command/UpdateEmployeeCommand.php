@@ -6,8 +6,8 @@ namespace App\Modules\Workforce\Application\Command;
 
 /**
  * Modificacion parcial. `*Given` distingue «no se envio» de «se envio `null`»
- * en los campos anulables. Sin `siteId`: no hay otro centro al que mover a
- * nadie (ADR-040).
+ * en los campos anulables. Sin `siteId`: hay un solo centro por instalacion
+ * (ADR-040).
  */
 final readonly class UpdateEmployeeCommand
 {

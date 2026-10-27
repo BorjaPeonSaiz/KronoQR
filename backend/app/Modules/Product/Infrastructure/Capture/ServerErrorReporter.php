@@ -32,14 +32,14 @@ use Throwable;
 
 /**
  * Los cuatro origenes de servidor del historico de errores, con un solo enganche
- * (RF-PD-15, tarea 5.12, decisiones 1, 2 y 3).
+ * (RF-PD-15).
  *
  * Lo invoca el `reportable` que `ProductServiceProvider::registerErrorCapture()`
  * registra sobre el manejador de excepciones. Todo `Throwable` que Laravel
  * informa pasa por aqui; el que sobrevive al filtro se convierte en
  * {@see ErrorReport} y va al {@see ErrorEventSink}.
  *
- * ## Que NO es un error (decision 1, reescrita tras la revision)
+ * ## Que NO es un error (reescrita tras la revision)
  *
  * Un `409` de «turno ya abierto» **es el sistema funcionando**. La primera
  * version lo decidia por el espacio de nombres de la excepcion —todo lo de
@@ -84,7 +84,7 @@ use Throwable;
  * identificador **publico**: el UUID del dispositivo o el del empleado, leidos
  * del portador del token. Nunca un nombre, nunca un correo, nunca el cuerpo. El
  * mensaje de la excepcion viaja crudo porque el saneado es del servidor y ocurre
- * en el sink (decision 5): quien reporta no tiene que saber sanear y no se confia
+ * en el sink: quien reporta no tiene que saber sanear y no se confia
  * en que lo haya hecho.
  *
  * **Con una excepcion, y es la que costo una revision**: el mensaje de una
@@ -183,7 +183,7 @@ final readonly class ServerErrorReporter
         }
 
         if (! $request instanceof Request) {
-            // Fuera de una peticion todo lo demas es error (decision 1).
+            // Fuera de una peticion todo lo demas es error.
             return false;
         }
 
@@ -270,7 +270,7 @@ final readonly class ServerErrorReporter
             ErrorSource::Api,
             ['route' => $path, 'method' => $request->getMethod()],
             // Regla dura: el fichaje es el registro legal. Un fallo ahi se mira
-            // ahora, no cuando alguien abra el panel (decision 3).
+            // ahora, no cuando alguien abra el panel.
             critical: str_starts_with($path, ExecutionContext::CLOCKING_ROUTE_PREFIX),
         );
     }

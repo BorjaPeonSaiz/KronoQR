@@ -15,7 +15,7 @@ namespace App\Modules\Workforce\Application\Port;
  * importacion masiva no emite PIN, porque un PIN se muestra una sola vez y se
  * entrega en mano con la tarjeta; RRHH lo emite desde la ficha en ese momento.
  * Tambien lo tienen las fichas anteriores a RF-ID-09. El alta individual nunca
- * lo deja: emite en su misma transaccion (tarea 1.13). Es el estado por el que
+ * lo deja: emite en su misma transaccion. Es el estado por el que
  * filtra «Sin emitir» en el listado, y por eso tiene que ser verdad: mostrar
  * «emitido» a alguien que no lo tiene esconderia a quien no puede fichar por
  * respaldo ni entrar al portal.

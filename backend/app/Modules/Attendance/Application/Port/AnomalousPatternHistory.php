@@ -7,8 +7,7 @@ namespace App\Modules\Attendance\Application\Port;
 use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
 
 /**
- * Que se ha hecho ya con los indicios de patron de cada persona (RF-PR-06,
- * decision 13c de la ficha 3.11).
+ * Que se ha hecho ya con los indicios de patron de cada persona (RF-PR-06).
  *
  * ## Por que la deteccion tiene que mirar la bandeja
  *
@@ -16,8 +15,7 @@ use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
  * `one_incident_per_finding` los deduplica sola. Un patron describe un
  * **habito**, y su jornada avanza cada noche: sin esto, las mismas dos personas
  * coincidiendo cada manana abrian una incidencia `high` nueva cada madrugada y
- * la bandeja que el runbook manda vaciar crecia sola. Es el hallazgo R-1 de la
- * revision de seguridad.
+ * la bandeja que el runbook manda vaciar crecia sola.
  *
  * ## Se lee UNA vez por pasada
  *

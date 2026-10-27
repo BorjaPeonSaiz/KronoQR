@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Infrastructure\Metrics;
 
 use App\Modules\Reporting\Application\Port\ComplianceMetrics;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
 use DateTimeZone;
 
 /**
  * Publica las dos metricas de cumplimiento para el colector *textfile* de
- * `node-exporter` (doc 02 §8.2, decision 10 de la ficha 3.4).
+ * `node-exporter` (doc 02 §8.2).
  *
  * ```
  * compliance_findings_last_week{rule="insufficient_rest"}
@@ -82,6 +83,6 @@ final readonly class TextfileComplianceMetrics implements ComplianceMetrics
      */
     private function epochOf(string $weekStartsOn): int
     {
-        return (new DateTimeImmutable($weekStartsOn.' 00:00:00', new DateTimeZone('UTC')))->getTimestamp();
+        return CivilDate::midnight($weekStartsOn, new DateTimeZone('UTC'))->getTimestamp();
     }
 }

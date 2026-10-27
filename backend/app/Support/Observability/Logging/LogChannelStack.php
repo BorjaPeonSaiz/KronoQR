@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Observability\Logging;
 
 /**
- * Que canales entran en la pila de log del producto (doc 02 §8.2.1, decision 8
- * de la ficha 3.1).
+ * Que canales entran en la pila de log del producto (doc 02 §8.2.1).
  *
  * ## La regla, en una frase
  *

@@ -40,8 +40,8 @@ use Illuminate\Support\Facades\Config;
  * ## La constancia del acceso tampoco se escribe aqui
  *
  * La escribe la consulta, dentro (RS-05). Si dependiera de una linea de este
- * metodo, el dia que la exportacion de la tarea 2.9 use el mismo informe habria
- * que acordarse de repetirla — y la 2.9 no la va a repetir, la va a heredar.
+ * metodo, la exportacion (RF-IN-04), que usa el mismo informe, tendria que
+ * acordarse de repetirla; asi la hereda.
  *
  * ## Los dos techos vienen de la configuracion, no de constantes
  *
@@ -55,7 +55,7 @@ use Illuminate\Support\Facades\Config;
  * Ninguna respuesta de este endpoint cambia el registro. Que quede auditado
  * (RS-05) no lo convierte en una escritura, igual que en la exportacion legal.
  *
- * ## Es funcionalidad ACCESORIA, y se degrada (tarea 5.3)
+ * ## Es funcionalidad ACCESORIA, y se degrada
  *
  * [ADR-023](../../../../../../docs/adr/ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md)
  * lo clasifica como degradable: *«informes avanzados y comparacion entre

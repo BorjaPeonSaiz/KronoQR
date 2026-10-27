@@ -50,7 +50,7 @@ final readonly class DownloadDataExportHandler
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
         /**
-         * El localizador confinado (ADR-045, F3). Antes decidia el controlador
+         * El localizador confinado (ADR-045). Antes decidia el controlador
          * con un `is_file()` sobre la ruta de la fila: una fila alterada con
          * `file_path='/proc/self/environ'` entregaba los secretos del proceso.
          * Ahora solo se entrega un ZIP presente dentro de su raiz, con su patron y

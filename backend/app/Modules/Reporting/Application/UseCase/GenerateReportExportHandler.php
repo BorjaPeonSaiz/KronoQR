@@ -27,17 +27,16 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DatabaseFailureKind;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\QueryException;
-use PDOException;
 use RuntimeException;
 use Throwable;
 
 /**
- * Genera el fichero de un informe en diferido (**RF-IN-06**, **RF-IN-07**,
- * decision 4 de la ficha 3.9; **V5-PA-4** desde la 2.3.0).
+ * Genera el fichero de un informe en diferido (**RF-IN-06**, **RF-IN-07**).
  *
  * ## Cuatro clases de informe, un solo ciclo de vida
  *
@@ -56,7 +55,7 @@ use Throwable;
  * esta `pending` —cancelada, dada por muerta, o un reintento del trabajador—
  * no se hace nada.
  *
- * ## Se puede cancelar mientras corre (V5-PA-4)
+ * ## Se puede cancelar mientras corre
  *
  * Cada fase pregunta a la fila si sigue `running`
  * ({@see ReportExportProgressTracker}), y la exportacion legal ademas cada 500
@@ -81,18 +80,15 @@ use Throwable;
  * —`personal_data.accessed` del informe, `legal_export.generated` de la
  * exportacion legal, `adoption_report.exported` del cuadro— se escriben en la
  * transaccion que cierra la fila (regla dura 6, ADR-027), con el solicitante
- * como actor y no `system` (bloque 11, V4-BE-5).
+ * como actor y no `system`.
  *
  * ## El aviso va DESPUES de cerrar la fila, y fuera de su transaccion
  *
  * Porque un SMTP lento o caido no puede impedir que un informe generado conste
- * como generado (regla dura 12, decision 8).
+ * como generado (regla dura 12).
  */
 final readonly class GenerateReportExportHandler
 {
-    /** El `SQLSTATE` con el que PostgreSQL corta por `statement_timeout`. */
-    private const string QUERY_CANCELED = '57014';
-
     public function __construct(
         private ReportExportRepository $exports,
         private PeriodReportExportGeneration $periodReports,
@@ -104,6 +100,7 @@ final readonly class GenerateReportExportHandler
         private ReportingEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private DatabaseFailureTranslator $databaseFailures,
         /** Dias que vive el fichero antes de purgarse (regla dura 14: ya resuelto). */
         private int $retentionDays,
     ) {}
@@ -276,7 +273,7 @@ final readonly class GenerateReportExportHandler
                 return;
             }
 
-            $this->exports->save($locked->fail($this->clock->now(), self::failureOf($failure)));
+            $this->exports->save($locked->fail($this->clock->now(), $this->failureOf($failure)));
         });
     }
 
@@ -296,7 +293,7 @@ final readonly class GenerateReportExportHandler
             uuid: $completed->uuid,
             kind: $completed->kind->value,
             format: $completed->format,
-            // El NOMBRE, nunca la ruta absoluta (regla dura 21 y decision 7).
+            // El NOMBRE, nunca la ruta absoluta (regla dura 21).
             fileName: $completed->fileName ?? '',
             sha256: $completed->sha256 ?? '',
             sizeBytes: $completed->sizeBytes ?? 0,
@@ -352,22 +349,24 @@ final readonly class GenerateReportExportHandler
     /**
      * De que fallo se trata, en el vocabulario que lee quien pidio el informe.
      *
-     * Se clasifica **aqui y no en el dominio** porque distinguir un error de base
-     * de datos exige nombrar los tipos del driver (regla dura 1). El orden
-     * importa: el `statement_timeout` es un periodo demasiado grande, no una
-     * averia; despues el disco, despues el driver, y lo demas es `unexpected`.
+     * Se clasifica **aqui y no en el dominio**, y sin nombrar los tipos del
+     * driver: que el fallo venga de la base de datos, y si fue un
+     * `statement_timeout`, lo dice el adaptador de
+     * {@see DatabaseFailureTranslator}. El orden importa: el `statement_timeout`
+     * es un periodo demasiado grande, no una averia; despues el disco, despues
+     * la base de datos, y lo demas es `unexpected`.
      */
-    private static function failureOf(Throwable $failure): ReportExportFailure
+    private function failureOf(Throwable $failure): ReportExportFailure
     {
+        $database = $this->databaseFailures->translate($failure);
+
         return match (true) {
             $failure instanceof ReportTooLargeForSynchronousDelivery => ReportExportFailure::QueryTimeout,
             // `query_canceled` por `statement_timeout`: la exportacion legal en cola
-            // lleva el techo del diferido y su origen no lo traduce (V5-PA-4).
-            $failure instanceof QueryException
-                && ($failure->errorInfo[0] ?? null) === self::QUERY_CANCELED => ReportExportFailure::QueryTimeout,
+            // lleva el techo del diferido y su origen no lo traduce.
+            $database?->kind === DatabaseFailureKind::QueryCanceled => ReportExportFailure::QueryTimeout,
             $failure instanceof ReportExportWriteFailed => ReportExportFailure::WriteFailed,
-            $failure instanceof QueryException,
-            $failure instanceof PDOException => ReportExportFailure::DatabaseError,
+            $database !== null => ReportExportFailure::DatabaseError,
             default => ReportExportFailure::Unexpected,
         };
     }

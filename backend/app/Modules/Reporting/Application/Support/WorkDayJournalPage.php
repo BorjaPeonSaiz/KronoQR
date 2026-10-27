@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Application\Support;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 
 /**
- * Una pagina del registro horario de una persona (**V5-PA-2**, RF-PA-03).
+ * Una pagina del registro horario de una persona (RF-PA-03).
  *
  * El registro trae **el rango pedido** —no el de la pagina— y solo las
  * jornadas de la pagina: es lo que la pantalla enseña como «del 1 de enero al

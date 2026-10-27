@@ -22,7 +22,7 @@ use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
  * ## Por que existe el puerto si solo tiene un adaptador
  *
  * Por lo mismo que `EmployeeQueries` en `Workforce`: es el unico sitio donde
- * entrara el alcance por departamento de RF-ID-03 (tarea 2.1) y donde se decide
+ * entrara el alcance por departamento de RF-ID-03 y donde se decide
  * como se lee esta consulta. Si el controlador hablara con Eloquent, ese filtro
  * habria que repetirlo en cada camino de lectura y bastaria olvidarlo en uno.
  *
@@ -58,7 +58,7 @@ interface WorkDayJournalReader
     /**
      * Las jornadas **con actividad** del rango, de la mas antigua a la mas
      * reciente: las mismas que traeria {@see self::journalFor()}, sin leer nada
-     * de ellas (V5-PA-2, 2.3.0).
+     * de ellas (2.3.0).
      *
      * Es lo que permite paginar el registro de una persona **por jornadas
      * enteras**: se cuentan aqui, se elige la pagina y se lee solo el tramo de
@@ -82,7 +82,7 @@ interface WorkDayJournalReader
      * @param  string  $timeZone  Zona del centro actual del empleado, la que
      *                            devolvio {@see timeZoneOf()}.
      * @param  bool  $withIncidents  Si cada jornada trae ademas sus incidencias
-     *                               (RF-PA-05, tarea 2.5). **Es una consulta mas**,
+     *                               (RF-PA-05). **Es una consulta mas**,
      *                               asi que quien no las va a enseñar no las pide:
      *                               hoy el portal del empleado, que recibe el mismo
      *                               esquema con la lista vacia por la decision escrita

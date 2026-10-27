@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Workforce\Domain\Exception\ConcurrentEmployeeWrite;
 use Illuminate\Database\ConnectionInterface;
-use PDOException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -35,14 +35,13 @@ use Throwable;
  *
  * ## Como se reconoce el cruce
  *
- * **No por la clase de la excepcion.** El cruce ocurre siempre en una
- * transaccion anidada —la escritura del correo va dentro de `withChainLock()`,
- * la insercion del alta dentro de la del repositorio—, y Laravel convierte ahi
- * el error en `Illuminate\Database\DeadlockException`: un `PDOException` que no
- * es `QueryException` y cuyo codigo es `0`. Lo que dice que fue un `40P01` o un
- * `40001` es el SQLSTATE de la excepcion original, que va en `getPrevious()`.
- * Por eso se recorre la cadena de causas: atrapar solo `QueryException`
- * dejaria salir el segundo cruce como `500`.
+ * **No por la clase de la excepcion, y no aqui.** El cruce ocurre siempre en
+ * una transaccion anidada —la escritura del correo va dentro de
+ * `withChainLock()`, la insercion del alta dentro de la del repositorio—, y el
+ * framework lo envuelve en una excepcion con codigo `0` cuyo SQLSTATE va en la
+ * causa. Reconocer un abrazo (`40P01`) o un fallo de serializacion (`40001`)
+ * en esa cadena es cosa del adaptador de {@see DatabaseFailureTranslator}: este
+ * caso de uso solo pregunta si fue concurrencia.
  *
  * ## Solo en la transaccion de fuera
  *
@@ -66,12 +65,10 @@ final readonly class EmployeeWriteRetry
     /** Uno de reintento: un tercer cruce seguido no es una carrera, es otra cosa. */
     private const int ATTEMPTS = 2;
 
-    /** `deadlock_detected` y `serialization_failure`. */
-    private const array CONCURRENCY_SQLSTATES = ['40P01', '40001'];
-
     public function __construct(
         private ConnectionInterface $connection,
         private LoggerInterface $logger,
+        private DatabaseFailureTranslator $databaseFailures,
     ) {}
 
     /**
@@ -95,17 +92,17 @@ final readonly class EmployeeWriteRetry
         for ($attempt = 1; ; $attempt++) {
             try {
                 return $this->connection->transaction($work(...));
-            } catch (PDOException $exception) {
-                $sqlState = self::concurrencySqlState($exception);
+            } catch (Throwable $exception) {
+                $database = $this->databaseFailures->translate($exception);
 
-                if ($sqlState === null) {
+                if ($database === null || ! $database->kind->isConcurrency()) {
                     throw $exception;
                 }
 
                 $this->logger->warning('workforce.employee_write_concurrency', [
                     'use_case' => $useCase,
                     'attempt' => $attempt,
-                    'sqlstate' => $sqlState,
+                    'sqlstate' => $database->sqlState,
                     'retried' => $attempt < self::ATTEMPTS,
                 ]);
 
@@ -114,23 +111,5 @@ final readonly class EmployeeWriteRetry
                 }
             }
         }
-    }
-
-    /**
-     * El SQLSTATE de concurrencia de la excepcion o de alguna de sus causas, o
-     * `null` si no lo es. `DeadlockException` lleva codigo `0`: el SQLSTATE
-     * esta en la `QueryException` original, que va como causa.
-     */
-    public static function concurrencySqlState(Throwable $exception): ?string
-    {
-        for ($cause = $exception; $cause instanceof Throwable; $cause = $cause->getPrevious()) {
-            $code = (string) $cause->getCode();
-
-            if ($cause instanceof PDOException && \in_array($code, self::CONCURRENCY_SQLSTATES, true)) {
-                return $code;
-            }
-        }
-
-        return null;
     }
 }

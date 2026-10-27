@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Infrastructure\Metrics\Exposition;
 
 /**
- * **El catalogo unico de lo que sale por `GET /metrics`** (doc 02 §8.2,
- * decision 1 de la ficha 3.1).
+ * **El catalogo unico de lo que sale por `GET /metrics`** (doc 02 §8.2).
  *
  * ## Por que existe una lista y no un `SCAN kronoqr:metrics:*`
  *
@@ -301,7 +300,7 @@ final class MetricCatalogue
                 'reporting_pdf_rendering_rejected_total',
                 MetricType::Counter,
                 MetricStorage::LabelledHash,
-                'PDF de informes que el tope de composiciones simultaneas no dejo componer, por motivo.',
+                'PDF (informes, registro propio, tarjetas y hoja de instrucciones) que el tope de composiciones simultaneas no dejo componer, por motivo.',
                 ['reason'],
             ),
             new MetricDefinition(
@@ -357,7 +356,7 @@ final class MetricCatalogue
             ),
 
             // ---------------------------------------------------------------
-            // Ficheros generados (ADR-045, C5 y C10). Una sola etiqueta,
+            // Ficheros generados (ADR-045 C5 y C10). Una sola etiqueta,
             // `class`, del catalogo cerrado `GeneratedFileClass`.
             // ---------------------------------------------------------------
             new MetricDefinition(

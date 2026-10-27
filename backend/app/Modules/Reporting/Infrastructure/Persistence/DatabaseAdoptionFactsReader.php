@@ -41,8 +41,7 @@ use Throwable;
  *
  * **No define «jornada completa».** La define {@see WorkDayCompletionReader}, que
  * es el mismo lector que publica `workdays_complete_ratio{site}`: con dos
- * consultas, Grafana y el cuadro darian dos porcentajes para la misma semana
- * (decision 8 de la ficha 3.13).
+ * consultas, Grafana y el cuadro darian dos porcentajes para la misma semana.
  *
  * ## Dias civiles de la zona del centro, convertidos a instantes ANTES de filtrar
  *
@@ -106,7 +105,7 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
 
     /**
      * Las clases de error del quiosco que cuentan como **un intento de fichar que
-     * no se pudo cursar** (RNF-D-01, decision 2(g) de la ficha 3.13).
+     * no se pudo cursar** (RNF-D-01).
      *
      * Seis de las veinticinco del catalogo de `ClientErrorCode`, y las seis estan
      * elegidas por lo mismo: **detras de cada una hay alguien delante de la tablet

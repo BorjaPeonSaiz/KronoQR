@@ -45,7 +45,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La revision diaria del registro horario (RF-PR-01, tarea 2.6).
+ * La revision diaria del registro horario (RF-PR-01).
  *
  * Recorre lo que hay que mirar, pregunta al dominio que tiene de raro y **emite
  * un hallazgo por cada cosa que encuentra**. No abre incidencias, no envia
@@ -116,7 +116,7 @@ final readonly class DetectAttendanceAnomalies
         $now = $this->clock->now();
 
         if ($site === null) {
-            // Con ceros, pero se publica (tarea 3.2). Una serie que solo aparece
+            // Con ceros, pero se publica. Una serie que solo aparece
             // cuando hay centro es indistinguible de un planificador parado, y
             // `DeteccionDeIncidenciasAusente` no podria separar los dos casos.
             return $this->measure(AnomalyScanResult::withoutSite(), $now);
@@ -125,7 +125,7 @@ final readonly class DetectAttendanceAnomalies
         $timezone = new DateTimeZone($site->timezone);
         $policy = $this->policyFor($site->id);
 
-        // RF-AT-12 y decision 8 de la ficha 3.5: que reglas abren incidencia en
+        // RF-AT-12: que reglas abren incidencia en
         // ESTA instalacion depende de si el hotel ficha la pausa. Se resuelve
         // aqui —que es quien alcanza los ajustes— y se le pasa ya resuelta al
         // dominio (regla dura 14). Una pasada entera usa el mismo valor: leerlo
@@ -167,7 +167,7 @@ final readonly class DetectAttendanceAnomalies
 
         $byType = $this->tally($anomalies);
 
-        // `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2, tarea 3.1).
+        // `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2).
         // El MISMO recuento que devuelve el comando, para que la serie de
         // Grafana y la salida de `attendance:detect-incidents` no puedan
         // discrepar. Va detras del aviso a proposito: medir es lo ultimo y no
@@ -187,7 +187,7 @@ final readonly class DetectAttendanceAnomalies
 
     /**
      * Publica el desenlace de la pasada y devuelve el resultado sin tocarlo
-     * (`incident_detection_*`, doc 02 §8.2, tarea 3.2).
+     * (`incident_detection_*`, doc 02 §8.2).
      *
      * **Es lo ultimo que ocurre y no puede impedir nada** (regla dura 19), igual
      * que `anomalyMetrics`: cuando se llega aqui las incidencias ya estan
@@ -225,7 +225,7 @@ final readonly class DetectAttendanceAnomalies
      * Un proceso que aborta a la mitad es peor que uno que informa: deja la
      * revision hecha a medias y sin decir por donde iba.
      *
-     * **Hasta donde llega hoy ese codigo de salida** (tarea 3.2): a la serie
+     * **Hasta donde llega hoy ese codigo de salida**: a la serie
      * `incident_detection_last_failures` del colector *textfile*, que la regla
      * `DeteccionDeIncidenciasConFallos` evalua con `> 0` y enruta al IT del
      * cliente con su runbook; y al apunte `scheduler.command_failed` que escribe
@@ -316,7 +316,7 @@ final readonly class DetectAttendanceAnomalies
      * Hallazgos que la politica SI evalua pero que esta pasada no convierte en
      * incidencia. Decision de producto del 30-08-2026 (doc 01 §4, nota sobre
      * RN-12): con ADR-024 la pausa son dos tramos y el quiosco todavia no
-     * registra la intencion de «salgo a descansar» (RF-AT-12, tarea 3.5), asi
+     * registra la intencion de «salgo a descansar» (RF-AT-12), asi
      * que en una instalacion donde la plantilla no ficha la pausa cada turno
      * de mas de seis horas abriria una incidencia `missing_break` —cientos a la
      * semana— sin que nadie pueda distinguir «no descanso» de «descanso y no lo
@@ -331,7 +331,7 @@ final readonly class DetectAttendanceAnomalies
      * el quiosco no registra la pausa — abrirla alli seria senalar a quien
      * descanso sin fichar.
      *
-     * **La lista ya no vive aqui** (tarea 5.2). Estaba escrita como una constante
+     * **La lista ya no vive aqui**. Estaba escrita como una constante
      * privada de este caso de uso, y funcionaba mientras la mirase solo quien
      * filtra; dejo de funcionar en cuanto la pantalla del perfil de cumplimiento
      * empezo a decirle al cliente que cambiar el umbral de RN-12 haria que se
@@ -744,7 +744,7 @@ final readonly class DetectAttendanceAnomalies
      *
      * El `context` lleva el primero —`scan_id`, instante, quiosco, via,
      * respuesta— y cuantos avisos fueron. `problem` es un identificador del
-     * catalogo cerrado de este producto o `other` (F9): nunca el texto que trajo
+     * catalogo cerrado de este producto o `other`: nunca el texto que trajo
      * la tablet. **Nunca el contenido del QR ni el codigo**, que no se guardan.
      *
      * **Desde la 2.3.0 tambien los que descarto el propio servidor** (ADR-061),

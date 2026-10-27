@@ -27,7 +27,7 @@ use Throwable;
  * El estado se resuelve una vez por peticion y se reutiliza: el informe por
  * periodo y la presencia en vivo comparten la respuesta. Se enlaza con
  * `scoped()` y no con `singleton()`, por la misma razon que los proveedores de
- * la tarea 5.1: un `singleton` sobrevive a la peticion en un trabajador de cola
+ * configuracion: un `singleton` sobrevive a la peticion en un trabajador de cola
  * o en Octane, y ahi la memoria dejaria de ser «por peticion» para convertirse
  * en una cache sin invalidacion — una licencia recien activada no surtiria
  * efecto hasta reiniciar el proceso.
@@ -44,7 +44,7 @@ use Throwable;
  * ## Salvo cuando la licencia no se ha podido LEER: `unknown`
  *
  * Con la base de datos caida, {@see LicenseUnavailable} no dice que la licencia
- * sea mala: dice que no se sabe (V21-4-PL-1). Degradar ahi castigaria a un
+ * sea mala: dice que no se sabe. Degradar ahi castigaria a un
  * hotel con licencia valida por una caida de su base, y una funcionalidad
  * accesoria que necesita la base tampoco podria servirse sin ella, asi que no
  * hay nada que regalar. Se concede, sin aviso de licencia y **sin memorizarlo**:

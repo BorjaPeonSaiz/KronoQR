@@ -24,6 +24,13 @@ rules:
   # es la unica construccion legitima de todo el backend —es precisamente el
   # adaptador que existe para que el dominio no lo haga—. Una regla global
   # naceria en rojo contra su propio diseno.
+  #
+  # Ademas de construirla vacia o con 'now' (H4): con un texto relativo al
+  # momento actual —'today', 'midnight', 'tomorrow', '+1 day', una hora sin
+  # fecha como '08:00'— y con date_create(), que es el mismo analizador. La
+  # fecha civil se convierte con CivilDate::midnight(). La prueba de
+  # arquitectura SystemClockTest vigila lo mismo, por tokens, tambien en
+  # Application; esta regla es la segunda llave en el dominio.
   - id: kronoqr-domain-lee-el-reloj-del-sistema
     languages: [php]
     severity: ERROR
@@ -32,24 +39,86 @@ rules:
       sistema. El dominio no pregunta la hora, la recibe ya resuelta: el caso de
       uso llama a Clock::now() (Shared\Application\Port\Clock, ADR-021) y le pasa
       el instante al agregado. Sin esto no se pueden probar DST ni los turnos que
-      cruzan medianoche, que son la mitad del riesgo de este dominio.
+      cruzan medianoche, que son la mitad del riesgo de este dominio. Una fecha
+      civil YYYY-MM-DD se convierte con CivilDate::midnight().
+    paths:
+      include:
+        - /backend/app/Modules/*/Domain/**
+    pattern-either:
+      - pattern: new DateTime()
+      - pattern: new \DateTime()
+      - pattern: new DateTimeImmutable()
+      - pattern: new \DateTimeImmutable()
+      - pattern: date_create(...)
+      - pattern: \date_create(...)
+      - pattern: date_create_immutable(...)
+      - pattern: \date_create_immutable(...)
+      - patterns:
+          - pattern-either:
+              - pattern: new DateTime($TEXT, ...)
+              - pattern: new \DateTime($TEXT, ...)
+              - pattern: new DateTimeImmutable($TEXT, ...)
+              - pattern: new \DateTimeImmutable($TEXT, ...)
+          # Un literal que se resuelve contra el momento actual.
+          - metavariable-regex:
+              metavariable: $TEXT
+              regex: (?i)^['"]\s*(now|today|midnight|noon|tomorrow|yesterday|next\b|last\b|this\b|first\b|[+-]|\d{1,2}:\d{2})
+
+  # `createFromFormat` SIN `!` rellena con el reloj del sistema todo lo que el
+  # formato no nombra: con 'Y-m-d', la hora y los microsegundos del momento en
+  # que se ejecuta (H4). Con `!` delante (o un `|` detras) lo pone a cero. Se
+  # exceptuan los formatos que empiezan por `U`, que fijan el instante entero.
+  # Solo se mira el formato escrito como literal: uno compuesto o una constante
+  # no se pueden leer aqui (`'!'.UtcInstant::FORMAT` es la forma buena).
+  - id: kronoqr-domain-createfromformat-sin-exclamacion
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Regla dura 2: createFromFormat sin '!' al principio toma del reloj del
+      sistema los campos que el formato no nombra (con 'Y-m-d', la hora y los
+      microsegundos de ahora). Escribe '!Y-m-d' o usa CivilDate::midnight().
     paths:
       include:
         - /backend/app/Modules/*/Domain/**
     patterns:
       - pattern-either:
-          - pattern: new DateTime()
-          - pattern: new DateTime('now')
-          - pattern: new DateTime("now")
-          - pattern: new \DateTime()
-          - pattern: new \DateTime('now')
-          - pattern: new \DateTime("now")
-          - pattern: new DateTimeImmutable()
-          - pattern: new DateTimeImmutable('now')
-          - pattern: new DateTimeImmutable("now")
-          - pattern: new \DateTimeImmutable()
-          - pattern: new \DateTimeImmutable('now')
-          - pattern: new \DateTimeImmutable("now")
+          - pattern: DateTime::createFromFormat($FORMAT, ...)
+          - pattern: \DateTime::createFromFormat($FORMAT, ...)
+          - pattern: DateTimeImmutable::createFromFormat($FORMAT, ...)
+          - pattern: \DateTimeImmutable::createFromFormat($FORMAT, ...)
+          - pattern: date_create_from_format($FORMAT, ...)
+          - pattern: date_create_immutable_from_format($FORMAT, ...)
+      - metavariable-regex:
+          metavariable: $FORMAT
+          regex: ^['"](?![!U])[^'"|]*['"]$
+
+  # Fuera del dominio no hay regla dura 2, pero si el mismo riesgo: una fecha
+  # civil concatenada con ' 00:00:00' y pasada al constructor se resuelve contra
+  # el reloj del sistema cuando la fecha llega vacia o mal compuesta, y nada
+  # falla. CivilDate::midnight() (Shared\Domain\Support) es la unica conversion
+  # y lanza ante esa entrada. Por eso esta regla cubre todo backend/app.
+  - id: kronoqr-fecha-civil-concatenada-con-medianoche
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Una fecha civil concatenada con ' 00:00:00' no se valida: si llega vacia
+      o mal compuesta, el constructor la resuelve contra el reloj del sistema.
+      Usa CivilDate::midnight($isoDate, $zone), que solo admite YYYY-MM-DD y
+      lanza ante lo demas.
+    paths:
+      include:
+        - /backend/app/**
+    patterns:
+      - pattern-either:
+          - pattern: new DateTime($DATE . $TIME, ...)
+          - pattern: new \DateTime($DATE . $TIME, ...)
+          - pattern: new DateTimeImmutable($DATE . $TIME, ...)
+          - pattern: new \DateTimeImmutable($DATE . $TIME, ...)
+          - pattern: date_create($DATE . $TIME, ...)
+          - pattern: date_create_immutable($DATE . $TIME, ...)
+      - metavariable-regex:
+          metavariable: $TIME
+          regex: ^['"]\s*(T|\s)?00:00(:00)?['"]$
 
   # --------------------------------------------------------------------------
   # RNF-M-02: analisis estatico en el nivel maximo «sin errores suprimidos sin
@@ -69,7 +138,10 @@ rules:
       include:
         - /backend/**/*.php
     patterns:
-      - pattern-regex: '@phpstan-ignore(-next-line|-line)?[ \t]+[A-Za-z][A-Za-z0-9_.,: \t]*$'
+      # `(\*/[ \t]*)?` para la supresion dentro de un comentario de bloque de
+      # una linea, `/** @phpstan-ignore x */`: sin el, el `*/` impedia casar
+      # el final de linea y la supresion sin motivo pasaba (V21-1-BE-1).
+      - pattern-regex: '@phpstan-ignore(-next-line|-line)?[ \t]+[A-Za-z][A-Za-z0-9_.,: \t]*(\*/[ \t]*)?$'
 
   # `@phpstan-ignore-line` y `-next-line` no leen el identificador: lo que les
   # sigue es comentario y suprimen CUALQUIER error de la linea. Solo vale

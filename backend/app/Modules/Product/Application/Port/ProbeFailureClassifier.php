@@ -7,7 +7,7 @@ namespace App\Modules\Product\Application\Port;
 use Throwable;
 
 /**
- * **¿Que servicio estaba caido cuando reviento una sonda?** (PR2, RF-PD-13).
+ * **¿Que servicio estaba caido cuando reviento una sonda?** (RF-PD-13).
  *
  * `product:doctor` atrapa la excepcion de una sonda que revienta y la convierte
  * en una comprobacion `failure`. Sin clasificar, esa comprobacion diria siempre

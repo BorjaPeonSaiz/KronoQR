@@ -79,7 +79,7 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
                 'app_version' => $appVersion,
                 'last_seen_at' => null,
                 'pending_queue_size' => 0,
-                // Y la telemetria de la tarea 3.3, por el mismo motivo: la
+                // Y la telemetria de salud, por el mismo motivo: la
                 // bateria y la cola mas antigua de la tablet anterior hablarian
                 // de un aparato que ya no esta en esa pared.
                 'oldest_pending_at' => null,

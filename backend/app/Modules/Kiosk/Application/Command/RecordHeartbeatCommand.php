@@ -26,12 +26,12 @@ use App\Modules\Shared\Domain\ValueObject\ErrorReport;
  * lo que distingue «37 pendientes de hace un minuto» —una sincronizacion en
  * curso— de «37 pendientes de hace tres horas», que es una tablet incomunicada.
  *
- * **`clientErrors` viaja aqui y no por un canal propio** (tarea 5.12, decision 7).
+ * **`clientErrors` viaja aqui y no por un canal propio**.
  * El quiosco no abre otra conexion de red que compita con la sincronizacion de la
  * cola en un cambio de turno: los errores de la tablet suben pegados al latido que
  * ya sube cada minuto. Llegan **ya tipados** desde el `FormRequest`, con su origen
  * y su severidad puestos por el servidor —nunca por el cuerpo de la peticion—, y
- * sin sanear: el saneado es del servidor y ocurre al persistir (decision 5).
+ * sin sanear: el saneado es del servidor y ocurre al persistir.
  */
 final readonly class RecordHeartbeatCommand
 {
@@ -49,7 +49,7 @@ final readonly class RecordHeartbeatCommand
          * El centro al que esta vinculado el quiosco, **del token** como los dos
          * identificadores de arriba.
          *
-         * Lo pide la tarea 3.5: la respuesta del latido lleva los dos ajustes
+         * Lo pide RF-AT-12: la respuesta del latido lleva los dos ajustes
          * que la tablet necesita para funcionar sin red —el fichaje de pausa y
          * la tolerancia de desfase— y `OperationalSettingsProvider` los entrega
          * por centro. Sale del token y no de una consulta a `devices` ni del

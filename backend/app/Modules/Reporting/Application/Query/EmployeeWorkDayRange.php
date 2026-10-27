@@ -22,7 +22,7 @@ final readonly class EmployeeWorkDayRange
         public ?string $to = null,
         /**
          * Si quien consulta es **la propia persona** desde su portal (RF-ID-05,
-         * RL-05, tarea 1.11) en lugar de alguien de gestion mirando el registro
+         * RL-05) en lugar de alguien de gestion mirando el registro
          * de un tercero (RF-PA-03).
          *
          * **Lo unico que cambia es si el acceso deja asiento en `audit_log`**, y

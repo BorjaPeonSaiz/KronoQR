@@ -185,14 +185,14 @@ final readonly class DatabaseProbe implements DoctorProbe
 
         return match ($anchor['status'] ?? null) {
             // Lo que se comprobo es el ULTIMO CIERRE ANUAL —sus filas y su ultimo
-            // eslabon—, no la cadena entera, y el texto dice eso (R4-PL-03).
+            // eslabon—, no la cadena entera, y el texto dice eso.
             'verified' => DoctorFinding::ok('database.audit_chain', $anchor, [
                 'year' => \is_int($anchor['partition_year'] ?? null) ? $anchor['partition_year'] : 0,
             ]),
             // Sin ningun año sellado no hay nada que verificar, y eso es lo
             // normal en una instalacion de menos de un año. No es un aviso, pero
             // tampoco puede decir «encadenado correctamente»: no se ha
-            // comprobado nada (R4-PL-03).
+            // comprobado nada.
             'no_anchor' => DoctorFinding::ok('database.audit_chain', $anchor, variant: 'no_anchor'),
             'mismatch' => DoctorFinding::failure('database.audit_chain', details: $anchor),
             default => DoctorFinding::warning('database.audit_chain', 'unknown', details: $anchor),

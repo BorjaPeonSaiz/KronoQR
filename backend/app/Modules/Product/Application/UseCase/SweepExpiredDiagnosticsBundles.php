@@ -27,7 +27,7 @@ use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
  * `product:diagnostics` al arrancar. Los dos borran a traves de
  * {@see GeneratedFileHousekeeping}: un nivel de la raiz, patron exacto
  * `kronoqr-diagnostics-*.json`, sin seguir enlaces, y edad `max(mtime, ctime)`
- * (C3, C9). Lo que no casa con el patron no se toca.
+ * (ADR-045 C3 y C9). Lo que no casa con el patron no se toca.
  *
  * ## Sin fila que lo proteja
  *

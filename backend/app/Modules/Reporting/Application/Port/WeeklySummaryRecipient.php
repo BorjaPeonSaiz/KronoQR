@@ -8,8 +8,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 
 /**
- * Un responsable de departamento que recibe el resumen semanal (**RF-PR-05**,
- * decision 2 de la ficha 3.12).
+ * Un responsable de departamento que recibe el resumen semanal (**RF-PR-05**).
  *
  * ## Trae su alcance, y esa es la mitad del requisito
  *

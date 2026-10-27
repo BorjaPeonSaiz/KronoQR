@@ -15,7 +15,7 @@ use SensitiveParameter;
  * **Por que en `Shared/Application/Port` y no en el modulo que pregunta.** Es el
  * mismo caso que {@see ClockingEmployees} y {@see EmployeeRegistry}: quien
  * **necesita** la abstraccion son dos satelites —el fichaje de respaldo del
- * quiosco (`Attendance`, tarea 1.12) y el portal del empleado (tarea 1.11)— y
+ * quiosco (`Attendance`) y el portal del empleado— y
  * quien **tiene** el dato es un tercero, `Workforce`, dueno de
  * `employees.pin_hash`. Ninguno puede importar nada de los otros (doc 02 §1.6,
  * verificado por Deptrac), y la unica capa que los tres alcanzan es esta. El

@@ -8,6 +8,7 @@ use App\Modules\Identity\Application\Command\RotateSigningKeyCommand as RotateSi
 use App\Modules\Identity\Application\Exception\SigningKeyRotationNotReady;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Identity\Application\UseCase\SigningKeyRotationReport;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -29,7 +30,7 @@ use Illuminate\Console\Command;
  * `ps`, en el historial y en el registro de cualquier guion que lo llame. Lo que
  * hace es **comprobar** que la configuracion esta en estado de solape y reemitir.
  *
- * ## Y no hay endpoint, tampoco (decision de la tarea 2.12)
+ * ## Y no hay endpoint, tampoco
  *
  * Rotar la clave no es una accion de panel: es un acto operativo con semanas de
  * logistica de reimpresion detras que empieza en el gestor de secretos del
@@ -41,6 +42,11 @@ use Illuminate\Console\Command;
  */
 final class RotateSigningKeyCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:rotate-key
         {--dry-run : Solo informa: no reemite ni escribe nada}';
 
@@ -65,45 +71,33 @@ final class RotateSigningKeyCommand extends Command
 
     private function render(SigningKeyRotationReport $report): void
     {
-        $this->line(sprintf(
-            'Clave saliente: %s · clave actual: %s',
-            $report->retiringKeyId,
-            $report->currentKeyId,
-        ));
+        $this->line($this->text('rotate_key.keys', [
+            'retiring' => $report->retiringKeyId,
+            'current' => $report->currentKeyId,
+        ]));
 
-        $this->line(sprintf(
-            'Tarjetas activas firmadas con %s: %d',
-            $report->retiringKeyId,
-            $report->cardsOnRetiringKey,
-        ));
+        $this->line($this->text('rotate_key.cards', [
+            'retiring' => $report->retiringKeyId,
+            'count' => $report->cardsOnRetiringKey,
+        ]));
 
         if ($report->dryRun) {
-            $this->info(sprintf('En seco: se reemitirian %d credenciales.', $report->reissued));
+            $this->info($this->text('rotate_key.dry_run', ['count' => $report->reissued]));
 
             if ($report->alreadyPending > 0) {
-                $this->line(sprintf(
-                    '%d ya tienen una reemision pendiente de imprimir y no se duplicarian.',
-                    $report->alreadyPending,
-                ));
+                $this->line($this->text('rotate_key.dry_run_pending', ['count' => $report->alreadyPending]));
             }
 
             return;
         }
 
-        $this->info(sprintf(
-            'Reemitidas %d credenciales, pendientes de imprimir. Ninguna tarjeta vigente se ha invalidado.',
-            $report->reissued,
-        ));
+        $this->info($this->text('rotate_key.reissued', ['count' => $report->reissued]));
 
         if ($report->alreadyPending > 0) {
-            $this->line(sprintf('%d ya estaban pendientes y no se han duplicado.', $report->alreadyPending));
+            $this->line($this->text('rotate_key.already_pending', ['count' => $report->alreadyPending]));
         }
 
         $this->line('');
-        $this->line('Siguientes pasos (docs/runbooks/rotacion-clave-qr.md):');
-        $this->line('  1. php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf');
-        $this->line('  2. Entregar en mano y registrar: php artisan credentials:deliver <uuid> --responsible=<correo>');
-        $this->line('  3. php artisan credentials:status --key-id='.$report->retiringKeyId.'   # quien falta');
-        $this->line('  4. php artisan credentials:retire-key '.$report->retiringKeyId.'        # cuando no falte nadie');
+        $this->paragraph('rotate_key.next_steps', ['key' => $report->retiringKeyId]);
     }
 }

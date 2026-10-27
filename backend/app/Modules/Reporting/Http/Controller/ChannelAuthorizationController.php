@@ -16,8 +16,8 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * presencia (ADR-011, RF-PA-01).
  *
  * Sustituye a la ruta que registraba `withBroadcasting()`, que aceptaba `GET` y
- * `POST`, no validaba la peticion y respondia JSONP con un `callback` (B3 y
- * R6-BD-02 de la verificacion de la 2.2.0). Quien decide si se firma sigue siendo
+ * `POST`, no validaba la peticion y respondia JSONP con un `callback`. Quien
+ * decide si se firma sigue siendo
  * el difusor: ejecuta el callback del canal de `routes/channels.php` y responde
  * `403` si dice que no.
  *
@@ -31,7 +31,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * `private-presence.all` o `private-presence.department.<digitos>`; cualquier
  * otro nombre es el mismo `403` que un canal ajeno, **antes** de llegar al
  * difusor y sin asiento: no es un acceso a datos de nadie, es un nombre que no
- * existe (bloque 12 de la 2.3.0).
+ * existe.
  */
 final class ChannelAuthorizationController extends Controller
 {

@@ -14,7 +14,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  *
  * **No es la purga del registro legal** (RL-02): esta tabla no es evidencia y no
  * pasa por la funcion de purga ni deja asiento. **Si es dato seudonimizado**
- * (ADR-061, A4): la huella enlaza con la tarjeta y con su titular, y por eso no
+ * (ADR-061 A4): la huella enlaza con la tarjeta y con su titular, y por eso no
  * se guarda mas de lo necesario. Lo
  * que si es constancia —el descarte— vive en `scan_events` y en
  * `discarded_scan_reports`, con la retencion del registro.

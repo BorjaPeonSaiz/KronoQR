@@ -96,7 +96,7 @@ final readonly class ReviewOutOfBoundsPurge
      */
     public function handle(ReviewOutOfBoundsPurgeCommand $command): PurgeReviewOutcome
     {
-        // La medida comun (V1-RV-03): `PurgeReviewRejected` es un rechazo de
+        // La medida comun: `PurgeReviewRejected` es un rechazo de
         // negocio (`BusinessRejection`) y cuenta como `rejected`, no como averia.
         return UseCaseInstrumentation::run(
             'compliance.review_out_of_bounds_purge',

@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * `php artisan product:errors:prune` — la purga del historico tecnico (Anexo C
- * del doc 01, **RF-PD-15**, RL-11, decision 10 de la ficha 5.12).
+ * del doc 01, **RF-PD-15**, RL-11).
  *
  * ## Esto NO es la purga del registro legal, y la diferencia se nota en todo
  *

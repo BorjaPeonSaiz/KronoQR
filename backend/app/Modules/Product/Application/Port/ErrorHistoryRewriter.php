@@ -8,7 +8,7 @@ use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 
 /**
  * La tabla `error_events`, vista desde **el unico caso de uso que reescribe
- * filas**: el saneado de las filas anteriores a la 2.2.0 (ADR-048, H6).
+ * filas**: el saneado de las filas anteriores a la 2.2.0 (ADR-048).
  *
  * ## Por que es un puerto aparte
  *

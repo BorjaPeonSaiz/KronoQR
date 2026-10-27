@@ -49,8 +49,8 @@ final readonly class RedisMetricWriter
      *
      * **Con `$count` mayor que uno** para poder volcar de golpe lo acumulado en
      * memoria durante una peticion: `db_query_duration_seconds` se escribe una
-     * sola vez al terminar, no una vez por consulta (decision 4 de la ficha
-     * 3.1). Un `HINCRBY` por consulta doblaria los viajes a Redis del camino de
+     * sola vez al terminar, no una vez por consulta.
+     * Un `HINCRBY` por consulta doblaria los viajes a Redis del camino de
      * fichaje.
      *
      * @param  list<float>  $bounds  Cubos de la serie, en segundos y crecientes.

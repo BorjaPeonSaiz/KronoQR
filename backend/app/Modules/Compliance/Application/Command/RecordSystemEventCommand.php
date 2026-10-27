@@ -10,7 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
 
 /**
  * La orden de dejar asiento de un hecho del ciclo de vida de la instalacion
- * (RF-PD-10, tarea 5.7).
+ * (RF-PD-10).
  *
  * **No lleva actor.** No es un olvido: estas acciones solo las puede firmar el
  * sistema, asi que ofrecer el campo seria ofrecer la posibilidad de equivocarse

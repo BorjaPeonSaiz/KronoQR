@@ -25,8 +25,8 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Por que esto existe, y por que no lo hace el instalador
  *
- * El instalador **no crea cuentas y no debe crearlas** (decision de la tarea
- * 5.4, doc 07 §6): una contrasena generada por un script acaba en el historial
+ * El instalador **no crea cuentas y no debe crearlas** (doc 07 §6): una
+ * contrasena generada por un script acaba en el historial
  * del shell, en la lista de procesos o en un fichero de despliegue, y ahi se
  * queda. Sin este endpoint, una instalacion recien montada no tendria ninguna
  * puerta de entrada a su propio panel, y el cliente tendria que usar SSH — que

@@ -30,7 +30,7 @@ use RuntimeException;
  * y por el mismo motivo: `Attendance` no puede importar el modelo `Device` de
  * `Identity` (doc 02 §1.6), y la tabla es lo estable — `scan_events.device_id`
  * es una clave foranea hacia ella. Funciona sin cambios con los tokens de
- * dispositivo que emite la tarea 1.5.
+ * dispositivo que emite el emparejamiento.
  */
 final readonly class ScanningDevice
 {

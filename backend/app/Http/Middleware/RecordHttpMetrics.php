@@ -32,9 +32,8 @@ use Throwable;
  *
  * Mismo motivo que `RedisScanMetrics`: el proceso PHP que atiende una peticion
  * termina con ella, asi que un contador en memoria no lo lee nadie. `HINCRBY` es
- * atomico entre procesos y cuesta microsegundos. `/metrics` las publica desde
- * la tarea 3.1, con `MetricCatalogue` y `MetricsCatalogueTest` contra el doc
- * 02 §8.2.
+ * atomico entre procesos y cuesta microsegundos. `/metrics` las publica con
+ * `MetricCatalogue`, y `MetricsCatalogueTest` las contrasta con el doc 02 §8.2.
  *
  * ## Los cubos son los del presupuesto de latencia
  *
@@ -55,7 +54,7 @@ use Throwable;
  */
 final readonly class RecordHttpMetrics
 {
-    /** Mismo prefijo que el resto de metricas, para que la tarea 3.1 las encuentre con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas, para que `/metrics` las encuentre con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string REQUESTS_TOTAL = self::KEY_PREFIX.'http_requests_total';
@@ -73,8 +72,8 @@ final readonly class RecordHttpMetrics
      * Un umbral solo es exacto si coincide con un cubo: entre dos cubos,
      * `histogram_quantile` interpola y una alerta a 2 s con cubos 1 y 3 saltaba
      * con un PIN de 1,2 s; y por encima del ultimo cubo finito todo cae en
-     * `+Inf`, asi que un lote a 10 s era inalcanzable (bloque 9 y tarea 10.8 de
-     * la 2.3.0). Los cubos que ya existian se conservan: quitar uno romperia las
+     * `+Inf`, asi que un lote a 10 s era inalcanzable.
+     * Los cubos que ya existian se conservan: quitar uno romperia las
      * consultas y los paneles que lo leen. Un cubo nuevo es una serie nueva por
      * ruta, y estas rutas son decenas, no miles.
      *

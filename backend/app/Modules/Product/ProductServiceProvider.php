@@ -180,6 +180,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\DormantManagementAccounts;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
@@ -187,6 +188,7 @@ use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\KioskAppVersions;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Port\ManagementAccountMorphType;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
@@ -194,6 +196,7 @@ use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
@@ -288,8 +291,7 @@ final class ProductServiceProvider extends ServiceProvider
     private const int CLIENT_ERRORS_IP_BUDGET_FACTOR = 4;
 
     /**
-     * La conexion por la que se ESCRIBE el historico de errores (RF-PD-15,
-     * decision 6 de la ficha 5.12).
+     * La conexion por la que se ESCRIBE el historico de errores (RF-PD-15).
      *
      * Misma base, mismo rol y **otra sesion de PostgreSQL**: es lo que hace que
      * guardar un error no dependa del estado de la transaccion que acaba de
@@ -363,7 +365,7 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         /*
-         * La plantilla de la salida a nomina (RF-IN-07, tarea 3.9).
+         * La plantilla de la salida a nomina (RF-IN-07).
          *
          * **El puerto vive en `Shared` y el adaptador aqui**, igual que los
          * umbrales operativos y por el mismo motivo: quien escribe el fichero es
@@ -384,7 +386,7 @@ final class ProductServiceProvider extends ServiceProvider
 
         /*
          * El codigo de servicio de la pantalla de diagnostico del quiosco
-         * (RF-KI-08, tarea 3.3).
+         * (RF-KI-08).
          *
          * `bind` y no `scoped`: se pide una vez por latido —una por minuto y por
          * quiosco— y no en cada escaneo, asi que una memoria por peticion seria
@@ -403,7 +405,7 @@ final class ProductServiceProvider extends ServiceProvider
 
         /*
          * El interruptor del resumen semanal por correo (RF-PR-05,
-         * `WEEKLY_SUMMARY_EMAIL`, tarea 3.12).
+         * `WEEKLY_SUMMARY_EMAIL`).
          *
          * Mismo reparto que el de arriba —puerto en `Shared`, adaptador aqui—
          * porque `Reporting` tampoco puede importar `Product`. `bind` y no
@@ -488,7 +490,7 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         /*
-         * El mismo perfil, pero para EDITARLO (tarea 5.2).
+         * El mismo perfil, pero para EDITARLO.
          *
          * Dos objetos y no uno: el de arriba esta en el camino de fichaje y
          * devuelve minutos sin nombre ni identificador; este devuelve lo que el
@@ -531,7 +533,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El historico de errores agrupado por huella (**RF-PD-15**, tarea 5.12).
+     * El historico de errores agrupado por huella (**RF-PD-15**).
      *
      * ## Las DOS conexiones, que es lo unico raro de este metodo
      *
@@ -589,7 +591,7 @@ final class ProductServiceProvider extends ServiceProvider
                 // que es lo unico que seguro sigue funcionando.
                 logger: Log::channel(),
                 /*
-                 * El techo de grupos abiertos por origen (decision 14). Entra
+                 * El techo de grupos abiertos por origen. Entra
                  * resuelto, como el resto de la configuracion del modulo (regla
                  * dura 14): el caso de uso no lee `config()`, y por eso una
                  * prueba puede bajarlo a dos sin tocar el estado del proceso.
@@ -634,7 +636,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // Tarea 11.3 C: el motivo de una concesion de soporte tiene plazo.
+        // El motivo de una concesion de soporte tiene plazo (RL-11).
         $this->app->bind(
             PruneSupportGrantReasons::class,
             static fn (Application $app): PruneSupportGrantReasons => new PruneSupportGrantReasons(
@@ -646,8 +648,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La captacion de los cuatro origenes de servidor (RF-PD-15, tarea 5.12,
-     * decision 2).
+     * La captacion de los cuatro origenes de servidor (RF-PD-15).
      *
      * ## Un solo enganche, y desde aqui
      *
@@ -736,7 +737,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La telemetria opcional (tarea 5.10, **RF-PD-12**, ADR-020, ADR-023).
+     * La telemetria opcional (**RF-PD-12**, ADR-020, ADR-023).
      *
      * ## Todo lo del entorno se resuelve AQUI
      *
@@ -826,7 +827,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los accesos temporales de soporte (tarea 5.9, **RF-PD-11**, RL-18,
+     * Los accesos temporales de soporte (**RF-PD-11**, RL-18,
      * ADR-020).
      *
      * ## Los tres umbrales se leen AQUI, en el borde
@@ -893,6 +894,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
                 maximumHours: max(1, Config::integer('product.support_grant_max_hours', 72)),
+                uuids: $app->make(UuidGenerator::class),
             ),
         );
 
@@ -910,7 +912,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La exportacion integra de los datos del cliente (tarea 5.10, **RF-PD-14**,
+     * La exportacion integra de los datos del cliente (**RF-PD-14**,
      * RL-20).
      *
      * ## Los dos umbrales se leen AQUI, en el borde
@@ -947,7 +949,10 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->app->bind(
             DataExportSource::class,
-            static fn (): DatabaseDataExportSource => new DatabaseDataExportSource(DB::connection()),
+            static fn (Application $app): DatabaseDataExportSource => new DatabaseDataExportSource(
+                DB::connection(),
+                $app->make(ManagementAccountMorphType::class),
+            ),
         );
 
         $this->app->bind(
@@ -982,6 +987,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
                 staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
+                uuids: $app->make(UuidGenerator::class),
             ),
         );
 
@@ -996,6 +1002,7 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 locales: $app->make(LocalePolicyProvider::class),
                 connection: DB::connection(),
+                databaseFailures: $app->make(DatabaseFailureTranslator::class),
                 productVersion: Config::string('app.version'),
                 retentionDays: max(1, Config::integer('product.data_export_retention_days', 7)),
             ),
@@ -1015,7 +1022,7 @@ final class ProductServiceProvider extends ServiceProvider
                 events: $app->make(ProductEventPublisher::class),
                 clock: $app->make(Clock::class),
                 // Cadena de `audit_log` y despues fila, el orden de toda
-                // escritura auditada: la purga toma los dos igual (ADR-045, C5).
+                // escritura auditada: la purga toma los dos igual (ADR-045 C5).
                 serialized: $app->make(SerializedLedgerWrite::class),
                 files: $app->make(GeneratedFileHousekeeping::class),
                 archives: GeneratedFileAreas::dataExportArchives(Config::string('product.data_export_path')),
@@ -1040,7 +1047,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // El barrido del paquete de diagnostico (ADR-045 §g, C4). Raiz y plazo
+        // El barrido del paquete de diagnostico (ADR-045 §g, condicion C4). Raiz y plazo
         // se leen aqui, en el borde (regla dura 14).
         $this->app->bind(
             SweepExpiredDiagnosticsBundles::class,
@@ -1054,7 +1061,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El logotipo del cliente (tarea 5.8, RF-PD-08).
+     * El logotipo del cliente (RF-PD-08).
      *
      * ## Los tres limites se leen AQUI, en el borde
      *
@@ -1100,7 +1107,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los idiomas de la instalacion (tarea 5.8, RF-PD-01).
+     * Los idiomas de la instalacion (RF-PD-01).
      *
      * ## Un objeto y DOS enlaces, a proposito
      *
@@ -1144,7 +1151,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * La licencia (tarea 5.3, RF-PD-04, ADR-018, ADR-023, ADR-028).
+     * La licencia (RF-PD-04, ADR-018, ADR-023, ADR-028).
      *
      * ## El verificador recibe la clave publica ya resuelta
      *
@@ -1163,7 +1170,7 @@ final class ProductServiceProvider extends ServiceProvider
      * peticion en un trabajador de cola o en Octane, y ahi dejaria de ser
      * memoria para ser una cache sin invalidacion: una clave recien activada no
      * surtiria efecto hasta reiniciar el proceso. Es el mismo criterio de los
-     * cuatro proveedores de la tarea 5.1.
+     * cuatro proveedores de configuracion.
      *
      * ## `bind()` para todo lo demas
      *
@@ -1279,7 +1286,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El asistente de puesta en marcha (tarea 5.5, RF-PD-03).
+     * El asistente de puesta en marcha (RF-PD-03).
      *
      * Los dos adaptadores van sobre `DB::connection()` y no sobre un modelo
      * Eloquent: `setup_progress` es una tabla de nueve filas como mucho, y
@@ -1311,8 +1318,8 @@ final class ProductServiceProvider extends ServiceProvider
          * por cuenta con el `email` del cuerpo, y aqui no hay ninguna cuenta a la
          * que contar: la de `/setup/administrator` todavia no existe y la de
          * `/setup/status` no la hay. Con la zona de acceso, todo el trafico del
-         * asistente compartiria el cubo de la cadena vacia —el mismo fallo que la
-         * tarea 2.1 encontro en `/auth/2fa/*`—, y ademas gastaria el cupo de
+         * asistente compartiria el cubo de la cadena vacia —el mismo fallo que
+         * tendria `/auth/2fa/*`—, y ademas gastaria el cupo de
          * acceso de la persona que esta a punto de entrar.
          *
          * SOLO POR ORIGEN, que es lo unico que hay. No hace falta mas: la unica
@@ -1466,7 +1473,7 @@ final class ProductServiceProvider extends ServiceProvider
         Gate::policy(DiagnosticsBundle::class, DiagnosticsPolicy::class);
 
         /*
-         * `throttle:data-export` (RF-PD-14, tarea 5.10).
+         * `throttle:data-export` (RF-PD-14).
          *
          * 30 POR MINUTO Y NO 3 COMO EL DIAGNOSTICO, y la diferencia no es un
          * descuido. El limitador cubre las tres rutas, y **el panel sondea
@@ -1599,9 +1606,9 @@ final class ProductServiceProvider extends ServiceProvider
              * **NO van en `routes/console.php`**: ahi vive cuando se ejecuta
              * cada comando programado, y ninguno de estos dos se programa.
              * `license:show` lo ejecuta una persona que quiere saber como esta
-             * su licencia —o `doctor` en la 5.9—, y `license:activate` lo
-             * ejecuta quien acaba de recibir una clave, o el instalador de la
-             * 5.4 la primera vez.
+             * su licencia —o `product:doctor`—, y `license:activate` lo
+             * ejecuta quien acaba de recibir una clave, o el instalador
+             * la primera vez.
              *
              * Y sobre todo: **una comprobacion de licencia programada no existe
              * en este producto**. No hay tarea nocturna que revise la licencia
@@ -1613,7 +1620,7 @@ final class ProductServiceProvider extends ServiceProvider
                 LicenseShowCommand::class,
                 LicenseActivateCommand::class,
                 /*
-                 * Los dos del acceso de soporte (Anexo C, RF-PD-11, tarea 5.9).
+                 * Los dos del acceso de soporte (Anexo C, RF-PD-11).
                  *
                  * **Tampoco se programan**, y aqui importa mas: una tarea
                  * nocturna que concediera o revocara accesos por su cuenta seria
@@ -1628,8 +1635,7 @@ final class ProductServiceProvider extends ServiceProvider
                 SupportGrantCommand::class,
                 SupportRevokeCommand::class,
                 /*
-                 * Los dos del diagnostico (Anexo C, RF-PD-09, RF-PD-13, tarea
-                 * 5.9).
+                 * Los dos del diagnostico (Anexo C, RF-PD-09, RF-PD-13).
                  *
                  * **`product:doctor` es el unico comando del producto que
                  * ejecutan OTROS PROGRAMAS**: `install.sh` en su fase de
@@ -1649,7 +1655,7 @@ final class ProductServiceProvider extends ServiceProvider
                 // enmienda del 14-10-2026). Lo programa `routes/console.php`.
                 ProductDiagnosticsRecordPendingCommand::class,
                 /*
-                 * La exportacion integra (RF-PD-14, RL-20, tarea 5.10).
+                 * La exportacion integra (RF-PD-14, RL-20).
                  *
                  * **La parte `--purge` se programa; el comando entero no.**
                  * `routes/console.php` ejecuta `product:export-all --purge` cada
@@ -1667,7 +1673,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductExportAllCommand::class,
                 /*
-                 * La telemetria opcional (Anexo C, RF-PD-12, tarea 5.10).
+                 * La telemetria opcional (Anexo C, RF-PD-12).
                  *
                  * **El unico que se programa entero**: `routes/console.php` lo
                  * ejecuta con `--send` los lunes a las 05:40 UTC, y eso es todo
@@ -1685,8 +1691,7 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductTelemetryCommand::class,
                 /*
-                 * Los dos del historico de errores (Anexo C, RF-PD-15, tarea
-                 * 5.12).
+                 * Los dos del historico de errores (Anexo C, RF-PD-15).
                  *
                  * **La purga se programa; el listado no.** `routes/console.php`
                  * ejecuta `product:errors:prune` a diario a las 03:35 UTC,
@@ -1753,7 +1758,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * El observador de los limites del plan (**ADR-028**, tarea 5.3).
+     * El observador de los limites del plan (**ADR-028**).
      *
      * ## Escucha altas, no las intercepta
      *
@@ -1797,7 +1802,7 @@ final class ProductServiceProvider extends ServiceProvider
         Event::listen(EmployeeHired::class, [ObservePlanLimits::class, 'onEmployeeHired']);
         // La carga masiva de plantilla se cuenta por el evento del LOTE y no por
         // sus filas, que llegan igualmente como `EmployeeHired` y el listener
-        // descarta por `viaImport` (H-04 de la 3.8, ADR-010).
+        // descarta por `viaImport` (ADR-010).
         Event::listen(EmployeesImported::class, [ObservePlanLimits::class, 'onEmployeesImported']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
 
@@ -1811,7 +1816,7 @@ final class ProductServiceProvider extends ServiceProvider
     }
 
     /**
-     * `product:doctor` y el paquete de diagnostico (tarea 5.9, **RF-PD-09**,
+     * `product:doctor` y el paquete de diagnostico (**RF-PD-09**,
      * **RF-PD-13**, ADR-020).
      *
      * ## Todo lo del entorno se resuelve AQUI, en el borde
@@ -1819,7 +1824,7 @@ final class ProductServiceProvider extends ServiceProvider
      * Rutas, umbrales, version, idioma y **el entorno del proceso entero** entran
      * ya resueltos en las sondas y en los recolectores. Es el mismo criterio que
      * el resto del modulo (regla dura 14), y aqui tiene un motivo extra: la
-     * prueba que exige la ficha 5.9 —«ninguna clave secreta del `.env.example`
+     * prueba que exige ADR-020 —«ninguna clave secreta del `.env.example`
      * aparece en el paquete»— necesita poder pasarle al recolector un entorno
      * inventado. Con `env()` dentro del recolector, esa prueba no se podria
      * escribir sin ensuciar el proceso entero.
@@ -1914,7 +1919,7 @@ final class ProductServiceProvider extends ServiceProvider
                         environment: Config::string('app.env'),
                     ),
                     /*
-                     * A quien llegan las alertas (tarea 3.2, decision 5). Va
+                     * A quien llegan las alertas. Va
                      * pegada a `MailProbe` porque el orden de esta lista ES el
                      * del informe: quien acaba de leer «el SMTP responde» es
                      * quien tiene que leer a continuacion «y las alertas no
@@ -2036,8 +2041,8 @@ final class ProductServiceProvider extends ServiceProvider
                         maintenance: $app->maintenanceMode(),
                     ),
                     /*
-                     * El tamano del historico de errores (RF-PD-15, decision
-                     * 14). Va en la familia `app` y detras de `ApplicationProbe`
+                     * El tamano del historico de errores (RF-PD-15).
+                     * Va en la familia `app` y detras de `ApplicationProbe`
                      * porque el orden de esta lista ES el del informe, y lo que
                      * impide fichar se lee antes que lo que degrada el
                      * diagnostico.
@@ -2052,7 +2057,7 @@ final class ProductServiceProvider extends ServiceProvider
                     ),
                     /*
                      * El codigo de servicio de la pantalla de diagnostico de las
-                     * tablets (RF-KI-08, tarea 3.3, decision 7). Detras de
+                     * tablets (RF-KI-08). Detras de
                      * `SettingsProbe` porque el orden de esta lista ES el del
                      * informe: primero si la configuracion se aplica, y despues
                      * que dice una de sus claves.
@@ -2078,7 +2083,7 @@ final class ProductServiceProvider extends ServiceProvider
                     ),
                     /*
                      * El cupo de descartes del servidor por encima de su techo
-                     * (ADR-061, A6). Aviso: el servidor aplica el techo.
+                     * (ADR-061). Aviso: el servidor aplica el techo.
                      */
                     new ScanDiscardBudgetProbe(
                         Config::get('attendance.scan_discard.daily_budget'),
@@ -2089,7 +2094,7 @@ final class ProductServiceProvider extends ServiceProvider
                 translator: $app->make(DoctorTranslator::class),
                 clock: $app->make(Clock::class),
                 productVersion: Config::string('app.version'),
-                // PR2: una sonda que revienta porque Redis o PostgreSQL no
+                // Una sonda que revienta porque Redis o PostgreSQL no
                 // contestan no es un fallo del producto.
                 failures: new ConnectionProbeFailureClassifier,
             ),

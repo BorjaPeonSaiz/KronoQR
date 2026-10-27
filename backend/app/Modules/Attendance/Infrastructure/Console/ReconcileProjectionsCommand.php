@@ -8,6 +8,7 @@ use App\Modules\Attendance\Application\Command\ReconcileDailyTotalsCommand;
 use App\Modules\Attendance\Application\Exception\InvalidReconciliationRange;
 use App\Modules\Attendance\Application\UseCase\ReconcileDailyTotals;
 use App\Modules\Attendance\Application\UseCase\ReconciliationReport;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -33,7 +34,7 @@ use Illuminate\Console\Command;
  * dejaria el suceso solo en la metrica; con este queda ademas en el log del
  * planificador y lo ve cualquiera que encadene el comando en un script.
  *
- * **Que hace ese codigo de salida** (tarea 3.2). Tres cosas, y las tres
+ * **Que hace ese codigo de salida**. Tres cosas, y las tres
  * hacen falta porque cada una falla de una forma distinta:
  *
  *   · `projection_divergence_total` sube y la regla `absent()` sobre el sello de
@@ -62,6 +63,11 @@ use Illuminate\Console\Command;
  */
 final class ReconcileProjectionsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.reconcile_projections';
+
     protected $signature = 'attendance:reconcile
         {--from= : Primera jornada del rango, en formato YYYY-MM-DD. Por defecto, ayer}
         {--to= : Ultima jornada del rango, en formato YYYY-MM-DD. Por defecto, la misma que --from}';
@@ -77,10 +83,7 @@ final class ReconcileProjectionsCommand extends Command
             // Nada se corrige en silencio: un `--from=marzo` no cae al valor por
             // defecto, porque quien lo escribio creeria haber revisado marzo
             // entero cuando solo se habria revisado ayer.
-            $this->error(
-                '--from y --to esperan una fecha en formato YYYY-MM-DD. '
-                .'Sin fechas validas no se adivina el rango: la pasada por defecto es la jornada de ayer.'
-            );
+            $this->error($this->text('invalid_dates'));
 
             return self::INVALID;
         }
@@ -94,7 +97,7 @@ final class ReconcileProjectionsCommand extends Command
         }
 
         if (! $report->ranOverASite) {
-            $this->warn('Todavia no hay centro de trabajo: sin zona horaria no hay jornada que reconciliar (RF-PD-03).');
+            $this->warn($this->text('no_site'));
 
             // Cero y no error: antes de la puesta en marcha esto es lo esperado,
             // y un planificador que fallara cada noche llenaria el log de una
@@ -110,40 +113,33 @@ final class ReconcileProjectionsCommand extends Command
      */
     private function report(ReconciliationReport $report): int
     {
-        $this->info(sprintf(
-            'Contrastadas %d jornadas de %s a %s (%d dias).',
-            $report->workDaysInspected,
-            $report->fromIsoDate,
-            $report->toIsoDate,
-            $report->daysInspected,
-        ));
+        $this->info($this->text('inspected', [
+            'work_days' => $report->workDaysInspected,
+            'from' => $report->fromIsoDate,
+            'to' => $report->toIsoDate,
+            'days' => $report->daysInspected,
+        ]));
 
         $this->reportSelfResolved($report);
 
         if ($report->isClean()) {
-            $this->line('Sin divergencias: la proyeccion coincide con los tramos vigentes (RN-06).');
+            $this->line($this->text('clean'));
 
             return self::SUCCESS;
         }
 
         foreach ($report->byField as $field => $count) {
             // `row` no es una columna: es la fila que faltaba entera.
-            $this->line('  '.($field === 'row' ? 'fila ausente' : $field).': '.$count);
+            $this->line('  '.($field === 'row' ? $this->text('missing_row') : $field).': '.$count);
         }
 
-        $this->warn(sprintf(
-            '%d divergencia(s), %d corregida(s). La proyeccion se habia desviado de sus eventos origen: '
-            .'no es mantenimiento rutinario. Sigue docs/runbooks/divergencia-proyeccion.md.',
-            $report->divergences,
-            $report->corrected,
-        ));
+        $this->warn($this->text('divergences', [
+            'count' => $report->divergences,
+            'corrected' => $report->corrected,
+        ]));
 
         if ($report->failures > 0) {
-            $this->error(sprintf(
-                '%d jornada(s) no se pudieron reconciliar. Busca «attendance.projection_not_corrected» '
-                .'y «attendance.projection_reconciliation_failed» en el log para ver cuales.',
-                $report->failures,
-            ));
+            $this->error($this->text('failures', ['count' => $report->failures]));
         }
 
         return self::FAILURE;
@@ -168,11 +164,7 @@ final class ReconcileProjectionsCommand extends Command
             return;
         }
 
-        $this->line(sprintf(
-            '%d jornada(s) se resolvieron solas: la lectura se cruzo con un fichaje y al releerlas '
-            .'bajo candado ya cuadraban. No se ha escrito nada en ellas.',
-            $report->selfResolved,
-        ));
+        $this->line($this->text('self_resolved', ['count' => $report->selfResolved]));
     }
 
     /**

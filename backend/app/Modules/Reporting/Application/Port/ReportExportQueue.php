@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Port;
 
 /**
- * Quien pone la generacion del informe en la cola (**RF-IN-06**, decision 4 de
- * la ficha 3.9).
+ * Quien pone la generacion del informe en la cola (**RF-IN-06**).
  *
  * ## Por que el informe grande es asincrono
  *

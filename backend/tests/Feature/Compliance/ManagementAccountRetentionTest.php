@@ -85,7 +85,7 @@ it('la simulacion cuenta las cuentas vencidas sin decir de quien y no toca nada'
     $orden = retencionDeCuentas(true);
 
     expect($orden['code'])->toBe(0, $orden['output'])
-        ->and($orden['output'])->toContain('Cuentas de gestion')
+        ->and($orden['output'])->toContain('Cuentas de gestión')
         ->and($orden['output'])->not->toContain('vieja@hotel.example')
         ->and($orden['output'])->not->toContain('Persona Antigua')
         ->and(DB::table('users')->where('id', $id)->value('anonymized_at'))->toBeNull();

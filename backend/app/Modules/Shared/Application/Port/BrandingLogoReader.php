@@ -7,8 +7,7 @@ namespace App\Modules\Shared\Application\Port;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
 
 /**
- * Entrega el logotipo de la instalacion ya leido y ya comprobado (RF-PD-08,
- * tarea 5.8).
+ * Entrega el logotipo de la instalacion ya leido y ya comprobado (RF-PD-08).
  *
  * **Puerto aparte de {@see BrandingProvider} y no un metodo mas suyo.** Aquel
  * devuelve texto —nombre, color, ruta— y se pide en cada pantalla; este toca el

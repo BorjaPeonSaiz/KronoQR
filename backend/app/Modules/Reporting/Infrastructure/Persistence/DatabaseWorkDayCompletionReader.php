@@ -54,7 +54,7 @@ final readonly class DatabaseWorkDayCompletionReader implements WorkDayCompletio
      * que publica la metrica de Grafana y la que enseña el cuadro de impacto
      * podrian separarse sin que nadie lo notara —bastaria con añadir un estado
      * nuevo a `status` y actualizar solo uno de los dos—, y entonces el cuadro
-     * perderia la funcion que tiene (decision 8 de la ficha 3.13).
+     * perderia la funcion que tiene.
      *
      * ## La agrupacion sigue siendo por persona **y fecha**
      *

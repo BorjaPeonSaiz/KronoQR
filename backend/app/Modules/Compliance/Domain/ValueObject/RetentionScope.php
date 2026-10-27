@@ -60,32 +60,4 @@ enum RetentionScope: string
      * nada que la nombre como autora, se minimiza en sitio.
      */
     case ManagementAccounts = 'management_accounts';
-
-    /** Etiqueta para el informe y la consola. Sin i18n: el informe es del servidor. */
-    public function label(): string
-    {
-        return match ($this) {
-            self::WorkRecords => 'Registro de jornada',
-            self::AuditLog => 'Cadena de auditoria',
-            self::TechnicalLog => 'Log tecnico',
-            self::ErrorHistory => 'Historico de errores',
-            self::PersonnelRecords => 'Fichas de personal',
-            self::ManagementAccounts => 'Cuentas de gestion',
-        };
-    }
-
-    /**
-     * Que se cuenta en este ambito. El log tecnico son ficheros y no filas, y
-     * llamarlos «filas» en el informe hace dudar de si se han borrado lineas de
-     * dentro de un fichero, que es otra cosa.
-     */
-    public function unit(): string
-    {
-        return match ($this) {
-            self::TechnicalLog => 'ficheros',
-            self::PersonnelRecords => 'personas',
-            self::ManagementAccounts => 'cuentas',
-            default => 'filas',
-        };
-    }
 }

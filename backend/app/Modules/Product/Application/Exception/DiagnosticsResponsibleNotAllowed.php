@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * El paquete de diagnostico con datos personales pedido por consola no tiene
  * quien lo firme: falta la cuenta, o la que se dio ya no es una cuenta `admin`
- * activa (RL-19, PR17; doc 01 §7.2, «Firmas por consola»).
+ * activa (RL-19; doc 01 §7.2, «Firmas por consola»).
  *
  * Se lanza antes de recolectar nada: no se genera ni se escribe ningun
  * asiento. El mensaje no lleva la cuenta (regla dura 21).

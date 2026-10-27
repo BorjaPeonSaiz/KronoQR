@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\View;
 
 /**
  * El registro propio como PDF **sellado** (`GET /api/v1/me/export?format=pdf`,
- * RF-ID-05, RL-05; PR19 de la verificacion de la 2.1.0).
+ * RF-ID-05, RL-05).
  *
  * El Anexo B del doc 01 exige CSV **y PDF** para el historico personal: el CSV
  * cubre la portabilidad del RGPD y el PDF es lo que una persona presenta ante
@@ -84,7 +84,7 @@ final readonly class PersonalRecordPdfWriter
         return View::make('pdf.period-report', [
             'title' => PersonalRecordLayout::text('title'),
             'brandName' => $brand->applicationName,
-            // Oscurecido hasta 4,5:1 sobre el papel (MB3): es texto de 10 pt.
+            // Oscurecido hasta 4,5:1 sobre el papel: es texto de 10 pt.
             'brandAccent' => $brand->accentForTextOnWhite(),
             'brandLogo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
             'metadata' => PersonalRecordLayout::metadata($journal, $holderName, $digest, $generatedAt),

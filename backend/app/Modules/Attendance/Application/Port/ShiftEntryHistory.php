@@ -30,8 +30,8 @@ namespace App\Modules\Attendance\Application\Port;
  * ## Por que no lleva mas metodos
  *
  * Deliberadamente estrecho. El historico completo de una jornada —la cadena de
- * versiones que enseña el panel de detalle— es de la tarea 1.16 y tendra su
- * propia consulta de lectura. Este puerto responde una sola pregunta, la que la
+ * versiones que enseña el panel de detalle— tiene su propia consulta de
+ * lectura. Este puerto responde una sola pregunta, la que la
  * capa HTTP necesita para elegir un codigo de estado.
  */
 interface ShiftEntryHistory

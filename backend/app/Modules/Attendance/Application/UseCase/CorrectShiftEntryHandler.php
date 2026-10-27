@@ -27,11 +27,11 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * **Rectifica el registro horario de una persona conservando lo que decia
@@ -100,11 +100,12 @@ final readonly class CorrectShiftEntryHandler
         private EmployeeDirectory $employees,
         private CompliancePolicyProvider $compliance,
         private ManualEntryRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya no es vigente
-     * @throws ShiftEntryMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
+     * @throws ShiftEntryMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen
      * @throws ShiftEntryMarkAfterTermination la persona esta de baja y una marca resultante pasa de la cota de su dia de cese (RN-05)
      * @throws EntryDoesNotContinueWorkDay el tramo, o el siguiente, quedaria en otro dia civil sin continuar la jornada (RN-05)
      */
@@ -135,7 +136,7 @@ final readonly class CorrectShiftEntryHandler
         $times = $this->timesFor($command, $workDay);
         $settings = $this->settings->forSite($workDay->siteId());
 
-        // F1: tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
+        // Tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
         // no solo lo que trae la orden: es el que queda en el registro. La
         // jornada no se comprueba porque una correccion no puede moverla
         // (`CorrectionWouldChangeWorkDate`, ADR-035).
@@ -166,7 +167,7 @@ final readonly class CorrectShiftEntryHandler
             // `shift_entries.uuid` es unico, asi que la version corregida tiene
             // identificador propio. Lo genera el caso de uso porque lleva la
             // hora dentro y el dominio no pregunta la hora (regla dura 2).
-            Str::uuid7()->toString(),
+            $this->uuids->next(),
             $times,
             // La marca que cambia pasa a `manual_admin`; la que no, conserva su
             // origen. Ese reparto lo hace el tramo al crear su version

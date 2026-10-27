@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos del registro horario que ve una persona del panel (F1).
+ * Textos del registro horario que ve una persona del panel.
  *
  * Solo los del alta y la corrección manuales: el quiosco no recibe nunca el
  * motivo de un rechazo (regla dura 17) y estos mensajes no pasan por él.

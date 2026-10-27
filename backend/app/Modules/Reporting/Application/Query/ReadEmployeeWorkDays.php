@@ -143,7 +143,7 @@ final readonly class ReadEmployeeWorkDays
     }
 
     /**
-     * Una pagina del registro, **por jornadas enteras** (V5-PA-2, V21-5-PA-3).
+     * Una pagina del registro, **por jornadas enteras**.
      *
      * Un año de una persona con dos tramos al dia eran 38 000 nodos en la
      * pantalla del panel y quince segundos de bloqueo con un equipo lento. Se

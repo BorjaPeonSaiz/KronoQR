@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Support;
 
 /**
- * **Por que la pasada semanal termino como termino** (RF-PR-05, decision 4 de la
- * ficha 3.12).
+ * **Por que la pasada semanal termino como termino** (RF-PR-05).
  *
  * ## Los motivos sin envio no son errores
  *
@@ -52,7 +51,7 @@ enum WeeklySummaryReason: string
 
     /**
      * La licencia no esta en vigor —caducada, sin activar, todavia no vigente
-     * o sin verificar— (V4-PL-4, ADR-023). Se arregla renovandola o
+     * o sin verificar— (ADR-023). Se arregla renovandola o
      * activandola, y el resumen vuelve solo: decir «el plan no lo incluye» aqui
      * mandaba a cambiar de plan a quien solo tenia que renovar.
      */

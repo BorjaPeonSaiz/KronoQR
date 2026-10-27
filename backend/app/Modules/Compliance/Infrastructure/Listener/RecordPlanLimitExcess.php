@@ -39,7 +39,7 @@ use App\Modules\Product\Domain\Event\PlanLimitExceeded;
  *
  * Una carga masiva de plantilla (RF-GP-05) da de alta a cientos de personas de
  * una vez y deja **un** asiento, con el recuento final y `added_in_excess`
- * (H-04, tarea 3.8). Antes escribia uno por fila: trescientas escrituras casi
+ * (H-04). Antes escribia uno por fila: trescientas escrituras casi
  * identicas bajo el candado global de `audit_log` (ADR-010), que es el mismo por
  * el que pasa cada fichaje del hotel.
  *
@@ -82,7 +82,7 @@ final readonly class RecordPlanLimitExcess
                 // Cuantas de las altas de ESTA operacion quedaron por encima del
                 // plan. En un alta de una en una vale 1 siempre; existe por la
                 // importacion de plantilla, que entra entera y deja un solo
-                // asiento (H-04, tarea 3.8): sin esta cifra, ese asiento diria
+                // asiento (H-04): sin esta cifra, ese asiento diria
                 // cuanta gente sobra pero no cuanta metio el fichero.
                 'added_in_excess' => $event->addedInExcess,
                 'first_crossing' => $event->firstCrossing,

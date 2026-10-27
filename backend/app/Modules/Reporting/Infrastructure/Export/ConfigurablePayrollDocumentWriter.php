@@ -14,7 +14,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 
 /**
  * La salida a nomina **en diferido**, con la plantilla que el cliente configuro
- * (**RF-IN-07**, ADR-017, decision 5 de la ficha 3.9).
+ * (**RF-IN-07**, ADR-017).
  *
  * ## Es el mismo escritor que la descarga sincrona
  *

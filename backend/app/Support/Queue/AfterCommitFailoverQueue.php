@@ -8,7 +8,7 @@ use Illuminate\Database\DatabaseTransactionsManager;
 use Illuminate\Queue\FailoverQueue;
 
 /**
- * Una cola `failover` que **espera al COMMIT antes de elegir conexion** (CH1).
+ * Una cola `failover` que **espera al COMMIT antes de elegir conexion**.
  *
  * La `FailoverQueue` del framework prueba cada conexion dentro de un `try`, pero
  * si el trabajo pide ejecutarse despues del COMMIT (`afterCommit`), la conexion

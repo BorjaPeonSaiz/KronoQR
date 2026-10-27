@@ -57,7 +57,7 @@ use Psr\Log\LoggerInterface;
  * lo cerro, y lo que los distingue es su `occurred_at`. Un tramo escrito a mano
  * no tiene ninguno y los dos quedan nulos, que es la verdad: nadie lo escaneo.
  *
- * ## Quien abrio y quien cerro (RF-AT-12, tarea 3.5)
+ * ## Quien abrio y quien cerro (RF-AT-12)
  *
  * `closed_by` es la columna de `shift_entries` (ADR-058): la escribe el escaneo
  * («Pausa» o salida) o quien escribe el tramo a mano (`ends_in_break`), y viaja
@@ -129,8 +129,9 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
 
             $day = new JournalWorkDay(
                 workDate: $workDate,
-                // La zona del tramo y no la del empleado: un traslado de centro
-                // no reescribe donde ocurrieron las jornadas anteriores.
+                // La zona del centro, que es una por instalacion y fija desde el
+                // primer fichaje (ADR-040, ADR-056): la del tramo y la de la
+                // jornada coinciden.
                 timeZone: $dayEntries === [] ? $timeZone : $dayEntries[0]->timeZone,
                 recalculatedAt: $projection[$workDate]['recalculated_at'] ?? null,
                 shiftEntries: $dayEntries,
@@ -259,7 +260,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
     }
 
     /**
-     * Que cerro el tramo, o `null` si sigue abierto (RF-AT-12, tarea 3.5).
+     * Que cerro el tramo, o `null` si sigue abierto (RF-AT-12).
      *
      * Tres casos y no dos: el escaneo que lo cerro, el tramo cerrado a mano —sin
      * escaneo, pero con hora de salida: `clock_out`— y el tramo que sigue
@@ -351,7 +352,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
     }
 
     /**
-     * Las incidencias del rango, agrupadas por jornada (RF-PA-05, tarea 2.5).
+     * Las incidencias del rango, agrupadas por jornada (RF-PA-05).
      *
      * **Todas, no solo las abiertas.** Una jornada que dio problemas y ya se
      * trabajo tiene que seguir diciendolo: quien mira el detalle seis meses
@@ -363,8 +364,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      * sea la que importa. El `id` desempata, por lo mismo que alli: dos
      * incidencias de la misma pasada comparten `detected_at` al microsegundo.
      *
-     * Cae sobre `incidents_employee_id_work_date_index`, que la migracion de la
-     * tarea 2.6 creo para esto.
+     * Cae sobre `incidents_employee_id_work_date_index`, que se creo para esto.
      *
      * **Lee `incidents`, que es tabla de `Compliance`.** Es la misma excepcion
      * acotada que esta clase ya se toma con `employees`, `sites`, `scan_events` y

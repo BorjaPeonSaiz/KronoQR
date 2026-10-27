@@ -61,7 +61,7 @@ final class SettingsPolicy
     }
 
     /**
-     * Si ademas puede tocar una clave **confidencial** (tarea 3.3).
+     * Si ademas puede tocar una clave **confidencial**.
      *
      * ## El fabricante configura la instalacion; no se lleva sus secretos
      *
@@ -91,9 +91,8 @@ final class SettingsPolicy
     }
 
     /**
-     * Si ademas puede tocar una clave **reservada al cliente** (tarea 3.5,
-     * RF-AT-12; ampliada en la 3.12, RF-PR-05, en la 3.13, RF-IN-08, y en el
-     * cierre de la Fase 3, RF-PR-06).
+     * Si ademas puede tocar una clave **reservada al cliente** (RF-AT-12,
+     * RF-PR-05, RF-IN-08, RF-PR-06).
      *
      * Son las que no deciden «como funciona el producto» sino **de que responde
      * el hotel, a donde van los datos de su gente, con que cifra se juzga el

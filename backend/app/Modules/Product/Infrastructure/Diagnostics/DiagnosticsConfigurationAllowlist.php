@@ -6,8 +6,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
 
 /**
  * Que claves del entorno entran en el paquete de diagnostico: **lista de
- * permitidos, no filtro de secretos por patron** (RF-PD-09, RS-08, ADR-020,
- * paso 5 de la ficha 5.9).
+ * permitidos, no filtro de secretos por patron** (RF-PD-09, RS-08, ADR-020).
  *
  * ## Por que no se filtra por patron
  *
@@ -34,7 +33,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  * ## De la observabilidad viajan las MAGNITUDES, nunca los destinos
  *
  * Mismo criterio que `TELEMETRY_ENABLED` frente a `TELEMETRY_ENDPOINT`, aplicado
- * a la tarea 3.1: `OTEL_TRACES_SAMPLER_ARG` y `OTEL_EXPORTER_OTLP_TIMEOUT` son
+ * a las trazas: `OTEL_TRACES_SAMPLER_ARG` y `OTEL_EXPORTER_OTLP_TIMEOUT` son
  * numeros del producto —explican por que una traza no aparece o por que el
  * exportador se rinde— y no dicen nada de la instalacion. `LOG_STACK` es la lista
  * de canales activos, hermana de `LOG_CHANNEL`, que ya viajaba: sin ella no se
@@ -107,7 +106,7 @@ final class DiagnosticsConfigurationAllowlist
         'MAIL_SCHEME',
         'LOG_CHANNEL',
         'LOG_LEVEL',
-        // Los canales activos y las dos magnitudes de las trazas (tarea 3.1).
+        // Los canales activos y las dos magnitudes de las trazas.
         // Ver el docblock: las magnitudes viajan, los destinos no.
         'LOG_STACK',
         'OTEL_TRACES_SAMPLER_ARG',
@@ -126,7 +125,7 @@ final class DiagnosticsConfigurationAllowlist
         // La RAIZ del directorio de marca, no la ruta del logotipo: la primera
         // es del despliegue y la segunda podria llevar el nombre del hotel.
         'BRANDING_LOGO_ROOT',
-        // PR13: en que fraccion de su vida se renueva el token del quiosco
+        // En que fraccion de su vida se renueva el token del quiosco
         // (ADR-044). Junto con `IDENTITY_DEVICE_TOKEN_DAYS` y `_OVERLAP_HOURS`
         // —que ya entran por sufijo— y el `token_expires_on` de cada quiosco,
         // dice si una tablet debio renovarse y no lo hizo. Es una fraccion

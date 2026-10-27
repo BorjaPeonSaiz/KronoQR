@@ -24,14 +24,12 @@ use Illuminate\Database\ConnectionInterface;
  * Cambio de un departamento: su nombre, su responsable, o las dos cosas
  * (RF-GP-01, RF-ID-03, RF-ID-10, ADR-051 §5).
  *
- * No cambia de centro y no es una omision: los empleados del departamento estan
- * adscritos a ese centro, y moverlo les cambiaria la zona horaria con la que se
- * calcula su jornada (RN-05).
+ * No toca el centro y no es una omision: hay uno solo por instalacion (ADR-040).
  *
  * ## Asientos (regla dura 6)
  *
  * - **Nombre**: `DepartmentRenamed` con la lista de campos tocados y el
- *   nombre anterior y el nuevo (R7-RV-02), y `Compliance` escribe
+ *   nombre anterior y el nuevo, y `Compliance` escribe
  *   `department.renamed`.
  * - **Responsable**: `DepartmentManagerChanged` y `Compliance` escribe un
  *   `role_assignment.changed` por cada cuenta afectada, la que sale y la que

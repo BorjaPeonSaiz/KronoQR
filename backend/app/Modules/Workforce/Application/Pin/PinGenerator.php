@@ -15,7 +15,7 @@ use RuntimeException;
  * Genera el PIN, de 6 u 8 cifras segun la instalacion (RF-ID-09, ADR-050).
  *
  * **`random_int` y nunca `rand` ni `mt_rand`**, a traves de
- * {@see PinCandidateSource} (H8). Mersenne Twister es predecible:
+ * {@see PinCandidateSource}. Mersenne Twister es predecible:
  * observando unas cuantas salidas se reconstruye su estado y, con el, todas las
  * siguientes. Aqui la salida es la llave del registro horario personal de una
  * persona (RL-05) y del fichaje de respaldo (RF-AT-11), asi que la fuente tiene

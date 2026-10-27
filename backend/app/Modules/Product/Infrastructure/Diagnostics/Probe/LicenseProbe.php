@@ -38,7 +38,7 @@ use App\Modules\Shared\Domain\ValueObject\FeatureRestriction;
  * llama pensando que se ha perdido su logotipo. Un `warning` con la explicacion
  * lo resuelve sin llamada.
  *
- * **El nombre no cuenta** (PR18). `LicensedBrandingProvider` no lo degrada
+ * **El nombre no cuenta**. `LicensedBrandingProvider` no lo degrada
  * nunca —encabeza la exportacion para la Inspeccion—, asi que un nombre
  * configurado sin el plan no es una marca que se este dejando de mostrar, y el
  * aviso no puede aconsejar borrarlo. Y el texto distingue **por que** no se
@@ -63,7 +63,7 @@ final readonly class LicenseProbe implements DoctorProbe
         try {
             $overview = $this->licenses->handle();
         } catch (LicenseUnavailable) {
-            // V21-4-PL-1: con la base caida no se sabe si hay licencia, y decir
+            // Con la base caida no se sabe si hay licencia, y decir
             // «no hay ninguna» mandaba a reactivarla en plena caida. Un
             // `warning` como cualquier otro estado (regla dura 15) y ninguna
             // comprobacion de marca, que tambien depende de la licencia.
@@ -128,7 +128,7 @@ final readonly class LicenseProbe implements DoctorProbe
     {
         $resolved = $this->settings->handle();
 
-        // Solo el aspecto: el nombre se sirve siempre (ver el docblock, PR18).
+        // Solo el aspecto: el nombre se sirve siempre (ver el docblock).
         $configured = $resolved->get(SettingKey::BRANDING_LOGO_PATH)->isProductDefault === false
             || $resolved->get(SettingKey::BRANDING_ACCENT_COLOR)->isProductDefault === false;
 

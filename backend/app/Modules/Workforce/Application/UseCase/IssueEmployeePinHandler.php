@@ -21,7 +21,7 @@ use Random\RandomException;
 /**
  * Emite el PIN de una persona (RF-ID-09).
  *
- * Es un paso de otra cosa: del alta individual (RF-GP-01, tarea 1.6) y del
+ * Es un paso de otra cosa: del alta individual (RF-GP-01) y del
  * restablecimiento. En el alta individual corre dentro de la transaccion que la
  * abre, que es lo que impide que de ella salga alguien sin PIN: si la emision
  * falla, el alta no se confirma. La importacion masiva no pasa por aqui: deja

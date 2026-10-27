@@ -13,7 +13,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * Lo que la bandeja ya sabe de los indicios de patron de cada persona
- * (RF-PR-06, decision 13c de la ficha 3.11).
+ * (RF-PR-06).
  *
  * ## Lee `incidents`, que es una tabla de `Compliance`
  *

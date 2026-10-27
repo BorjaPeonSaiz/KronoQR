@@ -8,8 +8,8 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use DateTimeImmutable;
 
 /**
- * Las fichas de personas dadas de baja que han cumplido su plazo (ADR-060,
- * tarea 11.3 A; RL-11, RGPD art. 5.1.e).
+ * Las fichas de personas dadas de baja que han cumplido su plazo (ADR-060;
+ * RL-11, RGPD art. 5.1.e).
  *
  * No borra la ficha: **la minimiza en sitio**. Lo que identifica a la persona
  * desaparece; su `uuid`, su centro, su departamento y sus fechas se quedan,

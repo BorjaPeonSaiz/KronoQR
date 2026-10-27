@@ -83,7 +83,7 @@ final class SettingCollectionResource extends JsonResource
      *
      * El dominio guarda la clave de traduccion y sus parametros, nunca el texto:
      * no sabe en que idioma se va a leer esto, y meter castellano dentro de
-     * `Domain/` es justo lo que la tarea 5.1 corrigio en las excepciones. Si
+     * `Domain/` es justo lo que no se hace en las excepciones. Si
      * faltara la traduccion se devuelve el motivo tecnico en ingles, que es peor
      * que traducirlo y mucho mejor que una clave suelta.
      */

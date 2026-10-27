@@ -12,7 +12,7 @@ use RuntimeException;
  * Saca del lote que devuelve `WorkDay::releaseEvents()` el evento de la
  * correccion.
  *
- * Los tres casos de uso de la tarea 1.15 necesitan lo mismo: publicar todos los
+ * Los tres casos de uso de correccion necesitan lo mismo: publicar todos los
  * eventos y, ademas, pasarle **ese** al libro de correcciones. Escribir el
  * `instanceof` en cada uno acabaria con tres versiones ligeramente distintas del
  * mismo bucle.

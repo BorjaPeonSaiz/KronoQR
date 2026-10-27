@@ -264,16 +264,26 @@ it('entrega un solo token nuevo aunque la tablet repita la recogida dos veces a 
     $codigos = array_map(static fn (array $r): int => $r['status'], $respuestas);
     sort($codigos);
 
-    $ganadora = array_values(array_filter($respuestas, static fn (array $r): bool => $r['status'] === 200));
+    $ganadoras = array_values(array_filter($respuestas, static fn (array $r): bool => $r['status'] === 200));
+    $emitidos = array_map(static function (array $r): int {
+        /** @var array{token: array{value: string}} $cuerpo */
+        $cuerpo = $r['body'];
 
-    /** @var array{token: array{value: string}} $cuerpo */
-    $cuerpo = $ganadora[0]['body'];
-    [$id] = explode('|', $cuerpo['token']['value'], 2);
+        return (int) explode('|', $cuerpo['token']['value'], 2)[0];
+    }, $ganadoras);
 
-    expect($codigos)->toBe([200, 422])
+    // Si las dos leen la fila a la vez, una pierde el `UPDATE` y recibe el
+    // rechazo. Si la segunda la lee cuando la primera ya confirmo, ve
+    // `reclaims = 1` y vuelve a recoger con todo derecho (hasta tres): dos
+    // 200 seguidos. Lo que no puede pasar en ninguno de los dos ordenes es
+    // mas de un dispositivo, mas de un token vivo o una recogida sin asiento.
+    $vivos = DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->pluck('id')->map(static fn (mixed $id): int => is_numeric($id) ? (int) $id : 0)->all();
+
+    expect($codigos)->toBeIn([[200, 422], [200, 200]])
         ->and(DB::table('devices')->count())->toBe(1)
-        ->and(DB::table('device_pairing_requests')->value('reclaims'))->toBe(1)
-        // Un solo token vivo para la tablet, y es el que recibio la ganadora.
-        ->and(DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->pluck('id')->all())->toBe([(int) $id])
-        ->and(DB::table('audit_log')->where('action', 'device.pairing_reclaimed')->count())->toBe(1);
+        ->and(DB::table('device_pairing_requests')->value('reclaims'))->toBe(count($ganadoras))
+        // Un solo token vivo para la tablet, y es uno de los que se entregaron.
+        ->and($vivos)->toHaveCount(1)
+        ->and($emitidos)->toContain($vivos[0] ?? null)
+        ->and(DB::table('audit_log')->where('action', 'device.pairing_reclaimed')->count())->toBe(count($ganadoras));
 })->group('RF-PD-06', 'RQ-03');

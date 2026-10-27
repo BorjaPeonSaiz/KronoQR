@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Instrumentacion transversal de la tarea 3.1 (doc 02 §8.1): metricas. Vive
+ * Instrumentacion transversal (doc 02 §8.1): metricas. Vive
  * fuera de los modulos a proposito: es infraestructura de TODO el proceso, no
  * de un dominio.
  *

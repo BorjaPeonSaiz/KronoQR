@@ -14,9 +14,9 @@ use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportFailure;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -27,8 +27,7 @@ use Throwable;
  *
  * No genera nada. Termina en milisegundos y devuelve la fila en `pending`, que
  * es lo que el contrato promete en el `202`. La generacion recorre todas las
- * tablas de la instalacion y no cabe en una peticion HTTP (decision 4 de la
- * ficha 5.10).
+ * tablas de la instalacion y no cabe en una peticion HTTP.
  *
  * ## El asiento se escribe al PEDIRLA, dentro de la transaccion
  *
@@ -78,6 +77,7 @@ final readonly class RequestDataExportHandler
          * segundo sin tocar el estado global del proceso.
          */
         private int $staleAfterSeconds,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -97,7 +97,7 @@ final readonly class RequestDataExportHandler
          * ordenado en el tiempo —el indice de la clave publica no se fragmenta—
          * y sin decir cuantas exportaciones se han pedido.
          */
-        $uuid = Str::uuid7()->toString();
+        $uuid = $this->uuids->next();
 
         /*
          * SE DESATASCA ANTES DE INTENTAR CREAR, y esto es lo que impide que un

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Application\Port;
 
 /**
- * La version del producto desplegada en esta instalacion (DC8, doc 02 §10.5).
+ * La version del producto desplegada en esta instalacion (doc 02 §10.5).
  *
  * Es la misma que publica `GET /api/v1/health`: la resuelve
  * `App\Support\Version\DeployedVersion` al cargar la configuracion

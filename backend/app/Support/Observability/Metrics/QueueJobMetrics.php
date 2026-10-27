@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * `queue_job_duration_seconds{job}` y `queue_jobs_failed_total{job}`
- * (doc 02 §8.2, decision 4 de la ficha 3.1).
+ * (doc 02 §8.2).
  *
  * ## La etiqueta es la CLASE CORTA del trabajo, nunca su carga
  *

@@ -33,7 +33,7 @@ use Illuminate\Database\ConnectionInterface;
  * nombre: «ES-hosteleria» es una regla, «Convenio del Hotel Fulanito» seria el
  * cliente.
  *
- * ## `volume`: solo numeros, para no pedir una segunda ronda (PR14)
+ * ## `volume`: solo numeros, para no pedir una segunda ronda
  *
  * «La nomina sale vacia» tiene dos lecturas opuestas: que no hay nada que
  * exportar o que lo hay y el fichero no lo recoge. Cuatro recuentos las

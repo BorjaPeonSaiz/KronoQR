@@ -40,7 +40,7 @@ use Illuminate\Http\JsonResponse;
  *
  * ## Lo que este controlador NO hace
  *
- * **No declara su ruta ni su rate limiting**: eso es la tarea 1.7. Y **no
+ * **No declara su ruta ni su rate limiting**: eso va en `routes/api.php`. Y **no
  * resuelve el dispositivo desde el cuerpo de la peticion**: sale del token
  * autenticado (ver `ScanningDevice`), porque si viajara en el cuerpo cualquier
  * portador podria atribuir un fichaje a otro quiosco.

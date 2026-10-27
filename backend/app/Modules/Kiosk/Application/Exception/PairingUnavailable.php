@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * **Ahora mismo no se puede crear una solicitud de emparejamiento**
- * (RF-PD-06, tarea 5.6).
+ * (RF-PD-06).
  *
  * Raiz de las dos causas —la instalacion tiene demasiadas solicitudes vivas, o
  * el sorteo de un codigo libre falla una y otra vez— porque el borde las trata

@@ -33,7 +33,7 @@ use Laravel\Sanctum\PersonalAccessToken;
  * Deptrac), que es el mismo criterio que ya usa `IdentityServiceProvider` con la
  * tabla del `tokenable`.
  *
- * ## Un acceso de soporte NO cierra sesion aqui (RF-PD-11, ADR-020, tarea 5.9)
+ * ## Un acceso de soporte NO cierra sesion aqui (RF-PD-11, ADR-020)
  *
  * Responde `204` y **no hace nada**. El descarte de arriba lo habria tratado
  * como una sesion de portal, con tres consecuencias malas a la vez: le habria

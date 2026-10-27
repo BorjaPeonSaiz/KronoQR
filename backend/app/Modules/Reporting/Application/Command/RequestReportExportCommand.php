@@ -16,7 +16,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
  * Lo pone la capa HTTP a partir del token (`ScopeGuard`), igual que en el
  * informe sincrono, y desde este momento queda **congelado** en la fila: el
  * trabajo lo aplicara tal cual dentro de unos minutos, sin volver a preguntar.
- * Es la decision 1 de la ficha, y la razon es que el fichero tiene que describir
+ * La razon es que el fichero tiene que describir
  * el alcance con el que se autorizo, que es el unico que quedo en `audit_log`.
  *
  * ## `requestedByUserId` no es opcional

@@ -46,6 +46,15 @@ it('exige PHPStan en el nivel maximo', function (): void {
         ->toMatch('/^\s*level:\s*9\s*$/m');
 })->group('RNF-M-02');
 
+it('analiza con PHPStan tambien bootstrap y config', function (): void {
+    // RNF-M-02. config/ es la unica capa que lee env(), cuyo tipo
+    // es mixed: fuera del analisis, un rtrim(env(...)) sin cast pasaba verde.
+    $neon = repoContents('backend/phpstan.neon');
+
+    expect($neon)->toMatch('/^\s*-\s*bootstrap\s*$/m')
+        ->and($neon)->toMatch('/^\s*-\s*config\s*$/m');
+})->group('RNF-M-02');
+
 it('exige justificacion en cada supresion de PHPStan', function (): void {
     // RNF-M-02, segunda mitad: "sin errores suprimidos sin justificar". PHPStan
     // obliga a nombrar el identificador del error tras la anotacion de
@@ -58,6 +67,14 @@ it('exige justificacion en cada supresion de PHPStan', function (): void {
     expect(repoContents('.semgrep/kronoqr-php.yaml'))
         ->toContain('kronoqr-phpstan-ignore-sin-justificacion');
 })->group('RNF-M-02');
+
+it('hace fallar make sast si Semgrep no entiende un fichero entero', function (): void {
+    // V2-DV-03: un `PartialParsing` deja trozos del dominio sin mirar por las
+    // reglas del reloj, y Semgrep sale con 0. `--strict` lo convierte en fallo.
+    preg_match('/^sast:[^\n]*\n((?:\t[^\n]*\n)+)/m', repoContents('Makefile'), $recipe);
+
+    expect($recipe[1] ?? '')->toMatch('/--config \.semgrep [^\n]*--strict/');
+})->group('RNF-M-02', 'RS-10');
 
 it('exige los umbrales de cobertura del dominio y del backend', function (): void {
     // RNF-M-01: dominio >= 90 %, global >= 75 % (§9.2). Son DOS umbrales, y el

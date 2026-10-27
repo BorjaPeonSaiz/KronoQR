@@ -39,7 +39,7 @@ use App\Modules\Shared\Domain\ValueObject\PrivacyNotice;
  * sin ella. Quien si lo comprueba es `LogoFileInspector`, en los dos momentos en
  * los que hace falta: al GUARDAR la ruta —un `422` con una persona delante— y al
  * LEER el fichero para dibujarlo, donde un rechazo solo significa «sigue sin
- * logotipo». `doctor` (tarea 5.9) usara el mismo inspector para avisar.
+ * logotipo». `doctor` usara el mismo inspector para avisar.
  *
  * ## Tolerante, como todo lo que lee configuracion
  *

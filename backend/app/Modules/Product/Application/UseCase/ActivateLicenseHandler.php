@@ -24,7 +24,7 @@ use Illuminate\Database\ConnectionInterface;
  *
  * Al contrario que la lectura, que es tolerante y nunca falla, la activacion es
  * estricta: quien acaba de pegar una clave tiene que enterarse de que no vale, y
- * con cual de los cuatro motivos. Es la misma politica de la tarea 5.1
+ * con cual de los cuatro motivos. Es la misma politica que la configuracion
  * —**lectura tolerante, escritura estricta**— y por el mismo motivo: una
  * instalacion no puede quedarse a medias creyendo que activo algo.
  *

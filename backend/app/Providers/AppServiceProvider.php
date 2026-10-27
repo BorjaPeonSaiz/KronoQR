@@ -32,7 +32,7 @@ use Symfony\Component\Clock\NativeClock;
  *
  * Viven aqui la guarda de arranque de produccion, que no es de ningun modulo
  * porque no es del producto sino del DESPLIEGUE, y la degradacion de la cache y
- * de la cola cuando Redis no responde (CH1), que es de su configuracion y no de
+ * de la cola cuando Redis no responde, que es de su configuracion y no de
  * quien las usa, con el cortacircuitos que evita reintentar Redis en cada acceso
  * mientras esta caido.
  */
@@ -127,7 +127,7 @@ final class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * La cache o la cola han dejado de usar Redis y siguen por su respaldo (CH1).
+     * La cache o la cola han dejado de usar Redis y siguen por su respaldo.
      *
      * El framework emite cada evento **una vez por transicion** —la primera
      * operacion que falla, no cada una—, asi que estas lineas no inundan el log

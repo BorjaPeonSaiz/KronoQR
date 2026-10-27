@@ -19,7 +19,7 @@ use App\Modules\Reporting\Domain\Event\ReportExportRequested;
 
 /**
  * Sella en `audit_log` el ciclo de vida de un informe en diferido
- * (**RF-IN-06**, RS-05, regla dura 6, decision 7 de la ficha 3.9).
+ * (**RF-IN-06**, RS-05, regla dura 6).
  *
  * ## Un listener con tres metodos, y no tres listeners
  *
@@ -47,7 +47,7 @@ use App\Modules\Reporting\Domain\Event\ReportExportRequested;
  *   aqui.
  *
  * **Nunca un nombre, nunca una hora trabajada y nunca la ruta absoluta del
- * fichero** (regla dura 21, decision 7): solo `file_name`, que es lo que permite
+ * fichero** (regla dura 21): solo `file_name`, que es lo que permite
  * reconocerlo en una conversacion.
  *
  * ## Sincronos, sin `ShouldQueue` y sin `afterCommit`
@@ -99,7 +99,7 @@ final readonly class RecordReportExportLifecycle
                 'report_export_uuid' => $event->uuid,
                 'kind' => $event->kind,
                 'format' => $event->format,
-                // El NOMBRE del fichero, nunca su ruta (decision 7).
+                // El NOMBRE del fichero, nunca su ruta.
                 'file_name' => $event->fileName,
                 // La huella es lo que identifica al fichero: con ella se puede
                 // confirmar que el que alguien tiene delante es el que salio de
@@ -113,8 +113,8 @@ final readonly class RecordReportExportLifecycle
             ]),
         ));
 
-        // La LECTURA, con su propio asiento y a nombre de quien la pidio (tarea
-        // 11.4, V4-BE-5; RS-05, RL-15). Antes la escribia el trabajo en la cola
+        // La LECTURA, con su propio asiento y a nombre de quien la pidio
+        // (RS-05, RL-15). Antes la escribia el trabajo en la cola
         // a nombre de `system`, y «quien se llevo estas horas» se respondia con
         // la maquina. Mismo contenido que la descarga sincrona —el contexto lo
         // resuelve `GeneratePeriodReport::compose()`—, mas el informe del que
@@ -145,7 +145,7 @@ final readonly class RecordReportExportLifecycle
      * asiento que la sincrona** (`legal_export.generated`, regla dura 6), con
      * sus mismas claves —periodo, alcance y recuentos— y dos mas: la
      * exportacion de la que sale y la marca de diferido. Actor: quien la pidio,
-     * no `system` (V5-PA-4). «Quien saco el registro de la plantilla» se
+     * no `system`. «Quien saco el registro de la plantilla» se
      * contesta asi con una sola consulta, venga de donde venga.
      *
      * @param  array<string, scalar|null>  $facts
@@ -165,7 +165,7 @@ final readonly class RecordReportExportLifecycle
     }
 
     /**
-     * Quien pidio un informe en diferido lo detuvo (V5-PA-4, RS-05). Sin
+     * Quien pidio un informe en diferido lo detuvo (RS-05). Sin
      * parametros —estan en `report_export.requested`, con el mismo `uuid`— y sin
      * nombres (regla dura 21).
      */
@@ -185,7 +185,7 @@ final readonly class RecordReportExportLifecycle
     }
 
     /**
-     * El cuadro de impacto descargado (**RF-IN-08**, tarea 3.13).
+     * El cuadro de impacto descargado (**RF-IN-08**).
      *
      * ## Vive en este listener y no en uno propio
      *

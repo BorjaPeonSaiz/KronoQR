@@ -36,22 +36,30 @@ final class BackupRunCommand extends Command
         $arguments = ['run', '--mode', $mode];
 
         if ($this->option('skip-verify') === true) {
-            $this->warn(
-                'Copia SIN verificar: una copia no verificada no es una copia. '.
-                'Verificala en cuanto puedas con: php artisan backup:verify'
-            );
+            $this->warn(self::text('console.backup.unverified'));
             $arguments[] = '--skip-verify';
         }
 
         $code = (new BackupScript($this))->run('backup.sh', $arguments);
 
         if ($code !== 0) {
-            $this->error(
-                'La copia no se ha completado (codigo '.$code.'). La copia anterior sigue siendo la buena. '.
-                'Procedimiento: docs/runbooks/restaurar-backup.md'
-            );
+            $this->error(self::text('console.backup.run_failed', ['code' => $code]));
         }
 
         return $code;
+    }
+
+    /**
+     * En el idioma de `APP_LOCALE`, no en el de la instalacion: esta orden vive
+     * en el armazon (`App\Console`), que no alcanza los modulos (Deptrac), y la
+     * lanzan el planificador y `update.sh`, cuya salida va a su propio informe.
+     *
+     * @param  array<string, int|string>  $replace
+     */
+    private static function text(string $key, array $replace = []): string
+    {
+        $text = __($key, $replace);
+
+        return \is_string($text) ? $text : $key;
     }
 }

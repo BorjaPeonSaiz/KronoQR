@@ -247,8 +247,8 @@ it('no borra nada ni deja asiento si el reloj de la aplicacion pide un corte que
 
     expect($exit)->toBe(1)
         ->and($output)->toContain('PostgreSQL ha rechazado el corte')
-        // La funcion toma el plazo mas largo de todos los centros.
-        ->toContain('todos los centros')
+        // La funcion toma el plazo del perfil del centro: hay uno por instalacion.
+        ->toContain('perfil de cumplimiento del centro')
         // El texto con el que el comando reconoce el rechazo es el de la
         // funcion de la migracion: si uno cambia, esto rompe.
         ->toContain(DatabaseWorkRecordArchive::CUTOFF_REJECTED)

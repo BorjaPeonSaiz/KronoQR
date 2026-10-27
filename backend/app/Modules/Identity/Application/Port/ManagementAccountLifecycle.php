@@ -74,7 +74,7 @@ interface ManagementAccountLifecycle
      * primer administrador. Lo unico que pierde es la capacidad de entrar.
      *
      * Anota el instante de la baja en `users.deactivated_at`: es desde donde se
-     * cuenta el plazo tras el que la cuenta se minimiza (tarea 11.3 B, ADR-060).
+     * cuenta el plazo tras el que la cuenta se minimiza (ADR-060).
      */
     public function deactivate(string $uuid, DateTimeImmutable $at): void;
 

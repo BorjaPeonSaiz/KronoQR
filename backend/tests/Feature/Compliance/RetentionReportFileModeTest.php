@@ -40,7 +40,7 @@ it('crea el informe con 0640 aunque la umask del proceso sea 0000', function ():
     $anterior = umask(0);
 
     try {
-        $ruta = (new FileRetentionReportStore)->store(informeDeRetencionDePrueba());
+        $ruta = app(FileRetentionReportStore::class)->store(informeDeRetencionDePrueba());
     } finally {
         umask($anterior);
     }
@@ -57,7 +57,7 @@ it('no pisa un informe que ya existe con el mismo nombre', function (): void {
     config(['compliance.retention.report_path' => $directorio]);
     $existente = GeneratedFilesSandbox::file($directorio.'/retencion-propuesta-20261002-051000.txt', 'el de antes');
 
-    $ruta = (new FileRetentionReportStore)->store(informeDeRetencionDePrueba());
+    $ruta = app(FileRetentionReportStore::class)->store(informeDeRetencionDePrueba());
 
     expect($ruta)->not->toBe($existente)
         ->and((string) file_get_contents($existente))->toBe('el de antes')
@@ -79,7 +79,7 @@ it('escribe en UTC la hora rotulada «UTC» y la del nombre, aunque el informe l
         tallies: [],
     );
 
-    $ruta = (new FileRetentionReportStore)->store($madrid);
+    $ruta = app(FileRetentionReportStore::class)->store($madrid);
 
     expect(basename($ruta))->toBe('retencion-propuesta-20261002-051000.txt')
         ->and((string) file_get_contents($ruta))->toContain('Generado:          2026-10-02 05:10:00 UTC');

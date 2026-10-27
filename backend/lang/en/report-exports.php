@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Notice that a background report is ready (RF-IN-06, task 3.9).
+ * Notice that a background report is ready (RF-IN-06).
  *
  * WHAT THIS EMAIL DOES NOT CARRY, first of all: the download link. It is
  * single-use and expires in fifteen minutes (ADR-041), so one sitting in a

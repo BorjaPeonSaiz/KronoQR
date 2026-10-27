@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Envia la telemetria si —y solo si— se cumplen las tres condiciones
- * (**RF-PD-12**, ADR-020, ADR-023, ficha 5.10 puntos 8 y 9).
+ * (**RF-PD-12**, ADR-020, ADR-023).
  *
  * ## Las tres condiciones se comprueban ANTES de construir nada
  *

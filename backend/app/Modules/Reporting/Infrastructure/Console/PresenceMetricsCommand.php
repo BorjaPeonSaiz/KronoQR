@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Infrastructure\Console;
 
 use App\Modules\Reporting\Application\UseCase\PublishPresenceMetrics;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
  * `php artisan reporting:presence-metrics` — publica `open_shifts_current` y
- * `websocket_connections_active` (doc 02 §8.2, doc 01 §9.2, tarea 2.4).
+ * `websocket_connections_active` (doc 02 §8.2, doc 01 §9.2).
  *
  * Lo ejecuta el planificador cada minuto (`routes/console.php`). A mano sirve
  * para comprobar que el fichero del colector *textfile* se escribe donde debe,
@@ -22,6 +23,11 @@ use Illuminate\Console\Command;
  */
 final class PresenceMetricsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las metricas de `reporting:*`. */
+    private const string TEXTS = 'console.reporting_metrics';
+
     protected $signature = 'reporting:presence-metrics';
 
     protected $description = 'Recalcula y publica las metricas de presencia en vivo (doc 02 §8.2).';
@@ -29,7 +35,7 @@ final class PresenceMetricsCommand extends Command
     public function handle(PublishPresenceMetrics $metrics): int
     {
         if (! $metrics->handle()) {
-            $this->warn('Todavia no hay centro de trabajo: no hay nada que etiquetar (RF-PD-03).', 'v');
+            $this->warn($this->text('presence.no_site'), 'v');
 
             // Cero y no error: antes de la puesta en marcha esto es lo esperado,
             // y un planificador que fallara cada minuto llenaria el log de una
@@ -41,7 +47,7 @@ final class PresenceMetricsCommand extends Command
         // del planificador (`ScheduledTaskOutput`). Una linea por minuto no dice
         // nada que no digan ya las metricas; un fallo si llega, porque sale por
         // la salida de error del comando.
-        $this->info('Metricas de presencia publicadas.', 'v');
+        $this->info($this->text('presence.published'), 'v');
 
         return self::SUCCESS;
     }

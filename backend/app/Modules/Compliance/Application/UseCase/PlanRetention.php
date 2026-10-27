@@ -61,10 +61,10 @@ final readonly class PlanRetention
             $shortCycleTallies[] = $archive->inspect($scopeCutoff);
         }
 
-        // Las cuentas de gestion dadas de baja (ADR-060, tarea 11.3 B). Solo el
+        // Las cuentas de gestion dadas de baja (ADR-060). Solo el
         // recuento: el informe no dice de quien.
         $accountCutoff = $policy->managementAccountCutoff($now);
-        // Las fichas de personas dadas de baja (ADR-060, tarea 11.3 A).
+        // Las fichas de personas dadas de baja (ADR-060).
         $personnelCutoff = $policy->personnelRecordCutoff($now);
 
         return new RetentionReport(

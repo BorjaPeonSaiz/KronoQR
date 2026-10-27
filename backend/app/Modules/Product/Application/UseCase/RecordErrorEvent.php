@@ -19,8 +19,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * **El unico camino por el que algo entra en `error_events`** (RF-PD-15, tarea
- * 5.12).
+ * **El unico camino por el que algo entra en `error_events`** (RF-PD-15).
  *
  * Sanea, calcula la huella, agrupa y cuenta. Es el adaptador del puerto
  * {@see ErrorEventSink} que vive en `Shared`, de modo que quien reporta —el
@@ -67,7 +66,7 @@ use Throwable;
  * `first_seen_at` y `last_seen_at` salen de `occurred_at` —el reloj de quien lo
  * sufrio, que es el que importa cuando un error viene de la cola offline de una
  * tablet—, acotado **por arriba al reloj del servidor y por abajo a recepcion
- * menos la retencion** (decision 6). Una tablet con la hora adelantada dejaria
+ * menos la retencion**. Una tablet con la hora adelantada dejaria
  * su grupo clavado en lo alto del listado; una con la hora atrasada un ano
  * escribia un `last_seen_at` de hace un ano en un grupo vivo y **lo arrastraba
  * hacia la purga**, borrando un fallo que estaba ocurriendo hoy. Ver
@@ -82,7 +81,7 @@ use Throwable;
  */
 final readonly class RecordErrorEvent implements ErrorEventSink
 {
-    /** El codigo con el que se reconoce el grupo de desbordamiento (decision 14). */
+    /** El codigo con el que se reconoce el grupo de desbordamiento. */
     public const string OVERFLOW_CODE = ErrorColumnSanitizer::OVERFLOW_CODE;
 
     /**
@@ -125,7 +124,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
             $context = $row->context;
             $fingerprint = $this->fingerprint($report, $message);
 
-            // Decision 14: por encima del techo, la ocurrencia se cuenta en el
+            // Por encima del techo, la ocurrencia se cuenta en el
             // grupo de desbordamiento del origen en vez de abrir fila.
             if ($this->overflows($report, $fingerprint)) {
                 $report = $this->asOverflow($report);
@@ -188,8 +187,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
     }
 
     /**
-     * Si esta ocurrencia **abriria** un grupo por encima del techo del origen
-     * (decision 14).
+     * Si esta ocurrencia **abriria** un grupo por encima del techo del origen.
      *
      * ## El problema que cierra
      *
@@ -250,8 +248,8 @@ final readonly class RecordErrorEvent implements ErrorEventSink
 
     /**
      * El mismo informe con sus columnas de texto ya saneadas y recortadas a la
-     * anchura de su columna por {@see ErrorColumnSanitizer::row()} (ADR-048,
-     * H7; decision 14). Aqui solo se recorta `module`, que no es texto libre.
+     * anchura de su columna por {@see ErrorColumnSanitizer::row()} (ADR-048).
+     * Aqui solo se recorta `module`, que no es texto libre.
      *
      * **Un valor largo no puede hacer fallar el `INSERT` y perder el error.** Es
      * el peor modo de fallo que puede tener esta tabla: el fallo que mas cuesta
@@ -294,7 +292,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
     }
 
     /**
-     * El instante del grupo, **acotado por los dos extremos** (decision 6).
+     * El instante del grupo, **acotado por los dos extremos**.
      *
      * - **Por arriba, al reloj del servidor.** Una tablet con la hora adelantada
      *   dejaria su grupo clavado en lo alto del listado durante dias y

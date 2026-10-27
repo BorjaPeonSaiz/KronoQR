@@ -16,8 +16,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * El Anexo B escribe `GET /api/v1/attendance/live` como `[rol: manager+]`, sin
  * la mitad `self` que si tiene el registro horario: la presencia de la plantilla
- * es una vista de gestion y no hay ninguna version «la mia» de ella. Desde la
- * tarea 2.1 el conjunto es `{admin, rrhh, responsable_departamento}`, y el
+ * es una vista de gestion y no hay ninguna version «la mia» de ella. El
+ * conjunto es `{admin, rrhh, responsable_departamento}`, y el
  * ultimo entra **acotado**: la consulta le devuelve su gente y solo su gente
  * (RF-ID-03), y el canal de WebSocket le firma sus departamentos y no el global.
  *
@@ -80,8 +80,8 @@ final class LivePresencePolicy
     /**
      * Roles que pueden ver la presencia de terceros («manager+»).
      *
-     * Metodo y no constante por lo mismo que en las hermanas: el conjunto cambio
-     * en la tarea 2.1 y puede volver a cambiar, y lo que no cambia —el alcance—
+     * Metodo y no constante por lo mismo que en las hermanas: el conjunto ya
+     * cambio una vez y puede volver a cambiar, y lo que no cambia —el alcance—
      * se resuelve, no se enumera.
      *
      * @return list<UserRole>

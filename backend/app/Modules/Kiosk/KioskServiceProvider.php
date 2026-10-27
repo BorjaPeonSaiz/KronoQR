@@ -59,10 +59,10 @@ use Psr\Log\LoggerInterface;
  *
  *   - `DeviceFleet`         -> `Infrastructure/Persistence` (telemetria de `devices`)
  *   - `KioskMetrics`        -> `Infrastructure/Metrics`
- *   - `DeviceRegistry`      -> `Infrastructure/Persistence` (alta y lista, tarea 5.6)
- *   - `PairingRequests`     -> `Infrastructure/Persistence` (tarea 5.6)
- *   - `PairingSecrets`      -> `Infrastructure/Adapter` (CSPRNG y hash, tarea 5.6)
- *   - `KioskEventPublisher` -> `Infrastructure/Adapter` (tarea 5.6)
+ *   - `DeviceRegistry`      -> `Infrastructure/Persistence` (alta y lista)
+ *   - `PairingRequests`     -> `Infrastructure/Persistence`
+ *   - `PairingSecrets`      -> `Infrastructure/Adapter` (CSPRNG y hash)
+ *   - `KioskEventPublisher` -> `Infrastructure/Adapter`
  *
  * **Los que necesita y no sirve** viven en `Shared/Application/Port` y los enlaza
  * el modulo dueño del dato (ADR-025, restriccion 3): `ClockingEmployees` en
@@ -71,7 +71,7 @@ use Psr\Log\LoggerInterface;
  * `PersonalDataAccessLog` en `ComplianceServiceProvider`.
  *
  * **La emision y la revocacion del token de un dispositivo NO entran por un
- * puerto** (tarea 5.6): `ClaimPairing` y `UnpairDevice` llaman directamente a
+ * puerto**: `ClaimPairing` y `UnpairDevice` llaman directamente a
  * `Identity\Application\UseCase\IssueDeviceToken` y `RevokeDeviceToken`. El doc 01
  * §5.5 dice que esa capacidad «se expone a `Kiosk` por caso de uso publico
  * explicito» y el §1.6 concede la arista; un puerto invertido añadiria una
@@ -163,14 +163,14 @@ final class KioskServiceProvider extends ServiceProvider
             // (`security.rejection_floor_ms`): los dos caminos tienen la misma
             // obligacion de RS-03 y ya no pueden divergir.
             $app->make(ConstantTimeFloor::class),
-            // V6-KI-02: la recogida repetida deja su asiento por evento.
+            // La recogida repetida deja su asiento por evento.
             $app->make(KioskEventPublisher::class),
         ));
     }
 
     /**
      * Las tres superficies de la salud del quiosco, con sus umbrales **ya
-     * resueltos** (RF-PA-07, tareas 5.11 y 3.3): `kiosk:health`,
+     * resueltos** (RF-PA-07): `kiosk:health`,
      * `GET /api/v1/devices` y la respuesta de `unpair`.
      *
      * Misma regla que los dos casos de uso del emparejamiento: la configuracion
@@ -188,8 +188,8 @@ final class KioskServiceProvider extends ServiceProvider
         ));
 
         /*
-         * `GET /api/v1/devices` juzga con LOS MISMOS umbrales que la consola
-         * (tarea 3.3, decision 2). Salen del mismo metodo a proposito: dos
+         * `GET /api/v1/devices` juzga con LOS MISMOS umbrales que la consola.
+         * Salen del mismo metodo a proposito: dos
          * lecturas de `config()` con dos valores por defecto distintos serian dos
          * opiniones sobre cuando un quiosco esta caido, que es exactamente lo que
          * esta tarea viene a eliminar.
@@ -269,7 +269,7 @@ final class KioskServiceProvider extends ServiceProvider
     }
 
     /**
-     * Las dos zonas del emparejamiento (tarea 5.6, RF-PD-06, §7.1).
+     * Las dos zonas del emparejamiento (RF-PD-06, §7.1).
      *
      * **DOS Y NO UNA, y con claves distintas**, que es lo que las hace servir para
      * algo:

@@ -77,6 +77,12 @@ beforeEach(function (): void {
     config()->set('product.diagnostics_pending_audit_path', $root.'/pending');
     config()->set('backup.path', $root.'/backups');
 
+    // Sin base de datos no se puede leer el idioma de la instalacion, y la
+    // consola habla el del respaldo del `.env` (`APP_LOCALE`). Se fija el que
+    // trae `.env.example`, `es`, para no depender del entorno que ejecuta la
+    // suite: sin `APP_LOCALE`, Laravel cae a `en`.
+    config()->set('app.locale', 'es');
+
     diagnosticsDbDownPlantMarkers($root.'/backups/reports');
 
     $_ENV[DIAGNOSTICS_DB_DOWN_ENV] = implode(' ', DIAGNOSTICS_DB_DOWN_PERSONAL);

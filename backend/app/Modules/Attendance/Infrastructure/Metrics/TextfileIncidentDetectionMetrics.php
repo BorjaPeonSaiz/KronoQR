@@ -10,7 +10,7 @@ use DateTimeImmutable;
 
 /**
  * Publica el desenlace de la revision diaria para el colector *textfile* de
- * `node-exporter` (doc 02 §8.2, RF-PR-01, tarea 3.2).
+ * `node-exporter` (doc 02 §8.2, RF-PR-01).
  *
  * ```
  * incident_detection_last_run_timestamp_seconds 1773545400

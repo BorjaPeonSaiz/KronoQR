@@ -34,7 +34,7 @@ use App\Modules\Workforce\Domain\Event\AbsenceVoided;
  * tipo, entre que dos dias, en que version y si llevaba nota. Al corregir, ademas
  * el **antes completo** y el motivo; al anular, el motivo.
  *
- * **`note` no entra nunca** (regla dura 21, decision 6 de la ficha 3.10). Puede
+ * **`note` no entra nunca** (regla dura 21). Puede
  * llevar un diagnostico —una baja medica es dato de salud— y el trail no la
  * necesita para reconstruir el cambio: de ella consta `has_note`, que es lo que
  * permite explicar por que una ausencia de tipo `other` era valida.

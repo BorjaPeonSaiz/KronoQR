@@ -11,8 +11,7 @@ use Illuminate\Http\Client\Factory as HttpClient;
 use Throwable;
 
 /**
- * **El unico cliente HTTP saliente de `app/`** (**RF-PD-12**, ADR-020, ficha
- * 5.10 punto 8).
+ * **El unico cliente HTTP saliente de `app/`** (**RF-PD-12**, ADR-020).
  *
  * `tests/Architecture/OutboundChannelsTest.php` comprueba que ningun otro
  * fichero de `app/` nombra el cliente HTTP de Laravel, Guzzle, `curl_*` ni
@@ -87,7 +86,7 @@ final readonly class HttpTelemetrySender implements TelemetrySender
 
         // El unico reintento. Escrito sin bucle a proposito: un `for` invita a
         // subir el tope, y el numero de intentos es una decision documentada
-        // (ficha 5.10 punto 8), no un parametro.
+        // (RF-PD-12), no un parametro.
         return $this->attempt($body, $endpoint, 2);
     }
 

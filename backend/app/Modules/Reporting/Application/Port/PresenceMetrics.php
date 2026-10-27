@@ -24,7 +24,7 @@ use DateTimeImmutable;
  * **Puerto y no un escritor concreto**, por lo mismo que
  * `Attendance\Application\Port\ScanMetrics`: el caso de uso no sabe si detras
  * hay un fichero para el colector *textfile* de `node-exporter`, un registro de
- * `promphp` o nada. Hoy es lo primero —`/metrics` lo expone la tarea 3.1— y esa
+ * `promphp` o nada. Hoy es lo primero —`/metrics` lo expone— y esa
  * eleccion no puede filtrarse a quien produce los numeros.
  *
  * **Las dos son gauges y se PUBLICAN enteras, nunca se incrementan** (regla dura

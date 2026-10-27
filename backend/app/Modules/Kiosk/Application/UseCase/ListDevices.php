@@ -31,8 +31,7 @@ use App\Modules\Shared\Domain\ValueObject\InstallationSite;
  * clase que usa `php artisan kiosk:health` y con los mismos umbrales
  * (`config/kiosk.php`), que son ademas los de la alerta «Quiosco sin latido >
  * 10 min» del doc 01 §9.3. Si el panel y la consola dijeran cosas distintas del
- * mismo quiosco, la conversacion siguiente seria cual de los dos miente
- * (decision 2 de la ficha 3.3).
+ * mismo quiosco, la conversacion siguiente seria cual de los dos miente.
  *
  * **Una sola consulta**, no dos: el informe se construye sobre la lista que ya
  * se ha leido. Pedirsela a {@see CheckKioskHealth} habria vuelto a consultar

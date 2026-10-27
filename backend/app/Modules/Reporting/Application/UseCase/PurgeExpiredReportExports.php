@@ -24,7 +24,7 @@ use DateTimeZone;
 
 /**
  * El mantenimiento diario de los informes en diferido: **desatasca, purga y
- * concilia** (**RF-IN-06**, RL-15, regla dura 5, decision 3 de la ficha 3.9;
+ * concilia** (**RF-IN-06**, RL-15, regla dura 5;
  * ADR-045).
  *
  * ## Por que el fichero caduca
@@ -49,8 +49,8 @@ use DateTimeZone;
  *
  * - **Fila `completed` sin fichero → `purged`.** Si aun no habia caducado deja
  *   `report_export.file_missing` con el `uuid` y sin ruta, y sube una metrica
- *   con alerta: es un borrado a mano o una exfiltracion (C5).
- * - **Fila que apunta fuera de su raiz → `purged` sin borrar nada** (C3).
+ *   con alerta: es un borrado a mano o una exfiltracion (ADR-045 C5).
+ * - **Fila que apunta fuera de su raiz → `purged` sin borrar nada** (ADR-045 C3).
  * - **Directorio `<uuid>/` sin fila viva → se borra entero** al superar su edad
  *   minima: el plazo de retencion, o 2 × `stale_after` si su fila no llego a
  *   `completed`. Antes se borraba en cuanto ninguna fila `completed` lo
@@ -160,7 +160,7 @@ final readonly class PurgeExpiredReportExports
             }
 
             if ($location === RecordedFileLocation::OutsideArea || $export->expired($now)) {
-                // Fuera de su raiz: se marca y no se borra nada (C3). Caducada:
+                // Fuera de su raiz: se marca y no se borra nada (ADR-045 C3). Caducada:
                 // la purga normal de una fila que se cruzo con esta pasada.
                 $this->exports->markPurged($export->purge($now));
 

@@ -73,7 +73,7 @@ final class StoreEmployeeRequest extends FormRequest
             nationalId: $this->optionalString('national_id'),
             hiredAt: $this->string('hired_at')->value(),
             locale: $this->has('locale')
-                ? $this->string('locale')->value()
+                ? ActiveLocale::canonical($this->string('locale')->value())
                 : ActiveLocale::defaultLocale(),
             teleworking: $this->boolean('teleworking'),
         );

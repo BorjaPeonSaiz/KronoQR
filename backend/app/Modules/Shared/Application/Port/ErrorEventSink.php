@@ -8,7 +8,7 @@ use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 
 /**
  * Donde acaban los errores: el historico agrupado por huella de `error_events`
- * (RF-PD-15, tarea 5.12).
+ * (RF-PD-15).
  *
  * ## Por que es un puerto y por que vive en `Shared`
  *

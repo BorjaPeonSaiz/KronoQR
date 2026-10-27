@@ -12,6 +12,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use DateTimeImmutable;
@@ -593,7 +594,7 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
      */
     private function asDate(string $isoDate): DateTimeImmutable
     {
-        return new DateTimeImmutable(substr($isoDate, 0, 10).' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight(substr($isoDate, 0, 10), new DateTimeZone('UTC'));
     }
 
     /**

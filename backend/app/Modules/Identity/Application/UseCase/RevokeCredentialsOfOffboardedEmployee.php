@@ -16,7 +16,7 @@ use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * **Una baja deja sin credencial a quien se va** (RN-14, RF-GP-03, N1).
+ * **Una baja deja sin credencial a quien se va** (RN-14, RF-GP-03).
  *
  * Dar de baja a una persona ya le impide fichar —el escaneo mira el estado
  * laboral—, pero sin este caso de uso su tarjeta seguiria «activa» en el

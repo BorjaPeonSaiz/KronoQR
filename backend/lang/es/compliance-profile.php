@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos del perfil de cumplimiento (RF-PD-07, tarea 5.2).
+ * Textos del perfil de cumplimiento (RF-PD-07).
  *
  * `attributes` son los nombres que ve una persona en un `422`; `errors` los
  * mensajes de las excepciones de dominio, que el borde resuelve con

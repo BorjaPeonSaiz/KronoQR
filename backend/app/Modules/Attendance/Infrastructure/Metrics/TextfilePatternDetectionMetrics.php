@@ -10,7 +10,7 @@ use DateTimeImmutable;
 
 /**
  * Publica el desenlace de la deteccion de patrones anomalos para el colector
- * *textfile* de `node-exporter` (doc 02 §8.2, RF-PR-06, tarea 3.11).
+ * *textfile* de `node-exporter` (doc 02 §8.2, RF-PR-06).
  *
  * ```
  * pattern_detection_last_run_timestamp_seconds 1774240500
@@ -37,7 +37,7 @@ use DateTimeImmutable;
  * patron duplicaria `anomalous_patterns_detected_total{pattern}`. Aqui la
  * pregunta es de la **pasada**, no del hallazgo.
  *
- * **Lo que NO alerta es el hallazgo** (decision 9 de la ficha): un indicio sobre
+ * **Lo que NO alerta es el hallazgo**: un indicio sobre
  * dos personas concretas se revisa en la bandeja por quien conoce el turno, no
  * se enruta a un canal de guardia. Lo que alerta es que la pasada no corra o
  * falle, que es operacion y no personas.

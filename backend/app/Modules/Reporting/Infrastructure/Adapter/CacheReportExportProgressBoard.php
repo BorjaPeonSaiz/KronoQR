@@ -11,7 +11,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * El avance de las exportaciones en curso, en la cache (**V5-PA-4**).
+ * El avance de las exportaciones en curso, en la cache.
  *
  * La cache de serie de la instalacion (`resilient`: Redis con su circuito).
  * Cada anotacion **caduca sola** a los `REPORTING_EXPORT_STALE_AFTER`

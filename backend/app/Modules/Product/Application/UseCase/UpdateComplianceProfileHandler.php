@@ -88,7 +88,7 @@ final readonly class UpdateComplianceProfileHandler
         private ConnectionInterface $connection,
         /**
          * Los ajustes operativos de la instalacion, de los que sale si el
-         * fichaje de pausa esta activado (RF-AT-12, decision 8 de la ficha 3.5).
+         * fichaje de pausa esta activado (RF-AT-12).
          *
          * `Product` implementa este puerto —{@see \App\Modules\Product\
          * Infrastructure\Adapter\DbOperationalSettingsProvider}— y aqui lo
@@ -179,7 +179,7 @@ final readonly class UpdateComplianceProfileHandler
             // `$updated`: asi la respuesta lleva la marca de modificacion que
             // acaba de escribirse y es exactamente lo que quedo en la fila, no
             // una reconstruccion que podria diferir el dia que alguien añada una
-            // columna derivada. Es el mismo criterio que la tarea 5.1.
+            // columna derivada. Es el mismo criterio que la configuracion.
             return new ComplianceProfileView(
                 $this->profiles->forSiteForWrite($site->id) ?? $updated,
                 $retentionFloor,
@@ -231,7 +231,7 @@ final readonly class UpdateComplianceProfileHandler
     /**
      * `compliance_profile_changes_total{effect}` (doc 02 §8.2).
      *
-     * **El efecto `compliance_view` es de la tarea 3.4 y no amplia el catalogo**:
+     * **El efecto `compliance_view` no amplia el catalogo**:
      * la serie ya declara la etiqueta `effect` y lo unico que cambia es que tiene
      * un valor mas. Hacia falta porque los dos efectos que habia no saben decir
      * «mueve los avisos de RRHH pero no abre incidencias», que es exactamente lo

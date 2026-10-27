@@ -144,7 +144,7 @@ final readonly class CredentialStatusBoard
     }
 
     /**
-     * Los filtros del panel (2.3.0, HC1): texto, departamento y estado, con Y
+     * Los filtros del panel (2.3.0): texto, departamento y estado, con Y
      * logico. **Ninguno toca la cobertura**, que ya esta calculada sobre la
      * plantilla: el denominador es la plantilla, no lo que se ve.
      *
@@ -190,7 +190,7 @@ final readonly class CredentialStatusBoard
     }
 
     /**
-     * HC1: lo que sale es la pagina, no la plantilla. El filtro y el recuento se
+     * Lo que sale es la pagina, no la plantilla. El filtro y el recuento se
      * hacen sobre todas, para que `meta.total` diga cuantas cumplen el filtro y
      * `summary` siga siendo la plantilla entera. Sin pagina —la consola—, todas.
      *

@@ -53,7 +53,7 @@ final class ExportMyWorkDaysRequest extends FormRequest
     /** El formato por omision: el portal que no dice nada recibe el CSV. */
     public const string CSV = 'csv';
 
-    /** El documento sellado que una persona presenta ante un tercero (PR19). */
+    /** El documento sellado que una persona presenta ante un tercero. */
     public const string PDF = 'pdf';
 
     public function authorize(): bool

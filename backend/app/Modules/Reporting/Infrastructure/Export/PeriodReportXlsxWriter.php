@@ -43,7 +43,7 @@ use Spatie\SimpleExcel\SimpleExcelWriter;
  *
  * ## Las horas son **texto**, no numeros
  *
- * Es la exigencia del plan de la tarea 2.9, y la libreria no la garantiza sola:
+ * Es la exigencia de RF-IN-04, y la libreria no la garantiza sola:
  * `Cell::fromValue('07:30')` deduce el tipo, y aunque hoy deduzca texto, un
  * cambio de version que decidiera interpretar `07:30` como una hora del reloj
  * convertiria `168:00` en un valor imposible y `-12:30` en un error de celda. Se

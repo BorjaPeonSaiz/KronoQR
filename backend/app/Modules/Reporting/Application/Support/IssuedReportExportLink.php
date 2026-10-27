@@ -34,7 +34,7 @@ final readonly class IssuedReportExportLink
         /** El token en claro. **Nunca se registra ni se guarda**: viaja a la URL y se olvida. */
         public ?string $token,
         public ?DateTimeImmutable $expiresAt,
-        /** Por donde va, si esta `running` (V5-PA-4). Nunca con un enlace: o hay fichero o hay avance. */
+        /** Por donde va, si esta `running`. Nunca con un enlace: o hay fichero o hay avance. */
         public ?ReportExportProgress $progress = null,
     ) {}
 }

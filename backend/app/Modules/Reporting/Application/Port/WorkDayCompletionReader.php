@@ -43,7 +43,7 @@ interface WorkDayCompletionReader
 
     /**
      * Lo mismo para un **rango** de jornadas, con la misma definicion exacta
-     * (RF-IN-08, tarea 3.13).
+     * (RF-IN-08).
      *
      * ## Por que un metodo y no llamar al de arriba en un bucle
      *
@@ -56,11 +56,11 @@ interface WorkDayCompletionReader
      * ## Y por que aqui y no una consulta propia del cuadro
      *
      * Porque «jornada completa» tiene que significar **una sola cosa** en el
-     * producto: la del `workdays_complete_ratio{site}` que pinta Grafana desde la
-     * tarea 3.1 y la del indicador que enseña el panel. Con dos consultas, el
+     * producto: la del `workdays_complete_ratio{site}` que pinta Grafana y la
+     * del indicador que enseña el panel. Con dos consultas, el
      * cuadro de mando y el cuadro de impacto acabarian dando dos porcentajes para
-     * la misma semana, y el cuadro perderia justo la funcion que tiene (decision 8
-     * de la ficha 3.13). **Lo que no comparten es la ventana**: Grafana mira los
+     * la misma semana, y el cuadro perderia justo la funcion que tiene.
+     * **Lo que no comparten es la ventana**: Grafana mira los
      * ultimos siete dias de contadores y el cuadro un periodo civil cerrado.
      *
      * @param  string  $from  Primera jornada, inclusive, en `Y-m-d` y en la zona del centro.

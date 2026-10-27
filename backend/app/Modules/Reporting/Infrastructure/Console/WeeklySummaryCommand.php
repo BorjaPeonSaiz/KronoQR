@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Support\WeeklySummaryReason;
 use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Reporting\Application\UseCase\WeeklySummaryPass;
 use App\Modules\Reporting\Domain\Exception\InvalidIsoWeek;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -48,6 +49,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class WeeklySummaryCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.weekly_summary';
+
     protected $signature = 'reporting:weekly-summary
         {--week= : Semana ISO a resumir, AAAA-Www. Por defecto, la semana pasada en la zona del centro}';
 
@@ -96,13 +102,12 @@ final class WeeklySummaryCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info(sprintf(
-            'Semana %s: %d resumen(es) enviados, %d omitidos de %d responsable(s).',
-            $pass->week,
-            $pass->sent,
-            $pass->skipped,
-            $pass->recipients,
-        ));
+        $this->info($this->text('sent', [
+            'week' => $pass->week,
+            'sent' => $pass->sent,
+            'skipped' => $pass->skipped,
+            'recipients' => $pass->recipients,
+        ]));
 
         return $this->report($pass);
     }
@@ -113,15 +118,15 @@ final class WeeklySummaryCommand extends Command
      * «¿Por que no me llega el resumen?» tiene cinco respuestas y las cinco se
      * tocan en sitios distintos. Un «no se envio nada» a secas obligaria a
      * revisarlos todos. «El plan no lo incluye» y «la licencia no esta en vigor»
-     * son dos (V4-PL-4): la primera se arregla ampliando el plan y la segunda
+     * son dos: la primera se arregla ampliando el plan y la segunda
      * renovando. Los textos, en `lang/{es,en}/reports.php`.
      */
     private function explain(WeeklySummaryReason $reason): string
     {
         $key = 'reports.weekly_summary.not_sent.'.$reason->value;
-        $text = __($key);
+        $text = $this->installationText($key);
 
-        return \is_string($text) && $text !== $key ? $text : '';
+        return $text !== $key ? $text : '';
     }
 
     /**
@@ -129,7 +134,7 @@ final class WeeklySummaryCommand extends Command
      *
      * Distinto de cero **solo** si algun envio fallo, aunque los demas salieran:
      * ahi hay una persona esperando un correo que no llego. La alerta no existe
-     * a proposito (decision 8 de la ficha); lo que queda es este codigo de
+     * a proposito; lo que queda es este codigo de
      * salida, que el planificador convierte en `scheduler.command_failed`.
      */
     private function report(WeeklySummaryPass $pass): int
@@ -138,12 +143,7 @@ final class WeeklySummaryCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->error(sprintf(
-            '%d resumen(es) no se pudieron entregar; su semana sigue pendiente y se reintentara. '
-            .'Busca «reporting.weekly_summary_failed» en el log para ver a que cuentas y de que clase '
-            .'fue el problema.',
-            $pass->failed(),
-        ));
+        $this->error($this->text('failures', ['count' => $pass->failed()]));
 
         return self::FAILURE;
     }

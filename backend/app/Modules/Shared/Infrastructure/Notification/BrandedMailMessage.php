@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Lang;
 
 /**
  * El correo del producto con la marca de la instalacion y en el idioma de quien
- * lo recibe (R6-PL-07, V6-PL-05; RF-PD-08).
+ * lo recibe (RF-PD-08).
  *
  * ## Por que hace falta
  *

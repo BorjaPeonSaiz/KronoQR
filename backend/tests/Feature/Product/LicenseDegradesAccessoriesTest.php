@@ -509,7 +509,7 @@ it('con la licencia caducada el comando manda renovar, no ampliar el plan (V4-PL
     // incluye» mandaba a cambiar de plan a quien solo tenia que renovar.
     conLicenciaCaducada();
     conResumenSemanalEncendido();
-    app()->setLocale($locale);
+    InstallationLocale::set($locale);
 
     expect(Artisan::call('reporting:weekly-summary'))->toBe(0);
 
@@ -527,7 +527,7 @@ it('con la licencia caducada el comando manda renovar, no ampliar el plan (V4-PL
 it('sin la funcionalidad en un plan vigente el comando dice que el plan no la incluye', function (string $locale, string $plan): void {
     conFuncionalidades(['advanced_reports']);
     conResumenSemanalEncendido();
-    app()->setLocale($locale);
+    InstallationLocale::set($locale);
 
     expect(Artisan::call('reporting:weekly-summary'))->toBe(0)
         ->and(Artisan::output())->toContain($plan);

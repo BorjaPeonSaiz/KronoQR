@@ -7,8 +7,7 @@ namespace App\Modules\Compliance\Application\Command;
 use App\Modules\Compliance\Domain\ValueObject\SiteTimezoneReviewTarget;
 
 /**
- * Dar por revisada una discrepancia de la zona del centro (RN-23, ADR-056;
- * bloque 2 de la 2.3.0).
+ * Dar por revisada una discrepancia de la zona del centro (RN-23, ADR-056).
  */
 final readonly class ReviewSiteTimezoneDiscrepancyCommand
 {

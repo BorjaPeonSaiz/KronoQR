@@ -35,8 +35,8 @@ use Illuminate\Http\JsonResponse;
  *
  * **La constancia del acceso no se escribe aqui** (RS-05): la escribe el caso de
  * uso, dentro. Si dependiera de una linea de este metodo, el dia que exista un
- * segundo camino hacia el mismo registro —el portal de la 1.11, la exportacion
- * legal de la 1.17— habria que acordarse de repetirla.
+ * segundo camino hacia el mismo registro —el portal del empleado, la exportacion
+ * legal— habria que acordarse de repetirla.
  *
  * **El alcance por departamento SI se comprueba aqui** (RF-ID-03), y antes de
  * invocar nada: un responsable de Cocina que pide el registro de alguien de

@@ -9,7 +9,7 @@ use Random\RandomException;
 /**
  * El azar de un PIN candidato (RF-ID-09).
  *
- * **Es un puerto por la misma razon que {@see EmployeeCodeGenerator}** (H8): la
+ * **Es un puerto por la misma razon que {@see EmployeeCodeGenerator}**: la
  * aleatoriedad es un efecto, y un generador que la produce por su cuenta no se
  * puede probar donde importa. Lo que hay que demostrar del generador es que
  * descarta un PIN excluido y vuelve a intentarlo, y eso solo se ve si la

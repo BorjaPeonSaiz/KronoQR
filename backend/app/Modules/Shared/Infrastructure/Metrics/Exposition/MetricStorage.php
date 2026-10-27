@@ -11,8 +11,8 @@ namespace App\Modules\Shared\Infrastructure\Metrics\Exposition;
  * `Redis*Metrics` de las Fases 1 a 5 escriben con **tres** formas distintas, y
  * las tres son correctas para lo que hace cada una. Reescribirlas para
  * unificarlas habria tocado catorce clases, sus pruebas y el paquete de
- * diagnostico para acabar exponiendo exactamente lo mismo (decision 1 de la
- * ficha 3.1). Lo que hace el catalogo es **declarar** cual usa cada serie, para
+ * diagnostico para acabar exponiendo exactamente lo mismo.
+ * Lo que hace el catalogo es **declarar** cual usa cada serie, para
  * que el lector no tenga que adivinarlo probando comandos.
  */
 enum MetricStorage

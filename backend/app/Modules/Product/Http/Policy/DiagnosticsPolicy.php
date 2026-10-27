@@ -59,7 +59,7 @@ final class DiagnosticsPolicy
 
     public function includePersonalData(ManagementActor $actor): bool
     {
-        // La misma lista que la consola y el caso de uso (2.3.0 bloque 3).
+        // La misma lista que la consola y el caso de uso.
         return $actor->actsAs(...DiagnosticsSigners::ROLES) && ! $actor->isSupportActor();
     }
 }

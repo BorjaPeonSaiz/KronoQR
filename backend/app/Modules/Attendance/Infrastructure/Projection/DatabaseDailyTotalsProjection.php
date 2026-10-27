@@ -12,7 +12,7 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * Lee `daily_totals` tal como esta escrita, para que la reconciliacion pueda
- * contrastarla con sus eventos origen (RF-PR-02, ADR-007, tarea 2.7).
+ * contrastarla con sus eventos origen (RF-PR-02, ADR-007).
  *
  * **Vive junto al proyector y no en `Persistence`** a proposito: es la otra cara
  * de la misma tabla derivada. `Infrastructure/Persistence` guarda la fuente de

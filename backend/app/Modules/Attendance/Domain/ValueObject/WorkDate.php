@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Exception\InvalidWorkDate;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -78,7 +79,7 @@ final readonly class WorkDate
      */
     public function startsAt(): DateTimeImmutable
     {
-        return (new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone))
+        return CivilDate::midnight($this->isoDate, $this->timezone)
             ->setTimezone(new DateTimeZone('UTC'));
     }
 
@@ -87,14 +88,14 @@ final readonly class WorkDate
      * acaba esta fecha.
      *
      * Lo usan la cota del dia del cese (RN-05, RN-14) y el tope del dia
-     * siguiente. Se calcula la **fecha** siguiente —a mediodia UTC, donde ningun
+     * siguiente. Se calcula la **fecha** siguiente —en UTC, donde ningun
      * desfase la mueve— y se toma su comienzo con {@see startsAt()}: el dia del
      * cambio de hora tiene 23 o 25 h (RN-09), y en las zonas en que el salto es
      * a medianoche (`America/Santiago`) ese dia ni siquiera tiene 00:00.
      */
     public function endsAt(): DateTimeImmutable
     {
-        $next = new DateTimeImmutable($this->isoDate.' 12:00:00', new DateTimeZone('UTC'))
+        $next = CivilDate::midnight($this->isoDate, new DateTimeZone('UTC'))
             ->add(new DateInterval('P1D'))
             ->format('Y-m-d');
 

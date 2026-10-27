@@ -13,8 +13,7 @@ use Illuminate\Console\Command;
 
 /**
  * La firma de una orden de consola con valor legal: quien es `--responsible`,
- * si puede firmar y si quien teclea confirma que es esa cuenta (V21-7-SC-1,
- * V21-6-PL-03, 2.3.0 bloque 3; doc 01 §7.2, «Firmas por consola»).
+ * si puede firmar y si quien teclea confirma que es esa cuenta (doc 01 §7.2, «Firmas por consola»).
  *
  * La usan todas las ordenes que firman un asiento, para que las reglas y los
  * mensajes sean los mismos en todas:

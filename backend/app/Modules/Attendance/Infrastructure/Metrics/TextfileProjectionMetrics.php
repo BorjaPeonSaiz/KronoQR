@@ -115,7 +115,7 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
             'projection_reconciliation_last_failures '.$failures,
             // NO es una divergencia y por eso no toca el contador: son las
             // jornadas en las que la pasada se cruzo con un fichaje y, al
-            // releerlas con la fila bloqueada, ya cuadraban (tarea 3.6). Se
+            // releerlas con la fila bloqueada, ya cuadraban. Se
             // publica porque el log de la pasada nocturna no lo lee nadie
             // —`runInBackground()`— y porque un numero grande noche tras noche
             // dice que la reconciliacion coincide con la hora punta de fichaje

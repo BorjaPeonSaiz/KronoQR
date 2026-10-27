@@ -112,7 +112,7 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
     /**
      * Cuando el `ON CONFLICT` no inserto, distingue **«ya estaba ese mismo
      * hallazgo»** —silencio, que es lo idempotente— de **«otro hallazgo distinto
-     * ocupa esa cuadrupla»**, que se lanza (decision 13d de la ficha 3.11).
+     * ocupa esa cuadrupla»**, que se lanza.
      *
      * ## Por que hizo falta
      *

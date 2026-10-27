@@ -6,7 +6,7 @@ namespace App\Modules\Reporting\Application\Generation;
 
 /**
  * Lo que una generacion deja escrito y **lo que hay que contar de ello** al
- * cerrar la fila (RF-IN-06, RS-05, V5-PA-4).
+ * cerrar la fila (RF-IN-06, RS-05).
  *
  * La huella y el tamaño no estan aqui: los mide el cierre sobre el fichero ya
  * escrito, que es la unica huella que sirve para comprobar que la descarga

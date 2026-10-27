@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
@@ -18,7 +19,6 @@ use App\Modules\Workforce\Domain\ValueObject\AbsenceImportRow;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
 use App\Modules\Workforce\Domain\ValueObject\ImportedAbsence;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 
 /**
  * Escribe lo que {@see PlanAbsenceImport} decidio (**RF-GP-04**, fase de
@@ -47,8 +47,8 @@ use Illuminate\Support\Str;
  * `employee.imported` con las cifras. La razon es que alli **cada alta deja
  * ademas su propio rastro** por el camino de siempre, y aqui no hay ningun otro:
  * sin un `absence.registered` por linea, una carga de cuarenta bajas seria una
- * sola fila del trail y no habria forma de responder «¿quien registro esta?»
- * (decision 6 de la ficha 3.10). Cada evento lleva `source: import` y la huella
+ * sola fila del trail y no habria forma de responder «¿quien registro esta?».
+ * Cada evento lleva `source: import` y la huella
  * del fichero, que es lo que ata las cuarenta entre si.
  *
  * ## Por que no reutiliza `RegisterAbsenceHandler`
@@ -70,6 +70,7 @@ final readonly class ApplyAbsenceImport
         private Clock $clock,
         private ConnectionInterface $connection,
         private AbsenceEmploymentRecheck $recheck,
+        private UuidGenerator $uuids,
     ) {}
 
     public function handle(AbsenceImportReport $report, ?int $importedByUserId): AbsenceImportReport
@@ -200,7 +201,7 @@ final readonly class ApplyAbsenceImport
         }
 
         return new Absence(
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             employeeUuid: $employeeUuid,
             type: $type,
             startsOn: RegisterAbsenceHandler::asDate($this->isoDateOf($imported->startsOn)),
@@ -211,7 +212,7 @@ final readonly class ApplyAbsenceImport
 
     /**
      * La ausencia tiene que tocar la relacion laboral, igual que en el alta
-     * individual (decision 2 de la ficha 3.10).
+     * individual.
      */
     private function fallsWithinEmployment(Absence $absence): bool
     {

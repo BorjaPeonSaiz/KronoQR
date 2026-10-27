@@ -23,8 +23,8 @@ use Throwable;
  *
  * `SELECT version()` devuelve *«PostgreSQL 17.2 (Debian 17.2-1.pgdg120+1) on
  * x86_64-pc-linux-gnu, compiled by gcc … »*: el compilador y **rutas de
- * compilacion del servidor**. Las rutas del servidor no salen de la instalacion
- * (ficha 5.10 punto 8). `SHOW server_version` da algo mas corto y aun asi lleva
+ * compilacion del servidor**. Las rutas del servidor no salen de la instalacion.
+ * `SHOW server_version` da algo mas corto y aun asi lleva
  * el paquete de la distribucion entre parentesis, asi que se recorta al numero:
  * `17.2`.
  *

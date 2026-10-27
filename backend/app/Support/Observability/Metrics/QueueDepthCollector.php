@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * `queue_jobs_pending{queue}` (doc 02 §8.2), calculada **en el momento del
- * scrape** y no acumulada en Redis (decision 4 de la ficha 3.1).
+ * scrape** y no acumulada en Redis.
  *
  * ## Por que aqui y no un contador
  *

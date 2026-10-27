@@ -37,7 +37,7 @@ use Throwable;
  */
 final readonly class RedisKioskMetrics implements KioskMetrics
 {
-    /** Mismo prefijo que el resto de metricas, para que la tarea 3.1 las encuentre con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas, para que `/metrics` las encuentre con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string LAST_SEEN = self::KEY_PREFIX.'kiosk_last_seen_seconds';
@@ -45,7 +45,7 @@ final readonly class RedisKioskMetrics implements KioskMetrics
     public const string QUEUE_SIZE = self::KEY_PREFIX.'kiosk_offline_queue_size';
 
     /**
-     * `kiosk_battery_level{device}` (RF-PA-07, tarea 3.3, doc 02 §8.2).
+     * `kiosk_battery_level{device}` (RF-PA-07, doc 02 §8.2).
      *
      * Gauge como los dos de arriba y por lo mismo: lo que interesa es el nivel
      * de AHORA, no cuantas veces se midio. **Solo se publica cuando el

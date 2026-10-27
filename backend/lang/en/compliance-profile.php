@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Compliance profile texts (RF-PD-07, task 5.2).
+ * Compliance profile texts (RF-PD-07).
  */
 
 return [

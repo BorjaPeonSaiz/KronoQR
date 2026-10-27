@@ -10,7 +10,7 @@ use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
 
 /**
- * Lee el logotipo del disco del cliente (RF-PD-08, tarea 5.8).
+ * Lee el logotipo del disco del cliente (RF-PD-08).
  *
  * Adaptador de {@see BrandingLogoReader}. Compone dos cosas que ya existen: la
  * ruta, que sale de `installation_settings` por {@see BrandingProvider}, y la
@@ -30,8 +30,8 @@ use App\Modules\Shared\Domain\ValueObject\LogoImage;
  * **Y no avisa por su cuenta.** Se penso registrar un aviso cuando la ruta esta
  * configurada y el fichero no aparece, y se descarto: esto se llama en cada
  * pantalla del quiosco y en cada documento, asi que un aviso por lectura serian
- * miles al dia por una imagen que falta. Quien tiene que decirlo es `doctor`
- * (tarea 5.9), que corre cuando alguien esta buscando el problema.
+ * miles al dia por una imagen que falta. Quien tiene que decirlo es `doctor`,
+ * que corre cuando alguien esta buscando el problema.
  *
  * ## Memoria por peticion
  *

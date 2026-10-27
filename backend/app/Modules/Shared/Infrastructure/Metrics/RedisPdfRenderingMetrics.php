@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Reporting\Infrastructure\Metrics;
+namespace App\Modules\Shared\Infrastructure\Metrics;
 
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Infrastructure\Adapter\RedisPdfRenderingSlots;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
@@ -17,10 +18,15 @@ use Throwable;
  * precisamente Redis sin responder, asi que ese contador se pierde justo
  * cuando ocurre; lo que queda es la linea `reporting.pdf_rendering_limiter_unavailable`
  * del log.
+ *
+ * Vive en `Shared` junto al tope ({@see RedisPdfRenderingSlots}): lo usan
+ * `Reporting` e `Identity`, que no pueden importarse entre si.
  */
 final readonly class RedisPdfRenderingMetrics implements PdfRenderingMetrics
 {
-    public const string PDF_RENDERING_REJECTED_TOTAL = RedisReportExportMetrics::KEY_PREFIX.'reporting_pdf_rendering_rejected_total';
+    public const string KEY_PREFIX = 'kronoqr:metrics:';
+
+    public const string PDF_RENDERING_REJECTED_TOTAL = self::KEY_PREFIX.'reporting_pdf_rendering_rejected_total';
 
     public function __construct(private Redis $redis) {}
 

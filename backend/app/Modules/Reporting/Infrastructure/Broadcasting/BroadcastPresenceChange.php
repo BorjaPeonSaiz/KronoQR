@@ -113,7 +113,7 @@ final class BroadcastPresenceChange implements ShouldQueue
     public bool $afterCommit = true;
 
     /**
-     * La cola que no tumba el fichaje (CH1): si Redis no responde, la difusion
+     * La cola que no tumba el fichaje: si Redis no responde, la difusion
      * se ejecuta en el mismo proceso despues de enviar la respuesta, en vez de
      * convertir en `500` un fichaje ya confirmado. Ver `resilient` en
      * `config/queue.php`.

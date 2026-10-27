@@ -235,7 +235,7 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
             $this->audit->handle($this->entryFor(AuditAction::Logout, $channel, $subjectUuid));
         }
 
-        // En todos los canales, y con sujeto (PO1, 2.2.0): el portal no deja
+        // En todos los canales, y con sujeto (2.2.0): el portal no deja
         // asiento (ADR-039), y sin esta linea su cierre de sesion no dejaba
         // ningun rastro. Es la que permite responder «¿esa sesion del ordenador
         // compartido se cerro, o caduco?» sin salir del log. UUID y nunca nombre
@@ -342,7 +342,7 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
                 'subject_uuid' => $subjectUuid,
                 // En el portal y en el PIN del quiosco el sujeto es un empleado,
                 // y el log de todo el producto lo identifica como
-                // `employee_uuid` (doc 02 §8.1, R4-BE-04): una consulta por esa
+                // `employee_uuid` (doc 02 §8.1): una consulta por esa
                 // clave en Loki tiene que encontrar tambien sus accesos. Siempre
                 // presente en esos canales, aunque sea nulo, por lo mismo.
                 ...($channel !== AuthChannel::MANAGEMENT ? ['employee_uuid' => $subjectUuid] : []),

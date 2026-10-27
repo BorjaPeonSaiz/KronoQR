@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Vista de cumplimiento (RF-PA-06, tarea 3.4).
+ * Vista de cumplimiento (RF-PA-06).
  *
  * LOS CRITERIOS DE EVALUACION SON PARTE DEL AVISO, NO DE LA DOCUMENTACION.
  * Un aviso cuyo criterio no se ve es un aviso que nadie defiende ante un

@@ -12,7 +12,7 @@ use Throwable;
 /**
  * El log estructurado de los actos del ciclo de vida de una credencial
  * (doc 02 §8.1). El span y la duracion los pone cada caso de uso con
- * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03); aqui se le añaden
+ * {@see UseCaseInstrumentation}, la medida comun; aqui se le añaden
  * los identificadores publicos del acto.
  *
  * **Por que dentro de `Application` y no en el borde HTTP**, al reves que
@@ -51,7 +51,7 @@ final readonly class CredentialTelemetry
     {
         // Al span del caso de uso, que esta activo (`UseCaseInstrumentation`).
         SpanScope::annotateCurrent($attributes);
-        $startedAt = microtime(true);
+        $startedAt = hrtime(true);
 
         try {
             $result = $act();
@@ -72,7 +72,7 @@ final readonly class CredentialTelemetry
         $this->logger->info($name, [
             ...$attributes,
             'trace_id' => SpanScope::currentTraceId(),
-            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'duration_ms' => (int) round((hrtime(true) - $startedAt) / 1_000_000),
         ]);
 
         return $result;

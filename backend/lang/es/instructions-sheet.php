@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * Textos de la hoja de instrucciones que se entrega al empleado junto con la
- * tarjeta y el PIN (tarea 5.11b, RL-05; ficha, decisiones 1 y 2).
+ * tarjeta y el PIN (RL-05).
  *
  * POR QUE ESTAN AQUI. La hoja la produce el producto
  * (`GET /api/v1/credentials/instructions-sheet`), no el paquete de entrega:

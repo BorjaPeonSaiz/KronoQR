@@ -28,8 +28,8 @@ use DateTimeImmutable;
  * Cruza cada tramo de `shift_entries` con sus asientos `shift_entry.*` de
  * `audit_log` y cuenta lo que no cuadra: tramos sin asiento, marcas, origenes o
  * correcciones que no son las del asiento, tramos retirados sin su correccion,
- * asientos sin tramo y asientos de purga que no se pueden creer; y, desde el
- * bloque 2 de la 2.3.0, un centro cuya zona horaria no es la de su ultimo
+ * asientos sin tramo y asientos de purga que no se pueden creer; y, desde la
+ * 2.3.0, un centro cuya zona horaria no es la de su ultimo
  * asiento `site.*` (RN-23). La regla es {@see WorkRecordReconciliation},
  * {@see WorkRecordPurgeBoundary} y {@see AuditedSiteTimezone}; aqui solo se
  * recorre, se cuenta y se publica.
@@ -77,7 +77,7 @@ final readonly class ReconcileWorkRecordWithAudit
             ? WorkRecordReconciliationWindow::full()
             : WorkRecordReconciliationWindow::recent($now, $windowDays);
 
-        // La medida comun (V1-RV-03): span, duracion y desenlace. Los recuentos
+        // La medida comun: span, duracion y desenlace. Los recuentos
         // del resultado van al cierre del span; `outcome` es el de la medida
         // (`ok`/`error`) y el veredicto de la conciliacion va aparte.
         return UseCaseInstrumentation::run(

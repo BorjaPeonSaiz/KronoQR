@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\RevokeCredentialCommand as RevokeCredential;
 use App\Modules\Identity\Application\UseCase\RevokeCredential as RevokeCredentialHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -22,6 +23,11 @@ use Illuminate\Console\Command;
  */
 final class RevokeCredentialCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:revoke
         {credential : UUID de la credencial}
         {--reason= : Motivo de la revocacion. Obligatorio}';
@@ -34,13 +40,13 @@ final class RevokeCredentialCommand extends Command
         $reason = trim((string) $this->option('reason'));
 
         if ($credentialUuid === '') {
-            $this->error('Hace falta el UUID de la credencial.');
+            $this->error($this->text('credential_required'));
 
             return self::INVALID;
         }
 
         if ($reason === '') {
-            $this->error('Una revocacion tiene que declarar su motivo: --reason="perdida".');
+            $this->error($this->text('revoke.reason_required'));
 
             return self::INVALID;
         }
@@ -57,13 +63,13 @@ final class RevokeCredentialCommand extends Command
         }
 
         if ($revoked === null) {
-            $this->error('No hay ninguna credencial con ese UUID.');
+            $this->error($this->text('credential_not_found'));
 
             return self::FAILURE;
         }
 
-        $this->info('Credencial revocada: '.$revoked->credential->uuid);
-        $this->line('Motivo: '.(string) $revoked->credential->revokedReason);
+        $this->info($this->text('revoke.revoked', ['uuid' => $revoked->credential->uuid]));
+        $this->line($this->text('revoke.reason', ['reason' => (string) $revoked->credential->revokedReason]));
 
         return self::SUCCESS;
     }

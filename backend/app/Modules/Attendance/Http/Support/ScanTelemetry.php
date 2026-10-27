@@ -19,7 +19,7 @@ use Throwable;
  * ## El span es del caso de uso; aqui, lo que es de la peticion
  *
  * El span y la duracion del acto los abre `RegisterScanHandler` con
- * {@see UseCaseInstrumentation}, la medida comun (V1-RV-03), y cuelga del span
+ * {@see UseCaseInstrumentation}, la medida comun, y cuelga del span
  * de servidor que abre `PropagateTraceContext` con el `traceparent` del
  * quiosco. Lo que solo se conoce en el borde —el `scan_id` y el `device_id` de
  * la peticion— se añade a ese span de servidor con
@@ -70,8 +70,8 @@ final readonly class ScanTelemetry
 
         // Y en el `Context` de Laravel, para que los lleve TODA linea de log de
         // esta peticion —tambien las que escriba un `Log::` suelto o una
-        // excepcion no controlada— y las del trabajo que esta peticion encole
-        // (tarea 3.1, decision 9). Aqui es donde se conocen.
+        // excepcion no controlada— y las del trabajo que esta peticion encole.
+        // Aqui es donde se conocen.
         $this->correlate(['scan_id' => $scanId, 'device_id' => $deviceUuid]);
 
         $startedAt = microtime(true);

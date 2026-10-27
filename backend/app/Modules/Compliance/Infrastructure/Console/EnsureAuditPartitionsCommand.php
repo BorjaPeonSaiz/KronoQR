@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Console;
 
 use App\Modules\Compliance\Application\Exception\AuditPartitionCreationUnavailable;
 use App\Modules\Compliance\Application\UseCase\EnsureAuditLogPartitions;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -35,6 +36,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class EnsureAuditPartitionsCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.ensure_audit_partitions';
+
     private const string RUNBOOK = 'docs/runbooks/rotura-cadena-auditoria.md';
 
     protected $signature = 'compliance:ensure-audit-partitions';
@@ -52,13 +58,13 @@ final class EnsureAuditPartitionsCommand extends Command
                 'year' => $unavailable->year,
             ]);
 
-            $this->error($unavailable->getMessage().' Procedimiento: '.self::RUNBOOK);
+            $this->error($unavailable->getMessage().$this->text('procedure', ['runbook' => self::RUNBOOK]));
 
             return self::FAILURE;
         }
 
         foreach ($status->createdYears as $year) {
-            $this->info('Particion audit_log_'.$year.' creada.');
+            $this->info($this->text('created', ['year' => $year]));
         }
 
         if ($status->currentYearWasMissing) {
@@ -67,19 +73,17 @@ final class EnsureAuditPartitionsCommand extends Command
                 'created' => $status->createdYears,
             ]);
 
-            $this->error(
-                'Faltaba la particion del año en curso ('.$status->currentYear.'). '
-                .'Se ha creado, pero hasta ahora TODA accion auditable estaba fallando. '
-                .'Procedimiento: '.self::RUNBOOK
-            );
+            $this->error($this->text('current_was_missing', [
+                'year' => $status->currentYear,
+                'runbook' => self::RUNBOOK,
+            ]));
 
             return self::FAILURE;
         }
 
-        $this->info(
-            'Particiones al dia: '.$status->currentYear.' presente'
-            .($status->nextYearReady ? ' y '.($status->currentYear + 1).' preparada.' : '.')
-        );
+        $this->info($status->nextYearReady
+            ? $this->text('up_to_date_with_next', ['year' => $status->currentYear, 'next' => $status->currentYear + 1])
+            : $this->text('up_to_date', ['year' => $status->currentYear]));
 
         return self::SUCCESS;
     }

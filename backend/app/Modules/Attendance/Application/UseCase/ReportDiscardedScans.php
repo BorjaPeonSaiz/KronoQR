@@ -103,7 +103,7 @@ final readonly class ReportDiscardedScans
                 attribution: $attribution,
             ));
 
-            // Al insertar, no al reenviar (F8): la serie cuenta avisos, no envios.
+            // Al insertar, no al reenviar: la serie cuenta avisos, no envios.
             if ($written) {
                 $this->metrics->discardedScanReported($command->deviceUuid, $attribution->isAttributed());
             }

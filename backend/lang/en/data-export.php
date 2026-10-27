@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 /*
- * The `README.md` shipped INSIDE the full data export ZIP (RF-PD-14, RL-20,
- * task 5.10).
+ * The `README.md` shipped INSIDE the full data export ZIP (RF-PD-14, RL-20).
  *
  * Same rules as the Spanish file, which is the reference: every file and every
  * column explained, nothing about the product taken for granted, complete

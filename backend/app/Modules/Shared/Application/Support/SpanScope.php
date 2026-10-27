@@ -49,7 +49,7 @@ use Throwable;
  *
  * ## Y tambien la usa el ARMAZON, fuera de los modulos
  *
- * La instrumentacion transversal de la tarea 3.1 —el span de servidor de
+ * La instrumentacion transversal (doc 02 §8.1) —el span de servidor de
  * `App\Http\Middleware\PropagateTraceContext`, el span por consulta de
  * `App\Support\Observability\Tracing\DatabaseSpans` y el del planificador—
  * necesita exactamente este andamiaje, y durante un tiempo tuvo su propia
@@ -175,8 +175,7 @@ final class SpanScope
     }
 
     /**
-     * Deja constancia de que el acto fallo, antes de {@see self::end()}
-     * (V21-4-BE-2).
+     * Deja constancia de que el acto fallo, antes de {@see self::end()}.
      *
      * Un evento `exception` con `exception.type` = la clase, y **nada mas**. No
      * es `recordException()` a proposito: ese metodo del SDK añade por su

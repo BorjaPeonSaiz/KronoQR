@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Resource;
 
+use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
@@ -31,7 +32,7 @@ use DateTimeImmutable;
  * rechazaria. Es el fallo tipico de esta clase de mapas y por eso se fuerza
  * aqui, donde se ve.
  *
- * ## `resolved_by` NO se sirve a un actor de soporte (decision 14)
+ * ## `resolved_by` NO se sirve a un actor de soporte
  *
  * Es la unica columna del historico que lleva **un nombre de persona**: la
  * cuenta de gestion del hotel que dio el fallo por atendido. El paquete de
@@ -60,7 +61,7 @@ final readonly class ErrorEventPayload
             'source' => $event->source->value,
             'module' => $event->module,
             'code' => $event->code,
-            'message' => $event->message,
+            'message' => self::message($event),
             'exception_class' => $event->exceptionClass,
             'file' => $event->file,
             'line' => $event->line,
@@ -85,6 +86,22 @@ final readonly class ErrorEventPayload
                 ? null
                 : ['uuid' => $event->resolvedByUuid, 'name' => $event->resolvedByName],
         ];
+    }
+
+    /**
+     * El mensaje saneado, con el marcador de «no quedo nada» en el idioma de la
+     * peticion: se guarda en un solo idioma porque agrupa por el y viaja asi en
+     * el paquete de diagnostico, y se traduce al enseñarlo.
+     */
+    private static function message(ErrorEvent $event): string
+    {
+        if ($event->message !== ErrorMessageSanitizer::EMPTY_MESSAGE) {
+            return $event->message;
+        }
+
+        $text = __('errors.report.empty_message');
+
+        return \is_string($text) ? $text : $event->message;
     }
 
     /** ISO-8601 en UTC con microsegundos, el esquema `UtcTimestamp`. */

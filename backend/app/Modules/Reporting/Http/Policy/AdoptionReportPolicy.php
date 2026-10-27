@@ -27,8 +27,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * presencia en vivo y en el cumplimiento. **No cabe**, y no por permisos: un
  * cuadro de adopcion de un departamento de tres personas convierte «horas
  * trabajadas» y «correcciones» en el dato de esas tres, servido en una pantalla
- * cuya finalidad es medir la adopcion del sistema (regla dura 21, decision 12 de
- * la ficha 3.13). El cuadro es de la instalacion entera precisamente para que eso
+ * cuya finalidad es medir la adopcion del sistema (regla dura 21).
+ * El cuadro es de la instalacion entera precisamente para que eso
  * no pueda pasar, y ese es el motivo por el que su consulta no lleva alcance.
  *
  * Ademas se queda en el middleware antes de llegar aqui: el §7.3 no le da

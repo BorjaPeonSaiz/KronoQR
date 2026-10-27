@@ -28,7 +28,7 @@ use LogicException;
  * {@see ScanRejectionReason} —que es la que el dominio necesita— y este es su
  * complemento de persistencia.
  *
- * **Y la mitad de aceptacion subio en la tarea 3.5**, exactamente por el motivo
+ * **Y la mitad de aceptacion subio tambien al dominio**, exactamente por el motivo
  * que este docblock dejaba escrito: `ScanIntentPolicy` y `DebouncePolicy` tienen
  * que razonar sobre `clock_in` frente a `break_start` (ADR-024), asi que esos
  * cuatro casos son ahora {@see ClockingAction} y aqui quedan `forAction()` y
@@ -42,7 +42,7 @@ enum ScanResult: string
 
     case CLOCK_OUT = 'clock_out';
 
-    /** RF-AT-12, estrenado por la tarea 3.5. El enum nacio completo porque la columna nacio con su CHECK completo. */
+    /** RF-AT-12. El enum nacio completo porque la columna nacio con su CHECK completo. */
     case BREAK_START = 'break_start';
 
     case BREAK_END = 'break_end';

@@ -79,7 +79,7 @@ interface ErrorEventRepository
     ): ErrorWriteOutcome;
 
     /**
-     * Cuantos grupos ABIERTOS tiene un origen (decision 14).
+     * Cuantos grupos ABIERTOS tiene un origen.
      *
      * Lo consulta el sumidero antes de crear una huella nueva: por encima del
      * techo, la ocurrencia va al grupo de desbordamiento del origen en lugar de

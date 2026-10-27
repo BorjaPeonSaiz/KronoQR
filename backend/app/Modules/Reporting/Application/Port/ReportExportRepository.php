@@ -14,7 +14,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use DateTimeImmutable;
 
 /**
- * La tabla `report_exports` (**RF-IN-06**, decision 1 de la ficha 3.9).
+ * La tabla `report_exports` (**RF-IN-06**).
  *
  * ## La exclusion mutua la resuelve el indice, no un `SELECT`
  *
@@ -30,8 +30,8 @@ use DateTimeImmutable;
  * No hay ningun metodo que devuelva «todas»: {@see self::recentFor()} y
  * {@see self::findByUuidFor()} exigen el identificador de la cuenta. Un
  * `findByUuid()` sin dueño seria la via por la que un `admin` acabaria viendo
- * las exportaciones de los demas, que es justamente lo que la decision 2 deja
- * fuera de alcance. Las dos excepciones —{@see self::findByUuid()} y
+ * las exportaciones de los demas, que es justamente lo que no se permite: cada
+ * informe es de quien lo pidio. Las dos excepciones —{@see self::findByUuid()} y
  * {@see self::expired()}— son del trabajador de cola y de la purga, que no
  * actuan en nombre de nadie.
  *
@@ -84,7 +84,7 @@ interface ReportExportRepository
      * La fila por su identificador publico **y su dueño**.
      *
      * Devuelve nulo para la exportacion de otra persona, que es lo que produce el
-     * `404` del contrato: `403` confirmaria que existe (decision 2).
+     * `404` del contrato: `403` confirmaria que existe.
      */
     public function findByUuidFor(string $uuid, int $requestedByUserId): ?ReportExport;
 
@@ -102,8 +102,7 @@ interface ReportExportRepository
      */
     /**
      * @param  list<ReportExportKind>|null  $kinds  Solo esas clases, o todas. El auditor solo
-     *                                              alcanza las `legal` (revision de seguridad
-     *                                              del bloque 14): una fila de otra clase no
+     *                                              alcanza las `legal`: una fila de otra clase no
      *                                              existe para el, como la de otra persona.
      */
     public function lockByUuidFor(string $uuid, int $requestedByUserId, ?array $kinds = null): ?ReportExport;
@@ -113,7 +112,7 @@ interface ReportExportRepository
 
     /**
      * El estado de la fila **tal como esta confirmado ahora**, sin bloquearla y
-     * sin hidratar nada mas (V5-PA-4).
+     * sin hidratar nada mas.
      *
      * Lo pregunta el trabajo de cola entre fases y cada pocos cientos de filas
      * para saber si alguien cancelo la exportacion. Es una lectura de una
@@ -124,8 +123,8 @@ interface ReportExportRepository
     public function statusOf(string $uuid): ?ReportExportStatus;
 
     /**
-     * Una `cancelled` deja de ocupar el turno de su dueño (V5-PA-4, revision de
-     * seguridad del bloque 14): el trabajador confirmo que dejo de escribir, o
+     * Una `cancelled` deja de ocupar el turno de su dueño: el trabajador
+     * confirmo que dejo de escribir, o
      * se cancelo antes de arrancar y no habia nadie escribiendo. Sin efecto sobre
      * cualquier otra fila.
      */
@@ -206,7 +205,7 @@ interface ReportExportRepository
 
     /**
      * Minimiza las `failed` y las `cancelled` ya paradas que se cerraron antes
-     * de `$closedBefore` (RL-11, revision de seguridad del bloque 14): pierden el
+     * de `$closedBefore` (RL-11): pierden el
      * alcance y los filtros por persona y por departamento, como una purgada. La
      * fila se queda (regla dura 5) y el hecho completo sigue en `audit_log`.
      *

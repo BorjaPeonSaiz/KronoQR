@@ -21,7 +21,7 @@ use Throwable;
  * los que ademas tienen esa consecuencia. Un cambio puede contar en varios, y
  * eso es correcto: son consecuencias, no categorias excluyentes.
  *
- * `compliance_view` lo añade la tarea 3.4 con RN-17 y **no toca el catalogo del
+ * `compliance_view` llega con RN-17 y **no toca el catalogo del
  * §8.2**: la serie sigue teniendo una sola etiqueta, `effect`, y lo que cambia es
  * el conjunto de valores que puede tomar. Un valor nuevo aparece solo en el
  * cuadro de mando en cuanto alguien lo produce; una etiqueta nueva habria roto

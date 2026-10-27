@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Gate;
 
 /**
  * `GET /api/v1/credentials/instructions-sheet` — la hoja que se entrega con la
- * tarjeta (tarea 5.11b, **RL-05**).
+ * tarjeta (**RL-05**).
  *
  * **Un solo campo, y opcional.** `locale` tiene que ser uno de los idiomas
  * **activos de la instalacion** (`LOCALE_AVAILABLE`); sin el, se usa
@@ -29,8 +29,8 @@ use Illuminate\Support\Facades\Gate;
  *
  * **Es un `GET`, al reves que `print`**, y por eso este `FormRequest` no tiene
  * `toCommand()`: no hay nada que mandar hacer. La hoja no acuña ningun QR, no
- * cambia el estado de nada y es el mismo documento para toda la plantilla
- * (ficha 5.11b, decision 1). Lo que si comparte con `print` es **quien puede
+ * cambia el estado de nada y es el mismo documento para toda la plantilla.
+ * Lo que si comparte con `print` es **quien puede
  * pedirla**: la misma policy y el mismo ambito `credentials:*`.
  */
 final class InstructionsSheetRequest extends FormRequest

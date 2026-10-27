@@ -22,7 +22,7 @@ use Throwable;
 
 /**
  * Seccion `error_events`: **el historico agrupado del periodo, con su
- * `trace_id`** (§11.6.6, **RF-PD-15**, decision 12 de la ficha 5.12).
+ * `trace_id`** (§11.6.6, **RF-PD-15**).
  *
  * ## Es la seccion por la que existe la tabla
  *
@@ -67,7 +67,7 @@ use Throwable;
  * Con el paquete anonimizado —el caso normal— eso son los siete dias por
  * omision.
  *
- * ## En el anonimizado no hay identificador de empleado (H2, ADR-048)
+ * ## En el anonimizado no hay identificador de empleado (ADR-048)
  *
  * `employee_uuid` es un **seudonimo** (art. 4.5 RGPD): el hotel tiene la
  * correspondencia con la persona. Por eso el paquete anonimizado **omite la
@@ -112,7 +112,7 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
         'resolved_at',
     ];
 
-    /** La columna que el paquete anonimizado no lleva (H2). */
+    /** La columna que el paquete anonimizado no lleva. */
     private const string EMPLOYEE_FIELD = 'employee_uuid';
 
     public function __construct(
@@ -145,7 +145,7 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
         // La lista se construye una vez y se aplica a todas las filas: impone el
         // orden declarado, de modo que dos paquetes de la misma instalacion se
         // puedan comparar linea a linea con `diff`. En el anonimizado no lleva
-        // `employee_uuid` (H2): ver el docblock de la clase.
+        // `employee_uuid`: ver el docblock de la clase.
         $anonymized = ! $options->includePersonalData;
         $allowlist = new FieldAllowlist(...array_values(array_filter(
             self::GROUP_FIELDS,
@@ -180,7 +180,7 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
      * es una lista de permitidos con dieciseis claves y valores escalares
      * saneados. La de aqui protege las columnas; aquella protege el contexto.
      *
-     * ## Se vuelve a sanear al leer (ADR-048, H7)
+     * ## Se vuelve a sanear al leer (ADR-048)
      *
      * `message`, `context`, `code`, `exception_class`, `file` y `app_version`
      * pasan otra vez por las mismas funciones que `RecordErrorEvent` aplica al

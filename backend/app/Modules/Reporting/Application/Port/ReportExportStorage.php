@@ -6,7 +6,7 @@ namespace App\Modules\Reporting\Application\Port;
 
 /**
  * El sistema de ficheros donde viven los informes generados en diferido
- * (**RF-IN-06**, decision 4 de la ficha 3.9).
+ * (**RF-IN-06**).
  *
  * ## Por que un puerto y no `Storage::` en el caso de uso
  *

@@ -10,7 +10,7 @@ use Random\RandomException;
 
 /**
  * Los caracteres aleatorios de un codigo de empleado nuevo, con el generador
- * criptografico del sistema (H8).
+ * criptografico del sistema.
  *
  * `random_int()` lanza si el sistema no puede darle entropia, y **eso es lo
  * correcto**: un alta con un codigo predecible es peor que un alta que falla.

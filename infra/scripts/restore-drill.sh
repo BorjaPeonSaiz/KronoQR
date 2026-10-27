@@ -603,13 +603,17 @@ comprobar_cadena_auditoria() {
   DURACION_CADENA=$(($(now_epoch) - inicio_cadena))
 
   # Solo las lineas del veredicto y de las roturas: identificadores y hashes, nunca el log completo.
-  printf '%s\n' "$salida" | grep -E 'Cadena integra|ROTURA|^  |Purga sellada|Accion desconocida|Incidente' | head -n 25 |
+  # La orden escribe en el idioma de la instalacion, asi que se buscan las dos
+  # redacciones, y ademas su linea `audit_chain=...`, que no se traduce.
+  printf '%s\n' "$salida" | grep -E '^audit_chain=|Cadena integra|Intact chain|ROTURA|BREAK|^  |Purga sellada|Sealed purge|Accion desconocida|Action unknown|Incidente|incident' | head -n 25 |
     while IFS= read -r linea; do
       informar "cadena: ${linea}"
     done
 
   if [ "$codigo" -ne 0 ]; then
-    if grep -qF 'ROTURA DE LA CADENA' <<<"$salida"; then
+    # El veredicto por la linea para scripts; la frase en español, para un
+    # verificador de una version anterior que todavia no la escribe.
+    if grep -qE '^audit_chain=broken|ROTURA DE LA CADENA' <<<"$salida"; then
       err "LA CADENA DE AUDITORIA DE LA COPIA RESTAURADA NO ENCAJA (salida ${codigo}). Esta copia no es de fiar para el registro legal. Procedimiento: docs/runbooks/rotura-cadena-auditoria.md; despues, repite con la copia anterior (--file)."
       informar "Cadena de auditoria: ROTURA (compliance:verify-audit-chain salio con ${codigo})."
     else

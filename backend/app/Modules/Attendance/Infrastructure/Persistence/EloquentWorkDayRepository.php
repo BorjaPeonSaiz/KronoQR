@@ -148,7 +148,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
     }
 
     /**
-     * La jornada que contiene un tramo **vigente** (RF-PA-04, tarea 1.15).
+     * La jornada que contiene un tramo **vigente** (RF-PA-04).
      *
      * Se entra por el tramo y no por la fecha porque el panel solo conoce el
      * identificador del tramo, y porque deducir la jornada de la hora de entrada
@@ -175,7 +175,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
 
     /**
      * La jornada que contiene un tramo, **vigente o retirado** (RF-AT-12,
-     * ADR-024, tarea 3.5).
+     * ADR-024).
      *
      * La misma consulta que {@see findWorkDayOfShiftEntry()} **sin el filtro de
      * estado**, y esa diferencia de una linea es toda la razon de ser del
@@ -240,7 +240,7 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      * revierte, el total revierte con el.
      *
      * Consecuencia para quien escriba el proximo caso de uso que guarde una
-     * jornada —la correccion de la tarea 1.15—: **tiene que publicar los eventos
+     * jornada —como la correccion manual—: **tiene que publicar los eventos
      * del agregado dentro de su transaccion**. Guardar sin publicar deja la
      * proyeccion vieja.
      */
@@ -511,9 +511,8 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         return [
             'uuid' => $entry->uuid(),
             'employee_id' => $employeeId,
-            // El centro se guarda en el tramo y no se deduce del empleado: un
-            // traslado de centro no puede reescribir donde ocurrieron las
-            // jornadas anteriores.
+            // El centro se guarda en el tramo: ADR-040 conserva `site_id` en
+            // el registro legal aunque apunte siempre al unico centro.
             'site_id' => $siteId,
             'work_date' => $entry->workDate()->isoDate,
             'clocked_in_at' => $this->toTimestamp($entry->clockedInAt()),

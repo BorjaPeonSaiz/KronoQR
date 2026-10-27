@@ -9,8 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 
 /**
- * Escribe la salida a **nomina** en una ruta del disco (**RF-IN-07**, ADR-017,
- * decision 5 de la ficha 3.9).
+ * Escribe la salida a **nomina** en una ruta del disco (**RF-IN-07**, ADR-017).
  *
  * ## Por que es un puerto aparte de {@see ReportExportDocumentWriter}
  *

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * English texts of the instruction sheet handed to the employee together with
- * the card and the PIN (task 5.11b, RL-05). Same keys, same structure and same
+ * the card and the PIN (RL-05). Same keys, same structure and same
  * rules as `lang/es/instructions-sheet.php`: read the explanation there.
  *
  * The confirmations described here are the ones `frontend-kiosk` shows in

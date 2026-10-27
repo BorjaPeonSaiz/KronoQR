@@ -13,7 +13,7 @@ use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
  *
  * ## Por que no es un array con una clave mas
  *
- * Antes de la tarea 2.1, el caso de uso devolvia `array{user, token}` y el
+ * Antes del segundo factor, el caso de uso devolvia `array{user, token}` y el
  * controlador serializaba siempre lo mismo. Con el segundo factor hay dos
  * desenlaces que **no se pueden confundir**: en uno hay una sesion utilizable y
  * en el otro hay un token que no autoriza nada del producto. Un array con un

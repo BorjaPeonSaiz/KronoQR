@@ -23,7 +23,7 @@ use App\Modules\Kiosk\Http\Response\PairingRejectedResponse;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Los tres pasos del emparejamiento de una tablet (**RF-PD-06**, tarea 5.6).
+ * Los tres pasos del emparejamiento de una tablet (**RF-PD-06**).
  *
  * `POST /api/v1/kiosk/pair` (publica) → `POST /api/v1/kiosk/pair/confirm`
  * (`admin`) → `POST /api/v1/kiosk/pair/claim` (publica).

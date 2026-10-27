@@ -24,9 +24,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * `reports:*` —lleva `attendance:read`, `attendance:correct`, `incidents:*` y
  * `employees:read`—, asi que ni siquiera pasa del middleware. Que la policy diga
  * lo mismo que el ambito es deliberado: si dijeran cosas distintas, una de las
- * dos estaria de adorno. La ficha 3.9 describe este conjunto como «manager+»
- * siguiendo al Anexo B; el conjunto real que «manager+» designa **para los
- * informes** es este, y asi lo dejo escrito la tarea 2.8.
+ * dos estaria de adorno. El Anexo B describe este conjunto como «manager+»;
+ * el conjunto real que «manager+» designa **para los informes** es este.
  *
  * El alcance por departamento sigue entrando en la consulta y viaja congelado en
  * la fila (RF-ID-03), preparado para el dia en que el producto decida que un
@@ -45,7 +44,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## `view` y `download` no miran el rol: miran el dueño
  *
- * Decision 2 de la ficha. **Solo el solicitante ve y descarga su exportacion,
+ * **Solo el solicitante ve y descarga su exportacion,
  * tambien si quien pregunta es `admin`.** Un informe en diferido contiene las
  * horas nominales de un conjunto de personas que eligio quien lo pidio; que un
  * administrador pueda pedir enlace de los ficheros que genero RRHH seria una via
@@ -67,7 +66,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## La licencia no se comprueba aqui
  *
- * Se comprueba en el controlador, al pedir (decision 6): `Feature::AdvancedReports`
+ * Se comprueba en el controlador, al pedir: `Feature::AdvancedReports`
  * para `period` y `Feature::PayrollExport` para `payroll`. Una policy que
  * consultara la licencia devolveria `403` donde el contrato promete `402`, y
  * quien lo recibiera creeria que le falta un permiso cuando lo que falta es una
@@ -77,7 +76,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * modelo Eloquent**, igual que las hermanas de este directorio: asi la
  * autorizacion se decide **antes** de tocar la base de datos.
  *
- * ## Desde la 2.3.0, dos clases mas y el auditor (V5-PA-4)
+ * ## Desde la 2.3.0, dos clases mas y el auditor
  *
  * - `requestLegal` — la exportacion para la Inspeccion en diferido: el mismo
  *   conjunto que `LegalExportPolicy::generate()` de la sincrona,
@@ -145,7 +144,7 @@ final class ReportExportPolicy
     }
 
     /**
-     * `POST /api/v1/reports/exports/{uuid}/cancel` (V5-PA-4).
+     * `POST /api/v1/reports/exports/{uuid}/cancel`.
      *
      * Como `view`: la puerta previa de rol. Que la exportacion sea **suya** lo
      * decide la consulta, y la ajena responde `404`.

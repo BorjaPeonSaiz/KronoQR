@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
 
 /**
  * `device_pairing_requests` escrita con el constructor de consultas
- * (**RF-PD-06**, tarea 5.6).
+ * (**RF-PD-06**).
  *
  * ## Por que el constructor de consultas y no un modelo Eloquent
  *

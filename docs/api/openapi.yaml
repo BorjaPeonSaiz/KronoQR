@@ -3560,7 +3560,9 @@ paths:
               description: |
                 Adjunto, con un nombre de fichero que no lleva ningun nombre de
                 persona ni ningun codigo de empleado: solo el periodo y la
-                extension (`.csv` o `.pdf`).
+                extension (`.csv` o `.pdf`). El comienzo va en el idioma de la
+                instalacion, como el documento: `mi-registro-horario-…` o
+                `my-time-record-…`.
               schema:
                 type: string
                 examples: ['attachment; filename=mi-registro-horario-2026-03-01_2026-03-31.csv']
@@ -5908,7 +5910,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: '#/components/responses/CredentialDocumentUnavailable'
 
   /api/v1/credentials/{uuid}/print:
     parameters:
@@ -6009,7 +6011,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: '#/components/responses/CredentialDocumentUnavailable'
 
   /api/v1/credentials/{uuid}/deliver:
     parameters:
@@ -6167,7 +6169,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: '#/components/responses/CredentialDocumentUnavailable'
 
   /api/v1/shift-entries:
     post:
@@ -13306,6 +13308,55 @@ components:
                 detail: El servicio no esta disponible en este momento. Reintenta pasados unos segundos.
                 instance: /api/v1/employees
 
+    CredentialDocumentUnavailable:
+      description: |
+        La tarjeta o la hoja de instrucciones no se puede componer ahora. No es
+        culpa de quien la pide y **ninguna credencial queda marcada como
+        impresa**: el PDF se compone antes de confirmar la impresion, asi que
+        reintentar es seguro. `problem+json`, nunca un `500` opaco. Dos `type`:
+
+        - `urn:kronoqr:problem:service-unavailable` — falta configuracion del
+          servidor (no hay clave de firma de credenciales; solo al imprimir), o
+          Redis no responde para repartir los turnos del motor de PDF, que
+          falla cerrado. Lo arregla quien administra el servidor; el `detail`
+          dice que falta, nunca un valor secreto. Sin `Retry-After`.
+        - `urn:kronoqr:problem:pdf-rendering-busy` — el motor de PDF esta, pero
+          todas sus composiciones simultaneas estan ocupadas. El tope
+          (`REPORTING_PDF_MAX_CONCURRENT`; cada composicion es un Chromium) es
+          uno para toda la instalacion: lo comparten estas rutas con los
+          informes y el registro propio. Se ha esperado unos segundos
+          (`REPORTING_PDF_WAIT_SECONDS`) a que quedara un hueco. Reintentar
+          pasado `Retry-After` tiene sentido.
+
+        La base de datos inalcanzable tiene su propia respuesta,
+        `DependencyUnavailable`, con `Retry-After`.
+      headers:
+        Retry-After:
+          description: |
+            Solo con `urn:kronoqr:problem:pdf-rendering-busy`. Segundos que
+            conviene esperar antes de volver a pedir el documento.
+          schema:
+            type: integer
+            minimum: 1
+          example: 3
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            sin-clave-de-firma:
+              value:
+                type: 'urn:kronoqr:problem:service-unavailable'
+                title: Servicio no disponible
+                status: 503
+                detail: La instalacion no tiene una clave de firma de credenciales valida. Revisa la configuracion del servidor.
+            motor-ocupado:
+              value:
+                type: 'urn:kronoqr:problem:pdf-rendering-busy'
+                title: Motor de PDF ocupado
+                status: 503
+                detail: El motor de PDF no tiene ahora ningun hueco libre. Vuelve a intentarlo en unos segundos.
+
     ServiceUnavailable:
       description: |
         La instalacion no esta en condiciones de atender la operacion, y no es
@@ -15947,6 +15998,8 @@ components:
             Idioma del panel para esta cuenta, uno de los idiomas activos de la
             instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
             la lista es `422`.
+            Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+            que en la importacion de plantilla.
           examples:
             - es
         actor_totp_code:
@@ -16627,6 +16680,8 @@ components:
             Idioma de la persona, uno de los idiomas activos de la
             instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
             la lista es `422`.
+            Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+            que en la importacion de plantilla.
         teleworking:
           $ref: '#/components/schemas/Teleworking'
 
@@ -16670,7 +16725,8 @@ components:
           description: |
             Idioma de la persona, uno de los idiomas activos de la
             instalacion (`LOCALE_AVAILABLE`). Sin el, no cambia. Fuera de la
-            lista es `422`.
+            lista es `422`. Sin distinguir mayusculas: `ES` se acepta y se
+            guarda como `es`, igual que en la importacion de plantilla.
         teleworking:
           $ref: '#/components/schemas/Teleworking'
 
@@ -18274,7 +18330,10 @@ components:
           maxLength: 190
           description: |
             Motivo de la revocacion, escrito por quien la ordeno. **No se
-            escriben nombres**: el titular ya viaja como `employee_uuid`.
+            escriben nombres**: el titular ya viaja como `employee_uuid`. El
+            que pone el sistema al dar de baja a la persona (RN-14) sale en el
+            idioma de la respuesta («Baja del empleado (RN-14)», «Employee left
+            (RN-14)»); en el registro y en la auditoria se guarda siempre igual.
         status:
           $ref: '#/components/schemas/CredentialStatus'
 
@@ -22484,7 +22543,9 @@ components:
             de palabras tecnicas (ADR-048): toda palabra fuera del vocabulario
             cerrado del producto aparece como `…`, y las cifras con forma de
             documento, telefono, cuenta, NAF, codigo de empleado, fecha, hora o
-            IP como un marcador (`[n]`, `[id]`, `[time]`…).
+            IP como un marcador (`[n]`, `[id]`, `[time]`…). Si del mensaje no
+            queda nada, sale el aviso «sin mensaje» en el idioma de la
+            respuesta (`(sin mensaje)`, `(no message)`).
           examples:
             - "SQLSTATE[08006] connection to server at '…' failed"
         exception_class:
@@ -23542,6 +23603,8 @@ components:
             Idioma del panel para esta cuenta, uno de los idiomas activos de la
             instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
             la lista es `422`.
+            Sin distinguir mayusculas: `ES` se acepta y se guarda como `es`, igual
+            que en la importacion de plantilla.
         device_name:
           type: string
           minLength: 1

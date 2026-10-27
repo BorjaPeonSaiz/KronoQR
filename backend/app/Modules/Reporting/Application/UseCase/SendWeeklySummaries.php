@@ -40,7 +40,7 @@ use Throwable;
 
 /**
  * El resumen semanal por correo al responsable de cada departamento
- * (**RF-PR-05**, tarea 3.12).
+ * (**RF-PR-05**).
  *
  * ## Que manda y que no
  *
@@ -76,8 +76,8 @@ use Throwable;
  *
  * ## NINGUNA E/S DE RED BAJO EL CANDADO DE LA CADENA DE AUDITORIA
  *
- * Es la regla que ordena este caso de uso, y nacio de un fallo real de diseño
- * (decision 13 de la ficha). Cada asiento de `audit_log` toma
+ * Es la regla que ordena este caso de uso, y nacio de un fallo real de diseño.
+ * Cada asiento de `audit_log` toma
  * `pg_advisory_xact_lock` sobre la cadena de hash (ADR-010) y **lo suelta con el
  * commit**. Con el envio dentro de la transaccion del asiento —como estaba—, una
  * pasada del resumen semanal retenia el candado por el que pasa **cada fichaje**
@@ -148,8 +148,8 @@ final readonly class SendWeeklySummaries
          * El asiento de la divulgacion (RS-05).
          *
          * Lo escribe **este** caso de uso y no `GeneratePeriodReport`, al
-         * contrario que los otros informes, y esa es la diferencia que la
-         * decision 13 introduce: aqui el asiento tiene que esperar a que el
+         * contrario que los otros informes, y esa es la diferencia: aqui el
+         * asiento tiene que esperar a que el
          * correo salga, y la transaccion que lo escribe no puede ser la misma
          * que habla con el SMTP.
          */
@@ -344,7 +344,7 @@ final readonly class SendWeeklySummaries
             return null;
         }
 
-        // V4-PL-4: «el plan no lo incluye» y «la licencia no esta en vigor» se
+        // «El plan no lo incluye» y «la licencia no esta en vigor» se
         // arreglan en sitios distintos —ampliar el plan o renovar—, y con un
         // booleano la caducada decia lo primero.
         return $license->restriction === FeatureRestriction::NotInPlan

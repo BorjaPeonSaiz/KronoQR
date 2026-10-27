@@ -10,7 +10,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\UpdateReportAllowlist;
 
 /**
  * Seccion `updates`: el informe de la **ultima** actualizacion y la lista de los
- * anteriores (tarea 5.7, doc 02 §11.6.6).
+ * anteriores (doc 02 §11.6.6).
  *
  * ## Por que va en el paquete
  *

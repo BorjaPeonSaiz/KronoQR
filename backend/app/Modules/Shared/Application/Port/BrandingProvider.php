@@ -16,8 +16,8 @@ use App\Modules\Shared\Domain\ValueObject\Branding;
  * `Product/Infrastructure/Adapter/`, que es donde estan las tablas.
  *
  * **Por que existe el puerto y no se lee `config('branding.*')` en cada sitio.**
- * Porque la marca deja de ser variable de entorno en la tarea 5.8 y pasa a ser
- * una fila editable desde el panel: con la lectura repartida, ese cambio serian
+ * Porque la marca no es una variable de entorno sino una fila editable desde el
+ * panel (RF-PD-08): con la lectura repartida, ese cambio serian
  * cuatro ficheros de cuatro modulos y el que se olvidara seguiria imprimiendo la
  * marca vieja. Con el puerto es un adaptador.
  *

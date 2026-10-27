@@ -18,7 +18,7 @@ use App\Modules\Product\Domain\Event\DataExportGenerated;
  *
  * ## El actor es quien la PIDIO, aunque escriba el trabajador de cola
  *
- * Es la decision 7 de la ficha 5.10, y sin ella este asiento saldria firmado como
+ * Sin esto, este asiento saldria firmado como
  * `system` —«no hay nadie detras»— porque en la cola no hay sesion que
  * `CurrentAuditContext` pueda leer. Responder «¿quien se llevo los datos?»
  * exigiria entonces emparejar a mano este asiento con el

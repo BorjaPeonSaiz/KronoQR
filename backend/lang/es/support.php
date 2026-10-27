@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de los accesos de soporte (RF-PD-11, RL-18, ADR-020, tarea 5.9).
+ * Textos de los accesos de soporte (RF-PD-11, RL-18, ADR-020).
  *
  * ESTAN ESCRITOS PARA EL CLIENTE, NO PARA NOSOTROS. Los lee quien esta a punto
  * de dejar entrar al fabricante en su instalacion, con una incidencia abierta y
@@ -22,14 +22,14 @@ return [
         'duration' => 'La duracion tiene que estar entre 1 y :maximum horas, y has pedido :hours. El maximo lo fija tu instalacion; si necesitas mas, revoca este acceso al terminar y concede otro.',
     ],
 
-    // `product:support-grants:prune-reasons` (tarea 11.3 C). Recuentos, nunca un motivo.
+    // `product:support-grants:prune-reasons`. Recuentos, nunca un motivo.
     'prune' => [
         'dry_run' => 'Se vaciaria el motivo de :rows concesion(es) de soporte cerradas hace mas de :days dias. No se ha tocado nada.',
         'done' => 'Vaciado el motivo de :rows concesion(es) de soporte cerradas hace mas de :days dias. El motivo original sigue en el registro de auditoria.',
         'failed' => 'No se ha podido vaciar el motivo de las concesiones de soporte (:failure). No se ha cambiado nada; se reintentara en la proxima pasada.',
     ],
 
-    // Junto al campo del motivo y en `support:grant` (tarea 11.3 C).
+    // Junto al campo del motivo y en `support:grant`.
     'reason_hint' => 'No escribas nombres, correos, DNI ni telefonos: si tienes que señalar a una persona, usa su uuid. El motivo va tal cual al registro de auditoria y no se puede corregir despues.',
 
 ];

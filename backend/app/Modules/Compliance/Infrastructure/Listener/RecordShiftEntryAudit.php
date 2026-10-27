@@ -123,8 +123,7 @@ final readonly class RecordShiftEntryAudit
     }
 
     /**
-     * Una correccion manual del registro horario (RF-PA-04, RN-13, RL-04,
-     * tarea 1.15).
+     * Una correccion manual del registro horario (RF-PA-04, RN-13, RL-04).
      *
      * **Es el asiento que de verdad importa de esta tabla.** Un fichaje lo
      * produjo una persona con su tarjeta; esto lo produjo **otra persona

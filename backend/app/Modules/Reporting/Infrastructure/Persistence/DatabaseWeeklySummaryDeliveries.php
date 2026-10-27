@@ -10,8 +10,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * `weekly_summary_deliveries` sobre PostgreSQL (RF-PR-05, decisiones 6 y 13 de
- * la ficha 3.12).
+ * `weekly_summary_deliveries` sobre PostgreSQL (RF-PR-05).
  *
  * ## La colision del `UNIQUE` se atrapa aqui, y se traduce a «ya esta enviado»
  *

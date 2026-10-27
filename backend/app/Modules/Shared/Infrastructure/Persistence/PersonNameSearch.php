@@ -34,7 +34,7 @@ namespace App\Modules\Shared\Infrastructure\Persistence;
  * el `ILIKE`. La barra invertida se escapa la primera, para no duplicar las que
  * añaden los otros dos `replace()`. El caracter de escape es la barra invertida
  * por defecto de `LIKE` en PostgreSQL, con `standard_conforming_strings`, que
- * viene activo de serie desde la 9.1.
+ * viene activo de serie desde PostgreSQL 9.1.
  *
  * ## Sin indice, y a proposito
  *

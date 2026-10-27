@@ -23,7 +23,7 @@ use DateTimeImmutable;
  * **El `tokenable` es el empleado y no una cuenta de `users`**, y no es un
  * detalle. Meter a la plantilla en la tabla de gestion habria significado
  * fabricar una cuenta por persona —con correo obligatorio, politica de
- * contraseña y el 2FA de la tarea 2.1 encima—, y el producto no puede exigir
+ * contraseña y el segundo factor encima—, y el producto no puede exigir
  * correo a nadie (regla dura 12, ADR-015). Es la misma decision que tomo el
  * token de quiosco al colgar de `devices`: quien tiene sesion es quien existe,
  * no una cuenta espejo que alguien tiene que acordarse de dar de baja.
@@ -48,7 +48,7 @@ interface PortalSessionIssuer
      *
      * **`null` no es un error del programa**: es la carrera —estrecha, pero
      * real— entre comprobar el PIN y acuñar el token, en la que a la persona le
-     * dan de baja o se le cambia de centro. Quien llama lo traduce al **mismo**
+     * dan de baja. Quien llama lo traduce al **mismo**
      * rechazo generico que un PIN incorrecto (regla dura 17): desde fuera no se
      * distingue, y desde dentro queda en el log.
      *
@@ -67,7 +67,7 @@ interface PortalSessionIssuer
     ): ?PortalSession;
 
     /**
-     * Cierra **todas** las sesiones del portal de este empleado (RN-14, N1).
+     * Cierra **todas** las sesiones del portal de este empleado (RN-14).
      *
      * La baja ya impide abrir una nueva; esto cubre la que estaba abierta, que
      * de otro modo seguiria valiendo hasta caducar. Un empleado desconocido no

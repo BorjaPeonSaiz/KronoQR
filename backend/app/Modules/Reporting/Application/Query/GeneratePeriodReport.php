@@ -63,8 +63,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
  * un `COUNT` sobre `employees`. Los dos se saben **sin** ejecutar el informe. El
  * tercer limite —el `statement_timeout`— es el unico que se descubre
  * ejecutando, y lo aplica el adaptador en PostgreSQL. Los tres desembocan en la
- * misma respuesta: `422` que remite a la generacion en diferido de RF-IN-06
- * (tarea 3.9).
+ * misma respuesta: `422` que remite a la generacion en diferido de RF-IN-06.
  *
  * ## La constancia
  *
@@ -106,8 +105,8 @@ final readonly class GeneratePeriodReport
      *
      * Son **claves**, no texto: la traduccion es de la capa de presentacion, que
      * es la que sabe en que idioma esta hablando. Estan aqui y no en el
-     * `Resource` porque forman parte de lo que el informe **es**: la tarea 2.9
-     * los escribira en la cabecera del CSV y del PDF desde este mismo objeto, y
+     * `Resource` porque forman parte de lo que el informe **es**: la exportacion
+     * (RF-IN-04) los escribe en la cabecera del CSV y del PDF desde este mismo objeto, y
      * si vivieran en el serializador de JSON habria dos listas que mantener.
      *
      * @var list<string>
@@ -183,8 +182,7 @@ final readonly class GeneratePeriodReport
     }
 
     /**
-     * El mismo informe, **con el asiento calculado y sin escribir** (decision 13
-     * de la ficha 3.12).
+     * El mismo informe, **con el asiento calculado y sin escribir**.
      *
      * ## Un solo llamante, y por un motivo muy concreto
      *

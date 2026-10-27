@@ -8,7 +8,7 @@ use DateTimeImmutable;
 
 /**
  * El rastro de que la revision diaria del registro horario se ejecuta, y de si
- * dejo algo sin hacer (doc 02 §8.2, RF-PR-01, tarea 3.2).
+ * dejo algo sin hacer (doc 02 §8.2, RF-PR-01).
  *
  * ## Por que hace falta un puerto mas, teniendo ya `AnomalyMetrics`
  *

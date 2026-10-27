@@ -51,7 +51,7 @@ final readonly class RecordPersonalDataIncludedInDiagnostics
     {
         $this->audit->handle(new RecordAuditEntryCommand(
             // Por el panel firma la sesion; por consola, la cuenta admin de
-            // `--responsible` (2.3.0 bloque 3, PR17), nunca `system`.
+            // `--responsible`, nunca `system`.
             actor: $event->responsibleUserId === null
                 ? $this->context->actor()
                 : AuditActor::user($event->responsibleUserId),

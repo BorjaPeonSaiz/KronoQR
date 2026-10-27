@@ -36,7 +36,7 @@ enum ReportDataset: string
 
     /**
      * El resumen semanal que sale por correo al responsable de cada
-     * departamento (**RF-PR-05**, `reporting:weekly-summary`, tarea 3.12).
+     * departamento (**RF-PR-05**, `reporting:weekly-summary`).
      *
      * Es el mismo informe por periodo de arriba, con la semana pasada y el
      * alcance de esa cuenta, **pero no es la misma divulgacion**: aqui nadie

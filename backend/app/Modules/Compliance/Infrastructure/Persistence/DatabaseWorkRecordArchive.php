@@ -124,7 +124,7 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
                 WHERE (se.id IS NOT NULL AND se.work_date < ?)
                    OR (se.id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?)
             SQL, [$date, $instant]),
-            // RN-22 (ADR-047, F7): los avisos de fichaje descartado envejecen
+            // RN-22 (ADR-047): los avisos de fichaje descartado envejecen
             // con `scan_events`, por LEAST(occurred_at, recorded_at). No cuelgan de nada ni
             // nada cuelga de ellos.
             $this->tally('discarded_scan_reports', <<<'SQL'

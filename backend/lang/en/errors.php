@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * English texts for `php artisan product:errors` and `product:errors:prune`
- * (RF-PD-15, task 5.12). Mirror of `lang/es/errors.php`: same keys, same
+ * (RF-PD-15). Mirror of `lang/es/errors.php`: same keys, same
  * placeholders, same audience — the hotel's IT person, who does not know this
  * system and probably already has a problem.
  */
@@ -15,6 +15,7 @@ return [
         'title' => 'KronoQR errors since :since',
         'none' => 'No open errors in this period.',
         'found' => 'Showing :shown group(s) of :total. A group is every time the same error happened.',
+        'empty_message' => '(no message)',
         'tag_error' => 'error',
         'tag_critical' => 'CRITICAL',
         'seen' => 'Happened :count time(s). First: :first. Last: :last.',

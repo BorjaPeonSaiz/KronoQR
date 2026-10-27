@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos del asistente de puesta en marcha (RF-PD-03, tarea 5.5).
+ * Textos del asistente de puesta en marcha (RF-PD-03).
  *
  * ESTAN ESCRITOS PARA QUIEN ESTA PONIENDO EN MARCHA EL SISTEMA, que casi nunca
  * es quien lo va a usar a diario: es la persona de informatica del hotel, con

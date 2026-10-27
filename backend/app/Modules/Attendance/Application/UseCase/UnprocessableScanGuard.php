@@ -98,7 +98,7 @@ final readonly class UnprocessableScanGuard
 
     /**
      * Cuanto se mira hacia atras, desde el fichaje, para atribuir por la huella
-     * (ADR-061, A2). Acota una consulta sin indice propio; una tarjeta que no se
+     * (ADR-061 A2). Acota una consulta sin indice propio; una tarjeta que no se
      * ha usado en seis meses no da un titular fiable.
      */
     public const int FINGERPRINT_LOOKBACK_DAYS = 180;
@@ -342,7 +342,7 @@ final readonly class UnprocessableScanGuard
      * codigo de una persona que puede fichar. Nunca el `token_hash` del padron.
      *
      * **Una tarjeta que no se atribuye por su firma busca a su titular por la
-     * huella del contenido** (ADR-061, A2): el aceptado mas reciente con el mismo
+     * huella del contenido** (ADR-061 A2): el aceptado mas reciente con el mismo
      * `payload_fingerprint`, dentro de {@see self::FINGERPRINT_LOOKBACK_DAYS}
      * dias antes del fichaje. Tambien si el resolutor lanza, que puede ser
      * justamente lo roto.
@@ -379,7 +379,7 @@ final readonly class UnprocessableScanGuard
     }
 
     /**
-     * El titular por la huella del contenido, o `none` (ADR-061, A2).
+     * El titular por la huella del contenido, o `none` (ADR-061 A2).
      */
     private function attributeByFingerprint(GuardedScan $scan, DateTimeImmutable $now): DiscardedScanAttribution
     {

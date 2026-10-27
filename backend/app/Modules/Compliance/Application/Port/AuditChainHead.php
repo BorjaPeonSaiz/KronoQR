@@ -8,7 +8,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditChainHeadSnapshot;
 
 /**
  * Lectura de la **punta** de la cadena: la huella del ultimo eslabon escrito
- * (RS-07, RF-PD-10, tarea 5.7).
+ * (RS-07, RF-PD-10).
  *
  * **Por que un puerto propio y no un metodo mas en `AuditChainReader`.** Aquel
  * recorre millones de filas para recalcular la cadena entera; este lee una. Los

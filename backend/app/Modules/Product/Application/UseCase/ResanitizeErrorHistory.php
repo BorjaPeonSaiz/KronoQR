@@ -13,7 +13,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * **Vuelve a sanear el historico de errores ya guardado** y recalcula sus
- * huellas (ADR-048 decision 9, H6; RF-PD-15, RL-19, regla dura 21).
+ * huellas (ADR-048 decision 9; RF-PD-15, RL-19, regla dura 21).
  *
  * ## Por que hace falta
  *
@@ -106,7 +106,7 @@ final readonly class ResanitizeErrorHistory
         // Dos recuentos y nada mas: ni mensajes, ni huellas, ni identificadores. Y
         // solo si habia algo que sanear: en una instalacion nueva la migracion que
         // lo lanza corre con el historico vacio, y su linea INFO salia en mitad de
-        // la salida del instalador sin decir nada (V1-PL-01).
+        // la salida del instalador sin decir nada.
         if ($rows > 0) {
             $this->logger->info('product.error_history_resanitized', ['rows' => $rows, 'merged' => $merged]);
         }

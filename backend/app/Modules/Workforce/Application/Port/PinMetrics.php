@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\Port;
 
 /**
- * `pin_resets_total{site}` (doc 02 §8.2, tarea 1.13).
+ * `pin_resets_total{site}` (doc 02 §8.2).
  *
  * **Que dice esta metrica.** Una subida sostenida de restablecimientos no es un
  * problema tecnico: es que los PIN no llegan a la gente, o que nadie ha
- * explicado para que sirven. Se mira junto a `pin_fallback_scans_total` de la
- * tarea 1.12 —las dos suben a la vez cuando la entrega de tarjetas falla— y
+ * explicado para que sirven. Se mira junto a `pin_fallback_scans_total`
+ * —las dos suben a la vez cuando la entrega de tarjetas falla— y
  * junto al panel de credenciales sin entregar (RF-QR-08).
  *
  * **La etiqueta es el centro y nunca el empleado** (regla dura 21, RGPD). Una

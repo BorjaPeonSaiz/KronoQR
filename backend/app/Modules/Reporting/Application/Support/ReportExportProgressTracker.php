@@ -13,8 +13,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\Port\Clock;
 
 /**
- * El avance de **una** generacion en diferido, y su punto de cancelacion
- * (**V5-PA-4**).
+ * El avance de **una** generacion en diferido, y su punto de cancelacion.
  *
  * ## Dos cosas en cada llamada, y en este orden
  *

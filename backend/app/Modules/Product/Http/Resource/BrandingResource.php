@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Serializa el esquema `Branding` (RF-PD-08, tarea 5.8).
+ * Serializa el esquema `Branding` (RF-PD-08).
  *
  * **Envuelve un objeto de valor, nunca un modelo**, como el resto de recursos
  * del modulo: asi no hay ninguna via por la que una columna nueva de

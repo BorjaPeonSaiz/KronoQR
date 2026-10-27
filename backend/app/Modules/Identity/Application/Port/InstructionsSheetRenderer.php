@@ -7,8 +7,7 @@ namespace App\Modules\Identity\Application\Port;
 use App\Modules\Shared\Domain\ValueObject\Branding;
 
 /**
- * Convierte la hoja de instrucciones del empleado en un PDF (tarea 5.11b,
- * **RL-05**, ficha 5.11b decision 1).
+ * Convierte la hoja de instrucciones del empleado en un PDF (**RL-05**).
  *
  * **Es un puerto por lo mismo que {@see CardRenderer}**: detras hay un proceso
  * externo. El adaptador de produccion compone el documento con

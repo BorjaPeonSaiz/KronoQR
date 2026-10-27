@@ -95,8 +95,7 @@ final readonly class ReadComplianceSummary
         private Clock $clock,
         private PersonalDataAccessLog $disclosures,
         /**
-         * De donde sale si RN-12 se evalua en esta instalacion (RF-AT-12,
-         * decision 8 de la ficha 3.5).
+         * De donde sale si RN-12 se evalua en esta instalacion (RF-AT-12).
          *
          * El evaluador es dominio puro y no consulta configuracion (regla dura
          * 14): recibe la suspension ya construida. La vista **recalcula siempre
@@ -293,8 +292,8 @@ final readonly class ReadComplianceSummary
      *
      * ## Se cuenta sobre la ventana EVALUADA, no sobre el rango pedido
      *
-     * Y la diferencia no es teorica. Las semanas del borde se evaluan enteras
-     * (decision 6), asi que una persona puede recibir un hallazgo de RN-17 por una
+     * Y la diferencia no es teorica. Las semanas del borde se evaluan enteras,
+     * asi que una persona puede recibir un hallazgo de RN-17 por una
      * semana cuyas siete jornadas caen **fuera** de `[from, to]` —basta pedir un
      * jueves en el que no ficho nadie—. Contando solo las jornadas de dentro del
      * rango, esa persona salia en `employees_affected` y no en

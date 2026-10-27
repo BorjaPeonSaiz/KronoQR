@@ -9,8 +9,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportStage;
 use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 
 /**
- * La exportacion para la Inspeccion en diferido (**RF-IN-05**, RL-06,
- * V5-PA-4, RC2).
+ * La exportacion para la Inspeccion en diferido (**RF-IN-05**, RL-06).
  *
  * ## El mismo fichero que la descarga sincrona
  *

@@ -39,7 +39,7 @@ use Illuminate\Support\Facades\Gate;
  *
  * ## Las reglas no viven aqui, sino en {@see DescribesPeriodReport}
  *
- * Las comparte con la descarga del mismo informe (RF-IN-04, tarea 2.9). Estan en
+ * Las comparte con la descarga del mismo informe (RF-IN-04). Estan en
  * un sitio para que la pantalla y el fichero no puedan aceptar parametros
  * distintos: si divergieran, el fichero que alguien adjunta a un correo
  * describiria un informe que no es el que estaba mirando.

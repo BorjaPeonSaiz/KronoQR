@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Adapter;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\ActiveLocaleMatch;
 use App\Modules\Shared\Domain\ValueObject\LocalePolicy;
 use App\Support\Locale\NegotiableLocales;
 use Illuminate\Contracts\Config\Repository as Config;
@@ -41,7 +42,7 @@ use Throwable;
  * daria 500 en `/health` en lugar de decir que le pasa.
  *
  * El respaldo no es la fuente: en cuanto la base de datos responde, manda la
- * fila (decision de la tarea 5.1, y la misma que rige para la marca).
+ * fila (la misma regla que rige para la configuracion y la marca).
  *
  * ## Memoria por peticion
  *
@@ -85,6 +86,11 @@ final class DbLocalePolicyProvider implements LocalePolicyProvider, NegotiableLo
         return $this->current()->default;
     }
 
+    public function activeLocaleFor(string $requested): ?string
+    {
+        return ActiveLocaleMatch::canonical($this->current()->available, $requested);
+    }
+
     /**
      * @return list<string>
      */
@@ -103,8 +109,11 @@ final class DbLocalePolicyProvider implements LocalePolicyProvider, NegotiableLo
      */
     private function fallback(): LocalePolicy
     {
+        // En minusculas, como los de `installation_settings`: `APP_LOCALE=ES`
+        // en el `.env` es el mismo idioma, y guardarlo asi en una ficha haria
+        // que dejara de coincidir en cuanto volviera la base de datos.
         $default = $this->config->get('app.locale');
-        $default = \is_string($default) && $default !== '' ? $default : 'es';
+        $default = \is_string($default) && trim($default) !== '' ? mb_strtolower(trim($default)) : 'es';
 
         $available = [];
 
@@ -112,7 +121,9 @@ final class DbLocalePolicyProvider implements LocalePolicyProvider, NegotiableLo
 
         if (\is_array($configured)) {
             foreach ($configured as $locale) {
-                if (\is_string($locale) && $locale !== '' && ! \in_array($locale, $available, true)) {
+                $locale = \is_string($locale) ? mb_strtolower(trim($locale)) : '';
+
+                if ($locale !== '' && ! \in_array($locale, $available, true)) {
                     $available[] = $locale;
                 }
             }

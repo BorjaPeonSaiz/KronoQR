@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Shared\Application\Port;
 
 /**
- * El codigo de servicio de la instalacion, ya resuelto (**RF-KI-08**, tarea
- * 3.3, regla dura 13).
+ * El codigo de servicio de la instalacion, ya resuelto (**RF-KI-08**, regla dura 13).
  *
  * Es el codigo numerico con el que se abre la pantalla de diagnostico de la
  * tablet. Vive en `installation_settings` bajo la clave `KIOSK_SERVICE_CODE`

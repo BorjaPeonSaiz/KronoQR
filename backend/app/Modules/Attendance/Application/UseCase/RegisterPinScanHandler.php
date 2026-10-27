@@ -42,8 +42,8 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  *
  * **Reutilizar y no copiar es la decision importante de esta clase.** Un segundo
  * camino de fichaje seria un segundo sitio donde equivocarse con cualquiera de
- * esas seis cosas, y con `worked_minutes` en el reenvio ya se fallo una vez
- * (tarea 1.7): un fichaje por PIN reenviado desde la cola offline devolvia el
+ * esas seis cosas, y con `worked_minutes` en el reenvio ya se fallo una vez:
+ * un fichaje por PIN reenviado desde la cola offline devolvia el
  * acumulado de hoy en lugar del que tenia cuando ocurrio. Compartiendo el
  * metodo, ese arreglo vale para las dos vias sin que nadie tenga que acordarse.
  *
@@ -92,7 +92,7 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * revision del responsable, lo que hace visible cualquier uso anomalo»*. La
  * marca la escribe `RegisterScanHandler` en `scan_events.flagged_for_review` a
  * partir del origen —`ReviewPolicy` la decide, y tambien marca por desfase de
- * reloj (RN-15)—, y la bandeja que la trabaja es la tarea 2.5. **Marcar no es
+ * reloj (RN-15)—, y la trabaja la bandeja de incidencias. **Marcar no es
  * rechazar** (regla dura 19): el fichaje se registra igual y con la misma traza
  * que el de una tarjeta, porque un empleado que no puede fichar es una jornada
  * perdida y una correccion manual.
@@ -119,7 +119,7 @@ final readonly class RegisterPinScanHandler
 
     private function doHandle(RegisterPinScanCommand $command): RegisterScanResult
     {
-        // PIN-02: un reenvio NO vuelve a comprobar el PIN. Antes se verificaba
+        // Un reenvio NO vuelve a comprobar el PIN. Antes se verificaba
         // primero y el UNIQUE detectaba el reenvio despues, asi que cada reintento
         // de la cola offline pagaba un bcrypt y, si el PIN era erroneo, sumaba un
         // fallo al bloqueo: tres reenvios del MISMO fichaje bloqueaban a su dueño

@@ -7,6 +7,9 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\PrintCredentialBatchCommand as PrintBatch;
 use App\Modules\Identity\Application\UseCase\PrintCredentialBatch as PrintBatchHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsBusy;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsUnavailable;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -40,6 +43,11 @@ use Illuminate\Console\Command;
  */
 final class PrintCredentialBatchCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:print-batch
         {--pending : Imprime solo las pendientes. Es la unica seleccion posible y hay que declararla}
         {--out= : Ruta del fichero PDF que se va a escribir. Obligatoria}';
@@ -58,7 +66,21 @@ final class PrintCredentialBatchCommand extends Command
             $printed = $handler->handle(new PrintBatch);
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
-            $this->line('El lote es todo o nada: no se ha impreso ninguna tarjeta. Vuelve a ejecutarlo.');
+            $this->line($this->text('print_batch.all_or_nothing'));
+
+            return self::FAILURE;
+        } catch (PdfRenderingSlotsBusy $busy) {
+            // La tarjeta se compone ANTES de la transaccion que la marca impresa
+            // (MintCards, paso 4): sin hueco no se ha impreso nada y basta con
+            // repetir la orden. Es capacidad, no un fallo: no se informa.
+            $this->error($this->text('print.pdf_busy', ['seconds' => $busy->retryAfterSeconds]));
+
+            return self::FAILURE;
+        } catch (PdfRenderingSlotsUnavailable $unavailable) {
+            // Redis no responde: el mismo fallo que el borde HTTP sirve como 503
+            // y que si se informa a error_events.
+            report($unavailable);
+            $this->error($this->text('print.pdf_unavailable'));
 
             return self::FAILURE;
         }
@@ -67,22 +89,22 @@ final class PrintCredentialBatchCommand extends Command
             // No es un error: es la idempotencia del lote. Un codigo de salida
             // distinto de cero haria fallar el guion de alguien que lo ejecuta
             // por costumbre cada mañana.
-            $this->info('No hay ninguna credencial pendiente de imprimir.');
+            $this->info($this->text('print_batch.nothing_pending'));
 
             return self::SUCCESS;
         }
 
         if (file_put_contents($out, $printed->pdf) === false) {
-            $this->error('El PDF se genero pero no se ha podido escribir en «'.$out.'».');
-            $this->line('Las '.$printed->count().' credenciales constan IMPRESAS y sus tokens son irrecuperables.');
-            $this->line('Sigue docs/runbooks/tarjeta-perdida-o-rota.md: revocar con motivo «impresion fallida» y reemitir.');
+            $this->error($this->text('print.not_written', ['path' => $out]));
+            $this->line($this->text('print_batch.printed_many', ['count' => $printed->count()]));
+            $this->line($this->text('print.runbook'));
 
             return self::FAILURE;
         }
 
-        $this->info($printed->count().' tarjeta(s) en una sola hoja: '.$out);
-        $this->line('Imprime, corta por las guias y BORRA el fichero.');
-        $this->line('Despues, registra cada entrega: php artisan credentials:deliver <credencial> --responsible=<correo>');
+        $this->info($this->text('print_batch.generated', ['count' => $printed->count(), 'path' => $out]));
+        $this->line($this->text('print_batch.handle_with_care'));
+        $this->line($this->text('print_batch.next'));
 
         return self::SUCCESS;
     }
@@ -102,20 +124,22 @@ final class PrintCredentialBatchCommand extends Command
             // Exigir la bandera no es burocracia: deja escrito en la orden —y en
             // el historial del interprete— que quien la ejecuto sabia que esto
             // NO reimprime nada.
-            return $this->reject('Hace falta --pending. Es la unica seleccion posible: no existe la reimpresion (ADR-034).');
+            return $this->reject('print_batch.pending_required');
         }
 
         $target = $this->option('out');
 
         if (! \is_string($target) || trim($target) === '') {
-            return $this->reject('Hace falta --out=/ruta/credenciales.pdf: este comando no elige donde dejar un PDF de tarjetas.');
+            return $this->reject('print_batch.out_required');
         }
 
         return null;
     }
 
-    private function reject(string $message): string
+    private function reject(string $key): string
     {
+        $message = $this->text($key);
+
         $this->error($message);
 
         return $message;

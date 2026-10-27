@@ -90,7 +90,7 @@ final readonly class SanctumDeviceTokenIssuer implements DeviceTokenIssuer
             if ($expiresAt instanceof DateTimeImmutable && $expiresAt <= $issuedAt) {
                 // Tampoco la que caduca al nacer o antes: ningun camino del
                 // producto la escribe y Sanctum ya no la acepta. La politica no
-                // tiene «80 % de vida» que medir (R1-AR-04), y si era la que
+                // tiene «80 % de vida» que medir, y si era la que
                 // firmo, no rota, como antes.
                 continue;
             }

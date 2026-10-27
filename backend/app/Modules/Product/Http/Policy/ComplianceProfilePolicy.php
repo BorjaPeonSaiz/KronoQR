@@ -51,8 +51,7 @@ final class ComplianceProfilePolicy
 
     /**
      * **Un acceso de soporte NO cambia el perfil de cumplimiento** (RF-PD-11,
-     * RL-01, RL-02, regla dura 14, decision de `seguridad-cumplimiento` de la
-     * tarea 5.9).
+     * RL-01, RL-02, regla dura 14).
      *
      * ## Por que esta es la excepcion dentro de `configuration`
      *

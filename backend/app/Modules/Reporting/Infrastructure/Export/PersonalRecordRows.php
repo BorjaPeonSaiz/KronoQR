@@ -12,7 +12,7 @@ use Closure;
 
 /**
  * **Que filas tiene** el registro propio, en que orden y de que tipo, para sus
- * dos formatos (`GET /api/v1/me/export`, CSV y PDF; 2.3.0, bloque 8).
+ * dos formatos (`GET /api/v1/me/export`, CSV y PDF; 2.3.0).
  *
  * El contrato promete que `X-Kronoqr-Report-Rows` da el mismo numero en el CSV
  * y en el PDF del mismo registro. Mientras cada formato tuvo su propio bucle,

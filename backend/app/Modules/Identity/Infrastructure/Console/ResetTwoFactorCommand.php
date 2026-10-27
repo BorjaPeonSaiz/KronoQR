@@ -38,22 +38,18 @@ final class ResetTwoFactorCommand extends AbstractManagementAccountCommand
         $outcome = $handler->handle(new ResetManagementTwoFactorCommand($uuid, $this->reason()));
 
         if ($outcome === TwoFactorResetOutcome::NotEnrolled) {
-            $this->components->error(
-                'Esa cuenta no tenia segundo factor activo: no hay nada que retirar. No se ha escrito ningun asiento.'
-            );
+            $this->components->error($this->text('reset_two_factor.not_enrolled'));
 
             return self::FAILURE;
         }
 
         if ($outcome !== TwoFactorResetOutcome::Reset) {
-            $this->components->error('No existe ninguna cuenta de gestion activa con ese UUID.');
+            $this->components->error($this->text('reset_two_factor.not_found'));
 
             return self::FAILURE;
         }
 
-        $this->components->info(
-            'Segundo factor retirado. La cuenta '.$uuid.' tendra que darlo de alta en su proximo acceso.'
-        );
+        $this->components->info($this->text('reset_two_factor.done', ['uuid' => $uuid]));
 
         return self::SUCCESS;
     }

@@ -17,10 +17,10 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
-use Illuminate\Support\Str;
 
 /**
  * Abrir una rotacion de la clave de firma **sin dejar a nadie sin poder
@@ -75,6 +75,7 @@ final readonly class RotateSigningKey
         private SerializedLedgerWrite $serialized,
         private CredentialTelemetry $telemetry,
         private EmploymentStatusLookup $employmentStatus,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -221,7 +222,7 @@ final readonly class RotateSigningKey
     private function reissueOne(Credential $card, DateTimeImmutable $now, ?int $actorUserId): void
     {
         $credential = Credential::issue(
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             employeeId: $card->employeeId,
             issuedAt: $now,
         );

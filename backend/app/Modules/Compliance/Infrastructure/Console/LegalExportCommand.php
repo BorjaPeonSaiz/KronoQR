@@ -9,7 +9,7 @@ use App\Modules\Compliance\Application\UseCase\GenerateLegalExport;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
-use App\Modules\Shared\Infrastructure\Console\InstallationText;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -59,6 +59,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class LegalExportCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.legal_export';
+
     protected $signature = 'compliance:legal-export
         {--from= : Primer dia del periodo, YYYY-MM-DD, por fecha de jornada}
         {--to= : Ultimo dia del periodo, inclusive}
@@ -73,7 +78,7 @@ final class LegalExportCommand extends Command
             $period = LegalExportPeriod::between($this->stringOption('from'), $this->stringOption('to'));
         } catch (InvalidLegalExportRequest $invalid) {
             $this->error($invalid->getMessage());
-            $this->line('Ejemplo: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31');
+            $this->line($this->text('example'));
 
             return self::FAILURE;
         }
@@ -101,21 +106,21 @@ final class LegalExportCommand extends Command
             'channel' => 'console',
         ]);
 
-        $this->info('Exportacion legal generada.');
-        $this->table(['Concepto', 'Valor'], [
-            ['Periodo', $period->from.' → '.$period->to],
-            ['Alcance', $scope->isEveryone() ? 'plantilla completa' : (string) $scope->employeeUuid],
-            ['Tramos', (string) $export->tally->shiftEntries],
-            ['Correcciones', (string) $export->tally->corrections],
-            ['Trabajadores', (string) $export->tally->employees],
-            ['Fichero', $export->path],
+        $this->info($this->text('generated'));
+        $this->table($this->texts('columns'), [
+            [$this->text('rows.period'), $period->from.' → '.$period->to],
+            [$this->text('rows.scope'), $scope->isEveryone() ? $this->text('whole_staff') : (string) $scope->employeeUuid],
+            [$this->text('rows.shift_entries'), (string) $export->tally->shiftEntries],
+            [$this->text('rows.corrections'), (string) $export->tally->corrections],
+            [$this->text('rows.employees'), (string) $export->tally->employees],
+            [$this->text('rows.file'), $export->path],
         ]);
 
         // ADR-045 §f: la copia de consola vive en el volumen persistente y no se
         // borra sola. En el idioma de la instalacion, como el resto de textos
         // que lee una persona.
         $this->newLine();
-        $this->warn(app(InstallationText::class)->line('legal-export.console.delete_after_delivery'));
+        $this->warn($this->installationText('legal-export.console.delete_after_delivery'));
 
         return self::SUCCESS;
     }

@@ -100,7 +100,7 @@ final readonly class AccessHardeningProbe implements DoctorProbe
     }
 
     /**
-     * Cuentas de gestion activas sin uso (ADR-060, tarea 11.3 B). Aviso y no
+     * Cuentas de gestion activas sin uso (ADR-060). Aviso y no
      * fallo: una cuenta activa no se purga nunca, pero una que nadie usa es una
      * puerta abierta que nadie vigila. El numero por rol, nunca quienes.
      */
@@ -123,8 +123,8 @@ final readonly class AccessHardeningProbe implements DoctorProbe
     }
 
     /**
-     * Tokens que `sanctum:prune-expired` no borrara nunca (tarea 11.3 D, RGPD
-     * art. 5.1.e). Aviso y no fallo: siguen funcionando como siempre; lo que
+     * Tokens que `sanctum:prune-expired` no borrara nunca (RGPD art. 5.1.e).
+     * Aviso y no fallo: siguen funcionando como siempre; lo que
      * no hacen es caducar.
      */
     private function tokensWithoutExpiry(): DoctorFinding
@@ -188,7 +188,7 @@ final readonly class AccessHardeningProbe implements DoctorProbe
 
     /**
      * Cuantas cuentas activas de los roles obligados no tienen aun segundo
-     * factor confirmado (M1 de la revision de ADR-050).
+     * factor confirmado (ADR-050).
      *
      * Tras actualizar, cada responsable sin TOTP lo da de alta en su primer
      * acceso, y hasta entonces **la ventana de auto-alta esta abierta**: quien

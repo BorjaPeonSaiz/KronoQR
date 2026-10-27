@@ -23,7 +23,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use RuntimeException;
 
 /**
- * La tabla `report_exports` (**RF-IN-06**, decision 1 de la ficha 3.9).
+ * La tabla `report_exports` (**RF-IN-06**).
  *
  * ## La exclusion mutua la resuelve el indice, no un `SELECT`
  *
@@ -185,7 +185,7 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
 
     public function findByUuidFor(string $uuid, int $requestedByUserId): ?ReportExport
     {
-        // El dueño entra EN LA CONSULTA (decision 2): la exportacion de otra
+        // El dueño entra EN LA CONSULTA: la exportacion de otra
         // persona no existe para quien pregunta, y eso es lo que produce el `404`
         // del contrato en lugar de un `403` que confirmaria que existe.
         $rows = $this->connection->select(

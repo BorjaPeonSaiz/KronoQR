@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\Support\CivilDate;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -218,6 +219,6 @@ final readonly class WorkRecordPurgeBoundary
             return null;
         }
 
-        return new DateTimeImmutable($value.'T00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($value, new DateTimeZone('UTC'));
     }
 }

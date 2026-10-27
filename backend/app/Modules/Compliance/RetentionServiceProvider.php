@@ -33,7 +33,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * La retencion del modulo `Compliance` (RL-02, RL-11, RF-PR-03, tarea 2.10).
+ * La retencion del modulo `Compliance` (RL-02, RL-11, RF-PR-03).
  *
  * ## Por que va en un proveedor propio
  *
@@ -118,7 +118,7 @@ final class RetentionServiceProvider extends ServiceProvider
         );
 
         /*
-         * Las cuentas de gestion dadas de baja (ADR-060, tarea 11.3 B), con el
+         * Las cuentas de gestion dadas de baja (ADR-060), con el
          * rol de la aplicacion y por la funcion `SECURITY DEFINER`: igual que
          * el registro de jornada, el asiento de cada cuenta va en la misma
          * transaccion que su minimizacion.
@@ -129,7 +129,7 @@ final class RetentionServiceProvider extends ServiceProvider
         );
 
         /*
-         * Las fichas de personas dadas de baja (ADR-060, tarea 11.3 A), por la
+         * Las fichas de personas dadas de baja (ADR-060), por la
          * funcion `SECURITY DEFINER` y con el rol de la aplicacion; la foto, del
          * directorio configurado (`compliance.retention.personnel_photo_root`).
          */

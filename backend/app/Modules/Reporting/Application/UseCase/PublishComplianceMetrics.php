@@ -17,8 +17,7 @@ use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeZone;
 
 /**
- * Publica las dos metricas de cumplimiento del cuadro «Negocio» (doc 02 §8.2,
- * paso 7 y decision 10 de la ficha 3.4).
+ * Publica las dos metricas de cumplimiento del cuadro «Negocio» (doc 02 §8.2).
  *
  * ```
  * compliance_findings_last_week{rule}        gauge

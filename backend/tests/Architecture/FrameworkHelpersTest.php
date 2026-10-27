@@ -150,3 +150,39 @@ it('no confunde una clase propia con el alias de una facade', function (): void 
 
     expect(FrameworkHelpers::facadeUsesIn($source, ['App\\Support\\Cache'], FrameworkHelpers::facadeAliases()))->toBe([]);
 })->group('RNF-M-03');
+
+it('detecta un helper llamado de forma indirecta', function (string $imports, string $codigo, string $helper): void {
+    // V1-AR-1: la deteccion de arriba solo veia el nombre seguido de `(`. Un
+    // alias de importacion, un callable escrito como texto, `dd()` o `dump()`
+    // pasaban en verde. La llamada va siempre en la linea 4.
+    $source = "<?php\nnamespace App\Modules\Attendance\Application;\n".$imports."\nfinal class Sonda { public function f(): mixed { return ".$codigo."; } }\n";
+
+    expect(FrameworkHelpers::callsIn($source, FrameworkHelpers::names()))
+        ->toBe([['function' => $helper, 'line' => 4]]);
+})->with([
+    'alias de un helper global' => ['use function config as ajuste;', "ajuste('x')", 'config'],
+    'alias de una funcion de Illuminate' => ['use function Illuminate\Support\now as reloj;', 'reloj()', 'now'],
+    'alias en un use agrupado' => ['use function Illuminate\Support\{now as reloj, today};', 'reloj()', 'now'],
+    'call_user_func' => ['', "call_user_func('config', 'x')", 'config'],
+    'call_user_func_array con barra' => ['', "\call_user_func_array('\\app', [])", 'app'],
+    'array_map' => ['', "array_map('now', [1])", 'now'],
+    'Closure::fromCallable' => ['', "\Closure::fromCallable('cache')", 'cache'],
+    'dd' => ['', 'dd($this)', 'dd'],
+    'dump' => ['', 'dump($this)', 'dump'],
+])->group('RNF-M-03');
+
+it('no confunde un callable propio ni un texto suelto con un helper indirecto', function (string $imports, string $codigo): void {
+    $source = "<?php\nnamespace App\Modules\Attendance\Application;\n".$imports."\nfinal class Sonda { public function f(): mixed { return ".$codigo."; } }\n";
+
+    expect(FrameworkHelpers::callsIn($source, FrameworkHelpers::names()))->toBe([]);
+})->with([
+    'array_map con una funcion de PHP' => ['', "array_map('trim', \$lineas)"],
+    'call_user_func con un cierre' => ['', 'call_user_func($this->act)'],
+    'alias de una funcion de PHP' => ['use function strlen as longitud;', "longitud('x')"],
+    'alias de una funcion propia' => ['use function App\Support\config as ajuste;', "ajuste('x')"],
+    'el texto en una llamada anidada' => ['', "array_map(\$this->f(...), ['config'])"],
+    'el texto como clave' => ['', "['config' => 1]"],
+    // Lo que no ve, y esta escrito en FrameworkHelpers::callsIn(): una funcion
+    // variable no se distingue por tokens de invocar un cierre.
+    'funcion variable' => ['', "(\$f = 'config')()"],
+])->group('RNF-M-03');

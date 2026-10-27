@@ -588,6 +588,13 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
     // objeto se construye sin problema y lo que falla es hablar con PostgreSQL o
     // con Redis. Romper el enlace del contenedor daria un 500 en la resolucion de
     // dependencias y no llegaria a ejercitar el `catch` que aqui interesa.
+    //
+    // Los idiomas caen al respaldo del `.env` (la prueba de abajo lo cubre con
+    // otros valores): se fija el de serie, `es`, para no depender del `.env`
+    // de quien ejecuta la suite.
+    config()->set('app.locale', 'es');
+    config()->set('app.supported_locales', ['es']);
+
     app()->bind(SettingsRepository::class, fn (): SettingsRepository => new class implements SettingsRepository
     {
         public function storedValues(): array
@@ -617,6 +624,40 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
         // selector y al portal sin saber en que idioma pintarse.
         ->and($response->json('locales.available'))->toBe(['es']);
 })->group('RF-PD-08');
+
+it('con la configuracion ilegible publica los idiomas de respaldo que negocia la API, no los de serie', function (): void {
+    // La marca cae a la del producto, pero los idiomas no pueden caer a los
+    // del catalogo (`['es']`): NegotiateLocale sirve entonces los de
+    // APP_SUPPORTED_LOCALES, y el quiosco tiene que ofrecer esos mismos.
+    config()->set('app.locale', 'en');
+    config()->set('app.supported_locales', ['en', 'es']);
+
+    app()->bind(SettingsRepository::class, fn (): SettingsRepository => new class implements SettingsRepository
+    {
+        public function storedValues(): array
+        {
+            throw new RuntimeException('installation_settings ilegible');
+        }
+
+        public function storedValuesForWrite(): array
+        {
+            throw new RuntimeException('installation_settings ilegible');
+        }
+
+        public function save(array $values, ?int $actorUserId): void
+        {
+            throw new RuntimeException('installation_settings ilegible');
+        }
+    });
+
+    olvidarMarcaMemorizada();
+
+    $response = Api::guest()->get('/api/v1/branding')->assertValidResponse(200);
+
+    expect($response->json('application_name'))->toBe('KronoQR')
+        ->and($response->json('locales.default'))->toBe('en')
+        ->and($response->json('locales.available'))->toBe(['en', 'es']);
+})->group('RF-PD-08', 'RF-PD-01');
 
 // --- RF-KI-09, RL-09: el aviso de privacidad del quiosco (2.2.0) -------------
 

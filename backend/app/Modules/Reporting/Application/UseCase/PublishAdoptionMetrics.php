@@ -14,7 +14,7 @@ use DateTimeZone;
 
 /**
  * `workdays_complete_ratio{site}` — la metrica de adopcion del §8.2 que alimenta
- * el cuadro de «Impacto y adopcion» (RF-IN-08, tarea 3.1).
+ * el cuadro de «Impacto y adopcion» (RF-IN-08).
  *
  * ## AYER, y no hoy
  *

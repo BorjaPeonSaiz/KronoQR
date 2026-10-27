@@ -46,6 +46,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SupportGrants;
 use Tests\Support\Reporting\RecordingReportExportProgressBoard;
@@ -718,3 +719,14 @@ it('el mantenimiento minimiza las fallidas y las canceladas que superan su plazo
     expect(ReportExports::find($reciente->uuid)->scope)->not->toBeNull()
         ->and(ReportExports::find($reciente->uuid)->parameters->employeeUuid)->toBe('019a0000-0000-7000-8000-000000000002');
 })->group('RL-11', 'RF-IN-06');
+
+it('el trabajo genera en el idioma de la instalacion y devuelve al proceso el que tenia', function (): void {
+    // Horizon reutiliza el proceso: el idioma del informe no puede quedarse
+    // puesto para el trabajo siguiente, salga bien o falle la generacion.
+    InstallationLocale::set('en');
+    App::setLocale('es');
+
+    app()->call([new GenerateReportExportJob(Str::uuid7()->toString()), 'handle']);
+
+    expect(App::getLocale())->toBe('es');
+})->group('RF-IN-06');

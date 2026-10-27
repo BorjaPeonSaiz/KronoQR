@@ -147,7 +147,7 @@ final readonly class GroupedPersonalDataAccessLog implements PersonalDataAccessL
      * el espacio de claves de la cache, y el hash no tiene que resistir un ataque
      * —solo evitar colisiones entre dos pares—.
      *
-     * **Con el canal, si lo hay** (tarea 11.4): la suscripcion a la presencia de
+     * **Con el canal, si lo hay**: la suscripcion a la presencia de
      * toda la instalacion y la de un departamento son dos accesos distintos, y
      * agruparlas en una ventana dejaria una de las dos sin asiento.
      *

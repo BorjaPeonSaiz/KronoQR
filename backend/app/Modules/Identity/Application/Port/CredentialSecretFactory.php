@@ -10,8 +10,8 @@ use App\Modules\Identity\Domain\ValueObject\CredentialSecret;
  * Produce el token aleatorio que se acuña **al imprimir** una credencial
  * (doc 02 §5.1, ADR-034).
  *
- * **Hoy no lo usa ningun caso de uso, y es correcto.** Lo consumira la impresion
- * de la tarea 1.10, que es donde el token nace: la emision ya no lo pide. El
+ * **Hoy no lo usa ningun caso de uso, y es correcto.** El token nace al
+ * imprimir (ADR-034): la emision ya no lo pide. El
  * puerto y su adaptador se conservan —registrados y probados— porque son la
  * pieza que hace deterministica la prueba de la impresion, no porque sobren.
  *

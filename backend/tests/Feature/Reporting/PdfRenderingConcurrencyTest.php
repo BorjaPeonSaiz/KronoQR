@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportPdfWriter;
-use App\Modules\Reporting\Infrastructure\Metrics\RedisPdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Adapter\RedisPdfRenderingSlots;
+use App\Modules\Shared\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
@@ -68,15 +70,23 @@ function topePdfEmbudo(): string
 
     App::instance(ReportDocumentRenderer::class, new ConcurrencyLimitedReportRenderer(
         new FakeReportDocumentRenderer,
-        app(Redis::class),
-        app(LoggerInterface::class),
-        app(PdfRenderingMetrics::class),
-        PDF_RENDERING_CONCURRENCY_SLOTS,
+        topePdfSlots(PDF_RENDERING_CONCURRENCY_SLOTS, $funnel),
         0,
-        $funnel,
     ));
 
     return $funnel;
+}
+
+/** El tope de verdad de la instalacion, sobre el Redis que se le de y un embudo propio. */
+function topePdfSlots(int $maxConcurrent, string $funnel, ?Redis $redis = null): RedisPdfRenderingSlots
+{
+    return new RedisPdfRenderingSlots(
+        $redis ?? app(Redis::class),
+        app(LoggerInterface::class),
+        app(PdfRenderingMetrics::class),
+        $maxConcurrent,
+        $funnel,
+    );
 }
 
 /** Ocupa todos los huecos del embudo, como lo harian otras composiciones en curso. */
@@ -234,7 +244,7 @@ it('sin Redis falla cerrado: 503 de motor no disponible, sin arrancar ningun Chr
         }
     };
 
-    $tope = new ConcurrencyLimitedReportRenderer($motor, $sinRedis, app(LoggerInterface::class), app(PdfRenderingMetrics::class), 2, 0);
+    $tope = new ConcurrencyLimitedReportRenderer($motor, topePdfSlots(2, 'testing:pdf-rendering:'.Str::random(12), $sinRedis), 0);
 
     expect(fn (): string => $tope->renderPdf('<p>x</p>', '<p>pie</p>'))
         ->toThrow(ReportRenderingUnavailable::class, 'Redis');
@@ -250,12 +260,19 @@ it('la instalacion pone el tope delante del motor real, con el limite y la esper
 
     $renderer = app(ReportDocumentRenderer::class);
     $valores = topePdfPropiedades($renderer);
+    $slots = $valores['slots'];
+    \assert(\is_object($slots));
+    $tope = topePdfPropiedades($slots);
 
+    // El tope es el puerto de toda la instalacion (`SharedServiceProvider`), el
+    // mismo que reciben las tarjetas: una sola configuracion y un solo embudo.
     expect($renderer)->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class)
         ->and($valores['engine'])->toBeInstanceOf(BrowsershotReportRenderer::class)
-        ->and($valores['maxConcurrent'])->toBe(3)
+        ->and($slots)->toBeInstanceOf(RedisPdfRenderingSlots::class)
+        ->and($slots)->toEqual(app(PdfRenderingSlots::class))
+        ->and($tope['maxConcurrent'])->toBe(3)
         ->and($valores['waitSeconds'])->toBe(4)
-        ->and($valores['funnel'])->toBe(ConcurrencyLimitedReportRenderer::FUNNEL);
+        ->and($tope['funnel'])->toBe(RedisPdfRenderingSlots::FUNNEL);
 })->group('RF-IN-04', 'RL-05');
 
 it('suelta el hueco tambien cuando el motor falla', function (): void {
@@ -263,15 +280,7 @@ it('suelta el hueco tambien cuando el motor falla', function (): void {
     // caduque: dos fallos seguidos bloquearian todos los PDF de la instalacion
     // durante dos minutos.
     $funnel = 'testing:pdf-rendering:'.Str::random(12);
-    $tope = new ConcurrencyLimitedReportRenderer(
-        new FakeReportDocumentRenderer(fails: true),
-        app(Redis::class),
-        app(LoggerInterface::class),
-        app(PdfRenderingMetrics::class),
-        1,
-        0,
-        $funnel,
-    );
+    $tope = new ConcurrencyLimitedReportRenderer(new FakeReportDocumentRenderer(fails: true), topePdfSlots(1, $funnel), 0);
 
     try {
         expect(fn (): string => $tope->renderPdf('<p>x</p>', '<p>pie</p>'))
@@ -294,10 +303,12 @@ it('el informe en diferido recibe el tope con la espera larga de la cola', funct
     $renderer = topePdfPropiedades($pdf)['renderer'];
     \assert(\is_object($renderer));
     $valores = topePdfPropiedades($renderer);
+    $slots = $valores['slots'];
+    \assert(\is_object($slots));
 
     expect($renderer)->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class)
         ->and($valores['engine'])->toBeInstanceOf(BrowsershotReportRenderer::class)
-        ->and($valores['maxConcurrent'])->toBe(3)
+        ->and(topePdfPropiedades($slots)['maxConcurrent'])->toBe(3)
         ->and($valores['waitSeconds'])->toBe(240);
 })->group('RF-IN-04');
 

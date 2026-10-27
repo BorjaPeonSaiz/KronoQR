@@ -16,7 +16,7 @@ final readonly class ImportAbsencesCommand
     public function __construct(
         /** Ruta del temporal de la peticion. PHP lo borra al terminar. */
         public string $path,
-        /** `false` es el modo simulacion de la decision 5: no escribe nada. */
+        /** `false` es el modo simulacion: no escribe nada. */
         public bool $apply,
         /** El `sha256` que devolvio la validacion. Obligatorio con `apply`. */
         public ?string $confirmChecksum = null,

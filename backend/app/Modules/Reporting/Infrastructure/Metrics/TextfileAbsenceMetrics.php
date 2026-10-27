@@ -11,7 +11,7 @@ use DateTimeZone;
 
 /**
  * Publica `absences_current{type}` para el colector *textfile* de
- * `node-exporter` (doc 02 §8.2, decision 8 de la ficha 3.10).
+ * `node-exporter` (doc 02 §8.2).
  *
  * ```
  * absences_current{type="sick_leave"}
@@ -26,7 +26,7 @@ use DateTimeZone;
  * desaparece es indistinguible de una que nunca tuvo nada, y «hoy no hay ninguna
  * baja medica» es justo lo que se mira.
  *
- * **Con la hermana de «que dia se midio», resto del cierre de la Fase 3.**
+ * **Con la hermana de «que dia se midio».**
  * `absences_metrics_day_seconds` es la fecha civil medida (medianoche UTC),
  * mismo papel y mismo tipo de valor que `compliance_metrics_week_start_seconds`
  * (y misma tecnica que `adoption_metrics_work_date_seconds`, que la calcula

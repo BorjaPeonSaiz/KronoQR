@@ -18,7 +18,7 @@ use Throwable;
  *
  * `MetricsCollector` recoge las dieciocho **con sus etiquetas**, y las etiquetas
  * llevan `device=<uuid>`. Un uuid de quiosco no sale de la instalacion por este
- * canal (ficha 5.10 punto 8: «ni `uuid` de nadie»), asi que aqui se **suman** y
+ * canal («ni `uuid` de nadie», RF-PD-12), asi que aqui se **suman** y
  * lo que viaja es un entero por serie. Reutilizar aquel recolector obligaria a
  * traer las etiquetas para tirarlas despues, que es como se filtra un campo.
  *

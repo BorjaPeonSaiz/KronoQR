@@ -8,8 +8,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Throwable;
 
 /**
- * `db_query_duration_seconds{operation}` (doc 02 §8.2, decision 4 de la ficha
- * 3.1).
+ * `db_query_duration_seconds{operation}` (doc 02 §8.2).
  *
  * ## Se ACUMULA en memoria y se vuelca UNA vez
  *

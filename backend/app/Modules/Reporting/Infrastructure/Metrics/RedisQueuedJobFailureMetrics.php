@@ -16,7 +16,7 @@ use Throwable;
  * no como `{@see}` porque un `use` de `App\Support` desde un modulo es la
  * frontera que Deptrac rechaza: `kronoqr:metrics:queue_jobs_failed_total` con el
  * campo `job=<clase corta>`, y `HINCRBY`, que es atomico. El endpoint `/metrics`
- * de la tarea 3.1 ya recorre ese prefijo, asi que no hay nada que registrar en
+ * ya recorre ese prefijo, asi que no hay nada que registrar en
  * el catalogo: es una serie que ya existe, escrita desde un segundo sitio.
  *
  * **Medir no puede romper nada.** Si Redis no responde, el informe sigue

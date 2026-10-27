@@ -17,8 +17,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * ## Las columnas y los valores son los del PDF
  *
  * Los decide {@see PersonalRecordLayout}, una sola definicion para los dos
- * formatos del mismo registro (R1-RV-02): que columnas hay, que dice cada celda
- * y en que desfase esta cada hora (R1-RV-01). Aqui solo queda lo que es del
+ * formatos del mismo registro: que columnas hay, que dice cada celda
+ * y en que desfase esta cada hora. Aqui solo queda lo que es del
  * fichero: la cabecera de criterios, el dialecto y la respuesta en streaming.
  * El CSV lleva todas las columnas; el PDF, todas menos las que solo sirven a
  * una maquina (la zona IANA y las marcas en UTC).

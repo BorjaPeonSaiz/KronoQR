@@ -16,7 +16,7 @@ use Illuminate\Database\Query\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
- * `compliance_profiles` para la gestion desde el panel (RF-PD-07, tarea 5.2).
+ * `compliance_profiles` para la gestion desde el panel (RF-PD-07).
  *
  * ## Por que no es un modelo Eloquent
  *

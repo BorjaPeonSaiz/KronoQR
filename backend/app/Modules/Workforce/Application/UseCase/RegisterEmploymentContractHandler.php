@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Workforce\Application\Command\RegisterEmploymentContractCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
@@ -157,6 +158,6 @@ final readonly class RegisterEmploymentContractHandler
     {
         // El `FormRequest` ya ha comprobado el formato; esto solo lo fija a
         // medianoche UTC para que la comparacion sea entre fechas.
-        return new DateTimeImmutable($isoDate.' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($isoDate, new DateTimeZone('UTC'));
     }
 }

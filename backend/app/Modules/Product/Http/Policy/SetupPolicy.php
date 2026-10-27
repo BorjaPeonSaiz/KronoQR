@@ -56,7 +56,7 @@ final class SetupPolicy
 
     /** Consultar los pasos y su estado (`GET /setup/steps`). */
     /**
-     * El asistente es un acto del cliente, no de soporte (tarea 5.9).
+     * El asistente es un acto del cliente, no de soporte.
      *
      * Un token de soporte con alcance `configuration` lleva `settings:*`, que
      * es el ambito bajo el que viajan estas rutas; sin esta linea podria

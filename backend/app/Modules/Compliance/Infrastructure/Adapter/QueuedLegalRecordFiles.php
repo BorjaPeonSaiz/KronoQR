@@ -15,7 +15,7 @@ use DateTimeImmutable;
 
 /**
  * La exportacion para la Inspeccion, escrita por la cola de informes
- * (**RF-IN-05**, V5-PA-4). Traduce el puerto de `Shared` al caso de uso de
+ * (**RF-IN-05**). Traduce el puerto de `Shared` al caso de uso de
  * este modulo: el periodo y el alcance a sus objetos de valor, y el recuento
  * del escritor al {@see LegalRecordFile} que `Reporting` sabe leer.
  */

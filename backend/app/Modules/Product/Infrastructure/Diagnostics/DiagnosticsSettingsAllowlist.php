@@ -12,7 +12,7 @@ use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 /**
  * Que ajustes guardados de la instalacion (`installation_settings`, lo que se
  * edita desde el panel y devuelve `GET /api/v1/settings`) entran en el paquete
- * de diagnostico, y con que forma (RF-PD-09, ADR-020, PR14).
+ * de diagnostico, y con que forma (RF-PD-09, ADR-020).
  *
  * ## Por que hace falta, ademas del `.env`
  *

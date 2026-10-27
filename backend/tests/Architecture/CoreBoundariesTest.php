@@ -127,6 +127,8 @@ it('no permite dos declaraciones del mismo puerto transversal ni de su adaptador
     // [simbolo, debe existir ya hoy]
     'Clock (ADR-021)' => ['Clock', true],
     'SystemClock (ADR-021)' => ['SystemClock', true],
+    'UuidGenerator (ADR-021, RV-3)' => ['UuidGenerator', true],
+    'TimeOrderedUuidGenerator (ADR-021, RV-3)' => ['TimeOrderedUuidGenerator', true],
     'CompliancePolicyProvider (ADR-025, tarea 1.1)' => ['CompliancePolicyProvider', true],
     'OperationalSettingsProvider (ADR-025, tarea 1.1)' => ['OperationalSettingsProvider', true],
     'DbCompliancePolicyProvider (ADR-025, tarea 2.6)' => ['DbCompliancePolicyProvider', true],

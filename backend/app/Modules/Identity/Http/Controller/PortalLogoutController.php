@@ -14,7 +14,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * `POST /api/v1/me/logout` — cierre de la sesion del portal del empleado
- * (RF-ID-05, RS-03; PO1 de la verificacion de la 2.1.0).
+ * (RF-ID-05, RS-03).
  *
  * Revoca **el token de esta llamada** y ninguno mas: cerrar sesion en el
  * ordenador de la sala de personal no puede echar a la misma persona del movil

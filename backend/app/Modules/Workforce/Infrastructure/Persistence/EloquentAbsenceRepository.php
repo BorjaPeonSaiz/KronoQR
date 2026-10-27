@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Workforce\Application\Port\AbsenceFilter;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
@@ -568,7 +569,7 @@ final readonly class EloquentAbsenceRepository implements AbsenceRepository
      */
     private static function asDate(string $value): DateTimeImmutable
     {
-        return new DateTimeImmutable(substr($value, 0, 10).' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight(substr($value, 0, 10), new DateTimeZone('UTC'));
     }
 
     /**

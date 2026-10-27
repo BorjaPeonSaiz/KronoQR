@@ -15,7 +15,7 @@ use App\Modules\Reporting\Infrastructure\Export\PeriodReportXlsxWriter;
  *
  * El contenido lo escribe {@see PeriodReportXlsxWriter}, que vive en
  * `Infrastructure/Export` y es **el mismo** que usa la generacion en diferido de
- * RF-IN-06 (tarea 3.9). El destino es lo unico que cambia: aqui `php://output` y
+ * RF-IN-06. El destino es lo unico que cambia: aqui `php://output` y
  * alli un fichero de `REPORTING_EXPORT_PATH`. Ver el docblock de
  * {@see PeriodReportCsv}.
  *

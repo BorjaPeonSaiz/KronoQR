@@ -200,8 +200,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         );
 
         /*
-         * La punta de la cadena la sirve **el mismo adaptador que la escribe**
-         * (tarea 5.7). No es reutilizacion por pereza: la respuesta a «cual es
+         * La punta de la cadena la sirve **el mismo adaptador que la escribe**.
+         * No es reutilizacion por pereza: la respuesta a «cual es
          * la punta» tiene que ser una sola, y un segundo adaptador que la
          * calculara por su cuenta seria la via mas silenciosa de que un dia deje
          * de coincidir con la que usa el encadenado.
@@ -259,7 +259,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         );
 
         /*
-         * La zona del centro con su auditoria (RN-23, bloque 2 de la 2.3.0),
+         * La zona del centro con su auditoria (RN-23),
          * para revisar una de sus discrepancias. Por la conexion de la
          * aplicacion, como la revision de una purga: la lectura cae dentro del
          * candado de la cadena.
@@ -275,7 +275,7 @@ final class ComplianceServiceProvider extends ServiceProvider
          * Es la tercera via del §1.6 —ADR-025— y no un evento de dominio: aqui no
          * ha pasado nada en el dominio de nadie, ha pasado que **alguien leyo**.
          * El puerto vive en `Shared/Application/Port` para que quien divulga
-         * —hoy el padron del quiosco (tarea 1.7), mañana el detalle de jornada
+         * —hoy el padron del quiosco, mañana el detalle de jornada
          * (1.16) y la exportacion legal (1.17)— no tenga que importar este
          * modulo, que es la arista que el §1.6 no concede.
          *
@@ -286,7 +286,7 @@ final class ComplianceServiceProvider extends ServiceProvider
          */
         /*
          * ENVUELTO EN LA AGRUPACION POR VENTANA, y **solo para los conjuntos que
-         * se sondean** (tarea 2.4, ADR-037).
+         * se sondean** (ADR-037).
          *
          * Hoy hay uno: la presencia en vivo, que el panel pide cada 15 s cuando
          * el WebSocket no llega (RNF-D-03). Un asiento por sondeo no responde
@@ -453,7 +453,7 @@ final class ComplianceServiceProvider extends ServiceProvider
                 PurgeOrphanedLegalExportTempFilesCommand::class,
                 /*
                  * `compliance:record-system-event` y `compliance:audit-chain-head`
-                 * (tarea 5.7, RF-PD-10). **Ninguno de los dos se programa**: los
+                 * (RF-PD-10). **Ninguno de los dos se programa**: los
                  * llama `infra/scripts/update.sh` y solo el, cuando actualiza o
                  * cuando restaura la copia previa. Un asiento del ciclo de vida
                  * de la instalacion escribiendose solo todas las noches no
@@ -467,7 +467,7 @@ final class ComplianceServiceProvider extends ServiceProvider
                 RecordSystemEventCommand::class,
                 AuditChainHeadCommand::class,
                 /*
-                 * `compliance:incident-metrics` (doc 02 §8.2, tarea 2.6). SI se
+                 * `compliance:incident-metrics` (doc 02 §8.2). SI se
                  * programa, y aparte de la deteccion: el gauge de incidencias
                  * abiertas tiene que BAJAR cuando alguien resuelve una desde la
                  * bandeja, no solo subir cuando la revision nocturna encuentra
@@ -479,7 +479,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> incidencia de la revision diaria (RF-PR-01, tarea 2.6).
+     * El mapa evento -> incidencia de la revision diaria (RF-PR-01).
      *
      * Misma via que la auditoria del fichaje: `Attendance` no puede importar este
      * modulo, asi que emite y `Compliance` reacciona. Que la lista viva aqui es lo
@@ -498,11 +498,11 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * Las incidencias del registro horario (RF-PR-01, tarea 2.6).
+     * Las incidencias del registro horario (RF-PR-01).
      *
      * Siete puertos, y ninguno lo conoce `Attendance`: el nucleo emite hallazgos
      * y este modulo decide severidad, responsable, aviso y metrica (doc 01 §5.1,
-     * doc 02 §1.6). Los dos ultimos son de la bandeja de la tarea 2.5: el lado de
+     * doc 02 §1.6). Los dos ultimos son de la bandeja (RF-PA-05): el lado de
      * **lectura**, separado del libro que escribe, y el histograma de resolucion,
      * separado del gauge de abiertas porque uno se observa y el otro se
      * recalcula.
@@ -536,7 +536,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->bind(IncidentNotifier::class, MailIncidentNotifier::class);
 
         /*
-         * El lado de LECTURA de la bandeja (tarea 2.5).
+         * El lado de LECTURA de la bandeja.
          *
          * Puerto propio y no un metodo mas de `IncidentLedger`: aquel escribe y
          * habla en el agregado, este solo lee y lo que devuelve lleva ademas
@@ -551,8 +551,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->singleton(IncidentMetrics::class, TextfileIncidentMetrics::class);
 
         /*
-         * `incident_resolution_seconds{type}` sobre Redis y no *textfile* (tarea
-         * 2.5). Es un histograma que se observa dentro de una peticion, no un
+         * `incident_resolution_seconds{type}` sobre Redis y no *textfile*.
+         * Es un histograma que se observa dentro de una peticion, no un
          * gauge que una tarea programada recalcula: ver el docblock del
          * adaptador. `singleton` por lo mismo que las demas metricas: no toca la
          * base de datos y no arrastra estado de la peticion.
@@ -584,8 +584,8 @@ final class ComplianceServiceProvider extends ServiceProvider
 
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
 
-        // La misma exportacion, escrita por la cola de informes de `Reporting`
-        // (V5-PA-4). Puerto de `Shared`: ningun modulo importa clases de otro.
+        // La misma exportacion, escrita por la cola de informes de `Reporting`.
+        // Puerto de `Shared`: ningun modulo importa clases de otro.
         $this->app->bind(LegalRecordFileWriter::class, QueuedLegalRecordFiles::class);
 
         // Con el techo de sentencia del diferido (`REPORTING_EXPORT_TIMEOUT_SECONDS`):
@@ -603,7 +603,7 @@ final class ComplianceServiceProvider extends ServiceProvider
             ),
         );
 
-        // La busqueda de la persona de la exportacion (RF-IN-05, V21-3-PA-1).
+        // La busqueda de la persona de la exportacion (RF-IN-05).
         // Lee `employees` como la propia exportacion; el asiento lo escribe el
         // caso de uso por `PersonalDataAccessLog`, que ya esta enlazado arriba.
         $this->app->bind(
@@ -632,7 +632,7 @@ final class ComplianceServiceProvider extends ServiceProvider
 
     /**
      * Zona propia, y unica, de la busqueda de la persona de la exportacion legal
-     * (RF-IN-05, V21-3-PA-1, RS-05): **por cuenta**, por minuto y por hora, y
+     * (RF-IN-05, RS-05): **por cuenta**, por minuto y por hora, y
      * **por origen**, por minuto.
      *
      * **Por que no le basta `throttle:management`.** Aquella zona deja 120
@@ -675,7 +675,7 @@ final class ComplianceServiceProvider extends ServiceProvider
 
     /**
      * El mapa evento -> asiento de `audit_log` del **fichaje** (RL-01, regla
-     * dura 6, tarea 1.4).
+     * dura 6).
      *
      * Es la unica via por la que `Attendance` deja traza: no puede importar este
      * modulo —el §1.6 no concede esa arista y Deptrac la verifica—, asi que
@@ -695,7 +695,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(EmployeeClockedOut::class, [RecordShiftEntryAudit::class, 'clockedOut']);
 
         /*
-         * Y la correccion manual (tarea 1.15, RF-PA-04, RN-13, RL-04).
+         * Y la correccion manual (RF-PA-04, RN-13, RL-04).
          *
          * **Un solo evento para las cuatro acciones** —alta, cambio de hora,
          * cierre de un turno olvidado y anulacion— porque legalmente son el mismo
@@ -717,7 +717,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ShiftEntryCorrected::class, [RecordShiftEntryAudit::class, 'corrected']);
 
         // La reconciliacion nocturna que corrige un agregado deja asiento con el
-        // antes y el despues (regla dura 6, RF-PR-02, tarea 2.7). Sincrono y
+        // antes y el despues (regla dura 6, RF-PR-02). Sincrono y
         // dentro de la transaccion de la correccion, como el resto.
         Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
 
@@ -728,7 +728,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de `audit_log` de la tarea 1.5 (regla dura 6).
+     * El mapa evento -> asiento de `audit_log` de las credenciales (regla dura 6).
      *
      * **Se escribe aqui y no en `Identity`.** El modulo que produce el hecho no
      * tiene que saber quien lo apunta; el que audita si tiene que saber que
@@ -742,14 +742,14 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordCredentialAndDeviceLifecycle(): void
     {
         Event::listen(CredentialIssued::class, [RecordCredentialLifecycle::class, 'handleCredentialIssued']);
-        // Imprimir y entregar son de la tarea 1.10. El primero es el momento en
+        // Imprimir y entregar. El primero es el momento en
         // que una persona pasa a poder fichar (ADR-034) y el segundo distingue
         // «se perdio antes de darsela» de «la perdio el empleado» (§5.5): los dos
         // son hechos con relevancia legal y los dos dejan asiento.
         Event::listen(CredentialPrinted::class, [RecordCredentialLifecycle::class, 'handleCredentialPrinted']);
         Event::listen(CredentialDelivered::class, [RecordCredentialLifecycle::class, 'handleCredentialDelivered']);
         Event::listen(CredentialRevoked::class, [RecordCredentialLifecycle::class, 'handleCredentialRevoked']);
-        // Rotar y retirar la clave de firma son de la tarea 2.12: el ciclo de
+        // Rotar y retirar la clave de firma: el ciclo de
         // vida de todas las tarjetas a la vez (RF-QR-07, §5.3).
         Event::listen(SigningKeyRotated::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRotated']);
         Event::listen(SigningKeyRetired::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRetired']);
@@ -759,7 +759,7 @@ final class ComplianceServiceProvider extends ServiceProvider
 
     /**
      * El asiento del **alta de un quiosco por codigo de emparejamiento**
-     * (tarea 5.6, RF-PD-06, regla dura 6, RL-04).
+     * (RF-PD-06, regla dura 6, RL-04).
      *
      * ## Listener propio, y no un metodo mas del de arriba
      *
@@ -784,12 +784,12 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordDeviceProvisioning(): void
     {
         Event::listen(DeviceProvisioned::class, [RecordDeviceProvisioning::class, 'handle']);
-        // V6-KI-02: la recogida repetida del emparejamiento, con su propio asiento.
+        // La recogida repetida del emparejamiento, con su propio asiento.
         Event::listen(PairingReclaimed::class, [RecordDeviceProvisioning::class, 'reclaimed']);
     }
 
     /**
-     * El mapa evento -> asiento de `audit_log` del PIN (tarea 1.13, RF-ID-09).
+     * El mapa evento -> asiento de `audit_log` del PIN (RF-ID-09).
      *
      * **Las tres acciones que RF-ID-09 exige auditar por escrito** —emision,
      * restablecimiento y entrega— entran por dos eventos: emitir y restablecer
@@ -808,7 +808,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento del contrato (tarea 2.8, RF-GP-02).
+     * El mapa evento -> asiento del contrato (RF-GP-02).
      *
      * Familia «cambia roles, permisos o parametros del calculo» del bloque D, y
      * no la del ciclo de vida de la plantilla: `weekly_hours` es la cifra contra
@@ -824,7 +824,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de las **ausencias** (tarea 3.10, RF-GP-04).
+     * El mapa evento -> asiento de las **ausencias** (RF-GP-04).
      *
      * Misma familia del bloque D que el contrato: una ausencia registrada cambia
      * el resultado del informe de absentismo, y quien la registra puede
@@ -850,16 +850,15 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El asiento del **centro de la instalacion** (tarea 5.5, RF-PD-03, RN-05).
+     * El asiento del **centro de la instalacion** (RF-PD-03, RN-05).
      *
      * Misma familia del bloque D que el contrato y que un umbral de calculo, y
      * por el mismo motivo: `sites.timezone` es el parametro con el que se decide
      * a que jornada va cada tramo, asi que crearlo o cambiarlo mueve horas de un
      * dia a otro sin tocar un fichaje.
      *
-     * **Cierra una deuda de la tarea 1.6**: `UpdateSiteHandler` decia por escrito
-     * que su cambio quedaba auditado «por el oyente de `Compliance`», y ese
-     * oyente no existia.
+     * **Es el oyente que `UpdateSiteHandler` da por hecho**: su cambio queda
+     * auditado «por el oyente de `Compliance`», y este es ese oyente.
      *
      * Sincrono, sin `ShouldQueue` y sin `afterCommit` (ADR-027): si el asiento
      * falla, el centro no se crea ni se modifica.
@@ -870,7 +869,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * Los asientos de **plantilla y departamentos** (AUD-2, RF-GP-01/02/03).
+     * Los asientos de **plantilla y departamentos** (RF-GP-01/02/03).
      *
      * `employee.hired|updated|offboarded` y `department.created|renamed`, con el
      * identificador y la lista de campos tocados, nunca valores (regla dura 21).
@@ -890,7 +889,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El asiento de la **carga masiva de plantilla** (tarea 5.5, RF-GP-05).
+     * El asiento de la **carga masiva de plantilla** (RF-GP-05).
      *
      * Familia de datos personales del bloque D, la misma que responde «¿que hizo
      * esa cuenta con la plantilla?». Es el asiento del LOTE: cada alta deja
@@ -907,8 +906,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El asiento del **cierre del asistente de puesta en marcha** (tarea 5.5,
-     * RF-PD-03, RL-04).
+     * El asiento del **cierre del asistente de puesta en marcha** (RF-PD-03, RL-04).
      *
      * El asistente **no se reabre**, y esa irreversibilidad se justifica con
      * RL-04: reabrirlo seria una via para reconfigurar la instalacion —empezando
@@ -927,7 +925,7 @@ final class ComplianceServiceProvider extends ServiceProvider
 
     /**
      * El asiento de cada cambio de la **configuracion de la instalacion**
-     * (tarea 5.1, RF-PD-01, RL-04).
+     * (RF-PD-01, RL-04).
      *
      * Misma familia del bloque D que el contrato y que el cambio de rol
      * —`AuthorityOrCalculationChange`— y por la misma razon: mueve un parametro
@@ -947,8 +945,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento del **perfil de cumplimiento** (tarea 5.2,
-     * RF-PD-07, RL-04).
+     * El mapa evento -> asiento del **perfil de cumplimiento** (RF-PD-07, RL-04).
      *
      * Misma familia del bloque D que la configuracion de instalacion
      * —`AuthorityOrCalculationChange`— porque la pregunta que responde es la
@@ -968,7 +965,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de la **licencia** (tarea 5.3, RF-PD-04,
+     * El mapa evento -> asiento de la **licencia** (RF-PD-04,
      * ADR-018, ADR-028).
      *
      * Familia propia del bloque D —`LicenseLifecycle`, la novena— y no la de
@@ -998,8 +995,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento del **paquete de diagnostico** (tarea 5.9,
-     * RF-PD-09, RL-19, ADR-020).
+     * El mapa evento -> asiento del **paquete de diagnostico** (RF-PD-09, RL-19, ADR-020).
      *
      * Familia `SupportAccess`, la misma que las concesiones de soporte, porque
      * las dos responden a la misma pregunta: «¿que ha salido de esta instalacion
@@ -1027,8 +1023,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de la **exportacion integra** (tarea 5.10,
-     * RF-PD-14, RL-20, RS-05).
+     * El mapa evento -> asiento de la **exportacion integra** (RF-PD-14, RL-20, RS-05).
      *
      * Familia `LegalExport`, la misma que `legal_export.generated`, porque las
      * dos responden a la misma pregunta: «¿que ha salido del registro y quien se
@@ -1053,13 +1048,12 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(DataExportRequested::class, [RecordDataExportRequested::class, 'handle']);
         Event::listen(DataExportGenerated::class, [RecordDataExportGenerated::class, 'handle']);
         Event::listen(DataExportDownloaded::class, [RecordDataExportDownloaded::class, 'handle']);
-        // ADR-045 §d (C5): el ZIP desaparecio antes de caducar.
+        // ADR-045 §d, condicion C5: el ZIP desaparecio antes de caducar.
         Event::listen(DataExportFileMissing::class, [RecordGeneratedFileMissing::class, 'dataExport']);
     }
 
     /**
-     * El mapa evento -> asiento de los **informes en diferido** (tarea 3.9,
-     * RF-IN-06, RF-IN-07, RS-05, ADR-041).
+     * El mapa evento -> asiento de los **informes en diferido** (RF-IN-06, RF-IN-07, RS-05, ADR-041).
      *
      * Familia `PersonalDataAccess`, la misma que `personal_data.accessed`, y
      * **no** la de la exportacion integra: la pregunta que responden estos tres
@@ -1073,7 +1067,7 @@ final class ComplianceServiceProvider extends ServiceProvider
      * —quien pidio el informe—, tambien en la descarga, que va **sin sesion**
      * (ADR-041) y por tanto no tiene de donde sacar otro.
      *
-     * **El cuarto es el cuadro de impacto** (RF-IN-08, tarea 3.13), y es el unico
+     * **El cuarto es el cuadro de impacto** (RF-IN-08), y es el unico
      * cuya LECTURA no deja asiento: su documento son doce agregados de la
      * instalacion entera, sin un solo identificador (regla dura 21), asi que abrir
      * la pantalla no saca nada del sistema. Descargarlo si, y por eso el hecho que
@@ -1091,14 +1085,13 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
         Event::listen(ReportExportCancelled::class, [RecordReportExportLifecycle::class, 'cancelled']);
         Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
-        // ADR-045 §d (C5). Actor `system` y no la cuenta que lo pidio: lo detecta
+        // ADR-045 §d, condicion C5. Actor `system` y no la cuenta que lo pidio: lo detecta
         // la purga diaria. Por eso va en su propio listener y no en el de arriba.
         Event::listen(ReportExportFileMissing::class, [RecordGeneratedFileMissing::class, 'reportExport']);
     }
 
     /**
-     * El mapa evento -> asiento de los **accesos de soporte** (tarea 5.9,
-     * RF-PD-11, RL-18, ADR-020, regla dura 16).
+     * El mapa evento -> asiento de los **accesos de soporte** (RF-PD-11, RL-18, ADR-020, regla dura 16).
      *
      * Familia `SupportAccess`, la misma que el paquete de diagnostico: las dos
      * responden a «¿que ha salido de esta instalacion hacia el fabricante, y con
@@ -1132,7 +1125,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     }
 
     /**
-     * El mapa evento -> asiento de las **cuentas de gestion** (tarea 2.1, RS-05,
+     * El mapa evento -> asiento de las **cuentas de gestion** (RS-05,
      * RS-06).
      *
      * Dos familias del bloque D en un solo listener, y por eso no vive con las
@@ -1150,8 +1143,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(TwoFactorReset::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorReset']);
         Event::listen(ManagementRoleAssigned::class, [RecordManagementAccountLifecycle::class, 'handleRoleAssigned']);
 
-        // La baja de la cuenta y la sustitucion de su contrasena (tarea 3.8,
-        // H-03 de la revision interna ASVS). Sincronos como los tres de arriba:
+        // La baja de la cuenta y la sustitucion de su contrasena (RS-05).
+        // Sincronos como los tres de arriba:
         // si el asiento falla, la cuenta sigue activa y la contrasena sigue
         // siendo la anterior. Una baja sin traza es el hecho que alguien querria
         // que no constara.

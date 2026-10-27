@@ -19,7 +19,7 @@ use DateTimeImmutable;
 
 /**
  * Consume el enlace de un solo uso y autoriza la entrega del fichero
- * (**RF-IN-06**, ADR-041, RS-05, decision 3 de la ficha 3.9).
+ * (**RF-IN-06**, ADR-041, RS-05).
  *
  * ## Esta es la unica autorizacion que tiene la descarga
  *
@@ -66,7 +66,7 @@ final readonly class DownloadReportExport
     public function __construct(
         private ReportExportRepository $exports,
         /**
-         * El localizador confinado (ADR-045, F3): la descarga entrega lo que esta
+         * El localizador confinado (ADR-045): la descarga entrega lo que esta
          * dentro de `REPORTING_EXPORT_PATH`, en un `<uuid>/`, sin enlaces. Una
          * fila alterada que apunte a `/proc/self/environ` no saca nada.
          */
@@ -172,7 +172,7 @@ final readonly class DownloadReportExport
             throw ReportExportLinkUnavailable::expired();
         }
 
-        // Confinado (ADR-045, F3): presente DENTRO de su raiz, con su patron y
+        // Confinado (ADR-045): presente DENTRO de su raiz, con su patron y
         // sin enlaces. Fuera de eso, `404` sin decir por que —el `refused` sube
         // en la metrica—, y el enlace no se gasta.
         return $this->files->locateRecorded($this->area, (string) $export->filePath) === RecordedFileLocation::Present;

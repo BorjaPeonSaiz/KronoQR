@@ -14,7 +14,7 @@ use DateTimeImmutable;
 
 /**
  * `php artisan product:errors:prune` — la purga del historico tecnico
- * (RF-PD-15, RL-11, decision 10 de la ficha 5.12).
+ * (RF-PD-15, RL-11).
  *
  * ## Esto NO es la purga del registro legal
  *

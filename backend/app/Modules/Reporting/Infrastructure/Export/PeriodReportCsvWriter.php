@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\App;
  *
  * ## Por que no lo escribe `spatie/simple-excel`
  *
- * El plan de la tarea 2.9 nombra esa libreria para los tres formatos, y para el
+ * Serviria para los tres formatos, y para el
  * XLSX es la que se usa. Para el CSV **no se puede**, y el motivo esta escrito
  * en el escritor de la exportacion legal —nombrado en prosa porque
  * `Reporting` no puede importar `Compliance` (doc 02 §1.6)—: su escritor de

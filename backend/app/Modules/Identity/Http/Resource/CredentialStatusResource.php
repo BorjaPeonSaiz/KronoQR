@@ -44,7 +44,7 @@ final class CredentialStatusResource extends JsonResource
         return [
             'data' => array_map(self::row(...), $report->rows),
             'summary' => self::coverage($report->coverage),
-            // La pagina dentro de las filas que pasan el filtro (2.3.0, HC1). El
+            // La pagina dentro de las filas que pasan el filtro (2.3.0). El
             // denominador de la plantilla es `summary.employees`.
             'meta' => [
                 'page' => $report->page,
@@ -95,8 +95,8 @@ final class CredentialStatusResource extends JsonResource
             // unico que NO se acota con `employee_uuid`: es de la instalacion
             // entera, a proposito. Acotarlo lo pondria a cero justo cuando
             // alguien abre la ficha de la persona que no puede fichar, que es
-            // el momento en el que hace falta verlo (revision de seguridad de
-            // la 2.12). El desglose por clave se queda en la metrica y en la
+            // el momento en el que hace falta verlo. El desglose por clave se
+            // queda en la metrica y en la
             // consola: el panel solo tiene que dar la voz de alarma.
             'active_unknown_key' => $coverage->unknownKeyCardsTotal(),
         ];

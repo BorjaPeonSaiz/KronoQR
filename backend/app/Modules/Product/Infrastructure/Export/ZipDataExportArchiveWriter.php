@@ -186,7 +186,7 @@ final readonly class ZipDataExportArchiveWriter implements DataExportArchiveWrit
     }
 
     /**
-     * Confinado a la raiz de los ZIP y a su patron de nombre (ADR-045, C3).
+     * Confinado a la raiz de los ZIP y a su patron de nombre (ADR-045 C3).
      *
      * Antes hacia `unlink` de la ruta que le dieran: una fila alterada podia
      * borrar una copia de `BACKUP_PATH`. Ahora una ruta fuera de

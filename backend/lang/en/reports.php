@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 /*
- * Period reports (RF-IN-01, RF-IN-02, RF-IN-03, task 2.8).
+ * Period reports (RF-IN-01, RF-IN-02, RF-IN-03).
  *
  * See `lang/es/reports.php` for the reasoning: the inclusion criteria are part
  * of the report, not of its documentation. Keys are decided by
- * `GeneratePeriodReport` and translated by the `Resource`; task 2.9 will write
+ * `GeneratePeriodReport` and translated by the `Resource`; the export (RF-IN-04) writes
  * the same list into the CSV and PDF headers.
  */
 
@@ -36,7 +36,7 @@ return [
         'iso_week' => 'Weeks start on Monday (ISO 8601) and are clipped to the requested range.',
 
         /*
-         * The three of RF-GP-04 (task 3.10, decision 7). THEY READ AS A SINGLE
+         * The three of RF-GP-04. THEY READ AS A SINGLE
          * PARAGRAPH, which is why they sit together: the first two say what has
          * been discounted from absenteeism and the third says what could not be.
          * Moving the third one elsewhere would leave "unexplained absence"
@@ -51,7 +51,7 @@ return [
     ],
 
     /*
-     * Exported file labels (RF-IN-04, task 2.9). See `lang/es/reports.php` for
+     * Exported file labels (RF-IN-04). See `lang/es/reports.php` for
      * the reasoning: CSV, XLSX and PDF share these strings so that two downloads
      * of the same report in different formats read the same.
      */
@@ -162,7 +162,7 @@ return [
     ],
 
     /*
-     * PAYROLL EXPORT (RF-IN-07, task 3.9). English counterpart of the `payroll`
+     * PAYROLL EXPORT (RF-IN-07). English counterpart of the `payroll`
      * block in `lang/es/reports.php`; see that file for the reasoning.
      */
     'payroll' => [
@@ -212,7 +212,7 @@ return [
     ],
 
     /*
-     * THE WEEKLY EMAIL SUMMARY (RF-PR-05, task 3.12).
+     * THE WEEKLY EMAIL SUMMARY (RF-PR-05).
      *
      * Written for the manager of a hotel department, not for whoever wrote this
      * code: it says what their team worked last week and what they had under
@@ -260,7 +260,7 @@ return [
         'no_department' => 'your scope',
 
         // What `reporting:weekly-summary` prints when it sends nothing, with
-        // where each case is fixed (RF-PR-05, V4-PL-4). No names or addresses:
+        // where each case is fixed (RF-PR-05). No names or addresses:
         // it ends up in the scheduler log (hard rule 21).
         'not_sent' => [
             'disabled' => 'The weekly summary is switched off on this installation. Turn it on in the panel, under Settings: WEEKLY_SUMMARY_EMAIL.',
@@ -272,7 +272,7 @@ return [
     ],
 
     /*
-     * THE IMPACT AND ADOPTION DASHBOARD (RF-IN-08, RNF-D-01, task 3.13).
+     * THE IMPACT AND ADOPTION DASHBOARD (RF-IN-08, RNF-D-01).
      *
      * THE CRITERIA ARE PART OF THE DASHBOARD, NOT OF THE MANUAL, for the same
      * reason as in the period report: a percentage without its definition is a

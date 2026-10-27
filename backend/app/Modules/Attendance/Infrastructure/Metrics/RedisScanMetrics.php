@@ -41,7 +41,7 @@ use Throwable;
  */
 final readonly class RedisScanMetrics implements ScanMetrics
 {
-    /** Prefijo comun para que la tarea 3.1 encuentre todas las series con un solo `SCAN`. */
+    /** Prefijo comun para que `/metrics` encuentre todas las series con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string SCANS_TOTAL = self::KEY_PREFIX.'scans_total';
@@ -52,7 +52,7 @@ final readonly class RedisScanMetrics implements ScanMetrics
 
     public const string BATCH_SIZE = self::KEY_PREFIX.'scan_batch_size';
 
-    /** RF-AT-11: fichajes por PIN de respaldo, por centro (§8.2, tarea 1.12). */
+    /** RF-AT-11: fichajes por PIN de respaldo, por centro (§8.2). */
     public const string PIN_FALLBACK_SCANS = self::KEY_PREFIX.'pin_fallback_scans_total';
 
     public const string SCANS_BY_ORIGIN = self::KEY_PREFIX.'scans_by_origin_total';
@@ -121,7 +121,7 @@ final readonly class RedisScanMetrics implements ScanMetrics
     }
 
     /**
-     * `sync_delay_seconds{device}` y el tamano del lote (tarea 1.7).
+     * `sync_delay_seconds{device}` y el tamano del lote.
      *
      * El retraso lleva etiqueta de dispositivo porque la pregunta operativa es
      * «¿que quiosco no esta drenando?», no «¿cuanto retraso hay en general»: un

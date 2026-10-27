@@ -56,18 +56,52 @@ final class FrameworkHelpers
             }
         }
 
-        $names = array_values(array_unique($names));
+        $names = array_values(array_unique([...$names, ...self::VAR_DUMPER]));
         sort($names);
 
         return $names;
     }
 
     /**
+     * `dump()` y `dd()` no estan en ningun `helpers.php` de Laravel: los declara
+     * `symfony/var-dumper`, que el framework arrastra. En un caso de uso son lo
+     * mismo que un helper —y peor: escriben en la salida y `dd()` termina el
+     * proceso—, asi que se vigilan junto a los del framework (V1-AR-1).
+     */
+    private const array VAR_DUMPER = ['dd', 'dump'];
+
+    /**
+     * Funciones de PHP que reciben un callable. Un helper pasado como texto a
+     * una de ellas (`call_user_func('config', …)`, `array_map('now', …)`) es una
+     * llamada al helper aunque su nombre no vaya seguido de `(` (V1-AR-1).
+     */
+    private const array CALLABLE_TAKERS = [
+        'array_filter', 'array_map', 'array_reduce', 'array_walk', 'array_walk_recursive',
+        'call_user_func', 'call_user_func_array', 'forward_static_call', 'forward_static_call_array',
+        'is_callable', 'iterator_apply', 'register_shutdown_function', 'uasort', 'uksort', 'usort',
+    ];
+
+    /**
      * Las llamadas a cualquiera de esas funciones globales en un fuente PHP.
      *
      * Una llamada es un nombre seguido de `(` que no va detras de `->`, `?->`,
      * `::`, `function`, `new` ni `const`. El nombre cuenta igual con o sin la
-     * barra inicial: `\now()` y `now()` llaman al mismo helper.
+     * barra inicial: `\now()` y `now()` llaman al mismo helper. Cuentan tambien
+     * las formas indirectas (V1-AR-1):
+     *
+     *   - un alias de importacion: `use function config as ajuste; ajuste()`, o
+     *     `use function Illuminate\Support\now as reloj; reloj()`;
+     *   - el nombre como texto en una funcion que recibe un callable
+     *     ({@see self::CALLABLE_TAKERS}) o en `Closure::fromCallable()`.
+     *
+     * LO QUE NO VE, Y ESTA ESCRITO: una funcion variable (`$f = 'config';
+     * $f()`). Por tokens no se distingue de invocar un cierre (`$act()`), que es
+     * corriente en Application, y seguir el valor de la variable es analisis de
+     * flujo, no de tokens. El texto `'config'` suelto tampoco se marca: seria
+     * marcar cada clave de traduccion o de array que se llame igual que un
+     * helper. Deptrac cubre la mitad que importa —el `use function` de una
+     * funcion de `Illuminate\` en Application es una violacion de capa—, y la
+     * revision de codigo, el resto.
      *
      * @param  list<string>  $names  En minusculas, como las da {@see self::names()}.
      * @return list<array{function: string, line: int}>
@@ -81,17 +115,160 @@ final class FrameworkHelpers
             static fn (array|string $token): bool => ! \is_array($token) || ! \in_array($token[0], $ignored, true),
         ));
 
+        $aliases = self::functionAliases($source);
         $calls = [];
 
         foreach ($tokens as $i => $token) {
-            $function = self::globalFunctionCalledAt($tokens, $i);
+            if (! \is_array($token)) {
+                continue;
+            }
 
-            if (\is_array($token) && \in_array($function, $names, true)) {
-                $calls[] = ['function' => $function, 'line' => $token[2]];
+            $function = self::globalFunctionCalledAt($tokens, $i);
+            $helper = self::helperName($aliases[$function] ?? $function);
+
+            if (\in_array($helper, $names, true)) {
+                $calls[] = ['function' => $helper, 'line' => $token[2]];
+            }
+
+            if (\in_array($function, self::CALLABLE_TAKERS, true) || self::isFromCallable($tokens, $i)) {
+                $calls = [...$calls, ...self::helpersPassedAsText($tokens, $i + 1, $names)];
             }
         }
 
         return $calls;
+    }
+
+    /**
+     * Las funciones importadas con `use function`, del nombre con el que se
+     * llaman (el alias o el ultimo segmento) al nombre completo, todo en
+     * minusculas y sin barra inicial. Admite la forma agrupada
+     * `use function A\{b, c as d};`.
+     *
+     * @return array<string, string>
+     */
+    private static function functionAliases(string $source): array
+    {
+        preg_match_all('/\buse\s+function\s+([^;]+);/i', self::codeOnly($source), $matches);
+        $aliases = [];
+
+        foreach ($matches[1] as $clause) {
+            $prefix = '';
+
+            // use function A\B\{c, d as e};
+            if (preg_match('/^(.*?)\\\\?\{(.+)\}$/s', trim($clause), $group) === 1) {
+                $prefix = rtrim($group[1], '\\').'\\';
+                $clause = $group[2];
+            }
+
+            foreach (explode(',', $clause) as $leaf) {
+                $parts = preg_split('/\s+as\s+/i', trim($leaf)) ?: [];
+                $aliases += self::aliasOf($prefix.($parts[0] ?? ''), $parts[1] ?? null);
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function aliasOf(string $name, ?string $alias): array
+    {
+        $full = strtolower(ltrim(trim($name), '\\'));
+        $segments = explode('\\', $full);
+
+        return $full === '' ? [] : [strtolower(trim($alias ?? end($segments))) => $full];
+    }
+
+    /**
+     * El helper al que apunta un nombre de funcion ya resuelto: el propio nombre
+     * si es global, y el ultimo segmento si es una funcion de `Illuminate\`.
+     * Cualquier otra funcion con espacio de nombres no es un helper.
+     */
+    private static function helperName(string $function): string
+    {
+        if (! str_contains($function, '\\')) {
+            return $function;
+        }
+
+        $segments = explode('\\', $function);
+
+        return str_starts_with($function, 'illuminate\\') ? end($segments) : '';
+    }
+
+    /**
+     * Si en la posicion `$i` empieza `Closure::fromCallable(`.
+     *
+     * @param  list<array{0: int, 1: string, 2: int}|string>  $tokens
+     */
+    private static function isFromCallable(array $tokens, int $i): bool
+    {
+        $class = $tokens[$i];
+        $method = $tokens[$i + 2] ?? null;
+
+        return \is_array($class)
+            && strtolower(ltrim($class[1], '\\')) === 'closure'
+            && is_array($tokens[$i + 1] ?? null)
+            && $tokens[$i + 1][0] === T_DOUBLE_COLON
+            && \is_array($method)
+            && strtolower($method[1]) === 'fromcallable';
+    }
+
+    /**
+     * Los helpers escritos como texto en los argumentos de primer nivel de la
+     * llamada que empieza en `$from` (el nombre de la funcion o de la clase).
+     *
+     * @param  list<array{0: int, 1: string, 2: int}|string>  $tokens
+     * @param  list<string>  $names
+     * @return list<array{function: string, line: int}>
+     */
+    private static function helpersPassedAsText(array $tokens, int $from, array $names): array
+    {
+        $found = [];
+        $depth = 0;
+        $count = \count($tokens);
+
+        for ($j = $from; $j < $count; $j++) {
+            $token = $tokens[$j];
+            $depth += self::depthChange($token);
+            $found[] = $depth === 1 ? self::helperWrittenAsText($token, $names) : null;
+
+            if ($depth <= 0 && \in_array($token, [')', ';'], true)) {
+                break;
+            }
+        }
+
+        return array_values(array_filter($found));
+    }
+
+    /**
+     * @param  array{0: int, 1: string, 2: int}|string  $token
+     */
+    private static function depthChange(array|string $token): int
+    {
+        return match ($token) {
+            '(', '[', '{' => 1,
+            ')', ']', '}' => -1,
+            default => 0,
+        };
+    }
+
+    /**
+     * El helper que nombra un texto literal (`'config'`, `'\now'`), o `null`.
+     *
+     * @param  array{0: int, 1: string, 2: int}|string  $token
+     * @param  list<string>  $names
+     * @return array{function: string, line: int}|null
+     */
+    private static function helperWrittenAsText(array|string $token, array $names): ?array
+    {
+        if (! \is_array($token) || $token[0] !== T_CONSTANT_ENCAPSED_STRING) {
+            return null;
+        }
+
+        $text = strtolower(ltrim(substr($token[1], 1, -1), '\\'));
+
+        return \in_array($text, $names, true) ? ['function' => $text, 'line' => $token[2]] : null;
     }
 
     /**

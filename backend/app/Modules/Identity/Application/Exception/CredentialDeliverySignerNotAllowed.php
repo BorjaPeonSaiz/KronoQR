@@ -9,7 +9,7 @@ use RuntimeException;
 
 /**
  * Quien responde de la entrega ya no es una cuenta de gestion activa con rol
- * admin o rrhh cuando se va a firmar (RF-QR-06, RL-04; 2.3.0 bloque 3).
+ * admin o rrhh cuando se va a firmar (RF-QR-06, RL-04).
  *
  * Se comprueba con la cadena de `audit_log` tomada, justo antes de marcar la
  * entrega: la baja de una cuenta toma la cadena antes de tocar su fila

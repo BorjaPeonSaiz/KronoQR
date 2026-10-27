@@ -23,9 +23,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * que **tiene** el dato —`Identity`— es quien lo implementa (ADR-025).
  *
  * **Cuatro metodos y ni uno mas.** Lo que una policy necesita preguntar es quien
- * es, que rol tiene, hasta donde alcanza y si es de la casa. El tercero lo añadio
- * la tarea 2.1 (RF-ID-03) y el cuarto la 5.9 (RF-PD-11), los dos como cambio
- * aditivo, tal y como este mismo docblock anticipaba.
+ * es, que rol tiene, hasta donde alcanza (RF-ID-03) y si es de la casa
+ * (RF-PD-11). Los dos ultimos llegaron como cambio aditivo, tal y como este
+ * mismo docblock anticipaba.
  *
  * **El ambito del token no se pregunta aqui.** Se comprueba antes, en el
  * middleware `ability` de Sanctum (doc 02 §7.3), y son dos controles distintos a
@@ -72,7 +72,7 @@ interface ManagementActor
 
     /**
      * Si quien actua es un **acceso temporal del fabricante** y no una cuenta de
-     * la organizacion del cliente (**RF-PD-11**, ADR-020, tarea 5.9).
+     * la organizacion del cliente (**RF-PD-11**, ADR-020).
      *
      * ## Por que no basta con mirar el rol
      *

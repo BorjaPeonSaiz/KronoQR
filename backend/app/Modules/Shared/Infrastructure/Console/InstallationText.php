@@ -32,6 +32,30 @@ final readonly class InstallationText
         return \is_string($text) ? $text : $key;
     }
 
+    /**
+     * Un parrafo de varias lineas, guardado en `lang/` como lista.
+     *
+     * @param  array<string, int|string>  $replace
+     * @return list<string>
+     */
+    public function lines(string $key, array $replace = []): array
+    {
+        $locale = $this->locale();
+        $lines = $this->translator->get($key, [], $locale);
+
+        if (! \is_array($lines)) {
+            return [$this->line($key, $replace)];
+        }
+
+        $texts = [];
+
+        foreach (array_keys($lines) as $index) {
+            $texts[] = $this->line($key.'.'.$index, $replace);
+        }
+
+        return $texts;
+    }
+
     private function locale(): ?string
     {
         try {

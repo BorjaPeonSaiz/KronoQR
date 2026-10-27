@@ -54,7 +54,7 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
      * Memoria por peticion.
      *
      * La revision diaria pide el perfil una vez, pero la vista de cumplimiento
-     * (tarea 3.4) lo pedira por cada jornada de un informe. El proceso muere con
+     * lo pedira por cada jornada de un informe. El proceso muere con
      * la peticion, asi que no es una cache con invalidacion: un cambio en el panel
      * tiene efecto en la siguiente.
      *

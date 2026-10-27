@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de `php artisan product:errors` y `product:errors:prune` (RF-PD-15,
- * tarea 5.12).
+ * Textos de `php artisan product:errors` y `product:errors:prune` (RF-PD-15).
  *
  * ## Para quien estan escritos
  *
@@ -34,6 +33,7 @@ return [
         'none' => 'No hay ningun error abierto en este periodo.',
         'found' => 'Se muestran :shown grupo(s) de :total. Un grupo son todas las veces que ha pasado '
             .'el mismo error.',
+        'empty_message' => '(sin mensaje)',
         'tag_error' => 'error',
         'tag_critical' => 'CRITICO',
         'seen' => 'Ha pasado :count vez/veces. Primera: :first. Ultima: :last.',

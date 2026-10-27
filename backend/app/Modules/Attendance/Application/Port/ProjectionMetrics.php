@@ -23,7 +23,7 @@ use DateTimeImmutable;
  * la integridad.
  *
  * Por lo mismo se publica `$failures`, que alimenta
- * `projection_reconciliation_last_failures` (doc 02 §8.2, tarea 3.2): la pasada
+ * `projection_reconciliation_last_failures` (doc 02 §8.2): la pasada
  * puede encontrar una divergencia y **no conseguir corregirla**, y hasta ahora
  * eso solo constaba en el codigo de salida del comando, que no llegaba a
  * ninguna alerta. Es un gauge de la ultima pasada —«¿la de anoche dejo algo sin
@@ -39,7 +39,7 @@ interface ProjectionMetrics
      * @param  int  $failures  jornadas que la pasada NO pudo dejar resueltas
      * @param  int  $selfResolved
      *                             sospechas que se deshicieron al releerlas con la fila
-     *                             bloqueada (tarea 3.6). **No son divergencias**: la pasada se cruzo
+     *                             bloqueada. **No son divergencias**: la pasada se cruzo
      *                             con un fichaje y no escribio nada. Se publican para que la huella
      *                             de la carrera no dependa solo del log —el comando nocturno corre
      *                             con `runInBackground()` y su salida no la lee nadie— y para poder

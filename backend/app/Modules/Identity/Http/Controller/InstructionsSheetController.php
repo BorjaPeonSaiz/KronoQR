@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `GET /api/v1/credentials/instructions-sheet` — la hoja de instrucciones que se
- * entrega junto con la tarjeta (tarea 5.11b, **RL-05**).
+ * entrega junto con la tarjeta (**RL-05**).
  *
  * **Es el unico documento del modulo que se pide con `GET`**, y la diferencia
  * con `print` es exactamente la que justifica el verbo: imprimir una tarjeta

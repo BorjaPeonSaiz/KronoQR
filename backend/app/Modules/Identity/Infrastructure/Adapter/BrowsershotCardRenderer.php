@@ -335,10 +335,10 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
             'brand' => [
                 'name' => $brand->applicationName,
                 'logo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
-                // Dos colores y no uno (V1-UX-1): el filete es decoracion y lleva
+                // Dos colores y no uno: el filete es decoracion y lleva
                 // el acento tal cual; el nombre de la instalacion se LEE y lleva
                 // el acento oscurecido hasta 4,5:1 sobre el papel blanco, como
-                // los PDF sellados (MB3). Lo calcula el dominio, no la plantilla.
+                // los PDF sellados. Lo calcula el dominio, no la plantilla.
                 'accent' => $brand->accentColor,
                 'accentText' => $brand->accentForTextOnWhite(),
             ],

@@ -27,6 +27,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainAnchor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Compliance\Domain\ValueObject\RetentionNote;
 use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
@@ -171,8 +172,7 @@ final readonly class ApplyRetention
     }
 
     /**
-     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060, tarea
-     * 11.3 A).
+     * Minimiza las fichas vencidas de personas dadas de baja (ADR-060).
      *
      * **Despues de purgar el registro y soltar particiones**, pero **solo las
      * fichas que ya eran candidatas antes** (`$candidates`): las que esa purga
@@ -190,7 +190,7 @@ final readonly class ApplyRetention
      * las observaciones del informe, con el `employee_uuid` y sin la ruta.
      *
      * @param  list<int>  $candidates
-     * @param  list<string>  $notes
+     * @param  list<RetentionNote>  $notes
      * @return list<RetentionTally>
      */
     private function anonymizePersonnelRecords(
@@ -240,8 +240,7 @@ final readonly class ApplyRetention
         }
 
         if ($orphaned > 0) {
-            $notes[] = $orphaned.' foto(s) de fichas minimizadas no se pudieron borrar del disco: la ficha ya no las '
-                .'apunta. El evento retention.personnel_photo_orphaned del log dice de que employee_uuid.';
+            $notes[] = RetentionNote::orphanedPersonnelPhotos($orphaned);
         }
 
         return [new RetentionTally(
@@ -302,7 +301,7 @@ final readonly class ApplyRetention
      * particion siguiente, el `hash` de la ultima fila de la anterior. Sin
      * encadenarlas, purgar dos anos a la vez marcaria el segundo como huerfano.
      *
-     * @return array{anchors: list<AuditChainAnchor>, notes: list<string>}
+     * @return array{anchors: list<AuditChainAnchor>, notes: list<RetentionNote>}
      */
     private function verifyPartitions(RetentionReport $plan, DateTimeImmutable $now): array
     {
@@ -321,7 +320,7 @@ final readonly class ApplyRetention
                 // Particion vacia: no hay cadena que anclar y `audit_chain_anchors`
                 // exige `row_count > 0`. Se deja donde esta -una particion vacia
                 // no ocupa ni estorba- en lugar de inventarle un sello.
-                $notes[] = 'Particion audit_log_'.$year.' vacia: no se sella ni se suelta.';
+                $notes[] = RetentionNote::emptyAuditPartition($year);
 
                 continue;
             }
@@ -546,7 +545,7 @@ final readonly class ApplyRetention
     }
 
     /**
-     * Minimiza las cuentas de gestion vencidas (ADR-060, tarea 11.3 B).
+     * Minimiza las cuentas de gestion vencidas (ADR-060).
      *
      * **Despues de soltar particiones**, pero **solo las cuentas que ya eran
      * candidatas antes** (`$candidates`): las que libera la suelta de los

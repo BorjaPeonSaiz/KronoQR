@@ -34,7 +34,7 @@ final readonly class RetentionReport
      * @param  list<int>  $auditPartitionYears  Anos candidatos a soltarse, ascendente
      * @param  array<string, DateTimeImmutable>  $shortCycleCutoffs  Corte por ambito de ciclo corto
      * @param  list<RetentionTally>  $tallies
-     * @param  list<string>  $notes  Lo que no se ha podido hacer y por que. Sin PII
+     * @param  list<RetentionNote>  $notes  Lo que no se ha podido hacer y por que. Sin PII
      */
     public function __construct(
         public RetentionMode $mode,
@@ -132,7 +132,7 @@ final readonly class RetentionReport
 
     /**
      * @param  list<RetentionTally>  $tallies
-     * @param  list<string>  $notes
+     * @param  list<RetentionNote>  $notes
      */
     public function executed(array $tallies, array $notes): self
     {

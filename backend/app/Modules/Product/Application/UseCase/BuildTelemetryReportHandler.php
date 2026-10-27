@@ -19,7 +19,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use Throwable;
 
 /**
- * Construye el documento de telemetria (**RF-PD-12**, ficha 5.10 punto 8).
+ * Construye el documento de telemetria (**RF-PD-12**).
  *
  * ## No decide si se envia
  *
@@ -122,7 +122,7 @@ final readonly class BuildTelemetryReportHandler
             ];
         } catch (LicenseUnavailable) {
             // No se pudo leer: ni `absent` ni `unverifiable`, que serian una
-            // afirmacion sobre la licencia (V21-4-PL-1).
+            // afirmacion sobre la licencia.
             return ['state' => 'unknown', 'license' => null, 'days_until_expiry' => null];
         } catch (Throwable) {
             return ['state' => 'unverifiable', 'license' => null, 'days_until_expiry' => null];

@@ -9,7 +9,7 @@ use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * La huella de una tarjeta en `scan_events` (RN-22, ADR-061, A2).
+ * La huella de una tarjeta en `scan_events` (RN-22, ADR-061 A2).
  *
  * **Entra por `scan_events_accepted_card_fingerprint_index`**, parcial sobre los
  * fichajes de tarjeta aceptados y ordenado por `occurred_at`: la busqueda toca

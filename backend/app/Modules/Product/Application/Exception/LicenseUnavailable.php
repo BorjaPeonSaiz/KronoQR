@@ -9,8 +9,7 @@ use Throwable;
 
 /**
  * La licencia no se ha podido leer porque **la base de datos no responde**: el
- * circuito de PostgreSQL esta abierto o la conexion se ha perdido (V21-4-PL-1,
- * RF-PD-04, ADR-019, ADR-059 §4).
+ * circuito de PostgreSQL esta abierto o la conexion se ha perdido (RF-PD-04, ADR-019, ADR-059 §4).
  *
  * ## Solo esa causa
  *

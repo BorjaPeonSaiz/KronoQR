@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
@@ -20,7 +21,6 @@ use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
-use Illuminate\Support\Str;
 use Random\RandomException;
 use RuntimeException;
 
@@ -71,6 +71,7 @@ final readonly class RegisterEmployeeHandler
         private IssueEmployeePinHandler $pins,
         private EmployeeWriteRetry $retry,
         private EmployeeCodeGenerator $codes,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
@@ -124,8 +125,8 @@ final readonly class RegisterEmployeeHandler
                 throw new RuntimeException('El alta no ha podido emitir el PIN del empleado '.$employee->uuid.'.');
             }
 
-            // Dentro de la transaccion, al contrario que antes de la tarea 1.13:
-            // el asiento de `audit_log` del alta y el del PIN son sincronos y
+            // Dentro de la transaccion: el asiento de `audit_log` del alta y el
+            // del PIN son sincronos y
             // tienen que poder impedir el alta si fallan (ADR-027, regla dura 6).
             $this->events->publish(new EmployeeHired(
                 employeeUuid: $employee->uuid,
@@ -133,12 +134,12 @@ final readonly class RegisterEmployeeHandler
                 departmentId: $employee->departmentId,
                 occurredAt: $this->clock->now(),
                 // Se propaga tal cual: decide quien cuenta el uso del plan —una
-                // vez por lote y no una por fila (ADR-028, H-04 de la 3.8)—. Que
+                // vez por lote y no una por fila (ADR-028)—. Que
                 // el alta importada no deje `pin.issued` ya cuenta en el trail
                 // que su PIN quedo pendiente.
                 viaImport: $command->viaImport,
                 // El valor inicial, para que el asiento del alta diga con que
-                // marca nacio la ficha (RF-GP-01, AUD-2).
+                // marca nacio la ficha (RF-GP-01).
                 teleworking: $employee->teleworking,
             ));
 
@@ -173,7 +174,7 @@ final readonly class RegisterEmployeeHandler
         return Employee::hire(
             // UUID v7 y no v4: es ordenable temporalmente, lo que mantiene la
             // localidad de los indices que lo referencian (doc 02 §6).
-            uuid: Str::uuid7()->toString(),
+            uuid: $this->uuids->next(),
             code: $code,
             firstName: $command->firstName,
             lastName: $command->lastName,

@@ -7,8 +7,7 @@ namespace App\Modules\Reporting\Application\Port;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 
 /**
- * Cuantas incidencias sin resolver tiene un alcance (RF-PR-05, decision 3 de la
- * ficha 3.12).
+ * Cuantas incidencias sin resolver tiene un alcance (RF-PR-05).
  *
  * **Un numero y nada mas.** El detalle —quien, que dia y de que tipo— ya sale en
  * el aviso diario de RF-PR-01, y repetirlo en el resumen semanal seria un
@@ -23,8 +22,8 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
  * que la pantalla enseña.
  *
  * El adaptador vive en `Reporting/Infrastructure`, que es donde `Compliance` ya
- * deja leer su tabla a este modulo (`DatabaseComplianceIncidentLinks`, tarea
- * 3.4): `Reporting` no puede importar `Compliance` (doc 02 §1.6) y la lectura
+ * deja leer su tabla a este modulo (`DatabaseComplianceIncidentLinks`):
+ * `Reporting` no puede importar `Compliance` (doc 02 §1.6) y la lectura
  * acotada de `incidents` por SQL es la licencia que ADR-025 concede.
  */
 interface OpenIncidentCount

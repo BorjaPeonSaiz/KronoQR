@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /*
- * English version of the employee's own timesheet export (RF-ID-05, RL-05,
- * task 1.11). See the Spanish file for why these strings live here.
+ * English version of the employee's own timesheet export (RF-ID-05, RL-05).
+ * See the Spanish file for why these strings live here.
  *
  * The row prefixes (`TRAMO`, `CORRECCION`), the correction reason codes and the
  * clocking sources stay untranslated on purpose: they are a closed catalogue
@@ -14,6 +14,10 @@ declare(strict_types=1);
 return [
 
     'title' => 'My time record',
+
+    // Start of the downloaded file name. Lower case, digits and hyphens only:
+    // it travels in `Content-Disposition` without quotes.
+    'file_name' => 'my-time-record',
 
     'header' => [
         'period' => 'Period',
@@ -67,7 +71,7 @@ return [
     ],
 
     /*
-     * The same record as a sealed PDF (`?format=pdf`, PR19). See the Spanish
+     * The same record as a sealed PDF (`?format=pdf`). See the Spanish
      * file for the reasoning. The title carries no names: it ends up in the PDF
      * metadata and in the browser's download history.
      */

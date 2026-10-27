@@ -16,7 +16,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
 /**
  * Seccion `configuration`: el `.env` **filtrado por lista de permitidos**, los
  * ajustes guardados en base de datos que pasan su propia lista de permitidos
- * (`installation_settings`, PR14), las filas de configuracion que no se pudieron aplicar y las claves en las que el
+ * (`installation_settings`), las filas de configuracion que no se pudieron aplicar y las claves en las que el
  * `.env` y la base de datos dicen cosas distintas (RF-PD-09, RS-08).
  *
  * ## Las tres cosas responden a la misma pregunta
@@ -40,7 +40,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
      * @param  array<string, mixed>  $environment  El entorno del proceso, inyectado y no leido
      *                                             con `env()`: asi la prueba puede pasarle el `.env.example` entero y
      *                                             afirmar que ninguna de sus claves secretas sale por aqui, que es
-     *                                             exactamente la prueba que la ficha 5.9 exige.
+     *                                             exactamente la prueba que exige ADR-020.
      */
     public function __construct(
         private GetSettingsHandler $settings,
@@ -72,7 +72,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
 
         return [
             'env' => $env,
-            // PR14: los ajustes guardados, que mandan sobre el `.env`, por lista
+            // Los ajustes guardados, que mandan sobre el `.env`, por lista
             // de permitidos y con su procedencia (`DiagnosticsSettingsAllowlist`).
             'installation_settings' => DiagnosticsSettingsAllowlist::apply($resolved),
             'invalid_keys' => array_map(

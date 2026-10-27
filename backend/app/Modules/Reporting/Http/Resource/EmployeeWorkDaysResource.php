@@ -31,10 +31,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * o un empleado consultando desde otro pais convertirian mal las horas de un
  * registro con valor legal.
  *
- * **La zona la pone cada tramo, no la jornada.** Un traslado de centro no
- * reescribe donde ocurrieron las jornadas anteriores, asi que un tramo fichado
- * en Canarias se presenta en `Atlantic/Canary` aunque la persona trabaje hoy en
- * Madrid.
+ * **La zona es la del centro, una sola para todo el historico** (ADR-040,
+ * ADR-056): queda fija desde el primer fichaje, asi que la de cada tramo y la
+ * de su jornada coinciden. Viaja en los dos niveles porque el contrato `v1` la
+ * declara en los dos (ADR-012).
  *
  * ## El total no se calcula aqui
  *
@@ -61,7 +61,7 @@ final class EmployeeWorkDaysResource extends JsonResource
      * @param  WorkDayJournal  $resource
      * @param  string  $today  El dia civil de hoy en la zona del centro, tal como
      *                         lo resuelve `ReadEmployeeWorkDays::todayIn()`.
-     * @param  WorkDayJournalPage|null  $page  La pagina, en la ruta del panel (V5-PA-2). Sin ella
+     * @param  WorkDayJournalPage|null  $page  La pagina, en la ruta del panel. Sin ella
      *                                         —el portal—, `meta` solo lleva el total.
      */
     public function __construct($resource, private readonly string $today, private readonly ?WorkDayJournalPage $page = null)

@@ -43,7 +43,7 @@ use DateTimeImmutable;
  * `saveTermination()`, que solo toca `status` y `terminated_at` y lleva el
  * predicado `status <> 'terminated'`.
  *
- * **Una transaccion con todo lo que la baja arrastra** (N1, AUD-2). El evento
+ * **Una transaccion con todo lo que la baja arrastra**. El evento
  * se publica dentro: `Identity` revoca la credencial y cierra el portal
  * (RN-14) y `Compliance` escribe el asiento `employee.offboarded`, los dos en
  * listeners sincronos y en el orden de ADR-046 (cadena → ficha → tarjetas). Si

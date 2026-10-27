@@ -102,15 +102,18 @@ it('no pasa un texto libre al analizador de fechas de PHP en el dominio (V1-AR-2
     // una variable y ni la lista de funciones de arriba ni Semgrep (que busca
     // el `'now'` literal) lo ven. Un texto que llega de fuera se lee con
     // `UtcInstant::parse()` o `createFromFormat('!…')`, que solo admiten un
-    // instante escrito. Lo que queda en el dominio compone la cadena con una
-    // fecha ya validada (`WorkDate`, `IsoWeek`…); que tambien pase a
-    // `createFromFormat('!…')` es de la tarea 19.4 (V1-AR-1).
+    // instante escrito, y una fecha civil con `CivilDate::midnight()` (H4).
+    //
+    // Cuenta tambien la cadena COMPUESTA (`$fecha.' 00:00:00'`, `($y + 1).'…'`):
+    // es la misma puerta, y si la parte variable llega vacia el analizador lee
+    // `' 00:00:00'` como «hoy a medianoche». Un literal que empieza por comilla
+    // (`'@'.$segundos`, `'2000-01-01 12:00:00'`) no es texto libre.
     $offenders = [];
 
     foreach (domainFiles() as $file) {
         $source = (string) file_get_contents($file);
 
-        if (preg_match('/new\s+\\\\?DateTime(?:Immutable)?\s*\(\s*\$\w+\s*[,)]|(?<![\w>:$])date_create(?:_immutable)?\s*\(/', $source) === 1) {
+        if (preg_match('/new\s+\\\\?DateTime(?:Immutable)?\s*\(\s*[$(]|(?<![\w>:$])date_create(?:_immutable)?\s*\(/', $source) === 1) {
             $offenders[] = ModuleTree::relative($file);
         }
     }

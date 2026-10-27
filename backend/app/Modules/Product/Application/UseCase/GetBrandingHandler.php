@@ -109,7 +109,7 @@ final readonly class GetBrandingHandler
                 'reason' => $failure::class,
             ]);
 
-            return self::productBranding();
+            return self::productBranding($this->fallbackLocales());
         }
     }
 
@@ -121,17 +121,39 @@ final readonly class GetBrandingHandler
      * camino normal: significa «no toques ningun token», que es exactamente lo
      * que hay que hacer cuando no se sabe lo que el cliente configuro.
      */
-    private static function productBranding(): InstallationBranding
+    private static function productBranding(LocalePolicy $locales): InstallationBranding
     {
         return new InstallationBranding(
             applicationName: SettingValue::productDefault(SettingKey::BRANDING_APP_NAME)->asText(),
             accentColor: null,
             logo: null,
-            locales: new LocalePolicy(
+            locales: $locales,
+        );
+    }
+
+    /**
+     * Los idiomas que se publican cuando la marca no se ha podido leer.
+     *
+     * **Los mismos que negocia la API**, no los de serie del catalogo. El
+     * puerto de idiomas ya tiene su propio respaldo —`app.locale` y
+     * `APP_SUPPORTED_LOCALES`, el mismo que usa `NegotiateLocale`— y no lanza
+     * con la base de datos caida. Con `['es']` del catalogo, una instalacion en
+     * ingles anunciaria un idioma que la API no le sirve y el quiosco no
+     * ofreceria el que si.
+     *
+     * Solo si hasta el puerto falla —un contenedor a medias— se cae al
+     * catalogo: una lista vacia dejaria al quiosco sin selector.
+     */
+    private function fallbackLocales(): LocalePolicy
+    {
+        try {
+            return $this->locales->current();
+        } catch (Throwable) {
+            return new LocalePolicy(
                 default: SettingValue::productDefault(SettingKey::LOCALE_DEFAULT)->asText(),
                 available: SettingValue::productDefault(SettingKey::LOCALE_AVAILABLE)->asTextList(),
-            ),
-        );
+            );
+        }
     }
 
     /**

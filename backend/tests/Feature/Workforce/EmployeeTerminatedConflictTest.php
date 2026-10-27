@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Shared\Infrastructure\Persistence\PostgresFailureTranslator;
 use App\Modules\Workforce\Application\UseCase\EmployeeWriteRetry;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DeadlockException;
@@ -149,7 +150,7 @@ it('responde 409 conflict, y no 500, si la modificacion se cruza dos veces segui
     $conexion->allows('transactionLevel')->andReturn(0);
     $conexion->allows('transaction')->andThrow($cruce);
     $log = new RecordingLogger;
-    app()->instance(EmployeeWriteRetry::class, new EmployeeWriteRetry($conexion, $log));
+    app()->instance(EmployeeWriteRetry::class, new EmployeeWriteRetry($conexion, $log, new PostgresFailureTranslator));
 
     Api::as($contexto['token'])
         ->patch('/api/v1/employees/'.$persona, ['email' => 'cruzado@hotel.example'])

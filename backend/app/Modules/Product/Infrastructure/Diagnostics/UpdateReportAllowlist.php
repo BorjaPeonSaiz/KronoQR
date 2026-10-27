@@ -16,7 +16,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  * PostgreSQL es el ejemplo que su propio comentario cita—. El informe se declara
  * limpio, y lo es **mientras nadie escriba en el sitio equivocado**.
  *
- * Esa es exactamente la clase de promesa que la ficha 5.9 prohibe confiar: era
+ * Esa es exactamente la clase de promesa en la que ADR-020 prohibe confiar: era
  * la unica seccion del paquete que se volcaba literal, sin lista de permitidos.
  * Un `say`/`err` mal puesto en una version futura de `update.sh` —o un mensaje
  * de error del motor que se cuele por `err`— acabaria en un fichero que el

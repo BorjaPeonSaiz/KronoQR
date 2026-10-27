@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use DateTimeImmutable;
 use Illuminate\Console\Command;
 use SensitiveParameter;
@@ -19,6 +20,11 @@ use SensitiveParameter;
  */
 abstract class AbstractManagementAccountCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `identity:*`. */
+    private const string TEXTS = 'console.identity_accounts';
+
     protected function stringOption(string $name): ?string
     {
         $value = $this->option($name);
@@ -59,10 +65,6 @@ abstract class AbstractManagementAccountCommand extends Command
         $this->line('  '.$password);
         $this->newLine();
 
-        $this->components->warn(
-            'Es una contrasena TEMPORAL: caduca el '.UtcInstant::wallTime($expiresAt).' UTC y su titular tendra que '
-            .'cambiarla al entrar. Anotala ahora: no se puede volver a consultar. Se entrega en mano, nunca por '
-            .'correo ni por mensajeria.'
-        );
+        $this->components->warn($this->text('temporary_password', ['expires' => UtcInstant::wallTime($expiresAt)]));
     }
 }

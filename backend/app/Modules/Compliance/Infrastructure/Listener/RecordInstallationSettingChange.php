@@ -75,7 +75,7 @@ final readonly class RecordInstallationSettingChange
                 // nombres de marca e idiomas (regla dura 21).
                 //
                 // **Salvo en una clave `confidential`**, donde no aparecen y en
-                // su lugar va `value_redacted` (tarea 3.3): `KIOSK_SERVICE_CODE`
+                // su lugar va `value_redacted`: `KIOSK_SERVICE_CODE`
                 // es un secreto compartido con cada tablet del hotel y este
                 // trail se enseña en una inspeccion. Que cambio, quien y cuando
                 // sigue estando, que es lo que RL-04 exige.

@@ -12,7 +12,7 @@ use DateTimeImmutable;
 /**
  * Persistencia del agregado `WorkDay`.
  *
- * Lo implementa la propia `Attendance/Infrastructure/Persistence` (tarea 1.4),
+ * Lo implementa la propia `Attendance/Infrastructure/Persistence`,
  * asi que es el unico de los cinco puertos del nucleo que puede hablar en tipos
  * del dominio de Attendance: los otros cuatro los sirve un satelite y por eso
  * solo pueden usar tipos de `Shared` o escalares (ADR-025, restriccion 2).

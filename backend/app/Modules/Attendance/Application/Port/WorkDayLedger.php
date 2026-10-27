@@ -10,7 +10,7 @@ use DateTimeImmutable;
 
 /**
  * Lectura **en bloque** del registro horario, para la revision diaria
- * (RF-PR-01, tarea 2.6).
+ * (RF-PR-01).
  *
  * **Por que no es un metodo mas de {@see WorkDayRepository}.** Aquel sirve al
  * fichaje: carga una jornada, la guarda y traduce las violaciones de RN-01 y

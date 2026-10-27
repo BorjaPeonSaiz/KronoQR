@@ -28,8 +28,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La deteccion de **patrones anomalos de uso de credencial** (RF-PR-06, RN-16,
- * tarea 3.11).
+ * La deteccion de **patrones anomalos de uso de credencial** (RF-PR-06, RN-16).
  *
  * Es la contrapartida explicita de haber descartado la biometria (ADR-009,
  * regla dura 20): el prestamo fisico de la tarjeta es el unico fraude que la
@@ -70,7 +69,7 @@ final readonly class DetectCredentialPatterns
 {
     public function __construct(
         private CredentialScans $scans,
-        /** Que hay ya en la bandeja sobre los indicios de cada persona (decision 13c). */
+        /** Que hay ya en la bandeja sobre los indicios de cada persona. */
         private AnomalousPatternHistory $history,
         private InstallationSiteProvider $sites,
         private OperationalSettingsProvider $settings,
@@ -148,7 +147,7 @@ final readonly class DetectCredentialPatterns
 
     /**
      * Que se ha hecho ya con los indicios de coincidencia de cada persona de la
-     * ventana (decision 13c de la ficha).
+     * ventana.
      *
      * **Una sola consulta por pasada**, con todos los empleados que aparecen en
      * los escaneos: preguntar por persona serian doscientos viajes para
@@ -222,7 +221,7 @@ final readonly class DetectCredentialPatterns
                 // No es una averia: es un indicio que no cabe en la bandeja
                 // porque otro distinto de la misma persona y el mismo dia ya
                 // ocupa esa cuadrupla. Seguir teniendo una sola incidencia es
-                // correcto; que nadie lo supiera, no (decision 13d).
+                // correcto; que nadie lo supiera, no.
                 $this->logger->warning('attendance.pattern_incident_collided', [
                     'employee_uuid' => $anomaly->employeeUuid,
                     'work_date' => $anomaly->workDate->isoDate,

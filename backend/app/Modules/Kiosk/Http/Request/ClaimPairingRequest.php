@@ -73,8 +73,8 @@ final class ClaimPairingRequest extends FormRequest
     }
 
     /**
-     * Huella opaca del origen de la peticion, para la recogida repetida
-     * (V6-KI-02): un HMAC-SHA256 de la direccion del cliente —la que deja
+     * Huella opaca del origen de la peticion, para la recogida repetida:
+     * un HMAC-SHA256 de la direccion del cliente —la que deja
      * `TrustProxies` tras el borde— con la clave de la aplicacion. **Nunca la
      * direccion**: lo que se guarda en `device_pairing_requests` no permite
      * recuperarla, ni siquiera probando las cuatro mil millones de IPv4, sin la

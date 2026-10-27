@@ -100,7 +100,7 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'application_errors_total',
         'compliance_profile_changes_total',
         'db_query_duration_seconds',
-        // ADR-045 (C5, C10): la conciliacion de ficheros generados. Una sola
+        // ADR-045, condiciones C5 y C10: la conciliacion de ficheros generados. Una sola
         // etiqueta, `class`, del catalogo cerrado `GeneratedFileClass`; nunca
         // `uuid`, nombre de fichero ni ruta. Es lo que soporte necesita para
         // contestar «la exportacion no se descarga» o «suena la alerta de
@@ -261,7 +261,7 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         $pattern = $prefix.$key.':*';
 
         $values = [];
-        // NULL y no CERO en la primera vuelta: `phpredis` recibe el cursor por
+        // NULL y no CERO en la primera iteracion: `phpredis` recibe el cursor por
         // referencia y trata un `0` de entrada como «el recorrido ya
         // termino», sin mirar una sola clave.
         $cursor = null;

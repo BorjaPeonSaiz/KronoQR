@@ -9,7 +9,7 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
 /**
- * `pin_resets_total{site}` sobre Redis (doc 02 §8.2, tarea 1.13).
+ * `pin_resets_total{site}` sobre Redis (doc 02 §8.2).
  *
  * **Redis y no el colector *textfile*, por lo mismo que
  * `Attendance\Infrastructure\Metrics\RedisScanMetrics`** —nombrado en prosa y no
@@ -17,8 +17,8 @@ use Throwable;
  * modulos que la frontera del §1.6 no concede—: lo
  * incrementa una peticion HTTP de un proceso que termina, y un contador en
  * memoria de un proceso que termina no lo lee nadie. `HINCRBY` es atomico y ya
- * hay Redis en el stack. El endpoint `/metrics` que lo publica es de la tarea
- * 3.1; hasta entonces el contador se acumula y las pruebas lo leen.
+ * hay Redis en el stack. El endpoint `/metrics` lo publica, y las pruebas lo
+ * leen directamente.
  *
  * **La unica etiqueta es el centro** (regla dura 21): nunca el empleado cuyo PIN
  * se restablecio. Una serie por persona seria un registro paralelo de a quien se
@@ -31,7 +31,7 @@ use Throwable;
  */
 final readonly class RedisPinMetrics implements PinMetrics
 {
-    /** Mismo prefijo que el resto de metricas para que la tarea 3.1 las reuna con un solo `SCAN`. */
+    /** Mismo prefijo que el resto de metricas para que `/metrics` las reuna con un solo `SCAN`. */
     public const string KEY_PREFIX = 'kronoqr:metrics:';
 
     public const string PIN_RESETS_TOTAL = self::KEY_PREFIX.'pin_resets_total';

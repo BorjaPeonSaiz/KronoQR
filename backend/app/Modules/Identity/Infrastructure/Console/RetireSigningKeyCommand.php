@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\RetireSigningKeyCommand as RetireSigningKeyInput;
 use App\Modules\Identity\Application\Exception\SigningKeyStillInUse;
 use App\Modules\Identity\Application\UseCase\RetireSigningKey;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -26,6 +27,11 @@ use Illuminate\Console\Command;
  */
 final class RetireSigningKeyCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:retire-key
         {key_id : Identificador de la clave saliente, dos caracteres (por ejemplo a3)}';
 
@@ -36,7 +42,7 @@ final class RetireSigningKeyCommand extends Command
         $keyId = trim((string) $this->argument('key_id'));
 
         if ($keyId === '') {
-            $this->error('Hace falta el key_id de la clave que se retira.');
+            $this->error($this->text('retire_key.key_required'));
 
             return self::INVALID;
         }
@@ -49,17 +55,13 @@ final class RetireSigningKeyCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info(sprintf(
-            'La clave %s ya no firma ninguna credencial activa (%d tarjetas en total a lo largo de su vida).',
-            $report->keyId,
-            $report->signedCredentials,
-        ));
+        $this->info($this->text('retire_key.retired', [
+            'key' => $report->keyId,
+            'count' => $report->signedCredentials,
+        ]));
 
         $this->line('');
-        $this->line('Ultimo paso, en el servidor:');
-        $this->line('  - Vacia QR_SIGNING_KEY_PREVIOUS_ID y QR_SIGNING_KEY_PREVIOUS.');
-        $this->line('  - Reinicia la aplicacion y comprueba que se ficha con normalidad.');
-        $this->line('  - Destruye la copia de la clave retirada del gestor de secretos.');
+        $this->paragraph('retire_key.last_step');
 
         return self::SUCCESS;
     }

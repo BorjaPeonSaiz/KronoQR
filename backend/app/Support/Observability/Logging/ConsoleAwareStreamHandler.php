@@ -12,8 +12,7 @@ use Throwable;
 /**
  * El manejador del canal `stderr`, el primario del producto (doc 02 §8.2.1): la
  * salida de error del proceso, SALVO en una orden de consola lanzada a mano con
- * `docker compose exec` dentro de un contenedor ya en marcha (V1-PL-01,
- * V21-4-PL-2, I11; decision del propietario del 20-10-2026).
+ * `docker compose exec` dentro de un contenedor ya en marcha (decision del propietario del 20-10-2026).
  *
  * ## El hueco que cierra
  *

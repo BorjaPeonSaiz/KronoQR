@@ -8,15 +8,14 @@ use App\Http\Middleware\NegotiateLocale;
 use App\Support\Health\LicenseStateProbe;
 
 /**
- * Los idiomas con los que el borde HTTP negocia cada respuesta (RF-PD-08,
- * tarea 5.8).
+ * Los idiomas con los que el borde HTTP negocia cada respuesta (RF-PD-08).
  *
  * ## Por que existe esta interfaz teniendo ya `LocalePolicyProvider`
  *
  * Porque su consumidor es {@see NegotiateLocale}, que esta
  * **fuera de los modulos y no puede depender de ninguno**: Deptrac no deja que
- * `AppFramework` alcance `App\Modules\*`, y esa frontera lleva intacta desde la
- * tarea 0.2. La direccion que si esta admitida es la contraria —un modulo
+ * `AppFramework` alcance `App\Modules\*`, y esa frontera no se ha roto nunca.
+ * La direccion que si esta admitida es la contraria —un modulo
  * alcanza el armazon—, que es exactamente la que ya usa
  * {@see LicenseStateProbe} para el estado de licencia de
  * `GET /health`.
@@ -48,4 +47,12 @@ interface NegotiableLocales
      * @return list<string>
      */
     public function availableLocales(): array;
+
+    /**
+     * La forma en la lista del idioma pedido si esta activo, o `null`. Sin
+     * distinguir mayusculas: `ES` es `es`. Es el mismo criterio de la
+     * importacion de plantilla (`Shared\Application\Support\ActiveLocaleMatch`),
+     * que este lado no puede nombrar; lo aplica quien implementa.
+     */
+    public function activeLocaleFor(string $requested): ?string;
 }

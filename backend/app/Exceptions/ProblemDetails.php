@@ -23,7 +23,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
  * `ServiceProvider` y llaman aqui para el formato.
  *
  * **Lo que NO se hace aqui: el rechazo de escaneo.** Ese tiene su propia forma,
- * generica y de tiempo constante (regla dura 17, tarea 1.7), y no puede
+ * generica y de tiempo constante (regla dura 17), y no puede
  * construirse con una funcion que acepta `detail` libre.
  */
 final class ProblemDetails
@@ -110,8 +110,7 @@ final class ProblemDetails
     public const string TYPE_INVALID_REQUEST = 'urn:kronoqr:problem:invalid-request';
 
     /**
-     * Ya hay una exportacion integra `pending` o `running` (**RF-PD-14**, tarea
-     * 5.10).
+     * Ya hay una exportacion integra `pending` o `running` (**RF-PD-14**).
      *
      * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409`, porque a
      * quien lo recibe le cambia por completo lo que tiene que hacer: el generico
@@ -135,7 +134,7 @@ final class ProblemDetails
 
     /**
      * Quien pide ya tiene un informe en diferido `pending` o `running`
-     * (**RF-IN-06**, tarea 3.9).
+     * (**RF-IN-06**).
      *
      * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409`, y **tipo
      * distinto del de la exportacion integra** aunque se parezcan: aquel dice
@@ -150,7 +149,7 @@ final class ProblemDetails
     public const string TYPE_REPORT_EXPORT_IN_PROGRESS = 'urn:kronoqr:problem:report-export-in-progress';
 
     /**
-     * Se pidio cancelar un informe en diferido que ya termino (**V5-PA-4**).
+     * Se pidio cancelar un informe en diferido que ya termino.
      *
      * `409` y no `422`: la peticion esta bien formada, lo que no admite es el
      * estado de la fila —`completed`, `failed` o `purged`—. El cuerpo lleva la
@@ -208,8 +207,7 @@ final class ProblemDetails
 
     /**
      * El `{uuid}` de la correccion existio y **ya no es la version vigente**:
-     * otra persona lo corrigio o lo anulo antes (ADR-035, tarea 5.11b tras la
-     * revision de codigo).
+     * otra persona lo corrigio o lo anulo antes (ADR-035).
      *
      * **Tipo propio y no `TYPE_CONFLICT`**, aunque los tres conflictos de la
      * correccion sean `409`, porque el panel tiene que reaccionar distinto a
@@ -279,7 +277,7 @@ final class ProblemDetails
 
     /**
      * El acento de marca nuevo no llega a 4,5:1 sobre las superficies claras y no viene
-     * confirmado (MB2, `PATCH /api/v1/settings`).
+     * confirmado (`PATCH /api/v1/settings`).
      *
      * `422` con el error colgado de `settings.BRANDING_ACCENT_COLOR`, como una
      * validacion, y `type` propio por el mismo motivo que el de arriba: el panel
@@ -319,7 +317,7 @@ final class ProblemDetails
      *
      * **Nunca lleva el mensaje de la excepcion**, tampoco con `APP_DEBUG=true`:
      * el de una `QueryException` trae el SQL y los valores enlazados, y entre
-     * ellos codigos de empleado (CH4, regla dura 21). El detalle esta en el log y
+     * ellos codigos de empleado (regla dura 21). El detalle esta en el log y
      * en `error_events`, agrupado por huella (RF-PD-15).
      */
     public const string TYPE_INTERNAL_ERROR = 'urn:kronoqr:problem:internal-error';
@@ -501,7 +499,7 @@ final class ProblemDetails
 
     /**
      * `409` de la exportacion integra, **con la que ya esta en curso dentro**
-     * (RF-PD-14, tarea 5.10).
+     * (RF-PD-14).
      *
      * El cuerpo lleva `export` porque es lo unico util que el panel puede hacer
      * con este error: enseñar la exportacion que hay, con su estado y su hora,
@@ -566,7 +564,7 @@ final class ProblemDetails
     }
 
     /**
-     * `409` al cancelar un informe en diferido que ya termino (V5-PA-4).
+     * `409` al cancelar un informe en diferido que ya termino.
      *
      * @param  array<string, mixed>  $export  La fila tal como esta, con la forma de `ReportExport`.
      */
@@ -734,7 +732,7 @@ final class ProblemDetails
 
     /**
      * Una funcionalidad **accesoria** no esta disponible con esta licencia
-     * (ADR-019, ADR-023, RF-PD-05, tarea 5.3).
+     * (ADR-019, ADR-023, RF-PD-05).
      *
      * ## `402` y no `403`
      *
@@ -1017,8 +1015,8 @@ final class ProblemDetails
     }
 
     /**
-     * El `500` de cualquier excepcion que ningun `render` especifico traduce
-     * (CH4). Ver {@see self::TYPE_INTERNAL_ERROR}.
+     * El `500` de cualquier excepcion que ningun `render` especifico traduce.
+     * Ver {@see self::TYPE_INTERNAL_ERROR}.
      */
     public static function internalError(): JsonResponse
     {

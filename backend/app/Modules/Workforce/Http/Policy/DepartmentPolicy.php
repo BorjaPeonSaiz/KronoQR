@@ -12,7 +12,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * - **Ver**: `admin`, `rrhh` y `responsable_departamento` (decision del
  *   propietario de 02-10-2026). **El `auditor` no**, desde la decision del
- *   13-10-2026 (RF-ID-02, bloque 25 de la 2.2.1): su unica funcion en la API es
+ *   13-10-2026 (RF-ID-02): su unica funcion en la API es
  *   la exportacion para la Inspeccion. Se le rechaza aqui por rol y no solo por
  *   ambito porque un token emitido antes del cambio conserva `attendance:read`
  *   hasta que caduca, y con el la ruta le dejaria pasar.

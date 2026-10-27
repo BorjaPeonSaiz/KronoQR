@@ -8,7 +8,7 @@ use Illuminate\Http\Client\Factory as HttpClient;
 use Throwable;
 
 /**
- * El envio a Loki por HTTP (decision 8 de la ficha 3.1).
+ * El envio a Loki por HTTP.
  *
  * ## Esto NO es un canal hacia el fabricante
  *

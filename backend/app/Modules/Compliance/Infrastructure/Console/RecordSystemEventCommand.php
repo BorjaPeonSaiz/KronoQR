@@ -10,13 +10,14 @@ use App\Modules\Compliance\Domain\Exception\ComplianceDomainException;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 use JsonException;
 use Throwable;
 
 /**
  * `php artisan compliance:record-system-event` — el asiento de auditoria que
- * deja el instalador (**RF-PD-10**, RL-04, RS-07, regla dura 6, tarea 5.7).
+ * deja el instalador (**RF-PD-10**, RL-04, RS-07, regla dura 6).
  *
  * ## Quien lo llama y por que existe
  *
@@ -63,6 +64,11 @@ use Throwable;
  */
 final class RecordSystemEventCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`. */
+    private const string TEXTS = 'console.record_system_event';
+
     /** No se pudo escribir el asiento, pero el hecho ocurrio. */
     private const int EXIT_NOT_RECORDED = 2;
 
@@ -78,7 +84,7 @@ final class RecordSystemEventCommand extends Command
         $action = AuditAction::tryFrom($name);
 
         if ($action === null || ! $action->requiresSystemActor()) {
-            $this->error('Accion desconocida: «'.$name.'». Solo se admiten las acciones «system.*» del catalogo.');
+            $this->error($this->text('unknown_action', ['action' => $name]));
 
             return self::FAILURE;
         }
@@ -86,13 +92,13 @@ final class RecordSystemEventCommand extends Command
         try {
             $data = $this->data();
         } catch (JsonException $exception) {
-            $this->error('El valor de --data no es JSON valido: '.$exception->getMessage());
+            $this->error($this->text('invalid_json', ['detail' => $exception->getMessage()]));
 
             return self::FAILURE;
         }
 
         if ($data === null) {
-            $this->error('--data debe ser un objeto JSON con los datos del asiento.');
+            $this->error($this->text('data_required'));
 
             return self::FAILURE;
         }
@@ -109,7 +115,7 @@ final class RecordSystemEventCommand extends Command
             // Cualquier otra cosa es que NO se pudo escribir. Se distingue del
             // caso anterior a proposito: uno lo arregla quien invoca y el otro
             // es un incidente de la instalacion.
-            $this->error('No se pudo escribir el asiento: '.$exception->getMessage());
+            $this->error($this->text('not_recorded', ['detail' => $exception->getMessage()]));
 
             return self::EXIT_NOT_RECORDED;
         }

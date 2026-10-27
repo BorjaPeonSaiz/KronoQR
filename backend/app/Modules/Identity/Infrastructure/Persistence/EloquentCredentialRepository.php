@@ -49,8 +49,7 @@ final readonly class EloquentCredentialRepository implements CredentialRepositor
      * también `uuid`, `employee_id`, `key_id`, `secret_hash` e `issued_at`: son
      * inmutables desde que se crea la fila, y un `update()` de todas las columnas
      * las deja abiertas a reescritura por cualquier caso de uso futuro que llame a
-     * `save()` con una entidad mal construida, sin que la base de datos lo impida
-     * (revisión de seguridad de la tarea 1.5).
+     * `save()` con una entidad mal construida, sin que la base de datos lo impida.
      *
      * La impresión y la entrega **no pasan por aquí** y tienen sus propios
      * métodos: las dos necesitan una condición en el `WHERE` que decida quién

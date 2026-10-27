@@ -10,7 +10,7 @@ use DateTimeImmutable;
 
 /**
  * Publica el desenlace de la pasada del resumen semanal para el colector
- * *textfile* de `node-exporter` (doc 02 §8.2, RF-PR-05, tarea 3.12).
+ * *textfile* de `node-exporter` (doc 02 §8.2, RF-PR-05).
  *
  * ```
  * weekly_summary_last_run_timestamp_seconds 1774240500

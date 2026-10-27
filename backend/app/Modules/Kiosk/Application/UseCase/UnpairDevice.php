@@ -119,8 +119,7 @@ final readonly class UnpairDevice
 
         // El veredicto lo calcula la MISMA clase que el panel y la consola, y
         // sobre el estado ya revocado: `revoked` no cuenta para ninguna alerta,
-        // que es justo lo que el panel tiene que pintar en cuanto se desvincula
-        // (decision 2 de la ficha 3.3).
+        // que es justo lo que el panel tiene que pintar en cuanto se desvincula.
         return new DeviceView($device, KioskHealthRow::of(
             $device,
             $this->clock->now(),

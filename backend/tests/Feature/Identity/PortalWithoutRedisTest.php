@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
+use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Infrastructure\Adapter\RedisPdfRenderingSlots;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
@@ -122,10 +123,7 @@ it('responde 503 al PDF con Redis caido, remitiendo al CSV y sin nombrar la depe
     // El embudo real delante de un motor de mentira, sobre el Redis caido.
     app()->instance(ReportDocumentRenderer::class, new ConcurrencyLimitedReportRenderer(
         new FakeReportDocumentRenderer,
-        app(Redis::class),
-        app(LoggerInterface::class),
-        app(PdfRenderingMetrics::class),
-        2,
+        new RedisPdfRenderingSlots(app(Redis::class), app(LoggerInterface::class), app(PdfRenderingMetrics::class), 2),
         0,
     ));
 

@@ -13,7 +13,7 @@ use Psr\Log\LoggerInterface;
  * RF-PD-07).
  *
  * En el borde, junto al controlador. El span del acto lo abre el caso de uso
- * con `UseCaseInstrumentation`, la medida comun (V1-RV-03); aqui se añaden al
+ * con `UseCaseInstrumentation`, la medida comun; aqui se añaden al
  * span en curso los atributos que solo conoce la peticion y se escribe el log
  * con su `trace_id`.
  *

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de la importacion masiva de plantilla (RF-GP-05, tarea 5.5).
+ * Textos de la importacion masiva de plantilla (RF-GP-05).
  *
  * LOS LEE QUIEN ESTA CARGANDO LA PLANTILLA DE UN HOTEL, normalmente el día antes
  * de abrir y con cuarenta líneas delante. Por eso cada mensaje dice **qué hacer

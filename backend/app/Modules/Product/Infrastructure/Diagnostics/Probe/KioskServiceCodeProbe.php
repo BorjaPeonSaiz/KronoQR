@@ -10,8 +10,7 @@ use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use Throwable;
 
 /**
- * Sonda `kiosk.service_code` de `product:doctor` (**RF-PD-13**, RF-KI-08,
- * tarea 3.3, decision 7).
+ * Sonda `kiosk.service_code` de `product:doctor` (**RF-PD-13**, RF-KI-08).
  *
  * ## Que responde, y por que hace falta preguntarlo
  *
@@ -45,7 +44,7 @@ use Throwable;
  * codigo. El `try` cubre lo demas y sale como aviso: `doctor` se ejecuta cuando
  * algo esta roto, y una sonda que revienta es inutil justo entonces.
  *
- * **Ni el codigo ni su huella salen de aqui** (decision 6). El hallazgo dice
+ * **Ni el codigo ni su huella salen de aqui**. El hallazgo dice
  * `configured: true|false` y nada mas; este informe viaja al fabricante dentro
  * del paquete de diagnostico (ADR-020, regla dura 16).
  */

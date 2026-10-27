@@ -94,7 +94,7 @@ final readonly class DatabaseAuditTrail implements AuditChainHead, AuditTrail
     }
 
     /**
-     * La punta de la cadena **ahora** (puerto {@see AuditChainHead}, tarea 5.7).
+     * La punta de la cadena **ahora** (puerto {@see AuditChainHead}).
      *
      * Es publica porque `update.sh` necesita la huella de la cadena que verifico
      * antes de tocar nada y la de despues de migrar, para escribirlas en el

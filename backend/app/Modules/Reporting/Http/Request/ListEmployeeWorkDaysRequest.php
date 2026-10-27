@@ -56,7 +56,7 @@ final class ListEmployeeWorkDaysRequest extends FormRequest
     {
         return [
             ...$this->workDateRangeRules(),
-            // Por jornadas enteras (V5-PA-2). Mismo techo que el resto de listas
+            // Por jornadas enteras. Mismo techo que el resto de listas
             // paginadas del contrato; el valor por omision es el mes del panel.
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],

@@ -13,7 +13,7 @@ use LogicException;
 
 /**
  * El cuadro de impacto escrito en un fichero de la cola de informes
- * (**RF-IN-08**, V5-PA-4).
+ * (**RF-IN-08**).
  *
  * **Los mismos tres escritores** que la descarga sincrona
  * (`AdoptionReportDocument`), con las mismas tres decisiones tomadas igual: la

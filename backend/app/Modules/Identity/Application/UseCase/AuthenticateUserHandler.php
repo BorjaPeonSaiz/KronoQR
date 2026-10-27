@@ -21,7 +21,7 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
  * Acceso al panel de gestion (RF-ID-01): comprueba credenciales, aplica el
  * bloqueo por intentos y emite el token con los ambitos del rol.
  *
- * **Con segundo factor** (RS-06, tarea 2.1). Entre la comprobacion de la
+ * **Con segundo factor** (RS-06). Entre la comprobacion de la
  * contrasena y la emision del token hay ahora una bifurcacion: si la cuenta debe
  * llevar TOTP —por su rol o porque ya lo activo—, este caso de uso devuelve una
  * **sesion pendiente** en lugar de una sesion, y quien emite la de verdad es

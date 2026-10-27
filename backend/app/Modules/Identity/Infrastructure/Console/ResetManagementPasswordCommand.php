@@ -38,12 +38,12 @@ final class ResetManagementPasswordCommand extends AbstractManagementAccountComm
         $outcome = $uuid === null ? null : $handler->handle(new ResetPassword($uuid, $this->reason()));
 
         if ($outcome === null || $outcome->status !== ManagementPasswordResetStatus::Reset) {
-            $this->components->error('No existe ninguna cuenta de gestion activa con ese correo.');
+            $this->components->error($this->text('reset_password.not_found'));
 
             return self::FAILURE;
         }
 
-        $this->components->info('Contrasena restablecida. Las sesiones abiertas de esa cuenta han dejado de valer.');
+        $this->components->info($this->text('reset_password.done'));
 
         $this->showTemporaryPassword($outcome->password()->plain, $outcome->expiresAt());
 

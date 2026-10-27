@@ -21,16 +21,15 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * de la capa de aplicacion, y de ahi que el controlador de la descarga invoque esto
  * en lugar de llamar al publicador. Con la llamada en el controlador, el dia que la
  * descarga se pudiera pedir tambien desde un comando —un envio programado del
- * cuadro, que la decision 10 de la ficha deja fuera de alcance por ahora— habria que
- * acordarse de repetirla.
+ * cuadro, que hoy no existe— habria que acordarse de repetirla.
  *
  * ## No hay transaccion aqui, y es deliberado
  *
  * El unico suscriptor es el asiento de `audit_log`, que toma el candado de la cadena
  * de hash en **su propia** transaccion corta (ADR-010). Envolver esto en otra
  * transaccion solo alargaria el tiempo que ese candado —por el que pasa cada
- * fichaje— se queda retenido, que es exactamente el fallo que la decision 13 de la
- * ficha 3.12 corrigio en el resumen semanal. Aqui no hay nada mas que persistir: el
+ * fichaje— se queda retenido, que es exactamente el fallo que hubo que corregir
+ * en el resumen semanal. Aqui no hay nada mas que persistir: el
  * fichero no se guarda en el servidor.
  *
  * ## Se llama ANTES de entregar el fichero

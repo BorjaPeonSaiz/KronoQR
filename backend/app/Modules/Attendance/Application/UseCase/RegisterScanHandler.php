@@ -38,6 +38,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
@@ -47,7 +48,6 @@ use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -62,7 +62,7 @@ use RuntimeException;
  * pide revision humana es `ClockingPolicy` (RN-07, RN-08). Aqui no hay ni un
  * `if` con una regla de negocio dentro.
  *
- * ## El orden de la tarea 3.5, y por que es ese
+ * ## El orden de lectura, y por que es ese
  *
  * Desde RF-AT-12 la decision depende de tres hechos y no de uno, asi que
  * {@see processResolved()} lee en este orden: **turno abierto → ultimo aceptado
@@ -96,7 +96,7 @@ use RuntimeException;
  * 7). Se **recalcula** como suma de los tramos vigentes, nunca se incrementa: un
  * acumulador seria correcto hasta la primera correccion, y a partir de ahi
  * mentiria en la direccion mas cara. Que la promesa viva en el repositorio y no
- * aqui es deliberado: la correccion de la tarea 1.15 tambien guarda jornadas, y
+ * aqui es deliberado: la correccion manual tambien guarda jornadas, y
  * asi obtiene la proyeccion sin tener que acordarse.
  *
  * **La auditoria (6) y los eventos (7) son la misma llamada, y ocurre DENTRO de
@@ -111,7 +111,7 @@ use RuntimeException;
  * ocurre, porque el segundo se puede corregir.
  *
  * > Consecuencia para quien anada un listener: **si tiene efectos fuera de la
- * > base de datos** —difundir por Reverb al panel en vivo (tarea 1.11), enviar
+ * > base de datos** —difundir por Reverb al panel en vivo, enviar
  * > una notificacion— tiene que ser un listener encolado con `$afterCommit`.
  * > Sin eso veria una escritura que todavia puede revertir.
  *
@@ -202,12 +202,13 @@ final readonly class RegisterScanHandler implements ScanRegistration
         private EventPublisher $events,
         private ScanMetrics $metrics,
         private Clock $clock,
+        private UuidGenerator $uuids,
     ) {}
 
     /**
      * @param  CredentialResolution|null  $resolution  Quien es el portador, si ya se sabe.
      *
-     * **Existe por el fichaje de respaldo por PIN** (RF-AT-11, tarea 1.12), que
+     * **Existe por el fichaje de respaldo por PIN** (RF-AT-11), que
      * identifica a la persona por un camino distinto —codigo de empleado y PIN
      * contra `pin_hash`— pero hace exactamente lo mismo a partir de ahi. Pasarla
      * ya resuelta es lo que permite que las dos vias compartan **este** metodo y
@@ -216,7 +217,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * la auditoria, los reintentos de carrera y la idempotencia por UNIQUE son
      * los mismos, y un segundo camino seria un segundo sitio donde equivocarse
      * con cualquiera de ellos —que ya paso una vez con `worked_minutes` en el
-     * reenvio (tarea 1.7)—.
+     * reenvio—.
      *
      * Nula en el camino normal: entonces la resuelve el `CredentialResolver`.
      */
@@ -292,7 +293,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * quien tiene trabajo CARO o CON EFECTOS antes de llamar a `handle()` y no
      * debe repetirlo en un reenvio: el fichaje por PIN, que sin esto volvia a
      * pagar un bcrypt y a sumar un fallo al bloqueo por cada reenvio de la cola
-     * offline (PIN-02, regla dura 8).
+     * offline (regla dura 8).
      */
     public function replayOf(string $scanId): ?RegisterScanResult
     {
@@ -300,7 +301,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
     }
 
     /**
-     * `scans_by_origin_total{origin}` (doc 02 §8.2, RF-IN-08, tarea 3.1).
+     * `scans_by_origin_total{origin}` (doc 02 §8.2, RF-IN-08).
      *
      * ## Por que en el caso de uso y no en la telemetria del borde
      *
@@ -610,7 +611,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
             // `audit_log` tiene que poder distinguir una entrada de una vuelta
             // de pausa, y `scan_events` no es solo-append (ADR-024, RL-04).
             $entry = $workDay->clockIn(
-                Str::uuid7()->toString(),
+                $this->uuids->next(),
                 $command->occurredAt,
                 $command->origin,
                 $resolution->action,

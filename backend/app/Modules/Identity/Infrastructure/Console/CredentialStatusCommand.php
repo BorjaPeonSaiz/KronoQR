@@ -8,9 +8,9 @@ use App\Modules\Identity\Application\Query\CredentialStatusQuery;
 use App\Modules\Identity\Application\UseCase\CredentialStatusBoard;
 use App\Modules\Identity\Application\UseCase\CredentialStatusRow;
 use App\Modules\Identity\Domain\Model\Credential;
-use App\Modules\Identity\Domain\ValueObject\CredentialLifecycleStatus;
 use App\Modules\Identity\Domain\ValueObject\SiteCredentialCoverage;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
 /**
@@ -46,6 +46,11 @@ use Illuminate\Console\Command;
  */
 final class CredentialStatusCommand extends Command
 {
+    use SpeaksInstallationLanguage;
+
+    /** Seccion de `lang/*\/console.php`, compartida por las ordenes `credentials:*`. */
+    private const string TEXTS = 'console.credentials';
+
     protected $signature = 'credentials:status
         {--pending : Solo quien todavia no tiene la tarjeta en la mano}
         {--key-id= : Solo quien sigue fichando con una tarjeta firmada por esa clave (RF-QR-07)}
@@ -82,10 +87,10 @@ final class CredentialStatusCommand extends Command
                 : $board->handle($query);
         } catch (InstallationSiteMissing) {
             // Antes del asistente de puesta en marcha no hay centro, y sin centro
-            // no hay ninguna credencial que contar (I11). Es un estado de la
+            // no hay ninguna credencial que contar. Es un estado de la
             // instalacion, no un fallo: ni excepcion en pantalla ni linea ERROR en
             // el log, y 0 para que la tarea programada no lo cuente como fallida.
-            $this->line('La instalacion todavia no tiene centro: completa antes el asistente de puesta en marcha, en el panel. Hasta entonces no hay credenciales que mostrar.');
+            $this->line($this->text('status.no_site'));
 
             return self::SUCCESS;
         }
@@ -98,7 +103,7 @@ final class CredentialStatusCommand extends Command
 
         if ($report->pendingPrint() > 0) {
             $this->line('');
-            $this->line('Para imprimirlas: php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf');
+            $this->line($this->text('status.print_hint'));
         }
 
         return self::SUCCESS;
@@ -111,25 +116,25 @@ final class CredentialStatusCommand extends Command
     {
         if ($rows === [] && $keyId !== null) {
             // La frase que autoriza el ultimo paso de una rotacion (§5.3).
-            $this->info('Nadie ficha ya con una tarjeta firmada por la clave '.$keyId.'.');
-            $this->line('Se puede retirar: php artisan credentials:retire-key '.$keyId);
+            $this->info($this->text('status.key_unused', ['key' => $keyId]));
+            $this->line($this->text('status.can_retire', ['key' => $keyId]));
 
             return;
         }
 
         if ($rows === []) {
-            $this->info('Todo el mundo tiene su tarjeta entregada.');
+            $this->info($this->text('status.all_delivered'));
 
             return;
         }
 
         $this->table(
-            ['Empleado', 'Codigo', 'Departamento', 'Estado', 'Credencial'],
-            array_map(static fn (CredentialStatusRow $row): array => [
+            $this->texts('status.columns'),
+            array_map(fn (CredentialStatusRow $row): array => [
                 $row->employee->fullName,
                 $row->employee->employeeCode,
                 $row->employee->departmentName ?? '—',
-                self::label($row->status),
+                $this->text('status.states.'.$row->status->value),
                 $row->credential instanceof Credential ? $row->credential->uuid : '—',
             ], $rows),
         );
@@ -137,27 +142,23 @@ final class CredentialStatusCommand extends Command
 
     private function renderCoverage(SiteCredentialCoverage $coverage): void
     {
-        $this->line(sprintf(
-            '%s — sin tarjeta entregada: %d de %d · pendientes de imprimir: %d',
-            $coverage->siteName,
-            $coverage->withoutDeliveredCredential,
-            $coverage->employees,
-            $coverage->pendingPrint,
-        ));
+        $this->line($this->text('status.coverage', [
+            'site' => $coverage->siteName,
+            'without' => $coverage->withoutDeliveredCredential,
+            'employees' => $coverage->employees,
+            'pending' => $coverage->pendingPrint,
+        ]));
 
         if ($coverage->unknownKeyCards !== []) {
             // Primero y en rojo: es lo unico de esta salida que significa que
-            // hay gente que NO PUEDE FICHAR ahora mismo (revision de seguridad
-            // de la 2.12). Lo demas son procesos en marcha.
+            // hay gente que NO PUEDE FICHAR ahora mismo. Lo demas son procesos
+            // en marcha.
             foreach ($coverage->unknownKeyIds() as $keyId) {
-                $this->error(sprintf(
-                    'AVISO: %d tarjeta(s) activa(s) firmada(s) con la clave %s, que ya no esta configurada. '
-                    .'Esas personas no pueden fichar con tarjeta.',
-                    $coverage->unknownKeyCards[$keyId],
-                    $keyId,
-                ));
-                $this->line('  Quienes son:   php artisan credentials:status --key-id='.$keyId);
-                $this->line('  Como se arregla: docs/runbooks/rotacion-clave-qr.md §6');
+                $this->error($this->text('status.unknown_key', [
+                    'count' => $coverage->unknownKeyCards[$keyId],
+                    'key' => $keyId,
+                ]));
+                $this->paragraph('status.unknown_key_help', ['key' => $keyId]);
             }
         }
 
@@ -165,27 +166,11 @@ final class CredentialStatusCommand extends Command
             // El avance de la reimpresion, en una linea. Se pinta siempre que
             // haya una rotacion abierta, aunque no se haya filtrado por clave:
             // quien mira el estado tiene que enterarse de que hay una en curso.
-            $this->line(sprintf(
-                'Rotacion en curso: %d de %d siguen fichando con la clave %s',
-                $coverage->pendingReprint,
-                $coverage->employees,
-                $coverage->retiringKeyId,
-            ));
+            $this->line($this->text('status.rotation', [
+                'pending' => $coverage->pendingReprint,
+                'employees' => $coverage->employees,
+                'key' => $coverage->retiringKeyId,
+            ]));
         }
-    }
-
-    /**
-     * Los textos de la consola van en español porque el operador los lee; el
-     * valor que viaja por la API es el del enum, en ingles (doc 02 §3.5).
-     */
-    private static function label(CredentialLifecycleStatus $status): string
-    {
-        return match ($status) {
-            CredentialLifecycleStatus::NO_CREDENTIAL => 'Sin credencial',
-            CredentialLifecycleStatus::PENDING_PRINT => 'Pendiente de imprimir',
-            CredentialLifecycleStatus::PENDING_DELIVERY => 'Pendiente de entregar',
-            CredentialLifecycleStatus::DELIVERED => 'Entregada',
-            CredentialLifecycleStatus::REVOKED => 'Revocada',
-        };
     }
 }

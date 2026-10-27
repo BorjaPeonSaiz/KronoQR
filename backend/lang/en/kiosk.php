@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /*
- * Kiosk and pairing texts (RF-PD-06, task 5.6) and the `php artisan
- * kiosk:health` report (RF-PA-07, task 5.11).
+ * Kiosk and pairing texts (RF-PD-06) and the `php artisan
+ * kiosk:health` report (RF-PA-07).
  *
  * WHAT BELONGS HERE. Only messages a PERSON reads in a management form or in the
  * console. The generic rejections —`PairingRejected` and `PairingCodeRejected`—
@@ -55,7 +55,7 @@ return [
         ],
 
         /*
-         * The tablet battery (task 3.3).
+         * The tablet battery.
          *
          * `unknown` is NOT zero: it means "this browser does not report it",
          * which is every browser other than Chrome on Android. Printing "0 %"

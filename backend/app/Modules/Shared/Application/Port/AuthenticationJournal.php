@@ -146,7 +146,7 @@ interface AuthenticationJournal
      * Escribe `auth.logged_out` en el log tecnico **en todos los canales** y el
      * asiento `auth.logout` solo en los que {@see AuthChannel::sessionEventsAreAudited()}
      * autoriza. Sin la linea del log, el cierre de sesion del portal no dejaba
-     * ningun rastro (PO1, 2.2.0).
+     * ningun rastro (2.2.0).
      *
      * @param  string|null  $subjectUuid  UUID publico de quien cierra sesion —cuenta de
      *                                    gestion o empleado del portal—, o `null` si el

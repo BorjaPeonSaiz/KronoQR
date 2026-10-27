@@ -12,8 +12,7 @@ use Throwable;
 
 /**
  * Un span `CLIENT` por consulta SQL: el ultimo tramo de la promesa del §8.1,
- * *«desde el `fetch` del navegador del quiosco hasta la consulta SQL»*
- * (decision 6 de la ficha 3.1).
+ * *«desde el `fetch` del navegador del quiosco hasta la consulta SQL»*.
  *
  * ## Los valores enlazados NO entran, y no es una precaucion generica
  *
@@ -74,10 +73,9 @@ final class DatabaseSpans
                 'postgresql '.$operation,
                 SpanKind::KIND_CLIENT,
                 [
-                    // Nombres ESTABLES de la convencion semantica 1.38 (tarea
-                    // 3.2, decision 12). La 3.1 los dejo como `db.system` y
-                    // `db.operation` —los nombres de la ficha— con la nota de que
-                    // se cambiaban con los cuadros de mando o en ninguna parte:
+                    // Nombres ESTABLES de la convencion semantica 1.38, y no
+                    // `db.system` y `db.operation`: se cambiaban con los
+                    // cuadros de mando o en ninguna parte:
                     // renombrar un atributo cuando ya hay paneles y consultas
                     // encima cuesta mucho mas que hacerlo ahora, que no hay
                     // ninguna. `db.query.text` ya era el nombre estable;

@@ -31,8 +31,8 @@ use DateTimeImmutable;
  * modulo Compliance** (`AuditMetrics`, sin importarlo aqui: Identity no puede
  * depender de Compliance): el caso de uso no sabe si detras hay un fichero para
  * el colector *textfile* de `node-exporter`, un registro de `promphp` o nada.
- * Hoy es lo primero —`/metrics` lo expone la aplicacion a partir de la tarea
- * 3.1—; en las pruebas es un doble que cuenta y permite afirmar sobre lo medido
+ * Hoy es lo primero —`/metrics` lo expone la aplicacion—; en las pruebas es un
+ * doble que cuenta y permite afirmar sobre lo medido
  * sin tocar el disco.
  */
 interface CredentialMetrics

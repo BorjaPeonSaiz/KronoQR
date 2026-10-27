@@ -60,7 +60,7 @@ final class MyWorkDayController extends Controller
             static fn () => $workDays->handle($query),
         );
 
-        // `no-store` (V4-PO-1): el portal se abre en el ordenador compartido de
+        // `no-store`: el portal se abre en el ordenador compartido de
         // la sala de personal, y el `no-cache, private` por omision deja que el
         // navegador guarde en disco las horas de quien acaba de salir.
         return (new EmployeeWorkDaysResource($journal, $workDays->todayIn($journal->timeZone)))

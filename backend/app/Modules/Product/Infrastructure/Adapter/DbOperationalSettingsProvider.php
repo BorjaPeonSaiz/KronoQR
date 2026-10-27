@@ -15,11 +15,11 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * Los umbrales **operativos** del centro, resueltos desde
  * `installation_settings` (RF-PD-01, regla dura 14, ADR-025).
  *
- * **Por que existia ya antes de la tarea 5.1.** Porque sin el, el primer fichaje
- * no tenia con que evaluar RN-08 ni RF-AT-06, y la alternativa era escribir 12 h
- * y 60 s como constantes en PHP — que es exactamente lo que la regla dura 14 y
- * ADR-017 prohiben. Lo que la 5.1 le cambia por dentro es de donde salen los
- * valores; la forma que ve el nucleo —`forSite(int $siteId)`— no cambia.
+ * **Por que existe aunque la configuracion tenga su propio caso de uso.** Porque
+ * sin el, el primer fichaje no tendria con que evaluar RN-08 ni RF-AT-06, y la
+ * alternativa era escribir 12 h y 60 s como constantes en PHP — que es
+ * exactamente lo que la regla dura 14 y ADR-017 prohiben. La forma que ve el
+ * nucleo es `forSite(int $siteId)`.
  *
  * ## Esto corre en el camino de fichaje, y eso manda sobre todo lo demas
  *
@@ -32,8 +32,8 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * `GET /api/v1/settings`.
  *
  * **Y solo se toman las claves que se consumen.** Del conjunto resuelto salen
- * `ATTENDANCE_*`, las dos `KIOSK_UPDATE_*` de la tarea 3.12 y la linea base del
- * cuadro de impacto de la 3.13 —diez—: la marca, los idiomas y la salida a nomina
+ * `ATTENDANCE_*`, las dos `KIOSK_UPDATE_*` y la linea base del cuadro de impacto
+ * —diez—: la marca, los idiomas y la salida a nomina
  * no entran aqui ni pueden influir en lo que este adaptador devuelve. **Las tres
  * ultimas no las consume el servidor en el camino de fichaje**: las dos del
  * quiosco viajan a la tablet por el latido (RF-KI-07) y quien decide con ellas es
@@ -49,19 +49,18 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * La resuelve {@see ResolvedSettings}, que es dominio puro, a traves de
  * {@see GetSettingsHandler}, que es el unico punto de lectura del modulo.
  *
- * **El ambito `site` desaparecio con la tarea 5.1** (ADR-040, migracion de
- * contraccion `2026_09_05_100000`): hay exactamente un centro por instalacion, y
- * un escalon que siempre resuelve al mismo sitio no es una cascada. `$siteId` se
- * conserva en la firma del puerto porque el nucleo lo pasa —`shift_entries` sigue
+ * **No hay ambito `site`** (ADR-040, migracion de contraccion
+ * `2026_09_05_100000`): hay exactamente un centro por instalacion, y un escalon
+ * que siempre resuelve al mismo sitio no es una cascada. `$siteId` se conserva
+ * en la firma del puerto porque el nucleo lo pasa —`shift_entries` sigue
  * teniendo `site_id`— y quitarlo seria tocar `Attendance` y `Kiosk` por nada. La
- * memoria por peticion sigue indexada por el, para que el dia que el producto
- * volviera a tener varios centros esto no haya que rehacerlo.
+ * memoria por peticion se indexa por el porque es la clave que llega.
  *
  * ## Sin fila, valor de serie: **no falla**
  *
  * Antes lanzaba `RuntimeException` cuando faltaba una clave. Con la cascada eso
- * seria justo lo contrario del resultado esperado de la tarea 5.1: *«una
- * instalacion sin ninguna fila en `installation_settings` arranca y funciona»*.
+ * seria justo lo contrario de lo que se espera de la configuracion (RF-PD-01):
+ * *«una instalacion sin ninguna fila en `installation_settings` arranca y funciona»*.
  * El valor de serie **es** el producto y vive en el catalogo (`SettingKey`), en
  * codigo, donde una prueba unitaria comprueba que cumple su propia definicion; no
  * es un valor de respaldo escondido, porque `GET /api/v1/settings` publica su
@@ -105,20 +104,20 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             debounceSeconds: $settings->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS),
             maximumClockSkewMinutes: $settings->integer(SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES),
             minimumTransitSeconds: $settings->integer(SettingKey::ATTENDANCE_MIN_TRANSIT_SECONDS),
-            // RF-PR-06 (tarea 3.11). Los dos que faltaban para que la deteccion
+            // RF-PR-06. Los dos que faltaban para que la deteccion
             // de patrones tenga sus tres umbrales fuera del codigo: el tercero
             // es el transito minimo de la linea de arriba, que existia desde la
             // 5.1 sin que lo consumiera nadie.
             patternWindowSeconds: $settings->integer(SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS),
             patternMinRepeats: $settings->integer(SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS),
-            // `choice` de dos valores y no un tipo booleano nuevo (decision 7 de
-            // la ficha 3.5): la comparacion con `'enabled'` es la unica
+            // `choice` de dos valores y no un tipo booleano nuevo: la
+            // comparacion con `'enabled'` es la unica
             // traduccion, y esta en un solo sitio. Cualquier otra cosa —una fila
             // corrupta, un valor futuro— vale `false`, que es el lado seguro:
             // RN-12 sigue suspendida y nadie recibe incidencias por una pausa
             // que su hotel no ficha.
             breakClockingEnabled: $settings->text(SettingKey::ATTENDANCE_BREAK_CLOCKING) === 'enabled',
-            // RF-KI-07 (tarea 3.12). Los dos que el servidor **no consume**: los
+            // RF-KI-07. Los dos que el servidor **no consume**: los
             // lleva el latido a la tablet, que es quien decide con ellos. El
             // parseo no puede fallar aqui —`ResolvedSettings` ya descarto la fila
             // que no cumpla el patron de la clave y habra caido al valor de
@@ -127,7 +126,7 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // que lanza (regla dura 19).
             kioskUpdateWindow: KioskUpdateWindow::fromRange($settings->text(SettingKey::KIOSK_UPDATE_WINDOW)),
             kioskUpdateQuietMinutes: $settings->integer(SettingKey::KIOSK_UPDATE_QUIET_MINUTES),
-            // RF-IN-08 (tarea 3.13). La tercera que el servidor NO consume en
+            // RF-IN-08. La tercera que el servidor NO consume en
             // ningun camino de fichaje: la lee el cuadro de impacto y nadie mas.
             // Entra por aqui porque es configuracion operativa del centro y ya se
             // resuelve en esta cascada; un proveedor aparte para una sola clave

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Resource;
 
 use App\Modules\Identity\Application\UseCase\CredentialView;
+use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmployee;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 use Illuminate\Http\Request;
@@ -41,9 +42,25 @@ final class CredentialResource extends JsonResource
             'printed_at' => self::utc($credential->printedAt),
             'delivered_at' => self::utc($credential->deliveredAt),
             'revoked_at' => self::utc($credential->revokedAt),
-            'revoked_reason' => $credential->revokedReason,
+            'revoked_reason' => self::reason($credential->revokedReason),
             'status' => $credential->isActive() ? 'active' : 'revoked',
         ];
+    }
+
+    /**
+     * El motivo tal como se escribio, salvo el que pone el sistema en una baja
+     * (RN-14): ese se guarda siempre con el mismo texto —el del registro y el
+     * del asiento, que no cambian de idioma— y se traduce aqui, al enseñarlo.
+     */
+    private static function reason(?string $stored): ?string
+    {
+        if ($stored !== RevokeCredentialsOfOffboardedEmployee::REASON) {
+            return $stored;
+        }
+
+        $text = __('credentials.revoked_reason.offboarded');
+
+        return \is_string($text) ? $text : $stored;
     }
 
     /**

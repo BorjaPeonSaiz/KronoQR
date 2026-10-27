@@ -20,11 +20,11 @@ use Illuminate\Database\ConnectionInterface;
  *
  * Un acumulador —`total_minutes = total_minutes + 240`— seria correcto hasta la
  * primera correccion. A partir de ahi el total no podria **bajar**, que es
- * justo lo que tiene que hacer cuando se anula un tramo (RN-13, tarea 1.15), y
+ * justo lo que tiene que hacer cuando se anula un tramo (RN-13), y
  * el error se descubriria en la nomina de alguien. Con el recalculo, anular un
  * tramo cambia el resultado sin que nadie tenga que acordarse de restar, y la
  * comprobacion de integridad es trivial y automatizable —la reconciliacion
- * nocturna de RF-PR-02 y el comando `attendance:reconcile` de la tarea 2.7—:
+ * nocturna de RF-PR-02 y el comando `attendance:reconcile`—:
  *
  * ```sql
  * SELECT employee_id, work_date, total_minutes FROM daily_totals;

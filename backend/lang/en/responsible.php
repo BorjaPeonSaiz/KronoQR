@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * The signature of console commands with legal weight (2.3.0 block 3, doc 01
+ * The signature of console commands with legal weight (doc 01
  * §7.2 "Console signatures"). Read by whoever types the command on the server.
  */
 

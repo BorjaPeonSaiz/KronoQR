@@ -96,9 +96,9 @@ final class WorkforceServiceProvider extends ServiceProvider
     {
         $this->app->bind(EmployeeRepository::class, EloquentEmployeeRepository::class);
 
-        // H8: el azar del codigo de empleado, fuera del dominio y probado aparte.
+        // El azar del codigo de empleado, fuera del dominio y probado aparte (regla dura 2).
         $this->app->bind(EmployeeCodeGenerator::class, RandomEmployeeCodeGenerator::class);
-        // H8: el azar de los PIN candidatos, con el mismo criterio.
+        // El azar de los PIN candidatos, con el mismo criterio.
         $this->app->bind(PinCandidateSource::class, RandomPinCandidateSource::class);
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
@@ -115,7 +115,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(WorkRecordPresence::class, DatabaseWorkRecordPresence::class);
 
         /*
-         * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
+         * Importacion masiva de plantilla (RF-GP-05).
          *
          * El lector va sobre `spatie/simple-excel` (doc 02 §3.1) y **no es
          * `singleton`**: guarda si la ultima lectura se trunco, y compartirlo
@@ -138,7 +138,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(WorkforceEventPublisher::class, LaravelWorkforceEventPublisher::class);
 
         /*
-         * Ausencias (RF-GP-04, tarea 3.10).
+         * Ausencias (RF-GP-04).
          *
          * El repositorio recibe el puerto `Clock` —`created_at` y el momento de
          * la anulacion salen de ahi y no del reloj del proceso (regla dura 2)— y
@@ -154,7 +154,7 @@ final class WorkforceServiceProvider extends ServiceProvider
          */
         $this->app->bind(AbsenceRepository::class, EloquentAbsenceRepository::class);
 
-        // Contratos historizados (RF-GP-02, tarea 2.8). Es lo que permite al
+        // Contratos historizados (RF-GP-02). Es lo que permite al
         // informe de RF-IN-03 comparar cada dia contra lo que estaba pactado
         // **ese** dia; sin el, no hay «horas contratadas» que comparar.
         $this->app->bind(EmploymentContractRepository::class, EloquentEmploymentContractRepository::class);
@@ -188,13 +188,13 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeePinVerifier::class, HashedEmployeePinVerifier::class);
 
         // Y la SESION que se abre cuando ese PIN acierta en el portal (RF-ID-05,
-        // RF-ID-07, RL-05, tarea 1.11). Mismo reparto que el verificador y por
+        // RF-ID-07, RL-05). Mismo reparto que el verificador y por
         // la misma razon: quien decide si se abre sesion es `Identity`, y quien
         // puede acuñar un token colgado de una persona es este modulo, porque el
         // `tokenable` es la fila de `employees`. Que el token cuelgue del
         // empleado y no de una cuenta de gestion es lo que evita una cuenta
         // espejo por persona —con correo obligatorio (regla dura 12), politica
-        // de contraseña y el 2FA de la tarea 2.1— para algo cuya credencial es
+        // de contraseña y el segundo factor— para algo cuya credencial es
         // un PIN de seis digitos.
         $this->app->bind(PortalSessionIssuer::class, SanctumPortalSessionIssuer::class);
 
@@ -222,7 +222,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         // identificadores «y nada mas».
         $this->app->bind(EmployeeScopeDirectory::class, EloquentEmployeeScopeDirectory::class);
 
-        // Y el padron minimo que consume el quiosco (RF-KI-03, tarea 1.7). Mismo
+        // Y el padron minimo que consume el quiosco (RF-KI-03). Mismo
         // patron y misma razon: lo declara `Shared` porque lo necesita `Kiosk`,
         // que es otro satelite, y lo implementa este modulo, que es donde estan
         // los nombres y la situacion laboral que decide quien aparece (RN-14).

@@ -17,11 +17,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * La tabla `license`, con **lectura tolerante y escritura estricta** (tarea 5.3).
+ * La tabla `license`, con **lectura tolerante y escritura estricta**.
  *
  * ## La lectura no puede fallar
  *
- * Es la misma politica que la tarea 5.1 impuso a la configuracion, y aqui pesa
+ * Es la misma politica que rige la configuracion, y aqui pesa
  * lo mismo: este adaptador lo consulta el `FeatureGate`, y el `FeatureGate` lo
  * consulta cualquier pantalla del panel. Si una fila corrupta —o una tabla que
  * todavia no existe porque la migracion no se ha aplicado— pudiera lanzar, el
@@ -33,7 +33,7 @@ use Throwable;
  * PostgreSQL** (circuito abierto o conexion perdida, `DependencyFailure`), lanza
  * {@see LicenseUnavailable}, que cada consumidor traduce a `unknown` —no degrada
  * nada, no avisa de nada—: `null` significa «sin licencia», y con PostgreSQL
- * caido eso era mentira (V21-4-PL-1).
+ * caido eso era mentira.
  *
  * **Cualquier otro fallo sigue siendo `null`**, como antes de la 2.3.0: un
  * permiso retirado (`42501`), una tabla renombrada (`42P01`). Con PostgreSQL

@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * `php artisan compliance:purge-legal-export-temp` — borra los temporales
  * huerfanos de la descarga HTTP de la exportacion legal y cuenta las copias de
- * consola que llevan demasiado tiempo en el servidor (RF-IN-05, hallazgo
- * MEDIO-3 del cierre de la Fase 1; ADR-045).
+ * consola que llevan demasiado tiempo en el servidor (RF-IN-05, ADR-045).
  *
  * ## Que borra y que no
  *

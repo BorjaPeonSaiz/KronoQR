@@ -59,7 +59,7 @@ use Throwable;
  * estructura es casi todo el peso: un año del registro propio (1464 tramos, 36
  * paginas) lleva 27 916 elementos `StructElem` —un `TD` y un `NonStruct` por
  * celda— sin comprimir, 4,2 de sus 4,5 MiB; sin etiquetar pesaria 0,34 MiB.
- * (Medido en el bloque 23 de la 2.2.1.)
+ * (Medido sobre la 2.2.1.)
  *
  * - **El registro propio del portal sale etiquetado siempre** (`$alwaysTagged`):
  *   es el unico documento sellado de la persona y el CSV no lleva sello ni
@@ -97,7 +97,7 @@ final readonly class BrowsershotReportRenderer implements ReportDocumentRenderer
                 ->generatePdfContent();
         } catch (Throwable $failure) {
             Log::error('reporting.pdf_engine_unavailable', [
-                // La clase y nunca el mensaje (L6): el de Browsershot puede
+                // La clase y nunca el mensaje: el de Browsershot puede
                 // arrastrar la salida del informe, con nombres.
                 'exception' => $failure::class,
             ]);

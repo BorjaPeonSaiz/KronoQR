@@ -12,7 +12,7 @@ use DateTimeImmutable;
 
 /**
  * La flota entera tal y como la sirve `GET /api/v1/devices`: el esquema
- * `DeviceList` con su `meta` (**RF-PA-07**, RF-PD-06, tarea 3.3, decision 3).
+ * `DeviceList` con su `meta` (**RF-PA-07**, RF-PD-06).
  *
  * ## Que anade `meta`, y por que no bastaba con la lista
  *

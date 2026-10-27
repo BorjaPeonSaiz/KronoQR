@@ -51,8 +51,8 @@ final class IncidentPolicy
     /**
      * Roles que trabajan la bandeja («manager+»).
      *
-     * Metodo y no constante por lo mismo que en las hermanas: el conjunto cambio
-     * en la tarea 2.1 y puede volver a cambiar, y lo que no cambia —el alcance—
+     * Metodo y no constante por lo mismo que en las hermanas: el conjunto ya
+     * cambio una vez y puede volver a cambiar, y lo que no cambia —el alcance—
      * se resuelve, no se enumera.
      *
      * @return list<UserRole>

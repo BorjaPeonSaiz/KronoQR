@@ -42,7 +42,7 @@ interface ResponsibleAccounts
     /**
      * La cuenta a la que apunta `--responsible` —por `uuid` o por correo—,
      * este activa o no, para que la consola la enseñe antes de confirmar y
-     * diga por que no puede firmar (2.3.0 bloque 3). `null` si no hay ninguna
+     * diga por que no puede firmar. `null` si no hay ninguna
      * cuenta con ese `uuid` o ese correo.
      *
      * No sustituye a {@see self::isActiveManagementAccount()}: lo leido aqui

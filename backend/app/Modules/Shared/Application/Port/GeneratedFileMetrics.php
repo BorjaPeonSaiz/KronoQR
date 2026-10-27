@@ -7,7 +7,8 @@ namespace App\Modules\Shared\Application\Port;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 
 /**
- * Las cuatro series de los ficheros generados (ADR-045 §e, §f, §h; C5, C10).
+ * Las cuatro series de los ficheros generados (ADR-045 §e, §f y §h;
+ * condiciones C5 y C10).
  *
  * **Una sola etiqueta, `class`, del catalogo cerrado** {@see GeneratedFileClass}.
  * Nunca `uuid`, nombre ni ruta (regla dura 21): por eso la firma solo admite el
@@ -28,7 +29,7 @@ interface GeneratedFileMetrics
 
     /**
      * `generated_files_missing_total{class}`: una fila `completed` cuyo fichero
-     * desaparecio **antes** de su `expires_at`. Evento de seguridad (C5).
+     * desaparecio **antes** de su `expires_at`. Evento de seguridad (ADR-045 C5).
      */
     public function missing(GeneratedFileClass $class): void;
 

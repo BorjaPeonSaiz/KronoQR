@@ -17,8 +17,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * Detiene un informe en diferido que sigue en curso (**V5-PA-4**, RC2,
- * RF-IN-06).
+ * Detiene un informe en diferido que sigue en curso (RF-IN-06).
  *
  * ## La fila cambia ya; el trabajo se entera despues
  *

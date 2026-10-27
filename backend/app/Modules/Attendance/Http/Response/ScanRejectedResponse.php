@@ -44,7 +44,7 @@ final class ScanRejectedResponse
     /**
      * El cuerpo, sin envolver en una respuesta HTTP.
      *
-     * Existe por el lote (`POST /api/v1/scan/batch`, tarea 1.7), donde el rechazo
+     * Existe por el lote (`POST /api/v1/scan/batch`), donde el rechazo
      * de un elemento no es la respuesta de la peticion sino una entrada dentro de
      * ella. Se comparte el cuerpo **y no se copia** para que siga siendo cierto
      * que existe una sola forma de rechazo: si el lote construyera la suya, dos

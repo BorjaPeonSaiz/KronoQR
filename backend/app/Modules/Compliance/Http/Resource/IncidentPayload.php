@@ -24,9 +24,8 @@ use DateTimeImmutable;
  *
  * **Ningun instante sale en hora local desde aqui.** Todos van en UTC (regla
  * dura 3) y la antiguedad se calcula contra `meta.generated_at`: la zona del
- * centro viaja una vez en `meta.time_zone` y no repetida en cada campo, porque a
- * diferencia del registro horario aqui no hay tramos de otro centro que puedan
- * tener zona propia.
+ * centro viaja una vez en `meta.time_zone` y no repetida en cada campo: hay un
+ * solo centro por instalacion y una sola zona (ADR-040, ADR-056).
  */
 final readonly class IncidentPayload
 {

@@ -78,8 +78,8 @@ final class SelfJournalPolicy
      *
      * Aqui ademas hay una razon concreta para que exista desde el primer dia:
      * descargar el historico completo es un acto distinto de mirar un mes en
-     * pantalla, y es plausible que un cliente quiera acotarlo —o que la tarea
-     * 2.9, al añadir el PDF, quiera exigir algo mas—. El dia que eso ocurra,
+     * pantalla, y es plausible que un cliente quiera acotarlo —o que el PDF
+     * quiera exigir algo mas—. El dia que eso ocurra,
      * este metodo ya existe y hay una prueba negativa apuntandole.
      *
      * @param  mixed  $actor  El `tokenable` del token de Sanctum.

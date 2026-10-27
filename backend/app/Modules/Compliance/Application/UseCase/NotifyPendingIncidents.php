@@ -36,7 +36,7 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
  *
  * El correo saca de la instalacion **nombres de la plantilla** por SMTP. Es
  * exactamente lo que RS-05 obliga a registrar —igual que el padron del quiosco o
- * la bandeja de la tarea 2.5— y ademas es el unico camino por el que esos datos
+ * la bandeja de incidencias— y ademas es el unico camino por el que esos datos
  * salen del servidor del cliente, asi que el asiento es lo que permite responder
  * ante una brecha (RL-15) «que se fue, a quien y cuando».
  *

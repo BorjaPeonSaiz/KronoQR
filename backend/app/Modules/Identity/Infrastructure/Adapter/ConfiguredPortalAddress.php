@@ -8,7 +8,7 @@ use App\Modules\Identity\Application\Port\PortalAddressProvider;
 
 /**
  * La direccion del portal del empleado: `APP_URL` mas el prefijo con el que
- * Nginx sirve su SPA (tarea 5.11b, RL-05).
+ * Nginx sirve su SPA (RL-05).
  *
  * ## De donde sale el `/portal/`
  *

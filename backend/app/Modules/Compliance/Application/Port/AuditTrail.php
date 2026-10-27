@@ -18,9 +18,8 @@ use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
  * `Attendance` dependiendo de `Compliance`, arista que el §1.6 no concede—, sino
  * por las dos vias que si estan concedidas: **publicando un evento de dominio**
  * que un listener de `Compliance/Infrastructure` recoge, o **invocando el caso
- * de uso publico** `RecordAuditEntry`. Los listeners de los eventos de fichaje
- * llegan con la tarea 1.4; los de credencial y dispositivo, con la 1.13 y la
- * 1.5.
+ * de uso publico** `RecordAuditEntry`, igual que los listeners de los eventos de
+ * fichaje, de credencial y de dispositivo.
  *
  * **Transaccionalidad.** `append()` NO abre transaccion propia: se une a la del
  * caso de uso que la llama. Es deliberado y es la mitad de la garantia: si la

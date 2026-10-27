@@ -17,7 +17,7 @@ use SensitiveParameter;
  * fichaje. Si el hash se calculara dentro, al guardar la fila, cada alta y cada
  * restablecimiento detendrian los fichajes de la instalacion durante ese tiempo.
  * Es el mismo criterio con el que el PIN del empleado se sella fuera del candado
- * (`Workforce`, tarea 1.13).
+ * (`Workforce`).
  *
  * El algoritmo y el coste son los de la configuracion de la aplicacion: el
  * adaptador no decide nada, solo los aplica.

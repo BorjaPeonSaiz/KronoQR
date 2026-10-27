@@ -10,8 +10,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Connection;
 
 /**
- * `installation_settings` con una capa de cache delante (paso 6 de la tarea
- * 5.1).
+ * `installation_settings` con una capa de cache delante.
  *
  * ## Por que hace falta
  *

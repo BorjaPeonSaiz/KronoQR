@@ -186,7 +186,7 @@ final class User extends Authenticatable implements ManagementActor
     }
 
     /**
-     * Nunca (**RF-PD-11**, ADR-020, tarea 5.9).
+     * Nunca (**RF-PD-11**, ADR-020).
      *
      * Una fila de `users` es **siempre** una cuenta de la organizacion del
      * cliente. El fabricante no tiene cuenta en la instalacion y no puede
