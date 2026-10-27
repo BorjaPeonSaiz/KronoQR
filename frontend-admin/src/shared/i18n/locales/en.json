@@ -2487,6 +2487,23 @@
         "neverUsed": "Never",
         "reasonPurged": "Reason removed on {date}"
       },
+      "uses": {
+        "action": "View uses",
+        "heading": "Uses of the support access",
+        "windowNote": "Each row is the start of a 15-minute window of use: if the access is used several times within that window, only the first request appears. The list is a best-effort record.",
+        "loading": "Loading the uses of the access…",
+        "caption": "Windows of use of the access, most recent first",
+        "pagination": "Pagination of the uses of the access",
+        "empty": {
+          "title": "This access has not been used yet",
+          "description": "When the manufacturer uses it, the start of each window of use will appear here."
+        },
+        "columns": {
+          "start": "Window start",
+          "method": "Method",
+          "route": "Route"
+        }
+      },
       "revoke": {
         "action": "Revoke",
         "heading": "Revoke support access",

@@ -9,6 +9,7 @@ import type {
   GrantSupportAccessRequest,
   IssuedSupportGrant,
   SupportGrantCollection,
+  SupportGrantUseCollection,
 } from '@/shared/api/types'
 
 /**
@@ -80,5 +81,22 @@ export function grantSupportAccess(body: GrantSupportAccessRequest): Promise<Iss
 export async function revokeSupportAccess(uuid: string): Promise<void> {
   await request<null>(`/api/v1/support/grants/${uuid}`, {
     method: 'DELETE',
+  })
+}
+
+/** Filas por pagina de la lista de usos de una concesion. */
+export const SUPPORT_USES_PER_PAGE = 25
+
+/**
+ * `GET /api/v1/support/grants/{uuid}/uses` (RF-PD-11): las ventanas de uso de
+ * una concesion, de la mas reciente a la mas antigua. Cada elemento es el
+ * inicio de una ventana de 15 minutos, no una peticion.
+ */
+export function listSupportGrantUses(
+  uuid: string,
+  page: number,
+): Promise<SupportGrantUseCollection> {
+  return requestJson<SupportGrantUseCollection>(`/api/v1/support/grants/${uuid}/uses`, {
+    query: { page, per_page: SUPPORT_USES_PER_PAGE },
   })
 }

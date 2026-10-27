@@ -2487,6 +2487,23 @@
         "neverUsed": "Nunca",
         "reasonPurged": "Motivo retirado el {date}"
       },
+      "uses": {
+        "action": "Ver usos",
+        "heading": "Usos del acceso de soporte",
+        "windowNote": "Cada fila es el inicio de una ventana de 15 minutos de uso: si el acceso se usa varias veces dentro de esa ventana, solo aparece la primera petición. La lista es un registro de mejor esfuerzo.",
+        "loading": "Cargando los usos del acceso…",
+        "caption": "Ventanas de uso del acceso, de la más reciente a la más antigua",
+        "pagination": "Paginación de los usos del acceso",
+        "empty": {
+          "title": "Este acceso no se ha usado todavía",
+          "description": "Cuando el fabricante lo use, aparecerá aquí el inicio de cada ventana de uso."
+        },
+        "columns": {
+          "start": "Inicio de la ventana",
+          "method": "Método",
+          "route": "Ruta"
+        }
+      },
       "revoke": {
         "action": "Revocar",
         "heading": "Revocar acceso de soporte",
