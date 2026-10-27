@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Departamentos de cada centro.
+ * Departamentos de cada centro: el catalogo del que sale el departamento de
+ * cada persona (RF-GP-01), el que da de alta el asistente de puesta en marcha
+ * (RF-PD-03) y el que acota a cada responsable (RF-ID-03).
  *
  * **Sin `destroy`**, por el mismo motivo que los centros: un departamento con
  * empleados o con incidencias asignadas no puede desaparecer, y la baja logica

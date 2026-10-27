@@ -14,7 +14,9 @@ export interface paths {
         /**
          * Sonda de vida
          * @description Indica que el proceso responde y **con que version esta desplegado**
-         *     (documento 02 §10.5): es lo que permite correlacionar una incidencia con
+         *     (documento 02 §10.5), que es lo que informan `doctor` y el paquete de
+         *     diagnostico (RF-PD-09) y lo que sondea la vigilancia de disponibilidad
+         *     (RNF-D-01): es lo que permite correlacionar una incidencia con
          *     una version concreta cuando el cliente llama por telefono.
          *
          *     No consulta base de datos, ni Redis, ni disco. Una sonda de vida que toca
@@ -1031,7 +1033,7 @@ export interface paths {
         /**
          * Activacion del segundo factor
          * @description Comprueba el primer codigo del autenticador, deja el segundo factor
-         *     **activo** y emite ya la sesion con los ambitos del rol: quien acaba de
+         *     **activo** (RF-ID-01, RS-06) y emite ya la sesion con los ambitos del rol: quien acaba de
          *     darlo de alta no tiene que volver a teclear su contrasena.
          *
          *     **Confirmar no es verificar.** `2fa/confirm` activa un secreto que
@@ -1060,7 +1062,8 @@ export interface paths {
         put?: never;
         /**
          * Cierre de sesion
-         * @description Revoca **el token con el que se hace la llamada** y solo ese: cerrar
+         * @description Revoca **el token con el que se hace la llamada** y solo ese (RF-ID-01;
+         *     el cierre deja su asiento en `audit_log`, RS-13): cerrar
          *     sesion en el portatil no puede echar a la misma persona de la tablet de
          *     recepcion donde estaba revisando incidencias.
          *
@@ -2526,7 +2529,9 @@ export interface paths {
         put?: never;
         /**
          * Alta de departamento
-         * @description Crea un departamento dentro de un centro. El nombre es unico **dentro
+         * @description Crea un departamento dentro de un centro: el catalogo del que sale el
+         *     departamento de cada persona (RF-GP-01), y el que da de alta el asistente
+         *     de puesta en marcha (RF-PD-03). El nombre es unico **dentro
          *     del centro** y no en la instalacion: dos hoteles del mismo cliente
          *     tienen los dos una «Recepcion».
          */
@@ -2552,7 +2557,8 @@ export interface paths {
         };
         /**
          * Detalle de un departamento
-         * @description Nombre y responsable del departamento. Lo leen `admin`, `rrhh` y
+         * @description Nombre y responsable del departamento (RF-GP-01; el responsable,
+         *     RF-ID-03). Lo leen `admin`, `rrhh` y
          *     `responsable_departamento`, sin acotar por departamento, por lo mismo
          *     que el listado (`GET /api/v1/departments`): es catalogo, no datos de
          *     personas. El `auditor` y un acceso de soporte reciben `403`.
@@ -4625,7 +4631,7 @@ export interface paths {
         };
         /**
          * Logotipo de la instalacion
-         * @description El fichero al que apunta `BRANDING_LOGO_PATH`, servido tal cual y con el
+         * @description El fichero al que apunta `BRANDING_LOGO_PATH`, servido tal cual (RF-PD-08) y con el
          *     tipo que le corresponde **por su contenido** (`image/png` o
          *     `image/svg+xml`), nunca por su extension.
          *
@@ -5318,7 +5324,7 @@ export interface paths {
         };
         /**
          * Pasos del asistente y su estado
-         * @description Los ocho pasos del asistente con su estado, lo que hace que la puesta en
+         * @description Los ocho pasos del asistente con su estado (RF-PD-03), lo que hace que la puesta en
          *     marcha sea **reanudable**: se abandona a la mitad —falta un dato, hay que
          *     llamar a alguien, la tablet llega mañana— se vuelve, y el panel sabe donde
          *     estaba.
