@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
 use App\Modules\Product\Domain\ValueObject\SettingDefinition;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Application\Port\ManagementAccountMorphType;
 use Closure;
 use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
@@ -73,7 +74,10 @@ final readonly class DatabaseDataExportSource implements DataExportSource
      */
     private const int FETCH_SIZE = 500;
 
-    public function __construct(private ConnectionInterface $connection) {}
+    public function __construct(
+        private ConnectionInterface $connection,
+        private ManagementAccountMorphType $managementAccounts,
+    ) {}
 
     public function within(Closure $work): mixed
     {
@@ -134,7 +138,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
     {
         $cursor = 'kronoqr_data_export_'.bin2hex(random_bytes(8));
 
-        $this->connection->statement('DECLARE '.$cursor.' NO SCROLL CURSOR FOR '.self::sqlFor($dataset->name));
+        $this->connection->statement('DECLARE '.$cursor.' NO SCROLL CURSOR FOR '.$this->sqlFor($dataset->name));
 
         try {
             while (true) {
@@ -180,14 +184,24 @@ final readonly class DatabaseDataExportSource implements DataExportSource
      * Un conjunto del catalogo sin consulta falla aqui, en voz alta, en lugar de
      * producir un fichero vacio que nadie mira.
      */
-    private static function sqlFor(string $dataset): string
+    private function sqlFor(string $dataset): string
     {
-        // La UNICA consulta que no es un literal: ver `installationSettingsSql()`.
+        // Las DOS consultas que no son un literal: ver `installationSettingsSql()`.
         // La lista de claves confidenciales vive en el catalogo de dominio y
         // copiarla aqui a mano seria una segunda fuente de verdad que se
         // desincroniza en silencio — y en la direccion peligrosa.
         if ($dataset === 'installation_settings') {
             return self::installationSettingsSql();
+        }
+
+        // Y el `model_type` de las cuentas, por lo mismo: lo dice `Identity`.
+        // Es un nombre de clase y no entrada de nadie, pero se cita igual.
+        if ($dataset === 'users') {
+            return str_replace(
+                '__MANAGEMENT_ACCOUNT_TYPE__',
+                "'".str_replace("'", "''", $this->managementAccounts->morphType())."'",
+                self::USERS,
+            );
         }
 
         return self::SQL_BY_DATASET[$dataset] ?? throw new RuntimeException(
@@ -612,6 +626,11 @@ final readonly class DatabaseDataExportSource implements DataExportSource
      *
      * Del segundo factor sale si esta activo, nunca el secreto ni el contador
      * (regla dura 21 aplicada a lo que sale del producto).
+     *
+     * `__MANAGEMENT_ACCOUNT_TYPE__` es el `model_type` de las cuentas de
+     * gestion, que publica `Identity` ({@see ManagementAccountMorphType}) y se
+     * pone en {@see sqlFor()}: la tabla de union la comparten con las
+     * concesiones de soporte, cuyos `id` se solapan con los de `users`.
      */
     private const string USERS = <<<'SQL'
         SELECT u.uuid::text AS user_uuid,
@@ -622,7 +641,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                      FROM model_has_roles mhr
                      JOIN roles r ON r.id = mhr.role_id
                     WHERE mhr.model_id = u.id
-                      AND mhr.model_type = 'App\Modules\Identity\Infrastructure\Persistence\User'
+                      AND mhr.model_type = __MANAGEMENT_ACCOUNT_TYPE__
                ), '') AS roles,
                u.locale,
                u.is_active::text AS is_active,

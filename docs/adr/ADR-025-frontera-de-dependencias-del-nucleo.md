@@ -95,3 +95,18 @@ Sin ellas, «los satélites pueden depender del núcleo» degenera en «todo el 
 - Prueba de arquitectura: ningún puerto de `Attendance/Application/Port/` tiene en su firma un tipo de `Identity`, `Workforce` o `Illuminate\*`. Es la que protege la restricción 2, que es la que se erosiona sin darse cuenta.
 - Prueba de arquitectura: una sola declaración de `CompliancePolicyProvider` y una sola de `DbCompliancePolicyProvider` en todo el árbol (mismo criterio que ADR-021 aplicó a `Clock`).
 - Prueba unitaria de dominio: RN-05 calcula la jornada con la zona del centro inyectada, y RN-14 rechaza al empleado de baja, ambas con dobles de los puertos y sin base de datos.
+
+## Nota del 26-10-2026 (2.3.0, bloque 19): el tipo polimórfico de las cuentas se publica por un puerto, sin `morphMap`
+
+La exportación íntegra (`Product`) lee `model_has_roles` con SQL y filtraba `model_type` por el nombre de la clase del modelo de cuentas de `Identity`, escrito a mano. Era un acoplamiento a un detalle interno de otro módulo que Deptrac no ve, porque es una cadena: mover o renombrar el modelo dejaba vacía la columna de roles sin que fallara nada.
+
+**Decisión del propietario: arreglo mínimo.** `Identity` publica el valor por el puerto `ManagementAccountMorphType` de `Shared/Application/Port` (adaptador `EloquentManagementAccountMorphType`, que lo saca de `getMorphClass()` del propio modelo), y `DatabaseDataExportSource` lo recibe por inyección. La prueba `ManagementAccountMorphTypeTest` ata el valor a la clase real. Es la misma forma que el resto de este ADR: el que tiene la tabla implementa el puerto.
+
+**Por qué no hay `morphMap`** (`Relation::enforceMorphMap`), que desacoplaría además los datos guardados del nombre de la clase. Cambia el valor que se escribe en las columnas polimórficas, y eso exige:
+
+- una migración de datos reversible sobre `model_has_roles`, `model_has_permissions` y `personal_access_tokens` (cuentas de gestión, concesiones de soporte, tabletas y portal);
+- recrear las dos funciones PL/pgSQL de la minimización (`2026_10_21_100100` y `2026_10_21_100300`), que llevan el nombre de la clase dentro: sin ello, la revocación de tokens al minimizar deja de encontrar filas en silencio;
+- adaptar `restore.sh`, que no migra: una copia anterior a la versión con `morphMap` restaurada en ella dejaría a todas las cuentas sin roles ni tokens hasta migrar a mano;
+- y avisar a quien lea esas columnas en la exportación íntegra, porque cambian de valor.
+
+Es un bloque propio con su plan de despliegue y sus pruebas de restauración, no una corrección de deuda. Si se hace, esta nota se sustituye por la decisión que lo justifique.

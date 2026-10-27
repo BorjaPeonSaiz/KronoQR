@@ -188,6 +188,7 @@ use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\KioskAppVersions;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Port\ManagementAccountMorphType;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
@@ -948,7 +949,10 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->app->bind(
             DataExportSource::class,
-            static fn (): DatabaseDataExportSource => new DatabaseDataExportSource(DB::connection()),
+            static fn (Application $app): DatabaseDataExportSource => new DatabaseDataExportSource(
+                DB::connection(),
+                $app->make(ManagementAccountMorphType::class),
+            ),
         );
 
         $this->app->bind(

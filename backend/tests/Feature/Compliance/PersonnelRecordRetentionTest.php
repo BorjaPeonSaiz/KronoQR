@@ -8,8 +8,8 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
+use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Domain\Support\DataExportCatalog;
-use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Log\Events\MessageLogged;
@@ -243,7 +243,7 @@ it('despues el directorio y la exportacion integra enseñan la ficha minimizada'
         ->assertJsonPath('status', 'terminated')
         ->assertJsonPath('anonymized_at', static fn (mixed $value): bool => \is_string($value) && str_ends_with($value, 'Z'));
 
-    $filas = iterator_to_array((new DatabaseDataExportSource(DB::connection()))->rows(DataExportCatalog::dataset('employees') ?? throw new LogicException('Sin conjunto employees.')), false);
+    $filas = iterator_to_array(app(DataExportSource::class)->rows(DataExportCatalog::dataset('employees') ?? throw new LogicException('Sin conjunto employees.')), false);
     $fila = collect($filas)->first(static fn (array $row): bool => ($row['employee_uuid'] ?? null) === $ficha['uuid']);
 
     expect($fila)->toBeArray()

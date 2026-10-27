@@ -98,6 +98,7 @@ use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountDirectory;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountLifecycle;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountMorphType;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountRegistry;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
@@ -112,6 +113,7 @@ use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\ManagementAccountMorphType;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
@@ -570,6 +572,10 @@ final class IdentityServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(CredentialMetrics::class, TextfileCredentialMetrics::class);
+
+        // El `model_type` de las cuentas de gestion, para quien lee las tablas
+        // de roles con SQL desde otro modulo (la exportacion integra).
+        $this->app->bind(ManagementAccountMorphType::class, EloquentManagementAccountMorphType::class);
 
         // Cuentas activas sin uso (ADR-060).
         $this->app->bind(DormantManagementAccounts::class, static fn (): DatabaseDormantAccounts => new DatabaseDormantAccounts(DB::connection()));
