@@ -128,7 +128,7 @@ use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
-use App\Modules\Shared\Application\Port\PdfRenderingMetrics;
+use App\Modules\Shared\Application\Port\PdfRenderingSlots;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UuidGenerator;
@@ -138,7 +138,6 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -886,17 +885,15 @@ final class ReportingServiceProvider extends ServiceProvider
     }
 
     /**
-     * El motor de PDF detras del tope de composiciones simultaneas
-     * (`reporting.pdf.max_concurrent`), con la espera que toque a quien lo pide.
+     * El motor de PDF detras del tope de composiciones simultaneas de toda la
+     * instalacion (el puerto `PdfRenderingSlots`, que liga y configura
+     * `SharedServiceProvider`), con la espera que toque a quien lo pide.
      */
     private static function limitedRenderer(Application $app, int $waitSeconds): ConcurrencyLimitedReportRenderer
     {
         return new ConcurrencyLimitedReportRenderer(
             $app->make(BrowsershotReportRenderer::class),
-            $app->make(Redis::class),
-            $app->make(LoggerInterface::class),
-            $app->make(PdfRenderingMetrics::class),
-            Config::integer('reporting.pdf.max_concurrent'),
+            $app->make(PdfRenderingSlots::class),
             $waitSeconds,
         );
     }
