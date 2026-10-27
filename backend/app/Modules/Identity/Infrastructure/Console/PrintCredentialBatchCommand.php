@@ -7,6 +7,8 @@ namespace App\Modules\Identity\Infrastructure\Console;
 use App\Modules\Identity\Application\Command\PrintCredentialBatchCommand as PrintBatch;
 use App\Modules\Identity\Application\UseCase\PrintCredentialBatch as PrintBatchHandler;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsBusy;
+use App\Modules\Shared\Application\Port\PdfRenderingSlotsUnavailable;
 use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use Illuminate\Console\Command;
 
@@ -65,6 +67,20 @@ final class PrintCredentialBatchCommand extends Command
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
             $this->line($this->text('print_batch.all_or_nothing'));
+
+            return self::FAILURE;
+        } catch (PdfRenderingSlotsBusy $busy) {
+            // La tarjeta se compone ANTES de la transaccion que la marca impresa
+            // (MintCards, paso 4): sin hueco no se ha impreso nada y basta con
+            // repetir la orden. Es capacidad, no un fallo: no se informa.
+            $this->error($this->text('print.pdf_busy', ['seconds' => $busy->retryAfterSeconds]));
+
+            return self::FAILURE;
+        } catch (PdfRenderingSlotsUnavailable $unavailable) {
+            // Redis no responde: el mismo fallo que el borde HTTP sirve como 503
+            // y que si se informa a error_events.
+            report($unavailable);
+            $this->error($this->text('print.pdf_unavailable'));
 
             return self::FAILURE;
         }

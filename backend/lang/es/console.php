@@ -507,6 +507,8 @@ return [
             'credential' => 'Credencial: :uuid',
             'handle_with_care' => 'Imprime, plastifica y BORRA el fichero: es un instrumento al portador.',
             'next' => 'Despues, registra la entrega: php artisan credentials:deliver :uuid --responsible=<correo>',
+            'pdf_busy' => 'El motor de PDF no tiene ahora ningún hueco libre: no se ha impreso ninguna tarjeta. Vuelve a ejecutar la orden en :seconds segundos.',
+            'pdf_unavailable' => 'El motor de PDF no puede trabajar porque Redis no responde: no se ha impreso ninguna tarjeta. Comprueba Redis en la instalación y vuelve a ejecutar la orden.',
         ],
         'print_batch' => [
             'all_or_nothing' => 'El lote es todo o nada: no se ha impreso ninguna tarjeta. Vuelve a ejecutarlo.',

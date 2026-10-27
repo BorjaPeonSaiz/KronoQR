@@ -507,6 +507,8 @@ return [
             'credential' => 'Credential: :uuid',
             'handle_with_care' => 'Print, laminate and DELETE the file: it is a bearer instrument.',
             'next' => 'Then record the delivery: php artisan credentials:deliver :uuid --responsible=<email>',
+            'pdf_busy' => 'The PDF engine has no free slot right now: no card has been printed. Run the command again in :seconds seconds.',
+            'pdf_unavailable' => 'The PDF engine cannot work because Redis is not responding: no card has been printed. Check Redis on the installation and run the command again.',
         ],
         'print_batch' => [
             'all_or_nothing' => 'The batch is all or nothing: no card has been printed. Run it again.',
