@@ -29,7 +29,9 @@ use DateTimeZone;
  *
  * **Nace abierta y no se cierra sola.** La resolucion es un acto de una persona
  * con su motivo y su traza (tarea 2.5): {@see self::resolvedBy()} exige quien,
- * cuando y por que, y no hay ningun otro camino que lleve a `resolved`. El
+ * cuando y por que. **La unica excepcion es RN-19**: una `rejected_pin_scan`
+ * abierta se cierra cuando la persona subsana el fichaje
+ * ({@see self::closedAsRecovered()}), sin autor y con asiento de `system`. El
  * instante llega **de fuera** —del puerto `Clock` que inyecta el caso de uso—
  * porque el dominio no lee el reloj (regla dura 2).
  *
@@ -295,6 +297,60 @@ final readonly class Incident
             resolvedAt: $at,
             resolvedByUserId: $userId,
             resolutionNote: $trimmed,
+            deviceUuid: $this->deviceUuid,
+        );
+    }
+
+    /**
+     * **La cierra la revision diaria porque la persona lo subsano** (RN-19).
+     *
+     * Es el unico cierre sin persona, y por eso esta tan acotado:
+     *
+     * 1. **Solo los tipos que lo admiten** ({@see IncidentType::closesWhenRecovered()}):
+     *    hoy, `rejected_pin_scan`.
+     * 2. **Solo lo que sigue abierto.** Una incidencia que alguien ya resolvio o
+     *    descarto conserva su desenlace y su nota: el sistema no corrige a una
+     *    persona.
+     * 3. **Queda como `resolved` sin autor ni nota.** «Habia algo y se arreglo»
+     *    es justo lo que paso; `resolvedByUserId` nulo es lo que distingue este
+     *    cierre del de una persona, y lo que explica el asiento de `system` que
+     *    escribe el caso de uso (regla dura 6).
+     * 4. **No antes de detectarse**, como cualquier cierre.
+     *
+     * @throws IncidentAlreadyClosed si ya estaba cerrada
+     * @throws InvalidIncident si el tipo no se cierra al subsanarse
+     */
+    public function closedAsRecovered(DateTimeImmutable $at): self
+    {
+        if (! $this->status->isOpen()) {
+            throw IncidentAlreadyClosed::inStatus($this->status->value);
+        }
+
+        if (! $this->type->closesWhenRecovered()) {
+            throw InvalidIncident::withoutClosureOnRecovery($this->type->value);
+        }
+
+        self::guardUtc($at);
+
+        if ($at < $this->detectedAt) {
+            throw InvalidIncident::withResolutionBeforeDetection(
+                $at->format(DATE_ATOM),
+                $this->detectedAt->format(DATE_ATOM),
+            );
+        }
+
+        return new self(
+            type: $this->type,
+            severity: $this->severity,
+            status: IncidentStatus::Resolved,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $this->assignedToUserId,
+            context: $this->context,
+            resolvedAt: $at,
             deviceUuid: $this->deviceUuid,
         );
     }

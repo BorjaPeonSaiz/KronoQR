@@ -10951,13 +10951,21 @@ export interface components {
             /** @description Cuando se cerro. `null` mientras siga abierta. */
             resolved_at: components["schemas"]["UtcTimestamp"] | null;
             /**
-             * @description Quien la cerro. **Siempre una persona**: la deteccion abre
-             *     incidencias con actor `system`, pero ninguna se cierra sola.
+             * @description Quien la cerro. **Una persona**, salvo en un caso: una
+             *     `rejected_pin_scan` abierta se cierra sola, como `resolved`, cuando
+             *     la persona subsana el fichaje despues de abrirse —el fichaje bueno
+             *     llega tarde de la cola offline de otro quiosco— (RN-19). Entonces
+             *     `resolved_by` y `resolution_note` son `null` con `resolved_at`
+             *     relleno, y el cierre deja su asiento `incident.resolved` con actor
+             *     `system`. Ninguna otra incidencia se cierra sola, y una que ya
+             *     trabajo una persona no la toca nadie.
              */
             resolved_by: components["schemas"]["IncidentUser"] | null;
             /**
              * @description Por que se dio por trabajada. Obligatoria al cerrarla (RN-13): sin
              *     ella la bandeja se vacia y nadie puede explicar despues que se hizo.
+             *     `null` en el unico cierre sin persona, el de RN-19 (ver
+             *     `resolved_by`).
              * @example Corregida la salida olvidada del dia 14 con el parte de turno.
              */
             resolution_note: string | null;

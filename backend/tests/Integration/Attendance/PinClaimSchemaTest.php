@@ -187,3 +187,26 @@ it('devuelve como subsanacion los seis resultados de RN-19 de esa persona y nada
     expect(array_map(static fn (DateTimeImmutable $at): string => $at->format('H:i:s'), $instants))
         ->toBe(['07:00:00', '07:01:00', '07:02:00', '07:03:00', '07:04:00', '07:10:00']);
 })->group('RN-19');
+
+it('lee la jornada entera de una persona por occurred_at, llegara cuando llegara', function (): void {
+    $fixture = pinClaimSchemaFixture();
+    $claim = ['claimed_employee_id' => $fixture['employeeId'], 'pin_lockout' => false];
+
+    // El extremo inferior entra y el superior no: [inicio, fin).
+    $atStart = pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => '2026-03-13 23:00:00+00', 'recorded_at' => '2026-03-20 08:00:00+00']);
+    $late = pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => '2026-03-14 22:59:59.999999+00']);
+    pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => '2026-03-14 23:00:00+00']);
+    pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => '2026-03-13 22:59:59.999999+00']);
+    // Otra persona dentro de la jornada, y un codigo inexistente.
+    pinClaimSchemaInsert($fixture, ['claimed_employee_id' => $fixture['otherId'], 'pin_lockout' => false, 'occurred_at' => '2026-03-14 10:00:00+00']);
+    pinClaimSchemaInsert($fixture, ['occurred_at' => '2026-03-14 10:00:00+00']);
+
+    $attempts = app(RejectedPinScans::class)->rejectedOf(
+        $fixture['employee'],
+        pinClaimSchemaUtc('2026-03-13 23:00:00'),
+        pinClaimSchemaUtc('2026-03-14 23:00:00'),
+    );
+
+    expect(array_map(static fn ($a): string => $a->scanId, $attempts))->toBe([$atStart, $late])
+        ->and($attempts[0]->claimantUuid)->toBe($fixture['employee']);
+})->group('RN-19', 'RF-PR-01');

@@ -242,6 +242,21 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
         return $affected > 0;
     }
 
+    public function openWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int
+    {
+        // Entra por `one_incident_per_finding`: misma cuadrupla, tramo nulo.
+        $id = $this->connection->table('incidents')
+            ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+            ->where('employees.uuid', $employeeUuid)
+            ->where('incidents.work_date', $workDate)
+            ->where('incidents.type', $type->value)
+            ->whereNull('incidents.shift_entry_id')
+            ->where('incidents.status', 'open')
+            ->value('incidents.id');
+
+        return is_numeric($id) ? (int) $id : null;
+    }
+
     private function employeeIdOf(string $employeeUuid): ?int
     {
         $id = $this->connection->table('employees')->where('uuid', $employeeUuid)->value('id');

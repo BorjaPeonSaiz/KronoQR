@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\Port;
 
 use App\Modules\Compliance\Domain\Model\Incident;
+use App\Modules\Compliance\Domain\ValueObject\IncidentType;
 use App\Modules\Shared\Domain\Exception\ConflictingFinding;
 
 /**
@@ -82,4 +83,15 @@ interface IncidentLedger
      *                              {@see Incident::resolvedBy()}, con su instante y su autor.
      */
     public function recordResolution(int $incidentId, Incident $resolved): bool;
+
+    /**
+     * El identificador de la incidencia **abierta** de ese tipo, persona y
+     * jornada que describe la jornada entera (sin tramo), o `null`.
+     *
+     * Es la cuadrupla de `one_incident_per_finding` con el tramo nulo, asi que
+     * hay una como mucho. Lo usa el cierre de RN-19, que solo conoce la jornada
+     * subsanada: lo que no esta abierto —resuelto o descartado por una persona—
+     * no se devuelve, porque el sistema no corrige a nadie.
+     */
+    public function openWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int;
 }
