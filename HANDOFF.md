@@ -89,9 +89,9 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 18 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** (19.4, 19.5, 19.7, 19.8, 19.9) terminado en `refactor/deuda-backend-19b` (casillas marcadas); falta CI manual completa, revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge. **Siguiente acción:** eso, y después la rama `chore/deps-octubre` (ver Pendiente del bloque 19).
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). **En curso:** `chore/deps-octubre` (Dependabot #208 y #209, ver Pendiente del bloque 19). **Siguiente acción:** integrarla y abrir el bloque 20.
 
-Lo que conviene saber del bloque 19 (19a integrada; 19b terminado, sin integrar):
+Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 
 - **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` (hoy en `Shared/Domain/Support`, también lo usa `kiosk:health`), comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
 - **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
