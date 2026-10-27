@@ -84,8 +84,7 @@ final class InvalidIncident extends ComplianceDomainException
     public static function withPinLockoutAwaitingReview(): self
     {
         return new self(
-            'Una rejected_pin_scan con intentos bloqueados no se cierra sin persona: RN-19 pide hablar con ella '
-            .'y restablecerle el PIN (RF-ID-09), y su fichaje no hace ninguna de las dos cosas.'
+            'Una rejected_pin_scan con bloqueo de PIN no se cierra sin persona: la cierra quien la revisa (RN-19, RF-ID-09).'
         );
     }
 

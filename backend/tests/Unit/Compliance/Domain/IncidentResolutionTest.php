@@ -338,7 +338,7 @@ it('no se cierra sola si algun intento abrio o encontro el bloqueo de PIN', func
 
     expect($bloqueada->closesWhenRecovered())->toBeFalse()
         ->and(fn (): Incident => $bloqueada->closedAsRecovered(Instants::utc('2026-03-16 04:30')))
-        ->toThrow(InvalidIncident::class, 'restablecerle el PIN');
+        ->toThrow(InvalidIncident::class, 'la cierra quien la revisa');
 })->with([
     'un bloqueo' => [1],
     'varios' => [2],

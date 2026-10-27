@@ -58,7 +58,7 @@ final readonly class RejectedPinScanRecovered implements DomainEvent
         // Una jornada subsanada tiene al menos un intento y un fichaje que lo
         // subsana: sin ellos no hay nada que cerrar ni nada que asentar.
         if ($attemptScanIds === [] || $recoveringScanIds === []) {
-            throw new InvalidArgumentException('Una jornada subsanada de RN-19 necesita sus intentos y los fichajes que los subsanan.');
+            throw new InvalidArgumentException('Una jornada subsanada de RN-19 necesita sus intentos y un fichaje que los subsana.');
         }
 
         TimeRange::assertUtc('detectedAt', $detectedAt);
