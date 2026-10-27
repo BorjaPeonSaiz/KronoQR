@@ -4,7 +4,7 @@
 // Por debajo del umbral se pintan todas las filas; por encima, solo la ventana
 // visible con su sobrepintado, y el alto total reserva siempre el de TODAS las
 // filas. jsdom no maqueta: se le da al contenedor un alto de 600 px para que el
-// virtualizador tenga ventana.
+// virtualizador tenga ventana (virtual-core 3.19 la lee de clientHeight, no de offsetHeight).
 import { computed, defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { settle } from './support/harness'
@@ -21,15 +21,15 @@ const OVERSCAN = 10
 /** Filas que caben enteras en la ventana. */
 const FITTING = VIEWPORT_HEIGHT_PX / ROW_HEIGHT
 
-const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
-const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
 
 beforeAll(() => {
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
     get: () => VIEWPORT_HEIGHT_PX,
   })
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
     get: () => 1200,
   })
@@ -37,8 +37,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const [name, descriptor] of [
-    ['offsetHeight', heightDescriptor],
-    ['offsetWidth', widthDescriptor],
+    ['clientHeight', heightDescriptor],
+    ['clientWidth', widthDescriptor],
   ] as const) {
     if (descriptor === undefined) {
       Reflect.deleteProperty(HTMLElement.prototype, name)
