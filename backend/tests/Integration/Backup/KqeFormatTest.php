@@ -213,7 +213,13 @@ it('distingue una copia heredada de la 2.1.0 (Salted__) y la descifra solo con k
 it('usa la copia ya verificada aunque el origen cambie despues (TOCTOU)', function (): void {
     $box = kqeFormatSandbox();
     $hook = $box['dir'].'/hook.sh';
-    file_put_contents($hook, "#!/bin/sh\nprintf 'Z' | dd of=\"\$1\" bs=1 seek=120 conv=notrunc 2>/dev/null\n");
+    // Escribe un byte DISTINTO del que hay: con una «Z» fija, el cifrado
+    // aleatorio ya la tenia en esa posicion una vez de cada 256 y el origen no
+    // cambiaba. `$(...)` pierde un NUL o un salto de linea, que tampoco son «Z».
+    file_put_contents($hook, "#!/bin/sh\n"
+        ."b=\$(dd if=\"\$1\" bs=1 skip=120 count=1 2>/dev/null)\n"
+        ."if [ \"\$b\" = Z ]; then c=Y; else c=Z; fi\n"
+        ."printf '%s' \"\$c\" | dd of=\"\$1\" bs=1 seek=120 conv=notrunc 2>/dev/null\n");
     chmod($hook, 0o755);
 
     $open = kqeFormatOpen($box['dir'], $box['file'], env: ['KQE_TEST_HOOK_AFTER_VERIFY' => $hook, 'KQE_ALLOW_TEST_HOOKS' => '1']);
