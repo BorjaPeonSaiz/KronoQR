@@ -126,6 +126,35 @@ describe('IncidentsView', () => {
     wrapper.unmount()
   })
 
+  it('RN-19: una resuelta sin autor ni nota dice que se cerro sola; con autor, no', async () => {
+    collection = incidentCollection([
+      incident({
+        id: 501,
+        type: 'rejected_pin_scan',
+        status: 'resolved',
+        resolved_at: '2026-03-15T07:55:00.000000Z',
+        resolved_by: null,
+        resolution_note: null,
+      }),
+      incident({
+        id: 502,
+        status: 'resolved',
+        resolved_at: '2026-03-15T07:56:00.000000Z',
+        resolved_by: { uuid: '0199f0aa-2222-7000-8000-0123456789ab', name: 'Marta Ruiz' },
+        resolution_note: 'Corregida con el parte.',
+      }),
+    ])
+    const wrapper = await mountView(IncidentsView)
+    await settle()
+
+    const notes = wrapper.findAll('[data-test="closed-by-system"]')
+
+    expect(notes).toHaveLength(1)
+    expect(notes[0]?.text()).toBe(es.incidents.table.closedBySystem)
+
+    wrapper.unmount()
+  })
+
   it('sin incidencias enseña el vacio del estado elegido, no una tabla vacia', async () => {
     collection = incidentCollection([])
     const wrapper = await mountView(IncidentsView)

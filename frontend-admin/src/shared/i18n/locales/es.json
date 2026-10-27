@@ -1516,6 +1516,7 @@
       "assignedTo": "Asignada a",
       "actions": "Acciones",
       "unassigned": "Sin asignar",
+      "closedBySystem": "Se cerró sola: la persona fichó dentro de los 10 minutos siguientes al intento.",
       "noDepartment": "Sin departamento",
       "resolve": "Resolver",
       "detectedAt": "Detectada el {moment}",
@@ -1625,6 +1626,7 @@
       "conflict": {
         "title": "Ya se ha resuelto",
         "resolvedBy": "{name} la marcó como «{outcome}» el {moment}.",
+        "closedBySystem": "Se cerró sola: la persona fichó dentro de los 10 minutos siguientes al intento.",
         "resolvedByUnknown": "Otra persona ya la ha resuelto mientras tanto.",
         "note": "Nota: «{note}»",
         "acknowledge": "Entendido"

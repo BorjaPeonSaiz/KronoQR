@@ -20,7 +20,7 @@ import { ATTENDANCE_READ } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { Incident } from '@/shared/api/types'
 import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
-import { severityBadgeClass } from './incidentPresentation'
+import { isClosedBySystem, severityBadgeClass } from './incidentPresentation'
 import { incidentScanMoment, incidentSubject } from './incidentSubject'
 
 const props = defineProps<{
@@ -197,6 +197,9 @@ function detectedAtLabel(incident: Incident): string {
             </button>
             <span v-else class="text-sm text-kq-text-muted">
               {{ t(`incidents.status.${row.item.status}`) }}
+              <span v-if="isClosedBySystem(row.item)" class="block" data-test="closed-by-system">
+                {{ t('incidents.table.closedBySystem') }}
+              </span>
             </span>
           </span>
         </div>

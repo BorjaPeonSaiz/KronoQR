@@ -1516,6 +1516,7 @@
       "assignedTo": "Assigned to",
       "actions": "Actions",
       "unassigned": "Unassigned",
+      "closedBySystem": "It closed itself: the person clocked in correctly within the 10 minutes after the attempt.",
       "noDepartment": "No department",
       "resolve": "Resolve",
       "detectedAt": "Detected on {moment}",
@@ -1625,6 +1626,7 @@
       "conflict": {
         "title": "Already resolved",
         "resolvedBy": "{name} marked it as \"{outcome}\" on {moment}.",
+        "closedBySystem": "It closed itself: the person clocked in correctly within the 10 minutes after the attempt.",
         "resolvedByUnknown": "Someone else has already resolved it in the meantime.",
         "note": "Note: \"{note}\"",
         "acknowledge": "Understood"
