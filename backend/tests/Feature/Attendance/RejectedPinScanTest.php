@@ -271,6 +271,23 @@ it('no abre nada si el PIN correcto llega treinta segundos despues', function ()
     expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->count())->toBe(0);
 })->group('RN-19', 'RF-PR-01');
 
+it('hoy abre la incidencia si la pasada llega con la ventana abierta, y el fichaje de despues no la cierra', function (): void {
+    // Comportamiento ACTUAL, no el que pide RN-19 (R3-AR-03, R3-BE-02 de la
+    // re-verificacion 2.2.0). La tarea 20.3 del plan 2.3.0 hace que la pasada
+    // espere a que cierren los 600 s y que la subsanacion cierre la incidencia;
+    // entonces esta prueba se invierte, y con ella el escenario de RN-19 del
+    // doc 01 §11.
+    $scenario = rejectedPinScenario('2026-03-14 04:25:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T04:25:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-14 04:30:00');
+
+    FrozenTime::at('2026-03-14 04:31:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T04:31:00Z')->assertOk();
+    rejectedPinDetect('2026-03-15 04:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->pluck('status')->all())->toBe(['open']);
+})->group('RN-19', 'RF-PR-01');
+
 it('no anota ni abre nada con el codigo de alguien de baja', function (): void {
     $scenario = rejectedPinScenario();
 
