@@ -27,29 +27,27 @@ it('tiene en lang/es y lang/en el nombre, la unidad, el modo y las observaciones
 
     expect($texts)->toBeArray();
 
-    /** @var array{report: array{scopes: array<string, mixed>, units: array<string, mixed>, modes: array<string, mixed>, observations: array<string, mixed>}} $texts */
+    /** @var array{report: array<string, array<string, mixed>>} $texts */
     $report = $texts['report'];
 
-    foreach (RetentionScope::cases() as $scope) {
-        foreach (['scopes', 'units'] as $family) {
-            $text = $report[$family][$scope->value] ?? null;
+    $expected = [
+        'scopes' => array_column(RetentionScope::cases(), 'value'),
+        'units' => array_column(RetentionScope::cases(), 'value'),
+        'modes' => array_column(RetentionMode::cases(), 'value'),
+        'observations' => array_column(RetentionNoteKind::cases(), 'value'),
+    ];
 
-            expect(\is_string($text) && trim($text) !== '')
-                ->toBeTrue('Falta lang/'.$locale.'/retention.php report.'.$family.'.'.$scope->value);
+    $missing = [];
+
+    foreach ($expected as $family => $keys) {
+        foreach ($keys as $key) {
+            $text = $report[$family][$key] ?? null;
+
+            if (! \is_string($text) || trim($text) === '') {
+                $missing[] = 'report.'.$family.'.'.$key;
+            }
         }
     }
 
-    foreach (RetentionMode::cases() as $mode) {
-        $text = $report['modes'][$mode->value] ?? null;
-
-        expect(\is_string($text) && trim($text) !== '')
-            ->toBeTrue('Falta lang/'.$locale.'/retention.php report.modes.'.$mode->value);
-    }
-
-    foreach (RetentionNoteKind::cases() as $kind) {
-        $text = $report['observations'][$kind->value] ?? null;
-
-        expect(\is_string($text) && trim($text) !== '')
-            ->toBeTrue('Falta lang/'.$locale.'/retention.php report.observations.'.$kind->value);
-    }
+    expect($missing)->toBe([], 'Faltan en lang/'.$locale.'/retention.php');
 })->with(['es', 'en'])->group('RF-PR-03', 'RL-11', 'RF-KI-05');
