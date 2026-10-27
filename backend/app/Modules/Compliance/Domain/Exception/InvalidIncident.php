@@ -76,7 +76,7 @@ final class InvalidIncident extends ComplianceDomainException
     public static function withoutClosureOnRecovery(string $type): self
     {
         return new self(
-            'Una incidencia «'.$type.'» no se cierra sola: solo rejected_pin_scan se cierra cuando la persona '
+            'Una incidencia «'.$type.'» no se cierra sin persona: solo rejected_pin_scan se cierra cuando la persona '
             .'lo subsana (RN-19). Las demas las cierra una persona con su nota (RN-13).'
         );
     }

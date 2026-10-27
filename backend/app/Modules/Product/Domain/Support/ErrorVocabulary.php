@@ -2568,7 +2568,6 @@ final readonly class ErrorVocabulary
         'sobrescribe',
         'socket',
         'sodium',
-        'sola',
         'solape',
         'solicitada',
         'solicitado',
