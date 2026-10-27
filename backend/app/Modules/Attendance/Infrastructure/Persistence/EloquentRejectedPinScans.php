@@ -84,7 +84,7 @@ final readonly class EloquentRejectedPinScans implements RejectedPinScans
      * Los valores de `scan_events.result` que subsanan un PIN rechazado.
      *
      * **Los decide el dominio** ({@see PinAttemptRecoveryPolicy::recovers()},
-     * R3-AR-04) y aqui solo se traducen a la columna: cada accion y cada motivo
+     * RN-19) y aqui solo se traducen a la columna: cada accion y cada motivo
      * de rechazo se pregunta uno a uno, asi que un desenlace nuevo entra o queda
      * fuera por lo que diga la regla, no por lo que recuerde este adaptador.
      *

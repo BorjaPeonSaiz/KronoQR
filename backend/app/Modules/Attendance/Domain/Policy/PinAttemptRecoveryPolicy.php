@@ -15,7 +15,7 @@ use DateTimeImmutable;
  * **Cuando un PIN rechazado ya no necesita revision** (RN-19, doc 01 §4).
  *
  * Tres decisiones de la regla, las tres aqui y ninguna en un adaptador
- * (R3-AR-04 de la re-verificacion 2.2.0):
+ * (doc 01 §4, nota de RN-19):
  *
  * 1. **Que fichajes subsanan** ({@see self::recovers()}): cualquiera aceptado,
  *    el anti-rebote y el irreconciliable de RN-18. El adaptador consulta esa
@@ -25,7 +25,7 @@ use DateTimeImmutable;
  *    habitual: se equivoco de PIN y al momento acerto, o volvio con su tarjeta.
  * 3. **Cuando se puede juzgar** ({@see self::statusOf()}): solo con la ventana
  *    cerrada. Mientras sigue abierta, la subsanacion puede no haber ocurrido
- *    todavia, y abrir la incidencia seria adelantarse (R3-AR-03, R3-BE-02).
+ *    todavia, y abrir la incidencia seria adelantarse (doc 01 §4, RN-19).
  *
  * La ventana es **estructural y no se configura** (doc 01 §4, nota «Sobre
  * RN-19»), como la de RN-18: no es un umbral legal ni operativo del hotel,
@@ -59,7 +59,8 @@ final readonly class PinAttemptRecoveryPolicy
     public static function recovers(ClockingAction|ScanRejectionReason $outcome): bool
     {
         return $outcome instanceof ClockingAction
-            || \in_array($outcome, [ScanRejectionReason::DEBOUNCE, ScanRejectionReason::OUT_OF_ORDER], true);
+            || $outcome === ScanRejectionReason::DEBOUNCE
+            || $outcome === ScanRejectionReason::OUT_OF_ORDER;
     }
 
     /** El ultimo instante en que un fichaje todavia subsana el intento, incluido. */

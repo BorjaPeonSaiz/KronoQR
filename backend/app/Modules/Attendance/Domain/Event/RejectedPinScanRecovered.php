@@ -18,7 +18,7 @@ use InvalidArgumentException;
  * que se cierre la ventana antes de abrir la incidencia—; el caso que lo
  * justifica es la subsanacion que **llega tarde**: el fichaje bueno estaba en la
  * cola offline de otro quiosco cuando la revision abrio la incidencia
- * (R3-BE-02 de la re-verificacion 2.2.0).
+ * (doc 01 §4, nota de RN-19).
  *
  * **Attendance no cierra incidencias**: dice que la jornada esta subsanada y
  * `Compliance`, que es quien las tiene, cierra la que siga abierta y deja el

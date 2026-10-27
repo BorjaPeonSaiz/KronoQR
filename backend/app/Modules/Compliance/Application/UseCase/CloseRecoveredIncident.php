@@ -27,8 +27,8 @@ use Illuminate\Database\ConnectionInterface;
  * La revision de RN-19 espera a que se cierre la ventana de 600 s antes de abrir
  * nada, pero el fichaje que subsana puede llegar **despues**: estaba en la cola
  * offline de otro quiosco cuando la revision miro. Sin este cierre la incidencia
- * se quedaba abierta pidiendo revisar un fichaje que no falta (R3-BE-02 de la
- * re-verificacion 2.2.0). Que la jornada esta subsanada lo decide `Attendance`;
+ * se quedaba abierta pidiendo revisar un fichaje que no falta (doc 01 §4, nota
+ * de RN-19). Que la jornada esta subsanada lo decide `Attendance`;
  * aqui solo se cierra lo que siga abierto.
  *
  * ## Que no hace

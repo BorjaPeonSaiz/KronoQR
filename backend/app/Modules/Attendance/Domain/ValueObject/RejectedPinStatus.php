@@ -18,7 +18,7 @@ use InvalidArgumentException;
  *   ventana. Es definitivo: un fichaje aceptado no se deshace.
  * - `PENDING`: no hay subsanacion **todavia** y la ventana de 600 s sigue
  *   abierta. La revision no lo juzga: lo vera en la pasada siguiente
- *   (R3-AR-03, R3-BE-02).
+ *   (doc 01 §4, RN-19).
  * - `UNRECOVERED`: la ventana se cerro sin subsanacion. Es lo unico que abre
  *   incidencia.
  *
@@ -49,14 +49,16 @@ enum RejectedPinStatus: string
             throw new InvalidArgumentException('Una jornada sin intentos por PIN rechazados no tiene estado de RN-19.');
         }
 
-        if (\in_array(self::UNRECOVERED, $attempts, true)) {
-            return self::UNRECOVERED;
+        $pending = false;
+
+        foreach ($attempts as $attempt) {
+            if ($attempt === self::UNRECOVERED) {
+                return self::UNRECOVERED;
+            }
+
+            $pending = $pending || $attempt === self::PENDING;
         }
 
-        if (\in_array(self::PENDING, $attempts, true)) {
-            return self::PENDING;
-        }
-
-        return self::RECOVERED;
+        return $pending ? self::PENDING : self::RECOVERED;
     }
 }
