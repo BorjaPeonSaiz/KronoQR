@@ -31,3 +31,23 @@ it('exporta los roles de cada cuenta de gestion', function (): void {
     expect($filas->get($admin->uuid)['roles'] ?? null)->toBe('admin')
         ->and($filas->get($rrhh->uuid)['roles'] ?? null)->toBe('rrhh');
 })->group('RF-PD-14', 'RL-20');
+
+it('no mezcla los roles de otro modelo que comparte el id de una cuenta', function (): void {
+    FrozenTime::at('2026-10-26 10:00:00');
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    // La tabla de union es polimorfica: un `model_id` igual con otro
+    // `model_type` es de otro modelo y no puede salir en `users.csv`.
+    DB::table('model_has_roles')->insert([
+        'role_id' => DB::table('roles')->where('name', UserRole::ADMIN->value)->value('id'),
+        'model_type' => 'App\Modules\Product\Infrastructure\Persistence\SupportGrant',
+        'model_id' => $rrhh->id,
+    ]);
+
+    $filas = collect(iterator_to_array(
+        app(DataExportSource::class)->rows(DataExportCatalog::dataset('users') ?? throw new LogicException('Sin conjunto users.')),
+        false,
+    ))->keyBy('user_uuid');
+
+    expect($filas->get($rrhh->uuid)['roles'] ?? null)->toBe('rrhh');
+})->group('RF-PD-14', 'RL-20');
