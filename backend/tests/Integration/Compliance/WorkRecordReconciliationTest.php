@@ -16,6 +16,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
 use App\Modules\Workforce\Application\UseCase\UpdateSiteHandler;
@@ -702,6 +703,91 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and($otra['output'])->toContain('shift_entries '.$posterior.' · audit_without_entry')
         ->and($otra['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)');
 })->group('RS-07', 'RL-04', 'RL-02');
+
+/**
+ * Un tramo cerrado de la persona del escenario escrito directamente en
+ * `shift_entries`, sin ningun asiento: lo que queda de un tramo cuyo asiento se
+ * fue con la particion de `audit_log` de su año, y tambien lo que dejaria un
+ * `INSERT` inventado. Lo que los distingue es el año sellado.
+ *
+ * @param  array{site: int, employee: string}  $escenario
+ */
+function registroAuditadoTramoSinAsiento(array $escenario, string $jornada, string $entrada, string $salida): string
+{
+    $uuid = Str::uuid7()->toString();
+
+    DB::table('shift_entries')->insert([
+        'uuid' => $uuid,
+        'employee_id' => AttendanceFixtures::employeeIdOf($escenario['employee']),
+        'site_id' => $escenario['site'],
+        'work_date' => $jornada,
+        'clocked_in_at' => $entrada,
+        'clocked_out_at' => $salida,
+        'duration_minutes' => 480,
+        'status' => 'closed',
+        'clock_in_source' => 'qr_kiosk',
+        'clock_out_source' => 'qr_kiosk',
+        'version' => 1,
+        'created_at' => $salida,
+        'updated_at' => $salida,
+    ]);
+
+    return $uuid;
+}
+
+/** El ancla de un año de `audit_log` ya purgado, como la deja el propietario al soltar su particion. */
+function registroAuditadoSellarAno(int $ano): void
+{
+    SchemaOwner::connection()->table('audit_chain_anchors')->insert([
+        'partition_year' => $ano,
+        'first_hash' => str_repeat('a', 64),
+        'last_hash' => str_repeat('b', 64),
+        'row_count' => 1,
+        'sealed_at' => ($ano + 1).'-01-01 00:00:00+00',
+        'sealed_by' => AuditLogSchema::migrationRole(),
+    ]);
+}
+
+it('no denuncia el turno de Nochevieja cuyo año de auditoria esta sellado en PostgreSQL', function (): void {
+    // V3-QA-4: la exencion de ADR-027 la decide el año sellado que lee
+    // `DatabaseSiteTimezoneAuditReader::sealedAuditYears()` de
+    // `audit_chain_anchors`. 00:30 del 1 de enero en Madrid son las 23:30 UTC
+    // del 31 de diciembre: el asiento de la entrada cayo en la particion de 2025.
+    $escenario = registroAuditadoEscenario();
+    $nochevieja = registroAuditadoTramoSinAsiento($escenario, '2026-01-01', '2025-12-31 23:30:00+00', '2026-01-01 07:30:00+00');
+    registroAuditadoSellarAno(2025);
+
+    $completa = registroAuditadoConciliar(true);
+
+    expect($completa['code'])->toBe(0, $completa['output'])
+        ->and($completa['output'])->not->toContain($nochevieja);
+})->group('RL-04', 'RL-02', 'RS-07');
+
+it('denuncia el mismo turno de Nochevieja si su año de auditoria no esta sellado', function (): void {
+    // El control de la prueba de arriba: si el adaptador no leyera el ancla, o
+    // leyera otra tabla, esta pasaria y aquella no.
+    $escenario = registroAuditadoEscenario();
+    $nochevieja = registroAuditadoTramoSinAsiento($escenario, '2026-01-01', '2025-12-31 23:30:00+00', '2026-01-01 07:30:00+00');
+
+    $completa = registroAuditadoConciliar(true);
+
+    expect($completa['code'])->toBe(1)
+        ->and($completa['output'])->toContain('shift_entries '.$nochevieja.' · entry_without_audit');
+})->group('RL-04', 'RS-07');
+
+it('no deja que un año sellado en PostgreSQL tape un tramo inventado', function (string $jornada, string $entrada, string $salida): void {
+    $escenario = registroAuditadoEscenario();
+    $inventado = registroAuditadoTramoSinAsiento($escenario, $jornada, $entrada, $salida);
+    registroAuditadoSellarAno(2025);
+
+    $completa = registroAuditadoConciliar(true);
+
+    expect($completa['code'])->toBe(1)
+        ->and($completa['output'])->toContain('shift_entries '.$inventado.' · entry_without_audit');
+})->with([
+    'tramo corriente de un año sellado' => ['2025-06-10', '2025-06-10 06:00:00+00', '2025-06-10 14:00:00+00'],
+    'entrada en el año sellado y jornada de otro año' => ['2026-03-02', '2025-03-01 23:30:00+00', '2025-03-02 07:30:00+00'],
+])->group('RL-04', 'RS-07');
 
 /**
  * El escenario con una correccion de zona por la orden de consola, que deja su
