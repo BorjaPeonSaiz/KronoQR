@@ -44,8 +44,13 @@ const SITE_WALL_CLOCK_PG_PATTERN = "'YYYY-MM-DD HH24:MI'";
  *   cambia su regla desde finales de 2026; PHP 8.4 trae compilada la 2026.3
  *   (`timezone_version_get()`) y todavia no. Se cierra cuando PHP traiga la
  *   2026.4 o la imagen instale `timezonedb` de PECL.
+ * - `America/Winnipeg`: al reves que Inuvik. En la CI, PHP lee la base tz del
+ *   sistema del runner (`timezone_version_get()` = `0.system`), mas nueva que
+ *   la de la imagen de PostgreSQL, y ya aplica la regla nueva de Manitoba a
+ *   finales de 2026 (UTC-5 el 31-12 frente a UTC-6). Aparecio el 27-10-2026
+ *   sin cambios en el codigo. Se cierra cuando las dos bases coincidan.
  */
-const SITE_WALL_CLOCK_KNOWN_SKEW = ['America/Inuvik'];
+const SITE_WALL_CLOCK_KNOWN_SKEW = ['America/Inuvik', 'America/Winnipeg'];
 
 /** @return list<string> */
 function instantesDelRelojDelCentro(): array
