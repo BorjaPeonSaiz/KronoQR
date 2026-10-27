@@ -306,7 +306,21 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
     FrozenTime::at('2026-03-15 10:00:00');
     $recoveringScanId = Str::uuid7()->toString();
     rejectedPinPost($scenario, $recoveringScanId, REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+
+    /** @var list<array<string, mixed>> $detections */
+    $detections = [];
+    Log::listen(static function (MessageLogged $message) use (&$detections): void {
+        if ($message->message === 'attendance.incident_detection') {
+            $detections[] = $message->context;
+        }
+    });
+
     rejectedPinDetect('2026-03-16 03:30:00');
+
+    // La pasada cuenta la jornada que anuncio, en el log y en su salida.
+    expect($detections)->toHaveCount(1)
+        ->and($detections[0]['recovered_work_days'])->toBe(1)
+        ->and(Artisan::output())->toContain(trans('console.detect_incidents.recovered', ['count' => 1]));
 
     $closed = DB::table('incidents')->where('type', 'rejected_pin_scan')->get();
 

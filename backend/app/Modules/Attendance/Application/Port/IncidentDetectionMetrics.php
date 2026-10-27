@@ -44,11 +44,14 @@ interface IncidentDetectionMetrics
      * @param  int  $workDaysInspected  jornadas revisadas en la pasada
      * @param  int  $findings  hallazgos emitidos, esten o no abiertos
      * @param  int  $failures  hallazgos que NO se pudieron convertir en incidencia
+     * @param  int  $recoveredWorkDays  jornadas de RN-19 subsanadas que se anunciaron para cerrar
+     *                                  su incidencia; anuncios, no cierres
      */
     public function scanCompleted(
         int $workDaysInspected,
         int $findings,
         int $failures,
+        int $recoveredWorkDays,
         DateTimeImmutable $at,
     ): void;
 }

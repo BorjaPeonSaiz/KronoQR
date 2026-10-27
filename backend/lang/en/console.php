@@ -646,6 +646,8 @@ return [
             .'No shift entry has been closed (RN-08).',
         'failures' => ':count finding(s) could not be opened as an incident. The rest could. '
             .'Look for «attendance.incident_not_opened» in the log to see which.',
+        'recovered' => ':count working day(s) with a rejected PIN already recovered: any incident still open is closed, '
+            .'unless it had a PIN lockout (RN-19). Each closure leaves its system audit entry.',
     ],
 
     'detect_patterns' => [

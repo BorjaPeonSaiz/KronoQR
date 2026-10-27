@@ -189,6 +189,7 @@ final readonly class DetectAttendanceAnomalies
                 workDaysInspected: \count($workDays),
                 byType: $byType,
                 failures: $failures,
+                recoveredWorkDays: \count($recoveredPinWorkDays),
             ),
             $now,
         );
@@ -213,6 +214,7 @@ final readonly class DetectAttendanceAnomalies
             $result->workDaysInspected,
             $result->total(),
             $result->failures,
+            $result->recoveredWorkDays,
             $now,
         );
 

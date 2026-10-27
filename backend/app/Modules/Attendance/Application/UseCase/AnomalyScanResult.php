@@ -46,14 +46,27 @@ final readonly class AnomalyScanResult
          * con su `employee_uuid` (regla dura 21).
          */
         public int $failures,
+        /**
+         * Jornadas de RN-19 **subsanadas enteras** que la pasada anuncio para
+         * que `Compliance` cierre su incidencia, si sigue abierta y no tuvo
+         * bloqueo de PIN.
+         *
+         * Cuenta **anuncios, no cierres**, por lo mismo que `$byType` cuenta
+         * hallazgos y no incidencias creadas: quien sabe si habia algo abierto
+         * es `Compliance`, al otro lado de un evento. La mayoria de estas
+         * jornadas nunca abrio incidencia, y la misma jornada vuelve a contar
+         * mientras siga dentro de la ventana. El cierre que si ocurre deja su
+         * asiento `incident.resolved` de actor `system`, que es la cifra exacta.
+         */
+        public int $recoveredWorkDays = 0,
     ) {}
 
     /**
      * @param  array<string, int>  $byType
      */
-    public static function of(int $daysInspected, int $workDaysInspected, array $byType, int $failures = 0): self
+    public static function of(int $daysInspected, int $workDaysInspected, array $byType, int $failures = 0, int $recoveredWorkDays = 0): self
     {
-        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures);
+        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures, $recoveredWorkDays);
     }
 
     /**

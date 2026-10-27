@@ -126,7 +126,7 @@ function rejectedPinDetectionAttempt(string $scanId, string $claimant, string $o
 }
 
 /**
- * @return array{result: AnomalyScanResult, anomalies: list<DetectedAnomaly>, recovered: list<RejectedPinScanRecovered>, metrics: array<string, int>, port: InMemoryRejectedPinScans}
+ * @return array{result: AnomalyScanResult, anomalies: list<DetectedAnomaly>, recovered: list<RejectedPinScanRecovered>, metrics: array<string, int>, detection: array{findings: int, failures: int, recoveredWorkDays: int}|null, port: InMemoryRejectedPinScans}
  */
 function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDays = 7): array
 {
@@ -151,6 +151,17 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         public function anomaliesDetected(array $byPattern): void
         {
             $this->byPattern = $byPattern;
+        }
+    };
+
+    $detectionMetrics = new class implements IncidentDetectionMetrics
+    {
+        /** @var array{findings: int, failures: int, recoveredWorkDays: int}|null */
+        public ?array $published = null;
+
+        public function scanCompleted(int $workDaysInspected, int $findings, int $failures, int $recoveredWorkDays, DateTimeImmutable $at): void
+        {
+            $this->published = ['findings' => $findings, 'failures' => $failures, 'recoveredWorkDays' => $recoveredWorkDays];
         }
     };
 
@@ -255,10 +266,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         },
         events: $events,
         anomalyMetrics: $anomalyMetrics,
-        detectionMetrics: new class implements IncidentDetectionMetrics
-        {
-            public function scanCompleted(int $workDaysInspected, int $findings, int $failures, DateTimeImmutable $at): void {}
-        },
+        detectionMetrics: $detectionMetrics,
         clock: FixedClock::at(REJECTED_PIN_DETECTION_NOW),
         logger: new NullLogger,
         caughtFailures: new RecordingCaughtFailures,
@@ -279,7 +287,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         }
     }
 
-    return ['result' => $result, 'anomalies' => $anomalies, 'recovered' => $recovered, 'metrics' => $anomalyMetrics->byPattern, 'port' => $port];
+    return ['result' => $result, 'anomalies' => $anomalies, 'recovered' => $recovered, 'metrics' => $anomalyMetrics->byPattern, 'detection' => $detectionMetrics->published, 'port' => $port];
 }
 
 it('agrupa cuatro intentos de la misma persona y dia en una incidencia con el primero', function (): void {
@@ -478,8 +486,11 @@ it('anuncia la jornada subsanada entera para que se cierre su incidencia', funct
             rejectedPinDetectionUtc('2026-03-13 23:00:00'),
             rejectedPinDetectionUtc('2026-03-14 23:00:00'),
         ]])
-        // Ni el recuento ni la metrica cuentan un cierre como hallazgo.
-        ->and($run['result']->byType)->toBe([]);
+        // Ni el recuento ni la metrica cuentan un cierre como hallazgo...
+        ->and($run['result']->byType)->toBe([])
+        // ...pero la pasada si cuenta la jornada que anuncio.
+        ->and($run['result']->recoveredWorkDays)->toBe(1)
+        ->and($run['detection'])->toBe(['findings' => 0, 'failures' => 0, 'recoveredWorkDays' => 1]);
 })->group('RN-19', 'RF-PR-01');
 
 it('no anuncia la jornada si un intento suyo sin subsanar quedo fuera de la ventana de recepcion', function (): void {
@@ -495,7 +506,8 @@ it('no anuncia la jornada si un intento suyo sin subsanar quedo fuera de la vent
     ));
 
     expect($run['recovered'])->toBe([])
-        ->and($run['anomalies'])->toBe([]);
+        ->and($run['anomalies'])->toBe([])
+        ->and($run['result']->recoveredWorkDays)->toBe(0);
 })->group('RN-19', 'RF-PR-01');
 
 it('no anuncia nada de una persona cuyo fichaje es de otra', function (): void {
