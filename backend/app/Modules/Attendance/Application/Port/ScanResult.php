@@ -219,6 +219,74 @@ enum ScanResult: string
     }
 
     /**
+     * Los **rechazos de credencial**: el servidor decidio que la tarjeta no
+     * servia —desconocida, revocada, con mala firma o de una persona suspendida—
+     * y por eso el escaneo **no es un uso de la credencial** ni un fichaje.
+     *
+     * Es el unico conjunto que comparten los adaptadores que tienen que
+     * excluirlos: el uso de credencial de RN-16 ({@see CredentialScans}) y los
+     * desfases marcados ({@see FlaggedScans}), que no pueden abrir `clock_skew`
+     * por un rechazo de RN-20. Antes cada uno escribia su lista a mano, y un
+     * rechazo nuevo entraba en uno y se olvidaba en el otro.
+     *
+     * Quedan fuera el anti-rebote (la credencial es valida y acaba de
+     * funcionar, ADR-031), el de RN-18 (describe el registro, no la tarjeta) y
+     * el descarte del servidor (no decidio nada, ADR-061); quien tambien tenga
+     * que excluir esos lo anade el mismo.
+     *
+     * @return list<string>
+     */
+    public static function credentialRejections(): array
+    {
+        $results = [];
+
+        foreach (self::cases() as $result) {
+            if ($result->isCredentialRejection()) {
+                $results[] = $result->value;
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Ver {@see credentialRejections()}. **Una tabla y no un `match`**, por lo
+     * mismo que {@see action()}: cada valor se clasifica a mano y uno nuevo sin
+     * entrada lanza en lugar de quedar fuera por omision.
+     */
+    public function isCredentialRejection(): bool
+    {
+        if (! \array_key_exists($this->value, self::CREDENTIAL_REJECTIONS)) {
+            throw new LogicException(
+                'scan_events.result '.$this->value.' no declara si es un rechazo de credencial: '
+                .'anadelo a ScanResult::CREDENTIAL_REJECTIONS.'
+            );
+        }
+
+        return self::CREDENTIAL_REJECTIONS[$this->value];
+    }
+
+    /**
+     * Si cada desenlace es un rechazo de credencial. Ver
+     * {@see credentialRejections()}.
+     *
+     * @var array<string, bool>
+     */
+    private const array CREDENTIAL_REJECTIONS = [
+        'clock_in' => false,
+        'clock_out' => false,
+        'break_start' => false,
+        'break_end' => false,
+        'rejected_unknown' => true,
+        'rejected_revoked' => true,
+        'rejected_debounce' => false,
+        'rejected_signature' => true,
+        'rejected_out_of_order' => false,
+        'discarded_unprocessable' => false,
+        'rejected_suspended' => true,
+    ];
+
+    /**
      * El anti-rebote es el unico desenlace que no crea tramo y **no es un
      * rechazo de cara al cliente** (ADR-031): viaja en un `200` con
      * `action: debounced`, con el nombre del empleado y el acumulado del dia,

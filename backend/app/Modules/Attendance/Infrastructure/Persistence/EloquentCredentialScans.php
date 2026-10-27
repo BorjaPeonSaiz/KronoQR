@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Infrastructure\Persistence;
 
 use App\Modules\Attendance\Application\Port\CredentialScans;
+use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Domain\ValueObject\CredentialScan;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
@@ -76,12 +77,13 @@ final readonly class EloquentCredentialScans implements CredentialScans
             ->join('devices', 'devices.id', '=', 'scan_events.device_id')
             ->leftJoin('shift_entries', 'shift_entries.id', '=', 'scan_events.shift_entry_id')
             ->whereIn('scan_events.origin', ['qr_kiosk', 'pin_kiosk'])
-            // La lista de lo que NO entra, escrita entera: con un `NOT LIKE
+            // La lista de lo que NO entra, clasificada caso a caso en
+            // `ScanResult::credentialRejections()`: con un `NOT LIKE
             // 'rejected%'` el anti-rebote se caia dentro sin que nadie lo
             // decidiera, y ahi estaba el agujero de RN-16. El
             // descarte del servidor (ADR-061) tampoco es un uso de la credencial
             // que el servidor decidiera: no entra.
-            ->whereNotIn('scan_events.result', ['rejected_unknown', 'rejected_revoked', 'rejected_signature', 'rejected_suspended', 'discarded_unprocessable'])
+            ->whereNotIn('scan_events.result', [...ScanResult::credentialRejections(), ScanResult::DISCARDED_UNPROCESSABLE->value])
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),
                 $to->format('Y-m-d H:i:s.uP'),
