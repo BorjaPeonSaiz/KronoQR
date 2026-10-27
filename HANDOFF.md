@@ -89,7 +89,20 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** en curso en `docs/especificacion-2.3.0`.
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** terminado en `docs/especificacion-2.3.0` (las 8 tareas ✅); falta CI manual, revisiones, PR y merge. **Siguiente acción:** eso y abrir el bloque 21.
+
+Lo que conviene saber del bloque 20 (decisiones en Engram `2.3.0/b20-decisiones`):
+
+- **Doc 01:** RN-24 (tramo a mano nunca hacia el futuro, ahora también en `WorkDay::addEntry`/`correctEntry` con `ManualEntryHorizon`), RN-25 (suspendido: no ficha, conserva tarjeta, sin incidencia, **sí entra al portal**, decisión del propietario 27-10), RN-26 (motivo de firma 10-1 000), RS-14 (conciliación). Los escenarios Gherkin viven en doc 01 §11 con su tabla (no hay `.feature`).
+- **RN-19 (20.3):** la revisión espera a que cierre la ventana de 600 s; un fichaje aceptado (o rebote/RN-18) en [intento, +600 s] subsana; `RejectedPinScanRecovered` → `CloseRecoveredIncident` cierra con actor `system` y asiento. Una subsanación fuera de `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` no cierra nada.
+- **G5 (decisión del propietario 27-10):** cambia la promesa del doc 05 §6.3, no el código: un asiento por cada 15 min de uso del soporte.
+- **20.7:** `docs:consistency` exige que cada operación del contrato y cada `Http/Controller` y `Domain/Policy` citen un requisito existente; no ve si el requisito cubre de verdad el comportamiento.
+- **Tarjeta de persona suspendida:** `scan_events.result = rejected_suspended` (migración `2026_10_27_100000`, reversible mientras no haya filas).
+- **Pendiente:**
+  - el PIN de una persona suspendida sigue como `rejected_unknown` (toca el verificador de PIN y el CHECK de ADR-043);
+  - carrera de microsegundos suspensión/resolución en `RegisterScanHandler::process` (fila `rejected_unknown` con `employee_id`);
+  - observabilidad sin RNF en doc 01 (métricas y órdenes de mantenimiento sin requisito);
+  - catálogo de departamentos sin RF propio (lo cubren RF-GP-01, RF-PD-03 y RF-ID-03).
 
 Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 
