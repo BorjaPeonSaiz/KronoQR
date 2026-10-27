@@ -132,6 +132,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -1094,11 +1095,14 @@ final class IdentityServiceProvider extends ServiceProvider
             return false;
         }
 
-        // El reloj del sistema, no un `Clock` inyectado: esto es infraestructura
-        // de sesion, no dominio (regla dura 2). La caducidad que SI se prueba con
-        // reloj fijo es la del modelo de dominio, y una prueba de integracion
-        // comprueba que las dos dicen lo mismo.
-        return $expiresAt->getTimestamp() > time();
+        // El reloj de Carbon, no un `Clock` inyectado: esto es infraestructura
+        // de sesion, no dominio (regla dura 2). Y Carbon y no `time()`: es el
+        // mismo reloj con el que Sanctum compara el `expires_at` del token, y el
+        // que `FrozenTime` detiene en las pruebas. Con `time()`, una prueba que
+        // dejara pasar las 24 horas de la concesion veia el token caducado desde
+        // el primer minuto en cuanto el calendario real pasaba de esa fecha
+        // (G5 de la verificacion 2.1.0, `SupportAccessScenarioTest`).
+        return $expiresAt->getTimestamp() > Carbon::now()->getTimestamp();
     }
 
     /**
