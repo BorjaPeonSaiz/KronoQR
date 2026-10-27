@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * Textos del historico personal que el empleado se descarga desde su portal
- * (RF-ID-05, RL-05, tarea 1.11).
+ * (RF-ID-05, RL-05).
  *
  * POR QUE ESTAN AQUI Y NO EN EL CODIGO. El idioma del documento es configuracion
  * de la instalacion (`APP_LOCALE`), no una constante del programa: el producto se
@@ -91,7 +91,7 @@ return [
     ],
 
     /*
-     * El mismo registro como PDF sellado (`?format=pdf`, PR19, Anexo B del
+     * El mismo registro como PDF sellado (`?format=pdf`, Anexo B del
      * doc 01). Es lo que una persona presenta ante un tercero, asi que aqui los
      * rotulos van con tildes y los tipos de fila se traducen: lo lee una persona,
      * no lo compara una maquina. El cuerpo y el sello son las plantillas del

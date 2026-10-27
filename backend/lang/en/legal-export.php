@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * English texts of the legal export (RF-IN-05, RL-06, task 1.17).
+ * English texts of the legal export (RF-IN-05, RL-06).
  *
  * The Spanish file carries the reasoning; this one mirrors it key by key. Two
  * things stay untranslated on purpose, here as well: the nine correction reason

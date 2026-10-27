@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Optional telemetry texts (RF-PD-12, ADR-020, ADR-023, task 5.10).
+ * Optional telemetry texts (RF-PD-12, ADR-020, ADR-023).
  *
  * WRITTEN FOR THE CUSTOMER. See the Spanish catalogue for the reasoning: the
  * decision to enable telemetry is taken with the field list in front of you,

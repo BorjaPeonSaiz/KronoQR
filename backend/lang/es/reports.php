@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Informes por periodo (RF-IN-01, RF-IN-02, RF-IN-03, tarea 2.8).
+ * Informes por periodo (RF-IN-01, RF-IN-02, RF-IN-03).
  *
  * LOS CRITERIOS DE INCLUSION SON PARTE DEL INFORME, NO DE LA DOCUMENTACION.
  * `/informe-nuevo` lo exige por escrito: un informe de horas sin ellos es una
@@ -13,7 +13,7 @@ declare(strict_types=1);
  *
  * Las claves las decide `GeneratePeriodReport`, que las transporta SIN traducir
  * porque el dominio no tiene idioma. La traduccion es del `Resource`, y la
- * misma lista la escribira la tarea 2.9 en la cabecera del CSV y del PDF.
+ * misma lista la escribe la exportacion (RF-IN-04) en la cabecera del CSV y del PDF.
  *
  * Cada linea se escribe para alguien de RRHH, no para quien programo esto:
  * dice QUE se ha contado, no como se ha implementado.
@@ -44,7 +44,7 @@ return [
         'iso_week' => 'Las semanas empiezan en lunes (semana ISO 8601) y se recortan al rango pedido.',
 
         /*
-         * Las tres de RF-GP-04 (tarea 3.10, decision 7). SE LEEN COMO UN SOLO
+         * Las tres de RF-GP-04. SE LEEN COMO UN SOLO
          * PARRAFO y por eso van seguidas: las dos primeras dicen que se ha
          * descontado del absentismo y la tercera dice lo que NO se ha podido
          * descontar. Sacar la tercera de aqui dejaria «absentismo no justificado»
@@ -59,7 +59,7 @@ return [
     ],
 
     /*
-     * Rotulos del fichero exportado (RF-IN-04, tarea 2.9).
+     * Rotulos del fichero exportado (RF-IN-04).
      *
      * LOS TRES FORMATOS USAN ESTOS MISMOS TEXTOS. CSV, XLSX y PDF recorren la
      * misma lista de columnas y escriben el mismo bloque de cabecera, de modo que
@@ -194,7 +194,7 @@ return [
     ],
 
     /*
-     * LA SALIDA A NOMINA (RF-IN-07, tarea 3.9).
+     * LA SALIDA A NOMINA (RF-IN-07).
      *
      * Rótulos POR OMISIÓN de las columnas del fichero de nómina. Se usan solo
      * cuando el cliente no ha escrito el suyo en `PAYROLL_EXPORT_COLUMNS`
@@ -259,7 +259,7 @@ return [
     ],
 
     /*
-     * EL RESUMEN SEMANAL POR CORREO (RF-PR-05, tarea 3.12).
+     * EL RESUMEN SEMANAL POR CORREO (RF-PR-05).
      *
      * Se escribe para el responsable de un departamento de hotel, no para quien
      * programo esto: dice que trabajo su gente la semana pasada y que tenia
@@ -308,7 +308,7 @@ return [
         'no_department' => 'tu ámbito',
 
         // Lo que imprime `reporting:weekly-summary` cuando no envía nada, con
-        // dónde se arregla cada caso (RF-PR-05, V4-PL-4). Sin nombres ni
+        // dónde se arregla cada caso (RF-PR-05). Sin nombres ni
         // direcciones: acaba en el log del planificador (regla dura 21).
         'not_sent' => [
             'disabled' => 'El resumen semanal está desactivado en esta instalación. Se enciende en el panel, en Ajustes: WEEKLY_SUMMARY_EMAIL.',
@@ -320,7 +320,7 @@ return [
     ],
 
     /*
-     * EL CUADRO DE IMPACTO Y ADOPCION (RF-IN-08, RNF-D-01, tarea 3.13).
+     * EL CUADRO DE IMPACTO Y ADOPCION (RF-IN-08, RNF-D-01).
      *
      * LOS CRITERIOS SON PARTE DEL CUADRO, NO DE LA DOCUMENTACION, por lo mismo
      * que en el informe por periodo: un porcentaje sin su definicion es un

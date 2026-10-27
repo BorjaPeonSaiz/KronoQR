@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * License texts (RF-PD-04, RF-PD-05, task 5.3). See `lang/es/license.php` for
+ * License texts (RF-PD-04, RF-PD-05). See `lang/es/license.php` for
  * the reasoning: every message states what happened, what still works and what
  * to do, because ADR-019 requires the degradation to be honest.
  */

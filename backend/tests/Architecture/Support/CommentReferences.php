@@ -105,10 +105,12 @@ final class CommentReferences
     private static function planPatterns(): array
     {
         return [
-            '~\bbloques?\s+[A-Z]?\d+[a-z]?(?:\.\d+)?\b~iu',
-            self::phrase('\b(?:tareas?|fichas?) \d+\.\d+[a-z]?\b'),
+            // Tambien en ingles: los comentarios de `lang/en/` hablan ese idioma.
+            '~\b(?:bloques?|blocks?)\s+[A-Z]?\d+[a-z]?(?:\.\d+)?\b~iu',
+            self::phrase('\b(?:tareas?|fichas?|tasks?) \d+\.\d+[a-z]?\b'),
             self::phrase('\b(?:de|desde|tras) la \d+\.\d+[a-z]?\b(?![.,]\w)'),
-            '~\bdecisi(?:o|ó)n(?:es)?\s+\d{1,2}\b(?!-\d)~iu',
+            // «decision 7» y «decision 13c» de una ficha.
+            '~\bdecisi(?:o|ó)n(?:es)?\s+\d{1,2}[a-z]?\b(?!-\d)~iu',
             self::phrase('\bdecisi(?:o|ó)n(?:es)? de la (?:\d|ficha\b|tarea\b)'),
             '~\bhallazgos?\s+[A-Z]{1,3}\d*-?\d+\b~iu',
             self::phrase('\bhallazgos? (?:de|del) (?:la )?revisi(?:o|ó)n\b'),

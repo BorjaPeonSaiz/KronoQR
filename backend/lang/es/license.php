@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de la licencia (RF-PD-04, RF-PD-05, tarea 5.3).
+ * Textos de la licencia (RF-PD-04, RF-PD-05).
  *
  * ESTAN ESCRITOS PARA EL CLIENTE, NO PARA NOSOTROS. Los lee la persona de
  * informatica del hotel, probablemente con prisa y probablemente con un

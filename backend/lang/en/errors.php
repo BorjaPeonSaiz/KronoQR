@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * English texts for `php artisan product:errors` and `product:errors:prune`
- * (RF-PD-15, task 5.12). Mirror of `lang/es/errors.php`: same keys, same
+ * (RF-PD-15). Mirror of `lang/es/errors.php`: same keys, same
  * placeholders, same audience — the hotel's IT person, who does not know this
  * system and probably already has a problem.
  */

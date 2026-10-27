@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Compliance view (RF-PA-06, task 3.4).
+ * Compliance view (RF-PA-06).
  *
  * THE EVALUATION CRITERIA ARE PART OF THE ALERT, NOT OF THE DOCUMENTATION.
  * An alert whose criterion cannot be seen is an alert nobody can defend in front

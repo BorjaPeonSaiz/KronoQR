@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /*
- * Textos del quiosco y de su emparejamiento (RF-PD-06, tarea 5.6) y del informe
- * de `php artisan kiosk:health` (RF-PA-07, tarea 5.11).
+ * Textos del quiosco y de su emparejamiento (RF-PD-06) y del informe
+ * de `php artisan kiosk:health` (RF-PA-07).
  *
  * QUE ENTRA AQUI Y QUE NO. Solo los mensajes que una PERSONA lee en un
  * formulario del panel o en la consola. Los rechazos genericos
@@ -71,7 +71,7 @@ return [
         ],
 
         /*
-         * La bateria de la tablet (tarea 3.3).
+         * La bateria de la tablet.
          *
          * `unknown` NO es cero: es «este navegador no informa», que es el caso de
          * todo lo que no sea Chrome en Android. Escribir «0 %» ahi pondria media

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Absence texts (RF-GP-04, task 3.10).
+ * Absence texts (RF-GP-04).
  *
  * READ BY WHOEVER IS LOADING A HOLIDAY ROTA, usually with the spreadsheet open
  * next to them. That is why every message says **what to do with that row**, not

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Texts of the `php artisan product:doctor --lang=en` report (RF-PD-13, task 5.9).
+ * Texts of the `php artisan product:doctor --lang=en` report (RF-PD-13).
  *
  * Same rules as the Spanish file: `checks.*` says what was checked and what was
  * found, `fixes.*` says what to do with the full copy-pasteable command, and no
@@ -16,7 +16,7 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'The «:family» group of checks could not run: something failed unexpectedly inside the '
         .'diagnostic itself. Every other check did run.',
-    // PR2: the group needs a service that did not answer. It is not a product defect.
+    // The group needs a service that did not answer. It is not a product defect.
     'failure_redis' => 'The «:family» group of checks could not run because Redis does not respond. '
         .'Every other check did run.',
     'failure_database' => 'The «:family» group of checks could not run because the database does not respond. '
@@ -332,7 +332,7 @@ return [
                 'failure' => 'The application cannot write to: :paths. Without that it cannot generate reports, '
                     .'store its cache or write its technical log.',
             ],
-            // 2.2.0 (block 20, A3-R2): the backup root is mounted read-only and
+            // Since 2.2.0 the backup root is mounted read-only and
             // each container writes only to its own subdirectory.
             'backup_path' => [
                 'ok' => 'The backup directory :path can be read and the application cannot write to it: backups '
@@ -415,7 +415,7 @@ return [
                     .'nightly backup after installing (at :daily_at UTC); after that night, it is not.',
                 'warning_unknown' => ':path, where the backup records its result, cannot be read.',
             ],
-            // V5-DV-05: the 15-minute promise holds if the backups leave the server.
+            // The 15-minute promise holds if the backups leave the server.
             'offsite' => [
                 'ok' => 'The backups and the WAL archive are on a network share, off the server.',
                 'warning_same_disk' => 'The backups are on the same disk as the data: if that disk is lost, the '

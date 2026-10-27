@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos del informe de `php artisan product:doctor` (RF-PD-13, tarea 5.9).
+ * Textos del informe de `php artisan product:doctor` (RF-PD-13).
  *
  * ## Para quien estan escritos
  *
@@ -28,8 +28,7 @@ declare(strict_types=1);
  *
  * Todo comando va COMPLETO, con su `docker compose exec app ...` (o el servicio
  * que toque) delante, y se lanza desde el directorio de la instalacion: quien lo
- * copia esta en el servidor, no dentro del contenedor (revision del bloque 5 de
- * la 2.3.0). Las migraciones van por el servicio puntual `migrate`, como en
+ * copia esta en el servidor, no dentro del contenedor. Las migraciones van por el servicio puntual `migrate`, como en
  * install.sh y update.sh, porque `app` no tiene la credencial del rol de
  * migracion.
  */
@@ -38,7 +37,7 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'No se pudo ejecutar el grupo de comprobaciones «:family»: algo fallo de forma inesperada '
         .'dentro del propio diagnostico. El resto de comprobaciones si se ha ejecutado.',
-    // PR2: al grupo le falta un servicio que no contesta. No es un fallo del producto.
+    // Al grupo le falta un servicio que no contesta. No es un fallo del producto.
     'failure_redis' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque Redis no responde. '
         .'El resto de comprobaciones si se ha ejecutado.',
     'failure_database' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque la base de datos no '
@@ -162,7 +161,7 @@ return [
             'worker' => [
                 'ok' => 'Horizon, el proceso que consume la cola de trabajos, esta en marcha (:masters supervisor(es) '
                     .'activo(s)).',
-                // V3-PL-07: sin poder preguntar a Horizon, solo se afirma lo que
+                // Sin poder preguntar a Horizon, solo se afirma lo que
                 // la cola demuestra. Con la cola vacia, nada.
                 'ok_busy' => 'Hay trabajos en proceso: algo esta consumiendo la cola de trabajos.',
                 'ok_idle' => 'La cola de trabajos esta vacia. No se ha podido preguntar a Horizon, asi que desde aqui '
@@ -371,7 +370,7 @@ return [
                 'failure' => 'La aplicacion no puede escribir en: :paths. Sin eso no puede generar informes, '
                     .'ni guardar la cache, ni escribir su registro tecnico.',
             ],
-            // 2.2.0 (bloque 20, A3-R2): la raiz de las copias se monta en solo
+            // Desde la 2.2.0, la raiz de las copias se monta en solo
             // lectura y cada contenedor escribe solo en su subdirectorio.
             'backup_path' => [
                 'ok' => 'El directorio de copias :path se puede leer y la aplicacion no puede escribir en el: '
@@ -446,7 +445,7 @@ return [
 
         'backup' => [
             'probe' => $probe,
-            // V3-PL-07: que las copias SE ESTAN HACIENDO, leido del mismo fichero
+            // Que las copias SE ESTAN HACIENDO, leido del mismo fichero
             // que las alertas y con su mismo umbral de 26 h.
             'last_good_copy' => [
                 'ok' => 'La ultima copia de seguridad verificada es de las :verified_at UTC (hace :hours h).',
@@ -461,7 +460,7 @@ return [
                     .'copia nocturna despues de instalar (a las :daily_at UTC); despues de esa noche, no lo es.',
                 'warning_unknown' => 'No se puede leer :path, donde la copia de seguridad deja su resultado.',
             ],
-            // V5-DV-05: la promesa de 15 minutos vale si las copias salen del servidor.
+            // La promesa de 15 minutos vale si las copias salen del servidor.
             'offsite' => [
                 'ok' => 'Las copias y el archivo del WAL estan en un recurso de red, fuera del servidor.',
                 'warning_same_disk' => 'Las copias de seguridad estan en el mismo disco que los datos: si ese disco '
@@ -1021,7 +1020,7 @@ return [
             ],
             'branding_logo' => [
                 // El logotipo no se sube desde el panel: se copia a la carpeta del
-                // servidor y en el panel solo se escribe su ruta (DC6).
+                // servidor y en el panel solo se escribe su ruta.
                 'warning_path' => 'Copia el PNG o el SVG a la carpeta de BRANDING_PATH del servidor (si esta vacia, '
                     .'./branding junto al docker-compose.yml) y escribe en el panel, pantalla Marca, su ruta '
                     .'de dentro del contenedor: /var/kronoqr/branding/<fichero>. Detalle: '

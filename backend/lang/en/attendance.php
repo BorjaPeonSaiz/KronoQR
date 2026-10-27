@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Working-time record messages shown to a panel user (F1).
+ * Working-time record messages shown to a panel user.
  *
  * Only those of manual entries and corrections: the kiosk never receives the
  * reason for a rejection (hard rule 17) and these messages never reach it.

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * La firma de las ordenes de consola con valor legal (2.3.0 bloque 3, doc 01
+ * La firma de las ordenes de consola con valor legal (doc 01
  * §7.2 «Firmas por consola»). Lo lee quien teclea la orden en el servidor.
  */
 

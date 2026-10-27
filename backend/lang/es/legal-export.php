@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * Textos de la exportacion legal para la Inspeccion de Trabajo (RF-IN-05,
- * RL-06, tarea 1.17).
+ * RL-06).
  *
  * POR QUE ESTAN AQUI Y NO EN EL CODIGO. El idioma del documento es
  * configuracion de la instalacion (`APP_LOCALE`), no una constante del programa:

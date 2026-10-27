@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Start-up wizard texts (RF-PD-03, task 5.5). See `lang/es/setup.php` for the
+ * Start-up wizard texts (RF-PD-03). See `lang/es/setup.php` for the
  * reasoning: every message says what to do, not only what failed, because the
  * person reading it is setting the system up and has no console at hand.
  */

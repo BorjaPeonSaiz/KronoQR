@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * El aviso de que un informe en diferido esta listo (RF-IN-06, tarea 3.9).
+ * El aviso de que un informe en diferido esta listo (RF-IN-06).
  *
  * LO QUE ESTE CORREO NO LLEVA, y es lo primero: el enlace de descarga. Es de un
  * solo uso y caduca en quince minutos (ADR-041), asi que uno metido en un buzon

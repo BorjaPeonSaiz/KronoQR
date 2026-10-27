@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Staff import texts (RF-GP-05, task 5.5). See `lang/es/import.php` for the
+ * Staff import texts (RF-GP-05). See `lang/es/import.php` for the
  * reasoning: every message says what to do with that line, and none of them
  * quotes the value of the cell.
  */

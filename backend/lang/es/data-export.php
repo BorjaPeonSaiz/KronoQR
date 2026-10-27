@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * El `README.md` que viaja DENTRO del ZIP de la exportacion integra (RF-PD-14,
- * RL-20, tarea 5.10).
+ * RL-20).
  *
  * ## Para quien esta escrito
  *

@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de `php artisan product:errors` y `product:errors:prune` (RF-PD-15,
- * tarea 5.12).
+ * Textos de `php artisan product:errors` y `product:errors:prune` (RF-PD-15).
  *
  * ## Para quien estan escritos
  *

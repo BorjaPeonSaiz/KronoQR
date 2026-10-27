@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Support access texts (RF-PD-11, RL-18, ADR-020, task 5.9).
+ * Support access texts (RF-PD-11, RL-18, ADR-020).
  *
  * WRITTEN FOR THE CUSTOMER, NOT FOR US. They are read by whoever is about to let
  * the vendor into their installation, with an open incident and in a hurry. Each
@@ -22,14 +22,14 @@ return [
         'duration' => 'The duration must be between 1 and :maximum hours, and you asked for :hours. Your installation sets the maximum; if you need longer, revoke this access when you are done and grant another one.',
     ],
 
-    // `product:support-grants:prune-reasons` (task 11.3 C). Counts, never a reason.
+    // `product:support-grants:prune-reasons`. Counts, never a reason.
     'prune' => [
         'dry_run' => 'The reason of :rows support grant(s) closed more than :days days ago would be cleared. Nothing has been changed.',
         'done' => 'Cleared the reason of :rows support grant(s) closed more than :days days ago. The original reason is still in the audit trail.',
         'failed' => 'The reason of the support grants could not be cleared (:failure). Nothing has been changed; the next run will try again.',
     ],
 
-    // Shown next to the reason field and by `support:grant` (task 11.3 C).
+    // Shown next to the reason field and by `support:grant`.
     'reason_hint' => 'Do not write names, emails, ID numbers or phone numbers: if you need to point to a person, use their uuid. The reason goes as is into the audit trail and cannot be corrected later.',
 
 ];

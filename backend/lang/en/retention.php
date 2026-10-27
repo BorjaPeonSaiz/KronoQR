@@ -17,7 +17,7 @@ return [
         'title' => 'The purge could not be completed against the database. Nothing has been deleted.',
         'cutoff' => [
             'PostgreSQL rejected the work record cutoff: it is later than the compliance profile allows with the UTC date of the database server.',
-            'The function takes the longest period of all the sites in the installation (each one never below the legal floor of its jurisdiction), not only the site you expected.',
+            'The function takes the period of the site compliance profile, never below the legal floor of its jurisdiction, and counts it with the date of the database server, not this one.',
             'Check the time on both servers and that the profile has not changed since the simulation, then simulate again.',
         ],
         'lock' => [

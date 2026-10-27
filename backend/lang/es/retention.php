@@ -17,7 +17,7 @@ return [
         'title' => 'La purga no ha podido completarse contra la base de datos. No se ha borrado nada.',
         'cutoff' => [
             'PostgreSQL ha rechazado el corte del registro de jornada: es posterior al que permite el perfil de cumplimiento con la fecha UTC del servidor de base de datos.',
-            'La función toma el plazo más largo de todos los centros de la instalación (cada uno, sin bajar del suelo legal de su jurisdicción), no solo el del centro que esperabas.',
+            'La función toma el plazo del perfil de cumplimiento del centro, sin bajar del suelo legal de su jurisdicción, y lo cuenta con la fecha del servidor de base de datos, no con la de este.',
             'Comprueba la hora de los dos servidores y que el perfil no haya cambiado desde la simulación, y vuelve a simular.',
         ],
         'lock' => [

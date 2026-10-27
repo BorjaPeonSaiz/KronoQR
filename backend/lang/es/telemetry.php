@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de la telemetria opcional (RF-PD-12, ADR-020, ADR-023, tarea 5.10).
+ * Textos de la telemetria opcional (RF-PD-12, ADR-020, ADR-023).
  *
  * ESTAN ESCRITOS PARA EL CLIENTE. Los lee quien esta decidiendo si deja que su
  * instalacion envie algo al fabricante, y esa decision se toma con la lista de

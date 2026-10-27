@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * Textos de las ausencias (RF-GP-04, tarea 3.10).
+ * Textos de las ausencias (RF-GP-04).
  *
  * LOS LEE QUIEN ESTÁ CARGANDO UN CUADRANTE DE VACACIONES, normalmente con la
  * hoja de cálculo abierta al lado. Por eso cada mensaje dice **qué hacer con esa
