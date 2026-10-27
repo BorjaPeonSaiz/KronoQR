@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\RejectedPinScans;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -213,3 +214,30 @@ it('lee la jornada entera de una persona por occurred_at, llegara cuando llegara
     expect(array_map(static fn ($a): string => $a->scanId, $attempts))->toBe([$atStart, $late])
         ->and($attempts[0]->claimantUuid)->toBe($fixture['employee']);
 })->group('RN-19', 'RF-PR-01');
+
+it('lee la jornada entera los dias del cambio de hora en Madrid, de 23 y de 25 horas', function (string $isoDate, string $startsAt, string $endsAt, string $insideLate): void {
+    $fixture = pinClaimSchemaFixture();
+    $claim = ['claimed_employee_id' => $fixture['employeeId'], 'pin_lockout' => false];
+    $workDate = WorkDate::fromIsoDate($isoDate, new DateTimeZone('Europe/Madrid'));
+
+    // Los limites salen de la jornada civil, no de sumar 24 h al inicio.
+    expect($workDate->startsAt())->toEqual(pinClaimSchemaUtc($startsAt))
+        ->and($workDate->endsAt())->toEqual(pinClaimSchemaUtc($endsAt));
+
+    $first = pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => $startsAt.'+00']);
+    $late = pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => $insideLate.'+00']);
+    $last = pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => pinClaimSchemaUtc($endsAt)->modify('-1 microsecond')->format('Y-m-d H:i:s.u').'+00']);
+    // Fuera por los dos lados: el microsegundo anterior y el limite superior.
+    pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => pinClaimSchemaUtc($startsAt)->modify('-1 microsecond')->format('Y-m-d H:i:s.u').'+00']);
+    pinClaimSchemaInsert($fixture, [...$claim, 'occurred_at' => $endsAt.'+00']);
+
+    $attempts = app(RejectedPinScans::class)->rejectedOf($fixture['employee'], $workDate->startsAt(), $workDate->endsAt());
+
+    expect(array_map(static fn ($a): string => $a->scanId, $attempts))->toBe([$first, $late, $last]);
+})->with([
+    // 29-03: a las 02:00 locales se pasa a las 03:00. La jornada dura 23 h.
+    'dia de 23 h' => ['2026-03-29', '2026-03-28 23:00:00', '2026-03-29 22:00:00', '2026-03-29 21:30:00'],
+    // 25-10: a las 03:00 locales se vuelve a las 02:00. La jornada dura 25 h, y
+    // las 23:30 locales (22:30 Z) siguen siendo de ese dia.
+    'dia de 25 h' => ['2026-10-25', '2026-10-24 22:00:00', '2026-10-25 23:00:00', '2026-10-25 22:30:00'],
+])->group('RN-19', 'RN-09');

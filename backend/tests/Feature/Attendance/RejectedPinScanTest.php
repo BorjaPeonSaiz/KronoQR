@@ -362,6 +362,28 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
         ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(1);
 })->group('RN-19', 'RF-PR-01', 'RL-01');
 
+it('cierra la incidencia del dia del intento cuando la subsanacion cae ya en el dia civil siguiente', function (): void {
+    // Madrid en marzo es UTC+1. PIN erroneo a las 23:58 del 13 (22:58 Z) en un
+    // quiosco con red; el bueno, a las 00:03 del 14 (23:03 Z) en otro sin red,
+    // llega dos dias despues. La incidencia es de la jornada del 13, la del
+    // intento (RN-05), y es esa la que se cierra; el 14 no abre nada.
+    $scenario = rejectedPinScenario('2026-03-13 22:58:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-13T22:58:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-14 03:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->pluck('work_date')->all())->toBe(['2026-03-13']);
+
+    FrozenTime::at('2026-03-15 10:00:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-13T23:03:00Z')->assertOk();
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    $incidents = DB::table('incidents')->where('type', 'rejected_pin_scan')->get(['work_date', 'status']);
+
+    expect($incidents)->toHaveCount(1)
+        ->and($incidents->first()?->work_date)->toBe('2026-03-13')
+        ->and($incidents->first()?->status)->toBe('resolved');
+})->group('RN-19', 'RN-09', 'RN-05', 'RF-PR-01');
+
 it('no cierra sola la incidencia con bloqueo de PIN aunque la persona acabe fichando a tiempo', function (): void {
     // Tres PIN erroneos en un quiosco con red abren el bloqueo (RS-12); el
     // bueno, a las 07:05 en otro quiosco sin red, llega al dia siguiente. La

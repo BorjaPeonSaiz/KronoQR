@@ -518,3 +518,25 @@ it('no anuncia nada de una persona cuyo fichaje es de otra', function (): void {
 
     expect($run['recovered'])->toBe([]);
 })->group('RN-19');
+
+it('anuncia la jornada del intento aunque lo subsane un fichaje del dia civil siguiente, y no mira ese dia', function (): void {
+    // Madrid en marzo es UTC+1: el intento de las 23:58 del 13 (22:58 Z) lo
+    // subsana el fichaje de las 00:03 del 14 (23:03 Z), cinco minutos despues.
+    // La jornada es la del intento (RN-05): se anuncia la del 13 y solo se
+    // lee la del 13, entera.
+    $port = new InMemoryRejectedPinScans(
+        [rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-13 22:58:00')],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-13 23:03:00')]],
+    );
+
+    $run = rejectedPinDetectionRun($port);
+
+    expect($run['anomalies'])->toBe([])
+        ->and(array_map(static fn (RejectedPinScanRecovered $r): string => $r->workDate(), $run['recovered']))->toBe(['2026-03-13'])
+        ->and($run['recovered'][0]->recoveringScanIds())->toBe(['recovering 23:03:00'])
+        ->and($port->workDayQueries)->toEqual([[
+            REJECTED_PIN_DETECTION_ANA,
+            rejectedPinDetectionUtc('2026-03-12 23:00:00'),
+            rejectedPinDetectionUtc('2026-03-13 23:00:00'),
+        ]]);
+})->group('RN-19', 'RN-09', 'RN-05');
