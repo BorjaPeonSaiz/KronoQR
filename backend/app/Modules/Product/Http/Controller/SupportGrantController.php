@@ -8,12 +8,15 @@ use App\Http\Controllers\Controller;
 use App\Modules\Product\Application\Command\RevokeSupportAccessCommand;
 use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\ListSupportGrantsHandler;
+use App\Modules\Product\Application\UseCase\ListSupportGrantUsesHandler;
 use App\Modules\Product\Application\UseCase\RevokeSupportAccessHandler;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Product\Domain\ValueObject\SupportRevocationOutcome;
 use App\Modules\Product\Http\Request\GrantSupportAccessRequest;
+use App\Modules\Product\Http\Request\IndexSupportGrantUsesRequest;
 use App\Modules\Product\Http\Resource\IssuedSupportGrantResource;
 use App\Modules\Product\Http\Resource\SupportGrantCollectionResource;
+use App\Modules\Product\Http\Resource\SupportGrantUseCollectionResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -21,8 +24,9 @@ use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Las tres rutas de `/api/v1/support/grants` (Anexo B del doc 01, **RF-PD-11**,
- * RL-18, ADR-020).
+ * Las cuatro rutas de `/api/v1/support/grants` (Anexo B del doc 01, **RF-PD-11**,
+ * RL-15, RL-18, ADR-020): la lista, conceder, revocar y las ventanas de uso de
+ * una concesion.
  *
  * Delgado como el resto: autoriza, invoca el caso de uso y serializa. **Ninguna
  * decision vive aqui.** La caducidad la calcula el dominio con el reloj
@@ -81,6 +85,21 @@ final class SupportGrantController extends Controller
         }
 
         return response()->noContent();
+    }
+
+    /**
+     * Las ventanas de uso de una concesion. La policy la comprueba el
+     * `FormRequest`, antes que la validacion, igual que en `store()`.
+     */
+    public function uses(string $uuid, IndexSupportGrantUsesRequest $request, ListSupportGrantUsesHandler $uses): JsonResponse
+    {
+        $page = $uses->handle($uuid, $request->page(), $request->perPage());
+
+        if ($page === null) {
+            throw new NotFoundHttpException;
+        }
+
+        return (new SupportGrantUseCollectionResource($page))->response();
     }
 
     private static function actorUserId(Request $request): ?int

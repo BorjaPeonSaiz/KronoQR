@@ -1940,7 +1940,8 @@ Route::post('/client-errors', [ClientErrorController::class, 'store'])
  * ACCESOS DE SOPORTE (tarea 5.9, RF-PD-11)
  * ---------------------------------------------------------------------------
  *
- * GET, POST /api/v1/support/grants y DELETE /api/v1/support/grants/{uuid}: los
+ * GET, POST /api/v1/support/grants, DELETE /api/v1/support/grants/{uuid} y
+ * GET /api/v1/support/grants/{uuid}/uses: los
  * accesos temporales que el cliente concede al fabricante (RF-PD-11, RL-18,
  * ADR-020, regla dura 16).
  *
@@ -1995,6 +1996,12 @@ Route::middleware([
     Route::delete('/support/grants/{uuid}', [SupportGrantController::class, 'destroy'])
         ->whereUuid('uuid')
         ->name('product.support.grants.destroy');
+    // G5 (27-10-2026): las ventanas de uso de una concesion, que el doc 05 §6.3
+    // promete en el panel. Solo esa concesion y solo `support_grant.used`: no
+    // es una consulta de `audit_log` (RF-PD-11, RL-15, RL-18).
+    Route::get('/support/grants/{uuid}/uses', [SupportGrantController::class, 'uses'])
+        ->whereUuid('uuid')
+        ->name('product.support.grants.uses');
 });
 
 /*

@@ -33,6 +33,7 @@ use App\Modules\Product\Application\Port\SetupFacts;
 use App\Modules\Product\Application\Port\SetupProgressRepository;
 use App\Modules\Product\Application\Port\SupportAccessRecorder;
 use App\Modules\Product\Application\Port\SupportGrantRepository;
+use App\Modules\Product\Application\Port\SupportGrantUses;
 use App\Modules\Product\Application\Port\SupportTokenIssuer;
 use App\Modules\Product\Application\Port\TelemetryCounters;
 use App\Modules\Product\Application\Port\TelemetryFacts;
@@ -169,6 +170,7 @@ use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupProgressRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSupportGrantRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseSupportGrantUses;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
 use App\Modules\Product\Infrastructure\Telemetry\DatabaseTelemetryFacts;
 use App\Modules\Product\Infrastructure\Telemetry\FileTelemetryStateStore;
@@ -869,6 +871,11 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->scoped(
             SupportGrantRepository::class,
             static fn (): DatabaseSupportGrantRepository => new DatabaseSupportGrantRepository(DB::connection()),
+        );
+
+        $this->app->bind(
+            SupportGrantUses::class,
+            static fn (): DatabaseSupportGrantUses => new DatabaseSupportGrantUses(DB::connection()),
         );
 
         $this->app->bind(

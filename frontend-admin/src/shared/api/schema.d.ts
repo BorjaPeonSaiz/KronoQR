@@ -5052,6 +5052,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/grants/{uuid}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Ventanas de uso de un acceso de soporte
+         * @description Las ventanas en que el fabricante **uso** esta concesion, una por linea,
+         *     de la mas reciente a la mas antigua (RF-PD-11, RL-18,
+         *     [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md) §3).
+         *     Es lo que el panel enseña al desplegar una concesion: «cada sesion de
+         *     trabajo del soporte queda registrada y el hotel la ve en su panel»
+         *     (doc 05 §6.3).
+         *
+         *     **Una linea por ventana, no una por peticion.** Cada linea es un
+         *     asiento `support_grant.used` de `audit_log`, que se escribe como mucho
+         *     una vez por concesion cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS`
+         *     (900 s de serie): `started_at` es la peticion que **abrio** la ventana.
+         *     Una sesion de una hora deja cuatro lineas; varias consultas dentro de la
+         *     misma ventana dejan una. **La duracion de cada ventana no viaja**: el
+         *     asiento no la guarda, y la configuracion de hoy puede no ser la del dia
+         *     en que se escribio.
+         *
+         *     **Lo que sale, y lo que no.** El instante, y el metodo y el **patron**
+         *     de la ruta de la peticion que abrio la ventana (`api/v1/employees/{uuid}`,
+         *     nunca la URL con sus identificadores). Ni parametros, ni cuerpo, ni
+         *     respuesta, ni ningun dato de una persona: el asiento no los lleva
+         *     (regla dura 21). Lo que el soporte **cambio** deja ademas su propio
+         *     asiento, con la concesion como actor, y se consulta en la auditoria.
+         *
+         *     **Solo esta concesion y solo esta accion.** No es una consulta de
+         *     `audit_log`: no admite filtros y no devuelve asientos de otra accion ni
+         *     de otra concesion. Sirve para acotar el alcance de una intervencion del
+         *     fabricante, tambien ante una brecha (RL-15).
+         *
+         *     **Registro de mejor esfuerzo.** El asiento se escribe despues de servir
+         *     la peticion y su fallo no la tumba (no se le devuelve un `500` a quien
+         *     esta arreglando una incidencia): si la base falla justo entonces, esa
+         *     ventana puede faltar aqui. `accessed_at` de la concesion
+         *     (`GET /api/v1/support/grants`) se actualiza en cada peticion y sigue
+         *     diciendo el ultimo uso.
+         *
+         *     **`admin` y solo `admin`, con ambito `support:*`** (documento 02 §7.3,
+         *     regla dura 18). El propio token de soporte no lleva ese ambito y recibe
+         *     `403`: quien recibe el acceso no consulta su rastro. `404` si el `uuid`
+         *     no es de ninguna concesion. No degrada con la licencia caducada (regla
+         *     dura 15).
+         */
+        get: operations["listSupportGrantUses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-export": {
         parameters: {
             query?: never;
@@ -12915,6 +12983,36 @@ export interface components {
         SupportGrantCollection: {
             data: components["schemas"]["SupportGrant"][];
         };
+        /**
+         * SupportGrantUse
+         * @description Una ventana de uso de un acceso de soporte: el asiento
+         *     `support_grant.used` que abrio (RF-PD-11, ADR-020 §3). Sin contenido de
+         *     la peticion y sin datos de personas.
+         */
+        SupportGrantUse: {
+            /**
+             * Format: date-time
+             * @description Instante de la peticion que abrio la ventana, en UTC.
+             * @example 2026-10-07T09:00:00.000000Z
+             */
+            started_at: string;
+            /**
+             * @description Metodo HTTP de esa peticion. `null` si el asiento no lo lleva.
+             * @example GET
+             */
+            method: string | null;
+            /**
+             * @description **Patron** de la ruta de esa peticion, nunca la URL con sus
+             *     identificadores. `null` si el asiento no lo lleva.
+             * @example api/v1/diagnostics/errors
+             */
+            route: string | null;
+        };
+        /** SupportGrantUseCollection */
+        SupportGrantUseCollection: {
+            data: components["schemas"]["SupportGrantUse"][];
+            meta: components["schemas"]["PageMeta"];
+        };
         /** GrantSupportAccessRequest */
         GrantSupportAccessRequest: {
             /**
@@ -19420,6 +19518,54 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportGrantUses: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de ventanas de uso, de la mas reciente a la mas antigua. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportGrantUseCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };

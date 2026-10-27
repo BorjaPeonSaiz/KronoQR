@@ -10174,6 +10174,94 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
+  /api/v1/support/grants/{uuid}/uses:
+    parameters:
+      - $ref: '#/components/parameters/SupportGrantUuid'
+    get:
+      operationId: listSupportGrantUses
+      summary: Ventanas de uso de un acceso de soporte
+      description: |
+        Las ventanas en que el fabricante **uso** esta concesion, una por linea,
+        de la mas reciente a la mas antigua (RF-PD-11, RL-18,
+        [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md) §3).
+        Es lo que el panel enseña al desplegar una concesion: «cada sesion de
+        trabajo del soporte queda registrada y el hotel la ve en su panel»
+        (doc 05 §6.3).
+
+        **Una linea por ventana, no una por peticion.** Cada linea es un
+        asiento `support_grant.used` de `audit_log`, que se escribe como mucho
+        una vez por concesion cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS`
+        (900 s de serie): `started_at` es la peticion que **abrio** la ventana.
+        Una sesion de una hora deja cuatro lineas; varias consultas dentro de la
+        misma ventana dejan una. **La duracion de cada ventana no viaja**: el
+        asiento no la guarda, y la configuracion de hoy puede no ser la del dia
+        en que se escribio.
+
+        **Lo que sale, y lo que no.** El instante, y el metodo y el **patron**
+        de la ruta de la peticion que abrio la ventana (`api/v1/employees/{uuid}`,
+        nunca la URL con sus identificadores). Ni parametros, ni cuerpo, ni
+        respuesta, ni ningun dato de una persona: el asiento no los lleva
+        (regla dura 21). Lo que el soporte **cambio** deja ademas su propio
+        asiento, con la concesion como actor, y se consulta en la auditoria.
+
+        **Solo esta concesion y solo esta accion.** No es una consulta de
+        `audit_log`: no admite filtros y no devuelve asientos de otra accion ni
+        de otra concesion. Sirve para acotar el alcance de una intervencion del
+        fabricante, tambien ante una brecha (RL-15).
+
+        **Registro de mejor esfuerzo.** El asiento se escribe despues de servir
+        la peticion y su fallo no la tumba (no se le devuelve un `500` a quien
+        esta arreglando una incidencia): si la base falla justo entonces, esa
+        ventana puede faltar aqui. `accessed_at` de la concesion
+        (`GET /api/v1/support/grants`) se actualiza en cada peticion y sigue
+        diciendo el ultimo uso.
+
+        **`admin` y solo `admin`, con ambito `support:*`** (documento 02 §7.3,
+        regla dura 18). El propio token de soporte no lleva ese ambito y recibe
+        `403`: quien recibe el acceso no consulta su rastro. `404` si el `uuid`
+        no es de ninguna concesion. No degrada con la licencia caducada (regla
+        dura 15).
+      tags: [Product]
+      security:
+        - managementToken: ['support:*']
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Pagina de ventanas de uso, de la mas reciente a la mas antigua.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportGrantUseCollection'
+              examples:
+                sesion-de-media-hora:
+                  value:
+                    data:
+                      - started_at: '2026-10-07T09:15:01.000000Z'
+                        method: GET
+                        route: api/v1/diagnostics/errors
+                      - started_at: '2026-10-07T09:00:00.000000Z'
+                        method: POST
+                        route: api/v1/diagnostics/bundle
+                    meta:
+                      page: 1
+                      per_page: 25
+                      total: 2
+                      total_pages: 1
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
   # ---------------------------------------------------------------------------
   # Exportacion integra de los datos del cliente (RF-PD-14, RL-20, tarea 5.10).
   # ---------------------------------------------------------------------------
@@ -22806,6 +22894,47 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/SupportGrant'
+
+    SupportGrantUse:
+      type: object
+      title: SupportGrantUse
+      description: |
+        Una ventana de uso de un acceso de soporte: el asiento
+        `support_grant.used` que abrio (RF-PD-11, ADR-020 §3). Sin contenido de
+        la peticion y sin datos de personas.
+      additionalProperties: false
+      required: [started_at, method, route]
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          description: Instante de la peticion que abrio la ventana, en UTC.
+          examples: ['2026-10-07T09:00:00.000000Z']
+        method:
+          type: [string, 'null']
+          description: Metodo HTTP de esa peticion. `null` si el asiento no lo lleva.
+          examples: [GET]
+        route:
+          type: [string, 'null']
+          maxLength: 255
+          description: |
+            **Patron** de la ruta de esa peticion, nunca la URL con sus
+            identificadores. `null` si el asiento no lo lleva.
+          examples: ['api/v1/diagnostics/errors']
+
+    SupportGrantUseCollection:
+      type: object
+      title: SupportGrantUseCollection
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SupportGrantUse'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
 
     GrantSupportAccessRequest:
       type: object
