@@ -114,4 +114,4 @@ it('atribuye por codigo solo a quien puede fichar', function (?EmploymentStatus 
     'de baja' => [EmploymentStatus::TERMINATED, DiscardedScanAttributionMethod::NONE],
     'suspendido' => [EmploymentStatus::SUSPENDED, DiscardedScanAttributionMethod::NONE],
     'codigo inexistente' => [null, DiscardedScanAttributionMethod::NONE],
-])->group('RN-22', 'RN-19');
+])->group('RN-25', 'RN-22', 'RN-19');

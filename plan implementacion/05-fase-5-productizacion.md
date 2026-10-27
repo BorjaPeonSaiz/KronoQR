@@ -583,7 +583,7 @@ curl -fsS https://<APP_URL>/api/v1/health
 |---|---|
 | **Horas** | 11–16 |
 | **Agente / Skill** | `producto-licencia` + `frontend-panel` |
-| **Requisitos** | `RF-PD-03`, **`RF-GP-05`** (doc 02 §11 · Anexo A del doc 01). Derivada: `RN-23` «La zona horaria del centro queda fija con el primer tramo» (2.2.1, bloque 20, [ADR-056](../docs/adr/ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md)): la zona que elige este asistente se cambia libremente hasta el primer fichaje y después solo por consola |
+| **Requisitos** | `RF-PD-03`, **`RF-GP-05`** (doc 02 §11 · Anexo A del doc 01). Derivada: `RN-23` «La zona horaria del centro queda fija con el primer tramo» (2.2.1, bloque 20, [ADR-056](../docs/adr/ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md)): la zona que elige este asistente se cambia libremente hasta el primer fichaje y después solo por consola. Derivada: `RN-26` «El motivo con el que se firma una acción de consola tiene de 10 a 1 000 caracteres» (2.2.1; en el doc 01 desde el bloque 20 de la 2.3.0): la corrección de esa zona es la primera acción que firma con motivo |
 | **Precondiciones** | `5.4` (§11.3: `5.4→5.5→5.7`). Necesita también `5.1` (configuración) y, para el paso de licencia, `5.3` |
 | **Bloquea a** | `5.7` (§11.3) |
 

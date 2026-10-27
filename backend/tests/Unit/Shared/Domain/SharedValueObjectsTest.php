@@ -264,7 +264,7 @@ it('solo deja fichar al empleado activo', function (EmploymentStatus $status, bo
     'activo' => [EmploymentStatus::ACTIVE, true],
     'suspendido' => [EmploymentStatus::SUSPENDED, false],
     'de baja' => [EmploymentStatus::TERMINATED, false],
-])->group('RN-14');
+])->group('RN-25', 'RN-14');
 
 it('pregunta al empleado si puede fichar en vez de comparar su estado por fuera', function (): void {
     $terminated = new EmployeeSnapshot('uuid-1', 'EMP-0001', 'Lucia', EmploymentStatus::TERMINATED, 1);

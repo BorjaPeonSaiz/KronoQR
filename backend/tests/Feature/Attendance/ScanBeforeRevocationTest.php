@@ -193,7 +193,7 @@ it('no atribuye ni marca nada a una persona suspendida', function (): void {
         ->and(filaDelEscaneo($conVigente)->flagged_for_review)->toBeFalse()
         ->and(filaDelEscaneo($conRevocada)->employee_id)->toBeNull()
         ->and(filaDelEscaneo($conRevocada)->flagged_for_review)->toBeFalse();
-})->group('RN-20');
+})->group('RN-25', 'RN-20');
 
 it('devuelve el mismo rechazo al reenviar el escaneo atribuido', function (): void {
     // Regla dura 8: el reenvio de la cola offline responde lo mismo, y la fila

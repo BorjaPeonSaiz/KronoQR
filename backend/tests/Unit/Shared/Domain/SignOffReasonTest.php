@@ -23,7 +23,7 @@ function signOffRechazo(): Closure
 
 it('admite de diez a mil caracteres', function (int $length): void {
     expect(SignOffReason::fromText(str_repeat('a', $length), signOffRechazo())->text)->toBe(str_repeat('a', $length));
-})->with([10, 1000])->group('RL-04', 'RN-23');
+})->with([10, 1000])->group('RN-26', 'RL-04', 'RN-23');
 
 it('rechaza nueve y mil uno con el fallo y el limite de cada uno', function (int $length, string $mensaje): void {
     expect(fn (): SignOffReason => SignOffReason::fromText(str_repeat('a', $length), signOffRechazo()))
@@ -31,13 +31,13 @@ it('rechaza nueve y mil uno con el fallo y el limite de cada uno', function (int
 })->with([
     'nueve' => [9, 'TooShort:10'],
     'mil uno' => [1001, 'TooLong:1000'],
-])->group('RL-04', 'RN-23');
+])->group('RN-26', 'RL-04', 'RN-23');
 
 it('recorta los espacios de los extremos antes de contar', function (): void {
     expect(SignOffReason::fromText("  Incidente INC-7 investigado  \n", signOffRechazo())->text)->toBe('Incidente INC-7 investigado')
         ->and(fn (): SignOffReason => SignOffReason::fromText('   corto    ', signOffRechazo()))
         ->toThrow(RuntimeException::class, 'TooShort:10');
-})->group('RL-04', 'RN-23');
+})->group('RN-26', 'RL-04', 'RN-23');
 
 it('cuenta caracteres multibyte como uno', function (): void {
     expect(SignOffReason::fromText(str_repeat('ñ', 10), signOffRechazo())->text)->toBe(str_repeat('ñ', 10))
@@ -46,9 +46,9 @@ it('cuenta caracteres multibyte como uno', function (): void {
         ->toThrow(RuntimeException::class, 'TooShort:10')
         ->and(fn (): SignOffReason => SignOffReason::fromText(str_repeat('ñ', 1001), signOffRechazo()))
         ->toThrow(RuntimeException::class, 'TooLong:1000');
-})->group('RL-04', 'RN-23');
+})->group('RN-26', 'RL-04', 'RN-23');
 
 it('fija los limites en diez y mil', function (): void {
     expect(SignOffReason::MIN_LENGTH)->toBe(10)
         ->and(SignOffReason::MAX_LENGTH)->toBe(1000);
-})->group('RL-04', 'RN-23');
+})->group('RN-26', 'RL-04', 'RN-23');

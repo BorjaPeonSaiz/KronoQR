@@ -271,7 +271,7 @@ it('paga exactamente una comparacion de hash bcrypt en cada rechazo', function (
     // tambien seria «una llamada», pero el hasher la descarta sin calcular nada.
     expect($comparados)->toHaveCount(1)
         ->and(password_get_info($comparados[0])['algoName'])->toBe('bcrypt');
-})->with('rechazos del PIN')->group('RS-03', 'RS-12');
+})->with('rechazos del PIN')->group('RN-25', 'RS-03', 'RS-12');
 
 /**
  * El `pin_hash` guardado de un empleado.

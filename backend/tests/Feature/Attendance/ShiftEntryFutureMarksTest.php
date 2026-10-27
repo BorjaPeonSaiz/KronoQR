@@ -80,7 +80,7 @@ it('rechaza con 422 un alta cuya salida todavia no ha ocurrido', function (): vo
     // Nada a medias: ni tramo, ni fila de correccion, ni asiento.
     expect(DB::table('shift_entries')->count())->toBe(0)
         ->and(DB::table('shift_corrections')->count())->toBe(0);
-})->group('RF-PA-04', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RL-04');
 
 it('rechaza con 422 la jornada teorica rellenada por adelantado', function (): void {
     $contexto = contextoHorasFuturas();
@@ -95,7 +95,7 @@ it('rechaza con 422 la jornada teorica rellenada por adelantado', function (): v
         ->assertJsonPath('errors.work_date.0', 'Esa jornada todavía no ha empezado: no se pueden registrar horas de un día futuro.');
 
     expect(DB::table('shift_entries')->count())->toBe(0);
-})->group('RF-PA-04', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RL-04');
 
 it('rechaza la entrada futura de un tramo abierto', function (): void {
     $contexto = contextoHorasFuturas();
@@ -107,7 +107,7 @@ it('rechaza la entrada futura de un tramo abierto', function (): void {
         ]))
         ->assertValidResponse(422)
         ->assertJsonStructure(['errors' => ['clocked_in_at']]);
-})->group('RF-PA-04', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RL-04');
 
 it('admite la salida dentro del margen, que es el redondeo al minuto del formulario', function (): void {
     $contexto = contextoHorasFuturas();
@@ -118,7 +118,7 @@ it('admite la salida dentro del margen, que es el redondeo al minuto del formula
         ]))
         ->assertValidResponse(201)
         ->assertJsonPath('daily_total_minutes', 245);
-})->group('RF-PA-04', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RL-04');
 
 it('lee el margen de la configuracion de la instalacion y no de una constante', function (): void {
     // Regla dura 13: el margen es configuracion. Con cero, un minuto por delante
@@ -137,7 +137,7 @@ it('lee el margen de la configuracion de la instalacion y no de una constante', 
         ->assertValidResponse(422)
         ->assertJsonPath('errors.clocked_out_at.0', 'Esa hora todavía no ha llegado: no se pueden registrar horas futuras. '
             .'Se admite un margen de 0 minuto(s) sobre la hora del servidor.');
-})->group('RF-PA-04', 'RF-PD-01');
+})->group('RN-24', 'RF-PA-04', 'RF-PD-01');
 
 it('rechaza cerrar un turno abierto con la hora a la que va a salir', function (): void {
     $contexto = contextoHorasFuturas();
@@ -160,7 +160,7 @@ it('rechaza cerrar un turno abierto con la hora a la que va a salir', function (
     expect(DB::table('shift_entries')->count())->toBe(1)
         ->and(DB::table('shift_entries')->value('clocked_out_at'))->toBeNull()
         ->and(DB::table('shift_corrections')->count())->toBe(1);
-})->group('RF-PA-04', 'RN-13', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RN-13', 'RL-04');
 
 it('rechaza mover a futuro la entrada de un tramo abierto', function (): void {
     $contexto = contextoHorasFuturas();
@@ -177,7 +177,7 @@ it('rechaza mover a futuro la entrada de un tramo abierto', function (): void {
         ])
         ->assertValidResponse(422)
         ->assertJsonStructure(['errors' => ['clocked_in_at']]);
-})->group('RF-PA-04', 'RL-04');
+})->group('RN-24', 'RF-PA-04', 'RL-04');
 
 it('responde el rechazo en ingles si el panel lo pide en ingles', function (): void {
     // Con el ingles activo: de serie solo lo esta el español (bloque 26).
@@ -192,4 +192,4 @@ it('responde el rechazo en ingles si el panel lo pide en ingles', function (): v
         ->assertValidResponse(422)
         ->assertJsonPath('errors.clocked_out_at.0', 'That time has not happened yet: future hours cannot be recorded. '
             .'A margin of 5 minute(s) over the server clock is allowed.');
-})->group('RF-PA-04');
+})->group('RN-24', 'RF-PA-04');

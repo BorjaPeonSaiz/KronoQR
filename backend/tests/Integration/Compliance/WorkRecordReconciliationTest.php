@@ -312,7 +312,7 @@ it('da cero discrepancias con el uso normal del producto: fichar, corregir, anul
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_entries_checked{scope="full"} 14')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="true"} 0')
         ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0');
-})->group('RL-04', 'RS-07', 'RN-13');
+})->group('RS-14', 'RL-04', 'RS-07', 'RN-13');
 
 it('detecta las cuatro manipulaciones, dos con la credencial de la aplicacion y dos con el rol propietario, con la cadena de hash en verde', function (): void {
     $escenario = registroAuditadoEscenario();
@@ -383,7 +383,7 @@ it('detecta las cuatro manipulaciones, dos con la credencial de la aplicacion y 
         expect($metricas)->not->toContain(WORK_RECORD_RECONCILIATION_APELLIDO)
             ->and($metricas)->not->toContain($escenario['otra']);
     }
-})->group('RL-04', 'RS-07', 'RN-13');
+})->group('RS-14', 'RL-04', 'RS-07', 'RN-13');
 
 it('vuelve a cuadrar cuando se remedia desde el panel, como dice el runbook, y deja la traza', function (): void {
     // docs/runbooks/discrepancia-registro-auditoria.md §3: una hora manipulada
@@ -434,7 +434,7 @@ it('vuelve a cuadrar cuando se remedia desde el panel, como dice el runbook, y d
         ->and(registroAuditadoConciliar(true)['code'])->toBe(0)
         // La traza: dos correcciones firmadas mas, con el «antes» manipulado.
         ->and(DB::table('shift_corrections')->where('reason_code', 'OTROS')->count())->toBe(2);
-})->group('RL-04', 'RS-07', 'RN-13');
+})->group('RS-14', 'RL-04', 'RS-07', 'RN-13');
 
 it('la ventana diaria no mira lo antiguo y la pasada completa si', function (): void {
     $escenario = registroAuditadoEscenario();
@@ -461,7 +461,7 @@ it('la ventana diaria no mira lo antiguo y la pasada completa si', function (): 
 
     expect(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="audit_without_entry"} 1');
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 /**
  * Lo que borra una purga del registro con ese corte y su asiento
@@ -549,7 +549,7 @@ it('no confunde una purga de retencion auditada con un borrado, y si el borrado 
     expect($completa['code'])->toBe(1)
         ->and($completa['output'])->toContain('shift_entries '.$tramos['abierto'].' · audit_without_entry')
         ->and($completa['output'])->toContain('1 discrepancia(s)');
-})->group('RL-04', 'RL-02', 'RS-07');
+})->group('RS-14', 'RL-04', 'RL-02', 'RS-07');
 
 it('un asiento de purga con corte futuro no tapa un borrado y sale como discrepancia', function (): void {
     // La aplicacion tiene INSERT sobre audit_log y la cadena no lleva secreto:
@@ -576,7 +576,7 @@ it('un asiento de purga con corte futuro no tapa un borrado y sale como discrepa
 
     expect(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="purge_out_of_bounds"} 1');
-})->group('RL-04', 'RL-02', 'RS-07');
+})->group('RS-14', 'RL-04', 'RL-02', 'RS-07');
 
 it('detecta un origen cambiado en la exportacion legal y una correccion con otro autor u otro motivo', function (): void {
     $escenario = registroAuditadoEscenario();
@@ -609,7 +609,7 @@ it('detecta un origen cambiado en la exportacion legal y una correccion con otro
             ->and($resultado['output'])->toContain('shift_entries '.$tramos['sustituido'].' · retired_without_correction · shift_corrections')
             ->and($resultado['output'])->toContain('4 discrepancia(s)');
     }
-})->group('RL-04', 'RN-13', 'RS-07');
+})->group('RS-14', 'RL-04', 'RN-13', 'RS-07');
 
 // --- Bloque 5 de la 2.2.1: el suelo legal español y la purga revisada ------
 
@@ -702,7 +702,7 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and($otra['output'])->toContain('purge_out_of_bounds · retention_years')
         ->and($otra['output'])->toContain('shift_entries '.$posterior.' · audit_without_entry')
         ->and($otra['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)');
-})->group('RS-07', 'RL-04', 'RL-02');
+})->group('RS-14', 'RS-07', 'RL-04', 'RL-02');
 
 /**
  * Un tramo cerrado de la persona del escenario escrito directamente en
@@ -761,7 +761,7 @@ it('no denuncia el turno de Nochevieja cuyo año de auditoria esta sellado en Po
 
     expect($completa['code'])->toBe(0, $completa['output'])
         ->and($completa['output'])->not->toContain($nochevieja);
-})->group('RL-04', 'RL-02', 'RS-07');
+})->group('RS-14', 'RL-04', 'RL-02', 'RS-07');
 
 it('denuncia el mismo turno de Nochevieja si su año de auditoria no esta sellado', function (): void {
     // El control de la prueba de arriba: si el adaptador no leyera el ancla, o
@@ -773,7 +773,7 @@ it('denuncia el mismo turno de Nochevieja si su año de auditoria no esta sellad
 
     expect($completa['code'])->toBe(1)
         ->and($completa['output'])->toContain('shift_entries '.$nochevieja.' · entry_without_audit');
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('no deja que un año sellado en PostgreSQL tape un tramo inventado', function (string $jornada, string $entrada, string $salida): void {
     $escenario = registroAuditadoEscenario();
@@ -787,7 +787,7 @@ it('no deja que un año sellado en PostgreSQL tape un tramo inventado', function
 })->with([
     'tramo corriente de un año sellado' => ['2025-06-10', '2025-06-10 06:00:00+00', '2025-06-10 14:00:00+00'],
     'entrada en el año sellado y jornada de otro año' => ['2026-03-02', '2025-03-01 23:30:00+00', '2025-03-02 07:30:00+00'],
-])->group('RL-04', 'RS-07');
+])->group('RS-14', 'RL-04', 'RS-07');
 
 /**
  * El escenario con una correccion de zona por la orden de consola, que deja su
@@ -845,7 +845,7 @@ it('denuncia la zona del centro cambiada por la funcion de la correccion fuera d
         ->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="site_timezone_differs_from_audit"} 2')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="site_timezone_differs_from_audit"} 2');
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('denuncia un cambio de zona de ida y vuelta por la funcion, aunque la zona vuelva a ser la de su asiento', function (): void {
     // A->B->A entre dos pasadas: la zona coincide otra vez con el asiento, pero
@@ -861,7 +861,7 @@ it('denuncia un cambio de zona de ida y vuelta por la funcion, aunque la zona vu
         ->and($pasada['code'])->toBe(1, $pasada['output'])
         ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 2')
         ->and($pasada['output'])->not->toContain('· timezone ·');
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('denuncia un site.updated que cambia la zona despues del primer tramo sin la firma de la correccion', function (): void {
     // El panel no lo puede escribir (409): un asiento asi lo ha escrito otro
@@ -891,7 +891,7 @@ it('denuncia un site.updated que cambia la zona despues del primer tramo sin la 
     expect($pasada['code'])->toBe(1, $pasada['output'])
         ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 1')
         ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · correction · audit_log #'.$asiento);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('dice que la zona no se puede verificar si el centro no tiene ningun asiento, sin fallar', function (): void {
     // El centro de las pruebas lo crean los ayudantes sin asiento
@@ -906,7 +906,7 @@ it('dice que la zona no se puede verificar si el centro no tiene ningun asiento,
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone"} 1')
         ->toContain('work_record_reconciliation_unverifiable{scope="full",subject="site_timezone_change"} 0');
-})->group('RN-23', 'RL-04');
+})->group('RS-14', 'RN-23', 'RL-04');
 
 it('da por buena la zona cambiada desde el panel antes del primer tramo', function (): void {
     // RN-23: sin registro horario el PATCH /site es el camino normal. Sus
@@ -923,7 +923,7 @@ it('da por buena la zona cambiada desde el panel antes del primer tramo', functi
     expect($pasada['code'])->toBe(0, $pasada['output'])
         ->and($pasada['output'])->not->toContain('site_timezone_differs_from_audit')
         ->and($pasada['output'])->not->toContain('no verificable');
-})->group('RN-23', 'RL-04');
+})->group('RS-14', 'RN-23', 'RL-04');
 
 it('no denuncia lo anterior a la linea base, y no usa una correccion de entonces para justificar una fila de hoy', function (): void {
     // Una instalacion que viene de la 2.1.0 o la 2.2.0: el panel cambiaba la
@@ -977,7 +977,7 @@ it('no denuncia lo anterior a la linea base, y no usa una correccion de entonces
     expect($pasada['code'])->toBe(1, $pasada['output'])
         ->and($pasada['output'])->toContain('site_timezone_differs_from_audit: 2')
         ->and($pasada['output'])->toContain('sites #'.$escenario['site'].' · site_timezone_differs_from_audit · site_timezone_changes #'.$fila);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 // --- Revisar una discrepancia de la zona (--acknowledge-site-change) ------------
 
@@ -1047,7 +1047,7 @@ it('da por revisada una fila de la traza sin firma: sale de las pendientes y se 
     expect($otra['code'])->toBe(1, $otra['output'])
         ->and($otra['output'])->toContain('ya está revisada')
         ->and(registroAuditadoRevisionesDeZona())->toBe(2);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('da por revisado un site.updated sin firma por su asiento', function (): void {
     $escenario = registroAuditadoZonaCorregida();
@@ -1075,7 +1075,7 @@ it('da por revisado un site.updated sin firma por su asiento', function (): void
 
     expect($revision['code'])->toBe(0, $revision['output'])
         ->and(registroAuditadoConciliar(true)['code'])->toBe(0);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('no deja revisar una discrepancia de la zona a una cuenta sin rol admin ni rrhh', function (UserRole $rol): void {
     $escenario = registroAuditadoZonaCorregida();
@@ -1103,7 +1103,7 @@ it('no deja revisar una discrepancia de la zona a una cuenta sin rol admin ni rr
 })->with([
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-])->group('RN-23', 'RS-07');
+])->group('RS-14', 'RN-23', 'RS-07');
 
 it('se niega a revisar lo que no es una discrepancia pendiente, y con opciones mal escritas', function (array $opciones, int $codigo, string $texto): void {
     $escenario = registroAuditadoZonaCorregida();
@@ -1128,7 +1128,7 @@ it('se niega a revisar lo que no es una discrepancia pendiente, y con opciones m
     'sin prefijo' => [['--acknowledge-site-change' => '12'], 2, 'change:<id>'],
     'con --full' => [['--acknowledge-site-change' => 'change::fila', '--full' => '1'], 2, 'no se combina'],
     'motivo corto' => [['--acknowledge-site-change' => 'change::fila', '--reason' => 'corto'], 1, 'al menos'],
-])->group('RN-23', 'RS-07');
+])->group('RS-14', 'RN-23', 'RS-07');
 
 it('detecta que alguien reescribio como termino un tramo, por fichaje y por correccion', function (): void {
     // RN-05 (2.3.0): `closed_by` decide si el tramo del dia siguiente continua
@@ -1150,7 +1150,7 @@ it('detecta que alguien reescribio como termino un tramo, por fichaje y por corr
         ->and($resultado['output'])->toContain('2 discrepancia(s)')
         ->and($resultado['output'])->toContain('shift_entries '.$pausa.' · entry_differs_from_audit · closed_by')
         ->and($resultado['output'])->toContain('shift_entries '.$tramos['corregido'].' · entry_differs_from_audit · closed_by');
-})->group('RL-04', 'RS-07', 'RN-05');
+})->group('RS-14', 'RL-04', 'RS-07', 'RN-05');
 
 // --- La firma de --acknowledge-site-change (2.3.0 bloque 3) -----------------
 
@@ -1179,7 +1179,7 @@ it('revisa la discrepancia de la zona con la cuenta nombrada por su uuid', funct
     expect($revision['code'])->toBe(0, $revision['output'])
         ->and($revision['output'])->toContain('Firma: '.$rrhh->name.' <'.$rrhh->email.'> · rrhh · '.$rrhh->uuid)
         ->and(DB::table('audit_log')->where('action', 'site.timezone_discrepancy_reviewed')->value('actor_id'))->toBe($rrhh->id);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('no revisa la discrepancia de la zona si la firma no vale (salida 2, sin asiento)', function (Closure $firma, string $dice): void {
     app()->setLocale('es');
@@ -1198,7 +1198,7 @@ it('no revisa la discrepancia de la zona si la firma no vale (salida 2, sin asie
 })->with([
     'id numerico' => [fn (): array => ['--responsible' => (string) ManagementUsers::withRole(UserRole::RRHH)->id], 'ya no admite el id interno'],
     'sin --responsible-confirm' => [fn (): array => ['--responsible' => ManagementUsers::withRole(UserRole::RRHH)->email], '--responsible-confirm=<correo de la cuenta>'],
-])->group('RN-23', 'RL-04', 'RS-07');
+])->group('RS-14', 'RN-23', 'RL-04', 'RS-07');
 
 it('con terminal, responder que no a la firma de la revision sale con 1 sin asiento', function (): void {
     $fila = registroAuditadoFilaPendiente();
@@ -1213,4 +1213,4 @@ it('con terminal, responder que no a la firma de la revision sale con 1 sin asie
     expect($revision['code'])->toBe(1, $revision['output'])
         ->and($revision['output'])->toContain('Firma: '.$rrhh->name)
         ->and(registroAuditadoRevisionesDeZona())->toBe(0);
-})->group('RN-23', 'RL-04', 'RS-07');
+})->group('RS-14', 'RN-23', 'RL-04', 'RS-07');

@@ -234,7 +234,7 @@ function conciliacionCompara(?RecordedShiftEntry $fila, ?AuditedShiftEntry $asie
 
 it('da por bueno un tramo cerrado por el quiosco que coincide con su asiento', function (): void {
     expect(conciliacionCompara(conciliacionFila(), conciliacionAsientoDeSalida()))->toBeNull();
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('da por bueno un tramo abierto contra el asiento de su entrada', function (): void {
     $entrada = AuditedShiftEntry::fromTrail(conciliacionEntradaAuditada(), false, conciliacionEntradaAuditada(), conciliacionEntradaAuditada());
@@ -248,7 +248,7 @@ it('da por bueno un tramo abierto contra el asiento de su entrada', function ():
     // no la escribio ningun fichaje.
     expect(conciliacionCompara(conciliacionFila(), $entrada)?->fields)
         ->toBe(['clocked_out_at', 'duration_minutes', 'clock_out_source', 'closed_by', 'status']);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('da por bueno un tramo anomalo cuando su asiento trae anomalias, y no al reves', function (): void {
     $anomalo = conciliacionAsientoDeSalida(['anomalies' => ['shift_too_long']]);
@@ -256,7 +256,7 @@ it('da por bueno un tramo anomalo cuando su asiento trae anomalias, y no al reve
     expect(conciliacionCompara(conciliacionFila(['status' => 'anomalous']), $anomalo))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(['status' => 'closed']), $anomalo)?->fields)->toBe(['status'])
         ->and(conciliacionCompara(conciliacionFila(['status' => 'anomalous']), conciliacionAsientoDeSalida())?->fields)->toBe(['status']);
-})->group('RL-04', 'RN-07');
+})->group('RS-14', 'RL-04', 'RN-07');
 
 it('admite los dos estados cerrados si el asiento es de una version que no apuntaba las anomalias', function (): void {
     $antiguo = AuditedShiftEntry::fromTrail(new AuditTrailEntry(20, 'shift_entry.closed', [
@@ -270,7 +270,7 @@ it('admite los dos estados cerrados si el asiento es de una version que no apunt
 
     expect(conciliacionCompara(conciliacionFila(['status' => 'closed']), $antiguo))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(['status' => 'anomalous']), $antiguo))->toBeNull();
-})->group('RL-04');
+})->group('RS-14', 'RL-04');
 
 it('da por buenas la version que produjo una correccion y la que sustituyo', function (): void {
     // La nueva: las marcas de `after`, su version y su fila de correccion.
@@ -315,7 +315,7 @@ it('da por buenas la version que produjo una correccion y la que sustituyo', fun
     // Si alguien desengancha la vieja de su sustituta, sale.
     expect(conciliacionCompara(conciliacionFila([...(array) $vieja, 'supersededByUuid' => null]), $asientoDeLaVieja)?->fields)
         ->toBe(['superseded_by']);
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('da por bueno un tramo anulado con su correccion, y por buena un alta manual', function (): void {
     $anulacion = conciliacionAsientoDeCorreccion('voided', [
@@ -325,7 +325,7 @@ it('da por bueno un tramo anulado con su correccion, y por buena un alta manual'
 
     expect(conciliacionCompara(conciliacionFila(['status' => 'voided', 'corrections' => [conciliacionCorreccion('voided')]]), $anulacion))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(WORK_RECORD_RECONCILIATION_ALTA + ['corrections' => [conciliacionCorreccion('created')]]), conciliacionAsientoDeCorreccion('created')))->toBeNull();
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('no confunde un tramo purgado con uno borrado, y solo hasta el corte auditado', function (): void {
     $asiento = conciliacionAsientoDeSalida();
@@ -334,7 +334,7 @@ it('no confunde un tramo purgado con uno borrado, y solo hasta el corte auditado
     expect(conciliacionCompara(null, $asiento, '2026-10-08'))->toBeNull()
         ->and(conciliacionCompara(null, $asiento, '2026-10-07')?->kind)->toBe(WorkRecordDiscrepancyKind::AuditWithoutEntry)
         ->and(conciliacionCompara(null, $asiento)?->kind)->toBe(WorkRecordDiscrepancyKind::AuditWithoutEntry);
-})->group('RL-04', 'RL-02');
+})->group('RS-14', 'RL-04', 'RL-02');
 
 it('no denuncia el turno de la noche del 31 de diciembre cuyo asiento se fue con la particion de su año (ADR-027)', function (): void {
     $nochevieja = conciliacionFila([
@@ -345,7 +345,7 @@ it('no denuncia el turno de la noche del 31 de diciembre cuyo asiento se fue con
 
     expect(conciliacionCompara($nochevieja, null, null, [2025]))->toBeNull()
         ->and(conciliacionCompara($nochevieja, null, null, [2024])?->kind)->toBe(WorkRecordDiscrepancyKind::EntryWithoutAudit);
-})->group('RL-04', 'RL-02', 'RS-07');
+})->group('RS-14', 'RL-04', 'RL-02', 'RS-07');
 
 it('no deja que un año sellado tape un tramo inventado con la entrada en ese año', function (array $cambios): void {
     // La exencion es la de la noche del 31: nada de un `INSERT` con la entrada
@@ -357,12 +357,12 @@ it('no deja que un año sellado tape un tramo inventado con la entrada en ese a�
     'tramo corriente de un año sellado' => [['clockedInAt' => '2025-06-10T06:00:00.000000Z', 'workDate' => '2025-06-10']],
     'jornada del 1 de enero de otro año' => [['clockedInAt' => '2022-12-31T23:30:00.000000Z', 'workDate' => '2026-01-01']],
     'dos dias entre entrada y jornada' => [['clockedInAt' => '2025-12-30T23:30:00.000000Z', 'workDate' => '2026-01-01']],
-])->group('RL-04', 'RS-07');
+])->group('RS-14', 'RL-04', 'RS-07');
 
 it('compara instantes y no textos: la misma marca en otra zona cuadra', function (): void {
     expect(conciliacionCompara(conciliacionFila(['clockedInAt' => '2026-10-07T08:00:00+02:00']), conciliacionAsientoDeSalida()))
         ->toBeNull();
-})->group('RL-04');
+})->group('RS-14', 'RL-04');
 
 // --- Lo que SI es una discrepancia: las cuatro huellas ----------------------
 
@@ -371,7 +371,7 @@ it('detecta un tramo sin ningun asiento: un INSERT inventado', function (): void
 
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::EntryWithoutAudit)
         ->and($hallazgo?->shiftEntryUuid)->toBe(WORK_RECORD_RECONCILIATION_TRAMO);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta una entrada cambiada, aunque sea un microsegundo', function (): void {
     $hallazgo = conciliacionCompara(conciliacionFila(['clockedInAt' => '2026-10-07T06:00:00.000001Z']), conciliacionAsientoDeSalida());
@@ -379,7 +379,7 @@ it('detecta una entrada cambiada, aunque sea un microsegundo', function (): void
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::EntryDiffersFromAudit)
         ->and($hallazgo?->fields)->toBe(['clocked_in_at'])
         ->and($hallazgo?->auditEntryId)->toBe(20);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta una salida falsa con sus minutos recalculados para que la fila sea coherente', function (): void {
     $hallazgo = conciliacionCompara(
@@ -388,12 +388,12 @@ it('detecta una salida falsa con sus minutos recalculados para que la fila sea c
     );
 
     expect($hallazgo?->fields)->toBe(['clocked_out_at', 'duration_minutes']);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta minutos cambiados sin tocar las marcas, que es lo que suma la exportacion', function (): void {
     expect(conciliacionCompara(conciliacionFila(['durationMinutes' => 600]), conciliacionAsientoDeSalida())?->fields)
         ->toBe(['duration_minutes']);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta un tramo pasado a otra persona, a otro centro o a otra jornada', function (): void {
     expect(conciliacionCompara(conciliacionFila([
@@ -401,14 +401,14 @@ it('detecta un tramo pasado a otra persona, a otro centro o a otra jornada', fun
         'siteId' => 2,
         'workDate' => '2026-10-08',
     ]), conciliacionAsientoDeSalida())?->fields)->toBe(['employee_uuid', 'site_id', 'work_date']);
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta un tramo anulado por SQL, sin correccion: un borrado para la exportacion', function (string $estado): void {
     $hallazgo = conciliacionCompara(conciliacionFila(['status' => $estado]), conciliacionAsientoDeSalida());
 
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::RetiredWithoutCorrection)
         ->and($hallazgo?->fields)->toBe(['status']);
-})->with(['voided', 'superseded'])->group('RL-04', 'RN-13', 'RS-07');
+})->with(['voided', 'superseded'])->group('RS-14', 'RL-04', 'RN-13', 'RS-07');
 
 it('detecta una anulacion cuya fila de correccion ha desaparecido', function (): void {
     $anulacion = conciliacionAsientoDeCorreccion('voided', [
@@ -419,7 +419,7 @@ it('detecta una anulacion cuya fila de correccion ha desaparecido', function ():
 
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::RetiredWithoutCorrection)
         ->and($hallazgo?->fields)->toBe(['shift_corrections']);
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('detecta un tramo anulado que alguien ha vuelto a poner en vigor', function (): void {
     $anulacion = conciliacionAsientoDeCorreccion('voided', [
@@ -429,12 +429,12 @@ it('detecta un tramo anulado que alguien ha vuelto a poner en vigor', function (
 
     expect(conciliacionCompara(conciliacionFila(['status' => 'closed', 'corrections' => [conciliacionCorreccion('voided')]]), $anulacion)?->fields)
         ->toBe(['status']);
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('detecta un alta manual sin su fila de correccion y una version cambiada', function (): void {
     expect(conciliacionCompara(conciliacionFila(WORK_RECORD_RECONCILIATION_ALTA), conciliacionAsientoDeCorreccion('created'))?->fields)->toBe(['shift_corrections'])
         ->and(conciliacionCompara(conciliacionFila(WORK_RECORD_RECONCILIATION_ALTA + ['version' => 3, 'corrections' => [conciliacionCorreccion('created')]]), conciliacionAsientoDeCorreccion('created'))?->fields)->toBe(['version']);
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('detecta un asiento cuyo tramo ya no existe: un DELETE', function (): void {
     $hallazgo = conciliacionCompara(null, conciliacionAsientoDeSalida());
@@ -442,7 +442,7 @@ it('detecta un asiento cuyo tramo ya no existe: un DELETE', function (): void {
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::AuditWithoutEntry)
         ->and($hallazgo?->auditEntryId)->toBe(20)
         ->and($hallazgo?->describe())->toBe('shift_entries '.WORK_RECORD_RECONCILIATION_TRAMO.' · audit_without_entry · audit_log #20');
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('detecta una entrada atribuida a otro origen: un fichaje por PIN que pasa por tarjeta', function (): void {
     $entradaPorPin = conciliacionEntradaAuditada(['origin' => 'pin_kiosk']);
@@ -452,7 +452,7 @@ it('detecta una entrada atribuida a otro origen: un fichaje por PIN que pasa por
     expect(conciliacionCompara(conciliacionFila(['clockInSource' => 'pin_kiosk']), $asiento))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(), $asiento)?->fields)->toBe(['clock_in_source'])
         ->and(conciliacionCompara(conciliacionFila(['clockOutSource' => 'manual_admin', 'clockInSource' => 'pin_kiosk']), $asiento)?->fields)->toBe(['clock_out_source']);
-})->group('RL-04', 'RS-07', 'RF-AT-11');
+})->group('RS-14', 'RL-04', 'RS-07', 'RF-AT-11');
 
 it('exige manual_admin en el lado que cambio una correccion, y no mira el que no cambio', function (): void {
     // Cambia solo la salida: la entrada hereda su origen de la version
@@ -473,7 +473,7 @@ it('exige manual_admin en el lado que cambio una correccion, y no mira el que no
         conciliacionFila(['clockInSource' => 'qr_kiosk', 'clockOutSource' => 'manual_admin', 'corrections' => [conciliacionCorreccion('created')]]),
         conciliacionAsientoDeCorreccion('created'),
     )?->fields)->toBe(['clock_in_source']);
-})->group('RL-04', 'RN-13');
+})->group('RS-14', 'RL-04', 'RN-13');
 
 it('exige la fila de correccion con el mismo motivo y el mismo autor que su asiento', function (array $correccion): void {
     $hallazgo = conciliacionCompara(
@@ -487,7 +487,7 @@ it('exige la fila de correccion con el mismo motivo y el mismo autor que su asie
     'otro autor' => [['created', 'AJUSTE_ACORDADO_CON_RRHH', 8]],
     'otro motivo' => [['created', 'OLVIDO_FICHAJE_ENTRADA', 7]],
     'otra accion' => [['modified', 'AJUSTE_ACORDADO_CON_RRHH', 7]],
-])->group('RL-04', 'RN-13');
+])->group('RS-14', 'RL-04', 'RN-13');
 
 // --- Las purgas: solo cuenta la que la purga real pudo escribir --------------
 
@@ -501,7 +501,7 @@ it('admite el asiento de una purga real y lo usa solo para su centro', function 
         ->and(WorkRecordReconciliation::compare(new WorkRecordPair(WORK_RECORD_RECONCILIATION_TRAMO, null, conciliacionAsientoDeSalida()), $limite))->toBeNull()
         ->and(WorkRecordReconciliation::compare(new WorkRecordPair(WORK_RECORD_RECONCILIATION_TRAMO, null, $deOtroCentro), $limite)?->kind)
         ->toBe(WorkRecordDiscrepancyKind::AuditWithoutEntry);
-})->group('RL-02', 'RL-04');
+})->group('RS-14', 'RL-02', 'RL-04');
 
 it('no cree un asiento de purga que la purga real no pudo escribir, y lo denuncia', function (AuditedPurge $purga, array $campos): void {
     $limite = WorkRecordPurgeBoundary::assess(new WorkRecordAuditContext([$purga]), new DateTimeImmutable('2026-10-08T04:15:00Z'), PurgeFloors::of([]));
@@ -522,7 +522,7 @@ it('no cree un asiento de purga que la purga real no pudo escribir, y lo denunci
     'sin años de conservacion' => [new AuditedPurge(91, new DateTimeImmutable('2026-10-08T03:00:00Z'), '2026-10-08', null, 1), ['retention_years']],
     'escrito despues de la pasada' => [new AuditedPurge(91, new DateTimeImmutable('2031-01-01T00:00:00Z'), '2026-10-08', 4, 1), ['occurred_at']],
     'sin centro' => [new AuditedPurge(91, new DateTimeImmutable('2031-01-01T00:00:00Z'), '2026-10-08', 4, null), ['occurred_at', 'site_id']],
-])->group('RL-02', 'RL-04', 'RS-07');
+])->group('RS-14', 'RL-02', 'RL-04', 'RS-07');
 
 it('no deja que el plazo vigente del perfil convierta en sospechosa una purga legitima anterior', function (): void {
     // Purga con cuatro años y despues el perfil sube a cinco: el asiento sigue
@@ -531,7 +531,7 @@ it('no deja que el plazo vigente del perfil convierta en sospechosa una purga le
 
     expect(WorkRecordPurgeBoundary::violations($purga, new DateTimeImmutable('2031-01-01T00:00:00Z'), 1))->toBe([])
         ->and(WorkRecordPurgeBoundary::violations($purga, new DateTimeImmutable('2031-01-01T00:00:00Z'), 5))->toBe(['retention_years']);
-})->group('RL-02');
+})->group('RS-14', 'RL-02');
 
 // --- Piezas -----------------------------------------------------------------
 
@@ -554,7 +554,7 @@ it('cuenta los minutos del asiento con la regla unica del registro', function (s
     'segundos sueltos' => ['2026-10-07T14:00:59.000000Z', 480],
     'microsegundos' => ['2026-10-07T14:00:59.999999Z', 480],
     'turno de noche' => ['2026-10-08T04:30:30.000000Z', 1350],
-])->group('RL-04', 'RN-06', 'RN-09');
+])->group('RS-14', 'RL-04', 'RN-06', 'RN-09');
 
 it('un asiento con la salida antes que la entrada no tiene minutos con los que coincidir', function (): void {
     // Imposible desde el registro (RN-03 y el CHECK de `shift_entries`): solo
@@ -565,7 +565,7 @@ it('un asiento con la salida antes que la entrada no tiene minutos con los que c
         conciliacionFila(['clockedOutAt' => $salida, 'durationMinutes' => 0]),
         conciliacionAsientoDeSalida(['clocked_out_at' => $salida]),
     )?->fields)->toBe(['duration_minutes']);
-})->group('RL-04', 'RN-09');
+})->group('RS-14', 'RL-04', 'RN-09');
 
 it('abre la ventana diaria con dos dias de margen para los asientos', function (): void {
     $ventana = WorkRecordReconciliationWindow::recent(Instants::utc('2026-10-08 04:15'), 7);
@@ -575,11 +575,11 @@ it('abre la ventana diaria con dos dias de margen para los asientos', function (
         ->and($ventana->auditSince?->format('Y-m-d\TH:i:sP'))->toBe('2026-09-29T00:00:00+00:00')
         ->and(WorkRecordReconciliationWindow::full()->auditSince)->toBeNull()
         ->and(WorkRecordReconciliationWindow::full()->fromWorkDate)->toBeNull();
-})->group('RL-04', 'RS-07');
+})->group('RS-14', 'RL-04', 'RS-07');
 
 it('rechaza una ventana que no mira ningun dia', function (): void {
     WorkRecordReconciliationWindow::recent(Instants::utc('2026-10-08 04:15'), 0);
-})->throws(InvalidWorkRecordReconciliationWindow::class)->group('RL-04');
+})->throws(InvalidWorkRecordReconciliationWindow::class)->group('RS-14', 'RL-04');
 
 // --- El suelo legal por jurisdiccion y la purga revisada (bloque 5 de la 2.2.1)
 
@@ -644,7 +644,7 @@ it('denuncia una purga española a tres años y admite la de cuatro', function (
         ->and($aCuatro->rejected)->toBe([])
         ->and($aCuatro->cutoffFor(1))->toBe('2026-10-08')
         ->and(conciliacionBorradoExplicado($aCuatro))->toBeTrue();
-})->group('RS-07', 'RL-02', 'RF-PD-07');
+})->group('RS-14', 'RS-07', 'RL-02', 'RF-PD-07');
 
 it('juzga con el mayor de los suelos: el declarado por el asiento solo lo endurece', function (): void {
     // Centro sin suelo (1) y asiento que declara 4: gana el 4.
@@ -658,7 +658,7 @@ it('juzga con el mayor de los suelos: el declarado por el asiento solo lo endure
         ->and($declaradoMenor->rejected[0]->fields ?? null)->toBe(['retention_years'])
         ->and($sinSuelo->rejected)->toBe([])
         ->and($sinSuelo->cutoffFor(1))->toBe('2026-10-08');
-})->group('RS-07', 'RL-02');
+})->group('RS-14', 'RS-07', 'RL-02');
 
 it('saca de las pendientes una purga revisada y vuelve a explicar sus borrados hasta su corte, no despues', function (): void {
     $limite = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()], [conciliacionRevision(95, 90)]);
@@ -671,7 +671,7 @@ it('saca de las pendientes una purga revisada y vuelve a explicar sus borrados h
         ->and(conciliacionBorradoExplicado($limite, '2026-10-07'))->toBeTrue()
         ->and(conciliacionBorradoExplicado($limite, '2026-10-08'))->toBeFalse()
         ->and(conciliacionBorradoExplicado($limite, '2026-10-09'))->toBeFalse();
-})->group('RS-07', 'RL-02', 'RL-04');
+})->group('RS-14', 'RS-07', 'RL-02', 'RL-04');
 
 it('se queda con el corte mas reciente de un centro aunque venga de una purga revisada', function (): void {
     $limite = conciliacionLimiteConSuelo(
@@ -685,7 +685,7 @@ it('se queda con el corte mas reciente de un centro aunque venga de una purga re
 
     expect($limite->cutoffFor(1))->toBe('2026-10-08')
         ->and($limite->rejected)->toBe([]);
-})->group('RS-07', 'RL-04');
+})->group('RS-14', 'RS-07', 'RL-04');
 
 it('no deja que una revision explique un corte imposible ni una purga sin centro', function (AuditedPurge $purga): void {
     $limite = conciliacionLimiteConSuelo([$purga], [conciliacionRevision(95, 90)]);
@@ -701,7 +701,7 @@ it('no deja que una revision explique un corte imposible ni una purga sin centro
     'corte imposible a tres años' => [conciliacionPurgaATresAnos(corte: '9999-12-31')],
     'corte que no es una fecha' => [conciliacionPurgaATresAnos(corte: '2026-13-40')],
     'sin centro' => [conciliacionPurgaATresAnos(centro: null)],
-])->group('RS-07', 'RL-04');
+])->group('RS-14', 'RS-07', 'RL-04');
 
 it('ignora una revision anterior a la purga o que apunta a otro asiento', function (AuditedPurgeReview $revision): void {
     $limite = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()], [$revision]);
@@ -714,7 +714,7 @@ it('ignora una revision anterior a la purga o que apunta a otro asiento', functi
     'la misma fila' => [conciliacionRevision(90, 90)],
     'de otro asiento' => [conciliacionRevision(95, 77)],
     'sin asiento revisado' => [conciliacionRevision(95, null)],
-])->group('RS-07', 'RL-04');
+])->group('RS-14', 'RS-07', 'RL-04');
 
 it('cuenta una sola vez una purga revisada dos veces, y sigue contando la posterior sin revisar', function (): void {
     $limite = conciliacionLimiteConSuelo(
@@ -725,7 +725,7 @@ it('cuenta una sola vez una purga revisada dos veces, y sigue contando la poster
     expect($limite->reviewedPurgeIds)->toBe([90])
         ->and($limite->rejected)->toHaveCount(1)
         ->and($limite->rejected[0]->auditEntryId)->toBe(100);
-})->group('RS-07', 'RL-04');
+})->group('RS-14', 'RS-07', 'RL-04');
 
 it('explica tras revisarse solo la purga cuyo unico defecto es el plazo', function (AuditedPurge $purga, array $defectos, bool $explica): void {
     // Los defectos son los que da la regla con el suelo español: el corte se
@@ -748,7 +748,7 @@ it('explica tras revisarse solo la purga cuyo unico defecto es el plazo', functi
     'sin centro' => [conciliacionPurgaATresAnos(centro: null), ['retention_years', 'site_id'], false],
     'corte un dia tarde' => [conciliacionPurgaATresAnos(corte: '2026-10-09'), ['cutoff_date', 'retention_years'], false],
     'corte invalido' => [conciliacionPurgaATresAnos(corte: '2026-02-30'), ['cutoff_date', 'retention_years'], false],
-])->group('RS-07', 'RL-04');
+])->group('RS-14', 'RS-07', 'RL-04');
 
 it('resuelve el suelo de cada centro y el efectivo de cada asiento', function (): void {
     $suelos = PurgeFloors::of([1 => LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), 4)]);
@@ -768,7 +768,7 @@ it('resuelve el suelo de cada centro y el efectivo de cada asiento', function ()
     expect($conInstalacion->yearsFor(null))->toBe(4)
         ->and($conInstalacion->yearsFor(3))->toBe(1)
         ->and($conInstalacion->effectiveFor(conciliacionPurgaATresAnos(centro: null)))->toBe(4);
-})->group('RL-02');
+})->group('RS-14', 'RL-02');
 
 it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros', function (): void {
     $instante = new DateTimeImmutable('2030-01-01T00:00:00Z');
@@ -781,7 +781,7 @@ it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->reviewedAuditEntryId)->toBeNull()
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->occurredAt)->toBe($instante)
         ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->auditEntryId)->toBe(5);
-})->group('RS-07', 'RL-04');
+})->group('RS-14', 'RS-07', 'RL-04');
 
 it('trata como salida el cierre de un asiento anterior a la v2.1.0, que no apuntaba la accion', function (): void {
     // Los cierres de la v2.0.0 y anteriores no llevan `action`: no existia la
@@ -795,7 +795,7 @@ it('trata como salida el cierre de un asiento anterior a la v2.1.0, que no apunt
 
     expect(conciliacionCompara(conciliacionFila(['closedBy' => 'clock_out']), $asiento))->toBeNull()
         ->and(conciliacionCompara(conciliacionFila(['closedBy' => 'break_start']), $asiento)?->fields)->toBe(['closed_by']);
-})->group('RL-04', 'RS-07', 'RN-05');
+})->group('RS-14', 'RL-04', 'RS-07', 'RN-05');
 
 it('una marca relativa en el asiento es ilegible y no la hora del proceso (V1-AR-2)', function (string $relativa): void {
     // Con el analizador libre, `now` daba la hora de la pasada: la salida no
@@ -806,4 +806,4 @@ it('una marca relativa en el asiento es ilegible y no la hora del proceso (V1-AR
     expect($hallazgo?->kind)->toBe(WorkRecordDiscrepancyKind::EntryDiffersFromAudit)
         ->and($hallazgo?->fields)->toContain('clocked_out_at')
         ->and($hallazgo?->fields)->not->toContain('duration_minutes');
-})->with(['now', 'tomorrow', '+8 hours'])->group('RL-04', 'RS-07');
+})->with(['now', 'tomorrow', '+8 hours'])->group('RS-14', 'RL-04', 'RS-07');

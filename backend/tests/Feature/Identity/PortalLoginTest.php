@@ -150,7 +150,7 @@ it('no deja entrar a quien no esta en alta, y con el mismo rechazo', function (s
 })->with([
     'suspendido' => 'suspended',
     'de baja' => 'terminated',
-])->group('RN-14', 'RS-03');
+])->group('RN-25', 'RN-14', 'RS-03');
 
 it('no deja entrar a quien no tiene PIN emitido', function (): void {
     // El alta de un empleado no emite PIN: lo hace RRHH en un acto propio
