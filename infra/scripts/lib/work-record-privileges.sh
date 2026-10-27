@@ -85,11 +85,22 @@ readonly KQ_WORK_RECORD_DURATION_TRIGGERS="shift_entries:shift_entries_guard_dur
 # de ADR-057 par.2): la funcion de incidents_guard_transition admite resolved -> open solo
 # para ese caso, y el rol recibe UPDATE (context). Se exigen SOLO si su migracion esta
 # aplicada, como la duracion: una version anterior no los tiene hasta migrar. La funcion
-# se reconoce por el tipo que nombra (`rejected_pin_scan`); la anterior no lo nombra.
+# se reconoce por la huella de su cuerpo: md5 de `prosrc` con los blancos normalizados
+# (KQ_GUARD_FUNCTION_FINGERPRINT_SQL). Normalizar solo cambia sangria, retornos de carro
+# y lineas en blanco; los saltos de linea se conservan, porque un comentario `--` termina
+# en ellos y quitarlos cambiaria lo que ejecuta la funcion. Cualquier otro cuerpo, aunque
+# nombre `rejected_pin_scan` (uno debilitado, o un comentario con el nombre), es otro.
 # Misma migracion y mismo trigger que ServiceInspector::INCIDENT_REOPENING_MIGRATION y
 # ::INCIDENT_REOPENING_TRIGGER (WorkRecordGuardListsParityTest).
 readonly KQ_INCIDENT_REOPENING_MIGRATION="'2026_10_27_100100_allow_system_reopening_of_rejected_pin_scan'"
 readonly KQ_INCIDENT_REOPENING_TRIGGER="incidents:incidents_guard_transition"
+# La huella de la funcion que crea esa migracion. Si otra migracion la cambia, se cambia aqui
+# y en ServiceInspector::INCIDENT_REOPENING_FINGERPRINT (WorkRecordGuardListsParityTest, y
+# WorkRecordPrivilegesDoctorCheckTest la compara con la de la base migrada).
+readonly KQ_INCIDENT_REOPENING_FINGERPRINT="c9e12ae8cfdd618e18589c257c6900b9"
+# La expresion de la huella sobre `p.prosrc` (pg_proc). Sin barras invertidas, para que
+# viaje igual por el shell y por PHP: la misma que ServiceInspector::GUARD_FUNCTION_FINGERPRINT_SQL.
+readonly KQ_GUARD_FUNCTION_FINGERPRINT_SQL="md5(btrim(regexp_replace(regexp_replace(p.prosrc, '[[:space:]]*' || chr(10) || '[[:space:]]*', chr(10), 'g'), '[[:blank:]]+', ' ', 'g'), ' ' || chr(10)))"
 # Privilegios de columna que solo se exigen con esa migracion: tabla:PRIVILEGIO:col1,...
 readonly KQ_INCIDENT_REOPENING_COLUMNS="incidents:UPDATE:context"
 
@@ -362,8 +373,9 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
      AND NOT EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = '${entry%%:*}'::regclass AND g.tgname = '${entry#*:}' AND NOT g.tgisinternal)"
     done
     # La reapertura de RN-19: con su migracion aplicada, el trigger de transiciones de
-    # incidents tiene que ejecutar la funcion que la admite. Una funcion distinta la ha
-    # puesto el rol de migracion a mano: es manipulacion y no se repara sola.
+    # incidents tiene que ejecutar la funcion que crea esa migracion, con su huella. Una
+    # funcion distinta (o debilitada) la ha puesto el rol de migracion a mano: es
+    # manipulacion y no se repara sola.
     purge_sql="${purge_sql}
   UNION ALL
   SELECT 'trigger:${KQ_INCIDENT_REOPENING_TRIGGER#*:}:SIN_REAPERTURA'
@@ -371,7 +383,7 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
      AND EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = '${KQ_INCIDENT_REOPENING_TRIGGER%%:*}'::regclass AND g.tgname = '${KQ_INCIDENT_REOPENING_TRIGGER#*:}' AND NOT g.tgisinternal)
      AND NOT EXISTS (SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid = g.tgfoid
                       WHERE g.tgrelid = '${KQ_INCIDENT_REOPENING_TRIGGER%%:*}'::regclass AND g.tgname = '${KQ_INCIDENT_REOPENING_TRIGGER#*:}'
-                        AND NOT g.tgisinternal AND p.prosrc LIKE '%rejected_pin_scan%')"
+                        AND NOT g.tgisinternal AND ${KQ_GUARD_FUNCTION_FINGERPRINT_SQL} = '${KQ_INCIDENT_REOPENING_FINGERPRINT}')"
     # La zona del centro (RN-23, ADR-056): con su migracion aplicada, el trigger de
     # sites (y ninguno de sites desactivado), la funcion de la correccion de consola y su traza
     # solo-append (solo SELECT para el rol, propiedad del mismo rol que sites).

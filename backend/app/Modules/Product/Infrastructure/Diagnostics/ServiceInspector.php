@@ -108,6 +108,25 @@ final readonly class ServiceInspector
     public const string INCIDENT_REOPENING_TRIGGER = 'incidents_guard_transition';
 
     /**
+     * La huella del cuerpo de la funcion que crea esa migracion, con
+     * {@see self::GUARD_FUNCTION_FINGERPRINT_SQL}. Nombrar `rejected_pin_scan`
+     * no basta: un cuerpo debilitado, o uno vacio con el nombre en un
+     * comentario, tiene otra huella. La misma que
+     * `KQ_INCIDENT_REOPENING_FINGERPRINT` del script.
+     */
+    public const string INCIDENT_REOPENING_FINGERPRINT = 'c9e12ae8cfdd618e18589c257c6900b9';
+
+    /**
+     * El md5 de `p.prosrc` (`pg_proc`) con los blancos normalizados: fuera
+     * retornos de carro, sangria y lineas en blanco, y cada tramo de espacios o
+     * tabuladores en uno. Los saltos de linea se conservan: un comentario `--`
+     * acaba en ellos, y quitarlos daria la misma huella a un cuerpo que ejecuta
+     * otra cosa. Sin barras invertidas, igual que
+     * `KQ_GUARD_FUNCTION_FINGERPRINT_SQL` del script.
+     */
+    public const string GUARD_FUNCTION_FINGERPRINT_SQL = "md5(btrim(regexp_replace(regexp_replace(p.prosrc, '[[:space:]]*' || chr(10) || '[[:space:]]*', chr(10), 'g'), '[[:blank:]]+', ' ', 'g'), ' ' || chr(10)))";
+
+    /**
      * Las tablas sin `DELETE` para la aplicacion desde esa migracion: la purga
      * pasa por la funcion.
      *
@@ -514,16 +533,17 @@ final readonly class ServiceInspector
 
     /**
      * Con la reapertura de RN-19 aplicada, {@see self::INCIDENT_REOPENING_TRIGGER}
-     * existe pero ejecuta una funcion que no la admite: alguien la ha
-     * reescrito con el rol de migracion. Se reconoce por el tipo que nombra,
-     * como hace `infra/scripts/lib/work-record-privileges.sh`. Si el *trigger*
+     * existe pero ejecuta una funcion distinta de la que crea esa migracion
+     * (otra huella, {@see self::INCIDENT_REOPENING_FINGERPRINT}): alguien la ha
+     * reescrito o debilitado con el rol de migracion. Lo mismo que mira
+     * `infra/scripts/lib/work-record-privileges.sh`. Si el *trigger*
      * falta, ya lo dice `missing_trigger`.
      */
     private function incidentGuardIsOutdated(): bool
     {
         /** @var object{outdated: bool} $row */
         $row = $this->database->selectOne(
-            <<<'SQL'
+            sprintf(<<<'SQL'
             SELECT EXISTS (
                        SELECT 1 FROM pg_catalog.pg_trigger g
                         WHERE g.tgrelid = 'public.incidents'::regclass AND g.tgname = ? AND NOT g.tgisinternal
@@ -532,10 +552,10 @@ final readonly class ServiceInspector
                        SELECT 1 FROM pg_catalog.pg_trigger g
                          JOIN pg_catalog.pg_proc p ON p.oid = g.tgfoid
                         WHERE g.tgrelid = 'public.incidents'::regclass AND g.tgname = ? AND NOT g.tgisinternal
-                          AND p.prosrc LIKE '%rejected_pin_scan%'
+                          AND %s = ?
                    ) AS outdated
-            SQL,
-            [self::INCIDENT_REOPENING_TRIGGER, self::INCIDENT_REOPENING_TRIGGER],
+            SQL, self::GUARD_FUNCTION_FINGERPRINT_SQL),
+            [self::INCIDENT_REOPENING_TRIGGER, self::INCIDENT_REOPENING_TRIGGER, self::INCIDENT_REOPENING_FINGERPRINT],
         );
 
         return (bool) $row->outdated;

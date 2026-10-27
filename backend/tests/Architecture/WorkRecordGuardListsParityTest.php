@@ -89,3 +89,16 @@ it('la reapertura de RN-19 vigila la misma migracion y el mismo trigger en el do
     expect(Repo::file('backend/database/migrations/'.ServiceInspector::INCIDENT_REOPENING_MIGRATION.'.php'))
         ->toBeFile();
 })->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');
+
+it('la huella de la funcion de la reapertura y su expresion son las mismas en el doctor y en el script', function (): void {
+    // Que coincida con la que deja la migracion lo mira, contra la base migrada,
+    // WorkRecordPrivilegesDoctorCheckTest.
+    expect(paridadGuardasVariable('KQ_INCIDENT_REOPENING_FINGERPRINT'))
+        ->toBe(ServiceInspector::INCIDENT_REOPENING_FINGERPRINT)
+        ->toMatch('/^[0-9a-f]{32}$/')
+        ->and(paridadGuardasVariable('KQ_GUARD_FUNCTION_FINGERPRINT_SQL'))
+        ->toBe(ServiceInspector::GUARD_FUNCTION_FINGERPRINT_SQL);
+
+    // Sin barras invertidas: el shell y PHP la leerian distinto.
+    expect(ServiceInspector::GUARD_FUNCTION_FINGERPRINT_SQL)->not->toContain('\\');
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');

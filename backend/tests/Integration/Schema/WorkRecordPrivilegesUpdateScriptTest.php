@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\WeakenedIncidentGuard;
 
 /*
  * `update.sh` y las migraciones del bloque 6 dicen lo mismo (ADR-057 §1 y §7,
@@ -314,6 +315,30 @@ it('el SQL de update.sh exige la reapertura de RN-19 con su migracion, y no sin 
     ],
     'sin UPDATE de context' => ['REVOKE UPDATE (context) ON TABLE incidents FROM :app', 'incidents.context:UPDATE', false, 'ok'],
 ])->group('RS-07', 'RL-04', 'RN-19');
+
+it('el SQL de update.sh da por manipulada la funcion de la reapertura debilitada aunque nombre rejected_pin_scan', function (string $weakening): void {
+    // Antes bastaba con que el cuerpo nombrara el tipo; ahora se compara su
+    // huella (KQ_INCIDENT_REOPENING_FINGERPRINT).
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+    $body = WeakenedIncidentGuard::body($migrator);
+
+    $migrator->beginTransaction();
+
+    try {
+        $intact = $migrator->selectOne($sql);
+        $migrator->statement(WeakenedIncidentGuard::replaceStatement(WeakenedIncidentGuard::weaken($body, $weakening)));
+        $row = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row) && is_object($intact));
+
+    expect(array_values((array) $intact)[0])->toBe('ok')
+        ->and(array_values((array) $row)[0])->toBe('trigger:incidents_guard_transition:SIN_REAPERTURA')
+        ->and(privilegiosActualizadorManipulado('trigger:incidents_guard_transition:SIN_REAPERTURA'))->toBeTrue();
+})->with(WeakenedIncidentGuard::weakenings())->group('RS-07', 'RL-04', 'RN-19');
 
 it('la reparacion de update.sh concede UPDATE (context) solo con la migracion de la reapertura', function (): void {
     $application = Config::string('database.roles.application');
