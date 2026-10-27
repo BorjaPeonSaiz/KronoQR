@@ -22,9 +22,4 @@ enum RetentionMode: string
     {
         return $this === self::Simulation;
     }
-
-    public function label(): string
-    {
-        return $this === self::Simulation ? 'SIMULACION (no se ha borrado nada)' : 'EJECUCION REAL';
-    }
 }

@@ -169,13 +169,9 @@ it('tampoco responde en dias por la ficha de personal ni por las cuentas', funct
     'cuentas' => [RetentionScope::ManagementAccounts],
 ])->group('RL-11');
 
-it('describe los dos ambitos nuevos con su nombre y su unidad', function (): void {
-    expect(RetentionScope::PersonnelRecords->label())->toBe('Fichas de personal')
-        ->and(RetentionScope::PersonnelRecords->unit())->toBe('personas')
-        ->and(RetentionScope::ManagementAccounts->label())->toBe('Cuentas de gestion')
-        ->and(RetentionScope::ManagementAccounts->unit())->toBe('cuentas')
-        ->and(RetentionScope::TechnicalLog->unit())->toBe('ficheros')
-        ->and(RetentionScope::WorkRecords->unit())->toBe('filas')
-        ->and(array_map(static fn (RetentionScope $scope): string => $scope->value, RetentionScope::cases()))
+// El nombre y la unidad de cada ambito son textos de lang/*/retention.php:
+// los vigila tests/Architecture/RetentionEnumTextsTest.php.
+it('cierra la lista de ambitos con los dos nuevos al final', function (): void {
+    expect(array_map(static fn (RetentionScope $scope): string => $scope->value, RetentionScope::cases()))
         ->toBe(['work_records', 'audit_log', 'technical_log', 'error_history', 'personnel_records', 'management_accounts']);
 })->group('RL-11');
