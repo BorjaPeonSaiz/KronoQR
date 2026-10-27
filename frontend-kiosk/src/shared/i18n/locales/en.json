@@ -118,7 +118,7 @@
   },
   "diagnostics": {
     "trigger": {
-      "ariaLabel": "Open kiosk diagnostics (hold for 3 seconds)"
+      "ariaLabel": "{time}: open kiosk diagnostics (hold for 3 seconds)"
     },
     "title": "Kiosk diagnostics",
     "back": "Back to clock-in",

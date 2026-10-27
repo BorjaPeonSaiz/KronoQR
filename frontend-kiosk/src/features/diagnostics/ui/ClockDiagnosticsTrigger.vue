@@ -5,7 +5,8 @@
 // UN `<button>` REAL, no un `<div>` con `@click`: alcanzable con teclado (una
 // tablet con teclado USB de recepcion existe) y anunciado como boton por el
 // lector de pantalla, con su propio `aria-label` -el texto visible es solo la
-// hora, que no dice para que sirve pulsarlo-.
+// hora, que no dice para que sirve pulsarlo-. El nombre accesible EMPIEZA por
+// esa hora visible (WCAG 2.5.3, Label in Name).
 //
 // PULSACION CORTA, NADA. Solo una pulsacion sostenida 3 s dispara
 // `useLongPress`; un toque accidental al pasar el dedo no hace nada, y con la
@@ -22,7 +23,7 @@
 // NUNCA BLOQUEA EL FICHAJE (regla dura 19): es un boton mas en la cabecera,
 // igual que el selector de idioma o el indicador de conexion; no tapa la
 // camara ni el visor, y no exige tocarlo para nada del flujo normal.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
@@ -44,6 +45,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (ticker !== null) clearInterval(ticker)
 })
+
+const clockText = computed(() => formatClockTime(now.value, locale.value, readSiteTimeZone()))
 
 const longPress = useLongPress({
   onLongPress: () => {
@@ -68,7 +71,7 @@ function onKeyDown(event: KeyboardEvent): void {
   <button
     type="button"
     class="kiosk-touch rounded-kq-sm px-3 text-lg font-medium text-kq-kiosk-text-muted"
-    :aria-label="t('diagnostics.trigger.ariaLabel')"
+    :aria-label="t('diagnostics.trigger.ariaLabel', { time: clockText })"
     data-testid="diagnostics-trigger"
     @pointerdown="longPress.onPointerDown"
     @pointerup="longPress.onPointerUp"
@@ -80,6 +83,6 @@ function onKeyDown(event: KeyboardEvent): void {
     @keyup.space="longPress.onPointerUp"
     @blur="longPress.onPointerCancel"
   >
-    {{ formatClockTime(now, locale, readSiteTimeZone()) }}
+    {{ clockText }}
   </button>
 </template>

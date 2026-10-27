@@ -188,7 +188,7 @@
       "reasonHint": "Required. It is kept in the audit log. No health data or value judgements.",
       "deactivate": {
         "button": "Deactivate",
-        "rowLabel": "Deactivate the account of {name}",
+        "rowLabel": "Deactivate: account of {name}",
         "heading": "Deactivate the account",
         "confirm": "Deactivate",
         "explanation": "The account of {name} ({email}) will no longer be able to sign in and all its open sessions will be closed.",
@@ -197,7 +197,7 @@
       },
       "resetPassword": {
         "button": "Reset password",
-        "rowLabel": "Reset the password of {name}",
+        "rowLabel": "Reset password: account of {name}",
         "heading": "Reset the password",
         "confirm": "Reset password",
         "explanation": "A temporary password will be generated for {name} ({email}). It is shown only once and handed over in person.",
@@ -206,7 +206,7 @@
       },
       "resetTwoFactor": {
         "button": "Reset 2FA",
-        "rowLabel": "Reset the second factor of {name}",
+        "rowLabel": "Reset 2FA: account of {name}",
         "heading": "Reset the second factor",
         "confirm": "Remove second factor",
         "explanation": "The second factor of {name} ({email}) will be removed so they set it up again on their next sign-in.",

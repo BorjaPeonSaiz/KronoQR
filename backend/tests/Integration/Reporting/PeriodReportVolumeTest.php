@@ -216,7 +216,7 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
     /** @var list<array{sql: string, bindings: array<int, mixed>, ms: float}> $sentencias */
     $sentencias = [];
     DB::listen(static function (QueryExecuted $sentencia) use (&$sentencias): void {
-        $sentencias[] = ['sql' => $sentencia->sql, 'bindings' => array_values($sentencia->bindings), 'ms' => $sentencia->time];
+        $sentencias[] = ['sql' => $sentencia->sql, 'bindings' => array_values($sentencia->bindings), 'ms' => $sentencia->time ?? 0.0];
     });
 
     $metrica = 0.0;

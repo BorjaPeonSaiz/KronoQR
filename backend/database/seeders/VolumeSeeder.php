@@ -53,7 +53,7 @@ final class VolumeSeeder extends DevelopmentSeeder
     public function run(): void
     {
         if (DB::table('shift_entries')->exists()) {
-            $this->command->warn(
+            $this->command?->warn(
                 'VolumeSeeder: ya hay tramos en la base de datos y no se toca nada. '
                 .'Para regenerarlos: php artisan migrate:fresh --seed',
             );
@@ -87,7 +87,7 @@ final class VolumeSeeder extends DevelopmentSeeder
             }
         }
 
-        $this->command->info('VolumeSeeder: '.$generated.' tramos generados en '.self::DAYS.' dias.');
+        $this->command?->info('VolumeSeeder: '.$generated.' tramos generados en '.self::DAYS.' dias.');
 
         $this->projectDailyTotals();
     }

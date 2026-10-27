@@ -6,7 +6,8 @@
 // (solo la ventana visible), que el total y la posicion de cada fila se declaran
 // (`aria-rowcount`/`aria-rowindex`, PA7-003) y que el contenedor con scroll es una
 // region enfocable y con nombre (AX7-01). jsdom no maqueta: se le da al
-// contenedor una altura de 600 px para que el virtualizador tenga ventana.
+// contenedor una altura de 600 px (clientHeight, que es lo que lee virtual-core
+// 3.19) para que el virtualizador tenga ventana.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import ComplianceFindingsGroupTable from '@/features/compliance/ComplianceFindingsGroupTable.vue'
 import PeriodReportTable from '@/features/reports/PeriodReportTable.vue'
@@ -15,15 +16,15 @@ import { mountView, settle } from './support/harness'
 
 const VIEWPORT_HEIGHT_PX = 600
 
-const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
-const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
 
 beforeAll(() => {
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
     get: () => VIEWPORT_HEIGHT_PX,
   })
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
     get: () => 1200,
   })
@@ -31,8 +32,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const [name, descriptor] of [
-    ['offsetHeight', heightDescriptor],
-    ['offsetWidth', widthDescriptor],
+    ['clientHeight', heightDescriptor],
+    ['clientWidth', widthDescriptor],
   ] as const) {
     if (descriptor === undefined) {
       Reflect.deleteProperty(HTMLElement.prototype, name)

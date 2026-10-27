@@ -188,7 +188,7 @@
       "reasonHint": "Obligatorio. Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
       "deactivate": {
         "button": "Dar de baja",
-        "rowLabel": "Dar de baja la cuenta de {name}",
+        "rowLabel": "Dar de baja: cuenta de {name}",
         "heading": "Dar de baja la cuenta",
         "confirm": "Dar de baja",
         "explanation": "La cuenta de {name} ({email}) dejará de poder entrar y todas sus sesiones abiertas se cerrarán.",
@@ -197,7 +197,7 @@
       },
       "resetPassword": {
         "button": "Restablecer contraseña",
-        "rowLabel": "Restablecer la contraseña de {name}",
+        "rowLabel": "Restablecer contraseña: cuenta de {name}",
         "heading": "Restablecer la contraseña",
         "confirm": "Restablecer contraseña",
         "explanation": "Se generará una contraseña temporal para {name} ({email}). Se mostrará una sola vez y se entrega en mano.",
@@ -206,7 +206,7 @@
       },
       "resetTwoFactor": {
         "button": "Restablecer 2FA",
-        "rowLabel": "Restablecer el segundo factor de {name}",
+        "rowLabel": "Restablecer 2FA: cuenta de {name}",
         "heading": "Restablecer el segundo factor",
         "confirm": "Retirar segundo factor",
         "explanation": "Se retirará el segundo factor de {name} ({email}) para que lo active de nuevo en su próximo acceso.",

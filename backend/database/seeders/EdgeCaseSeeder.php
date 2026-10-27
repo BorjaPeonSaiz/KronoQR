@@ -119,7 +119,7 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
         $siteId = $this->madridSite();
 
         if ($siteId === null) {
-            $this->command->warn('EdgeCaseSeeder: no hay ningun centro en '.self::TIMEZONE.'; no se siembra nada.');
+            $this->command?->warn('EdgeCaseSeeder: no hay ningun centro en '.self::TIMEZONE.'; no se siembra nada.');
 
             return;
         }
@@ -134,7 +134,7 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
 
         $this->projectDailyTotals();
 
-        $this->command->info('EdgeCaseSeeder: '.\count(self::CASES).' casos limite sembrados.');
+        $this->command?->info('EdgeCaseSeeder: '.\count(self::CASES).' casos limite sembrados.');
     }
 
     /**
