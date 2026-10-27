@@ -94,4 +94,29 @@ interface IncidentLedger
      * no se devuelve, porque el sistema no corrige a nadie.
      */
     public function openWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int;
+
+    /**
+     * El identificador de la incidencia de ese tipo, persona y jornada (sin
+     * tramo) **que cerro el sistema** —`resolved`, sin autor ni nota—, o `null`.
+     *
+     * Lo usa la reapertura de RN-19 cuando el hallazgo choca con
+     * `one_incident_per_finding`: lo que cerro o descarto una persona no se
+     * devuelve, porque el sistema no la reabre.
+     */
+    public function systemClosedWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int;
+
+    /**
+     * Escribe la **reapertura** de una incidencia y dice si de verdad la
+     * escribio (RN-19, enmienda del 27-10-2026 de ADR-057 §2).
+     *
+     * Devuelve `false` si la fila ya no es una cerrada por el sistema. Lo
+     * decide el `UPDATE ... WHERE status = 'resolved' AND resolved_by_user_id
+     * IS NULL AND resolution_note IS NULL`, por lo mismo que la resolucion: una
+     * persona puede haberla trabajado entre la lectura y la escritura.
+     *
+     * Solo toca el estado, la resolucion (a nulo) y el contexto.
+     *
+     * @param  Incident  $reopened  El agregado ya reabierto por {@see Incident::reopenedBySystem()}.
+     */
+    public function recordReopening(int $incidentId, Incident $reopened): bool;
 }

@@ -88,6 +88,29 @@ final class InvalidIncident extends ComplianceDomainException
         );
     }
 
+    public static function withoutReopeningBySystem(string $type): self
+    {
+        return new self(
+            'Una incidencia «'.$type.'» no se puede reabrir sin persona: solo rejected_pin_scan se puede reabrir sin persona, '
+            .'y solo si la jornada ya no esta subsanada (RN-19).'
+        );
+    }
+
+    public static function withoutSystemClosure(string $status): self
+    {
+        return new self(
+            'Solo se puede reabrir una incidencia resuelta por el sistema, sin autor ni nota. Esta esta «'.$status.'» '
+            .'o resuelta por una persona, y nada resuelta por una persona se puede reabrir (RN-19, RN-13).'
+        );
+    }
+
+    public static function withoutReopeningContext(): self
+    {
+        return new self(
+            'Reabrir una incidencia exige los datos del hallazgo nuevo: sin datos, nadie puede explicar por que vuelve a la bandeja (RN-19).'
+        );
+    }
+
     public static function withResolutionBeforeDetection(string $resolvedAt, string $detectedAt): self
     {
         return new self(

@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\RejectedPinScanRecovered;
+use App\Modules\Attendance\Domain\Event\RejectedPinScanRelapsed;
 use App\Modules\Attendance\Domain\Event\ShiftEntryCorrected;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Compliance\Application\Port\AuditChainHead;
@@ -86,6 +87,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantGranted;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantRevoked;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantUsed;
 use App\Modules\Compliance\Infrastructure\Listener\RecordWorkforceChange;
+use App\Modules\Compliance\Infrastructure\Listener\ReopenIncidentOnRejectedPinScanRelapsed;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
@@ -499,6 +501,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(AttendanceReviewCompleted::class, [NotifyIncidentAssignees::class, 'handle']);
         // RN-19: la jornada subsanada cierra la `rejected_pin_scan` que siga abierta.
         Event::listen(RejectedPinScanRecovered::class, [CloseIncidentOnRejectedPinScanRecovered::class, 'handle']);
+        // RN-19: la jornada que recae reabre la `rejected_pin_scan` que cerro el sistema.
+        Event::listen(RejectedPinScanRelapsed::class, [ReopenIncidentOnRejectedPinScanRelapsed::class, 'handle']);
     }
 
     /**

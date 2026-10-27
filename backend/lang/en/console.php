@@ -648,6 +648,9 @@ return [
             .'Look for «attendance.incident_not_opened» in the log to see which.',
         'recovered' => ':count working day(s) with a rejected PIN already recovered: any incident still open is closed, '
             .'unless it had a PIN lockout (RN-19). Each closure leaves its system audit entry.',
+        'relapsed' => ':count working day(s) with a rejected PIN that again have an attempt not made good after another one was: '
+            .'the incident is reopened if the system closed it; one closed by a person is left alone (RN-19). '
+            .'Each reopening leaves its system audit entry.',
     ],
 
     'detect_patterns' => [

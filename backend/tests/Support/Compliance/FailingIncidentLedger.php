@@ -55,4 +55,14 @@ final readonly class FailingIncidentLedger implements IncidentLedger
     {
         return $this->ledger->openWorkDayFindingOf($type, $employeeUuid, $workDate);
     }
+
+    public function systemClosedWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int
+    {
+        return $this->ledger->systemClosedWorkDayFindingOf($type, $employeeUuid, $workDate);
+    }
+
+    public function recordReopening(int $incidentId, Incident $reopened): bool
+    {
+        return $this->ledger->recordReopening($incidentId, $reopened);
+    }
 }

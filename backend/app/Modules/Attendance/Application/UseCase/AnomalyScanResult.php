@@ -59,14 +59,35 @@ final readonly class AnomalyScanResult
          * asiento `incident.resolved` de actor `system`, que es la cifra exacta.
          */
         public int $recoveredWorkDays = 0,
+        /**
+         * Jornadas de RN-19 **que recaen**: sin subsanar ahora y con algun
+         * intento ya subsanado, que la pasada anuncio para que `Compliance`
+         * reabra su incidencia si la cerro el sistema (enmienda del 27-10-2026
+         * de ADR-057 §2).
+         *
+         * Cuenta **anuncios, no reaperturas**, por lo mismo que
+         * `$recoveredWorkDays`: quien sabe si la incidencia la cerro el sistema
+         * es `Compliance`, al otro lado de un evento. La mayoria nunca se cerro
+         * —la subsanacion llego a tiempo y el hallazgo abre una incidencia
+         * nueva, o ya estaba abierta— y la misma jornada vuelve a contar
+         * mientras siga en la ventana. La reapertura que si ocurre deja su
+         * asiento `incident.reopened` de actor `system`, que es la cifra exacta.
+         */
+        public int $relapsedWorkDays = 0,
     ) {}
 
     /**
      * @param  array<string, int>  $byType
      */
-    public static function of(int $daysInspected, int $workDaysInspected, array $byType, int $failures = 0, int $recoveredWorkDays = 0): self
-    {
-        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures, $recoveredWorkDays);
+    public static function of(
+        int $daysInspected,
+        int $workDaysInspected,
+        array $byType,
+        int $failures = 0,
+        int $recoveredWorkDays = 0,
+        int $relapsedWorkDays = 0,
+    ): self {
+        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures, $recoveredWorkDays, $relapsedWorkDays);
     }
 
     /**

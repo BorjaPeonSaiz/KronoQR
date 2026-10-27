@@ -2306,6 +2306,7 @@ final readonly class ErrorVocabulary
         'renewed',
         'renombralo',
         'reopen',
+        'reopened',
         'repeat',
         'repeated',
         'repite',

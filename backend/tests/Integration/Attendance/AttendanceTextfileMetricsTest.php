@@ -116,6 +116,7 @@ it('publica las series de la revision diaria con su tipo', function (): void {
         findings: 3,
         failures: 1,
         recoveredWorkDays: 2,
+        relapsedWorkDays: 1,
         at: new DateTimeImmutable('2026-03-15T04:30:00+00:00'),
     );
 
@@ -131,7 +132,10 @@ it('publica las series de la revision diaria con su tipo', function (): void {
         ->toContain('incident_detection_work_days_inspected 42')
         // RN-19: las jornadas subsanadas que la pasada anuncio para cerrar.
         ->toContain('# TYPE incident_detection_last_recovered_work_days gauge')
-        ->toContain('incident_detection_last_recovered_work_days 2');
+        ->toContain('incident_detection_last_recovered_work_days 2')
+        // Y las que recaen, anunciadas para reabrir la que cerro el sistema.
+        ->toContain('# TYPE incident_detection_last_relapsed_work_days gauge')
+        ->toContain('incident_detection_last_relapsed_work_days 1');
 })->group('RF-PR-01', 'RN-19');
 
 it('publica la pasada sin centro con ceros, y no la calla', function (): void {
@@ -144,6 +148,7 @@ it('publica la pasada sin centro con ceros, y no la calla', function (): void {
         findings: 0,
         failures: 0,
         recoveredWorkDays: 0,
+        relapsedWorkDays: 0,
         at: new DateTimeImmutable('2026-03-15T04:30:00+00:00'),
     );
 
@@ -153,13 +158,14 @@ it('publica la pasada sin centro con ceros, y no la calla', function (): void {
         ->toContain('incident_detection_last_run_timestamp_seconds '.strtotime('2026-03-15T04:30:00+00:00'))
         ->toContain('incident_detection_last_findings 0')
         ->toContain('incident_detection_last_failures 0')
-        ->toContain('incident_detection_last_recovered_work_days 0');
+        ->toContain('incident_detection_last_recovered_work_days 0')
+        ->toContain('incident_detection_last_relapsed_work_days 0');
 })->group('RF-PR-01', 'RF-PD-03');
 
 it('no escribe el fichero de la revision diaria con el colector apagado', function (): void {
     Config::set('observability.metrics.enabled', false);
 
-    (new TextfileIncidentDetectionMetrics)->scanCompleted(1, 0, 0, 0, new DateTimeImmutable('2026-03-15T04:30:00+00:00'));
+    (new TextfileIncidentDetectionMetrics)->scanCompleted(1, 0, 0, 0, 0, new DateTimeImmutable('2026-03-15T04:30:00+00:00'));
 
     expect(ficheroDeAttendance('kronoqr_incident_detection.prom'))->not->toBeFile();
 })->group('RF-PR-01');

@@ -31,7 +31,9 @@ use DateTimeZone;
  * con su motivo y su traza (tarea 2.5): {@see self::resolvedBy()} exige quien,
  * cuando y por que. **La unica excepcion es RN-19**: una `rejected_pin_scan`
  * abierta y sin bloqueo de PIN se cierra cuando la persona subsana el fichaje
- * ({@see self::closedAsRecovered()}), sin autor y con asiento de `system`. El
+ * ({@see self::closedAsRecovered()}), sin autor y con asiento de `system`, y
+ * se reabre si despues aparece otro intento sin subsanar de esa jornada
+ * ({@see self::reopenedBySystem()}). El
  * instante llega **de fuera** —del puerto `Clock` que inyecta el caso de uso—
  * porque el dominio no lee el reloj (regla dura 2).
  *
@@ -364,6 +366,75 @@ final readonly class Incident
             resolvedAt: $at,
             deviceUuid: $this->deviceUuid,
         );
+    }
+
+    /**
+     * **La reabre la revision diaria porque aparecio otro intento sin
+     * subsanar en la misma jornada** (RN-19, enmienda del 27-10-2026 de
+     * ADR-057 §2).
+     *
+     * Es la vuelta atras de {@see self::closedAsRecovered()}, y solo de ella:
+     *
+     * 1. **Solo los tipos que se cierran sin persona**
+     *    ({@see IncidentType::closesWhenRecovered()}): ningun otro se pudo
+     *    cerrar solo, asi que ningun otro se reabre solo.
+     * 2. **Solo lo que cerro el sistema** ({@see self::wasClosedBySystem()}):
+     *    `resolved`, sin autor y sin nota. Lo que resolvio o descarto una
+     *    persona conserva su desenlace, y una abierta no se reabre.
+     * 3. **Con el contexto del hallazgo nuevo**, que no puede estar vacio: la
+     *    incidencia vuelve a la bandeja por los intentos sin subsanar de ahora,
+     *    y es eso lo que tiene que contar. El anterior queda en el asiento.
+     * 4. **Sin resolucion y con la misma deteccion.** Vuelve a `open` con los
+     *    tres campos del cierre nulos, como cualquier abierta; `detectedAt` no
+     *    cambia porque la incidencia se detecto cuando se detecto. El momento de
+     *    la reapertura lo deja el asiento de `system` que escribe el caso de uso.
+     *
+     * El esquema dice lo mismo (`incidents_guard_transition`): aunque este
+     * metodo fallara, una persona no veria reabierta su resolucion.
+     *
+     * @param  array<string, int|string>  $context  El del hallazgo nuevo.
+     *
+     * @throws InvalidIncident si el tipo no se cierra sin persona, si no la cerro el sistema o sin contexto
+     */
+    public function reopenedBySystem(array $context): self
+    {
+        if (! $this->type->closesWhenRecovered()) {
+            throw InvalidIncident::withoutReopeningBySystem($this->type->value);
+        }
+
+        if (! $this->wasClosedBySystem()) {
+            throw InvalidIncident::withoutSystemClosure($this->status->value);
+        }
+
+        if ($context === []) {
+            throw InvalidIncident::withoutReopeningContext();
+        }
+
+        return new self(
+            type: $this->type,
+            severity: $this->severity,
+            status: IncidentStatus::Open,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $this->assignedToUserId,
+            context: $context,
+            deviceUuid: $this->deviceUuid,
+        );
+    }
+
+    /**
+     * La cerro el sistema (RN-19): `resolved`, sin autor y sin nota, que es
+     * exactamente lo que deja {@see self::closedAsRecovered()} y nada que haga
+     * una persona, porque {@see self::resolvedBy()} exige las dos cosas.
+     */
+    public function wasClosedBySystem(): bool
+    {
+        return $this->status === IncidentStatus::Resolved
+            && $this->resolvedByUserId === null
+            && $this->resolutionNote === null;
     }
 
     /**

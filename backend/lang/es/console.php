@@ -648,6 +648,9 @@ return [
             .'Busca «attendance.incident_not_opened» en el log para ver cuales.',
         'recovered' => ':count jornada(s) con PIN rechazado ya subsanadas: se cierra la incidencia que siguiera abierta, '
             .'salvo si tuvo bloqueo de PIN (RN-19). Cada cierre deja su asiento de sistema.',
+        'relapsed' => ':count jornada(s) con PIN rechazado que vuelven a tener un intento sin subsanar tras otro subsanado: '
+            .'se reabre la incidencia si la cerro el sistema; la que cerro una persona no se toca (RN-19). '
+            .'Cada reapertura deja su asiento de sistema.',
     ],
 
     'detect_patterns' => [

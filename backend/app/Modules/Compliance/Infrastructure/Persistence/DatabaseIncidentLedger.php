@@ -257,6 +257,55 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
         return is_numeric($id) ? (int) $id : null;
     }
 
+    public function systemClosedWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int
+    {
+        // La misma cuadrupla, y solo lo que cerro el sistema: sin autor ni nota.
+        $id = $this->connection->table('incidents')
+            ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+            ->where('employees.uuid', $employeeUuid)
+            ->where('incidents.work_date', $workDate)
+            ->where('incidents.type', $type->value)
+            ->whereNull('incidents.shift_entry_id')
+            ->where('incidents.status', 'resolved')
+            ->whereNull('incidents.resolved_by_user_id')
+            ->whereNull('incidents.resolution_note')
+            ->value('incidents.id');
+
+        return is_numeric($id) ? (int) $id : null;
+    }
+
+    public function recordReopening(int $incidentId, Incident $reopened): bool
+    {
+        if (! $reopened->status->isOpen()) {
+            // No puede pasar: solo `Incident::reopenedBySystem()` produce un
+            // agregado reabierto y siempre lo deja abierto.
+            throw new RuntimeException('Al reabrir, la incidencia tiene que estar abierta.');
+        }
+
+        // El `WHERE` ES la garantia: si una persona la trabajo entre la lectura y
+        // esta escritura, no se toca. Y el trigger `incidents_guard_transition`
+        // dice lo mismo aunque este `WHERE` faltara (ADR-057 §2).
+        $affected = $this->connection->update(<<<'SQL'
+            UPDATE incidents
+               SET status = 'open',
+                   resolved_at = NULL,
+                   resolved_by_user_id = NULL,
+                   resolution_note = NULL,
+                   context = ?::jsonb,
+                   updated_at = ?
+             WHERE id = ?
+               AND status = 'resolved'
+               AND resolved_by_user_id IS NULL
+               AND resolution_note IS NULL
+        SQL, [
+            json_encode($reopened->context, JSON_THROW_ON_ERROR),
+            $this->clock->now()->format('Y-m-d H:i:s.uP'),
+            $incidentId,
+        ]);
+
+        return $affected > 0;
+    }
+
     private function employeeIdOf(string $employeeUuid): ?int
     {
         $id = $this->connection->table('employees')->where('uuid', $employeeUuid)->value('id');

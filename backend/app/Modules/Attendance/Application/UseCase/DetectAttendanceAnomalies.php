@@ -19,6 +19,7 @@ use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
 use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
 use App\Modules\Attendance\Domain\Event\RejectedPinScanRecovered;
+use App\Modules\Attendance\Domain\Event\RejectedPinScanRelapsed;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\AnomalyDetectionPolicy;
 use App\Modules\Attendance\Domain\Policy\DiscardedScanReviewPolicy;
@@ -143,8 +144,9 @@ final readonly class DetectAttendanceAnomalies
 
         // RN-19: lo que no esta subsanado es hallazgo; la jornada que ya lo
         // esta, entera, puede cerrar una incidencia abierta antes de que la
-        // subsanacion llegara de la cola offline.
-        [$rejectedPinAnomalies, $recoveredPinWorkDays] = $this->inspectRejectedPinScans($command, $site->id, $timezone, $now);
+        // subsanacion llegara de la cola offline; y la que recae —algo
+        // subsanado y algo que no— puede reabrir la que cerro el sistema.
+        [$rejectedPinAnomalies, $recoveredPinWorkDays, $relapsedPinWorkDays] = $this->inspectRejectedPinScans($command, $site->id, $timezone, $now);
 
         $anomalies = [
             ...$this->inspectWorkDays($workDays, $policy, $now, $suspension),
@@ -156,7 +158,11 @@ final readonly class DetectAttendanceAnomalies
             ...$this->inspectUnattributedServerDiscards($command, $site->id, $timezone, $now),
         ];
 
-        $failures = $this->publishEach($anomalies) + $this->publishRecoveries($recoveredPinWorkDays);
+        // Las recaidas van DESPUES de los hallazgos: el suyo ya choco con la
+        // incidencia cerrada, y lo que queda es reabrirla.
+        $failures = $this->publishEach($anomalies)
+            + $this->publishRecoveries($recoveredPinWorkDays)
+            + $this->publishRelapses($relapsedPinWorkDays);
 
         // El aviso al responsable es **un resumen por ejecucion** y no un correo
         // por hallazgo (RF-PR-01): quien lo compone es `Compliance`, que es quien
@@ -190,6 +196,7 @@ final readonly class DetectAttendanceAnomalies
                 byType: $byType,
                 failures: $failures,
                 recoveredWorkDays: \count($recoveredPinWorkDays),
+                relapsedWorkDays: \count($relapsedPinWorkDays),
             ),
             $now,
         );
@@ -215,6 +222,7 @@ final readonly class DetectAttendanceAnomalies
             $result->total(),
             $result->failures,
             $result->recoveredWorkDays,
+            $result->relapsedWorkDays,
             $now,
         );
 
@@ -590,10 +598,15 @@ final readonly class DetectAttendanceAnomalies
      *   subsanada, sale en la segunda lista. `Compliance` cierra la incidencia
      *   que siga abierta para esa jornada, si la hay.
      *
+     * Y si una jornada **sin subsanar** tiene a la vez, entera, algun intento
+     * subsanado, sale tambien en la tercera lista: la revision pudo haber
+     * cerrado su incidencia cuando la jornada estaba subsanada, y `Compliance`
+     * la reabre si la cerro el sistema (enmienda del 27-10-2026 de ADR-057 §2).
+     *
      * El `context` no lleva **ni el codigo de empleado ni el PIN** (regla dura
      * 21): el `scan_id` y el instante del primero, y tres recuentos.
      *
-     * @return array{0: list<DetectedAnomaly>, 1: list<RejectedPinScanRecovered>}
+     * @return array{0: list<DetectedAnomaly>, 1: list<RejectedPinScanRecovered>, 2: list<RejectedPinScanRelapsed>}
      */
     private function inspectRejectedPinScans(
         DetectAnomaliesCommand $command,
@@ -627,6 +640,7 @@ final readonly class DetectAttendanceAnomalies
 
         $anomalies = [];
         $recovered = [];
+        $relapsed = [];
 
         foreach ($groups as $group) {
             $verdict = RejectedPinStatus::ofWorkDay($group['statuses']);
@@ -640,11 +654,18 @@ final readonly class DetectAttendanceAnomalies
             }
 
             if ($group['unrecovered'] !== []) {
-                $anomalies[] = $this->rejectedPinAnomaly($group['claimantUuid'], $siteId, $group['workDate'], $group['unrecovered'], $now);
+                $anomaly = $this->rejectedPinAnomaly($group['claimantUuid'], $siteId, $group['workDate'], $group['unrecovered'], $now);
+                $anomalies[] = $anomaly;
+
+                $relapse = $this->relapseOfWholeWorkDay($policy, $anomaly, $now);
+
+                if ($relapse instanceof RejectedPinScanRelapsed) {
+                    $relapsed[] = $relapse;
+                }
             }
         }
 
-        return [$anomalies, $recovered];
+        return [$anomalies, $recovered, $relapsed];
     }
 
     /**
@@ -727,17 +748,70 @@ final readonly class DetectAttendanceAnomalies
         WorkDate $workDate,
         DateTimeImmutable $now,
     ): ?RejectedPinScanRecovered {
-        $attempts = $this->rejectedPinScans->rejectedOf($claimantUuid, $workDate->startsAt(), $workDate->endsAt());
+        [$statuses, $attemptScanIds, $recoveringScanIds] = $this->wholeWorkDayOf($policy, $claimantUuid, $workDate, $now);
 
-        if ($attempts === []) {
+        if ($statuses === [] || RejectedPinStatus::ofWorkDay($statuses) !== RejectedPinStatus::RECOVERED || $recoveringScanIds === []) {
             return null;
         }
 
+        return new RejectedPinScanRecovered($claimantUuid, $siteId, $workDate, $now, $attemptScanIds, $recoveringScanIds);
+    }
+
+    /**
+     * La jornada **sin subsanar** del hallazgo tiene, entera, algun intento
+     * subsanado (RN-19, enmienda del 27-10-2026 de ADR-057 §2).
+     *
+     * Es la condicion necesaria para que la revision la haya cerrado antes: un
+     * cierre sin persona exige la jornada entera subsanada, y un intento
+     * subsanado lo sigue estando —sus fichajes no se borran—. No es suficiente:
+     * casi siempre la subsanacion llego a tiempo y nunca se abrio nada. Por eso
+     * esto **anuncia** y `Compliance` solo reabre lo que de verdad cerro el
+     * sistema.
+     *
+     * Se lee la jornada entera por lo mismo que en {@see recoveryOfWholeWorkDay()}:
+     * el intento subsanado pudo recibirse antes del borde de la ventana de
+     * `recorded_at`. Solo se hace con las jornadas sin subsanar, que son las
+     * que abren incidencia y son pocas.
+     */
+    private function relapseOfWholeWorkDay(
+        PinAttemptRecoveryPolicy $policy,
+        DetectedAnomaly $anomaly,
+        DateTimeImmutable $now,
+    ): ?RejectedPinScanRelapsed {
+        $claimantUuid = (string) $anomaly->employeeUuid;
+
+        [$statuses, $attemptScanIds, $recoveringScanIds] = $this->wholeWorkDayOf($policy, $claimantUuid, $anomaly->workDate, $now);
+
+        if (! \in_array(RejectedPinStatus::RECOVERED, $statuses, true) || $recoveringScanIds === []) {
+            return null;
+        }
+
+        return new RejectedPinScanRelapsed(
+            $claimantUuid,
+            $anomaly->siteId,
+            $anomaly->workDate,
+            $now,
+            $anomaly->context,
+            $attemptScanIds,
+            $recoveringScanIds,
+        );
+    }
+
+    /**
+     * El estado de cada intento de la jornada **entera** de esa persona, sus
+     * `scan_id` y los de los fichajes que los subsanan, sin repetir. Que
+     * fichajes subsanan cada intento lo decide la politica
+     * ({@see PinAttemptRecoveryPolicy::scansThatRecover()}).
+     *
+     * @return array{0: list<RejectedPinStatus>, 1: list<string>, 2: list<string>}
+     */
+    private function wholeWorkDayOf(PinAttemptRecoveryPolicy $policy, string $claimantUuid, WorkDate $workDate, DateTimeImmutable $now): array
+    {
         $statuses = [];
         $attemptScanIds = [];
         $recoveringScanIds = [];
 
-        foreach ($attempts as $attempt) {
+        foreach ($this->rejectedPinScans->rejectedOf($claimantUuid, $workDate->startsAt(), $workDate->endsAt()) as $attempt) {
             $candidates = $this->recoveringCandidatesOf($policy, $attempt);
             $statuses[] = $policy->statusOf($attempt, $candidates, $now);
             $attemptScanIds[] = $attempt->scanId;
@@ -747,13 +821,7 @@ final readonly class DetectAttendanceAnomalies
             }
         }
 
-        $recoveringScanIds = array_values(array_unique($recoveringScanIds));
-
-        if (RejectedPinStatus::ofWorkDay($statuses) !== RejectedPinStatus::RECOVERED || $recoveringScanIds === []) {
-            return null;
-        }
-
-        return new RejectedPinScanRecovered($claimantUuid, $siteId, $workDate, $now, $attemptScanIds, $recoveringScanIds);
+        return [$statuses, $attemptScanIds, array_values(array_unique($recoveringScanIds))];
     }
 
     /**
@@ -776,6 +844,37 @@ final readonly class DetectAttendanceAnomalies
                 $this->logger->error('attendance.incident_not_closed', [
                     'employee_uuid' => $recovery->employeeUuid,
                     'work_date' => $recovery->workDate(),
+                    'type' => AnomalyType::REJECTED_PIN_SCAN->value,
+                    'exception' => $failure::class,
+                ]);
+
+                $this->caughtFailures->report($failure);
+            }
+        }
+
+        return $failures;
+    }
+
+    /**
+     * Publica las jornadas de RN-19 que recaen, con el mismo aislamiento por
+     * hallazgo que {@see publishEach()}: si reabrir una falla, se cuenta, se
+     * registra y se sigue con las demas.
+     *
+     * @param  list<RejectedPinScanRelapsed>  $relapsed
+     */
+    private function publishRelapses(array $relapsed): int
+    {
+        $failures = 0;
+
+        foreach ($relapsed as $relapse) {
+            try {
+                $this->events->publish($relapse);
+            } catch (Throwable $failure) {
+                $failures++;
+
+                $this->logger->error('attendance.incident_not_reopened', [
+                    'employee_uuid' => $relapse->employeeUuid,
+                    'work_date' => $relapse->workDate(),
                     'type' => AnomalyType::REJECTED_PIN_SCAN->value,
                     'exception' => $failure::class,
                 ]);

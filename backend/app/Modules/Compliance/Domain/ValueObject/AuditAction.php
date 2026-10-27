@@ -452,6 +452,14 @@ enum AuditAction: string
      */
     case IncidentResolved = 'incident.resolved';
 
+    /**
+     * La revision diaria ha reabierto una `rejected_pin_scan` que ella misma
+     * cerro, porque aparecio otro intento sin subsanar de la misma jornada
+     * (RN-19, enmienda del 27-10-2026 de ADR-057 §2). Actor `system`, con el
+     * contexto anterior y el nuevo. **Nunca reabre lo que trabajo una persona.**
+     */
+    case IncidentReopened = 'incident.reopened';
+
     // --- Licencia (RF-PD-04, ADR-018, ADR-028, tarea 5.3) --------------------
 
     /**
