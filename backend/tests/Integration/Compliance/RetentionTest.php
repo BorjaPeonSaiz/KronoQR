@@ -370,7 +370,7 @@ it('no modifica ninguna fila en simulacion y cuenta lo que se purgaria', functio
     $output = Artisan::output();
 
     // Los conteos correctos: de cada tabla, solo lo vencido.
-    expect($output)->toContain('SIMULACION')
+    expect($output)->toContain('SIMULACIÓN')
         ->and($output)->toContain('anterior a 2023-06-01')
         // 1 tramo, 1 correccion, 1 incidencia, 1 total diario y 2 escaneos -el
         // del tramo vencido y el rechazado sin tramo-.

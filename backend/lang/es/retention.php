@@ -38,12 +38,12 @@ return [
      * Lo que la orden escribe en pantalla al simular o ejecutar la purga.
      */
     'console' => [
-        'cutoff' => 'Corte del registro de jornada: anterior a :date (:years anos, perfil del centro :site).',
-        'columns' => ['Almacen', 'Cantidad', 'Rango'],
+        'cutoff' => 'Corte del registro de jornada: anterior a :date (:years años, perfil del centro :site).',
+        'columns' => ['Almacén', 'Cantidad', 'Rango'],
         'report' => 'Informe: :path',
         'purged' => 'Purgados :count registros. Queda asiento en audit_log.',
-        'nothing_due' => 'No hay nada vencido: no se purgaria nada.',
-        'how_to_execute' => 'Nada se ha borrado. Para ejecutar ESTA purga, con la autorizacion del responsable:',
+        'nothing_due' => 'No hay nada vencido: no se purgaría nada.',
+        'how_to_execute' => 'Nada se ha borrado. Para ejecutar ESTA purga, con la autorización del responsable:',
     ],
 
     /*
@@ -51,24 +51,24 @@ return [
      * idioma de la instalacion; su nombre de fichero, no (lo buscan scripts).
      */
     'report' => [
-        'title' => 'KronoQR — informe de retencion (RL-02, RL-11, RF-PR-03)',
+        'title' => 'KronoQR — informe de retención (RL-02, RL-11, RF-PR-03)',
         'mode' => 'Modo:              :mode',
         'modes' => [
-            'simulation' => 'SIMULACION (no se ha borrado nada)',
-            'execution' => 'EJECUCION REAL',
+            'simulation' => 'SIMULACIÓN (no se ha borrado nada)',
+            'execution' => 'EJECUCIÓN REAL',
         ],
         'generated' => 'Generado:          :at UTC',
         'site' => 'Centro:            :site',
-        'terms' => 'Plazos aplicados:  registro de jornada y auditoria :years anos · log tecnico :log_days dias · '
+        'terms' => 'Plazos aplicados:  registro de jornada y auditoría :years años · log técnico :log_days días · '
             .'historico de errores :error_days dias',
         'cutoff' => 'Corte de jornada:  anterior a :date (ese dia NO se purga: el plazo lo incluye)',
         'scopes' => [
             'work_records' => 'Registro de jornada',
-            'audit_log' => 'Cadena de auditoria',
-            'technical_log' => 'Log tecnico',
-            'error_history' => 'Historico de errores',
+            'audit_log' => 'Cadena de auditoría',
+            'technical_log' => 'Log técnico',
+            'error_history' => 'Histórico de errores',
             'personnel_records' => 'Fichas de personal',
-            'management_accounts' => 'Cuentas de gestion',
+            'management_accounts' => 'Cuentas de gestión',
         ],
         'units' => [
             'work_records' => 'filas',
@@ -79,9 +79,9 @@ return [
             'management_accounts' => 'cuentas',
         ],
         'term' => [
-            'years' => ':years anos',
-            'years_since_leaving' => ':years anos desde el cese',
-            'days' => ':days dias',
+            'years' => ':years años',
+            'years_since_leaving' => ':years años desde el cese',
+            'days' => ':days días',
         ],
         'not_installed' => 'no instalado',
         'subtotal' => 'subtotal',
@@ -93,12 +93,12 @@ return [
             'orphaned_personnel_photos' => ':count foto(s) de fichas minimizadas no se pudieron borrar del disco: '
                 .'la ficha ya no las apunta. El evento retention.personnel_photo_orphaned del log dice de qué employee_uuid.',
         ],
-        'nothing_deleted' => 'No se ha borrado nada. Para ejecutar ESTA purga, con la confirmacion del responsable:',
+        'nothing_deleted' => 'No se ha borrado nada. Para ejecutar ESTA purga, con la confirmación del responsable:',
         'phrase_expires' => [
             'La frase caduca cuando cambia el corte o el perfil de cumplimiento: se ejecuta lo que',
-            'se aprobo, no lo que hoy toque.',
+            'se aprobó, no lo que hoy toque.',
         ],
-        'executed' => 'Purga ejecutada con la confirmacion :token.',
+        'executed' => 'Purga ejecutada con la confirmación :token.',
         'executed_entries' => 'Queda asiento en audit_log; las particiones soltadas quedan selladas en audit_chain_anchors.',
         'stays_on_server' => 'Este informe se queda en el servidor del cliente (ADR-020). No contiene datos personales.',
     ],
