@@ -2175,7 +2175,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 
 - Cobertura de dominio **≥ 90 %**; global backend **≥ 75 %**; frontend **≥ 70 %**
 - **MSI ≥ 80 %** sobre `Modules/*/Domain`
-- Suite unitaria completa dentro del presupuesto de duración que verifica `make test-unit` (doc 02 §9.2; 2,6-2,7 s medidos en el contenedor al cierre, presupuesto 4 s)
+- Suite unitaria completa dentro del presupuesto de duración que verifica `make test-unit` (doc 02 §9.2; 2,6-2,7 s medidos en el contenedor al cierre, con el presupuesto de entonces, 4 s; hoy es de 5 s y su única fuente es `UNIT_SUITE_MAX_SECONDS` del `Makefile`)
 - `vue-tsc` y PHPStan 9 con **0 errores**
 - Deptrac y Pest Arch con **0 violaciones**
 - `axe` con **0 violaciones críticas o graves**

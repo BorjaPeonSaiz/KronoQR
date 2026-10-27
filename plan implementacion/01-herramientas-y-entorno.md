@@ -245,7 +245,7 @@ Resultado esperado: las cuatro extensiones listadas. Si `redis` no carga, se dej
 
 Son **500 veces más lento**. Y `vendor/` son **16.919 de los 17.779 ficheros** del backend.
 
-**Consecuencia sobre el presupuesto de `CLAUDE.md`.** La suite unitaria debe terminar por debajo de 2 s (§9.1). Con `vendor/` en el mount tardaba **3,84 s con solo tres pruebas triviales**: el presupuesto estaba agotado antes de que existiera el dominio, y las tareas 1.1 y 1.2 son las más iterativas del proyecto.
+**Consecuencia sobre el presupuesto de `CLAUDE.md`.** La suite unitaria debía terminar por debajo de 2 s (§9.1; hoy el presupuesto es de 5 s, `UNIT_SUITE_MAX_SECONDS` del `Makefile`, y es la única cifra que vale). Con `vendor/` en el mount tardaba **3,84 s con solo tres pruebas triviales**: el presupuesto estaba agotado antes de que existiera el dominio, y las tareas 1.1 y 1.2 son las más iterativas del proyecto.
 
 **Qué se descartó antes de dar con la causa**, porque la lista ahorra el trabajo a quien lo revise:
 

@@ -187,12 +187,12 @@ Nótese el puerto `CompliancePolicyProvider`: el dominio **recibe** los umbrales
 | Módulo | Responsabilidad | Puede depender de |
 |---|---|---|
 | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
-| `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, **eventos de dominio** de `Attendance` e `Identity` |
+| `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, **eventos de dominio** de `Attendance`, `Identity`, `Kiosk`, `Product`, `Reporting` y `Workforce` |
 | `Workforce` | Empleados, departamentos, el centro de la instalación, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
-| `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
-| `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
-| `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, `Attendance` (vía caso de uso) |
-| `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared`, `Shared/Application/Port` (implementa `CompliancePolicyProvider` y `BrandingProvider`) |
+| `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`), **eventos de dominio** de `Workforce` |
+| `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, **eventos de dominio** de `Attendance`, `Compliance`, `Identity`, `Kiosk`, `Product` y `Workforce` |
+| `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, **casos de uso** de `Attendance` e `Identity` |
+| `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared`, `Shared/Application/Port` (implementa `CompliancePolicyProvider` y `BrandingProvider`), **eventos de dominio** de `Identity` y `Workforce` |
 | `Shared` | Objetos de valor comunes, tipos base, contratos de eventos | — |
 
 **La comunicación entre módulos ocurre solo por tres vías:** casos de uso públicos con interfaz explícita, eventos de dominio, o **implementar un puerto declarado por el módulo consumidor** (ADR-025). Nunca por acceso directo a los modelos Eloquent de otro módulo.

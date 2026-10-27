@@ -5813,7 +5813,8 @@ paths:
       summary: Impresion masiva en A4
       description: |
         Devuelve **un solo PDF** en A4 con todas las credenciales **pendientes de
-        imprimir** del centro indicado (RF-QR-04).
+        imprimir** de la instalacion (RF-QR-04). Hay un solo centro por
+        instalacion (ADR-040), y la peticion no lleva ningun parametro.
 
         El doc 02 §5.5 dice para que existe: *«La hoja A4 con varias tarjetas por
         pagina es lo que hace viable dar de alta a 40 personas de temporada en
@@ -18440,8 +18441,9 @@ components:
       type: object
       title: PrintCredentialBatchRequest
       description: |
-        **Solo el centro, y es opcional.** No hay ningun otro parametro, y su
-        ausencia es la parte importante del esquema: no existe `reprint`, ni
+        **Sin parametros.** Hay un solo centro por instalacion (ADR-040), asi que
+        ni siquiera se elige el centro. La ausencia de parametros es la parte
+        importante del esquema: no existe `reprint`, ni
         `force`, ni `include_printed`, porque no existe la reimpresion (ADR-034).
         `additionalProperties: false` hace que el contrato no ofrezca ningun sitio
         donde alojarlos el dia que alguien los eche de menos.
@@ -18459,9 +18461,9 @@ components:
         | Valor | Significado |
         |---|---|
         | `no_credential` | No se le ha emitido ninguna credencial |
-        | `pending_print` | Emitida y sin imprimir. **Todavia no puede fichar** |
-        | `pending_delivery` | Impresa y sin entregar. La tarjeta existe, pero no la tiene |
-        | `delivered` | Entregada. Es el unico estado en el que puede fichar con tarjeta |
+        | `pending_print` | Emitida y sin imprimir. **Todavia no puede fichar**: no tiene token (ADR-034) |
+        | `pending_delivery` | Impresa y sin entregar. **Ya puede fichar**: el token nace al imprimir (ADR-034), aunque la persona aun no tenga la tarjeta |
+        | `delivered` | Entregada. Puede fichar con tarjeta |
         | `revoked` | Su ultima credencial esta revocada y no le queda ninguna activa |
 
         **`no_credential` y `revoked` se separan a proposito** aunque las dos

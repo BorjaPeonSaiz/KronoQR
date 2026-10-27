@@ -1519,15 +1519,18 @@ POST   /api/v1/credentials/print-batch     Impresión masiva en A4       [rol: r
 POST   /api/v1/credentials/{uuid}/deliver  Registrar entrega            [rol: rrhh]
 POST   /api/v1/credentials/{uuid}/revoke   Revocar                      [rol: rrhh]
 GET    /api/v1/credentials/status          Estado de credenciales       [rol: rrhh, filtro ?key_id=]
+GET    /api/v1/credentials/instructions-sheet Hoja de instrucciones de la tarjeta [rol: rrhh, PDF]
 
 POST   /api/v1/employees/{uuid}/pin/reset  Generar o restablecer PIN    [rol: rrhh, auditado]
 POST   /api/v1/employees/{uuid}/pin/deliver Registrar entrega del PIN   [rol: rrhh, auditado]
 
 GET    /api/v1/reports/period              Informe por periodo          [rol: manager+]
+GET    /api/v1/reports/period/export       El mismo informe como fichero [rol: manager+, ?format=csv|xlsx|pdf]
 POST   /api/v1/reports/exports             Generar exportación async    [rol: manager+; kind payroll, rrhh+]
 GET    /api/v1/reports/exports             Mis exportaciones en diferido[rol: manager+, solo las propias]
 GET    /api/v1/reports/exports/{id}        Estado y enlace de descarga  [rol: manager+, caducable]
 GET    /api/v1/reports/exports/{id}/download Descarga del fichero       [sin sesión: token de un solo uso]
+POST   /api/v1/reports/exports/{id}/cancel  Cancelar una exportación en curso [rol: manager+, solo las propias]
 GET    /api/v1/reports/legal-export        Exportación para Inspección  [rol: admin|rrhh|auditor]
 POST   /api/v1/reports/legal-export/employees/search  Persona de la exportación [rol: admin|rrhh|auditor; POST para que el DNI no vaya en la URL; auditado]
 GET    /api/v1/reports/payroll-export      Salida para nómina           [rol: rrhh]
@@ -1550,6 +1553,14 @@ DELETE /api/v1/support/grants/{id}         Revocar acceso de soporte    [rol: ad
 POST   /api/v1/diagnostics/bundle          Generar paquete diagnóstico  [rol: admin]
 GET    /api/v1/diagnostics/errors          Histórico de errores         [rol: admin]
 POST   /api/v1/diagnostics/errors/{id}/resolve  Marcar error resuelto   [rol: admin]
+GET    /api/v1/data-export               Exportaciones íntegras recientes [rol: admin]
+POST   /api/v1/data-export               Pedir la exportación íntegra (RF-PD-14) [rol: admin, auditado]
+GET    /api/v1/data-export/{uuid}/download Descargar la exportación íntegra [rol: admin, auditado]
+POST   /api/v1/client-errors             Errores del panel o del portal [autenticado, sin sesiones restringidas]
+
+GET    /api/v1/branding                  Marca de la instalación      [público]
+GET    /api/v1/branding/logo             Logotipo de la instalación   [público]
+GET    /api/v1/branding/manifest.webmanifest  Manifiesto del quiosco con la marca [público]
 
 GET    /api/v1/setup/status                Estado del asistente         [público, throttle 10 r/m]
 POST   /api/v1/setup/administrator         Primer administrador         [público, solo sin cuentas de gestión]
@@ -1566,6 +1577,9 @@ GET    /api/v1/departments, /departments/{id}
                                             Catálogo de departamentos     [admin, rrhh y responsable; escritura: admin y RRHH; responsable: solo admin con accounts:*]
 POST/PATCH /api/v1/employees, /departments, /absences
                                             Alta y modificación           [rol: rrhh+]
+GET    /api/v1/absences/{uuid}           Detalle de una ausencia, con su historial [rol: manager+]
+POST   /api/v1/absences/{uuid}/void      Anular una ausencia          [rol: rrhh+, auditado]
+POST   /api/v1/absences/import           Carga de ausencias por fichero [rol: rrhh+, modo simulación]
 POST   /api/v1/employees/{uuid}/contracts  Alta de contrato             [rol: rrhh+]
 PATCH  /api/v1/site                        El centro: sin alta ni lista; la zona, solo hasta el primer fichaje (RN-23)  [rol: rrhh+]
 POST   /api/v1/employees/{uuid}/offboard   Baja (RN-14)                  [rol: rrhh+]
