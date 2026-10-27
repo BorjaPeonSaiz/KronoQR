@@ -92,6 +92,34 @@ rules:
           metavariable: $FORMAT
           regex: ^['"](?![!U])[^'"|]*['"]$
 
+  # Fuera del dominio no hay regla dura 2, pero si el mismo riesgo: una fecha
+  # civil concatenada con ' 00:00:00' y pasada al constructor se resuelve contra
+  # el reloj del sistema cuando la fecha llega vacia o mal compuesta, y nada
+  # falla. CivilDate::midnight() (Shared\Domain\Support) es la unica conversion
+  # y lanza ante esa entrada. Por eso esta regla cubre todo backend/app.
+  - id: kronoqr-fecha-civil-concatenada-con-medianoche
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Una fecha civil concatenada con ' 00:00:00' no se valida: si llega vacia
+      o mal compuesta, el constructor la resuelve contra el reloj del sistema.
+      Usa CivilDate::midnight($isoDate, $zone), que solo admite YYYY-MM-DD y
+      lanza ante lo demas.
+    paths:
+      include:
+        - /backend/app/**
+    patterns:
+      - pattern-either:
+          - pattern: new DateTime($DATE . $TIME, ...)
+          - pattern: new \DateTime($DATE . $TIME, ...)
+          - pattern: new DateTimeImmutable($DATE . $TIME, ...)
+          - pattern: new \DateTimeImmutable($DATE . $TIME, ...)
+          - pattern: date_create($DATE . $TIME, ...)
+          - pattern: date_create_immutable($DATE . $TIME, ...)
+      - metavariable-regex:
+          metavariable: $TIME
+          regex: ^['"]\s*(T|\s)?00:00(:00)?['"]$
+
   # --------------------------------------------------------------------------
   # RNF-M-02: analisis estatico en el nivel maximo «sin errores suprimidos sin
   # justificar». PHPStan 2 ya exige el identificador del error tras

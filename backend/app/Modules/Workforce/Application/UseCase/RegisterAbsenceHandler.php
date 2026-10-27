@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Workforce\Application\Command\RegisterAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -138,6 +139,6 @@ final readonly class RegisterAbsenceHandler
      */
     public static function asDate(string $isoDate): DateTimeImmutable
     {
-        return new DateTimeImmutable($isoDate.' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($isoDate, new DateTimeZone('UTC'));
     }
 }

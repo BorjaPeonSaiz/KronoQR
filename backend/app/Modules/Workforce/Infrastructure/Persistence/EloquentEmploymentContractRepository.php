@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Domain\Exception\OverlappingEmploymentContract;
 use App\Modules\Workforce\Domain\Model\EmploymentContract as ContractEntity;
@@ -150,7 +151,7 @@ final readonly class EloquentEmploymentContractRepository implements EmploymentC
 
     private function asDate(string $isoDate): DateTimeImmutable
     {
-        return new DateTimeImmutable($isoDate.' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($isoDate, new DateTimeZone('UTC'));
     }
 
     private function translate(QueryException $exception, ContractEntity $contract): Throwable

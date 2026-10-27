@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Workforce\Application\Port\AbsenceFilter;
 use App\Modules\Workforce\Domain\Model\Absence;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceStatus;
@@ -187,6 +188,6 @@ final class IndexAbsenceRequest extends FormRequest
 
     private static function asDate(string $isoDate): DateTimeImmutable
     {
-        return new DateTimeImmutable($isoDate.' 00:00:00', new DateTimeZone('UTC'));
+        return CivilDate::midnight($isoDate, new DateTimeZone('UTC'));
     }
 }

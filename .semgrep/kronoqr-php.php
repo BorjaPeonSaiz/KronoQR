@@ -102,6 +102,18 @@ final class DomainClockFixture
 
         // ok: kronoqr-domain-createfromformat-sin-exclamacion
         $o = DateTimeImmutable::createFromFormat('U', $isoDate);
+
+        // ruleid: kronoqr-fecha-civil-concatenada-con-medianoche
+        $p = new DateTimeImmutable($isoDate.' 00:00:00', $zone);
+
+        // ruleid: kronoqr-fecha-civil-concatenada-con-medianoche
+        $q = new \DateTime(substr($isoDate, 0, 10).'T00:00', $zone);
+
+        // ok: kronoqr-fecha-civil-concatenada-con-medianoche
+        $r = new DateTimeImmutable($isoDate.' 08:30:00', $zone);
+
+        // ok: kronoqr-fecha-civil-concatenada-con-medianoche
+        $s = new DateTimeImmutable($isoDate, $zone);
     }
 
     // ruleid: kronoqr-phpstan-ignore-sin-justificacion

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Infrastructure\Metrics;
 
 use App\Modules\Reporting\Application\Port\ComplianceMetrics;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -82,6 +83,6 @@ final readonly class TextfileComplianceMetrics implements ComplianceMetrics
      */
     private function epochOf(string $weekStartsOn): int
     {
-        return (new DateTimeImmutable($weekStartsOn.' 00:00:00', new DateTimeZone('UTC')))->getTimestamp();
+        return CivilDate::midnight($weekStartsOn, new DateTimeZone('UTC'))->getTimestamp();
     }
 }

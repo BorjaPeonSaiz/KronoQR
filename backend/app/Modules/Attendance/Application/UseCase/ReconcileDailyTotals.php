@@ -23,6 +23,7 @@ use App\Modules\Shared\Application\Port\DatabaseFailureTranslator;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use DateTimeImmutable;
 use DateTimeZone;
 use Psr\Log\LoggerInterface;
@@ -700,8 +701,8 @@ final readonly class ReconcileDailyTotals
     private function datesIn(WorkDate $from, WorkDate $to, DateTimeZone $timezone): array
     {
         $utc = new DateTimeZone('UTC');
-        $cursor = new DateTimeImmutable($from->isoDate, $utc);
-        $last = new DateTimeImmutable($to->isoDate, $utc);
+        $cursor = CivilDate::midnight($from->isoDate, $utc);
+        $last = CivilDate::midnight($to->isoDate, $utc);
 
         $dates = [];
 
