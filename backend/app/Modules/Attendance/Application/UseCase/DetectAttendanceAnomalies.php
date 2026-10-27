@@ -30,6 +30,7 @@ use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttributionMethod;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScanSource;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinStatus;
 use App\Modules\Attendance\Domain\ValueObject\UnattributedServerDiscard;
@@ -628,9 +629,12 @@ final readonly class DetectAttendanceAnomalies
         foreach ($groups as $group) {
             $verdict = RejectedPinStatus::ofWorkDay($group['statuses']);
 
-            if ($verdict === RejectedPinStatus::RECOVERED
-                && $this->wholeWorkDayIsRecovered($policy, $group['claimantUuid'], $group['workDate'], $now)) {
-                $recovered[] = new RejectedPinScanRecovered($group['claimantUuid'], $siteId, $group['workDate'], $now);
+            if ($verdict === RejectedPinStatus::RECOVERED) {
+                $recovery = $this->recoveryOfWholeWorkDay($policy, $group['claimantUuid'], $siteId, $group['workDate'], $now);
+
+                if ($recovery instanceof RejectedPinScanRecovered) {
+                    $recovered[] = $recovery;
+                }
             }
 
             if ($group['unrecovered'] !== []) {
@@ -682,13 +686,21 @@ final readonly class DetectAttendanceAnomalies
     /** El estado de un intento con los fichajes de su persona dentro de su ventana. */
     private function rejectedPinStatus(PinAttemptRecoveryPolicy $policy, RejectedPinAttempt $attempt, DateTimeImmutable $now): RejectedPinStatus
     {
-        $recovering = $this->rejectedPinScans->recoveringScansOf(
+        return $policy->statusOf($attempt, $this->recoveringCandidatesOf($policy, $attempt), $now);
+    }
+
+    /**
+     * Los fichajes de la persona del intento dentro de su ventana.
+     *
+     * @return list<RecoveringScan>
+     */
+    private function recoveringCandidatesOf(PinAttemptRecoveryPolicy $policy, RejectedPinAttempt $attempt): array
+    {
+        return $this->rejectedPinScans->recoveringScansOf(
             $attempt->claimantUuid,
             $attempt->occurredAt,
             $policy->windowEndsAt($attempt),
         );
-
-        return $policy->statusOf($attempt, $recovering, $now);
     }
 
     /**
@@ -699,21 +711,47 @@ final readonly class DetectAttendanceAnomalies
      * recibido antes del borde de la ventana ya no aparece en
      * `rejectedBetween()`, y sin esta segunda lectura la incidencia que el abrio
      * se cerraria con el todavia pendiente.
+     *
+     * Si lo esta, el anuncio lleva el `scan_id` de **todos** los intentos y de
+     * los fichajes que los subsanan, que es lo que el asiento del cierre deja
+     * escrito: quien lo audite puede ir a `scan_events` y comprobarlo. Que
+     * fichajes subsanan cada intento lo decide la politica
+     * ({@see PinAttemptRecoveryPolicy::scansThatRecover()}).
      */
-    private function wholeWorkDayIsRecovered(PinAttemptRecoveryPolicy $policy, string $claimantUuid, WorkDate $workDate, DateTimeImmutable $now): bool
-    {
+    private function recoveryOfWholeWorkDay(
+        PinAttemptRecoveryPolicy $policy,
+        string $claimantUuid,
+        int $siteId,
+        WorkDate $workDate,
+        DateTimeImmutable $now,
+    ): ?RejectedPinScanRecovered {
         $attempts = $this->rejectedPinScans->rejectedOf($claimantUuid, $workDate->startsAt(), $workDate->endsAt());
 
         if ($attempts === []) {
-            return false;
+            return null;
         }
 
-        $statuses = array_map(
-            fn (RejectedPinAttempt $attempt): RejectedPinStatus => $this->rejectedPinStatus($policy, $attempt, $now),
-            $attempts,
-        );
+        $statuses = [];
+        $attemptScanIds = [];
+        $recoveringScanIds = [];
 
-        return RejectedPinStatus::ofWorkDay($statuses) === RejectedPinStatus::RECOVERED;
+        foreach ($attempts as $attempt) {
+            $candidates = $this->recoveringCandidatesOf($policy, $attempt);
+            $statuses[] = $policy->statusOf($attempt, $candidates, $now);
+            $attemptScanIds[] = $attempt->scanId;
+
+            foreach ($policy->scansThatRecover($attempt, $candidates) as $scan) {
+                $recoveringScanIds[] = $scan->scanId;
+            }
+        }
+
+        $recoveringScanIds = array_values(array_unique($recoveringScanIds));
+
+        if (RejectedPinStatus::ofWorkDay($statuses) !== RejectedPinStatus::RECOVERED || $recoveringScanIds === []) {
+            return null;
+        }
+
+        return new RejectedPinScanRecovered($claimantUuid, $siteId, $workDate, $now, $attemptScanIds, $recoveringScanIds);
     }
 
     /**

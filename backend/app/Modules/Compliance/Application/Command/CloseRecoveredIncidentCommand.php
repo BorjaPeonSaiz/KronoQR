@@ -23,5 +23,17 @@ final readonly class CloseRecoveredIncidentCommand
         public string $workDate,
         /** El instante de la pasada que vio la subsanacion, en UTC. */
         public DateTimeImmutable $recoveredAt,
+        /**
+         * `scan_id` de los intentos de la jornada: UUID v7 de la tablet, sin PII.
+         *
+         * @var list<string>
+         */
+        public array $attemptScanIds,
+        /**
+         * `scan_id` de los fichajes que los subsanan.
+         *
+         * @var list<string>
+         */
+        public array $recoveringScanIds,
     ) {}
 }

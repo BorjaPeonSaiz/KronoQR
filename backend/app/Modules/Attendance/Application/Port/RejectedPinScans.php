@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application\Port;
 
 use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use DateTimeImmutable;
 
@@ -46,11 +47,13 @@ interface RejectedPinScans
     public function rejectedOf(string $claimantUuid, DateTimeImmutable $fromOccurredAt, DateTimeImmutable $toOccurredAt): array;
 
     /**
-     * `occurred_at` de los fichajes de esa persona que subsanan
+     * Los fichajes de esa persona que subsanan
      * ({@see PinAttemptRecoveryPolicy::recovers()}: la lista la decide el
-     * dominio) con `occurred_at` ∈ [from, to], ambos incluidos.
+     * dominio) con `occurred_at` ∈ [from, to], ambos incluidos, ordenados por
+     * `occurred_at` ASC y `scan_id` ASC. Con su `scan_id`, que es lo que nombra
+     * el asiento del cierre sin persona.
      *
-     * @return list<DateTimeImmutable>
+     * @return list<RecoveringScan>
      */
     public function recoveringScansOf(string $employeeUuid, DateTimeImmutable $from, DateTimeImmutable $to): array;
 }

@@ -29,6 +29,8 @@ final readonly class CloseIncidentOnRejectedPinScanRecovered
             employeeUuid: $event->employeeUuid(),
             workDate: $event->workDate(),
             recoveredAt: $event->occurredAt(),
+            attemptScanIds: $event->attemptScanIds(),
+            recoveringScanIds: $event->recoveringScanIds(),
         ));
     }
 }

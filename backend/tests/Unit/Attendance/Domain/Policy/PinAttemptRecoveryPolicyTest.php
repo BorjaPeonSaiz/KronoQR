@@ -6,6 +6,7 @@ use App\Modules\Attendance\Domain\Event\RejectedPinScanRecovered;
 use App\Modules\Attendance\Domain\Exception\InstantIsNotUtc;
 use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinStatus;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
@@ -36,10 +37,16 @@ function pinRecoveryAt(string $instant): DateTimeImmutable
     return new DateTimeImmutable($instant, new DateTimeZone('UTC'));
 }
 
+/** Un fichaje que subsana, con un `scan_id` que dice su hora para leer los fallos. */
+function pinRecoveryScan(string $instant): RecoveringScan
+{
+    return new RecoveringScan('recovering '.$instant, pinRecoveryAt($instant));
+}
+
 it('decide la subsanacion en los bordes de la ventana', function (array $accepted, bool $expected): void {
     $policy = new PinAttemptRecoveryPolicy;
 
-    expect($policy->isRecovered(pinRecoveryAttempt(), array_values(array_map(pinRecoveryAt(...), $accepted))))->toBe($expected);
+    expect($policy->isRecovered(pinRecoveryAttempt(), array_values(array_map(pinRecoveryScan(...), $accepted))))->toBe($expected);
 })->with([
     'a +0 s subsana' => [['2026-03-14 07:00:00'], true],
     'a +600 s subsana' => [['2026-03-14 07:10:00'], true],
@@ -107,7 +114,7 @@ it('cierra la ventana 600 segundos despues del intento', function (): void {
 it('espera a que se cierre la ventana antes de dar un intento por no subsanado', function (array $accepted, string $now, RejectedPinStatus $expected): void {
     $status = (new PinAttemptRecoveryPolicy)->statusOf(
         pinRecoveryAttempt(),
-        array_values(array_map(pinRecoveryAt(...), $accepted)),
+        array_values(array_map(pinRecoveryScan(...), $accepted)),
         pinRecoveryAt($now),
     );
 
@@ -154,23 +161,47 @@ it('anuncia la jornada subsanada con escalares y en UTC', function (): void {
         3,
         WorkDate::fromIsoDate('2026-03-14', new DateTimeZone('Europe/Madrid')),
         pinRecoveryAt('2026-03-15 04:30:00'),
+        ['scan-a', 'scan-b'],
+        ['scan-c'],
     );
 
     expect($event->employeeUuid())->toBe('0199f0c2-0000-7000-8000-000000000001')
         ->and($event->siteId())->toBe(3)
         ->and($event->workDate())->toBe('2026-03-14')
         ->and($event->eventName())->toBe('attendance.rejected_pin_scan_recovered')
-        ->and($event->occurredAt()->format('Y-m-d H:i:s'))->toBe('2026-03-15 04:30:00');
+        ->and($event->occurredAt()->format('Y-m-d H:i:s'))->toBe('2026-03-15 04:30:00')
+        ->and($event->attemptScanIds())->toBe(['scan-a', 'scan-b'])
+        ->and($event->recoveringScanIds())->toBe(['scan-c']);
 })->group('RN-19');
 
-it('no anuncia una jornada subsanada sin persona ni con un instante fuera de UTC', function (string $employeeUuid, DateTimeImmutable $at, string $exception): void {
+it('no anuncia una jornada subsanada sin persona, sin intentos ni fichaje que subsane o con un instante fuera de UTC', function (string $employeeUuid, DateTimeImmutable $at, string $exception, array $attempts = ['scan-a'], array $recovering = ['scan-b']): void {
     expect(fn (): RejectedPinScanRecovered => new RejectedPinScanRecovered(
         $employeeUuid,
         3,
         WorkDate::fromIsoDate('2026-03-14', new DateTimeZone('Europe/Madrid')),
         $at,
+        array_values(array_map(strval(...), $attempts)),
+        array_values(array_map(strval(...), $recovering)),
     ))->toThrow($exception);
 })->with([
     'sin persona' => ['', new DateTimeImmutable('2026-03-15 04:30:00', new DateTimeZone('UTC')), InvalidArgumentException::class],
     'fuera de UTC' => ['0199f0c2-0000-7000-8000-000000000001', new DateTimeImmutable('2026-03-15 05:30:00', new DateTimeZone('Europe/Madrid')), InstantIsNotUtc::class],
+    'sin intentos' => ['0199f0c2-0000-7000-8000-000000000001', new DateTimeImmutable('2026-03-15 04:30:00', new DateTimeZone('UTC')), InvalidArgumentException::class, []],
+    'sin fichaje que subsane' => ['0199f0c2-0000-7000-8000-000000000001', new DateTimeImmutable('2026-03-15 04:30:00', new DateTimeZone('UTC')), InvalidArgumentException::class, ['scan-a'], []],
+])->group('RN-19');
+
+it('nombra los fichajes que subsanan el intento: los de su ventana, en su orden', function (): void {
+    $policy = new PinAttemptRecoveryPolicy;
+    $candidates = array_map(pinRecoveryScan(...), ['2026-03-14 06:59:59', '2026-03-14 07:00:00', '2026-03-14 07:04:00', '2026-03-14 07:10:00', '2026-03-14 07:10:01']);
+
+    expect(array_map(static fn (RecoveringScan $scan): string => $scan->scanId, $policy->scansThatRecover(pinRecoveryAttempt(), $candidates)))
+        ->toBe(['recovering 2026-03-14 07:00:00', 'recovering 2026-03-14 07:04:00', 'recovering 2026-03-14 07:10:00'])
+        ->and($policy->scansThatRecover(pinRecoveryAttempt(), []))->toBe([]);
+})->group('RN-19');
+
+it('rechaza un fichaje que subsana sin scan_id o fuera de UTC', function (string $scanId, DateTimeImmutable $at, string $exception): void {
+    expect(fn (): RecoveringScan => new RecoveringScan($scanId, $at))->toThrow($exception);
+})->with([
+    'sin scan_id' => ['', new DateTimeImmutable('2026-03-14 07:00:00', new DateTimeZone('UTC')), InvalidArgumentException::class],
+    'fuera de UTC' => ['scan-1', new DateTimeImmutable('2026-03-14 08:00:00', new DateTimeZone('Europe/Madrid')), InstantIsNotUtc::class],
 ])->group('RN-19');

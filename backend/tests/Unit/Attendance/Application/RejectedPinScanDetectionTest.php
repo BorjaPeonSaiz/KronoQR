@@ -19,6 +19,7 @@ use App\Modules\Attendance\Domain\Event\RejectedPinScanRecovered;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
@@ -61,6 +62,9 @@ final class InMemoryRejectedPinScans implements RejectedPinScans
     public array $workDayQueries = [];
 
     /**
+     * Cada fichaje que subsana lleva un `scan_id` con su hora, para leer las
+     * aserciones sin tabla de correspondencias.
+     *
      * @param  list<RejectedPinAttempt>  $attempts
      * @param  array<string, list<DateTimeImmutable>>  $recovering
      */
@@ -96,10 +100,12 @@ final class InMemoryRejectedPinScans implements RejectedPinScans
     {
         $this->recoveryQueries[] = [$employeeUuid, $from, $to];
 
-        return array_values(array_filter(
+        $inWindow = array_values(array_filter(
             $this->recovering[$employeeUuid] ?? [],
             static fn (DateTimeImmutable $at): bool => $at >= $from && $at <= $to,
         ));
+
+        return array_map(static fn (DateTimeImmutable $at): RecoveringScan => new RecoveringScan('recovering '.$at->format('H:i:s'), $at), $inWindow);
     }
 }
 
@@ -462,6 +468,10 @@ it('anuncia la jornada subsanada entera para que se cierre su incidencia', funct
         ->and($run['recovered'][0]->workDate())->toBe('2026-03-14')
         ->and($run['recovered'][0]->siteId())->toBe(1)
         ->and($run['recovered'][0]->occurredAt())->toEqual(rejectedPinDetectionUtc(REJECTED_PIN_DETECTION_NOW))
+        // El asiento del cierre nombra los dos intentos y el fichaje que
+        // subsana a ambos, una sola vez.
+        ->and($run['recovered'][0]->attemptScanIds())->toBe(['0199-scan-1', '0199-scan-2'])
+        ->and($run['recovered'][0]->recoveringScanIds())->toBe(['recovering 07:05:00'])
         // La jornada entera se pide por sus limites civiles en Madrid (UTC+1).
         ->and($port->workDayQueries)->toEqual([[
             REJECTED_PIN_DETECTION_ANA,

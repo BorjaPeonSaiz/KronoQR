@@ -104,7 +104,7 @@ final readonly class CloseRecoveredIncident
                 actor: AuditActor::system(),
                 action: AuditAction::IncidentResolved,
                 subject: AuditSubject::of('incident', $incidentId),
-                payload: $this->payloadOf($closed),
+                payload: $this->payloadOf($closed, $command),
                 occurredAt: $command->recoveredAt,
             ));
 
@@ -112,8 +112,14 @@ final readonly class CloseRecoveredIncident
         });
     }
 
-    /** Identificadores, fechas y el desenlace. **Ni un nombre** (regla dura 21). */
-    private function payloadOf(Incident $closed): AuditPayload
+    /**
+     * Identificadores, fechas y el desenlace. **Ni un nombre** (regla dura 21).
+     *
+     * Lleva los `scan_id` de los intentos y de los fichajes que los subsanan:
+     * un cierre que nadie firma tiene que poder comprobarse contra
+     * `scan_events`, y un UUID v7 de la tablet no identifica a nadie.
+     */
+    private function payloadOf(Incident $closed, CloseRecoveredIncidentCommand $command): AuditPayload
     {
         return AuditPayload::of([
             'employee_uuid' => $closed->employeeUuid,
@@ -126,6 +132,8 @@ final readonly class CloseRecoveredIncident
             // Sin nota: nadie la escribio. `closure` dice por que se cerro sola.
             'note' => null,
             'closure' => self::CLOSURE,
+            'attempt_scan_ids' => $command->attemptScanIds,
+            'recovering_scan_ids' => $command->recoveringScanIds,
             'resolution_seconds' => $closed->resolutionSeconds(),
         ]);
     }

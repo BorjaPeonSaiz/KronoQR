@@ -8,6 +8,7 @@ use App\Modules\Attendance\Application\Port\RejectedPinScans;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use DateTimeImmutable;
@@ -67,17 +68,22 @@ final readonly class EloquentRejectedPinScans implements RejectedPinScans
 
     public function recoveringScansOf(string $employeeUuid, DateTimeImmutable $from, DateTimeImmutable $to): array
     {
-        /** @var list<string|DateTimeInterface> $instants */
-        $instants = $this->connection->table('scan_events')
+        /** @var list<object{scan_id: string, occurred_at: string|DateTimeInterface}> $rows */
+        $rows = $this->connection->table('scan_events')
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->where('employees.uuid', $employeeUuid)
             ->whereIn('scan_events.result', self::recoveringResults())
             ->whereBetween('scan_events.occurred_at', [$this->toTimestamp($from), $this->toTimestamp($to)])
             ->orderBy('scan_events.occurred_at')
-            ->pluck('scan_events.occurred_at')
+            ->orderBy('scan_events.scan_id')
+            ->select(['scan_events.scan_id', 'scan_events.occurred_at'])
+            ->get()
             ->all();
 
-        return array_map(fn (string|DateTimeInterface $at): DateTimeImmutable => $this->toUtc($at), $instants);
+        return array_map(
+            fn (object $row): RecoveringScan => new RecoveringScan($row->scan_id, $this->toUtc($row->occurred_at)),
+            $rows,
+        );
     }
 
     /**

@@ -25,7 +25,10 @@ use InvalidArgumentException;
  * asiento (regla dura 6). Por eso, igual que {@see AttendanceAnomalyDetected},
  * los accesores devuelven escalares: el listener no puede nombrar `WorkDate`.
  *
- * Sin datos personales (regla dura 21): la persona por su UUID.
+ * Sin datos personales (regla dura 21): la persona por su UUID, y los intentos
+ * y los fichajes que los subsanan por su `scan_id`. Esos dos son los que el
+ * asiento del cierre deja escritos: un cierre sin persona tiene que poder
+ * comprobarse contra `scan_events`.
  */
 final readonly class RejectedPinScanRecovered implements DomainEvent
 {
@@ -35,9 +38,27 @@ final readonly class RejectedPinScanRecovered implements DomainEvent
         public WorkDate $workDate,
         /** El instante de la pasada que lo vio, en UTC. */
         public DateTimeImmutable $detectedAt,
+        /**
+         * `scan_id` de todos los intentos de la jornada, en su orden.
+         *
+         * @var list<string>
+         */
+        public array $attemptScanIds,
+        /**
+         * `scan_id` de los fichajes que los subsanan, sin repetir.
+         *
+         * @var list<string>
+         */
+        public array $recoveringScanIds,
     ) {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('Una jornada subsanada de RN-19 necesita el UUID de la persona.');
+        }
+
+        // Una jornada subsanada tiene al menos un intento y un fichaje que lo
+        // subsana: sin ellos no hay nada que cerrar ni nada que asentar.
+        if ($attemptScanIds === [] || $recoveringScanIds === []) {
+            throw new InvalidArgumentException('Una jornada subsanada de RN-19 necesita sus intentos y los fichajes que los subsanan.');
         }
 
         TimeRange::assertUtc('detectedAt', $detectedAt);
@@ -58,6 +79,18 @@ final readonly class RejectedPinScanRecovered implements DomainEvent
     public function workDate(): string
     {
         return $this->workDate->isoDate;
+    }
+
+    /** @return list<string> */
+    public function attemptScanIds(): array
+    {
+        return $this->attemptScanIds;
+    }
+
+    /** @return list<string> */
+    public function recoveringScanIds(): array
+    {
+        return $this->recoveringScanIds;
     }
 
     #[\Override]

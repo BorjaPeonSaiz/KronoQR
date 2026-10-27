@@ -295,7 +295,8 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
     // madrugada abre la incidencia —la ventana estaba cerrada y no habia
     // subsanacion— y la de despues la cierra.
     $scenario = rejectedPinScenario('2026-03-14 07:02:00');
-    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T07:02:00Z')->assertStatus(422);
+    $attemptScanId = Str::uuid7()->toString();
+    rejectedPinPost($scenario, $attemptScanId, REJECTED_PIN_BAD, '2026-03-14T07:02:00Z')->assertStatus(422);
     rejectedPinDetect('2026-03-15 03:30:00');
 
     $incident = DB::table('incidents')->where('type', 'rejected_pin_scan')->first();
@@ -303,7 +304,8 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
     expect($incident?->status)->toBe('open');
 
     FrozenTime::at('2026-03-15 10:00:00');
-    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+    $recoveringScanId = Str::uuid7()->toString();
+    rejectedPinPost($scenario, $recoveringScanId, REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
     rejectedPinDetect('2026-03-16 03:30:00');
 
     $closed = DB::table('incidents')->where('type', 'rejected_pin_scan')->get();
@@ -334,6 +336,9 @@ it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola o
             'note' => null,
             'closure' => 'recovered_by_employee',
             'work_date' => '2026-03-14',
+            // Quien audite el cierre puede ir a `scan_events` con estos dos.
+            'attempt_scan_ids' => [$attemptScanId],
+            'recovering_scan_ids' => [$recoveringScanId],
         ]);
 
     // Y una pasada mas no reabre ni vuelve a cerrar nada.

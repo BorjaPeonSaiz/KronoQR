@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinStatus;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
@@ -70,23 +71,36 @@ final readonly class PinAttemptRecoveryPolicy
     }
 
     /**
-     * @param  list<DateTimeImmutable>  $acceptedAt  `occurred_at` de fichajes que subsanan
-     *                                               ({@see self::recovers()}), de la misma persona
+     * Los fichajes que subsanan el intento: los que caen dentro de su ventana,
+     * en el orden en que llegan.
+     *
+     * Son los que nombra el asiento del cierre sin persona (`recovering_scan_ids`):
+     * por eso los decide la politica y no quien los cuenta.
+     *
+     * @param  list<RecoveringScan>  $candidates  fichajes de la misma persona con un desenlace
+     *                                            que subsana ({@see self::recovers()})
+     * @return list<RecoveringScan>
      */
-    public function isRecovered(RejectedPinAttempt $attempt, array $acceptedAt): bool
+    public function scansThatRecover(RejectedPinAttempt $attempt, array $candidates): array
     {
         // Se comparan instantes y no segundos enteros: `occurred_at` llega con
         // microsegundos y truncarlos daria por subsanado un fichaje a 600,4 s.
         $from = $attempt->occurredAt;
         $to = $this->windowEndsAt($attempt);
 
-        foreach ($acceptedAt as $instant) {
-            if ($instant >= $from && $instant <= $to) {
-                return true;
-            }
-        }
+        return array_values(array_filter(
+            $candidates,
+            static fn (RecoveringScan $scan): bool => $scan->occurredAt >= $from && $scan->occurredAt <= $to,
+        ));
+    }
 
-        return false;
+    /**
+     * @param  list<RecoveringScan>  $candidates  fichajes de la misma persona con un desenlace
+     *                                            que subsana ({@see self::recovers()})
+     */
+    public function isRecovered(RejectedPinAttempt $attempt, array $candidates): bool
+    {
+        return $this->scansThatRecover($attempt, $candidates) !== [];
     }
 
     /**
@@ -98,13 +112,13 @@ final readonly class PinAttemptRecoveryPolicy
      * a `+600 s` exactos un fichaje todavia subsana— y despues queda sin
      * subsanar.
      *
-     * @param  list<DateTimeImmutable>  $acceptedAt
+     * @param  list<RecoveringScan>  $candidates
      */
-    public function statusOf(RejectedPinAttempt $attempt, array $acceptedAt, DateTimeImmutable $now): RejectedPinStatus
+    public function statusOf(RejectedPinAttempt $attempt, array $candidates, DateTimeImmutable $now): RejectedPinStatus
     {
         TimeRange::assertUtc('now', $now);
 
-        if ($this->isRecovered($attempt, $acceptedAt)) {
+        if ($this->isRecovered($attempt, $candidates)) {
             return RejectedPinStatus::RECOVERED;
         }
 

@@ -178,14 +178,17 @@ it('devuelve como subsanacion los seis resultados de RN-19 de esa persona y nada
     pinClaimSchemaInsert($fixture, ['employee_id' => $fixture['otherId'], 'origin' => 'qr_kiosk', 'result' => 'clock_in', 'worked_minutes' => 0, 'occurred_at' => '2026-03-14 07:05:00+00']);
     pinClaimSchemaInsert($fixture, [...$mine, 'result' => 'clock_in', 'worked_minutes' => 0, 'occurred_at' => '2026-03-14 07:10:00.000001+00']);
 
-    $instants = app(RejectedPinScans::class)->recoveringScansOf(
+    $scans = app(RejectedPinScans::class)->recoveringScansOf(
         $fixture['employee'],
         pinClaimSchemaUtc('2026-03-14 07:00:00'),
         pinClaimSchemaUtc('2026-03-14 07:10:00'),
     );
 
-    expect(array_map(static fn (DateTimeImmutable $at): string => $at->format('H:i:s'), $instants))
-        ->toBe(['07:00:00', '07:01:00', '07:02:00', '07:03:00', '07:04:00', '07:10:00']);
+    expect(array_map(static fn ($scan): string => $scan->occurredAt->format('H:i:s'), $scans))
+        ->toBe(['07:00:00', '07:01:00', '07:02:00', '07:03:00', '07:04:00', '07:10:00'])
+        // Con el `scan_id` de cada fila: es lo que nombra el asiento del cierre.
+        ->and(array_map(static fn ($scan): string => $scan->scanId, $scans))
+        ->each->toMatch('/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/');
 })->group('RN-19');
 
 it('lee la jornada entera de una persona por occurred_at, llegara cuando llegara', function (): void {
