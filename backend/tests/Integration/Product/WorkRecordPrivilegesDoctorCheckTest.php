@@ -454,3 +454,36 @@ it('el aviso de las guardas y su que hacer estan en español y en ingles', funct
     expect($message)->not->toStartWith('doctor.');
     expect($fix)->not->toStartWith('doctor.');
 })->with(['es', 'en'])->group('RF-PD-13');
+
+// --- La reapertura de RN-19 (enmienda del 27-10-2026 de ADR-057 §2) --------------
+
+it('avisa si la funcion del trigger de incidencias ya no admite la reapertura, y no lo exige sin su migracion', function (): void {
+    // Una funcion reescrita con el rol de migracion: el trigger sigue ahi y
+    // activo, pero ya no es la de la enmienda. En una transaccion que se deshace.
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(<<<'SQL'
+            CREATE OR REPLACE FUNCTION public.incidents_guard_transition()
+            RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+            AS $kq$ BEGIN RETURN NEW; END $kq$
+            SQL);
+
+        $findings = privilegiosRegistroDoctor($migrator);
+
+        $migrator->table('migrations')->where('migration', ServiceInspector::INCIDENT_REOPENING_MIGRATION)->delete();
+
+        $without = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe(['outdated_trigger:incidents_guard_transition'])
+        ->and($without[0]->details['guard_issues'])->toBe([]);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');

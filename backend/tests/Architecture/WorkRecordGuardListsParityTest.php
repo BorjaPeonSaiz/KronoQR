@@ -76,3 +76,16 @@ it('los triggers de la duracion y su migracion son los mismos en el doctor y en 
     expect(Repo::file('backend/database/migrations/'.ServiceInspector::WORK_RECORD_DURATION_GUARD_MIGRATION.'.php'))
         ->toBeFile();
 })->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-06');
+
+it('la reapertura de RN-19 vigila la misma migracion y el mismo trigger en el doctor y en el script', function (): void {
+    expect(paridadGuardasVariable('KQ_INCIDENT_REOPENING_MIGRATION'))
+        ->toBe(ServiceInspector::INCIDENT_REOPENING_MIGRATION)
+        ->and(paridadGuardasTriggers('KQ_INCIDENT_REOPENING_TRIGGER'))
+        ->toBe([ServiceInspector::INCIDENT_REOPENING_TRIGGER])
+        // Y el trigger es uno de los del registro: su ausencia ya la vigila la
+        // lista general, esta solo mira que su funcion sea la de la reapertura.
+        ->and(ServiceInspector::WORK_RECORD_GUARD_TRIGGERS)->toContain(ServiceInspector::INCIDENT_REOPENING_TRIGGER);
+
+    expect(Repo::file('backend/database/migrations/'.ServiceInspector::INCIDENT_REOPENING_MIGRATION.'.php'))
+        ->toBeFile();
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');

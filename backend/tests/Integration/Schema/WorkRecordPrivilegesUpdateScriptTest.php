@@ -277,3 +277,80 @@ it('vigila la minimizacion en sitio: trigger desactivado, DELETE devuelto y func
         ->and(privilegiosActualizadorManipulado('absences:DELETE,users_guard_anonymized:EJECUTABLE'))->toBeFalse()
         ->and(privilegiosActualizadorManipulado('check:users_chk_anonymized_is_minimised:SIN_VALIDAR'))->toBeTrue();
 })->group('RS-07', 'RL-04');
+
+it('el SQL de update.sh exige la reapertura de RN-19 con su migracion, y no sin ella', function (string $statement, string $expected, bool $tampered, string $expectedWithout): void {
+    // Enmienda del 27-10-2026 de ADR-057 §2: la funcion del trigger que admite
+    // la reapertura y `UPDATE (context)`. Con el rol de migracion, en una
+    // transaccion que se deshace.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql(Config::string('database.roles.application'));
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(str_replace(':app', '"'.Config::string('database.roles.application').'"', $statement));
+        $row = $migrator->selectOne($sql);
+
+        $migrator->table('migrations')->where('migration', '2026_10_27_100100_allow_system_reopening_of_rejected_pin_scan')->delete();
+        $without = $migrator->selectOne($sql);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($row) && is_object($without));
+
+    expect(array_values((array) $row)[0])->toBe($expected)
+        // Sin la migracion, la funcion anterior y sin `context` es lo esperado:
+        // un `context` concedido sobra, y se repara.
+        ->and(array_values((array) $without)[0])->toBe($expectedWithout)
+        ->and(privilegiosActualizadorManipulado($expected))->toBe($tampered);
+})->with([
+    'la funcion sin reapertura' => [
+        'CREATE OR REPLACE FUNCTION public.incidents_guard_transition() RETURNS trigger LANGUAGE plpgsql '
+            .'SET search_path = pg_catalog, pg_temp AS $kq$ BEGIN RETURN NEW; END $kq$',
+        'trigger:incidents_guard_transition:SIN_REAPERTURA',
+        true,
+        'incidents.context:UPDATE',
+    ],
+    'sin UPDATE de context' => ['REVOKE UPDATE (context) ON TABLE incidents FROM :app', 'incidents.context:UPDATE', false, 'ok'],
+])->group('RS-07', 'RL-04', 'RN-19');
+
+it('la reparacion de update.sh concede UPDATE (context) solo con la migracion de la reapertura', function (): void {
+    $application = Config::string('database.roles.application');
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $sql = privilegiosActualizadorSql($application);
+
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'CFG_DB_USERNAME='.escapeshellarg($application).'; KQ_WORK_RECORD_STAGE=b7; work_record_privileges_repair_sql'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement('REVOKE UPDATE (context) ON TABLE incidents FROM "'.$application.'"');
+        $before = $migrator->selectOne($sql);
+        $migrator->getPdo()->exec($process->getOutput());
+        $after = $migrator->selectOne($sql);
+
+        // Sin la migracion, la reparacion no la concede.
+        $migrator->table('migrations')->where('migration', '2026_10_27_100100_allow_system_reopening_of_rejected_pin_scan')->delete();
+        $migrator->getPdo()->exec($process->getOutput());
+        /** @var object{granted: bool} $granted */
+        $granted = $migrator->selectOne("SELECT has_column_privilege(?, 'incidents', 'context', 'UPDATE') AS granted", [$application]);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    \assert(is_object($before) && is_object($after));
+
+    expect(array_values((array) $before)[0])->toBe('incidents.context:UPDATE')
+        ->and(array_values((array) $after)[0])->toBe('ok')
+        ->and($granted->granted)->toBeFalse();
+})->group('RS-07', 'RL-04', 'RN-19');

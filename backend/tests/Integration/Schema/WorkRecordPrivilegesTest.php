@@ -40,7 +40,9 @@ const WORK_RECORD_PRIVILEGES_UPDATABLE = [
     // `closed_by` desde la 2.3.0 (RN-05): se escribe al cerrar un tramo abierto,
     // con la salida. Va al final porque la lista sigue el orden de las columnas.
     'shift_entries' => ['clocked_out_at', 'duration_minutes', 'status', 'clock_out_source', 'superseded_by_id', 'updated_at', 'closed_by'],
-    'incidents' => ['status', 'notified_at', 'resolved_at', 'resolved_by_user_id', 'resolution_note', 'updated_at'],
+    // `context` desde la 2.3.0 (RN-19): solo cambia cuando el sistema reabre una
+    // rejected_pin_scan que el sistema cerro, y eso lo decide el trigger.
+    'incidents' => ['status', 'context', 'notified_at', 'resolved_at', 'resolved_by_user_id', 'resolution_note', 'updated_at'],
 ];
 
 /**
@@ -202,7 +204,8 @@ it('el motor rechaza reescribir lo que el dominio no reescribe', function (strin
     'cambiar el instante de un escaneo' => ['scan_events.occurred_at', static fn () => DB::table('scan_events')->update(['occurred_at' => '2026-01-01 00:00:00+00'])],
     'reescribir un aviso de fichaje descartado' => ['discarded_scan_reports.attribution', static fn () => DB::table('discarded_scan_reports')->update(['attribution' => 'x'])],
     'cambiar el tipo de una incidencia' => ['incidents.type', static fn () => DB::table('incidents')->update(['type' => 'short_shift'])],
-    'cambiar el contexto de una incidencia' => ['incidents.context', static fn () => DB::table('incidents')->update(['context' => '{}'])],
+    // `incidents.context` ya no lo niega el privilegio sino el trigger, salvo en la
+    // reapertura de RN-19 (IncidentReopeningGuardTest).
     'cambiar cuando se detecto una incidencia' => ['incidents.detected_at', static fn () => DB::table('incidents')->update(['detected_at' => '2026-01-01 00:00:00+00'])],
     'reasignar una incidencia' => ['incidents.assigned_to_user_id', static fn () => DB::table('incidents')->update(['assigned_to_user_id' => null])],
     'vaciar shift_entries' => ['TRUNCATE shift_entries', static fn () => DB::statement('TRUNCATE shift_entries CASCADE')],

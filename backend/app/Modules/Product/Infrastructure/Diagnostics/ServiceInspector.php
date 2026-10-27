@@ -96,6 +96,18 @@ final readonly class ServiceInspector
     ];
 
     /**
+     * La migracion con la que el sistema reabre la `rejected_pin_scan` que el
+     * sistema cerro (RN-19, enmienda del 27-10-2026 de ADR-057 §2). Con ella
+     * aplicada, {@see self::INCIDENT_REOPENING_TRIGGER} tiene que ejecutar la
+     * funcion que admite la reapertura. La misma que
+     * `KQ_INCIDENT_REOPENING_MIGRATION` del script.
+     */
+    public const string INCIDENT_REOPENING_MIGRATION = '2026_10_27_100100_allow_system_reopening_of_rejected_pin_scan';
+
+    /** El *trigger* cuya funcion cambia esa migracion; el mismo que `KQ_INCIDENT_REOPENING_TRIGGER`. */
+    public const string INCIDENT_REOPENING_TRIGGER = 'incidents_guard_transition';
+
+    /**
      * Las tablas sin `DELETE` para la aplicacion desde esa migracion: la purga
      * pasa por la funcion.
      *
@@ -429,6 +441,9 @@ final readonly class ServiceInspector
      *   las claves ajenas;
      * - que `work_record_purge_batch` siga como debe
      *   ({@see self::definerFunctionIssues()});
+     * - con la migracion de la reapertura de RN-19 aplicada, que
+     *   {@see self::INCIDENT_REOPENING_TRIGGER} ejecute la funcion que la
+     *   admite (`outdated_trigger:`);
      * - que la aplicacion no tenga `DELETE` sobre las siete tablas.
      *
      * Solo lee el catalogo; ninguna fila del registro.
@@ -486,10 +501,44 @@ final readonly class ServiceInspector
             $issues[] = 'disabled_trigger:'.$trigger;
         }
 
+        if ($this->database->table('migrations')->where('migration', self::INCIDENT_REOPENING_MIGRATION)->exists()
+            && $this->incidentGuardIsOutdated()) {
+            $issues[] = 'outdated_trigger:'.self::INCIDENT_REOPENING_TRIGGER;
+        }
+
         return [
             'excess' => array_values(array_filter(explode(',', $row->deletable))),
             'issues' => [...$issues, ...$this->definerFunctionIssues('public.work_record_purge_batch(date, integer)', 'purge_function')],
         ];
+    }
+
+    /**
+     * Con la reapertura de RN-19 aplicada, {@see self::INCIDENT_REOPENING_TRIGGER}
+     * existe pero ejecuta una funcion que no la admite: alguien la ha
+     * reescrito con el rol de migracion. Se reconoce por el tipo que nombra,
+     * como hace `infra/scripts/lib/work-record-privileges.sh`. Si el *trigger*
+     * falta, ya lo dice `missing_trigger`.
+     */
+    private function incidentGuardIsOutdated(): bool
+    {
+        /** @var object{outdated: bool} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT EXISTS (
+                       SELECT 1 FROM pg_catalog.pg_trigger g
+                        WHERE g.tgrelid = 'public.incidents'::regclass AND g.tgname = ? AND NOT g.tgisinternal
+                   )
+               AND NOT EXISTS (
+                       SELECT 1 FROM pg_catalog.pg_trigger g
+                         JOIN pg_catalog.pg_proc p ON p.oid = g.tgfoid
+                        WHERE g.tgrelid = 'public.incidents'::regclass AND g.tgname = ? AND NOT g.tgisinternal
+                          AND p.prosrc LIKE '%rejected_pin_scan%'
+                   ) AS outdated
+            SQL,
+            [self::INCIDENT_REOPENING_TRIGGER, self::INCIDENT_REOPENING_TRIGGER],
+        );
+
+        return (bool) $row->outdated;
     }
 
     /**

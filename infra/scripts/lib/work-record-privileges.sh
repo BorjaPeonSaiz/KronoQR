@@ -13,7 +13,8 @@
 # trigger y la funcion de purga `SECURITY DEFINER`, y sin DELETE de tabla para el rol) y, desde
 # la 2.3.0, la 2026_10_18_120000 (RN-23, ADR-056: el trigger de `sites` y la funcion
 # `SECURITY DEFINER` de la correccion de la zona) y la 2026_10_25_100000 (los dos triggers
-# que exigen que la duracion de un tramo sea la de sus marcas).
+# que exigen que la duracion de un tramo sea la de sus marcas) y la 2026_10_27_100100 (RN-19:
+# la funcion de incidents_guard_transition que admite la reapertura, y UPDATE (context)).
 # La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) lo devuelve todo si
 # alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria.
 
@@ -80,6 +81,17 @@ readonly KQ_WORK_RECORD_TRIGGER_TABLES="shift_entries incidents"
 # ServiceInspector::WORK_RECORD_DURATION_GUARD_TRIGGERS (WorkRecordGuardListsParityTest).
 readonly KQ_WORK_RECORD_DURATION_MIGRATION="'2026_10_25_100000_guard_shift_entry_duration_in_database'"
 readonly KQ_WORK_RECORD_DURATION_TRIGGERS="shift_entries:shift_entries_guard_duration_insert shift_entries:shift_entries_guard_duration_close"
+# El sistema reabre la rejected_pin_scan que el sistema cerro (RN-19, enmienda del 27-10-2026
+# de ADR-057 par.2): la funcion de incidents_guard_transition admite resolved -> open solo
+# para ese caso, y el rol recibe UPDATE (context). Se exigen SOLO si su migracion esta
+# aplicada, como la duracion: una version anterior no los tiene hasta migrar. La funcion
+# se reconoce por el tipo que nombra (`rejected_pin_scan`); la anterior no lo nombra.
+# Misma migracion y mismo trigger que ServiceInspector::INCIDENT_REOPENING_MIGRATION y
+# ::INCIDENT_REOPENING_TRIGGER (WorkRecordGuardListsParityTest).
+readonly KQ_INCIDENT_REOPENING_MIGRATION="'2026_10_27_100100_allow_system_reopening_of_rejected_pin_scan'"
+readonly KQ_INCIDENT_REOPENING_TRIGGER="incidents:incidents_guard_transition"
+# Privilegios de columna que solo se exigen con esa migracion: tabla:PRIVILEGIO:col1,...
+readonly KQ_INCIDENT_REOPENING_COLUMNS="incidents:UPDATE:context"
 
 # Privilegios de TABLA enteros: tabla:INSERT:UPDATE:DELETE (t = concedido, f = no).
 # SELECT siempre se concede; TRUNCATE, REFERENCES, TRIGGER y MAINTAIN, nunca.
@@ -303,7 +315,16 @@ work_record_privileges_sql() {
   for entry in ${KQ_WORK_RECORD_COLUMNS}; do
     IFS=: read -r tbl priv cols <<<"${entry}"
     for col in ${cols//,/ }; do
-      columns_values="${columns_values}${sep}('${tbl}', '${col}', '${priv}')"
+      columns_values="${columns_values}${sep}('${tbl}', '${col}', '${priv}', TRUE)"
+      sep=","$'\n'"  "
+    done
+  done
+  # Las columnas de la reapertura de RN-19: concedidas solo con su migracion aplicada.
+  local reopening_applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_INCIDENT_REOPENING_MIGRATION})"
+  for entry in ${KQ_INCIDENT_REOPENING_COLUMNS}; do
+    IFS=: read -r tbl priv cols <<<"${entry}"
+    for col in ${cols//,/ }; do
+      columns_values="${columns_values}${sep}('${tbl}', '${col}', '${priv}', ${reopening_applied})"
       sep=","$'\n'"  "
     done
   done
@@ -340,6 +361,17 @@ $(work_record_definer_function_sql "${role}" "${KQ_WORK_RECORD_PURGE_FUNCTION}" 
    WHERE ${duration_applied}
      AND NOT EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = '${entry%%:*}'::regclass AND g.tgname = '${entry#*:}' AND NOT g.tgisinternal)"
     done
+    # La reapertura de RN-19: con su migracion aplicada, el trigger de transiciones de
+    # incidents tiene que ejecutar la funcion que la admite. Una funcion distinta la ha
+    # puesto el rol de migracion a mano: es manipulacion y no se repara sola.
+    purge_sql="${purge_sql}
+  UNION ALL
+  SELECT 'trigger:${KQ_INCIDENT_REOPENING_TRIGGER#*:}:SIN_REAPERTURA'
+   WHERE ${reopening_applied}
+     AND EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = '${KQ_INCIDENT_REOPENING_TRIGGER%%:*}'::regclass AND g.tgname = '${KQ_INCIDENT_REOPENING_TRIGGER#*:}' AND NOT g.tgisinternal)
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid = g.tgfoid
+                      WHERE g.tgrelid = '${KQ_INCIDENT_REOPENING_TRIGGER%%:*}'::regclass AND g.tgname = '${KQ_INCIDENT_REOPENING_TRIGGER#*:}'
+                        AND NOT g.tgisinternal AND p.prosrc LIKE '%rejected_pin_scan%')"
     # La zona del centro (RN-23, ADR-056): con su migracion aplicada, el trigger de
     # sites (y ninguno de sites desactivado), la funcion de la correccion de consola y su traza
     # solo-append (solo SELECT para el rol, propiedad del mismo rol que sites).
@@ -368,7 +400,7 @@ $(minimise_retention_sql "${role}")"
   cat <<SQL
 WITH t(tbl, ins, upd, del) AS (VALUES
   ${tables_values}),
-c(tbl, col, priv) AS (VALUES
+c(tbl, col, priv, want) AS (VALUES
   ${columns_values})
 SELECT coalesce(string_agg(d.x, ',' ORDER BY d.x), 'ok') FROM (
   SELECT t.tbl || ':' || p.priv AS x
@@ -380,7 +412,7 @@ SELECT coalesce(string_agg(d.x, ',' ORDER BY d.x), 'ok') FROM (
     FROM t JOIN pg_attribute a ON a.attrelid = t.tbl::regclass AND a.attnum > 0 AND NOT a.attisdropped
     CROSS JOIN LATERAL (VALUES ('INSERT', t.ins), ('UPDATE', t.upd)) AS p(priv, whole)
    WHERE has_column_privilege('${role}', a.attrelid, a.attnum, p.priv)
-         IS DISTINCT FROM (p.whole OR EXISTS (SELECT 1 FROM c WHERE c.tbl = t.tbl AND c.col = a.attname AND c.priv = p.priv))${purge_sql}
+         IS DISTINCT FROM (p.whole OR EXISTS (SELECT 1 FROM c WHERE c.tbl = t.tbl AND c.col = a.attname AND c.priv = p.priv AND c.want))${purge_sql}
 ) AS d
 SQL
 }
@@ -410,6 +442,12 @@ work_record_privileges_repair_sql() {
   for entry in ${KQ_WORK_RECORD_COLUMNS}; do
     IFS=: read -r tbl priv cols <<<"${entry}"
     printf 'GRANT %s (%s) ON TABLE %s TO %s;\n' "${priv}" "${cols//,/, }" "${tbl}" "${role}"
+  done
+  # Las de la reapertura de RN-19, solo con su migracion aplicada (sin ella, el REVOKE ALL
+  # de arriba ya las deja retiradas).
+  for entry in ${KQ_INCIDENT_REOPENING_COLUMNS}; do
+    IFS=: read -r tbl priv cols <<<"${entry}"
+    printf '%s\n' "DO \$kq\$ BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_INCIDENT_REOPENING_MIGRATION}) THEN EXECUTE format('GRANT ${priv} (${cols//,/, }) ON TABLE public.%I TO %I', '${tbl}', '${CFG_DB_USERNAME}'); END IF; END \$kq\$;"
   done
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
     # Por nombre, sin firma. Si la funcion no existe no hace nada y la deriva persiste.
