@@ -1263,7 +1263,8 @@ Escenario: Licencia caducada
 Escenario: Acceso de soporte del fabricante
   Dado que el administrador del cliente concede acceso de soporte por 24 horas
   Cuando el soporte del fabricante consulta datos de la instalación
-  Entonces cada acceso queda registrado en el trail de auditoría
+  Entonces cada sesión de uso queda registrada en el trail de auditoría, con un asiento por cada ventana de 15 minutos en que se usó el acceso
+  Y varias consultas dentro de la misma ventana de 15 minutos dejan un solo asiento
   Y el registro es visible para el administrador del cliente
   Y transcurridas 24 horas el acceso deja de funcionar sin intervención
 
