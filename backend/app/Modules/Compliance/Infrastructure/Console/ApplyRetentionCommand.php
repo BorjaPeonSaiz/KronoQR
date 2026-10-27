@@ -225,8 +225,9 @@ final class ApplyRetentionCommand extends Command
      * falta.
      *
      * - `42501` con el texto del rechazo del corte: la funcion de ADR-057 §3
-     *   calcula su corte con el reloj de PostgreSQL y el plazo **mas largo de
-     *   todos los centros**. Otro `42501` (un rol sin `EXECUTE`) es generico.
+     *   calcula su corte con el reloj de PostgreSQL y el plazo **del perfil de
+     *   cumplimiento del centro**, sin bajar del suelo legal de su
+     *   jurisdiccion. Otro `42501` (un rol sin `EXECUTE`) es generico.
      * - `55P03`: `lock_timeout` de la funcion; se puede repetir.
      * - `P0002`: no hay perfil de cumplimiento.
      */

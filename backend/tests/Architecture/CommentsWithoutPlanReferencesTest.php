@@ -64,7 +64,15 @@ it('reconoce las referencias al plan y deja pasar el motivo (red de seguridad)',
 })->group('RNF-M-06');
 
 it('reconoce la justificacion con varios centros y deja pasar el centro unico', function (): void {
-    foreach (['un traslado de centro no reescribe', 'el dia que haya varios centros', 'un tramo de otro centro', 'se le cambia de centro'] as $texto) {
+    $multicentro = [
+        'un traslado de centro no reescribe', 'el dia que haya varios centros', 'un tramo de otro centro', 'se le cambia de centro',
+        // Partida entre lineas de comentario y con negrita: se lee como prosa.
+        "// calcula su corte con el plazo **mas largo de todos los centros**.\n",
+        "// un tramo de otro\n// centro\n",
+        "/**\n * el dia que haya **varios**\n * centros\n */",
+    ];
+
+    foreach ($multicentro as $texto) {
         expect(CommentReferences::multiSiteReference($texto))->not->toBeNull($texto);
     }
 

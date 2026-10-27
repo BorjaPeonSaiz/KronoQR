@@ -86,13 +86,20 @@ final class CommentReferences
         return self::firstMatch($text, self::planPatterns());
     }
 
-    /** La primera justificacion con varios centros o traslados, o `null`. */
+    /**
+     * La primera justificacion con varios centros o traslados, o `null`.
+     *
+     * Busca sobre el comentario normalizado ({@see self::prose()}): la frase
+     * puede llegar partida entre dos lineas de `//`, o con una palabra en
+     * negrita (`el plazo **mas largo de todos los centros**`).
+     */
     public static function multiSiteReference(string $text): ?string
     {
-        return self::firstMatch($text, [
+        return self::firstMatch(self::prose($text), [
             self::phrase('\bvari(?:o|a)s centros\b'),
             self::phrase('\bm(?:a|á)s de un centro\b'),
             self::phrase('\botros? centros?\b'),
+            self::phrase('\btod(?:o|a)s los centros\b'),
             self::phrase('\bcambi(?:a|o|e|en|ar|arle)? de centro\b'),
             // Un cambio de departamento si existe; el de centro, no.
             '~\btraslados?\b(?!\s+de\s+departamento)~iu',
@@ -125,6 +132,19 @@ final class CommentReferences
             // Id corto al principio de una linea, seguido de dos puntos (`// G1: ...`).
             '~(?:^|\n)[\s*\/#]*\K'.self::SHORT_ID.'(?=:)~u',
         ];
+    }
+
+    /**
+     * El texto de un comentario como prosa corrida: sin los delimitadores
+     * `/*` y `*\/`, sin el margen `*`, `//` o `#` de cada linea, sin la negrita
+     * `**` y con los espacios colapsados.
+     */
+    private static function prose(string $comment): string
+    {
+        $text = (string) preg_replace('~/\*+|\*+/~u', ' ', $comment);
+        $text = (string) preg_replace('~^[ \t]*(?:\*(?!\*)|//+|#)~mu', '', $text);
+
+        return trim((string) preg_replace('~\s+~u', ' ', str_replace('**', '', $text)));
     }
 
     /**
