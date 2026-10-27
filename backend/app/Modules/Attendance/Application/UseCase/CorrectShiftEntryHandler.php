@@ -136,12 +136,14 @@ final readonly class CorrectShiftEntryHandler
         $times = $this->timesFor($command, $workDay);
         $settings = $this->settings->forSite($workDay->siteId());
 
-        // Tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
-        // no solo lo que trae la orden: es el que queda en el registro. La
-        // jornada no se comprueba porque una correccion no puede moverla
-        // (`CorrectionWouldChangeWorkDate`, ADR-035).
-        ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes)
-            ->assertTimesAllowed($times);
+        // Tampoco se corrige hacia el futuro (RN-24). Se mira el tramo
+        // RESULTANTE y no solo lo que trae la orden: es el que queda en el
+        // registro. La jornada no se comprueba porque una correccion no puede
+        // moverla (`CorrectionWouldChangeWorkDate`, ADR-035). La regla la hace
+        // cumplir el agregado, que recibe el horizonte; se mira tambien aqui,
+        // antes de la ficha, para que el `422` diga eso y no otra cosa.
+        $horizon = ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes);
+        $horizon->assertTimesAllowed($times);
 
         // RN-05 y RN-14 (2.3.0): la cota de continuacion, la misma que la vuelta
         // de una pausa en el quiosco y que el alta manual. Corregir no depende
@@ -176,6 +178,7 @@ final readonly class CorrectShiftEntryHandler
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
             ClockingPolicies::forSettings($settings),
             $continuation,
+            $horizon,
         );
 
         // RN-05 frente a las otras jornadas de la persona, que el agregado no ve.

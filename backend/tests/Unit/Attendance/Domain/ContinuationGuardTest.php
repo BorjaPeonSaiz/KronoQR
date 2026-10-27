@@ -15,6 +15,7 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
+use Tests\Support\Factory\ManualEntryHorizonFactory;
 use Tests\Support\Factory\ShiftEntryFactory;
 use Tests\Support\Factory\WorkDayFactory;
 use Tests\Support\Time\Instants;
@@ -50,6 +51,7 @@ function continuacionAlta(WorkDay $workDay, string $desdeMadrid, ?string $hastaM
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 }
 
@@ -64,6 +66,7 @@ function continuacionCorreccion(WorkDay $workDay, string $entryUuid, ShiftEntryT
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 }
 
@@ -346,6 +349,7 @@ it('mide la cota en horas reales la noche del cambio de hora de octubre', functi
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     if ($admite) {
@@ -372,6 +376,7 @@ it('aplica la cota del perfil, no una constante', function (): void {
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::ofHours(10),
+        ManualEntryHorizonFactory::standard(),
     ));
 
     expect($rechazo->parameters['hours'])->toBe('10');

@@ -14,6 +14,7 @@ use Tests\Support\Domain\RecordedEvents;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Factory\ContinuationCeilingFactory;
 use Tests\Support\Factory\CorrectionFactory;
+use Tests\Support\Factory\ManualEntryHorizonFactory;
 use Tests\Support\Factory\ShiftEntryFactory;
 use Tests\Support\Factory\WorkDayFactory;
 use Tests\Support\Time\Instants;
@@ -72,6 +73,7 @@ it('crea una version nueva y no muta la anterior', function (): void {
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     expect($corregido->uuid())->toBe('shift-entry-1-v2')
@@ -100,6 +102,7 @@ it('encadena la version anterior con la nueva y la saca del conjunto vigente', f
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $vigentes = array_map(static fn (ShiftEntry $entry): string => $entry->uuid(), $jornada->entries());
@@ -132,6 +135,7 @@ it('recalcula el total del dia tras corregir la hora de salida', function (): vo
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $eventos = $jornada->releaseEvents();
@@ -164,6 +168,7 @@ it('no genera ningun tramo artificial al corregir un turno que cruza la medianoc
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $marcas = array_map(
@@ -200,6 +205,7 @@ it('cierra un tramo abierto con motivo y deja constancia de como estaba', functi
         CorrectionFactory::new()->by(42)->at('2026-03-14 16:20')->because(CorrectionReasonCode::OLVIDO_FICHAJE_SALIDA)->build(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -237,6 +243,7 @@ it('distingue modificar la hora de cerrar un tramo abierto', function (): void {
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     expect(recordedCorrection($jornada->releaseEvents())->action)->toBe(CorrectionAction::MODIFIED);
@@ -256,6 +263,7 @@ it('marca como manual solo la marca que se rectifico', function (): void {
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     // La entrada la ficho la persona con su tarjeta y eso no ha dejado de ser
@@ -279,6 +287,7 @@ it('vuelve a clasificar la duracion de la version corregida', function (): void 
         CorrectionFactory::standard(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -349,6 +358,7 @@ it('da de alta un tramo que nunca se ficho', function (): void {
         CorrectionFactory::new()->because(CorrectionReasonCode::CREDENCIAL_NO_ENTREGADA)->build(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $correccion = recordedCorrection($jornada->releaseEvents());
@@ -378,6 +388,7 @@ it('fecha el recalculo en el momento de la correccion y no en el del trabajo', f
         CorrectionFactory::new()->at('2026-04-02 11:15')->build(),
         ClockingPolicyFactory::standard(),
         ContinuationCeilingFactory::standard(),
+        ManualEntryHorizonFactory::standard(),
     );
 
     $eventos = $jornada->releaseEvents();

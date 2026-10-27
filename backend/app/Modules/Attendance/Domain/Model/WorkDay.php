@@ -15,8 +15,10 @@ use App\Modules\Attendance\Domain\Exception\NoOpenShiftEntry;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryDoesNotBelongToWorkDay;
+use App\Modules\Attendance\Domain\Exception\ShiftEntryMarkInFuture;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryNotInWorkDay;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
+use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ContinuationCeiling;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
@@ -271,6 +273,12 @@ final class WorkDay
      * salida del tramo anterior, la misma que acota la vuelta de una pausa en el
      * quiosco (`$continuation`, 2.3.0).
      *
+     * **Nunca hacia el futuro** (RN-24): la jornada y las marcas no pueden
+     * quedar por delante de la hora del servidor mas el margen. El horizonte
+     * llega resuelto, como la politica y la cota, y se comprueba antes que
+     * nada: lo que no ha ocurrido no se anota, venga del camino que venga.
+     *
+     * @throws ShiftEntryMarkInFuture la jornada o alguna marca va por delante del horizonte (RN-24)
      * @throws ShiftEntryAlreadyOpen dejaria dos turnos abiertos (RN-01)
      * @throws OverlappingShiftEntry pisaria a otro tramo vigente (RN-02)
      * @throws CorrectionWouldChangeWorkDate el alta abriria la jornada en otro dia civil (RN-05)
@@ -283,7 +291,11 @@ final class WorkDay
         Correction $correction,
         ClockingPolicy $policy,
         ContinuationCeiling $continuation,
+        ManualEntryHorizon $horizon,
     ): ShiftEntry {
+        $horizon->assertWorkDateAllowed($this->workDate);
+        $horizon->assertTimesAllowed($times);
+
         $this->guardTimesFit($times, null);
         $this->guardOpeningStaysOnThisWorkDate($times, null);
         $this->guardContinuesWorkDay($times, null, $continuation);
@@ -322,6 +334,10 @@ final class WorkDay
      * `clockIn()`: es un UUID v7 y lleva la hora dentro, y el dominio no
      * pregunta la hora (regla dura 2).
      *
+     * **Nunca hacia el futuro** (RN-24): ni la entrada ni la salida resultantes
+     * pueden quedar por delante del horizonte. Va lo primero, como en el alta.
+     *
+     * @throws ShiftEntryMarkInFuture la entrada o la salida van por delante del horizonte (RN-24)
      * @throws ShiftEntryNotInWorkDay el tramo no es de esta jornada, o ya fue anulado o sustituido
      * @throws CorrectionChangesNothing las marcas nuevas son las mismas
      * @throws CorrectionWouldChangeWorkDate la correccion moveria la jornada a otro dia civil (RN-05)
@@ -337,7 +353,10 @@ final class WorkDay
         Correction $correction,
         ClockingPolicy $policy,
         ContinuationCeiling $continuation,
+        ManualEntryHorizon $horizon,
     ): ShiftEntry {
+        $horizon->assertTimesAllowed($times);
+
         $entry = $this->entry($entryUuid);
         $before = $entry->times();
 
