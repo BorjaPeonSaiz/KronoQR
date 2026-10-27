@@ -13,6 +13,7 @@ use OpenSpout\Common\Entity\Cell\StringCell;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\WriterInterface;
+use OpenSpout\Writer\XLSX\Options as XlsxOptions;
 use Spatie\SimpleExcel\SimpleExcelWriter;
 
 /**
@@ -79,7 +80,7 @@ final readonly class PayrollXlsxWriter
         );
 
         if ($layout->hasHeaderRow) {
-            $writer->addRow(self::textRow(PayrollHeadings::of($layout)), (new Style)->setFontBold());
+            $writer->addRow(self::textRow(PayrollHeadings::of($layout), self::boldStyle()));
         }
 
         $written = 0;
@@ -100,13 +101,34 @@ final readonly class PayrollXlsxWriter
      *
      * @param  list<string>  $cells
      */
-    private static function textRow(array $cells): Row
+    private static function textRow(array $cells, ?Style $style = null): Row
     {
         return new Row(array_map(
             static fn (string $value): Cell => $value === ''
                 ? new EmptyCell(null, null)
-                : new StringCell($value, null),
+                : new StringCell($value, $style),
             $cells,
         ));
+    }
+
+    /**
+     * Negrita sobre la letra del resto de la hoja.
+     *
+     * Desde OpenSpout 5 un `Style` lleva todos sus valores y no solo los que se
+     * tocan: `new Style(fontBold: true)` a secas sale en Arial 11 junto a un
+     * cuerpo en Calibri 12. Se repiten la letra y el tamano por defecto del
+     * escritor XLSX para que la cabecera solo se distinga por la negrita.
+     *
+     * El estilo va **en las celdas** y no como segundo argumento de
+     * `SimpleExcelWriter::addRow()`, que lo descarta cuando recibe un `Row`
+     * ya construido.
+     */
+    private static function boldStyle(): Style
+    {
+        return new Style(
+            fontBold: true,
+            fontSize: XlsxOptions::DEFAULT_FONT_SIZE,
+            fontName: XlsxOptions::DEFAULT_FONT_NAME,
+        );
     }
 }

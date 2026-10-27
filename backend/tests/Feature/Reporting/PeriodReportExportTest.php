@@ -25,6 +25,7 @@ use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
 use Tests\Support\Reporting\PeriodReportFixtures;
+use Tests\Support\Reporting\XlsxAppearance;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -281,6 +282,10 @@ it('descarga el informe como XLSX legible, con las horas como texto', function (
 
     $filas = SimpleExcelReader::create($ruta)->noHeaderRow()->getRows()->toArray();
 
+    // Y lo que se ve al abrirla, que el lector de valores no distingue: la
+    // cabecera en negrita y fija al desplazarse, los datos sin negrita.
+    $aspecto = XlsxAppearance::of($ruta);
+
     unlink($ruta);
 
     /** @var list<array<int, mixed>> $filas */
@@ -324,6 +329,10 @@ it('descarga el informe como XLSX legible, con las horas como texto', function (
         // Tantos rotulos como celdas de datos: si los anchos y las columnas se
         // hubieran separado, la fila saldria mas corta que la cabecera.
         ->and(\count($datos))->toBe(\count($rotulos));
+
+    expect($aspecto->frozenRows())->toBe(1)
+        ->and($aspecto->rowIsBold(1))->toBeTrue()
+        ->and($aspecto->rowIsBold(2))->toBeFalse();
 })->group('RF-IN-04', 'RF-GP-04');
 
 it('descarga el informe como PDF, con su tipo y su nombre de fichero', function (): void {

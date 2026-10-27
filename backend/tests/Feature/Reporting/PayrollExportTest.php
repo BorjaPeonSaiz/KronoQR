@@ -15,6 +15,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PeriodReportFixtures;
+use Tests\Support\Reporting\XlsxAppearance;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -349,6 +350,8 @@ it('descarga la nomina como XLSX legible, con las columnas configuradas y como t
     file_put_contents($ruta, cuerpoDeLaNomina($respuesta));
 
     $filas = SimpleExcelReader::create($ruta)->noHeaderRow()->getRows()->toArray();
+    // La cabecera en negrita, que el lector de valores no distingue.
+    $aspecto = XlsxAppearance::of($ruta);
 
     unlink($ruta);
 
@@ -361,7 +364,9 @@ it('descarga la nomina como XLSX legible, con las columnas configuradas y como t
     expect($texto($filas[0]))->toBe(['Código de empleado', 'HORAS'])
         // La duracion es TEXTO y se lee tal cual: si la hoja la hubiera
         // interpretado como hora del reloj, aqui llegaria un objeto de fecha.
-        ->and($texto($filas[1]))->toBe(['EMP-0007', '22:30']);
+        ->and($texto($filas[1]))->toBe(['EMP-0007', '22:30'])
+        ->and($aspecto->rowIsBold(1))->toBeTrue()
+        ->and($aspecto->rowIsBold(2))->toBeFalse();
 })->group('RF-IN-07', 'RF-IN-04');
 
 // --- Granularidad y casos del calendario ------------------------------------

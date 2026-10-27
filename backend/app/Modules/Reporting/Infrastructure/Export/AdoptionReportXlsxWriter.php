@@ -12,6 +12,7 @@ use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\WriterInterface;
 use OpenSpout\Writer\XLSX\Entity\SheetView;
+use OpenSpout\Writer\XLSX\Options as XlsxOptions;
 use OpenSpout\Writer\XLSX\Writer as XlsxEngine;
 use Spatie\SimpleExcel\SimpleExcelWriter;
 
@@ -77,7 +78,7 @@ final readonly class AdoptionReportXlsxWriter
 
         self::configureSheet($writer);
 
-        $writer->addRow(self::textRow(AdoptionReportLayout::header()), self::boldStyle());
+        $writer->addRow(self::textRow(AdoptionReportLayout::header(), self::boldStyle()));
 
         $rows = 0;
 
@@ -89,8 +90,8 @@ final readonly class AdoptionReportXlsxWriter
         // La segunda tabla, separada por una linea en blanco para que la hoja de
         // calculo reconozca cada una al seleccionarla.
         $writer->addRow(self::textRow([]));
-        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.origin_breakdown')]), self::boldStyle());
-        $writer->addRow(self::textRow(AdoptionReportLayout::originHeader()), self::boldStyle());
+        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.origin_breakdown')], self::boldStyle()));
+        $writer->addRow(self::textRow(AdoptionReportLayout::originHeader(), self::boldStyle()));
 
         foreach ($report->originBreakdown as $share) {
             $writer->addRow(self::textRow(AdoptionReportLayout::originCells($share)));
@@ -107,14 +108,14 @@ final readonly class AdoptionReportXlsxWriter
     ): void {
         $writer->addNewSheetAndMakeItCurrent(AdoptionReportLayout::text('document.sheet_criteria'));
 
-        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.title')]), self::boldStyle());
+        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.title')], self::boldStyle()));
 
         foreach (AdoptionReportLayout::metadata($report, $issuer, $digest) as [$label, $value]) {
             $writer->addRow(self::textRow([$label, $value]));
         }
 
         $writer->addRow(self::textRow([]));
-        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.criteria')]), self::boldStyle());
+        $writer->addRow(self::textRow([AdoptionReportLayout::text('document.criteria')], self::boldStyle()));
 
         foreach (AdoptionReportLayout::criteria($report) as $criterion) {
             $writer->addRow(self::textRow([$criterion]));
@@ -138,7 +139,7 @@ final readonly class AdoptionReportXlsxWriter
         }
 
         $sheet = $engine->getCurrentSheet();
-        $sheet->setSheetView((new SheetView)->setFreezeRow(self::FREEZE_BELOW_HEADER));
+        $sheet->setSheetView(new SheetView(freezeRow: self::FREEZE_BELOW_HEADER));
 
         foreach (AdoptionReportLayout::COLUMN_WIDTHS as $index => $width) {
             // OpenSpout indexa las columnas desde 1 en esta API.
@@ -152,18 +153,34 @@ final readonly class AdoptionReportXlsxWriter
      *
      * @param  list<string>  $cells
      */
-    private static function textRow(array $cells): Row
+    private static function textRow(array $cells, ?Style $style = null): Row
     {
         return new Row(array_map(
             static fn (string $value): Cell => $value === ''
                 ? new EmptyCell(null, null)
-                : new StringCell($value, null),
+                : new StringCell($value, $style),
             $cells,
         ));
     }
 
+    /**
+     * Negrita sobre la letra del resto de la hoja.
+     *
+     * Desde OpenSpout 5 un `Style` lleva todos sus valores y no solo los que se
+     * tocan: `new Style(fontBold: true)` a secas sale en Arial 11 junto a un
+     * cuerpo en Calibri 12. Se repiten la letra y el tamano por defecto del
+     * escritor XLSX para que la cabecera solo se distinga por la negrita.
+     *
+     * El estilo va **en las celdas** y no como segundo argumento de
+     * `SimpleExcelWriter::addRow()`, que lo descarta cuando recibe un `Row`
+     * ya construido.
+     */
     private static function boldStyle(): Style
     {
-        return (new Style)->setFontBold();
+        return new Style(
+            fontBold: true,
+            fontSize: XlsxOptions::DEFAULT_FONT_SIZE,
+            fontName: XlsxOptions::DEFAULT_FONT_NAME,
+        );
     }
 }
