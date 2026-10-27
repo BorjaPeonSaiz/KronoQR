@@ -17,6 +17,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Observability\CapturedLog;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Telemetry\RecordingTracer;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -202,7 +203,8 @@ it('escribe un unico asiento de revision con el payload del diseño, y no repite
 })->group('RL-04', 'RS-07', 'RL-02');
 
 it('habla ingles en una instalacion en ingles', function (): void {
-    app()->setLocale('en');
+    // La orden habla el idioma de la instalacion, no el del proceso.
+    InstallationLocale::set('en');
     $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
 
     $resultado = acuseDePurgaOrden(['--acknowledge' => (string) $purga]);
@@ -243,7 +245,8 @@ it('sale con 2 y sin escribir si el asiento no es un entero positivo o el respon
 ])->group('RL-04', 'RS-07');
 
 it('dice en ingles que el id no es valido', function (): void {
-    app()->setLocale('en');
+    // La orden habla el idioma de la instalacion, no el del proceso.
+    InstallationLocale::set('en');
 
     $resultado = acuseDePurgaOrden(['--acknowledge' => '12abc']);
 

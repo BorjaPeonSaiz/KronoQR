@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
+use App\Modules\Identity\Infrastructure\Adapter\ConcurrencyLimitedInstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\HexColor;
 use Tests\Support\Product\FixedLogo;
@@ -142,7 +143,12 @@ it('escribe cada frase en el idioma que se le pide, sin tocar el del proceso', f
 it('usa el motor real y no el doble de las pruebas de feature', function (): void {
     // Control: sin esto, las pruebas de arriba pasarian igual con un doble
     // enlazado por otra prueba de la suite.
-    expect(app(InstructionsSheetRenderer::class))->toBeInstanceOf(BrowsershotInstructionsSheetRenderer::class);
+    // La instalacion lo pone detras del tope de Chromium compartido.
+    $renderer = app(InstructionsSheetRenderer::class);
+
+    expect($renderer)->toBeInstanceOf(ConcurrencyLimitedInstructionsSheetRenderer::class)
+        ->and((new ReflectionProperty($renderer, 'engine'))->getValue($renderer))
+        ->toBeInstanceOf(BrowsershotInstructionsSheetRenderer::class);
 })->group('RL-05');
 
 it('pinta con el acento oscurecido lo que se lee y con el acento tal cual lo decorativo', function (string $acento, string $impreso): void {

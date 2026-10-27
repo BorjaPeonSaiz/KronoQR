@@ -19,6 +19,7 @@ use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -381,7 +382,8 @@ it('sin centro remite a la puesta en marcha', function (): void {
 })->group('RN-23');
 
 it('habla en ingles a una instalacion en ingles', function (): void {
-    app()->setLocale('en');
+    // La orden habla el idioma de la instalacion, no el del proceso.
+    InstallationLocale::set('en');
     correccionDeZonaConRegistro();
 
     $orden = correccionDeZonaOrden([

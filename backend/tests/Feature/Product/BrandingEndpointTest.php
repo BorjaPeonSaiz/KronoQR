@@ -588,6 +588,13 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
     // objeto se construye sin problema y lo que falla es hablar con PostgreSQL o
     // con Redis. Romper el enlace del contenedor daria un 500 en la resolucion de
     // dependencias y no llegaria a ejercitar el `catch` que aqui interesa.
+    //
+    // Los idiomas caen al respaldo del `.env` (la prueba de abajo lo cubre con
+    // otros valores): se fija el de serie, `es`, para no depender del `.env`
+    // de quien ejecuta la suite.
+    config()->set('app.locale', 'es');
+    config()->set('app.supported_locales', ['es']);
+
     app()->bind(SettingsRepository::class, fn (): SettingsRepository => new class implements SettingsRepository
     {
         public function storedValues(): array
