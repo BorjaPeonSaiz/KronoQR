@@ -200,3 +200,16 @@ es justo lo que el trail tiene que poder enseñar.
   - ningún `accessed` con actor `system` en los diferidos que tienen solicitante;
   - un fallo no deja asiento;
   - el resumen semanal no cambia.
+
+## Enmienda del 27 de octubre de 2026 (bloque 20 de la 2.3.0): los contratos son parte de la ficha
+
+**Decisión D20 del plan de la 2.3.0, aprobada por el propietario con su recomendación.** La tabla de la Decisión decía que la ficha individual (`GET /employees/{uuid}`) no deja asiento, pero no decía qué pasa con los contratos de esa persona. **Los contratos forman parte de la ficha** y tampoco dejan asiento:
+
+| Lectura | ¿Asiento? | Por qué |
+|---|---|---|
+| `GET /employees/{uuid}/contracts` | No | Falla la condición 3, como la ficha: es una persona y no su registro horario |
+
+- **Por qué es la misma lectura.** Un contrato son las horas semanales y anuales, el tipo de jornada y su vigencia (RF-GP-01). Son datos laborales del mismo nivel que la ficha y no son una categoría especial. Los lee quien ya puede abrir la ficha (`rrhh+`), y quien puede abrir la ficha puede listar el índice, que sí deja asiento. El argumento de la Decisión vale igual.
+- **Lo que no cambia.** Escribir un contrato sigue dejando su asiento. Un conjunto de contratos que salga del proceso, como el informe de horas trabajadas frente a las contratadas, sí deja asiento por la condición 3, con el informe del que forma parte.
+- **Lo que no cubre.** Las **ausencias** no entran en esta enmienda. Pueden llevar un dato de salud (ADR-060), y si su lectura individual debe dejar asiento es otra pregunta.
+- **Así está hoy el código.** `EmploymentContractController::index` no llama al puerto `PersonalDataAccessLog`. Esta enmienda escribe la decisión, no cambia el comportamiento.
