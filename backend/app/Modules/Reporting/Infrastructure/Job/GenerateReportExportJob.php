@@ -144,6 +144,9 @@ final class GenerateReportExportJob implements ShouldQueue
         $startedAt = microtime(true);
 
         // El documento sale en el idioma de la INSTALACION. Ver el docblock.
+        // El trabajador de Horizon es un proceso largo: el idioma anterior se
+        // repone al terminar para no imponerselo a los trabajos que vengan.
+        $previousLocale = $app->getLocale();
         $app->setLocale($locales->current()->default);
 
         try {
@@ -178,6 +181,8 @@ final class GenerateReportExportJob implements ShouldQueue
             $metrics->failed(class_basename(self::class));
 
             return;
+        } finally {
+            $app->setLocale($previousLocale);
         }
 
         /*
