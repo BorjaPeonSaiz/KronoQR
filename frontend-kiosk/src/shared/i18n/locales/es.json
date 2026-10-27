@@ -118,7 +118,7 @@
   },
   "diagnostics": {
     "trigger": {
-      "ariaLabel": "Abrir diagnóstico del quiosco (mantén pulsado 3 segundos)"
+      "ariaLabel": "{time}: abrir diagnóstico del quiosco (mantén pulsado 3 segundos)"
     },
     "title": "Diagnóstico del quiosco",
     "back": "Volver a fichar",
