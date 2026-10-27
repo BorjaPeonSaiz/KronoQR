@@ -354,6 +354,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 - **Decidido (18-10-2026):** firma `--responsible` para `product:export-all`, `compliance:legal-export` y `credentials:revoke` en el bloque 35 de la 2.3.0 (tras el B7). El resto sigue como `system` (doc 07 §6).
 
+### Anotado en el bloque 20 de la 2.3.0 (27-10-2026, revisión de seguridad de la reapertura de RN-19)
+
+- **Huella de las demás funciones guarda** (`arquitecto-dominio` + `migracion-segura`): `work-record-privileges.sh` y `product:doctor` comparan ya el cuerpo de `incidents_guard_transition` por huella (`KQ_INCIDENT_REOPENING_FINGERPRINT`). Las otras (`shift_entries_guard_*`, `incidents_guard_insert`, `zz_sites_guard_timezone`, `*_guard_anonymized*`, las `SECURITY DEFINER`) siguen vigiladas solo por existencia, activación y `SECURITY DEFINER`/`search_path`: un `CREATE OR REPLACE` que las vacíe pasa. No se hizo aquí porque cada una la redefine una migración distinta y la huella esperada depende de cuáles estén aplicadas (una constante por función y por migración, en el script y en PHP).
+- **`incident_context_differs_from_audit` en §4** (`arquitecto-dominio`): residuo aceptado en la enmienda del 27-10 de ADR-057 (reescribir el `context` de una `rejected_pin_scan` no trabajada por persona con dos `UPDATE`). Diseño propuesto en el ADR; toca `WorkRecordDiscrepancy`, `DatabaseWorkRecordAuditSource`, métrica y prueba de Prometheus, runbook y guía de operación es/en.
+
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
 
 - **Integrados:** B18 (#162: CSP por ubicación, cosign *keyless* de imágenes y de `SHA256SUMS`, Redis por digest),
