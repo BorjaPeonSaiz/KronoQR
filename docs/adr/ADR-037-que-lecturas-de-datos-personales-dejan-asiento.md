@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `Shared/Application/Port/PersonalDataAccessLog` y sus llamantes · `Identity/Application/UseCase/CredentialStatusBoard` · `Workforce/Application/Query/EmployeeQueries` · `Compliance/Infrastructure/Persistence/DatabaseAuditTrail` |
 | **Requisitos** | RS-05, RL-15, RL-05, RF-QR-08, RF-GP-01, RF-PA-03, RF-IN-05 (enmienda del 18-10-2026), RF-ID-10 y RF-IN-06 (enmienda del 21-10-2026) |
+| **Enmiendas** | Matizada por [ADR-041](ADR-041-descarga-de-ficheros-diferidos-con-enlace-de-un-solo-uso.md): cada descarga de un fichero diferido deja su asiento `report_export.downloaded` (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 

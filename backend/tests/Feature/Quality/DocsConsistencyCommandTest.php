@@ -20,7 +20,7 @@ use Tests\Feature\Quality\Support\Commands;
 /**
  * Monta un repositorio de mentira coherente y apunta la configuracion a el.
  *
- * @param  array{requisitos?: string, adrRows?: string, adrFiles?: list<string>, plan?: string}  $overrides
+ * @param  array{requisitos?: string, adrRows?: string, adrFiles?: list<string>, adrContent?: string, plan?: string}  $overrides
  */
 function useDocsTree(array $overrides = []): void
 {
@@ -49,7 +49,7 @@ function useDocsTree(array $overrides = []): void
         MD);
 
     foreach ($overrides['adrFiles'] ?? ['ADR-001-monolito-modular.md'] as $file) {
-        file_put_contents($docs.'/adr/'.$file, "# Decision\n");
+        file_put_contents($docs.'/adr/'.$file, $overrides['adrContent'] ?? "# Decision\n");
     }
 
     file_put_contents($plan.'/00-fase-0.md', $overrides['plan'] ?? <<<'MD'
@@ -117,6 +117,41 @@ it('detecta un ADR escrito que ninguna fila del indice anuncia', function (): vo
 
     expect($exit)->toBe(1);
     expect($output)->toContain('ADR-031');
+})->group('RQ-12', 'RNF-M-04');
+
+it('detecta un indice que da por pendiente una decision que su ADR ya no tiene pendiente', function (): void {
+    // V3-AR-1 y V21-3-AR-4: el §4 decia «implementacion pendiente» de ADR-057
+    // cuando el ADR estaba implementado, y el comando no lo veia.
+    useDocsTree([
+        'adrRows' => '| **001** | **Monolito modular** *(aceptada; implementacion pendiente)* |',
+        'adrContent' => "# Decision\n\n| Campo | Valor |\n|---|---|\n| **Estado** | Aceptada e implementada |\n",
+    ]);
+
+    [$exit, $output] = Commands::run('docs:consistency --check');
+
+    expect($exit)->toBe(1);
+    expect($output)->toContain('ADR-001')->toContain('pendiente');
+})->group('RQ-12', 'RNF-M-04');
+
+it('detecta un ADR propuesto que el indice presenta como si estuviera en vigor', function (): void {
+    useDocsTree([
+        'adrRows' => '| **001** | **Monolito modular** *(aceptada)* |',
+        'adrContent' => "# Decision\n\n| **Estado** | Propuesta, pendiente de decision del propietario |\n",
+    ]);
+
+    [$exit, $output] = Commands::run('docs:consistency --check');
+
+    expect($exit)->toBe(1);
+    expect($output)->toContain('ADR-001')->toContain('propuesta');
+})->group('RQ-12', 'RNF-M-04');
+
+it('acepta un indice cuyo estado dice lo mismo que el ADR, aunque lo resuma', function (): void {
+    useDocsTree([
+        'adrRows' => '| **001** | **Monolito modular** *(aceptada; la prueba sigue pendiente)* |',
+        'adrContent' => "# Decision\n\n| **Estado** | Aceptada. Pendiente: la prueba de arquitectura |\n",
+    ]);
+
+    expect(Commands::run('docs:consistency --check')[0])->toBe(0);
 })->group('RQ-12', 'RNF-M-04');
 
 it('detecta un requisito que ninguna tarea del plan construye', function (): void {

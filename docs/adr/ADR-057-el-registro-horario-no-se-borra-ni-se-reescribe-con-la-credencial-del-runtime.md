@@ -297,3 +297,16 @@ El residuo es el mismo que el de `work_record_purge_batch`. Con la credencial de
 - **Un *trigger* más, con la misma función para dos momentos:** `shift_entries_guard_duration_insert` (`AFTER INSERT`) y `shift_entries_guard_duration_close` (`AFTER UPDATE … WHEN (OLD.clocked_out_at IS NULL)`). Los dos rechazan con `23514` una fila cuya duración no es `div(floor(epoch(salida)) − floor(epoch(entrada)), 60)`, o que tiene duración sin salida o salida sin duración. Es la cuenta de `ElapsedMinutes::between()` (RN-09), y `ShiftEntryDurationGuardTest` las ata con las marcas que separan las dos formas de redondear (migración `2026_10_25_100000`).
 - **Un *trigger* y no un `CHECK`.** Las filas anteriores no se reescriben (regla dura 5), y una descuadrada es la evidencia que §4 tiene que encontrar. Un `CHECK` validado haría fallar la actualización de una instalación con una sola de esas filas. Uno `NOT VALID` rige en cada `UPDATE`, y el `upsert` de `EloquentWorkDayRepository` reescribe en cada fichaje los tramos cerrados de la jornada, así que un tramo antiguo descuadrado bloquearía los fichajes de ese día.
 - **Lo que queda:** las filas escritas antes de esta nota siguen como están. El repositorio conserva su duración guardada (el `CASE` de §2) y §4 la denuncia en el campo `duration_minutes` cuando no cuadra con las marcas auditadas. Ninguna fila nueva puede ya divergir.
+
+## Nota del 27-10-2026 (2.3.0, bloque 20): la tabla `migrations` en §1
+
+**No cambia ninguna decisión: recoge en §1 un privilegio que ya está en vigor** (V6-AR-5 de la verificación final de la 2.2.0). La tabla de §1 enumeraba las tablas del registro horario y dejaba fuera `migrations`. De ella dependen ADR-054 y la propia puesta en marcha de este ADR. Quien escribe en `migrations` decide qué ejecuta el migrador en la actualización siguiente. Si inserta el nombre de una migración futura, sus `REVOKE` no llegan a aplicarse. Si borra una fila, se repite una migración.
+
+| Tabla | `SELECT` | `INSERT` | `UPDATE` | `DELETE` |
+|---|---|---|---|---|
+| `migrations` | sí | **no** | **no** | **no** |
+
+- **Dueño:** el rol de migración (`fichaje_migrator`, ADR-033 y ADR-042). Es el único que escribe en ella, desde el servicio `migrate`. El runtime solo la lee. Tampoco tiene `TRUNCATE`.
+- **Dónde se aplica:** en la migración `2026_10_09_100000_revoke_application_writes_on_migrations_table` y en la de provisión de privilegios (`2026_08_19_099000`), para que volver a ejecutar esta última no devuelva el privilegio.
+- **Dónde se comprueba:** `update.sh` (`verify_privileges … migrations`) rechaza que el rol de la aplicación tenga `INSERT` o `UPDATE`, por tabla o por columna, o `DELETE` o `TRUNCATE` sobre `migrations`, y lo repara antes de seguir (`repair_migrations_privileges`, V4-SC-1).
+- **Prueba:** `backend/tests/Integration/Schema/MigrationsTablePrivilegesTest.php`.

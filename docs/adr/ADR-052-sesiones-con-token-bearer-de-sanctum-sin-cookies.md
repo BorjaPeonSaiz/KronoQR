@@ -87,3 +87,11 @@ Con este modelo, **un script ajeno que llegue a ejecutarse en una SPA lee el tok
 - **Verificación final:** la de seguridad lo comprueba en `main` ([2.2.0-verificacion-final-tanda-4.md](../verificacion/2.2.0-verificacion-final-tanda-4.md), «Suplantación: ADR-052, Bearer sin cookies»: `config/sanctum.php` sin `stateful` ni `guard`, y ninguna `Set-Cookie` en `/api/v1/health` ni en `/auth/login`). La de arquitectura da A6-1 por corregido con este ADR ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md)).
 - **Siguen pendientes para la 2.2.1**, y no son de la revisión: la regla de ESLint contra `localStorage` en el panel y el portal (Consecuencias) y la CSP por ubicación ([`2.2.1-lista-cambios.md`](../verificacion/2.2.1-lista-cambios.md) §3).
 - La cabecera se actualiza por esta nota.
+
+## Nota del 27-10-2026 (2.3.0, bloque 20): la guarda contra el almacenamiento del navegador existe
+
+**La decisión no cambia.** La pendiente de Consecuencias («nada impide hoy que el panel o el portal empiecen a usar `localStorage`») está cerrada desde el 16-10-2026, en la 2.2.1 (V21-6-AR-5 de la verificación final de la 2.2.1).
+
+- **La regla** es `no-browser-storage`, de `packages/web-kit/eslint/no-browser-storage.js`. Es una sola definición, y la usan `frontend-admin`, `frontend-portal` y el propio `web-kit`. Prohíbe `localStorage` **y** `sessionStorage`, como global y como `window.`, `globalThis.` o `self.`, en todo `src/`. Va más allá de lo que proponía este ADR: la sesión es la única excepción, no la norma.
+- **Las excepciones** se declaran fichero a fichero en el `eslint.config.js` de cada aplicación, con su motivo. Hoy son cuatro: la sesión de cada SPA en `sessionStorage` (`frontend-admin/src/features/auth/session.store.ts` y `frontend-portal/src/features/login/session.store.ts`, la decisión de §1), la marca técnica de recarga del panel en `sessionStorage` (`frontend-admin/src/router/chunkLoadRecovery.ts`) y la caché de la marca en `localStorage` (`packages/web-kit/src/brandingState.ts`), que no lleva datos personales.
+- **Su prueba** es `packages/web-kit/tests/unit/noBrowserStorage.spec.ts`. ESLint la aplica en `make quality` y en la CI.

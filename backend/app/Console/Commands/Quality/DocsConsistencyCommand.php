@@ -81,6 +81,11 @@ final class DocsConsistencyCommand extends Command
             $this->problems[] = 'docs/adr/'.$file.' existe y ninguna fila del §4 del doc 02 lo anuncia. '
                 .'Añade su fila: el §4 es el indice por el que se entra a las decisiones.';
         }
+
+        foreach ($registry->statusDivergences() as $number => $divergence) {
+            $this->problems[] = 'ADR-'.$number.': '.$divergence.'. Pon al dia el estado en cursiva de su '
+                .'fila del §4 del doc 02: quien entra por el indice lee un estado que la decision ya no tiene.';
+        }
     }
 
     /**

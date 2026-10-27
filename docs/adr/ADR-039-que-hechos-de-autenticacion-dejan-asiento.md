@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `Shared/Application/Port/AuthenticationJournal` y sus cuatro llamantes · `Compliance/Infrastructure/Adapter/AuditedAuthenticationJournal` · `Compliance/Infrastructure/Audit/DeferredAuditEntry` · `Compliance/Domain/ValueObject/AuditAction` · `Shared/Domain/ValueObject/AuthChannel` |
 | **Requisitos** | RS-03, RS-05, RS-07, RS-12, RL-11, RNF-P-02, OWASP A09, `T1110.001` |
+| **Enmiendas** | Precisada por [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) (el PIN rechazado conserva a quién correspondía el código, solo en la base de datos) y por [ADR-051](ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md) (un hecho nuevo: el fallo de la contraseña actual en el cambio de contraseña) (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 

@@ -7,6 +7,7 @@
 | **Decide** | `producto-licencia` con `seguridad-cumplimiento` |
 | **Afecta a** | Tareas 0.5, 1.11, 1.12 y 1.13 · [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §3.3 y §7.5 · **Regla dura 12** de `CLAUDE.md` |
 | **Requisitos** | RF-ID-05, RF-ID-06, RF-ID-07, RF-ID-08, RF-ID-09, RF-AT-11, RF-GP-01, RL-05, RS-12 |
+| **Enmiendas** | Precisada por [ADR-050](ADR-050-portal-accesible-desde-internet.md): PIN de 6 u 8 cifras, bloqueo por origen y portal expuesto a internet como decisión avisada del cliente; las cifras de este ADR (10⁶, red interna) son las de antes (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.4, 1.7, 1.9 y 3.5 · [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §6 · **Reglas duras 8, 9 y 19** de `CLAUDE.md` |
 | **Requisitos** | RF-AT-07, RF-AT-09, RF-AT-10, RF-KI-03, RF-KI-04, RN-15, RNF-D-01, RQ-03, RQ-05 |
+| **Enmiendas** | Precisada por [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md): ningún fichaje sale de la cola sin un desenlace del servidor (punto 3) (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

@@ -9,6 +9,7 @@
 | **Requisitos** | RF-PD-14, RL-20, RF-IN-06, RF-PR-03, RF-PR-04, RF-PD-11, RF-PD-12, RL-02, RL-12, RL-14, RL-15, RL-19, reglas duras 5, 6, 13, 16 y 21 |
 | **Precisa** | [ADR-041](ADR-041-descarga-de-ficheros-diferidos-con-enlace-de-un-solo-uso.md) (decide **cómo** se descarga un fichero diferido; este decide **dónde vive**, y en su §6 `purged` pasa a significar también «el fichero desapareció»), [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) (dónde queda el paquete y cuándo se barre), [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (qué monta cada servicio; ver «Encaje con ADR-042») |
 | **Hallazgos** | R3-PL-01, R3-PL-02, R3-BE-04, R4-SC-02, R5-DV-03, R6-AR-03, R6-PL-05 · se cruza con A3-R2 y R5-DV-04 |
+| **Enmiendas** | Precisada por [ADR-049](ADR-049-formato-autenticado-kqe1-de-las-copias-y-subclave-del-wal.md): reparto de `BACKUP_PATH` y cierre de A3-R2 (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 

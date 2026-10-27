@@ -34,15 +34,90 @@ final readonly class AdrRegistry
     /** Nombre de fichero: `ADR-026-la-correccion-supersede.md`. */
     private const string FILE_NAME = '/^ADR-(?<number>\d{3})-[a-z0-9-]+\.md$/';
 
+    /** El estado que la fila del §4 resume en cursiva: `*(aceptada; … pendiente)*`. */
+    private const string ROW_STATUS = '/\*\((?<status>.*?)\)\*/u';
+
+    /** La fila «Estado» de la cabecera del ADR. */
+    private const string FILE_STATUS = '/^\|\s*\*\*Estado\*\*\s*\|(?<status>[^\n]*)$/mu';
+
+    /**
+     * Palabras de estado que el indice no puede afirmar si el ADR no las dice.
+     * Un indice que dice «pendiente» o «propuesta» de una decision ya aceptada e
+     * implementada manda a quien lo lee a esperar algo que ya ocurrio.
+     */
+    private const array INDEX_STATUS_WORDS = ['pendiente', 'propuesta', 'rechazada', 'sustituida'];
+
+    /**
+     * Palabras de estado que el ADR no puede decir sin que el indice las diga:
+     * una decision que no esta en vigor no puede figurar en el indice como si lo
+     * estuviera.
+     */
+    private const array FILE_STATUS_WORDS = ['propuesta', 'rechazada', 'sustituida'];
+
     /**
      * @param  array<array-key, string>  $cited  Numero -> titulo de la fila del §4.
      * @param  array<array-key, string>  $files  Numero -> nombre del fichero de docs/adr/.
+     * @param  array<array-key, string>  $states  Numero -> fila «Estado» del ADR.
      */
-    private function __construct(public array $cited, public array $files) {}
+    private function __construct(public array $cited, public array $files, public array $states = []) {}
 
     public static function fromPaths(string $stackFile, string $adrDirectory): self
     {
-        return new self(self::rows($stackFile), self::filesIn($adrDirectory));
+        $files = self::filesIn($adrDirectory);
+
+        return new self(self::rows($stackFile), $files, self::statesOf($adrDirectory, $files));
+    }
+
+    /**
+     * Filas del §4 cuyo estado en cursiva dice algo que la fila «Estado» de su
+     * ADR no dice, o al reves. Numero -> descripcion de la divergencia.
+     *
+     * Se compara por palabras y no por frases: el indice resume y el ADR
+     * detalla, y lo unico que se exige es que el resumen no afirme un estado
+     * que el ADR ya no tiene.
+     *
+     * @return array<array-key, string>
+     */
+    public function statusDivergences(): array
+    {
+        $divergences = [];
+
+        foreach ($this->states as $number => $state) {
+            $title = $this->cited[$number] ?? null;
+
+            if ($title === null) {
+                continue;
+            }
+
+            $rowStatus = preg_match(self::ROW_STATUS, $title, $match) === 1 ? mb_strtolower($match['status']) : '';
+            $fileStatus = mb_strtolower($state);
+
+            $divergence = self::wordOnlyIn($rowStatus, $fileStatus, self::INDEX_STATUS_WORDS, 'el indice dice «%s» y la fila «Estado» del ADR no')
+                ?? self::wordOnlyIn($fileStatus, $rowStatus, self::FILE_STATUS_WORDS, 'la fila «Estado» del ADR dice «%s» y el indice no');
+
+            if ($divergence !== null) {
+                $divergences[$number] = $divergence;
+            }
+        }
+
+        return $divergences;
+    }
+
+    /**
+     * La primera palabra de `$words` que `$says` contiene y `$silent` no, ya
+     * escrita en `$message`; `null` si no hay ninguna.
+     *
+     * @param  list<string>  $words
+     */
+    private static function wordOnlyIn(string $says, string $silent, array $words, string $message): ?string
+    {
+        foreach ($words as $word) {
+            if (str_contains($says, $word) && ! str_contains($silent, $word)) {
+                return \sprintf($message, $word);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -142,5 +217,23 @@ final readonly class AdrRegistry
         ksort($files);
 
         return $files;
+    }
+
+    /**
+     * La fila «Estado» de cada ADR, o cadena vacia si no la tiene.
+     *
+     * @param  array<array-key, string>  $files
+     * @return array<array-key, string>
+     */
+    private static function statesOf(string $directory, array $files): array
+    {
+        $states = [];
+
+        foreach ($files as $number => $file) {
+            $content = (string) file_get_contents($directory.'/'.$file);
+            $states[$number] = preg_match(self::FILE_STATUS, $content, $match) === 1 ? trim($match['status']) : '';
+        }
+
+        return $states;
     }
 }

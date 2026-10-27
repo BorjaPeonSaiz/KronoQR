@@ -23,7 +23,7 @@ Desde el bloque 13 de la 2.2.0 hay además migraciones que **no son atómicas**:
 `update.sh` aplica los siete pasos de doc 02 §11.6.4 con el 2 y el 3 intercambiados respecto a la redacción original:
 
 1. **Precondiciones**, sin tocar nada: versión de origen en `versions.txt`, espacio, servicios sanos, cadena de auditoría íntegra, clave de copia presente.
-2. **Mantenimiento** (`phase_maintenance`): la API de gestión responde `503` y se paran `horizon` y `scheduler`. Los quioscos encolan (regla dura 19, ADR-008).
+2. **Mantenimiento** (`phase_maintenance`): la API de gestión responde `503` *(toda la API, `/scan` incluido, salvo las dos sondas: [nota del 27-10-2026](#nota-del-27-10-2026-230-bloque-20-el-mantenimiento-afecta-a-toda-la-api))* y se paran `horizon` y `scheduler`. Los quioscos encolan (regla dura 19, ADR-008).
 3. **Copia lógica cifrada y verificada** de esta ejecución (`phase_backup`). Es bloqueante y no tiene ninguna bandera para omitirla.
 4. **Migraciones versión a versión** (`phase_migrations`), con el servicio `migrate` (ADR-042) y un punto de control entre versiones: una marca en el informe y un lote de `migrations` por versión.
 5. **Arranque de la versión nueva sin borde**, verificación desde dentro (salud, versión, cadena de auditoría, restricciones, privilegios y `product:doctor`), y solo después el borde y los procesos de fondo.
@@ -83,3 +83,9 @@ Esta nota precisa dos cosas que el texto de arriba no cuenta. La decisión no ca
 - **El mantenimiento afecta a toda la API**, y no solo a la de gestión: el fichaje (`/scan`) también responde `503`, y solo siguen respondiendo `/api/v1/health` y `/api/v1/ready`. El quiosco lo cubre encolando (regla dura 19, ADR-008).
 - **Lo que dura.** En la etapa ⑧b de la CI, con la base casi vacía, la ventana fue de 51 a 53 s en las tres últimas ejecuciones verdes (18-10-2026; por ejemplo `workers=11s backup=3s migrations=9s start=28s`), y `update.sh` entero tardó entre 63 y 65 s. La copia previa va dentro de la ventana y crece con la base, así que en un servidor real la ventana depende de los datos y del hardware. Cada instalación tiene su cifra en el informe (`Ventana de mantenimiento: N s`).
 - **Después de la actualización.** Las tablets con la PWA anterior pasan a modo urgente y recargan a cualquier hora, con la cola vacía y sin uso (excepción de RF-KI-07, nota de ADR-012 de esta misma fecha). Por eso `update.sh` se ejecuta fuera de los turnos.
+
+## Nota del 27-10-2026 (2.3.0, bloque 20): el mantenimiento afecta a toda la API
+
+**La decisión no cambia: se corrige el alcance que dice el paso 2** (V6-AR-2 de la verificación final de la 2.2.0). El paso 2 decía «la API de gestión responde `503`», y la nota del 18-10-2026 ya lo precisaba. Desde esta nota lo dice también el propio paso. En el código, `preventRequestsDuringMaintenance` está en `backend/bootstrap/app.php` y deja fuera solo `api/v1/health` y `api/v1/ready`. El `503` lo dan el panel, el portal y el quiosco, con `/scan`, `/scan/batch` y `/scan/pin` incluidos.
+
+**Tiene que ser así, y no es un efecto lateral.** El razonamiento del punto 1 («todo lo que ocurre durante la ventana sigue en las colas de los quioscos») solo se cumple si el servidor rechaza también los fichajes. Si `/scan` quedara fuera del mantenimiento, un fichaje aceptado durante la ventana existiría en la base migrada y no en la copia. La vuelta atrás lo borraría con la persona ya confirmada en la tablet. **Quien toque el mantenimiento no puede excluir `/scan`.** Lo vigila `backend/tests/Feature/Health/MaintenanceModeTest.php`: con el mantenimiento puesto, `/scan` responde `503` y las dos sondas no.

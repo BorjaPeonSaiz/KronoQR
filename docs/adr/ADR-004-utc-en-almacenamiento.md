@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 0.2, 1.1, 1.3 y 2.8 · [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §3.2 y Anexo B · Reglas duras 2 y 3 de `CLAUDE.md` |
 | **Requisitos** | RN-04, RN-05, RN-09, RQ-02, RL-01 |
+| **Enmiendas** | Precisada por [ADR-056](ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md): la zona de presentación de un instante pasado es la del centro, que queda fija desde el primer tramo (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

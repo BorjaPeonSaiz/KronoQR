@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.1 y 0.2 · Regla dura 2 de `CLAUDE.md` |
 | **Requisitos** | RN-04, RN-05, RN-09, RQ-01 |
+| **Enmiendas** | Precisada por [ADR-055](ADR-055-el-veredicto-de-cumplimiento-lo-da-la-vista-y-la-bandeja-no-lo-contradice.md) §3: una excepción cerrada para las reglas de negocio de `Shared/Domain`, con su lista y su prueba de arquitectura (referencia de vuelta añadida el 27-10-2026) |
 
 > Los ADR-001 a ADR-020 provienen de la tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4 y se redactaron en la tarea 0.6. Este es el primero que nace de una decisión tomada al desarrollar el plan de implementación.
 
