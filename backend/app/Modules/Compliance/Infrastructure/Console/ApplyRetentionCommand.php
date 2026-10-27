@@ -189,7 +189,7 @@ final class ApplyRetentionCommand extends Command
         }
 
         foreach ($report->notes as $note) {
-            $this->warn($note);
+            $this->warn($this->text('report.observations.'.$note->kind->value, $note->parameters));
         }
 
         $this->line('');

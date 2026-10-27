@@ -88,6 +88,11 @@ return [
         'total_to_purge' => 'TOTAL de registros a purgar: :count',
         'total_purged' => 'TOTAL de registros purgados: :count',
         'notes' => 'Observaciones',
+        'observations' => [
+            'empty_audit_partition' => 'Partición audit_log_:year vacía: no se sella ni se suelta.',
+            'orphaned_personnel_photos' => ':count foto(s) de fichas minimizadas no se pudieron borrar del disco: '
+                .'la ficha ya no las apunta. El evento retention.personnel_photo_orphaned del log dice de qué employee_uuid.',
+        ],
         'nothing_deleted' => 'No se ha borrado nada. Para ejecutar ESTA purga, con la confirmacion del responsable:',
         'phrase_expires' => [
             'La frase caduca cuando cambia el corte o el perfil de cumplimiento: se ejecuta lo que',

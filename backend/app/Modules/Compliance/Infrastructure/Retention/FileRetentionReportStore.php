@@ -153,7 +153,7 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             $lines[] = str_repeat('-', mb_strlen($notes));
 
             foreach ($report->notes as $note) {
-                $lines[] = '  · '.$note;
+                $lines[] = '  · '.$this->text('observations.'.$note->kind->value, $note->parameters);
             }
 
             $lines[] = '';

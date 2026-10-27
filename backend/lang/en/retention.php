@@ -88,6 +88,11 @@ return [
         'total_to_purge' => 'TOTAL records to purge: :count',
         'total_purged' => 'TOTAL records purged: :count',
         'notes' => 'Notes',
+        'observations' => [
+            'empty_audit_partition' => 'Partition audit_log_:year is empty: it is neither sealed nor released.',
+            'orphaned_personnel_photos' => ':count photo(s) of minimised personnel records could not be deleted from disk: '
+                .'the record no longer points to them. The retention.personnel_photo_orphaned log event says which employee_uuid.',
+        ],
         'nothing_deleted' => 'Nothing has been deleted. To run THIS purge, with the confirmation of the person responsible:',
         'phrase_expires' => [
             'The phrase expires when the cutoff or the compliance profile changes: what runs is what',
