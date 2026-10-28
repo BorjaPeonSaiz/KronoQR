@@ -24,8 +24,9 @@ use Laravel\Sanctum\PersonalAccessToken;
  * estructura solo daria de que hablar al cliente.
  *
  * **Aqui se resuelve el canal y el sujeto, y nada mas.** Quien cierra sesion es
- * o una cuenta de gestion o un empleado del portal —el endpoint acepta los dos
- * tokens—, y esa distincion solo se puede hacer donde esta la peticion. Lo que
+ * una cuenta de gestion (canal `management`), un empleado del portal (`portal`)
+ * o un quiosco emparejado (`device`, con su UUID como `device_uuid` y nunca como
+ * `employee_uuid`), y esa distincion solo se puede hacer donde esta la peticion. Lo que
  * se hace con ella —si deja asiento y con que actor— lo decide el caso de uso y
  * el escritor de auditoria, no este fichero.
  *
@@ -72,6 +73,14 @@ final class LogoutController extends Controller
      */
     private const string MANAGEMENT_TABLE = 'users';
 
+    /**
+     * La tabla del `tokenable` de un quiosco emparejado. Su cierre va al canal
+     * `device`, con el UUID del dispositivo como `device_uuid`: antes caia en el
+     * descarte del portal y salia como si fuera un empleado (tarea 22.6). El
+     * modelo vive en `Kiosk` y aqui no se importa, por lo mismo que arriba.
+     */
+    private const string DEVICE_TABLE = 'devices';
+
     public function __invoke(LogoutRequest $request, LogOutHandler $handler): Response
     {
         $user = $request->user();
@@ -89,9 +98,13 @@ final class LogoutController extends Controller
 
             $handler->handle(
                 $token->id,
-                $user->getTable() === self::MANAGEMENT_TABLE
-                    ? AuthChannel::MANAGEMENT
-                    : AuthChannel::PORTAL,
+                match ($user->getTable()) {
+                    self::MANAGEMENT_TABLE => AuthChannel::MANAGEMENT,
+                    self::DEVICE_TABLE => AuthChannel::DEVICE,
+                    // `employees`: lo unico que queda tras SessionPolicy y el
+                    // descarte del soporte de arriba.
+                    default => AuthChannel::PORTAL,
+                },
                 is_string($uuid) && $uuid !== '' ? $uuid : null,
             );
         }

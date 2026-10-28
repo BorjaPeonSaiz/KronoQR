@@ -18,11 +18,14 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * silencioso en un fallo.
  */
 
-it('nombra los tres canales exactamente como los nombran la metrica y el asiento', function (): void {
+it('nombra los cuatro canales exactamente como los nombran la metrica, el log y el asiento', function (): void {
+    // `device` no es una puerta de autenticacion —el quiosco se empareja, no
+    // teclea credenciales— y solo aparece en el cierre de su propia sesion: las
+    // series de la metrica siguen siendo las de los otros tres.
     expect(array_map(
         static fn (AuthChannel $channel): string => $channel->value,
         AuthChannel::cases(),
-    ))->toBe(['management', 'portal', 'kiosk_pin']);
+    ))->toBe(['management', 'portal', 'kiosk_pin', 'device']);
 })->group('RS-12');
 
 it('nombra los cuatro desenlaces exactamente como los nombra la etiqueta outcome', function (): void {
@@ -35,7 +38,10 @@ it('nombra los cuatro desenlaces exactamente como los nombra la etiqueta outcome
 it('resuelve el tipo de sujeto por el canal, para que no lo declare quien deja el rastro', function (): void {
     expect(AuthChannel::MANAGEMENT->subjectType())->toBe('user')
         ->and(AuthChannel::PORTAL->subjectType())->toBe('employee')
-        ->and(AuthChannel::KIOSK_PIN->subjectType())->toBe('employee');
+        ->and(AuthChannel::KIOSK_PIN->subjectType())->toBe('employee')
+        // Un dispositivo no es una persona de la plantilla: su UUID va como
+        // `device_uuid`, nunca como `employee_uuid`.
+        ->and(AuthChannel::DEVICE->subjectType())->toBe('device');
 })->group('RS-12');
 
 it('solo audita los hechos de sesion del panel', function (): void {
@@ -45,7 +51,8 @@ it('solo audita los hechos de sesion del panel', function (): void {
     // por aqui: lo decide el servidor, asi que su actor es verdadero.
     expect(AuthChannel::MANAGEMENT->sessionEventsAreAudited())->toBeTrue()
         ->and(AuthChannel::PORTAL->sessionEventsAreAudited())->toBeFalse()
-        ->and(AuthChannel::KIOSK_PIN->sessionEventsAreAudited())->toBeFalse();
+        ->and(AuthChannel::KIOSK_PIN->sessionEventsAreAudited())->toBeFalse()
+        ->and(AuthChannel::DEVICE->sessionEventsAreAudited())->toBeFalse();
 })->group('RS-13', 'RS-12', 'RS-05');
 
 it('traduce cada puerta del PIN a su canal, en un solo sitio', function (): void {

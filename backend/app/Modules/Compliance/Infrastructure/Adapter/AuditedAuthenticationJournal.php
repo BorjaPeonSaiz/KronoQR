@@ -345,7 +345,11 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
                 // `employee_uuid` (doc 02 §8.1): una consulta por esa
                 // clave en Loki tiene que encontrar tambien sus accesos. Siempre
                 // presente en esos canales, aunque sea nulo, por lo mismo.
-                ...($channel !== AuthChannel::MANAGEMENT ? ['employee_uuid' => $subjectUuid] : []),
+                // En el canal `device` el sujeto es el quiosco y va como
+                // `device_uuid`, la clave con la que el resto del producto lo
+                // registra (doc 02 §8.1): un dispositivo no es un empleado, y
+                // ponerlo en `employee_uuid` falseaba la traza de la plantilla.
+                ...($channel !== AuthChannel::MANAGEMENT ? [$channel->subjectType().'_uuid' => $subjectUuid] : []),
                 'ip_hash' => $this->addresses->of($this->context->ip()),
                 ...$extra,
             ]);
