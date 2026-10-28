@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Compliance\DevelopmentSeedChecks;
 use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaSnapshot;
 
 /*
  * Todas las migraciones vuelven atras y se reaplican (RF-PD-10, tarea 5.7), y
@@ -21,6 +22,18 @@ use Tests\Support\Database\CommittedDatabase;
  * Lo que se afirma del esquema resultante es lo que el §9.4 llama invariantes
  * de base de datos: las restricciones de RN-01 y RN-02 estan presentes y
  * VALIDAS, y la cadena de auditoria verifica.
+ *
+ * ## El esquema vuelve a ser el mismo, paso a paso
+ *
+ * Que el ciclo termine no basta: un `down()` que deje un `GRANT`, una funcion,
+ * un indice o una restriccion con otra definicion lo pasaba igual (R5-BD-04).
+ * Por eso los `down()` se deshacen **de uno en uno** y se toma el catalogo tras
+ * cada uno ({@see SchemaSnapshot}: tablas, columnas, indices, restricciones,
+ * funciones, *triggers*, tipos, estadisticas y privilegios). Despues los `up()`
+ * se aplican tambien de uno en uno, y tras cada uno el catalogo tiene que ser
+ * **identico** al que dejo el `down()` correspondiente; tras el ultimo, al del
+ * principio. Una diferencia nombra la migracion cuyo `down()` hay que mirar.
+ * Y con todas deshechas solo queda la tabla `migrations`.
  *
  * ## Una sola siembra para dos comprobaciones
  *
@@ -75,28 +88,74 @@ it('deshace todas las migraciones y las reaplica sobre la semilla completa, que 
     }
 
     $entries = $migrator->table('shift_entries')->count();
-    $applied = $migrator->table('migrations')->count();
+
+    /** @var list<string> $migrations */
+    $migrations = $migrator->table('migrations')->orderBy('id')->pluck('migration')->all();
+    $applied = count($migrations);
 
     expect($entries)->toBeGreaterThan(1000)
         ->and($applied)->toBeGreaterThan(0);
 
-    // TODOS los down(), en orden inverso, sobre datos de verdad.
+    // El esquema completo, migrado por el camino normal: la referencia del
+    // ultimo paso de la vuelta.
+    $atHead = SchemaSnapshot::of($migrator);
+
+    // TODOS los down(), uno a uno y en orden inverso, sobre datos de verdad.
+    // `$afterDown[$k]` es el esquema con las `$k` primeras migraciones,
+    // alcanzado deshaciendo la `$k + 1`.
+    $afterDown = [];
     $rollbackStart = microtime(true);
-    [$rolledBack, $rollbackOutput] = Commands::run('migrate:rollback --database='.$name.' --step='.$applied);
+
+    for ($k = $applied - 1; $k >= 0; $k--) {
+        [$rolledBack, $rollbackOutput] = Commands::run('migrate:rollback --database='.$name.' --step=1');
+
+        expect($rolledBack)->toBe(0, $migrations[$k].': '.$rollbackOutput);
+
+        $afterDown[$k] = SchemaSnapshot::of($migrator);
+    }
+
     $rollbackSeconds = microtime(true) - $rollbackStart;
 
-    expect($rolledBack)->toBe(0, $rollbackOutput)
-        ->and($migrator->table('migrations')->count())->toBe(0)
+    expect($migrator->table('migrations')->count())->toBe(0)
         ->and($schema->hasTable('shift_entries'))->toBeFalse()
         ->and($schema->hasTable('audit_log'))->toBeFalse()
         ->and($schema->hasTable('employees'))->toBeFalse();
 
-    // Y todos los up() otra vez, desde cero.
+    // Sin ninguna migracion no queda nada del producto: ni una funcion, ni un
+    // tipo, ni un privilegio por omision; solo la tabla `migrations`.
+    $leftovers = array_values(array_filter(
+        $afterDown[0],
+        static fn (string $line): bool => ! str_starts_with($line, 'schema|')
+            && ! str_starts_with($line, 'extension|')
+            && preg_match('/\A(?:relation|column|index|constraint|sequence)\|migrations(?:_id_seq)?\|/', $line) !== 1,
+    ));
+
+    expect($leftovers)->toBe([], "Restos tras deshacer todas las migraciones:\n".implode("\n", $leftovers));
+
+    // Y todos los up() otra vez, desde cero y uno a uno. Tras cada uno, el
+    // esquema tiene que ser el mismo al que se llego deshaciendo: si no, el
+    // down() de la migracion siguiente dejo un residuo o se dejo algo sin
+    // deshacer (R5-BD-04). Tras el ultimo, el mismo que al principio.
+    $mismatches = [];
     $migrateStart = microtime(true);
-    [$migrated, $migrateOutput] = Commands::run('migrate --database='.$name);
+
+    foreach ($migrations as $k => $migration) {
+        [$migrated, $migrateOutput] = Commands::run('migrate --database='.$name.' --path=database/migrations/'.$migration.'.php');
+
+        expect($migrated)->toBe(0, $migration.': '.$migrateOutput);
+
+        $expected = $k + 1 === $applied ? $atHead : $afterDown[$k + 1];
+        $differences = SchemaSnapshot::differences($expected, SchemaSnapshot::of($migrator));
+
+        if ($differences !== []) {
+            $culprit = $k + 1 === $applied ? 'la migracion completa' : 'deshacer '.$migrations[$k + 1];
+            $mismatches[] = $migration.' (frente a '.$culprit."):\n  ".implode("\n  ", array_slice($differences, 0, 20));
+        }
+    }
+
     $migrateSeconds = microtime(true) - $migrateStart;
 
-    expect($migrated)->toBe(0, $migrateOutput)
+    expect($mismatches)->toBe([], "El esquema no vuelve a ser el mismo:\n".implode("\n", $mismatches))
         ->and($migrator->table('migrations')->count())->toBe($applied)
         ->and($schema->hasTable('shift_entries'))->toBeTrue()
         ->and($migrator->table('shift_entries')->count())->toBe(0);

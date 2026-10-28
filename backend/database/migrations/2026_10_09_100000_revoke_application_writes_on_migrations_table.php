@@ -51,10 +51,16 @@ use Illuminate\Support\Facades\DB;
  * si se llega aqui, quien ejecuta es otro rol y el `REVOKE` no le quita nada al
  * propietario de la tabla.
  *
- * ## Reversible
+ * ## Reversible, sin devolver la escritura
  *
- * `down()` devuelve exactamente lo que habia: `INSERT, UPDATE, DELETE`. No toca
- * filas. `TRUNCATE` no se toca en ningun sentido: la provision nunca lo concedio.
+ * `down()` **no** devuelve `INSERT, UPDATE, DELETE` (cambio de la 2.3.0,
+ * bloque 21). Desde que la provision los retira tambien, una instalacion nueva
+ * no los tenia antes de esta migracion, y devolverlos al deshacerla dejaba un
+ * esquema distinto del que hubo (`MigrationsRoundTripTest`) y reabria V4-SC-1.
+ * En una instalacion anterior a esa correccion, deshacer esta migracion deja a
+ * la aplicacion sin una escritura que nunca uso. El `SELECT` explicito se
+ * conserva por lo mismo: con la provision tambien estaba. No toca filas.
+ * `TRUNCATE` no se toca en ningun sentido: la provision nunca lo concedio.
  */
 return new class extends Migration
 {
@@ -73,9 +79,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $this->limitLockWait();
-
-        DB::statement('GRANT INSERT, UPDATE, DELETE ON TABLE '.$this->table().' TO '.$this->applicationRole());
+        // Nada que deshacer: ver «Reversible, sin devolver la escritura».
     }
 
     private function table(): string

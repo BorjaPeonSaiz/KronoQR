@@ -159,7 +159,7 @@ it('volver a ejecutar la provision no devuelve la escritura sobre migrations', f
     }
 })->group('RF-PD-10', 'RS-07');
 
-it('su down() devuelve exactamente lo que habia y su up() lo vuelve a quitar', function (): void {
+it('su down() no devuelve la escritura, que una instalacion nueva tampoco tenia, y su up() se reaplica', function (): void {
     $name = config()->string('database.migrations.connection');
     $migrator = DB::connection($name);
 
@@ -170,12 +170,14 @@ it('su down() devuelve exactamente lo que habia y su up() lo vuelve a quitar', f
     try {
         [$back, $backOutput] = Commands::run('migrate:rollback --database='.$name.' --step='.$steps);
 
+        // La provision ya la retira: deshacer esta migracion deja el esquema
+        // de antes de ella, que tampoco tenia escritura (MigrationsRoundTripTest).
         expect($back)->toBe(0, $backOutput)
             ->and(migrationsTablePrivileges($migrator))->toMatchArray([
                 'SELECT' => true,
-                'INSERT' => true,
-                'UPDATE' => true,
-                'DELETE' => true,
+                'INSERT' => false,
+                'UPDATE' => false,
+                'DELETE' => false,
                 'TRUNCATE' => false,
             ]);
     } finally {

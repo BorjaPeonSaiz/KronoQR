@@ -96,5 +96,14 @@ return new class extends Migration
 
         // Con filas `fingerprint_match` esto falla y la reversion se detiene.
         $this->validateConstraint('discarded_scan_reports', self::CHECK);
+
+        // Y la columna vuelve a su anchura. Ya validada la restriccion, ningun
+        // valor pasa de los 13 caracteres de `employee_code`: estrecharla no
+        // puede fallar. Reescribe una tabla pequeña, y solo al deshacer.
+        DB::transaction(function (): void {
+            $this->limitLockWait();
+
+            DB::statement('ALTER TABLE discarded_scan_reports ALTER COLUMN attribution TYPE varchar(16)');
+        });
     }
 };
