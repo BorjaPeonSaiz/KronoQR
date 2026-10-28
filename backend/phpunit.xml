@@ -153,6 +153,21 @@
         -->
         <env name="REDIS_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
         <env name="DB_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
+        <!--
+            LA SUITE NO COMPARTE CLAVES DE REDIS CON EL ENTORNO DE DESARROLLO
+            (V21-4-BE-4). Las pruebas de metricas, del limitador y del latido
+            escriben en Redis y borran lo que escriben; con la base y el prefijo
+            de serie (0, 1 y `kronoqr-database-`) lo hacian en el mismo espacio
+            que la aplicacion de desarrollo, y `/metrics` de `make up` contaba
+            altas de administrador que solo habian ocurrido en Pest. Base 14 y 15
+            —las dos ultimas de las 16 de serie— y un prefijo propio: ni las
+            claves se cruzan ni un `KEYS`/`DEL` de una prueba alcanza las del
+            entorno. `TestRedisIsolationTest` (Feature) lo comprueba sobre el
+            cliente conectado, no sobre este fichero.
+        -->
+        <env name="REDIS_DB" value="14" force="true"/>
+        <env name="REDIS_CACHE_DB" value="15" force="true"/>
+        <env name="REDIS_PREFIX" value="kronoqr-pest-" force="true"/>
 
         <!--
             Claves de firma de credenciales para la suite (doc 02 §5.1).
@@ -216,6 +231,9 @@
         <server name="SESSION_DRIVER" value="array" force="true"/>
         <server name="REDIS_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
         <server name="DB_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
+        <server name="REDIS_DB" value="14" force="true"/>
+        <server name="REDIS_CACHE_DB" value="15" force="true"/>
+        <server name="REDIS_PREFIX" value="kronoqr-pest-" force="true"/>
 
         <!-- Las dos lineas o ninguna: ver el comentario de arriba. -->
         <server name="QR_SIGNING_KEY_CURRENT_ID" value="a3" force="true"/>
