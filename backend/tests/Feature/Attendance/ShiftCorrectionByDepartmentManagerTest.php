@@ -8,6 +8,7 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
@@ -44,7 +45,7 @@ beforeEach(function (): void {
  * Hotel con Cocina, que dirige el responsable, y Recepcion, que no; Ana en
  * Cocina con un tramo abierto y Lucia en Recepcion con otro.
  *
- * @return array{token: string, responsable_id: int, ana_open: string, lucia_open: string}
+ * @return array{token: string, responsable_id: int, ana_open: string, lucia: string, lucia_open: string}
  */
 function correccionDelResponsableEscenario(): array
 {
@@ -61,6 +62,7 @@ function correccionDelResponsableEscenario(): array
         'token' => ManagementUsers::tokenFor($responsable),
         'responsable_id' => $responsable->id,
         'ana_open' => correccionDelResponsableTramoAbierto($site, $ana),
+        'lucia' => $lucia,
         'lucia_open' => correccionDelResponsableTramoAbierto($site, $lucia),
     ];
 }
@@ -145,3 +147,39 @@ it('no deja al responsable corregir a una persona de un departamento que no diri
     expect(DB::table('shift_corrections')->count())->toBe(0)
         ->and(DB::table('shift_entries')->where('uuid', $escenario['lucia_open'])->value('status'))->toBe('open');
 })->group('RF-ID-03', 'RF-PA-04', 'RS-05');
+
+it('deja asiento access.denied cuando el responsable intenta corregir fuera de su departamento', function (): void {
+    // A4 de la 2.1.0: el 403 de arriba lo pone el alcance (`ScopeGuard`), y el
+    // doc 02 §9.4 exige entonces el asiento. Con el tramo, la operacion y la
+    // persona afectada por su UUID; su nombre, nunca (regla dura 21).
+    $escenario = correccionDelResponsableEscenario();
+
+    Api::as($escenario['token'])->patch('/api/v1/shift-entries/'.$escenario['lucia_open'], [
+        'clocked_out_at' => '2026-03-14T15:00:00Z',
+        'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
+    ])->assertStatus(403);
+
+    $asiento = DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->sole();
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode((string) ($asiento->payload ?? '{}'), true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload['dataset'] ?? null)->toBe('shift_entry')
+        ->and($payload['operation'] ?? null)->toBe('correct')
+        ->and($payload['reason'] ?? null)->toBe('out_of_scope')
+        ->and($payload['employee_uuid'] ?? null)->toBe($escenario['lucia'])
+        ->and((string) json_encode($asiento))->not->toContain('Ferrer');
+})->group('RF-ID-03', 'RS-05', 'RQ-07');
+
+it('no deja asiento access.denied cuando el responsable corrige a su propia gente', function (): void {
+    // El control del caso anterior: sin el, un asiento escrito en toda
+    // correccion del responsable pasaria la prueba de arriba.
+    $escenario = correccionDelResponsableEscenario();
+
+    Api::as($escenario['token'])->patch('/api/v1/shift-entries/'.$escenario['ana_open'], [
+        'clocked_out_at' => '2026-03-14T15:00:00Z',
+        'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
+    ])->assertStatus(200);
+
+    expect(DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->count())->toBe(0);
+})->group('RF-ID-03', 'RS-05');

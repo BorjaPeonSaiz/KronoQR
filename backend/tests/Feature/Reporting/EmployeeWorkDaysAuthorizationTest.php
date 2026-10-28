@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
@@ -77,30 +78,32 @@ it('no deja consultar el registro horario de otro a una sesion de portal', funct
         ->assertStatus(403);
 })->group('RF-PA-03', 'RQ-07', 'RF-ID-07');
 
-it('no deja consultar el registro horario a un auditor ni a un responsable de departamento', function (string $role): void {
-    // LOS DOS TIENEN `attendance:read` EN EL TOKEN, y aun asi reciben 403. No es
-    // una contradiccion: es exactamente para lo que sirven las dos
-    // comprobaciones del §7.3.
-    //
-    //   - `auditor` no esta en «manager+» (Anexo B). Lo que ese rol necesita —el
-    //     registro para un requerimiento— se sirve por
-    //     `GET /api/v1/reports/legal-export`, que es suyo y queda auditado como
-    //     exportacion legal (tarea 1.17).
-    //   - `responsable_departamento` no adquiere alcance propio hasta RF-ID-03
-    //     (tarea 2.1): darle acceso hoy seria darle el registro horario de TODA
-    //     la instalacion, que es justo lo que ese requisito viene a impedir.
-    //
-    // Cuando la 2.1 cambie el alcance, este caso cambiara con ella y no en
-    // silencio.
-    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::from($role)));
+it('no deja consultar el registro horario a un auditor', function (): void {
+    // Por rol y por ambito: desde la 2.2.1 el `auditor` solo lleva
+    // `reports:legal` (RF-ID-02), y no esta en «manager+» (Anexo B). Lo que
+    // necesita —el registro para un requerimiento— se sirve por
+    // `GET /api/v1/reports/legal-export`, que queda auditado como exportacion
+    // legal.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
     Api::as($token)
         ->get('/api/v1/employees/'.empleadoConsultable().'/workdays')
         ->assertStatus(403);
-})->with([
-    'auditor' => UserRole::AUDITOR->value,
-    'responsable de departamento' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
-])->group('RF-PA-03', 'RQ-07', 'RF-ID-03');
+})->group('RF-PA-03', 'RQ-07', 'RF-ID-02');
+
+it('no deja consultar el registro horario a un responsable que no dirige el departamento de la persona', function (): void {
+    // Por ALCANCE, no por rol (R4-QA-01): la policy admite al responsable
+    // (RF-ID-03) y la matriz lo autoriza con una persona de su departamento.
+    // Aqui no dirige ninguno, asi que no alcanza a nadie: `403` y el asiento
+    // `access.denied` que el doc 02 §9.4 exige a la denegacion por alcance.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
+
+    Api::as($token)
+        ->get('/api/v1/employees/'.empleadoConsultable().'/workdays')
+        ->assertStatus(403);
+
+    expect(DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->count())->toBe(1);
+})->group('RF-PA-03', 'RQ-07', 'RF-ID-03', 'RS-05');
 
 it('deniega el ambito aunque el rol sea el correcto', function (): void {
     // La mitad de la autorizacion que no es la policy (§7.3). Un token de RRHH

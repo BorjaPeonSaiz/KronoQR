@@ -133,9 +133,11 @@ it('no deja corregir a un auditor, que solo puede mirar', function (): void {
 
 it('no deja corregir a un responsable que no dirige ningun departamento', function (): void {
     // La policy admite al rol (RF-ID-03), pero el alcance es por departamento:
-    // un responsable sin departamento no alcanza a nadie, y el `403` sale de
-    // ahi. El caso positivo —corregir dentro de su departamento— y el de un
-    // departamento ajeno estan en `ShiftCorrectionByDepartmentManagerTest`.
+    // un responsable sin departamento no alcanza a nadie, y el `403` de alta y
+    // de correccion sale de ahi; el de anular, del rol (anular es `rrhh+`). El
+    // caso positivo —corregir dentro de su departamento— y el de un
+    // departamento ajeno, con su asiento, estan en
+    // `ShiftCorrectionByDepartmentManagerTest`.
     ['employee' => $employee, 'entry' => $entry] = tramoParaAutorizacion();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
 
