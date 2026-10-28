@@ -463,13 +463,18 @@ endif
 # .github/scripts/pest-max-skipped.sh, la misma para las tres suites de la CI.
 INTEGRATION_MAX_SKIPPED ?=
 
+# La misma memoria que `make test` y que la CI (V21-2-QA-4): `php -d` sobre
+# vendor/bin/pest y no `php artisan test`, que lanza Pest en un proceso hijo que
+# no hereda el `-d` y se quedaba con los 256 MB del contenedor —y la suite de
+# integracion moria a mitad con «Allowed memory size ... exhausted»—. Ver el
+# comentario de TEST_MEMORY_LIMIT. `QualityGatesTest` lo exige.
 test-integration: ## Repositorios contra PostgreSQL real (INTEGRATION_MAX_SKIPPED=n falla si se omiten mas de n pruebas)
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else ifeq ($(INTEGRATION_MAX_SKIPPED),)
-	$(RUN_APP) php artisan test --testsuite=Integration
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Integration
 else
-	@bash .github/scripts/pest-max-skipped.sh run "$(INTEGRATION_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Integration"
+	@bash .github/scripts/pest-max-skipped.sh run "$(INTEGRATION_MAX_SKIPPED)" "$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Integration"
 endif
 
 # Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
@@ -498,9 +503,9 @@ test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta e
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else ifeq ($(CONTRACT_MAX_SKIPPED),)
-	$(RUN_APP) php artisan test --testsuite=Contract,Feature
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Contract,Feature
 else
-	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Contract,Feature"
+	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Contract,Feature"
 endif
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:

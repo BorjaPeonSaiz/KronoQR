@@ -284,6 +284,21 @@ it('ejecuta la suite completa en local con la misma memoria que la CI', function
     expect($makefile)->toMatch('/^test:.*\n(?:.*\n){0,3}\t\$\(RUN_APP\) php -d memory_limit=\$\(TEST_MEMORY_LIMIT\) \$\(PEST\)$/m');
 })->group('RQ-14');
 
+it('ejecuta cada suite con base de datos con la misma memoria que la suite completa', function (string $suite): void {
+    // V21-2-QA-4 (2.2.1): `make test` ya tenia 1 GB, pero `make test-integration`
+    // lanzaba `php artisan test`, cuyo proceso hijo no hereda el `-d`, y moria
+    // con los 256 MB del contenedor. Las dos ramas del objetivo —con y sin la
+    // puerta de omitidas— y ninguna llamada a `artisan test` para esa suite.
+    $makefile = repoContents('Makefile');
+    $orden = 'php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite='.$suite;
+
+    expect(substr_count($makefile, $orden))->toBe(2)
+        ->and($makefile)->not->toContain('php artisan test --testsuite='.$suite);
+})->with([
+    'integracion' => ['Integration'],
+    'contrato y feature' => ['Contract,Feature'],
+])->group('RQ-14');
+
 it('ata cada convencion del stack a una herramienta que la verifica', function (): void {
     // RNF-M-06: "se verifican por herramienta en la CI, no por revision humana".
     // Se comprueba que el fichero de configuracion de cada verificador existe;
