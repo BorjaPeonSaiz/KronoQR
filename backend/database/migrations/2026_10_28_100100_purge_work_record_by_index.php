@@ -28,13 +28,17 @@ use Illuminate\Support\Facades\DB;
  *   `p_batch`. Un `DELETE ... IN (SELECT ... LIMIT p_batch)` repetido volvia a
  *   leer en cada lote lo que el anterior acababa de borrar, porque dentro de
  *   la misma transaccion esas filas siguen en el indice.
- * - Los tramos siguen por generaciones, como antes: cada vuelta tiene que ver
- *   lo que borro la anterior.
+ * - Los tramos siguen por generaciones, como antes, con el mismo
+ *   `DELETE ... IN (SELECT ... LIMIT p_batch)` repetido hasta que una vuelta
+ *   no borra nada: cada vuelta vuelve a pasar por las entradas de indice de
+ *   los tramos que borraron las anteriores, y ese coste crece con el atraso.
+ *   Medido aparte, no pesa (ver el comentario del paso 4).
  *
  * Medido con un historico de 4,5 años (951 149 escaneos, 385 310 tramos):
  * la llamada sin nada vencido baja de 573 ms a 2 ms, y la que purga siete
- * meses (52 500 tramos y sus hijos) de 9,5 s a 4,2 s, que es sobre todo la
- * comprobacion fila a fila de las claves ajenas al borrar cada tramo.
+ * meses (52 500 tramos y sus hijos) de 9,5 s a 4,2 s. De esos 4,2 s, unos 4 s
+ * son el paso 4, y casi todo es la comprobacion fila a fila de las cuatro
+ * claves ajenas que apuntan a `shift_entries` al borrar cada tramo.
  *
  * ## Despliegue y bloqueos
  *
@@ -58,9 +62,12 @@ return new class extends Migration
 
         DB::statement($this->indexedFunction());
 
-        // `CREATE OR REPLACE` conserva los privilegios de la funcion, pero se
-        // repite por si alguien la hubiera recreado: solo la aplicacion la
-        // ejecuta (ADR-057 §3).
+        // `CREATE OR REPLACE` conserva los privilegios de la funcion; el
+        // `REVOKE` es solo una red barata por si alguien la hubiera recreado
+        // a mano, y no basta: una funcion recreada tambien habria perdido el
+        // `GRANT EXECUTE` de la aplicacion, que repone
+        // `infra/scripts/lib/work-record-privileges.sh` (y vigila el doctor).
+        // Solo la aplicacion la ejecuta (ADR-057 §3).
         DB::statement('REVOKE ALL ON FUNCTION public.work_record_purge_batch(date, integer) FROM PUBLIC');
     }
 
@@ -135,13 +142,19 @@ return new class extends Migration
 
             -- Cada tabla hasta agotarla, en sentencias de `p_batch`
             -- filas como mucho, y de hijo a padre: las claves ajenas
-            -- son RESTRICT. Lo vencido de cada tabla se lee UNA vez, por
-            -- un indice, y se parte en tandas de `p_batch` identificadores
-            -- que se borran por la clave primaria o por la clave ajena.
-            -- Ningun lote recorre una tabla entera ni vuelve a leer lo que
-            -- borro el anterior: un `DELETE ... IN (SELECT ... LIMIT)`
-            -- repetido si, y con un año de atraso el planificador preferia
-            -- leer `scan_events` entera.
+            -- son RESTRICT. En los pasos 1 a 3b y 5, lo vencido se lee
+            -- UNA vez, por un indice, y se parte en tandas de `p_batch`
+            -- identificadores que se borran por la clave primaria o por
+            -- la clave ajena. Un `DELETE ... IN (SELECT ... LIMIT)`
+            -- repetido vuelve a pasar en cada lote por las entradas de
+            -- indice de lo que borraron los anteriores (dentro de la
+            -- misma transaccion siguen ahi), y con un año de atraso el
+            -- planificador preferia leer `scan_events` entera.
+            --
+            -- Ese patron repetido queda en dos sitios, acotado: dentro de
+            -- la tanda de tramos del paso 1 (vuelve sobre los hijos de
+            -- esa tanda, no de las anteriores) y en el paso 4, que lo
+            -- conserva a proposito y explica por que.
 
             -- 1-3. Lo que cuelga de los tramos vencidos: correcciones
             -- (RN-13), incidencias y escaneos. Los tramos vencidos salen
@@ -246,6 +259,20 @@ return new class extends Migration
             -- versiones a las que ya no apunta nadie, hasta que una
             -- vuelta no borra ninguna (una generacion corta no es la
             -- ultima).
+            --
+            -- Este paso SI repite el `DELETE ... IN (SELECT ... LIMIT)`:
+            -- cada vuelta vuelve a recorrer las entradas de indice de los
+            -- tramos que borraron las anteriores, y la ultima, que no
+            -- borra nada, recorre el indice entero. Medido con siete
+            -- meses vencidos (52 500 tramos de 410 250, lote 1000, 54
+            -- vueltas), el paso tarda unos 4 s: la vuelta 50 relee unos
+            -- 49 000 tramos ya borrados en 4 ms y 1 204 bloques de un
+            -- total de 98 ms, y el resto son las cuatro claves ajenas que
+            -- apuntan al tramo, comprobadas fila a fila. Leer los tramos una vez y
+            -- borrarlos en tandas por generacion tardaba lo mismo (3,9 s
+            -- frente a 3,9 s; 962 720 bloques frente a 1 166 519): no
+            -- compensa otro algoritmo para la auto-referencia de
+            -- `superseded_by_id`.
             deleted := 0;
             LOOP
                 DELETE FROM public.shift_entries WHERE id IN (
