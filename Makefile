@@ -1353,6 +1353,17 @@ endif
 # tocar el fichero de dominio que cubre no muta nada por push -y eso es
 # exactamente lo que la ejecucion nocturna, con el dominio entero, sigue
 # cazando antes de la manana siguiente-.
+#
+# Y ademas, POR FICHERO (R2-QB-01, decision del propietario del 28-10-2026):
+# Pest da una sola nota por ejecucion, y un fichero flojo quedaba tapado por
+# los buenos del mismo cambio -`PinVerification` vivio al 47,6 %-. Si cambian
+# varios, cada clase, trait o enum se muta tambien sola con MUTATE_FILE_MIN.
+# Es 70 y no 80 porque en un fichero pequeño un mutante equivalente pesa
+# mucho, y el 80 sigue exigiendose sobre el conjunto. Con un solo fichero no
+# hace falta: su nota es la del conjunto. Solo aqui y no de noche: con
+# --parallel Pest no da notas por fichero, y la deuda ya existente pondria la
+# nocturna en rojo sin que nadie hubiera tocado nada.
+MUTATE_FILE_MIN := 70
 mutate-changed: ## Mutacion acotada a Domain/*.php que cambian frente a MUTATE_BASE (por defecto origin/main)
 ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
@@ -1389,6 +1400,20 @@ else
 		else \
 			echo "[make] ERROR: sin mutantes, pero entre lo cambiado hay clases, traits o enums. Una clase de dominio sin pruebas que la cubran (--covered-only) sale asi: escribe las pruebas unitarias."; \
 		fi; \
+	fi; \
+	if [ "$$rc" -eq 0 ] && [ "$$(printf '%s\n' "$$files" | wc -l)" -gt 1 ]; then \
+		for f in $$files; do \
+			grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f" || continue; \
+			echo "[make] Mutando $$f por separado (minimo $(MUTATE_FILE_MIN) por ciento por fichero)."; \
+			( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$f --testsuite=Unit --min=$(MUTATE_FILE_MIN)"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
+			frc="$$(cat "$$st" 2>/dev/null)"; frc="$${frc:-1}"; \
+			if [ "$$frc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
+				echo "[make] $$f no tiene mutantes que la suite Unit cubra: no cuenta para el minimo por fichero."; \
+			elif [ "$$frc" -ne 0 ]; then \
+				echo "[make] ERROR: $$f no llega al $(MUTATE_FILE_MIN) por ciento por si solo; el conjunto lo tapaba."; \
+				rc="$$frc"; \
+			fi; \
+		done; \
 	fi; \
 	rm -f "$$log" "$$st"; \
 	exit "$$rc"
