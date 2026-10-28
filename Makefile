@@ -423,9 +423,10 @@ UNIT_SUITE_MAX_SECONDS ?= 5
 UNIT_MAX_SKIPPED ?=
 
 # La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
-# el del arranque de artisan ni el de docker exec— y se compara con awk porque
-# sh no sabe de decimales. Si el formato de salida de Pest cambiara y la linea
-# no apareciera, el gate avisa en vez de aprobar en silencio.
+# el del arranque de artisan ni el de docker exec—. Lo hace
+# .github/scripts/pest-duration-budget.sh, que FALLA si no encuentra la linea:
+# hasta R2-QA-04 este objetivo avisaba y aprobaba, y un cambio de formato de
+# Pest habria apagado el presupuesto con la CI en verde.
 test-unit: ## Dominio puro, sin base de datos, con presupuesto de duracion
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
@@ -433,24 +434,19 @@ else
 	@$(RUN_APP) php artisan test --testsuite=Unit > .unit-suite.log 2>&1; \
 	status=$$?; \
 	cat .unit-suite.log; \
-	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
 	skip_rc=0; \
 	if [ -n "$(UNIT_MAX_SKIPPED)" ] && [ $$status -eq 0 ]; then \
 		: "Ruta absoluta: en la CI RUN_APP es «cd backend &&» y esta linea ya corre dentro de backend/."; \
 		bash "$(CURDIR)/.github/scripts/pest-max-skipped.sh" check "$(UNIT_MAX_SKIPPED)" .unit-suite.log || skip_rc=$$?; \
 	fi; \
+	budget_rc=0; \
+	if [ $$status -eq 0 ]; then \
+		sh "$(CURDIR)/.github/scripts/pest-duration-budget.sh" "$(UNIT_SUITE_MAX_SECONDS)" .unit-suite.log || budget_rc=$$?; \
+	fi; \
 	rm -f .unit-suite.log; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	if [ $$skip_rc -ne 0 ]; then exit $$skip_rc; fi; \
-	if [ -z "$$dur" ]; then \
-		echo "[make] AVISO: no se pudo leer la duracion de la suite; el presupuesto de $(UNIT_SUITE_MAX_SECONDS) s no se ha comprobado."; \
-	elif awk "BEGIN { exit !($$dur > $(UNIT_SUITE_MAX_SECONDS)) }"; then \
-		echo "[make] La suite unitaria ha tardado $$dur s y el presupuesto es $(UNIT_SUITE_MAX_SECONDS) s (doc 02 §9.2)."; \
-		echo "[make] Una suite unitaria lenta deja de ejecutarse en cada cambio, que es su unica razon de ser."; \
-		exit 1; \
-	else \
-		echo "[make] Suite unitaria en $$dur s, dentro del presupuesto de $(UNIT_SUITE_MAX_SECONDS) s."; \
-	fi
+	exit $$budget_rc
 endif
 
 # Puerta contra las omisiones silenciosas (R6-DV-07, R2-QA-01). Una prueba
