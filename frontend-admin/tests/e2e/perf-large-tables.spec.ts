@@ -11,11 +11,16 @@
 // POR QUE AQUI Y NO EN LA SUITE FUNCIONAL. La misma afirmacion en
 // `large-tables.spec.ts` dio 1 626 ms frente a 1 500 en el run 40722198667,
 // con el resto de la suite en verde: es la carga del runner, no el panel. Se
-// juzga la MEDIANA de tres muestras, como `perf-lcp.spec.ts` del quiosco, para
-// que un pico aislado no sea un rojo. Solo existe con
+// juzga la MEDIANA de tres muestras EN FRIO —un contexto de navegador nuevo
+// por muestra, sin cache ni estado de la anterior—, como `perf-lcp.spec.ts`
+// del quiosco, para que un pico aislado no sea un rojo.
+//
+// LO QUE SE CRONOMETRA ES EL PANEL. El doble de la API sirve el cuerpo ya
+// serializado (`support/largeTables.ts`): con `route.fulfill({ json })` Node
+// serializaba los ~12 MB del informe dentro de la ventana medida. Solo existe con
 // KRONOQR_E2E_PERFORMANCE=1 (proyecto `admin-perf`, `make e2e-performance`,
 // job nocturno `performance-kiosk` de ci.yml).
-import type { Page } from '@playwright/test'
+import type { Browser, Page, TestInfo } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { logIn } from './support/admin'
 import {
@@ -104,11 +109,40 @@ async function complianceSample(page: Page): Promise<Sample> {
   return { interactiveMs, longestLoadTaskMs, longestScrollTaskMs }
 }
 
-async function samplesOf(page: Page, take: (page: Page) => Promise<Sample>): Promise<Sample[]> {
+/**
+ * Una pagina en un contexto nuevo, con la CPU estrangulada, el doble de la API
+ * y la sesion abierta: cada muestra empieza en frio. Las opciones del contexto
+ * son las del proyecto, que un `browser.newContext()` no hereda solo.
+ */
+async function coldPage(browser: Browser, info: TestInfo): Promise<Page> {
+  const { baseURL, viewport, locale, timezoneId } = info.project.use
+  const context = await browser.newContext({
+    ...(baseURL === undefined ? {} : { baseURL }),
+    ...(viewport === undefined ? {} : { viewport }),
+    ...(locale === undefined ? {} : { locale }),
+    ...(timezoneId === undefined ? {} : { timezoneId }),
+  })
+  const page = await context.newPage()
+
+  await throttleCpu(page)
+  await observeLongTasks(page)
+  await serveBigData(page)
+  await logIn(page)
+
+  return page
+}
+
+async function samplesOf(
+  browser: Browser,
+  take: (page: Page) => Promise<Sample>,
+): Promise<Sample[]> {
   const samples: Sample[] = []
 
   for (let index = 0; index < SAMPLES; index += 1) {
+    const page = await coldPage(browser, test.info())
+
     samples.push(await take(page))
+    await page.context().close()
   }
 
   test.info().annotations.push({
@@ -124,18 +158,11 @@ async function samplesOf(page: Page, take: (page: Page) => Promise<Sample>): Pro
   return samples
 }
 
-test.beforeEach(async ({ page }) => {
-  await throttleCpu(page)
-  await observeLongTasks(page)
-  await serveBigData(page)
-  await logIn(page)
-})
-
 test(
   'el informe de 20 000 filas queda interactivo en menos de 1,5 s y sin tareas largas, en la mediana de tres muestras',
   { tag: ['@RNF-P-04', '@RF-IN-01'] },
-  async ({ page }) => {
-    const samples = await samplesOf(page, reportSample)
+  async ({ browser }) => {
+    const samples = await samplesOf(browser, reportSample)
 
     expect(median(samples.map((sample) => sample.interactiveMs))).toBeLessThan(
       INTERACTIVE_BUDGET_MS,
@@ -152,8 +179,8 @@ test(
 test(
   'los 3 000 hallazgos de cumplimiento quedan interactivos en menos de 1,5 s y sin tareas largas, en la mediana de tres muestras',
   { tag: ['@RNF-P-04', '@RF-PA-06'] },
-  async ({ page }) => {
-    const samples = await samplesOf(page, complianceSample)
+  async ({ browser }) => {
+    const samples = await samplesOf(browser, complianceSample)
 
     expect(median(samples.map((sample) => sample.interactiveMs))).toBeLessThan(
       INTERACTIVE_BUDGET_MS,

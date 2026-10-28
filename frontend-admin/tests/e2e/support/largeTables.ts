@@ -118,6 +118,28 @@ const BIG_SUMMARY = {
   },
 }
 
+/**
+ * Los cuerpos ya serializados, una vez por informe. Con `route.fulfill({ json })`
+ * Node volvia a serializar los ~12 MB del informe en cada peticion y los pasaba
+ * por CDP DENTRO de la ventana que la prueba de rendimiento cronometra: se
+ * medía el doble de la prueba, no el panel.
+ */
+const SERIALIZED = new Map<object, string>()
+
+function serialized(body: object): string {
+  const cached = SERIALIZED.get(body)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const json = JSON.stringify(body)
+
+  SERIALIZED.set(body, json)
+
+  return json
+}
+
 /** Sirve el volumen grande DESPUES del doble general: la ultima ruta registrada gana. */
 export async function serveBigData(
   page: Page,
@@ -129,13 +151,16 @@ export async function serveBigData(
     branding: BILINGUAL_BRANDING,
     ...(locale === undefined ? {} : { locale }),
   })
+  const reportBody = serialized(report)
+  const summaryBody = serialized(BIG_SUMMARY)
+
   await page.route(
     (url) => url.pathname === '/api/v1/reports/period',
-    (route) => route.fulfill({ status: 200, json: report }),
+    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: reportBody }),
   )
   await page.route(
     (url) => url.pathname === '/api/v1/compliance/summary',
-    (route) => route.fulfill({ status: 200, json: BIG_SUMMARY }),
+    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: summaryBody }),
   )
 }
 
