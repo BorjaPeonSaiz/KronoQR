@@ -14,6 +14,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -166,24 +167,34 @@ it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos',
     // origen dejaria que una tablet con un bucle defectuoso consumiera la cuota
     // de todas las demas. El sintoma seria «el quiosco de recepcion no ficha»
     // con la causa a tres metros de distancia.
+    //
+    // Dos dispositivos emparejados de verdad, cada uno con su token: con una
+    // cuenta `users` de rol `kiosk` las respuestas eran 403 y «la otra tablet
+    // sigue fichando» no se comprobaba.
     config()->set('kiosk.rate_limits.scan_per_device', 2);
-
-    $tablet = ManagementUsers::kioskRoleAccountToken();
+    FrozenTime::at('2026-03-14 07:02:31');
+    $escenario = AttendanceFixtures::scenario();
+    app()->instance(
+        CredentialResolver::class,
+        FakeCredentialResolver::new()->resolving('tarjeta-buena', $escenario['employee']),
+    );
+    $tabletDeRecepcion = $escenario['token'];
+    $tabletDeCocina = AttendanceFixtures::tokenFor(AttendanceFixtures::device($escenario['site'], 'Cocina')['id']);
 
     for ($i = 0; $i < 2; $i++) {
         [$scanId, $cuerpo] = escaneoValido();
 
-        Api::as($tablet)
+        Api::as($tabletDeRecepcion)
             ->withHeaders(['Idempotency-Key' => $scanId])
-            ->post('/api/v1/scan', $cuerpo)
-            ->assertStatus(403);
+            ->post('/api/v1/scan', [...$cuerpo, 'qr_payload' => 'tarjeta-inventada'])
+            ->assertStatus(422);
     }
 
     [$scanId, $cuerpo] = escaneoValido();
 
-    Api::as($tablet)
+    Api::as($tabletDeRecepcion)
         ->withHeaders(['Idempotency-Key' => $scanId])
-        ->post('/api/v1/scan', $cuerpo)
+        ->post('/api/v1/scan', [...$cuerpo, 'qr_payload' => 'tarjeta-buena'])
         ->assertStatus(429)
         // `problem+json` tambien en el camino de error, con su `Retry-After`.
         ->assertHeader('Retry-After');
@@ -191,10 +202,13 @@ it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos',
     // La otra tablet del mismo hotel, con la misma IP, sigue fichando.
     [$scanId, $cuerpo] = escaneoValido();
 
-    Api::as(ManagementUsers::kioskRoleAccountToken())
+    $respuesta = Api::as($tabletDeCocina)
         ->withHeaders(['Idempotency-Key' => $scanId])
-        ->post('/api/v1/scan', $cuerpo)
-        ->assertStatus(403);
+        ->post('/api/v1/scan', [...$cuerpo, 'qr_payload' => 'tarjeta-buena']);
+
+    $respuesta->assertOk();
+    expect($respuesta->json('action'))->toBe('clock_in')
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('clock_in');
 })->group('RS-02', 'RS-04');
 
 it('deniega tambien el fichaje de pausa a cada rol de gestion y al portal', function (UserRole $rol): void {

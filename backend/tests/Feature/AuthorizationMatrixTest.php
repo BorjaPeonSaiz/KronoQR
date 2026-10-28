@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route as Router;
-use Tests\Architecture\Support\Repo;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Http\AuthorizationMatrix;
@@ -90,7 +92,25 @@ use Tests\Support\Product\LicenseKeys;
  * `AbsenceScopeTest`. Ni que el responsable vea solo su departamento: aqui el
  * empleado de la ruta es de su departamento a proposito, para que lo que se
  * mida sea el rol y no el alcance.
+ *
+ * Lo que SI afirma de la auditoria es lo contrario: un 403 por rol o por
+ * ambito no deja `access.denied` (doc 02 §9.4, doc 07 A-16); si lo dejara,
+ * llenaria de ruido lo que se enseña en una inspeccion. En esta instalacion
+ * solo una denegacion es por alcance, y esta escrita abajo con los asientos
+ * que deja; cualquier otro `access.denied` al terminar un caso es un fallo.
  */
+
+/**
+ * Las rutas cuya denegacion en la instalacion de la matriz SI es por alcance,
+ * con los `access.denied` que deja cada caso.
+ */
+const AUTHORIZATION_MATRIX_SCOPE_DENIALS = [
+    // El responsable tiene el permiso de la presencia en vivo, pero su alcance
+    // no llega al canal de toda la instalacion (`private-presence.all`):
+    // `PresenceChannelAuthorizer` lo anota por el diario de autorizacion, como
+    // `PresenceChannelAuditTest` comprueba con el canal de otro departamento.
+    'POST api/v1/broadcasting/auth' => 1,
+];
 
 uses(RefreshDatabase::class);
 
@@ -283,7 +303,9 @@ it('responde a cada actor, y sin token, lo que la matriz dice de la ruta', funct
 
     $discrepancies = authorizationMatrixDiscrepanciesOf($route, $installation, $tokens);
 
-    expect($discrepancies)->toBe([], implode("\n", $discrepancies));
+    expect($discrepancies)->toBe([], implode("\n", $discrepancies))
+        ->and(DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->count())
+        ->toBe(AUTHORIZATION_MATRIX_SCOPE_DENIALS[$route] ?? 0);
 })->with(authorizationMatrixRoutes())->group('RQ-07', 'RS-05', 'RS-04', 'RS-06');
 
 it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', function (): void {
@@ -312,35 +334,27 @@ it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', 
  * ese ambito y lleva a un `403` (V2-PA-01: el auditor con `attendance:read` veia
  * la presencia en el menu y el servidor se la negaba).
  *
- * Los ambitos de gestion salen de `docs/api/role-abilities.json`, que
- * `RoleCatalogTest` ata a la tabla `role_has_permissions`; los del portal, el
- * quiosco y la sesion pendiente son los que emiten `PortalLogins`,
- * `AttendanceFixtures` y el acceso con segundo factor (doc 02 §7.3).
+ * Los ambitos se leen del token que la matriz emite a cada actor
+ * (`PersonalAccessToken::findToken(...)->abilities`), no de una copia escrita
+ * aqui: con la copia, un ambito de mas en el emisor del quiosco, del portal o
+ * de un rol pasaba esta prueba, que seguia mirando la lista de antes.
  */
 
 /**
- * Los ambitos que lleva el token de cada actor de la matriz.
+ * Los ambitos que lleva el token de cada actor de la matriz, tal como se
+ * emitio.
  *
  * @return array<string, list<string>>
  */
 function authorizationMatrixAbilitiesByActor(): array
 {
-    /** @var array{roles: array<string, list<string>>} $catalog */
-    $catalog = json_decode(Repo::contents('docs/api/role-abilities.json'), true, 512, JSON_THROW_ON_ERROR);
-
-    return [
-        AuthorizationMatrix::ADMIN => $catalog['roles']['admin'],
-        AuthorizationMatrix::RRHH => $catalog['roles']['rrhh'],
-        AuthorizationMatrix::RESPONSABLE => $catalog['roles']['responsable_departamento'],
-        AuthorizationMatrix::AUDITOR => $catalog['roles']['auditor'],
-        AuthorizationMatrix::EMPLEADO => [TokenAbility::SELF_READ->value],
-        AuthorizationMatrix::QUIOSCO => [
-            TokenAbility::SCAN_WRITE->value,
-            TokenAbility::ROSTER_READ->value,
-            TokenAbility::HEARTBEAT_WRITE->value,
-        ],
-        AuthorizationMatrix::TWO_FACTOR_PENDING => [TokenAbility::TWO_FACTOR_PENDING->value],
-    ];
+    return array_map(
+        static fn (string $token): array => array_values(array_map(
+            strval(...),
+            (array) PersonalAccessToken::findToken($token)?->abilities,
+        )),
+        AuthorizationMatrix::tokens(AuthorizationMatrix::installation()),
+    );
 }
 
 /**
