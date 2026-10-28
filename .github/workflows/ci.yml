@@ -3663,7 +3663,10 @@ jobs:
   mutation:
     name: "Mutacion completa (RQ-10, nocturna)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # 180 desde el 28-10-2026: la pasada completa tardo 80 min el 26-10 y se
+    # corto a los 120 el 25, el 27 y el 28. Partirla en varios jobs queda
+    # pendiente (HANDOFF).
+    timeout-minutes: 180
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)
 
     steps:
