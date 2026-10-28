@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
+use App\Modules\Identity\Application\Port\UserAccounts;
+use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
+use App\Modules\Identity\Infrastructure\Persistence\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route as Router;
@@ -102,15 +107,56 @@ use Tests\Support\Product\LicenseKeys;
 
 /**
  * Las rutas cuya denegacion en la instalacion de la matriz SI es por alcance,
- * con los `access.denied` que deja cada caso.
+ * con el actor al que se deniega y los `access.denied` que le deja cada caso.
+ * Por actor y no por ruta: que la ruta deje un asiento no autoriza a que lo
+ * deje cualquier otro de sus actores.
  */
 const AUTHORIZATION_MATRIX_SCOPE_DENIALS = [
     // El responsable tiene el permiso de la presencia en vivo, pero su alcance
     // no llega al canal de toda la instalacion (`private-presence.all`):
     // `PresenceChannelAuthorizer` lo anota por el diario de autorizacion, como
     // `PresenceChannelAuditTest` comprueba con el canal de otro departamento.
-    'POST api/v1/broadcasting/auth' => 1,
+    'POST api/v1/broadcasting/auth' => [AuthorizationMatrix::RESPONSABLE => 1],
 ];
+
+/**
+ * Los `access.denied` de `audit_log`, por actor de la matriz: el asiento lleva
+ * el portador del token (`CurrentAuditContext`). Los que no son de ningun actor
+ * van bajo `otro`, para que tambien cuenten.
+ *
+ * @param  array<string, string>  $tokens
+ * @return array<string, int>
+ */
+function authorizationMatrixScopeDenialsByActor(array $tokens): array
+{
+    $denials = DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->get(['actor_type', 'actor_id']);
+    $actorOf = [];
+
+    foreach ($tokens as $actor => $token) {
+        $tokenable = PersonalAccessToken::findToken($token)?->tokenable;
+        if (! $tokenable instanceof Model || ! is_scalar($tokenable->getKey())) {
+            continue;
+        }
+
+        $type = match ($tokenable->getTable()) {
+            'users' => 'user',
+            'devices' => 'device',
+            default => $tokenable->getTable(),
+        };
+        $actorOf[$type.':'.$tokenable->getKey()] = $actor;
+    }
+
+    $found = [];
+
+    foreach ($denials as $denial) {
+        $actor = $actorOf[$denial->actor_type.':'.$denial->actor_id] ?? 'otro';
+        $found[$actor] = ($found[$actor] ?? 0) + 1;
+    }
+
+    ksort($found);
+
+    return $found;
+}
 
 uses(RefreshDatabase::class);
 
@@ -304,8 +350,7 @@ it('responde a cada actor, y sin token, lo que la matriz dice de la ruta', funct
     $discrepancies = authorizationMatrixDiscrepanciesOf($route, $installation, $tokens);
 
     expect($discrepancies)->toBe([], implode("\n", $discrepancies))
-        ->and(DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->count())
-        ->toBe(AUTHORIZATION_MATRIX_SCOPE_DENIALS[$route] ?? 0);
+        ->and(authorizationMatrixScopeDenialsByActor($tokens))->toBe(AUTHORIZATION_MATRIX_SCOPE_DENIALS[$route] ?? []);
 })->with(authorizationMatrixRoutes())->group('RQ-07', 'RS-05', 'RS-04', 'RS-06');
 
 it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', function (): void {
@@ -341,20 +386,50 @@ it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', 
  */
 
 /**
- * Los ambitos que lleva el token de cada actor de la matriz, tal como se
- * emitio.
+ * Los ambitos que lleva el token de cada actor de la matriz, tal como los
+ * emite el codigo de produccion.
  *
  * @return array<string, list<string>>
  */
 function authorizationMatrixAbilitiesByActor(): array
 {
-    return array_map(
-        static fn (string $token): array => array_values(array_map(
+    $abilities = [];
+
+    foreach (AuthorizationMatrix::tokens(AuthorizationMatrix::installation()) as $actor => $token) {
+        $abilities[$actor] = array_values(array_map(
             strval(...),
-            (array) PersonalAccessToken::findToken($token)?->abilities,
-        )),
-        AuthorizationMatrix::tokens(AuthorizationMatrix::installation()),
-    );
+            (array) PersonalAccessToken::findToken(authorizationMatrixIssuedByProduction($actor, $token))?->abilities,
+        ));
+    }
+
+    return $abilities;
+}
+
+/**
+ * El token del actor emitido por el emisor de produccion. Los de gestion de
+ * la matriz los crea `ManagementUsers::tokenFor()` a partir de los permisos de
+ * la cuenta; aqui se vuelven a pedir a `AccessTokenIssuer` (el que usa
+ * `POST /auth/login` y el segundo factor), para que un ambito de mas o de
+ * menos en el emisor se vea. El portal y el quiosco ya llegan con el suyo.
+ */
+function authorizationMatrixIssuedByProduction(string $actor, string $token): string
+{
+    $tokenable = PersonalAccessToken::findToken($token)?->tokenable;
+
+    if (! $tokenable instanceof User) {
+        return $token;
+    }
+
+    $account = app(UserAccounts::class)->findByUuid((string) $tokenable->uuid);
+    $issuer = app(AccessTokenIssuer::class);
+
+    if (! $account instanceof AuthenticatedUser) {
+        throw new RuntimeException('La cuenta del actor '.$actor.' no existe para el emisor.');
+    }
+
+    return $actor === AuthorizationMatrix::TWO_FACTOR_PENDING
+        ? $issuer->issuePendingFor($account, 'matriz de autorizacion')->plainTextToken
+        : $issuer->issueFor($account, 'matriz de autorizacion')->plainTextToken;
 }
 
 /**
