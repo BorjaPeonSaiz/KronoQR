@@ -6,9 +6,10 @@ namespace App\Modules\Identity\Http\Controller;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Identity\Application\UseCase\LogOutHandler;
+use App\Modules\Identity\Http\Policy\SessionPolicy;
+use App\Modules\Identity\Http\Request\LogoutRequest;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -55,6 +56,9 @@ use Laravel\Sanctum\PersonalAccessToken;
  * la unica accion del ciclo de vida de una concesion que el fabricante decide,
  * y ademas le permitiria cerrar su propio rastro cuando le conviniera.
  *
+ * Quien puede llamarla lo decide {@see SessionPolicy} en la peticion: los
+ * cuatro portadores que el producto emite (regla dura 18).
+ *
  * `204` y no `403` porque no hay nada que denegar: la peticion es valida y su
  * efecto —que no queda sesion abierta que cerrar— ya se cumple.
  */
@@ -68,7 +72,7 @@ final class LogoutController extends Controller
      */
     private const string MANAGEMENT_TABLE = 'users';
 
-    public function __invoke(Request $request, LogOutHandler $handler): Response
+    public function __invoke(LogoutRequest $request, LogOutHandler $handler): Response
     {
         $user = $request->user();
 
