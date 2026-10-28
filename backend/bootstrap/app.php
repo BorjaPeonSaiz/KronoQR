@@ -144,7 +144,7 @@ return Application::configure(basePath: dirname(__DIR__))
              * produccion: existe para que Spectator, que se engancha por grupo
              * (`config/spectator.php`), valide tambien esta ruta contra el
              * contrato. Sin grupo, todo `assertValidResponse()` sobre ella pasaba
-             * en verde sin mirar nada (Q3, bloque 22 de la 2.3.0).
+             * en verde sin mirar nada (RQ-06, RQ-14).
              */
             Route::post('api/v1/broadcasting/auth', ChannelAuthorizationController::class)
                 ->middleware([
@@ -252,6 +252,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         /*
+         * El grupo de la firma de los canales de WebSocket, vacio a proposito:
+         * ver la ruta `broadcasting.auth`, arriba. Spectator se antepone a el
+         * en las pruebas.
+         */
+        $middleware->group('channel-auth', []);
+
+        /*
          * Observabilidad del borde HTTP (doc 02 §8.1 y §8.2, tarea 1.7).
          *
          * Los dos van en el grupo `api`, que es el unico que existe: las tres
@@ -266,13 +273,6 @@ return Application::configure(basePath: dirname(__DIR__))
          * trabajo y siguen adelante ante cualquier fallo: medir un fichaje no
          * puede impedirlo (regla dura 19).
          */
-        /*
-         * El grupo de la firma de los canales de WebSocket, vacio a proposito:
-         * ver la ruta `broadcasting.auth`, arriba. Spectator se antepone a el
-         * en las pruebas.
-         */
-        $middleware->group('channel-auth', []);
-
         $middleware->api(prepend: [
             PropagateTraceContext::class,
             RecordHttpMetrics::class,
