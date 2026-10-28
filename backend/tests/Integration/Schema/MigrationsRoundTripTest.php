@@ -72,6 +72,15 @@ it('deshace todas las migraciones y las reaplica sobre la semilla completa, que 
     Config::set('observability.metrics.textfile_path', $metrics);
     Config::set('observability.metrics.enabled', true);
 
+    // Una historia canonica antes de nada: todas en un lote y en el orden de
+    // sus nombres. Otras pruebas de este proceso deshacen una migracion suelta
+    // (`--path`) y la reaplican en un lote posterior, y entonces deshacer de una
+    // en una ya no recorre el orden en que se aplican desde cero, que es con lo
+    // que se compara cada paso.
+    [$refreshed, $refreshOutput] = Commands::run('migrate:refresh --database='.$name);
+
+    expect($refreshed)->toBe(0, $refreshOutput);
+
     try {
         $seedStart = microtime(true);
         [$seeded, $seedOutput] = Commands::run('db:seed --force');
