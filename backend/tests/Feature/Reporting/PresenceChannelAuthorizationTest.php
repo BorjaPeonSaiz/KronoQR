@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
@@ -156,25 +157,23 @@ it('niega al responsable el canal global de la instalacion', function (): void {
     autorizarCanal($escenario['jefeDeCocina'], 'presence.all')->assertStatus(403);
 })->group('RF-ID-03', 'RS-04');
 
-it('niega el canal a un auditor, tambien con un token que aun tenga el ambito', function (): void {
+it('niega los dos canales a un auditor, tambien con un token que aun tenga el ambito', function (Closure $token, Closure $canal): void {
     // Desde la 2.2.1 el `auditor` solo lleva `reports:legal` (RF-ID-02) y no
     // pasa el middleware. Un token emitido antes conserva `attendance:read`
     // hasta que caduca, pasa el middleware, y lo que le para es la policy. Es
-    // exactamente para lo que sirven los dos controles.
-    escenarioDeCanales();
+    // exactamente para lo que sirven los dos controles. Y en los dos canales:
+    // el de un departamento tiene su propio criterio en `routes/channels.php`,
+    // y el token antiguo no se habia pedido contra el (V21-4-QA-1).
+    $escenario = escenarioDeCanales();
 
-    $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
-    $actual = ManagementUsers::tokenFor($auditor);
-    $anterior = ManagementUsers::legacyAuditorTokenFor($auditor);
-
-    autorizarCanal($actual, 'presence.all')->assertStatus(403);
-
-    // Cada token resuelve su propio portador: el guard de Sanctum cachea el
-    // usuario, y con el su token, dentro de la misma aplicacion de prueba.
-    Auth::forgetGuards();
-
-    autorizarCanal($anterior, 'presence.all')->assertStatus(403);
-})->group('RF-ID-03', 'RF-ID-02', 'RS-04');
+    autorizarCanal($token(ManagementUsers::withRole(UserRole::AUDITOR)), $canal($escenario))->assertStatus(403);
+})->with([
+    'token actual' => [static fn (User $auditor): string => ManagementUsers::tokenFor($auditor)],
+    'token anterior a la 2.2.1' => [static fn (User $auditor): string => ManagementUsers::legacyAuditorTokenFor($auditor)],
+])->with([
+    'canal global' => [static fn (array $escenario): string => 'presence.all'],
+    'canal de un departamento' => [static fn (array $escenario): string => 'presence.department.'.$escenario['cocina']],
+])->group('RF-ID-03', 'RF-ID-02', 'RS-04');
 
 it('niega los dos canales a una sesion de portal y a un quiosco', function (Closure $portador): void {
     // Al quiosco y al portal les falta el ambito `attendance:read`, asi que ni
