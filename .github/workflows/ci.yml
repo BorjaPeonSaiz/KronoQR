@@ -3616,7 +3616,9 @@ jobs:
   # aparte, mas ligero, corre en paralelo al de cobertura sin ese coste.
   #
   # En `push` y en `workflow_dispatch`, el job `unit` muta lo que el cambio
-  # toca y aplica el 80 % a CADA fichero (`make mutate-changed`); este job es
+  # toca y aplica el 80 % al CONJUNTO de esos ficheros (`make mutate-changed`:
+  # Pest da una sola nota por ejecucion, asi que un fichero flojo puede quedar
+  # tapado por los demas del mismo cambio); este job es
   # la pasada GLOBAL (MSI >= 80 % sobre todo el dominio) y es la unica que
   # corre completa, de noche y en el disparo manual. Hasta el 02-10-2026 el
   # job `unit` repetia la completa en el disparo manual; se quito (R6-DV-01/02:

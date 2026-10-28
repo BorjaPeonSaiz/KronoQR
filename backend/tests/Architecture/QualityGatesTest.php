@@ -159,6 +159,13 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
     expect(preg_match('/^  mutation:\n(.*?)\z/ms', $ci, $mutation))->toBe(1);
     expect($mutation[1] ?? '')->toMatch('/\bmake mutate\b(?!-changed)/');
 
+    // Y ningun comentario vuelve a prometer lo contrario (V2-QB-4): «el 80 % a
+    // CADA fichero» sobrevivio en ci.yml a la revision del 02-10 que lo
+    // corrigio en el Makefile, y quien lo leia creia cubierto un fichero flojo.
+    // El Makefile dice «NO es "80 % a cada fichero"», que es lo correcto: se
+    // busca la afirmacion, con su verbo.
+    expect(preg_match('/aplica el 80\s*%\s+a\s+cada\s+fichero/iu', $ci.$makefile))->toBe(0);
+
     // Sin mutantes (una rama cuyo unico cambio de dominio es una interfaz): solo
     // se da por bueno si NO hay clases, traits ni enums entre lo cambiado. Un
     // `--ignore-min-score-on-zero-mutations` a ciegas dejaria pasar una clase
