@@ -2464,6 +2464,17 @@ paths:
         —quien agotara el cupo solo se cerraria la sesion a si mismo— y si
         dejaria a una persona sin poder cerrar sesion justo cuando sospecha que
         su token esta comprometido. Por eso **no declara `429`**.
+
+        **El rastro depende de quien llama** (ADR-039, RS-13). Solo la cuenta
+        de gestion deja asiento `auth.logout` en `audit_log`. Los demas
+        portadores dejan unicamente la linea `auth.logged_out` del log tecnico,
+        cada uno en su canal y con el UUID en su campo: la sesion del portal en
+        el canal `portal`, con `employee_uuid`; un quiosco emparejado en el
+        canal `device`, con `device_uuid` y sin `employee_uuid`, porque un
+        dispositivo no es una persona de la plantilla. Un acceso de soporte
+        recibe `204` y no se le revoca nada ni deja rastro de cierre: su
+        credencial la retira el cliente (RF-PD-11, ADR-020). Nunca un nombre
+        (regla dura 21).
       tags: [Identity]
       security:
         - managementToken: []
