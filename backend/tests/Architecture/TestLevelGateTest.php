@@ -131,7 +131,9 @@ function testLevelGateKinds(): array
 
         // Identidad y acceso
         'RF-ID-01' => [$endpoint, $recorrido],
-        'RF-ID-02' => [$endpoint],
+        // El auditor tiene su propio recorrido en el panel desde la 2.2.1
+        // (`auditor.spec.ts`): solo la exportacion para la Inspeccion.
+        'RF-ID-02' => [$endpoint, $recorrido],
         'RF-ID-03' => [$endpoint, $recorrido],
         'RF-ID-04' => [$endpoint],
         'RF-ID-05' => [$endpoint, $recorrido],
@@ -156,7 +158,9 @@ function testLevelGateKinds(): array
         'RF-QR-01' => [$endpoint],
         'RF-QR-02' => [$regla, $endpoint],
         'RF-QR-03' => [$endpoint],
-        'RF-QR-04' => [$endpoint],
+        // Imprimir una tarjeta y un lote desde el panel (`credential-print.spec.ts`,
+        // V1-QA-3): el PDF lo prueban feature y contrato; el boton, el E2E.
+        'RF-QR-04' => [$endpoint, $recorrido],
         // El nivel de correccion del QR se comprueba sobre la tarjeta impresa y
         // escaneada de verdad por la camara simulada.
         'RF-QR-05' => [$recorrido],
@@ -229,18 +233,12 @@ function testLevelGateKinds(): array
 function testLevelGateKnownGaps(): array
 {
     return [
-        'RF-IN-02' => [
-            // El agregado por departamento lo calcula PostgreSQL
-            // (`DatabasePeriodReportReader`, `GROUP BY` del informe): no hay
-            // calculo de dominio que probar sin base de datos. Su prueba del
-            // calculo es la de integracion con volumen, `PeriodReportVolumeTest`.
-            TEST_LEVEL_GATE_UNITARIA => 'el agregado lo calcula la consulta SQL, no el dominio',
-        ],
-        // RF-PR-05 y RF-QR-04, los dos que destapo conceder el contrato por
-        // prueba y no por fichero (bloque 14), se cerraron en la 2.2.1 con su
-        // prueba de contrato: `InstallationSettingsTest` valida el ajuste
-        // `WEEKLY_SUMMARY_EMAIL`, unica superficie HTTP del resumen semanal, y
-        // `CredentialPrintContractTest` la respuesta PDF de las dos impresiones.
+        // Vacia desde la 2.3.0. El ultimo hueco, RF-IN-02 sin unitaria («el
+        // agregado lo calcula la consulta SQL»), se cerro en la tarea 22.2 con
+        // `DepartmentReportTest`: la suma la hace PostgreSQL, pero lo que el
+        // informe hace con sus filas —el cubo sin departamento en los totales,
+        // ninguna persona en el asiento— es dominio y se prueba sin base.
+        // RF-PR-05 y RF-QR-04 se cerraron en la 2.2.1 con su prueba de contrato.
     ];
 }
 
@@ -270,7 +268,34 @@ function testLevelGateTestsByRequirement(): array
         'k6' => [Repo::file('load-tests/k6')],
     ], \dirname($backend)))->scan();
 
-    return $index = $scan->byRequirement();
+    // Las que la CI no ejecuta nunca no dan nivel (V1-QA-2): el mismo criterio
+    // que `qa:traceability`, con la misma lista de `quality.skipped_in_ci`.
+    $skipped = testLevelGateSkippedInCi();
+
+    return $index = array_map(
+        static fn (array $tests): array => array_values(array_filter(
+            $tests,
+            static fn (TaggedTest $test): bool => ! $test->isAlwaysSkippedInCi($skipped),
+        )),
+        $scan->byRequirement(),
+    );
+}
+
+/**
+ * Los ficheros de `quality.skipped_in_ci`, leidos como literales de
+ * `config/quality.php` (esta suite no arranca el framework).
+ *
+ * @return list<string>
+ */
+function testLevelGateSkippedInCi(): array
+{
+    $config = Repo::contents('backend/config/quality.php');
+
+    preg_match('/\'skipped_in_ci\'\s*=>\s*\[(?<entries>[^\]]*)\]/', $config, $block);
+    $entries = $block['entries'] ?? throw new RuntimeException('No se lee skipped_in_ci de config/quality.php.');
+    preg_match_all('/\'(?<file>[^\']+)\'\s*=>\s*\d+/', $entries, $files);
+
+    return $files['file'];
 }
 
 /**
@@ -421,6 +446,24 @@ it('exige a cada requisito implementado los niveles de prueba de su tipo', funct
         'Los huecos de nivel no son los de la lista cerrada testLevelGateKnownGaps(). Si sobra uno, escribe '
         .'la prueba del nivel que falta (doc 02 §9.5); si se ha cerrado uno, quitalo de la lista.',
     );
+})->group('RQ-14');
+
+it('no da nivel a una prueba que la CI omite siempre', function (): void {
+    // V1-QA-2: `FpmPoolRenderTest` necesita php-fpm y la CI lo omite siempre;
+    // una RF cuya unica integracion fuera esa pasaria la puerta sin probarse.
+    $omitida = new TaggedTest('pest', 'backend/tests/Integration/Install/FpmPoolRenderTest.php', 1, 'x', ['RF-AT-01'], conditional: true);
+    $deEseFicheroSinSalto = new TaggedTest('pest', 'backend/tests/Integration/Install/FpmPoolRenderTest.php', 1, 'x', ['RF-AT-01']);
+
+    expect(testLevelGateSkippedInCi())->toBe(['tests/Integration/Install/FpmPoolRenderTest.php'])
+        ->and($omitida->isAlwaysSkippedInCi(testLevelGateSkippedInCi()))->toBeTrue()
+        ->and($deEseFicheroSinSalto->isAlwaysSkippedInCi(testLevelGateSkippedInCi()))->toBeFalse();
+})->group('RQ-13', 'RQ-14');
+
+it('no cuenta en ningun requisito las pruebas que la CI omite siempre', function (): void {
+    $contadas = array_merge(...array_values(testLevelGateTestsByRequirement()));
+
+    expect(array_filter($contadas, static fn (TaggedTest $test): bool => $test->isAlwaysSkippedInCi(testLevelGateSkippedInCi())))
+        ->toBe([]);
 })->group('RQ-14');
 
 it('deja en alcance los requisitos de las fases ya ejecutadas', function (): void {
