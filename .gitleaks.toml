@@ -219,4 +219,11 @@ useDefault = true
     #    `generic-api-key` lo captura por el nombre de la clave (TRACE_ID_KEY), no por
     #    su forma: es un identificador de correlacion, no un secreto.
     '''^0af7651916cd43dd8448eb211c80319c$''',
+    # 35) frontend-admin/tests/e2e/credential-print.spec.ts (bloque 22 de la 2.3.0,
+    #    commit c8f113d4): UUID v7 fijo con el que el E2E nombra la credencial de la
+    #    fila «pendiente de imprimir» del panel, contra una API simulada. La regla
+    #    `generic-api-key` lo captura por el nombre de la constante (CREDENTIAL_UUID),
+    #    no por su forma: es un identificador escrito a mano, sin uso fuera de la prueba,
+    #    y la credencial real va en el QR firmado con HMAC, nunca como este UUID.
+    '''^0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c11$''',
   ]
