@@ -29,7 +29,7 @@ presupuesto de tiempo (doc 02 §10.1); aquí, lo que significa un rojo en cada u
 | ⑥ Frontend unitarias | Vitest de los cuatro paquetes del workspace | Un componente o un almacén se comporta distinto de su prueba |
 | ⑦ E2E | Playwright con cámara simulada y axe | Un recorrido de usuario roto o una violación de accesibilidad |
 | ⑧ Instalación limpia · ⑧b Actualización | `clean-install` (los cuatro escenarios de RQ-11) y `update` (idempotencia, vuelta atrás con fallo inyectado, restauración de la copia previa). Corren en `main`, en cada etiqueta y a mano, no en cada push | El instalador, el actualizador o el paquete de entrega no hacen lo que dice [`actualizacion-cliente.md`](actualizacion-cliente.md). **Es el que más importa antes de publicar** |
-| Nocturnas | `coverage` (dominio ≥ 90 %, global ≥ 75 %), `mutation` completa y `secrets-history` | Una regresión que el push no cubre; se ve a la mañana siguiente |
+| Nocturnas | `coverage` (dominio ≥ 90 %, global ≥ 75 %), `mutation` completa con su canario y la parte del dominio que ve (`mutate-scope`), y `secrets-history` | Una regresión que el push no cubre; se ve a la mañana siguiente |
 
 Los presupuestos de ①–③ (menos de 15 min de reloj) y del resto los mide cada job
 con una anotación `::warning`: es un termómetro, no una puerta. Si se pasa, se
@@ -60,6 +60,8 @@ make test-integration   # ④  PostgreSQL real
 make observability-check # reglas de Prometheus, pruebas de umbral y Alertmanager
 make e2e                # ⑦  Playwright con cámara simulada
 make mutate             # mutación COMPLETA (nocturna y disparo manual)
+make mutate-canary      # el canario que corre antes de las dos mutaciones
+make mutate-scope       # parte del dominio que la mutación ve (nocturna)
 make changelog-check VERSION=1.2.3   # puerta de versión
 ```
 
@@ -85,6 +87,9 @@ Playwright no arranca ahí): valídalo en el job ⑦ de la CI o en el anfitrión
 | Deptrac: `Uncovered` | Un fichero ha caído en `ModuleUnclassified`. Suele ser una carpeta nueva que no está en la estructura del §2: muévela a su capa, no relajes la regla |
 | Pest Arch: `llama a now()` | Regla dura 2. Inyecta el puerto `Clock`. Sin eso no se pueden probar DST ni medianoche, que son la mitad del riesgo del dominio |
 | Una prueba de `Architecture` de alertas, runbooks o documentación de cliente (`AlertCatalogueTest`, `BackupAndAlertingTest`, `ClientDocumentationTest`…) | Alguien ha añadido una alerta sin runbook, un `runbook_url` que no existe, o un documento que cita una orden o un fichero que ya no existe. **Se arregla el documento o la regla, no la prueba**: la norma del doc 02 §8.4 es que una alerta sin procedimiento es ruido |
+| `[mutate-canary] ERROR: el canario ha dado «…»` | La mutación no ha llegado a mutar el dominio porque el entorno no distingue un mutante vivo de uno muerto. Con más `tested` de lo esperado, el proceso hijo de Pest falla por su cuenta (memoria, una extensión, una opción nueva en `MUTATE_OPTIONS`); con más `untested`, el mutante no llega al hijo (OPcache: `backend/tools/mutation/zzz-no-opcache.ini`). Reprodúcelo con `make mutate-canary`. Solo si has cambiado a propósito `tests/MutationCanary` o has actualizado Pest, ajusta `MUTATION_CANARY_EXPECTED` en el `Makefile` |
+| `Mutation score below expected` | Mira el resumen del *run*: da la puntuación y los ficheros con mutantes vivos, de más a menos. El diff de cada mutante vivo está en el artefacto `mutacion-acotada-log` (③) o `mutacion-completa-log` (nocturna); `gh run view --log` corta el log antes de la puntuación. Se escribe la prueba que lo mata, no se baja el umbral |
+| `[coverage-gate] app/Modules/*/Domain/*` en el job `mutation` (`make mutate-scope`) | La suite Unit cubre menos dominio que `MUTATION_SCOPE_MIN`: lo que no cubre, la mutación no lo ve (`--covered-only`). Suele ser un fichero de dominio nuevo sin prueba unitaria; la lista de los que quedan por debajo sale en el log |
 | `qa:traceability --check`: requisito sin prueba | Etiqueta la prueba con `->group('RN-05', 'RF-AT-08')` o escríbela; el nivel lo decide la tabla del doc 02 §9.5 |
 | `docs:consistency`: divergencia entre documentos | Arreglar la contradicción forma parte de la tarea; el orden de autoridad está en `CLAUDE.md` |
 | `Missing script: lint` en un frontend | El `package.json` de ese frontend debe exponer `lint` (ESLint) y `type-check` (`vue-tsc --noEmit`). Es el contrato que espera la etapa ① |
@@ -96,8 +101,41 @@ Playwright no arranca ahí): valídalo en el job ⑦ de la CI o en el anfitrión
 | `release.yml` · `esperar-ci`: la etapa ⑧/⑧b de esa etiqueta no está en verde | No se publica. Arregla la causa en `ci.yml` (⑧ y ⑧b corren en la propia etiqueta) y repite con `workflow_dispatch` indicando la etiqueta, sin crear otra |
 | `Presupuesto excedido` (aviso, no error) | La etapa ha tardado más de lo que fija el doc 02 §10.1. No rompe la ejecución, pero se mira: una CI lenta se acaba ignorando |
 
+## Relanzar un run
+
+Un *run* rojo **no se relanza para ponerlo en verde**: una prueba que falla a
+veces se arregla o se borra, nunca se reintenta (doc 02 §10.1, R2-QB-07). Vale
+igual para el «Re-run» de GitHub (intento 2) que para un `gh workflow run`
+nuevo sobre el mismo SHA, en `main` y en una rama antes de integrarla.
+
+1. **Mira qué falló.** Si es una prueba —aunque el día anterior pasara—, no se
+   relanza: abre una incidencia con el enlace al job, y arregla o borra la
+   prueba en una rama. El verde llega con ese commit.
+2. **Solo si el fallo es del entorno** —*runner* perdido o cancelado, caída de
+   GitHub o del registro de imágenes, una descarga de dependencias que no
+   llegó, el *runner* que agotó su tiempo sin que el código cambiara de
+   duración—, **abre primero la incidencia** con el enlace al intento fallido,
+   el job y la causa, y después relanza.
+3. Un *run* que se canceló a sí mismo por concurrencia (un *push* más nuevo del
+   mismo tipo) no es un fallo: no hace falta incidencia.
+
+Los reintentos quedan en la API aunque la lista de *runs* solo enseñe el
+último intento. Para auditarlos en el cierre de cada fase:
+
+```bash
+gh api 'repos/{owner}/{repo}/actions/runs?branch=main&per_page=100' \
+  --jq '.workflow_runs[] | select(.run_attempt > 1) | [.id, .run_attempt, .head_sha[0:8], .conclusion] | @tsv'
+gh api 'repos/{owner}/{repo}/actions/runs/<id>/attempts/1/jobs' \
+  --jq '.jobs[] | select(.conclusion == "failure") | [.name, .html_url] | @tsv'
+```
+
+Cada línea de la primera orden tiene que tener su incidencia.
+
 ## Qué no hacer
 
+- **No relanzar un run para que una prueba intermitente salga en verde.** El
+  intento 2 no deja rastro en la lista de *runs* fallidos y la prueba sigue
+  rota (sección anterior).
 - **No desactivar un paso para que pase la CI.** Si una comprobación estorba, o
   está mal planteada y se cambia con su justificación, o el código está mal.
 - **No añadir un `baseline` de PHPStan ni `skip_violations` en Deptrac.** El
