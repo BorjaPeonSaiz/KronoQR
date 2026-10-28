@@ -16,8 +16,10 @@ use PhpToken;
  * via mueve uno y deja el otro en la hora real, y el resultado pasa a depender
  * del dia en que se ejecuta. Dos familias:
  *
- *   1. Vincular `Clock` en el contenedor a mano (`instance`, `bind`,
- *      `singleton`, `scoped` y sus variantes `*If`, tambien por la facade
+ *   1. Vincular o sustituir `Clock` a mano (`instance`, `bind`,
+ *      `singleton`, `scoped` y sus variantes `*If`, `extend`, los dobles
+ *      `mock`, `spy` y `partialMock` —de Laravel o de Pest— y el contenedor
+ *      como array, `$this->app[Clock::class] = …`; tambien por la facade
  *      `App::`), con el nombre corto, el nombre completo o un alias de
  *      importacion.
  *   2. Mover solo Carbon: `::setTestNow()` de cualquier clase (`Carbon`,
@@ -50,10 +52,21 @@ final class ClockTampering
 
         $offences = [];
 
-        $binding = '/(?:->|::)(instance|bind|singleton|scoped|bindIf|singletonIf|scopedIf)\(\s*('
+        // Como metodo (`app()->instance(`, `$this->mock(`), como estatico
+        // (`App::bind(`) o como funcion de Pest (`mock(`, `spy(`).
+        $binding = '/(?:->|::|(?<![\w$>:\\\\]))(instance|bind|singleton|scoped|bindIf|singletonIf|scopedIf|extend|mock|spy|partialMock)\(\s*('
             .implode('|', $names).')::class/';
 
         if (preg_match_all($binding, $code, $matches) > 0) {
+            foreach ($matches[0] as $match) {
+                $offences[] = 'vincula Clock a mano: '.$match;
+            }
+        }
+
+        // El contenedor como array: `$this->app[Clock::class] = …`.
+        $offsetSet = '/\[\s*('.implode('|', $names).')::class\s*\]\s*=(?![=>])/';
+
+        if (preg_match_all($offsetSet, $code, $matches) > 0) {
             foreach ($matches[0] as $match) {
                 $offences[] = 'vincula Clock a mano: '.$match;
             }

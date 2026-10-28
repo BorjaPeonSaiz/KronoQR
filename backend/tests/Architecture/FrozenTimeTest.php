@@ -77,6 +77,13 @@ it('reconoce cada forma de tocar un solo reloj', function (string $source): void
     'Clock por su nombre completo' => '<?php $this->app->singleton(\App\Modules\Shared\Application\Port\Clock::class, fn () => $reloj);',
     'Clock por un alias' => '<?php use App\Modules\Shared\Application\Port\Clock as Reloj; app()->bind(Reloj::class, fn () => $reloj);',
     'Clock por la facade App' => '<?php App::scoped(Clock::class, fn () => $reloj);',
+    'un doble de Clock con mock de Laravel' => '<?php $this->mock(Clock::class, fn ($mock) => $mock->shouldReceive("now"));',
+    'un doble de Clock con mock de Pest' => '<?php $reloj = mock(Clock::class)->expect(now: fn () => $instante);',
+    'un espia de Clock' => '<?php $this->spy(Clock::class);',
+    'un doble parcial de Clock' => '<?php $this->partialMock(Clock::class, fn ($mock) => $mock);',
+    'extend sobre Clock' => '<?php app()->extend(Clock::class, fn ($reloj) => FixedClock::at("2026-06-15 10:00:00"));',
+    'el contenedor como array' => '<?php $this->app[Clock::class] = FixedClock::at("2026-06-15 10:00:00");',
+    'app() como array y nombre completo' => '<?php app()[\App\Modules\Shared\Application\Port\Clock::class] = $reloj;',
     'Carbon::setTestNow' => '<?php Carbon::setTestNow(Carbon::now()->addMinutes(2));',
     'CarbonImmutable::setTestNow' => '<?php CarbonImmutable::setTestNow("2026-06-15 10:00:00");',
     'la facade Date' => '<?php Date::setTestNow("2026-06-15 10:00:00");',
@@ -94,6 +101,9 @@ it('no confunde con tocar el reloj lo que solo lo lee o lo explica', function (s
     'un comentario que lo nombra' => "<?php\n// Aqui no se usa Carbon::setTestNow() ni ->instance(Clock::class\n\$x = 1;",
     'otro metodo cuyo nombre contiene travel' => '<?php $ruta->unravelTo(3);',
     'otra clase vinculada' => '<?php app()->instance(ClockSkewPolicy::class, $politica);',
+    'un doble de otra clase' => '<?php $this->mock(ClockSkewPolicy::class);',
+    'leer Clock del contenedor como array' => '<?php $reloj = $this->app[Clock::class];',
+    'comparar lo que hay en el contenedor' => '<?php expect($this->app[Clock::class] === $reloj)->toBeTrue();',
 ])->group('RQ-13');
 
 it('el helper existe y lo usa al menos una prueba de cada suite con framework', function (): void {
