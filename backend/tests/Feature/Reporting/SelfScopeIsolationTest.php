@@ -92,54 +92,42 @@ function aislamientoJornada(int $site, string $employee, string $workDate, strin
     }
 }
 
-it('devuelve siempre el registro del titular del token, se manipule lo que se manipule', function (): void {
+it('rechaza como campo desconocido un identificador ajeno en la consulta de /me/workdays', function (string $parametro): void {
     // La barrera 1. Ninguna de estas formas existe en el contrato; se prueban
     // porque lo que hay que demostrar no es que el contrato no las describa,
-    // sino que el servidor no las atiende.
+    // sino que el servidor no las atiende. Un desenlace y uno solo (R4-QA-02):
+    // `ValidatesWorkDateRange` usa `RejectsUnknownInput`, asi que el parametro
+    // ajeno da `422` ANTES de leer nada, ni lo del otro ni lo propio.
     $contexto = dosEmpleadosYUnPortal();
 
-    $intentos = [
-        '/api/v1/me/workdays?employee_uuid='.$contexto['theirs'],
-        '/api/v1/me/workdays?uuid='.$contexto['theirs'],
-        '/api/v1/me/workdays?employee='.$contexto['theirs'],
-        '/api/v1/me/workdays?employee_uuid[]='.$contexto['theirs'],
-    ];
+    $respuesta = Api::as($contexto['token'])->get('/api/v1/me/workdays?'.$parametro.'='.$contexto['theirs']);
 
-    foreach ($intentos as $uri) {
-        $respuesta = Api::as($contexto['token'])->call('GET', $uri);
+    $respuesta->assertStatus(422);
 
-        // O se rechaza por parametro desconocido, o se atiende devolviendo LO
-        // PROPIO. Lo que no puede pasar nunca es que devuelva lo del otro.
-        expect($respuesta->getStatusCode())->toBeIn([200, 422], $uri);
+    expect($respuesta->getContent())->not->toContain($contexto['theirs']);
+})->with([
+    'employee_uuid' => 'employee_uuid',
+    'uuid' => 'uuid',
+    'employee' => 'employee',
+    'employee_uuid como lista' => 'employee_uuid[]',
+])->group('RF-ID-07', 'RQ-07', 'RL-05');
 
-        if ($respuesta->getStatusCode() === 200) {
-            $respuesta->assertJsonPath('employee_uuid', $contexto['mine']);
-        }
-
-        expect($respuesta->getContent())->not->toContain($contexto['theirs'], $uri);
-    }
-})->group('RF-ID-07', 'RQ-07', 'RL-05');
-
-it('ignora un identificador ajeno enviado en el cuerpo o en una cabecera', function (): void {
-    // Las otras dos vias por las que alguien intentaria colar un identificador.
+it('rechaza como campo desconocido un identificador ajeno en el cuerpo de /me/workdays', function (): void {
     $contexto = dosEmpleadosYUnPortal();
 
     $respuesta = Api::as($contexto['token'])
-        ->withHeaders(['X-Employee-Uuid' => $contexto['theirs']])
         ->call('GET', '/api/v1/me/workdays', ['employee_uuid' => $contexto['theirs']]);
 
-    // El cuerpo con un campo desconocido se rechaza (`RejectsUnknownInput`) y la
-    // cabecera se ignora. Cualquiera de los dos desenlaces vale; el que no vale
-    // es un `200` con el registro del otro.
-    expect($respuesta->getStatusCode())->toBeIn([200, 422]);
-
-    if ($respuesta->getStatusCode() === 200) {
-        $respuesta->assertJsonPath('employee_uuid', $contexto['mine']);
-    }
+    $respuesta->assertStatus(422)->assertJsonStructure(['errors' => ['employee_uuid']]);
 
     expect($respuesta->getContent())->not->toContain($contexto['theirs']);
+})->group('RF-ID-07', 'RQ-07');
 
-    // Y la cabecera sola, sin cuerpo, tampoco cambia nada.
+it('devuelve el registro propio aunque una cabecera señale a otra persona', function (): void {
+    // La cabecera no existe para el servidor: la respuesta es la del titular
+    // del token.
+    $contexto = dosEmpleadosYUnPortal();
+
     Api::as($contexto['token'])
         ->withHeaders(['X-Employee-Uuid' => $contexto['theirs']])
         ->get('/api/v1/me/workdays')
@@ -147,26 +135,26 @@ it('ignora un identificador ajeno enviado en el cuerpo o en una cabecera', funct
         ->assertJsonPath('employee_uuid', $contexto['mine']);
 })->group('RF-ID-07', 'RQ-07');
 
-it('no exporta el registro de otra persona aunque se señale en la consulta de /me/export', function (string $parametro): void {
+it('no exporta el registro de otra persona aunque se señale en la consulta de /me/export', function (string $parametro, string $formato): void {
     // A6 y V4-PO-2 (2.3.0). `/me/export` es la ruta que entrega el fichero
     // completo, y el CSV es su formato por omision: la manipulacion de la
     // barrera 1 se prueba tambien aqui, y no solo sobre `/me/workdays`. Sin
     // `format` (el CSV por omision) y con `format=csv` explicito.
     $contexto = dosEmpleadosYUnPortal();
 
-    foreach (['', '&format=csv'] as $formato) {
-        $uri = '/api/v1/me/export?from=2026-03-01&to=2026-03-31'.$formato.'&'.$parametro.'='.$contexto['theirs'];
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/me/export?from=2026-03-01&to=2026-03-31'.$formato.'&'.$parametro.'='.$contexto['theirs']);
 
-        $respuesta = Api::as($contexto['token'])->get($uri);
+    // Un parametro que no esta en el contrato se rechaza como campo
+    // desconocido ANTES de leer nada: ni el fichero del otro ni el propio.
+    $respuesta->assertStatus(422)->assertJsonStructure(['errors' => [$parametro]]);
 
-        // Un parametro que no esta en el contrato se rechaza como campo
-        // desconocido ANTES de leer nada: ni el fichero del otro ni el propio.
-        $respuesta->assertStatus(422)->assertJsonStructure(['errors' => [$parametro]]);
-
-        expect($respuesta->headers->get('Content-Disposition'))->toBeNull()
-            ->and($respuesta->getContent())->not->toContain($contexto['theirs']);
-    }
-})->with(['employee_uuid', 'uuid', 'employee'])->group('RF-ID-07', 'RQ-07', 'RL-05');
+    expect($respuesta->headers->get('Content-Disposition'))->toBeNull()
+        ->and($respuesta->getContent())->not->toContain($contexto['theirs']);
+})->with(['employee_uuid', 'uuid', 'employee'])->with([
+    'CSV por omision' => '',
+    'CSV explicito' => '&format=csv',
+])->group('RF-ID-07', 'RQ-07', 'RL-05');
 
 it('exporta solo lo propio aunque el identificador ajeno viaje en el cuerpo o en una cabecera', function (): void {
     // Las otras dos vias de la barrera 1 sobre `/me/export` (A6). El campo en el
@@ -273,8 +261,10 @@ it('no deja entrar por /me a un quiosco', function (): void {
     // registro horario de alguien.
     dosEmpleadosYUnPortal();
 
-    Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/me/workdays')->assertStatus(403);
-    Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/me/export')->assertStatus(403);
+    $quiosco = AttendanceFixtures::kioskToken();
+
+    Api::as($quiosco)->get('/api/v1/me/workdays')->assertStatus(403);
+    Api::as($quiosco)->get('/api/v1/me/export')->assertStatus(403);
 })->group('RF-ID-07', 'RQ-07', 'RS-04', 'RF-ID-04');
 
 it('no deja entrar por /me sin token', function (string $uri): void {
