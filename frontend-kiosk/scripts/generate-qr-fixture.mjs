@@ -84,6 +84,28 @@ const outputDir = path.join(appDir, 'e2e', 'fixtures')
 const payload =
   process.env['KIOSK_E2E_QR_PAYLOAD'] ?? 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
 
+/**
+ * La SEGUNDA tarjeta del video alterno (`qr-video-alternating.y4m`, KP3): el
+ * mismo formato `FH1` y la misma longitud, otra persona. Firma sin valor, como
+ * la primera: el quiosco no verifica firmas y el E2E no habla con el backend.
+ */
+const secondPayload = 'FH1.a3.Pz8rW4nKq2VhT6yLm3XcJw.Qe7Rt1Yu9Io3Pa5S'
+
+/**
+ * Cadencia del video alterno: 2 fotogramas por segundo. Una tarjeta 1 s delante
+ * de la camara, 1 s sin nada, la otra tarjeta 1 s y otro segundo sin nada, en
+ * bucle: lo que pasa en un cambio de turno, una persona detras de otra. Para el
+ * quiosco cada aparicion es otra persona (otro payload que el ultimo), asi que
+ * cada una es un fichaje nuevo sin esperar a `HELD_GAP_MS` ni a
+ * `LOCAL_REPEAT_WINDOW_MS`. El hueco sin tarjeta importa: tras un acierto ZXing
+ * espera `DELAY_BETWEEN_SUCCESS_MS` (800 ms) antes de volver a mirar, y sin
+ * nadie delante vuelve a mirar cada 100 ms; dos tarjetas pegadas medirian esa
+ * espera, que en el mostrador no existe. Ocho fotogramas: 11 MB, frente a los
+ * 330 MB que costaria lo mismo a 30 fps.
+ */
+const ALTERNATING_FPS = 2
+const ALTERNATING_FRAMES_PER_STEP = 2
+
 /** Lee una fraccion `0 <= x <= 1` de una variable de entorno, o falla alto y claro. */
 function readFractionEnv(name, fallback) {
   const raw = process.env[name]
@@ -415,6 +437,28 @@ function writeY4m(file, luma) {
 }
 
 /**
+ * Un video de varios fotogramas distintos, a `fps`, en el mismo formato que
+ * `writeY4m`. Chromium lo reproduce en bucle a la cadencia de su cabecera.
+ */
+function writeY4mSequence(file, lumaFrames, fps) {
+  const chromaSize = (WIDTH / 2) * (HEIGHT / 2)
+  const chroma = Buffer.alloc(chromaSize, CHROMA_NEUTRAL)
+  const header = Buffer.from(
+    `YUV4MPEG2 W${WIDTH} H${HEIGHT} F${fps}:1 It A1:1 C420mpeg2\n`,
+    'ascii',
+  )
+  const frameMarker = Buffer.from('FRAME\n', 'ascii')
+
+  const parts = [header]
+  for (const luma of lumaFrames) {
+    parts.push(frameMarker, Buffer.from(luma), chroma, chroma)
+  }
+
+  writeFileSync(file, Buffer.concat(parts))
+  return parts.reduce((total, part) => total + part.byteLength, 0)
+}
+
+/**
  * Como `renderLuma`, pero invirtiendo exactamente las celdas de `wornCells`
  * -una por palabra de codigo corrompida (`pickWornCells`)- en vez de tapar
  * un parche contiguo.
@@ -454,6 +498,7 @@ try {
   const degraded = path.join(outputDir, 'qr-video-degraded.y4m')
   const worn = path.join(outputDir, 'qr-video-worn.y4m')
   const blank = path.join(outputDir, 'qr-video-blank.y4m')
+  const alternating = path.join(outputDir, 'qr-video-alternating.y4m')
 
   const cleanBytes = writeY4m(clean, renderLuma(matrix, 0))
   const degradedBytes = writeY4m(degraded, renderLuma(matrix, occlusionFraction))
@@ -495,10 +540,27 @@ try {
   // no puede permitirse.
   const blankBytes = writeY4m(blank, new Uint8Array(WIDTH * HEIGHT).fill(LUMA_WHITE))
 
+  // Dos tarjetas que se turnan delante de la camara (KP3): la suite nocturna de
+  // rendimiento mide RNF-P-01 sobre decenas de fichajes seguidos
+  // (`perf-scan-latency.spec.ts`), y una sola tarjeta quieta solo ficha una vez.
+  const firstCard = renderLuma(matrix, 0)
+  const secondCard = renderLuma(encode(secondPayload), 0)
+  const nobody = new Uint8Array(WIDTH * HEIGHT).fill(LUMA_WHITE)
+  const alternatingBytes = writeY4mSequence(
+    alternating,
+    [firstCard, nobody, secondCard, nobody].flatMap((step) =>
+      Array.from({ length: ALTERNATING_FRAMES_PER_STEP }, () => step),
+    ),
+    ALTERNATING_FPS,
+  )
+
   log(`Escrito e2e/fixtures/qr-video.y4m (${(cleanBytes / 1024 / 1024).toFixed(1)} MB)`)
   log(`Escrito e2e/fixtures/qr-video-degraded.y4m (${(degradedBytes / 1024 / 1024).toFixed(1)} MB)`)
   log(`Escrito e2e/fixtures/qr-video-worn.y4m (${(wornBytes / 1024 / 1024).toFixed(1)} MB)`)
   log(`Escrito e2e/fixtures/qr-video-blank.y4m (${(blankBytes / 1024 / 1024).toFixed(1)} MB)`)
+  log(
+    `Escrito e2e/fixtures/qr-video-alternating.y4m (${(alternatingBytes / 1024 / 1024).toFixed(1)} MB)`,
+  )
 } catch (error) {
   process.stderr.write('[qr-fixture] No se ha podido generar el video: ' + String(error) + '\n')
   process.stderr.write(

@@ -236,8 +236,8 @@ test(
     // Despues: la confirmacion y el envio del fichaje ocurren con el latido
     // SIN resolver. El presupuesto de 300 ms (la parte del quiosco de RNF-P-01,
     // doc 02 §6) NO se afirma aqui: es de rendimiento y depende de la carga de
-    // la maquina; lo afirman `tests/unit/ScanView.spec.ts` y `tests/e2e/scan.spec.ts`
-    // («confirma en menos de 300 ms»).
+    // la maquina; lo afirman `tests/unit/ScanView.spec.ts` y, con p95 y p99 sobre
+    // sesenta fichajes, `tests/e2e/perf-scan-latency.spec.ts` (suite nocturna).
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
 
@@ -273,7 +273,7 @@ test(
     await page.goto('/')
 
     // Regla dura 19: con el relevo en curso el quiosco confirma igual. La
-    // latencia de 300 ms ya la fijan `scan.spec.ts` y la prueba de arriba.
+    // latencia la mide `perf-scan-latency.spec.ts`, en la suite nocturna.
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
 
     // El token y SU caducidad se guardaron juntos.

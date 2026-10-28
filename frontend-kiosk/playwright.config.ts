@@ -35,6 +35,14 @@ const BASE_URL = `http://127.0.0.1:${PORT}`
 // sin CSP, que es justo como PIN-01 llego a produccion sin que nada lo viera.
 const SECURITY_HEADERS = readProductionSecurityHeaders()
 
+// LA SUITE NOCTURNA DE RENDIMIENTO (D4 de la 2.3.0, KP3). `perf-scan-latency.spec.ts`
+// ficha sesenta veces seguidas para medir RNF-P-01 con p95 y p99, y eso es reloj
+// de verdad: en el E2E de cada push fallaria cuando el runner va cargado, no
+// cuando el quiosco empeora. Su proyecto solo existe con
+// `KRONOQR_E2E_PERFORMANCE=1`, que pone `make e2e-performance` (job nocturno
+// `performance-kiosk` de ci.yml); sin la variable, `npm run test:e2e` no lo ve.
+const PERFORMANCE_SUITE = process.env['KRONOQR_E2E_PERFORMANCE'] === '1'
+
 /** Argumentos comunes: camara falsa y permiso concedido sin dialogo. */
 function chromiumArgs(videoFile: string): string[] {
   return [
@@ -80,7 +88,7 @@ export default defineConfig({
     {
       name: 'kiosk-qr',
       testIgnore:
-        /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$|perf-lcp\.spec\.ts$|perf-scanner-ready\.spec\.ts$/,
+        /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$|perf-lcp\.spec\.ts$|perf-scanner-ready\.spec\.ts$|perf-scan-latency\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -149,6 +157,22 @@ export default defineConfig({
         launchOptions: { args: chromiumArgs(fixture('qr-video.y4m')) },
       },
     },
+    ...(PERFORMANCE_SUITE
+      ? [
+          {
+            // `perf-scan-latency.spec.ts` (KP3): dos tarjetas que se turnan
+            // delante de la camara (`qr-video-alternating.y4m`), un fichaje cada
+            // ~2 s. Proyecto propio: la medida no comparte navegador con nada.
+            name: 'kiosk-perf-latency',
+            testMatch: /perf-scan-latency\.spec\.ts$/,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 1280, height: 800 },
+              launchOptions: { args: chromiumArgs(fixture('qr-video-alternating.y4m')) },
+            },
+          },
+        ]
+      : []),
     {
       // `kiosk-upgrade.spec.ts` (tarea 3.1 de la 2.2.1): la tablet abierta
       // recibe una version nueva y la aplica sola. Camara SIN QR, como
