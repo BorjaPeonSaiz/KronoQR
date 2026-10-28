@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. La regla de admisión en `Shared/Domain` y el reparto describen el código actual. **N5 corregida en la 2.2.1**, con la prueba que vigila el invariante y `ElapsedMinutes` añadida a la lista del punto 3 ([enmienda del 15-10-2026](#enmienda-del-15-10-2026-bloque-19-de-la-221-n5-corregida-y-una-regla-más-en-la-lista-del-punto-3)). Pendiente: la prueba de arquitectura de esa lista (`qa-testing`) |
+| **Estado** | Aceptada. La regla de admisión en `Shared/Domain` y el reparto describen el código actual. **N5 corregida en la 2.2.1**, con la prueba que vigila el invariante y `ElapsedMinutes` añadida a la lista del punto 3 ([enmienda del 15-10-2026](#enmienda-del-15-10-2026-bloque-19-de-la-221-n5-corregida-y-una-regla-más-en-la-lista-del-punto-3)). **Lista del punto 3 completa y vigilada por una prueba de arquitectura** desde la [enmienda del 27-10-2026](#enmienda-del-27-10-2026-bloque-20-de-la-230-la-lista-del-punto-3-completa-y-vigilada) |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo A6-6 de la [tanda 6 de la 2.1.0](../verificacion/2.1.0-tanda-6.md); divergencia N5 de la [tanda 3](../verificacion/2.1.0-tanda-3.md), abierta en la [re-verificación](../verificacion/2.2.0-reverificacion-tanda-3.md)) |
 | **Afecta a** | Precisa [ADR-021](ADR-021-clock-en-shared.md) (criterio de admisión en `Shared`) y [ADR-025](ADR-025-frontera-de-dependencias-del-nucleo.md) · Respeta [ADR-017](ADR-017-toda-diferencia-entre-clientes-es-configuracion.md) y [ADR-024](ADR-024-la-pausa-son-dos-tramos.md) · `backend/app/Modules/Shared/Domain/ValueObject/CompliancePolicy.php`, `ComplianceRule.php`, `ComplianceRuleSuspension.php`, `Shared/Domain/Policy/PinLockoutPolicy.php` · `Attendance/Domain/Policy/AnomalyDetectionPolicy.php`, `Attendance/Application/UseCase/DetectAttendanceAnomalies.php`, `Attendance/Infrastructure/Persistence/EloquentWorkDayLedger.php` · `Reporting/Domain/Policy/ComplianceEvaluation.php`, `Reporting/Domain/ValueObject/ComplianceFacts.php`, `Reporting/Infrastructure/Persistence/DatabaseComplianceFactsReader.php` |
@@ -117,3 +117,44 @@ Una regla nueva en `Shared/Domain` exige una enmienda de este ADR que la añada 
 **La semántica de la medida no cambia:** se restan segundos enteros (`getTimestamp()`) y se trunca al minuto, como hasta ahora. **Con una excepción deliberada, en la conciliación de ADR-057 §4, que pasa a ser más estricta:** la copia que tenía `WorkRecordReconciliation` daba 0 minutos a un asiento con la salida entre 1 y 59 s **antes** que la entrada (`intdiv` trunca hacia cero), y ese 0 podía coincidir con lo guardado. Con `ElapsedMinutes` una salida anterior a la entrada no es una duración, y ese asiento discrepa siempre. Es a propósito: una salida que precede a la entrada no describe ningún tramo posible (RN-03), y la conciliación existe para señalar lo que no cuadra. Medir con microsegundos (C3 de la [re-verificación de la 2.2.0, tanda 1](../verificacion/2.2.0-reverificacion-tanda-1.md)) cambiaría `shift_entries.duration_minutes` respecto a lo ya guardado: la conciliación de ADR-057 §4 denunciaría como `entry_differs_from_audit` cada tramo histórico que cruzara un minuto por fracciones de segundo, y `attendance:reconcile` vería divergencias en `daily_totals`. Es una precisión de RN-09 que decide el propietario, con su plan de transición, y no entra aquí.
 
 **Sigue pendiente** la prueba de arquitectura de la lista del punto 3 (`qa-testing`): que falle si aparece en `Shared/Domain` una regla que no está en la lista.
+
+## Enmienda del 27-10-2026 (bloque 20 de la 2.3.0): la lista del punto 3, completa y vigilada
+
+**Por qué.** La lista del punto 3 se había quedado corta. Cuatro reglas vivían en `Shared/Domain` sin figurar en ella: `EmploymentStatus::canClock`, `LegalRetentionFloor::admits`, `SignOffReason` y `KioskAppVersionEntry::isReadyToReload` (V21-3-AR-2, V21-1-AR-2 y V3-AR-3 de las verificaciones 2.2.0 y 2.2.1). Además, la guarda que prometían las Consecuencias no existía. Al hacer inventario aparecieron otras tres: el alcance de un responsable, el documento de identidad y el asiento de la sesión por canal. Ninguna se mueve en esta enmienda. Todas cumplen las condiciones, con la precisión de la condición 1 que se explica abajo, y se añaden a la lista.
+
+**Precisión de la condición 1.** También la cumple una regla que un solo módulo aplica cuando la aplica sobre un dato que otro módulo le entrega por un puerto de `Shared`, y la regla dice qué significa ese dato para el módulo que lo produce. Si la regla se reescribiera en el módulo que consume, podría dejar de coincidir con el significado que le da el que produce, y sería el mismo fallo de las dos copias que este ADR existe para impedir. Hay dos casos y los dos van en la lista: `isReadyToReload` (lo produce `Kiosk` y lo aplica `Product`) y `sessionEventsAreAudited` (lo produce `Identity` y lo aplica `Compliance`). No vale para nada más. Una regla de un solo módulo sobre sus propios datos vive en el dominio de ese módulo.
+
+### La lista cerrada, a 27-10-2026
+
+Sustituye a las tablas del punto 3 y de la enmienda del 15-10-2026, que conserva. Cada fila nombra la clase y los miembros públicos en los que vive la regla.
+
+| Regla | Clase y miembros | Módulos que la aplican | Requisitos |
+|---|---|---|---|
+| Comparaciones de RN-10, RN-11, RN-12 y RN-17 contra el perfil | `Shared\Domain\ValueObject\CompliancePolicy`: `restIsInsufficient`, `dailyTimeIsExcessive`, `continuousShiftNeedsBreak`, `weeklyTimeIsExcessive` | `Attendance` (bandeja) y `Reporting` (vista) | RN-10, RN-11, RN-12, RN-17 |
+| Qué regla abre incidencia | `Shared\Domain\ValueObject\ComplianceRule`: `opensIncident` | `Product` (asiento del cambio de umbral y pantalla del perfil) y `Reporting` (vista) | RN-17 |
+| Suspensión de una regla | `Shared\Domain\ValueObject\ComplianceRuleSuspension`: `isSuspended` | `Attendance`, `Reporting` y `Product` | RN-12 |
+| Bloqueo del PIN por intentos | `Shared\Domain\Policy\PinLockoutPolicy` (la clase entera) | `Identity` (portal) y `Workforce` (PIN del quiosco), por el puerto `PinAttempts` | RS-12 |
+| Minutos entre dos instantes y hueco de RN-10 | `Shared\Domain\ValueObject\ElapsedMinutes` (la clase entera) | `Attendance`, `Reporting` y `Compliance` | RN-09, RN-10 |
+| Quién puede fichar: solo la persona activa. Quién entra al portal: también la suspendida, no la baja. Qué PIN vale en cada puerta | `Shared\Domain\ValueObject\EmploymentStatus`: `canClock`, `canSignInToPortal`, `admitsPinFrom` · `Shared\Domain\ValueObject\EmployeeSnapshot`: `canClock` | `Attendance` (escaneo, alta manual y atribución de descartes), `Identity` (tarjeta y sesión del portal) y `Workforce` (PIN del quiosco y del portal, y padrón de tarjetas) | RN-14, RN-19, RN-20, RN-22, RN-25, RL-05 |
+| El plazo de retención cumple el suelo legal de la jurisdicción | `Shared\Domain\ValueObject\LegalRetentionFloor`: `admits` | `Compliance` (purga y conciliación) y `Product` (perfil de cumplimiento) | RL-02 |
+| Firma de una acción de consola con relevancia legal: motivo y cuenta que firma | `Shared\Domain\ValueObject\SignOffReason`: `MIN_LENGTH`, `MAX_LENGTH` · `Shared\Domain\ValueObject\ResponsibleAccount`: `canSignAs`, `isConfirmedBy` | `Compliance` (purga revisada, ADR-057 §6) y `Workforce` (corrección de la zona del centro, ADR-056) | RN-23, RL-04 |
+| Una tablet desfasada está lista para recargar: cola en disco y vacía | `Shared\Domain\ValueObject\KioskAppVersionEntry`: `isReadyToReload` | `Product` (diagnóstico) sobre el sondeo que entrega `Kiosk` (condición 1 precisada) | RF-KI-07, RF-PA-07 |
+| Documento de identidad: longitud admitida una vez normalizado | `Shared\Domain\ValueObject\NationalId`: `isTooShort`, `MIN_LENGTH`, `MAX_LENGTH` | `Workforce` (alta e importación) y `Compliance` (búsqueda de la exportación legal) | RF-GP-01, RF-IN-05 |
+| Alcance de un responsable: a quién alcanza su departamento | `Shared\Domain\ValueObject\AccessScope`: `isUnrestricted`, `reachesNobody`, `reaches` | `Compliance`, `Reporting`, `Workforce` e `Identity` | RF-ID-03 |
+| Qué canal deja asiento de sesión | `Shared\Domain\ValueObject\AuthChannel`: `sessionEventsAreAudited` | `Compliance` (diario de autenticación) sobre el canal que entrega `Identity` (condición 1 precisada) | RS-13 |
+
+**La fila de quién puede fichar crece el mismo día** (decisión del propietario del 27-10-2026 sobre RN-25). La persona suspendida entra al portal personal solo para consultar, y la de baja no. Las dos puertas del PIN comparten verificador en `Workforce` y la sesión del portal se valida en `Identity`, así que la diferencia entre las puertas es una regla de dos módulos y va junto a `canClock`: `canSignInToPortal` dice quién entra al portal y `admitsPinFrom` dice qué PIN vale en cada puerta.
+
+### La guarda
+
+`backend/tests/Architecture/SharedDomainRulesListTest.php` recorre `Shared/Domain` como texto, sin comentarios. Clasifica tres señales:
+
+1. cada clase de `Shared/Domain/Policy/`;
+2. cada método público que devuelve `bool`;
+3. cada constante entera.
+
+Cada señal tiene que estar en la lista de arriba, que la prueba lee de este ADR, o en la lista de la prueba de **consultas que no son reglas**, con su motivo. Ejemplos de consulta: `PinLength::fits` es la forma de un valor; `PinVerification::isLocked` es el resultado que ya decidió `PinLockoutPolicy`; `UserRole::isManagementRole` es la definición del propio tipo. Una señal nueva sin clasificar rompe la prueba, y quien la añade tiene dos salidas: es una consulta y lo dice en la prueba, o es una regla y necesita una enmienda de este ADR. La prueba falla también si este ADR nombra una clase que la prueba no admite, si una fila no nombra uno de los miembros de su clase o si una entrada de cualquiera de las dos listas ya no existe en el código.
+
+**Límite de la guarda.** Ve los predicados, las políticas y los umbrales enteros, no cualquier regla. Una regla escrita como validación del constructor sin constante con nombre, o como un método que no devuelve `bool`, no la detecta. `SignOffReason` entró en la lista por sus dos constantes. Esto se acepta: la guarda cubre la forma que han tenido todas las reglas que se han colado hasta hoy, y quien revisa (`revisor-codigo`) sigue mirando el resto.
+
+**Responde** a la pendiente de las Consecuencias («sin guarda que vigile la lista del punto 3») y a la de la enmienda del 15-10-2026. La guarda mira todo `Shared/Domain` y no solo `Policy/`: tres de las reglas que se colaron vivían en `ValueObject/`.

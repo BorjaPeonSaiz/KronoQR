@@ -210,6 +210,8 @@ export type DoctorCheck = Schemas['DoctorCheck']
 export type SupportScope = Schemas['SupportScope']
 export type SupportGrant = Schemas['SupportGrant']
 export type SupportGrantCollection = Schemas['SupportGrantCollection']
+export type SupportGrantUse = Schemas['SupportGrantUse']
+export type SupportGrantUseCollection = Schemas['SupportGrantUseCollection']
 export type GrantSupportAccessRequest = Schemas['GrantSupportAccessRequest']
 export type IssuedSupportGrant = Schemas['IssuedSupportGrant']
 

@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` con `seguridad-cumplimiento` (Bloque 3 de la 2.2.0, hallazgo AUD-1) |
 | **Afecta a** | Enmienda [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) (condición 1), [ADR-027](ADR-027-audit-log-particionado.md) (creación de la partición anual), [ADR-029](ADR-029-configuracion-en-el-entorno-del-contenedor.md) (inyección del `.env`) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) (consecuencia 3) · Regla dura 6 de `CLAUDE.md` · `infra/compose.prod.yaml`, `infra/compose.dev.yaml`, `infra/scripts/install.sh`, `infra/scripts/update.sh`, `infra/docker/postgres/initdb/03-backup-role.sh` (rol `fichaje_backup`) · migración `backend/database/migrations/2026_09_29_100000_audit_log_partition_function.php` |
 | **Requisitos** | RS-07, RS-08, RL-04 |
+| **Enmiendas** | Precisada por [ADR-045](ADR-045-los-ficheros-generados-viven-en-un-volumen-compartido.md) (el volumen de ficheros generados) y por [ADR-049](ADR-049-formato-autenticado-kqe1-de-las-copias-y-subclave-del-wal.md) (A3-R1 no cambia: el `scheduler` conserva la clave de las copias) (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 

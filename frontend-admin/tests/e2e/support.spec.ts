@@ -146,3 +146,33 @@ test(
     await expect(page.getByTestId(`revoke-${SUPPORT_GRANT_UUID}`)).not.toBeVisible()
   },
 )
+
+test(
+  'ver los usos de un acceso lista las ventanas de 15 minutos, pagina y se cierra con Escape',
+  { tag: ['@RF-PD-11'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin', supportGrants: [SUPPORT_GRANT_ACTIVE] })
+
+    await logInAsAdmin(page)
+    await page.goto('/support')
+
+    await page.getByTestId(`uses-${SUPPORT_GRANT_UUID}`).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Usos del acceso de soporte' })
+
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByTestId('grant-uses-note')).toContainText('ventana de 15 minutos')
+    await expect(dialog.getByTestId('grant-use-row')).toHaveCount(25)
+    await expect(dialog.getByRole('columnheader', { name: 'Inicio de la ventana' })).toBeVisible()
+
+    await dialog.getByRole('button', { name: 'Siguiente' }).click()
+
+    await expect(dialog.getByTestId('grant-use-row')).toHaveCount(5)
+
+    await page.keyboard.press('Escape')
+
+    await expect(dialog).not.toBeVisible()
+    // El foco vuelve al boton que abrio el dialogo.
+    await expect(page.getByTestId(`uses-${SUPPORT_GRANT_UUID}`)).toBeFocused()
+  },
+)

@@ -300,6 +300,7 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // revocar dos veces es `204` y `404` solo si el UUID no existe.
         '/api/v1/support/grants',
         '/api/v1/support/grants/{uuid}',
+        '/api/v1/support/grants/{uuid}/uses',
         // Tarea 5.10: la exportacion integra de los datos del cliente (RF-PD-14,
         // RL-20). Ambito `settings:*` y no uno propio, al contrario que el
         // diagnostico y los accesos de soporte: aquellos existen para que algo

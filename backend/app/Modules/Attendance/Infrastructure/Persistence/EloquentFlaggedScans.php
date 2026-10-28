@@ -42,11 +42,7 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
             // de una cola que drena tarde—. Su hallazgo es otro
             // (`scan_before_revocation`) y no puede abrir `clock_skew`: aqui
             // solo entran los fichajes, nunca los rechazos de credencial.
-            ->whereNotIn('scan_events.result', [
-                ScanResult::REJECTED_UNKNOWN->value,
-                ScanResult::REJECTED_REVOKED->value,
-                ScanResult::REJECTED_SIGNATURE->value,
-            ])
+            ->whereNotIn('scan_events.result', ScanResult::credentialRejections())
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),
                 $to->format('Y-m-d H:i:s.uP'),

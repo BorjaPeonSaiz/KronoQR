@@ -9,7 +9,7 @@
 // existen para estado de exito/aviso/peligro. La severidad `low` no es un
 // error ni un aviso, asi que usa el tinte primario suave en vez de inventar un
 // token «info» que el resto del panel no tiene.
-import type { IncidentSeverity } from '@/shared/api/types'
+import type { Incident, IncidentSeverity } from '@/shared/api/types'
 
 const SEVERITY_CLASSES: Record<IncidentSeverity, string> = {
   high: 'bg-kq-danger-soft text-kq-danger',
@@ -19,4 +19,22 @@ const SEVERITY_CLASSES: Record<IncidentSeverity, string> = {
 
 export function severityBadgeClass(severity: IncidentSeverity): string {
   return SEVERITY_CLASSES[severity]
+}
+
+/**
+ * Cierre del sistema (RN-19): una `rejected_pin_scan` que se cierra sola como
+ * `resolved` cuando la persona ficha bien despues. Es el unico cierre sin
+ * persona: `resolved_by` y `resolution_note` llegan `null` (contrato,
+ * `Incident.resolved_by`). Se distingue por eso y no por el tipo, para que el
+ * dia que otro cierre automatico lo use el texto siga siendo verdad solo si el
+ * servidor lo declara asi.
+ */
+export function isClosedBySystem(
+  incident: Pick<Incident, 'status' | 'resolved_by' | 'resolution_note'>,
+): boolean {
+  return (
+    incident.status === 'resolved' &&
+    incident.resolved_by === null &&
+    incident.resolution_note === null
+  )
 }

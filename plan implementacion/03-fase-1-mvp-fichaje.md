@@ -762,7 +762,7 @@ Resultado esperado: los cuatro rechazos indistinguibles en respuesta y en tiempo
 |---|---|
 | **Horas** | 8–10 |
 | **Agente / Skill** | `backend-laravel` |
-| **Requisitos** | **RF-GP-01, RF-GP-03, RF-ID-01..02 básicos, RS-13** (literal del doc 02 §11). El Anexo A del doc 01 lo confirma: `RF-ID-01..02` en la Fase 1 son *«autenticación de gestión básica, sin 2FA»*. **RS-13** se cita desde el 29 de agosto de 2026: el rastro de autenticación de este canal lo entregó la rama SSDLC (ADR-039) sobre lo construido aquí |
+| **Requisitos** | **RF-GP-01, RF-GP-03, RF-ID-01..02 básicos, RS-13** (literal del doc 02 §11). El Anexo A del doc 01 lo confirma: `RF-ID-01..02` en la Fase 1 son *«autenticación de gestión básica, sin 2FA»*. **RS-13** se cita desde el 29 de agosto de 2026: el rastro de autenticación de este canal lo entregó la rama SSDLC (ADR-039) sobre lo construido aquí. Derivada: `RN-25` «Una persona suspendida no ficha y no deja incidencia» (2.3.0, bloque 20): el estado `suspended` de esta tarea, documentado como regla |
 | **Precondiciones** | **1.2** (§11.3: `1.1→1.2 ├─► 1.6`) y el esquema de 1.3 |
 | **Bloquea a** | **1.11** (§11.3: `1.6 ──► 1.11`). Y, por la nota del §11, **1.10** |
 
@@ -1757,7 +1757,7 @@ sigue a estas cinco tareas: `1.14` entre 1.3 y 1.4, `1.15`–`1.17` tras lo que 
 |---|---|
 | **Horas** | 8–10 |
 | **Agente / Skill** | `backend-laravel` + `/revision-cumplimiento` |
-| **Requisitos** | **RS-07** (doc 01 Anexo A, ADR-032). Sostiene **RL-01** (la 1.4 escribe en esta tabla) y **RL-15** (capacidad técnica de determinar el alcance de una brecha a partir de los logs de auditoría) |
+| **Requisitos** | **RS-07** (doc 01 Anexo A, ADR-032). Sostiene **RL-01** (la 1.4 escribe en esta tabla) y **RL-15** (capacidad técnica de determinar el alcance de una brecha a partir de los logs de auditoría). Derivada: `RS-14` «El registro horario se concilia con su auditoría» (2.2.0, [ADR-057](../docs/adr/ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) §4; en el doc 01 desde el bloque 20 de la 2.3.0): la contrapartida de esta cadena sobre el registro horario |
 | **Precondiciones** | **1.3** (esquema). No necesita el RBAC completo de 2.1: el actor que encadena en esta fase es el dispositivo (tokens de **1.5**) o la autenticación mínima de **1.6** |
 | **Bloquea a** | **1.4**, **1.5**, **1.13**, que ya escriben en esta tabla, y **1.15** |
 
@@ -1852,7 +1852,7 @@ curl -s http://localhost/metrics | grep audit_chain_verification_failures_total 
 |---|---|
 | **Horas** | 10–12 |
 | **Agente / Skill** | `arquitecto-dominio` → `backend-laravel` (en ese orden) |
-| **Requisitos** | **RN-13, RL-04, RF-PA-04** (doc 01 Anexo A, ADR-032). Aplica también RN-06 (el total se recalcula, nunca se incrementa) |
+| **Requisitos** | **RN-13, RL-04, RF-PA-04** (doc 01 Anexo A, ADR-032). Aplica también RN-06 (el total se recalcula, nunca se incrementa). Derivada: `RN-24` «Un tramo escrito a mano nunca va hacia el futuro» (F1 de la verificación 2.1.0; en el doc 01 desde el bloque 20 de la 2.3.0) |
 | **Precondiciones** | **1.14** (necesita `audit_log`) y **1.4** (necesita `shift_entries` y el caso de uso que los crea) |
 | **Bloquea a** | **1.16** y **1.17** |
 
@@ -2175,7 +2175,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 
 - Cobertura de dominio **≥ 90 %**; global backend **≥ 75 %**; frontend **≥ 70 %**
 - **MSI ≥ 80 %** sobre `Modules/*/Domain`
-- Suite unitaria completa dentro del presupuesto de duración que verifica `make test-unit` (doc 02 §9.2; 2,6-2,7 s medidos en el contenedor al cierre, presupuesto 4 s)
+- Suite unitaria completa dentro del presupuesto de duración que verifica `make test-unit` (doc 02 §9.2; 2,6-2,7 s medidos en el contenedor al cierre, con el presupuesto de entonces, 4 s; hoy es de 5 s y su única fuente es `UNIT_SUITE_MAX_SECONDS` del `Makefile`)
 - `vue-tsc` y PHPStan 9 con **0 errores**
 - Deptrac y Pest Arch con **0 violaciones**
 - `axe` con **0 violaciones críticas o graves**

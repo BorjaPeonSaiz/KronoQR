@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.1, 1.5, 1.6 y 5.1 · §1.5 y §1.6 del documento 02 · Regla dura 1 de `CLAUDE.md` |
 | **Requisitos** | RN-05, RN-14, RF-AT-01, RF-QR-03, RF-PD-07 |
+| **Enmiendas** | Precisada por [ADR-055](ADR-055-el-veredicto-de-cumplimiento-lo-da-la-vista-y-la-bandeja-no-lo-contradice.md) §3: qué reglas compartidas cruzan la frontera por `Shared/Domain` (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 

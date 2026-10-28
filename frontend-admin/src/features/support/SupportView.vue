@@ -31,6 +31,7 @@ import type { SupportGrant, SupportScope } from '@/shared/api/types'
 import { DIAGNOSTICS_MANAGE, SUPPORT_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import SupportGrantUsesDialog from './SupportGrantUsesDialog.vue'
 import {
   generateDiagnosticsBundle,
   grantSupportAccess,
@@ -271,6 +272,8 @@ function usedLabel(entry: SupportGrant): string {
     ? t('support.grant.list.neverUsed')
     : t('support.grant.list.usedAgo', { hours: elapsed.hours, minutes: elapsed.minutes })
 }
+
+const usesTarget = ref<SupportGrant | null>(null)
 
 const revokeTarget = ref<SupportGrant | null>(null)
 const revokeBusy = ref(false)
@@ -562,8 +565,18 @@ const buttonClass =
               <td class="px-3 py-2">{{ usedLabel(entry) }}</td>
               <td class="px-3 py-2">
                 <button
+                  type="button"
+                  :class="buttonClass"
+                  :data-test="`uses-${entry.uuid}`"
+                  @click="usesTarget = entry"
+                >
+                  {{ t('support.grant.uses.action') }}
+                  <span class="sr-only">{{ reasonLabel(entry) }}</span>
+                </button>
+                <button
                   v-if="entry.status === 'active'"
                   type="button"
+                  class="ml-2"
                   :class="buttonClass"
                   :data-test="`revoke-${entry.uuid}`"
                   @click="openRevoke(entry)"
@@ -576,6 +589,13 @@ const buttonClass =
         </table>
       </div>
     </section>
+
+    <SupportGrantUsesDialog
+      v-if="usesTarget !== null"
+      :grant-uuid="usesTarget.uuid"
+      :timezone="timezone"
+      @close="usesTarget = null"
+    />
 
     <ConfirmDialog
       v-if="revokeTarget !== null"

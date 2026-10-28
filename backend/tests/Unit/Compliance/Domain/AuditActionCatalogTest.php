@@ -86,6 +86,8 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     // Abre o resuelve una incidencia del registro horario (tarea 2.6).
     'incident.opened',
     'incident.resolved',
+    // Y la reabre el sistema, solo si la cerro el sistema (RN-19).
+    'incident.reopened',
     // Activa una licencia o supera una cifra del plan (tarea 5.3, ADR-028).
     // Ninguna de las dos impide nada: la segunda describe un alta que SI se
     // hizo, y su asiento es la fecha desde la que el cliente opera fuera de

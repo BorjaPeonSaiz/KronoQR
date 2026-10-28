@@ -6,6 +6,7 @@ namespace Tests\Support\Compliance;
 
 use App\Modules\Compliance\Application\Port\IncidentLedger;
 use App\Modules\Compliance\Domain\Model\Incident;
+use App\Modules\Compliance\Domain\ValueObject\IncidentType;
 use RuntimeException;
 
 /**
@@ -48,5 +49,20 @@ final readonly class FailingIncidentLedger implements IncidentLedger
     public function recordResolution(int $incidentId, Incident $resolved): bool
     {
         return $this->ledger->recordResolution($incidentId, $resolved);
+    }
+
+    public function openWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int
+    {
+        return $this->ledger->openWorkDayFindingOf($type, $employeeUuid, $workDate);
+    }
+
+    public function systemClosedWorkDayFindingOf(IncidentType $type, string $employeeUuid, string $workDate): ?int
+    {
+        return $this->ledger->systemClosedWorkDayFindingOf($type, $employeeUuid, $workDate);
+    }
+
+    public function recordReopening(int $incidentId, Incident $reopened): bool
+    {
+        return $this->ledger->recordReopening($incidentId, $reopened);
     }
 }

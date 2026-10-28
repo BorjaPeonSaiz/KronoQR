@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` con `devops-observabilidad` |
 | **Afecta a** | Tareas 0.1 y 2.4 · [ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md) |
 | **Requisitos** | RF-PA-01, RNF-P-04, RNF-D-03, RNF-P-06 |
+| **Enmiendas** | Precisada por [ADR-059](ADR-059-con-una-dependencia-caida-el-fichaje-se-encola-y-el-resto-responde-503-con-rastro.md): el reintento de la difusión de presencia con una dependencia caída (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

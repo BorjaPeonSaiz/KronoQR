@@ -46,14 +46,48 @@ final readonly class AnomalyScanResult
          * con su `employee_uuid` (regla dura 21).
          */
         public int $failures,
+        /**
+         * Jornadas de RN-19 **subsanadas enteras** que la pasada anuncio para
+         * que `Compliance` cierre su incidencia, si sigue abierta y no tuvo
+         * bloqueo de PIN.
+         *
+         * Cuenta **anuncios, no cierres**, por lo mismo que `$byType` cuenta
+         * hallazgos y no incidencias creadas: quien sabe si habia algo abierto
+         * es `Compliance`, al otro lado de un evento. La mayoria de estas
+         * jornadas nunca abrio incidencia, y la misma jornada vuelve a contar
+         * mientras siga dentro de la ventana. El cierre que si ocurre deja su
+         * asiento `incident.resolved` de actor `system`, que es la cifra exacta.
+         */
+        public int $recoveredWorkDays = 0,
+        /**
+         * Jornadas de RN-19 **que recaen**: sin subsanar ahora y con algun
+         * intento ya subsanado, que la pasada anuncio para que `Compliance`
+         * reabra su incidencia si la cerro el sistema (enmienda del 27-10-2026
+         * de ADR-057 §2).
+         *
+         * Cuenta **anuncios, no reaperturas**, por lo mismo que
+         * `$recoveredWorkDays`: quien sabe si la incidencia la cerro el sistema
+         * es `Compliance`, al otro lado de un evento. La mayoria nunca se cerro
+         * —la subsanacion llego a tiempo y el hallazgo abre una incidencia
+         * nueva, o ya estaba abierta— y la misma jornada vuelve a contar
+         * mientras siga en la ventana. La reapertura que si ocurre deja su
+         * asiento `incident.reopened` de actor `system`, que es la cifra exacta.
+         */
+        public int $relapsedWorkDays = 0,
     ) {}
 
     /**
      * @param  array<string, int>  $byType
      */
-    public static function of(int $daysInspected, int $workDaysInspected, array $byType, int $failures = 0): self
-    {
-        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures);
+    public static function of(
+        int $daysInspected,
+        int $workDaysInspected,
+        array $byType,
+        int $failures = 0,
+        int $recoveredWorkDays = 0,
+        int $relapsedWorkDays = 0,
+    ): self {
+        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures, $recoveredWorkDays, $relapsedWorkDays);
     }
 
     /**

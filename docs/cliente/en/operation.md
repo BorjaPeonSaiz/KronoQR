@@ -1304,7 +1304,12 @@ up in the inbox without anything to switch on; HR has the explanation of each in
   recorded**; HR reviews it and corrects it by hand. If it repeats on one
   tablet, that tablet's app is out of date: update it.
 - **"PIN clocking not recorded"**: a PIN clocking attempt that was not accepted
-  and that the person did not repeat.
+  and that the person did not repeat. It closes itself if the person clocks in
+  correctly within the 10 minutes after the attempt, unless the PIN got locked:
+  then it stays open so you can talk to the person and reset it. And if, after
+  closing itself, another attempt from that same day arrives without being made
+  good —from another tablet that was offline—, it reopens itself. One closed or
+  dismissed by a person is never reopened.
 
 **The incidents open from what arrives after the update**, not over history:
 what happened before is not reprocessed. **What does not change**: a late PIN
@@ -2460,6 +2465,10 @@ time.
   "Grant access". The token is shown **once only**: copy it and hand it to
   support through the contract's channel. If it is lost, revoke and create
   another.
+- **What support has done with it:** in "Support", next to each grant, "View
+  uses" lists the windows of use: the moment each one started (in the site's
+  time zone), and the method and route of its first request. Each row is the
+  start of a 15-minute window, not a request; it is a best-effort record.
 - **Console:**
 
   ```bash

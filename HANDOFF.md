@@ -89,7 +89,20 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). **En curso:** `chore/deps-octubre` (Dependabot #208 y #209, ver Pendiente del bloque 19). **Siguiente acción:** integrarla y abrir el bloque 20.
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 19 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** terminado en `docs/especificacion-2.3.0` (las 8 tareas ✅); falta CI manual, revisiones, PR y merge. **Siguiente acción:** eso y abrir el bloque 21.
+
+Lo que conviene saber del bloque 20 (decisiones en Engram `2.3.0/b20-decisiones`):
+
+- **Doc 01:** RN-24 (tramo a mano nunca hacia el futuro, ahora también en `WorkDay::addEntry`/`correctEntry` con `ManualEntryHorizon`), RN-25 (suspendido: no ficha, conserva tarjeta, sin incidencia, **sí entra al portal**, decisión del propietario 27-10), RN-26 (motivo de firma 10-1 000), RS-14 (conciliación). Los escenarios Gherkin viven en doc 01 §11 con su tabla (no hay `.feature`).
+- **RN-19 (20.3):** la revisión espera a que cierre la ventana de 600 s; un fichaje aceptado (o rebote/RN-18) en [intento, +600 s] subsana; `RejectedPinScanRecovered` → `CloseRecoveredIncident` cierra con actor `system` y asiento con los `scan_id`. No se cierra si hubo bloqueo de PIN. **Reapertura (enmienda de ADR-057 §2 aprobada el 27-10):** si después llega otro intento sin subsanar del mismo día, `RejectedPinScanRelapsed` → `ReopenRecoveredIncident` reabre (`resolved → open` solo para cierre de sistema; migración `2026_10_27_100100`, `UPDATE (context)` para `fichaje_app`, vigilado por `work-record-privileges.sh` y `product:doctor`), asiento `incident.reopened`. La reapertura no reenvía el correo de aviso. Una subsanación fuera de `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` no cierra nada.
+- **G5 (decisiones del propietario 27-10):** cambia la promesa del doc 05 §6.3, no el código (un asiento por cada 15 min de uso del soporte), y el panel lista esas ventanas: `GET /api/v1/support/grants/{uuid}/uses` (admin) y «Ver usos» en Soporte. El asiento sigue siendo de mejor esfuerzo (residuo en el doc 07, 2.4.0).
+- **20.7:** `docs:consistency` exige que cada operación del contrato y cada `Http/Controller` y `Domain/Policy` citen un requisito existente; no ve si el requisito cubre de verdad el comportamiento.
+- **Tarjeta de persona suspendida:** `scan_events.result = rejected_suspended` (migración `2026_10_27_100000`, reversible mientras no haya filas).
+- **Pendiente:**
+  - el PIN de una persona suspendida sigue como `rejected_unknown` (toca el verificador de PIN y el CHECK de ADR-043);
+  - carrera de microsegundos suspensión/resolución en `RegisterScanHandler::process` (fila `rejected_unknown` con `employee_id`);
+  - observabilidad sin RNF en doc 01 (métricas y órdenes de mantenimiento sin requisito);
+  - catálogo de departamentos sin RF propio (lo cubren RF-GP-01, RF-PD-03 y RF-ID-03).
 
 Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 
@@ -100,7 +113,7 @@ Lo que conviene saber del bloque 19 (integrado: #206 y #210):
 - **Pendiente:**
   - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
   - **19b:** `CivilDate::midnight()` para las fechas civiles; puerto `UuidGenerator`; Semgrep `--strict`; Deptrac limita Kiosk y Application; la consola habla el idioma de la instalación (`SpeaksInstallationLanguage`, `lang/*/console.php`; la ayuda de Artisan y las líneas clave=valor que leen los scripts siguen fijas); `model_type` de las cuentas por el puerto `ManagementAccountMorphType` sin `morphMap` (ADR-025, nota del 26-10); comentarios de `app/` y `lang/` sin referencias al plan, con guarda (`PendingDomainCommentCleanup` lista los de `Domain/` que faltan; solo encoge).
-  - **Dependabot (27-10):** #204, #205 y #207 integradas. #208 rompe ① (`simple-excel` 3.11 trae un OpenSpout sin `setFreezeRow`/`setFontBold`; larastan 3.13.1 marca dos `->warn()` sobre `Command|null`) y #209 rompe ⑥ y ⑦ (`/vue-virtual` 3.13.47 pinta 0 filas en `useVirtualRows`/`VirtualizedTables`; axe 4.14 encuentra `label-content-name-mismatch` real en los botones de Cuentas). Van juntas en una rama `chore/deps-octubre` tras integrar el 19b. #149 sigue aparcada (bloque 31).
+  - **Dependabot (27-10):** #204, #205 y #207 integradas; #208 y #209 en #211 (OpenSpout 5: la cabecera XLSX sale en negrita por primera vez; vue-virtual 3.19 mide con `clientHeight`; axe 4.14 `label-content-name-mismatch` corregido en Cuentas y en el reloj del quiosco). #149 sigue aparcada (bloque 31).
   - unas 200 líneas de `lang/es` (console, data-export, doctor…) siguen sin tildes; algunas las citan pruebas o scripts: cambiarlas a la vez;
   - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
   - Redis local reparado el 26-10 (`redis-check-aof --fix`, como indica `doctor.sh`; se perdieron 1 122 bytes de la cola del AOF). Se ha corrompido dos veces (25-10 y 26-10) por apagar el portÃ¡til con Docker en marcha: parar con `make down` antes.
@@ -340,6 +353,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 ## Pendiente
 
 - **Decidido (18-10-2026):** firma `--responsible` para `product:export-all`, `compliance:legal-export` y `credentials:revoke` en el bloque 35 de la 2.3.0 (tras el B7). El resto sigue como `system` (doc 07 §6).
+
+### Anotado en el bloque 20 de la 2.3.0 (27-10-2026, revisión de seguridad de la reapertura de RN-19)
+
+- **Huella de las demás funciones guarda** (`arquitecto-dominio` + `migracion-segura`): `work-record-privileges.sh` y `product:doctor` comparan ya el cuerpo de `incidents_guard_transition` por huella (`KQ_INCIDENT_REOPENING_FINGERPRINT`). Las otras (`shift_entries_guard_*`, `incidents_guard_insert`, `zz_sites_guard_timezone`, `*_guard_anonymized*`, las `SECURITY DEFINER`) siguen vigiladas solo por existencia, activación y `SECURITY DEFINER`/`search_path`: un `CREATE OR REPLACE` que las vacíe pasa. No se hizo aquí porque cada una la redefine una migración distinta y la huella esperada depende de cuáles estén aplicadas (una constante por función y por migración, en el script y en PHP).
+- **`incident_context_differs_from_audit` en §4** (`arquitecto-dominio`): residuo aceptado en la enmienda del 27-10 de ADR-057 (reescribir el `context` de una `rejected_pin_scan` no trabajada por persona con dos `UPDATE`). Diseño propuesto en el ADR; toca `WorkRecordDiscrepancy`, `DatabaseWorkRecordAuditSource`, métrica y prueba de Prometheus, runbook y guía de operación es/en.
 
 ### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
 

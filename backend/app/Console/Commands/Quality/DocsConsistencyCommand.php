@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Console\Commands\Quality;
 
 use App\Console\Commands\Quality\Support\AdrRegistry;
+use App\Console\Commands\Quality\Support\ContractOperations;
 use App\Console\Commands\Quality\Support\PlanIndex;
 use App\Console\Commands\Quality\Support\PlanTask;
 use App\Console\Commands\Quality\Support\Requirement;
 use App\Console\Commands\Quality\Support\RequirementCatalog;
+use App\Console\Commands\Quality\Support\RequirementCitations;
+use App\Console\Commands\Quality\Support\SourceTree;
 use Illuminate\Console\Command;
 
 /**
@@ -29,6 +32,37 @@ use Illuminate\Console\Command;
  *
  * Vive en app/Console/Commands/Quality/ y no en un modulo: es herramienta del
  * repositorio y no se ejecuta jamas en la instalacion de un cliente.
+ *
+ * ## El orden «doc 01 -> contrato -> codigo»
+ *
+ * Una decision que llega al codigo o al contrato sin pasar antes por el doc 01
+ * es comportamiento que nadie ha decidido como requisito: ni se prueba contra
+ * el, ni se le ha contado al cliente. Ya ocurrio con la actualizacion urgente
+ * de la tablet y con el rol de quien firma por consola. Lo que se puede
+ * comprobar de forma mecanica, y se comprueba:
+ *
+ * 1. **Cada operacion del contrato cita al menos un requisito** en su resumen o
+ *    su descripcion. Un endpoint que no responde a ningun requisito es
+ *    comportamiento que el doc 01 no ha decidido.
+ * 2. **Todo requisito que cita el contrato existe en el catalogo**
+ *    (`requisitos.yaml`, generado del Anexo A). Un identificador en el contrato
+ *    que el doc 01 no define es un requisito escrito en el escalon equivocado.
+ * 3. **Cada controlador y cada politica del dominio cita al menos un
+ *    requisito**: son las puertas por las que entra una ruta y una regla.
+ * 4. **Todo requisito que cita el codigo de produccion existe en el catalogo**.
+ *
+ * Lo que **no** detecta, y por eso no sustituye a la revision:
+ *
+ * - **Que el requisito citado diga lo que hace el codigo.** Los dos casos de
+ *   arriba citaban requisitos que existian (RF-KI-07, RN-23): faltaba la
+ *   excepcion o el rol en su texto. Comparar prosa con comportamiento no es
+ *   mecanico.
+ * - Comportamiento nuevo dentro de un fichero que ya cita algun requisito: una
+ *   rama mas en un controlador citado pasa sin ruido.
+ * - Casos de uso, ordenes de consola y vistas de los frontends sin cita (ver
+ *   `requirement_citations` en config/quality.php para el porque).
+ * - Rutas del router sin contrato y operaciones sin ruta: eso ya lo exige
+ *   `tests/Contract/OpenApiContractTest.php`, en los dos sentidos.
  */
 final class DocsConsistencyCommand extends Command
 {
@@ -58,8 +92,20 @@ final class DocsConsistencyCommand extends Command
         $this->checkEveryRequirementIsBuilt($plan, $catalog->requirements);
         $this->checkPhasesAgree($plan, $catalog->requirements);
 
-        $this->line('ADR: '.count($catalog->requirements).' requisitos y '
-            .count($plan->tasks).' tareas del plan comprobados.');
+        $contract = ContractOperations::fromFile($docs.'/'.config()->string('quality.contract_file'));
+        $this->checkContractCitesRequirements($contract, $catalog->phases());
+
+        /** @var list<string> $mustCite */
+        $mustCite = config()->array('quality.requirement_citations.must_cite');
+        /** @var list<string> $mustExist */
+        $mustExist = config()->array('quality.requirement_citations.must_exist');
+
+        $this->checkCodeCitesRequirements(SourceTree::of($mustCite), $catalog->phases());
+        $this->checkCodeCitationsExist(SourceTree::of($mustExist), $catalog->phases());
+
+        $this->line('ADR: '.count($catalog->requirements).' requisitos, '
+            .count($plan->tasks).' tareas del plan y '
+            .count($contract->operations).' operaciones del contrato comprobados.');
 
         return $this->report();
     }
@@ -80,6 +126,11 @@ final class DocsConsistencyCommand extends Command
         foreach ($registry->fileWithoutRow() as $number => $file) {
             $this->problems[] = 'docs/adr/'.$file.' existe y ninguna fila del §4 del doc 02 lo anuncia. '
                 .'Añade su fila: el §4 es el indice por el que se entra a las decisiones.';
+        }
+
+        foreach ($registry->statusDivergences() as $number => $divergence) {
+            $this->problems[] = 'ADR-'.$number.': '.$divergence.'. Pon al dia el estado en cursiva de su '
+                .'fila del §4 del doc 02: quien entra por el indice lee un estado que la decision ya no tiene.';
         }
     }
 
@@ -114,6 +165,83 @@ final class DocsConsistencyCommand extends Command
                 .'y lo construyen tareas de otra fase: '.$where.'. Una de las dos esta mal, y la que '
                 .'manda sobre QUE hace el producto es el doc 01.';
         }
+    }
+
+    /**
+     * Comprobaciones 1 y 2 del docblock de la clase.
+     *
+     * @param  array<string, int>  $catalog
+     */
+    private function checkContractCitesRequirements(ContractOperations $contract, array $catalog): void
+    {
+        foreach ($contract->operations as $operation) {
+            if (RequirementCitations::unknown($operation->citations, $catalog) === $operation->citations) {
+                $this->problems[] = 'El contrato describe '.$operation->describe().' sin citar ningun requisito '
+                    .'del doc 01. Cita en su descripcion el RF-/RN-/RS-/RL- que lo decide; si no hay ninguno, '
+                    .'el requisito se escribe antes en el doc 01 (orden «doc 01 -> contrato -> codigo»).';
+            }
+        }
+
+        foreach (RequirementCitations::unknown($contract->citations, $catalog) as $id) {
+            $this->problems[] = 'El contrato cita '.$id.', que el doc 01 no define (requisitos.yaml). '
+                .'O el requisito se escribio en el contrato antes que en el doc 01, o el identificador esta mal.';
+        }
+    }
+
+    /**
+     * Comprobacion 3 del docblock de la clase.
+     *
+     * @param  array<string, int>  $catalog
+     */
+    private function checkCodeCitesRequirements(SourceTree $tree, array $catalog): void
+    {
+        $this->reportMissingDirectories($tree);
+
+        foreach ($tree->files as $file => $contents) {
+            $cited = RequirementCitations::in($contents);
+
+            if (RequirementCitations::unknown($cited, $catalog) === $cited) {
+                $this->problems[] = $this->relative($file).' no cita ningun requisito del doc 01. Es una puerta '
+                    .'de comportamiento (una ruta o una regla): cita el requisito que la decide, o escribelo '
+                    .'antes en el doc 01.';
+            }
+        }
+    }
+
+    /**
+     * Comprobacion 4 del docblock de la clase.
+     *
+     * @param  array<string, int>  $catalog
+     */
+    private function checkCodeCitationsExist(SourceTree $tree, array $catalog): void
+    {
+        $this->reportMissingDirectories($tree);
+
+        foreach ($tree->files as $file => $contents) {
+            foreach (RequirementCitations::unknown(RequirementCitations::in($contents), $catalog) as $id) {
+                $this->problems[] = $this->relative($file).' cita '.$id.', que el doc 01 no define '
+                    .'(requisitos.yaml). El codigo no puede ir por delante del requisito.';
+            }
+        }
+    }
+
+    private function reportMissingDirectories(SourceTree $tree): void
+    {
+        foreach ($tree->missing as $pattern) {
+            $this->problems[] = 'No existe ningun directorio para '.$pattern.' (config/quality.php, '
+                .'requirement_citations). Una exploracion parcial no comprueba nada: corrige la ruta.';
+        }
+    }
+
+    private function relative(string $file): string
+    {
+        foreach ([base_path(), rtrim(config()->string('quality.repo_path'), '/')] as $root) {
+            if (str_starts_with($file, $root.'/')) {
+                return substr($file, \strlen($root) + 1);
+            }
+        }
+
+        return $file;
     }
 
     private function report(): int

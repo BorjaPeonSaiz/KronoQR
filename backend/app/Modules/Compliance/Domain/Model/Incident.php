@@ -29,7 +29,11 @@ use DateTimeZone;
  *
  * **Nace abierta y no se cierra sola.** La resolucion es un acto de una persona
  * con su motivo y su traza (tarea 2.5): {@see self::resolvedBy()} exige quien,
- * cuando y por que, y no hay ningun otro camino que lleve a `resolved`. El
+ * cuando y por que. **La unica excepcion es RN-19**: una `rejected_pin_scan`
+ * abierta y sin bloqueo de PIN se cierra cuando la persona subsana el fichaje
+ * ({@see self::closedAsRecovered()}), sin autor y con asiento de `system`, y
+ * se reabre si despues aparece otro intento sin subsanar de esa jornada
+ * ({@see self::reopenedBySystem()}). El
  * instante llega **de fuera** —del puerto `Clock` que inyecta el caso de uso—
  * porque el dominio no lee el reloj (regla dura 2).
  *
@@ -45,6 +49,9 @@ use DateTimeZone;
  */
 final readonly class Incident
 {
+    /** Clave del contexto de `rejected_pin_scan` con los intentos que tocaron el bloqueo (RN-19). */
+    private const string PIN_LOCKOUT_ATTEMPTS = 'lockout_attempts';
+
     /**
      * @param  array<string, int|string>  $context  Los hechos que lo sostienen: minutos, umbral o el `scan_id` de RN-18. Nunca datos personales.
      */
@@ -300,6 +307,149 @@ final readonly class Incident
     }
 
     /**
+     * **La cierra la revision diaria porque la persona lo subsano** (RN-19).
+     *
+     * Es el unico cierre sin persona, y por eso esta tan acotado:
+     *
+     * 1. **Solo los tipos que lo admiten** ({@see IncidentType::closesWhenRecovered()}):
+     *    hoy, `rejected_pin_scan`.
+     * 2. **Solo lo que sigue abierto.** Una incidencia que alguien ya resolvio o
+     *    descarto conserva su desenlace y su nota: el sistema no corrige a una
+     *    persona.
+     * 3. **Nunca con bloqueo de PIN** ({@see self::closesWhenRecovered()}): si
+     *    algun intento abrio o encontro el bloqueo de RS-12, RN-19 pide hablar
+     *    con la persona y restablecerle el PIN, y el fichaje bueno no hace
+     *    ninguna de las dos cosas.
+     * 4. **Queda como `resolved` sin autor ni nota.** «Habia algo y se arreglo»
+     *    es justo lo que paso; `resolvedByUserId` nulo es lo que distingue este
+     *    cierre del de una persona, y lo que explica el asiento de `system` que
+     *    escribe el caso de uso (regla dura 6).
+     * 5. **No antes de detectarse**, como cualquier cierre.
+     *
+     * @throws IncidentAlreadyClosed si ya estaba cerrada
+     * @throws InvalidIncident si el tipo no se cierra al subsanarse
+     */
+    public function closedAsRecovered(DateTimeImmutable $at): self
+    {
+        if (! $this->status->isOpen()) {
+            throw IncidentAlreadyClosed::inStatus($this->status->value);
+        }
+
+        if (! $this->type->closesWhenRecovered()) {
+            throw InvalidIncident::withoutClosureOnRecovery($this->type->value);
+        }
+
+        if ($this->hadPinLockout()) {
+            throw InvalidIncident::withPinLockoutAwaitingReview();
+        }
+
+        self::guardUtc($at);
+
+        if ($at < $this->detectedAt) {
+            throw InvalidIncident::withResolutionBeforeDetection(
+                $at->format(DATE_ATOM),
+                $this->detectedAt->format(DATE_ATOM),
+            );
+        }
+
+        return new self(
+            type: $this->type,
+            severity: $this->severity,
+            status: IncidentStatus::Resolved,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $this->assignedToUserId,
+            context: $this->context,
+            resolvedAt: $at,
+            deviceUuid: $this->deviceUuid,
+        );
+    }
+
+    /**
+     * **La reabre la revision diaria porque aparecio otro intento sin
+     * subsanar en la misma jornada** (RN-19, enmienda del 27-10-2026 de
+     * ADR-057 §2).
+     *
+     * Es la vuelta atras de {@see self::closedAsRecovered()}, y solo de ella:
+     *
+     * 1. **Solo los tipos que se cierran sin persona**
+     *    ({@see IncidentType::closesWhenRecovered()}): ningun otro se pudo
+     *    cerrar solo, asi que ningun otro se reabre solo.
+     * 2. **Solo lo que cerro el sistema** ({@see self::wasClosedBySystem()}):
+     *    `resolved`, sin autor y sin nota. Lo que resolvio o descarto una
+     *    persona conserva su desenlace, y una abierta no se reabre.
+     * 3. **Con el contexto del hallazgo nuevo**, que no puede estar vacio: la
+     *    incidencia vuelve a la bandeja por los intentos sin subsanar de ahora,
+     *    y es eso lo que tiene que contar. El anterior queda en el asiento.
+     * 4. **Sin resolucion y con la misma deteccion.** Vuelve a `open` con los
+     *    tres campos del cierre nulos, como cualquier abierta; `detectedAt` no
+     *    cambia porque la incidencia se detecto cuando se detecto. El momento de
+     *    la reapertura lo deja el asiento de `system` que escribe el caso de uso.
+     *
+     * El esquema dice lo mismo (`incidents_guard_transition`): aunque este
+     * metodo fallara, una persona no veria reabierta su resolucion.
+     *
+     * @param  array<string, int|string>  $context  El del hallazgo nuevo.
+     *
+     * @throws InvalidIncident si el tipo no se cierra sin persona, si no la cerro el sistema o sin contexto
+     */
+    public function reopenedBySystem(array $context): self
+    {
+        if (! $this->type->closesWhenRecovered()) {
+            throw InvalidIncident::withoutReopeningBySystem($this->type->value);
+        }
+
+        if (! $this->wasClosedBySystem()) {
+            throw InvalidIncident::withoutSystemClosure($this->status->value);
+        }
+
+        if ($context === []) {
+            throw InvalidIncident::withoutReopeningContext();
+        }
+
+        return new self(
+            type: $this->type,
+            severity: $this->severity,
+            status: IncidentStatus::Open,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $this->assignedToUserId,
+            context: $context,
+            deviceUuid: $this->deviceUuid,
+        );
+    }
+
+    /**
+     * La cerro el sistema (RN-19): `resolved`, sin autor y sin nota, que es
+     * exactamente lo que deja {@see self::closedAsRecovered()} y nada que haga
+     * una persona, porque {@see self::resolvedBy()} exige las dos cosas.
+     */
+    public function wasClosedBySystem(): bool
+    {
+        return $this->status === IncidentStatus::Resolved
+            && $this->resolvedByUserId === null
+            && $this->resolutionNote === null;
+    }
+
+    /**
+     * Si la revision diaria puede cerrarla porque la persona lo subsano
+     * (RN-19): de un tipo que lo admite y **sin bloqueo de PIN**.
+     *
+     * Es la pregunta que hace el caso de uso antes de cerrar: una incidencia que
+     * no se cierra sola no es un fallo de la pasada, es trabajo de una persona.
+     */
+    public function closesWhenRecovered(): bool
+    {
+        return $this->type->closesWhenRecovered() && ! $this->hadPinLockout();
+    }
+
+    /**
      * Cuanto tardo en trabajarse, en segundos: lo que observa el histograma
      * `incident_resolution_seconds{type}` (doc 02 §8.2) y lo que alimenta el
      * objetivo «< 24 h» del doc 01 §1.3.
@@ -327,6 +477,24 @@ final readonly class Incident
     public function isAboutASingleShiftEntry(): bool
     {
         return $this->shiftEntryUuid !== null;
+    }
+
+    /**
+     * Algun intento de la incidencia abrio o encontro el bloqueo de RS-12
+     * (`lockout_attempts` del contexto de `rejected_pin_scan`, doc 01 §5.5).
+     *
+     * Un valor que no es un entero cuenta como bloqueo: ante la duda, la mira
+     * una persona, que es el lado seguro de RN-19.
+     */
+    private function hadPinLockout(): bool
+    {
+        if (! \array_key_exists(self::PIN_LOCKOUT_ATTEMPTS, $this->context)) {
+            return false;
+        }
+
+        $lockouts = $this->context[self::PIN_LOCKOUT_ATTEMPTS];
+
+        return ! \is_int($lockouts) || $lockouts > 0;
     }
 
     /**

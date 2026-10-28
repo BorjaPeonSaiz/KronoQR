@@ -247,3 +247,115 @@ it('reconstruye una fila cerrada tal y como esta escrita', function (): void {
         ->and($reconstruida->resolvedByUserId)->toBe(9)
         ->and($reconstruida->isAboutASingleShiftEntry())->toBeFalse();
 })->group('RF-PA-05');
+
+// --- RN-19 · la incidencia que se cierra porque la persona lo subsano ---------
+
+/** Una `rejected_pin_scan` abierta de la jornada del 14, detectada el 15 a las 04:30 UTC. */
+function incidenciaDePinAbierta(): Incident
+{
+    return Incident::open(
+        type: IncidentType::RejectedPinScan,
+        employeeUuid: 'employee-1',
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 04:30'),
+        assignedToUserId: 7,
+        context: ['scan_id' => 'scan-1', 'attempts' => 1],
+    );
+}
+
+it('cierra como resuelta, sin autor ni nota, la rejected_pin_scan que la persona subsano', function (): void {
+    $abierta = incidenciaDePinAbierta();
+    $cerrada = $abierta->closedAsRecovered(Instants::utc('2026-03-16 04:30'));
+
+    expect($cerrada->status)->toBe(IncidentStatus::Resolved)
+        ->and($cerrada->resolvedAt)->toEqual(Instants::utc('2026-03-16 04:30'))
+        ->and($cerrada->resolvedByUserId)->toBeNull()
+        ->and($cerrada->resolutionNote)->toBeNull()
+        ->and($cerrada->resolutionSeconds())->toBe(86400)
+        // Lo demas sigue siendo lo que se detecto.
+        ->and($cerrada->type)->toBe($abierta->type)
+        ->and($cerrada->severity)->toBe($abierta->severity)
+        ->and($cerrada->employeeUuid)->toBe($abierta->employeeUuid)
+        ->and($cerrada->siteId)->toBe($abierta->siteId)
+        ->and($cerrada->workDate)->toBe($abierta->workDate)
+        ->and($cerrada->shiftEntryUuid)->toBeNull()
+        ->and($cerrada->detectedAt)->toEqual($abierta->detectedAt)
+        ->and($cerrada->assignedToUserId)->toBe(7)
+        ->and($cerrada->context)->toBe($abierta->context)
+        ->and($cerrada->deviceUuid)->toBeNull()
+        // Y la de partida no cambia: el agregado es inmutable.
+        ->and($abierta->status)->toBe(IncidentStatus::Open);
+})->group('RN-19', 'RF-PR-01');
+
+it('admite el cierre en el mismo instante de la deteccion', function (): void {
+    expect(incidenciaDePinAbierta()->closedAsRecovered(Instants::utc('2026-03-15 04:30'))->resolutionSeconds())->toBe(0);
+})->group('RN-19');
+
+it('solo se cierra sola la rejected_pin_scan', function (IncidentType $type): void {
+    expect($type->closesWhenRecovered())->toBe($type === IncidentType::RejectedPinScan);
+})->with(IncidentType::cases())->group('RN-19', 'RN-13');
+
+it('no cierra sola ninguna otra incidencia', function (): void {
+    expect(fn (): Incident => incidenciaAbierta(IncidentType::OutOfOrderScan)->closedAsRecovered(Instants::utc('2026-03-16 04:30')))
+        ->toThrow(InvalidIncident::class);
+})->group('RN-19', 'RN-13');
+
+it('no toca la que una persona ya resolvio o descarto', function (IncidentStatus $outcome): void {
+    $trabajada = incidenciaDePinAbierta()->resolvedBy($outcome, 7, 'Revisado con la persona.', Instants::utc('2026-03-15 09:00'));
+
+    expect(fn (): Incident => $trabajada->closedAsRecovered(Instants::utc('2026-03-16 04:30')))
+        ->toThrow(IncidentAlreadyClosed::class);
+})->with([IncidentStatus::Resolved, IncidentStatus::Dismissed])->group('RN-19', 'RN-13');
+
+it('no la cierra antes de detectarla ni con un instante fuera de UTC', function (DateTimeImmutable $at): void {
+    expect(fn (): Incident => incidenciaDePinAbierta()->closedAsRecovered($at))->toThrow(InvalidIncident::class);
+})->with([
+    'antes de detectarse' => [Instants::utc('2026-03-15 04:29')],
+    'fuera de UTC' => [new DateTimeImmutable('2026-03-16 05:30', Instants::madrid())],
+])->group('RN-19');
+
+/**
+ * @param  array<string, int|string>  $context
+ */
+function incidenciaDePinConContexto(array $context): Incident
+{
+    return Incident::open(
+        type: IncidentType::RejectedPinScan,
+        employeeUuid: 'employee-1',
+        siteId: 1,
+        workDate: '2026-03-14',
+        shiftEntryUuid: null,
+        detectedAt: Instants::utc('2026-03-15 04:30'),
+        assignedToUserId: 7,
+        context: $context,
+    );
+}
+
+it('no se cierra sola si algun intento abrio o encontro el bloqueo de PIN', function (int|string $lockouts): void {
+    $bloqueada = incidenciaDePinConContexto(['scan_id' => 'scan-1', 'attempts' => 3, 'lockout_attempts' => $lockouts]);
+
+    expect($bloqueada->closesWhenRecovered())->toBeFalse()
+        ->and(fn (): Incident => $bloqueada->closedAsRecovered(Instants::utc('2026-03-16 04:30')))
+        ->toThrow(InvalidIncident::class, 'la cierra quien la revisa');
+})->with([
+    'un bloqueo' => [1],
+    'varios' => [2],
+    // Un contexto que no se entiende no se cierra sin persona.
+    'valor que no es entero' => ['1'],
+])->group('RN-19', 'RS-12');
+
+it('se cierra sola con cero bloqueos de PIN o sin recuento de bloqueos', function (array $context): void {
+    $abierta = incidenciaDePinConContexto($context);
+
+    expect($abierta->closesWhenRecovered())->toBeTrue()
+        ->and($abierta->closedAsRecovered(Instants::utc('2026-03-16 04:30'))->status)->toBe(IncidentStatus::Resolved);
+})->with([
+    'cero bloqueos' => [['scan_id' => 'scan-1', 'attempts' => 1, 'lockout_attempts' => 0]],
+    'sin la clave' => [['scan_id' => 'scan-1', 'attempts' => 1]],
+])->group('RN-19', 'RS-12');
+
+it('no dice que se cierre sola una incidencia de otro tipo aunque no tenga bloqueo', function (): void {
+    expect(incidenciaAbierta(IncidentType::OutOfOrderScan)->closesWhenRecovered())->toBeFalse();
+})->group('RN-19', 'RN-13');

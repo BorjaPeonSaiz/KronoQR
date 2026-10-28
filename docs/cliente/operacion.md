@@ -1285,7 +1285,12 @@ de cada una en [`guia-rrhh.md`](guia-rrhh.md) §4.1:
   RRHH lo revisa y lo corrige a mano. Si se repite en una tablet, esa tablet
   tiene la aplicación atrasada: actualízala.
 - **«Fichaje por PIN no registrado»**: un intento de fichar por PIN que no se
-  aceptó y que la persona no repitió.
+  aceptó y que la persona no repitió. Se cierra sola si la persona ficha bien en
+  los 10 minutos siguientes al intento, salvo que el PIN se bloqueara: en ese
+  caso queda abierta para hablar con la persona y restablecerlo. Y si, después
+  de cerrarse sola, llega otro intento de ese mismo día sin subsanar —de otra
+  tablet que estaba sin red—, se reabre sola. La que cerró o descartó una
+  persona no se reabre nunca.
 
 **Las incidencias se abren a partir de lo que llega desde la actualización**,
 no sobre el histórico: lo que ocurrió antes no se reprocesa. **Lo que no
@@ -2431,6 +2436,11 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 - **Panel:** «Soporte» → «Accesos de soporte» → motivo, alcance, horas →
   «Conceder». El token se muestra **una sola vez**: cópialo y entrégalo a
   soporte por el canal del contrato. Si se pierde, revoca y crea otro.
+- **Qué ha hecho soporte con él:** en «Soporte», junto a cada concesión,
+  «Ver usos» lista las ventanas de uso: el instante en que empezó cada una (en la
+  zona del centro), el método y la ruta de la primera petición. Cada fila es el
+  inicio de una ventana de 15 minutos, no una petición; es un registro de mejor
+  esfuerzo.
 - **Consola:**
 
   ```bash

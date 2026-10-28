@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 0.2, 1.1, 1.2, 1.4 y 2.2 · [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §1.5 y §2 · Reglas duras 1 y 2 de `CLAUDE.md` |
 | **Requisitos** | RN-01..RN-09, RQ-01, RQ-02, RQ-10, RNF-M-01, RNF-M-03 |
+| **Enmiendas** | Precisada por [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md): la variante ligera de `Workforce` escribe la ficha por un puerto de repositorio, bajo candado y por columnas (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

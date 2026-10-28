@@ -125,7 +125,7 @@ it('no reactiva ni suspende a quien ya esta de baja', function (Closure $transic
 })->with([
     'reactivar' => [static fn (Employee $employee): Employee => $employee->reinstate()],
     'suspender' => [static fn (Employee $employee): Employee => $employee->suspend()],
-])->group('RF-GP-03', 'RN-14');
+])->group('RN-25', 'RF-GP-03', 'RN-14');
 
 it('distingue suspension de baja', function (): void {
     // Suspender no cierra el registro de nadie: no lleva fecha de cese y se
@@ -135,7 +135,7 @@ it('distingue suspension de baja', function (): void {
     expect($suspended->status)->toBe(EmploymentStatus::SUSPENDED)
         ->and($suspended->terminatedAt)->toBeNull()
         ->and($suspended->reinstate()->status)->toBe(EmploymentStatus::ACTIVE);
-})->group('RF-GP-01', 'RN-14');
+})->group('RN-25', 'RF-GP-01', 'RN-14');
 
 it('borra el correo solo cuando se pide explicitamente', function (): void {
     // En un PATCH, «no enviado» y «enviado a null» son dos ordenes distintas.

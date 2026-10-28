@@ -50,6 +50,14 @@ enum ScanRejectionReason: string
     case OUT_OF_ORDER = 'rejected_out_of_order';
 
     /**
+     * RN-25: la tarjeta es autentica y vigente, y su titular esta **suspendido**.
+     * Antes se escribia como `rejected_revoked`, y el registro decia que la
+     * tarjeta estaba revocada cuando no lo estaba. Sin titular en la fila y sin
+     * incidencia (RN-25), y hacia fuera el mismo `422` generico (RS-03).
+     */
+    case HOLDER_SUSPENDED = 'rejected_suspended';
+
+    /**
      * Traduce el motivo con el que Identity rechazo la credencial.
      *
      * Son dos vocabularios y no uno a proposito: el de Identity describe **la
@@ -63,6 +71,7 @@ enum ScanRejectionReason: string
             CredentialRejectionReason::UNKNOWN => self::UNKNOWN_CREDENTIAL,
             CredentialRejectionReason::REVOKED => self::REVOKED_CREDENTIAL,
             CredentialRejectionReason::INVALID_SIGNATURE => self::INVALID_SIGNATURE,
+            CredentialRejectionReason::HOLDER_SUSPENDED => self::HOLDER_SUSPENDED,
         };
     }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
+use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use DateTimeImmutable;
 
@@ -31,11 +33,27 @@ interface RejectedPinScans
     public function rejectedBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array;
 
     /**
-     * `occurred_at` de los fichajes que subsanan (`clock_in`, `clock_out`,
-     * `break_start`, `break_end`, `rejected_debounce`, `rejected_out_of_order`)
-     * de esa persona con `occurred_at` ∈ [from, to], ambos incluidos.
+     * Intentos con claim **de esa persona** cuyo `occurred_at` ∈ [from, to),
+     * con el mismo orden.
      *
-     * @return list<DateTimeImmutable>
+     * Es la jornada entera, llegara cuando llegara: antes de dar una jornada por
+     * subsanada y cerrar su incidencia, la revision la mira completa y no solo lo
+     * que cayo en su ventana de `recorded_at`. Sin esto, un intento sin subsanar
+     * recibido justo antes del borde de la ventana desapareceria de la cuenta y
+     * la incidencia se cerraria con el todavia pendiente.
+     *
+     * @return list<RejectedPinAttempt>
+     */
+    public function rejectedOf(string $claimantUuid, DateTimeImmutable $fromOccurredAt, DateTimeImmutable $toOccurredAt): array;
+
+    /**
+     * Los fichajes de esa persona que subsanan
+     * ({@see PinAttemptRecoveryPolicy::recovers()}: la lista la decide el
+     * dominio) con `occurred_at` ∈ [from, to], ambos incluidos, ordenados por
+     * `occurred_at` ASC y `scan_id` ASC. Con su `scan_id`, que es lo que nombra
+     * el asiento del cierre sin persona.
+     *
+     * @return list<RecoveringScan>
      */
     public function recoveringScansOf(string $employeeUuid, DateTimeImmutable $from, DateTimeImmutable $to): array;
 }

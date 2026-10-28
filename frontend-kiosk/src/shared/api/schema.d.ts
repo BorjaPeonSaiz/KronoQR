@@ -14,7 +14,9 @@ export interface paths {
         /**
          * Sonda de vida
          * @description Indica que el proceso responde y **con que version esta desplegado**
-         *     (documento 02 §10.5): es lo que permite correlacionar una incidencia con
+         *     (documento 02 §10.5), que es lo que informan `doctor` y el paquete de
+         *     diagnostico (RF-PD-09) y lo que sondea la vigilancia de disponibilidad
+         *     (RNF-D-01): es lo que permite correlacionar una incidencia con
          *     una version concreta cuando el cliente llama por telefono.
          *
          *     No consulta base de datos, ni Redis, ni disco. Una sonda de vida que toca
@@ -1031,7 +1033,7 @@ export interface paths {
         /**
          * Activacion del segundo factor
          * @description Comprueba el primer codigo del autenticador, deja el segundo factor
-         *     **activo** y emite ya la sesion con los ambitos del rol: quien acaba de
+         *     **activo** (RF-ID-01, RS-06) y emite ya la sesion con los ambitos del rol: quien acaba de
          *     darlo de alta no tiene que volver a teclear su contrasena.
          *
          *     **Confirmar no es verificar.** `2fa/confirm` activa un secreto que
@@ -1060,7 +1062,8 @@ export interface paths {
         put?: never;
         /**
          * Cierre de sesion
-         * @description Revoca **el token con el que se hace la llamada** y solo ese: cerrar
+         * @description Revoca **el token con el que se hace la llamada** y solo ese (RF-ID-01;
+         *     el cierre deja su asiento en `audit_log`, RS-13): cerrar
          *     sesion en el portatil no puede echar a la misma persona de la tablet de
          *     recepcion donde estaba revisando incidencias.
          *
@@ -1547,6 +1550,10 @@ export interface paths {
          *     confirmaria que ese codigo de empleado existe, y ademas convertiria el
          *     propio bloqueo en un oraculo. Quien necesite saber por que no entra
          *     pregunta a RRHH, que es quien puede restablecer el PIN.
+         *
+         *     **Una persona suspendida si entra** (RN-25, RL-05): la suspension
+         *     impide fichar, no consultar el propio registro, y la sesion que tuviera
+         *     abierta sigue valiendo. La de baja no entra (RN-14).
          *
          *     **Bloqueo creciente por empleado y por canal** (RS-12, §7.5): 3 fallos
          *     bloquean 5 min, 5 fallos 15 min y 10 fallos 60 min, con la cuenta a cero
@@ -2526,7 +2533,9 @@ export interface paths {
         put?: never;
         /**
          * Alta de departamento
-         * @description Crea un departamento dentro de un centro. El nombre es unico **dentro
+         * @description Crea un departamento dentro de un centro: el catalogo del que sale el
+         *     departamento de cada persona (RF-GP-01), y el que da de alta el asistente
+         *     de puesta en marcha (RF-PD-03). El nombre es unico **dentro
          *     del centro** y no en la instalacion: dos hoteles del mismo cliente
          *     tienen los dos una «Recepcion».
          */
@@ -2552,7 +2561,8 @@ export interface paths {
         };
         /**
          * Detalle de un departamento
-         * @description Nombre y responsable del departamento. Lo leen `admin`, `rrhh` y
+         * @description Nombre y responsable del departamento (RF-GP-01; el responsable,
+         *     RF-ID-03). Lo leen `admin`, `rrhh` y
          *     `responsable_departamento`, sin acotar por departamento, por lo mismo
          *     que el listado (`GET /api/v1/departments`): es catalogo, no datos de
          *     personas. El `auditor` y un acceso de soporte reciben `403`.
@@ -2835,7 +2845,8 @@ export interface paths {
         /**
          * Impresion masiva en A4
          * @description Devuelve **un solo PDF** en A4 con todas las credenciales **pendientes de
-         *     imprimir** del centro indicado (RF-QR-04).
+         *     imprimir** de la instalacion (RF-QR-04). Hay un solo centro por
+         *     instalacion (ADR-040), y la peticion no lleva ningun parametro.
          *
          *     El doc 02 §5.5 dice para que existe: *«La hoja A4 con varias tarjetas por
          *     pagina es lo que hace viable dar de alta a 40 personas de temporada en
@@ -4624,7 +4635,7 @@ export interface paths {
         };
         /**
          * Logotipo de la instalacion
-         * @description El fichero al que apunta `BRANDING_LOGO_PATH`, servido tal cual y con el
+         * @description El fichero al que apunta `BRANDING_LOGO_PATH`, servido tal cual (RF-PD-08) y con el
          *     tipo que le corresponde **por su contenido** (`image/png` o
          *     `image/svg+xml`), nunca por su extension.
          *
@@ -5041,6 +5052,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/grants/{uuid}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Ventanas de uso de un acceso de soporte
+         * @description Las ventanas en que el fabricante **uso** esta concesion, una por linea,
+         *     de la mas reciente a la mas antigua (RF-PD-11, RL-18,
+         *     [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md) §3).
+         *     Es lo que el panel enseña al desplegar una concesion: «cada sesion de
+         *     trabajo del soporte queda registrada y el hotel la ve en su panel»
+         *     (doc 05 §6.3).
+         *
+         *     **Una linea por ventana, no una por peticion.** Cada linea es un
+         *     asiento `support_grant.used` de `audit_log`, que se escribe como mucho
+         *     una vez por concesion cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS`
+         *     (900 s de serie): `started_at` es la peticion que **abrio** la ventana.
+         *     Una sesion de una hora deja cuatro lineas; varias consultas dentro de la
+         *     misma ventana dejan una. **La duracion de cada ventana no viaja**: el
+         *     asiento no la guarda, y la configuracion de hoy puede no ser la del dia
+         *     en que se escribio.
+         *
+         *     **Lo que sale, y lo que no.** El instante, y el metodo y el **patron**
+         *     de la ruta de la peticion que abrio la ventana (`api/v1/employees/{uuid}`,
+         *     nunca la URL con sus identificadores). Ni parametros, ni cuerpo, ni
+         *     respuesta, ni ningun dato de una persona: el asiento no los lleva
+         *     (regla dura 21). Lo que el soporte **cambio** deja ademas su propio
+         *     asiento, con la concesion como actor, y se consulta en la auditoria.
+         *
+         *     **Solo esta concesion y solo esta accion.** No es una consulta de
+         *     `audit_log`: no admite filtros y no devuelve asientos de otra accion ni
+         *     de otra concesion. Sirve para acotar el alcance de una intervencion del
+         *     fabricante, tambien ante una brecha (RL-15).
+         *
+         *     **Registro de mejor esfuerzo.** El asiento se escribe despues de servir
+         *     la peticion y su fallo no la tumba (no se le devuelve un `500` a quien
+         *     esta arreglando una incidencia): si la base falla justo entonces, esa
+         *     ventana puede faltar aqui. `accessed_at` de la concesion
+         *     (`GET /api/v1/support/grants`) se actualiza en cada peticion y sigue
+         *     diciendo el ultimo uso.
+         *
+         *     **`admin` y solo `admin`, con ambito `support:*`** (documento 02 §7.3,
+         *     regla dura 18). El propio token de soporte no lleva ese ambito y recibe
+         *     `403`: quien recibe el acceso no consulta su rastro. `404` si el `uuid`
+         *     no es de ninguna concesion. No degrada con la licencia caducada (regla
+         *     dura 15).
+         */
+        get: operations["listSupportGrantUses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-export": {
         parameters: {
             query?: never;
@@ -5317,7 +5396,7 @@ export interface paths {
         };
         /**
          * Pasos del asistente y su estado
-         * @description Los ocho pasos del asistente con su estado, lo que hace que la puesta en
+         * @description Los ocho pasos del asistente con su estado (RF-PD-03), lo que hace que la puesta en
          *     marcha sea **reanudable**: se abandona a la mitad —falta un dato, hay que
          *     llamar a alguien, la tablet llega mañana— se vuelve, y el panel sabe donde
          *     estaba.
@@ -9670,8 +9749,9 @@ export interface components {
         };
         /**
          * PrintCredentialBatchRequest
-         * @description **Solo el centro, y es opcional.** No hay ningun otro parametro, y su
-         *     ausencia es la parte importante del esquema: no existe `reprint`, ni
+         * @description **Sin parametros.** Hay un solo centro por instalacion (ADR-040), asi que
+         *     ni siquiera se elige el centro. La ausencia de parametros es la parte
+         *     importante del esquema: no existe `reprint`, ni
          *     `force`, ni `include_printed`, porque no existe la reimpresion (ADR-034).
          *     `additionalProperties: false` hace que el contrato no ofrezca ningun sitio
          *     donde alojarlos el dia que alguien los eche de menos.
@@ -9686,9 +9766,9 @@ export interface components {
          *     | Valor | Significado |
          *     |---|---|
          *     | `no_credential` | No se le ha emitido ninguna credencial |
-         *     | `pending_print` | Emitida y sin imprimir. **Todavia no puede fichar** |
-         *     | `pending_delivery` | Impresa y sin entregar. La tarjeta existe, pero no la tiene |
-         *     | `delivered` | Entregada. Es el unico estado en el que puede fichar con tarjeta |
+         *     | `pending_print` | Emitida y sin imprimir. **Todavia no puede fichar**: no tiene token (ADR-034) |
+         *     | `pending_delivery` | Impresa y sin entregar. **Ya puede fichar**: el token nace al imprimir (ADR-034), aunque la persona aun no tenga la tarjeta |
+         *     | `delivered` | Entregada. Puede fichar con tarjeta |
          *     | `revoked` | Su ultima credencial esta revocada y no le queda ninguna activa |
          *
          *     **`no_credential` y `revoked` se separan a proposito** aunque las dos
@@ -10712,10 +10792,13 @@ export interface components {
          *     `IncidentStatus` menos `open`: no hay forma de reabrir desde la API, y no
          *     es un olvido — cerrar es final.
          *
-         *     **La deteccion tampoco la reabre.** La restriccion
-         *     `one_incident_per_finding` cubre todos los estados, asi que el mismo
-         *     hallazgo —mismo empleado, misma jornada, mismo tipo y mismo tramo— no
-         *     vuelve a entrar aunque la jornada siga dentro de la ventana de revision.
+         *     **La deteccion tampoco reabre lo que cerro una persona.** La
+         *     restriccion `one_incident_per_finding` cubre todos los estados, asi que
+         *     el mismo hallazgo —mismo empleado, misma jornada, mismo tipo y mismo
+         *     tramo— no vuelve a entrar aunque la jornada siga dentro de la ventana de
+         *     revision. La unica vuelta atras es de la revision y sobre su propio
+         *     cierre: una `rejected_pin_scan` que cerro el sistema se reabre si llega
+         *     despues otro intento de esa jornada sin subsanar (RN-19, ADR-057 §2).
          *     Lo que si abre fila nueva es un hecho realmente nuevo: una correccion
          *     estrena identificador de tramo (ADR-035), asi que la cuadrupla es otra.
          * @example resolved
@@ -10949,13 +11032,25 @@ export interface components {
             /** @description Cuando se cerro. `null` mientras siga abierta. */
             resolved_at: components["schemas"]["UtcTimestamp"] | null;
             /**
-             * @description Quien la cerro. **Siempre una persona**: la deteccion abre
-             *     incidencias con actor `system`, pero ninguna se cierra sola.
+             * @description Quien la cerro. **Una persona**, salvo en un caso: una
+             *     `rejected_pin_scan` abierta se cierra sola, como `resolved`, cuando
+             *     la persona subsana el fichaje despues de abrirse —el fichaje bueno
+             *     llega tarde de la cola offline de otro quiosco— (RN-19). Entonces
+             *     `resolved_by` y `resolution_note` son `null` con `resolved_at`
+             *     relleno, y el cierre deja su asiento `incident.resolved` con actor
+             *     `system`. Si despues llega otro intento de esa jornada sin
+             *     subsanar, la revision la reabre: vuelve a `open` con `resolved_at`,
+             *     `resolved_by` y `resolution_note` a `null`, el `context` del intento
+             *     nuevo y el asiento `incident.reopened` de actor `system`. Ninguna
+             *     otra incidencia se cierra ni se reabre sola, y una que ya trabajo
+             *     una persona no la toca nadie.
              */
             resolved_by: components["schemas"]["IncidentUser"] | null;
             /**
              * @description Por que se dio por trabajada. Obligatoria al cerrarla (RN-13): sin
              *     ella la bandeja se vacia y nadie puede explicar despues que se hizo.
+             *     `null` en el unico cierre sin persona, el de RN-19 (ver
+             *     `resolved_by`).
              * @example Corregida la salida olvidada del dia 14 con el parte de turno.
              */
             resolution_note: string | null;
@@ -12894,6 +12989,36 @@ export interface components {
         /** SupportGrantCollection */
         SupportGrantCollection: {
             data: components["schemas"]["SupportGrant"][];
+        };
+        /**
+         * SupportGrantUse
+         * @description Una ventana de uso de un acceso de soporte: el asiento
+         *     `support_grant.used` que abrio (RF-PD-11, ADR-020 §3). Sin contenido de
+         *     la peticion y sin datos de personas.
+         */
+        SupportGrantUse: {
+            /**
+             * Format: date-time
+             * @description Instante de la peticion que abrio la ventana, en UTC.
+             * @example 2026-10-07T09:00:00.000000Z
+             */
+            started_at: string;
+            /**
+             * @description Metodo HTTP de esa peticion. `null` si el asiento no lo lleva.
+             * @example GET
+             */
+            method: string | null;
+            /**
+             * @description **Patron** de la ruta de esa peticion, nunca la URL con sus
+             *     identificadores. `null` si el asiento no lo lleva.
+             * @example api/v1/diagnostics/errors
+             */
+            route: string | null;
+        };
+        /** SupportGrantUseCollection */
+        SupportGrantUseCollection: {
+            data: components["schemas"]["SupportGrantUse"][];
+            meta: components["schemas"]["PageMeta"];
         };
         /** GrantSupportAccessRequest */
         GrantSupportAccessRequest: {
@@ -19400,6 +19525,54 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportGrantUses: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de ventanas de uso, de la mas reciente a la mas antigua. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportGrantUseCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };

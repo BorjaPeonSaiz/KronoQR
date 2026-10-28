@@ -87,6 +87,8 @@ function textfileSeries(): array
         'incident_detection_work_days_inspected',
         'incident_detection_last_findings',
         'incident_detection_last_failures',
+        'incident_detection_last_recovered_work_days',
+        'incident_detection_last_relapsed_work_days',
         // Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics (tarea 3.11)
         //
         // Dos y no cuatro, al contrario que su hermana de arriba: el §8.2 declara

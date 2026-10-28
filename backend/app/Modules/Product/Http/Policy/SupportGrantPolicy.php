@@ -68,6 +68,16 @@ final class SupportGrantPolicy
     }
 
     /**
+     * Las ventanas de uso de una concesion (`GET .../{uuid}/uses`). Las mismas
+     * personas que ven la lista: es su detalle. **El propio soporte no**: quien
+     * recibe el acceso no consulta su rastro, igual que no ve la lista.
+     */
+    public function viewUses(ManagementActor $actor): bool
+    {
+        return self::isInstallationAdministrator($actor);
+    }
+
+    /**
      * Administrador **del cliente**, no un acceso del fabricante que actua como
      * tal. Ver el docblock de la clase.
      */

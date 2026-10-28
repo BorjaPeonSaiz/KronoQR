@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 0.2, 0.6, 1.7 y 5.7 · [ADR-013](ADR-013-contrato-openapi-como-fuente-de-verdad.md) y [ADR-024](ADR-024-la-pausa-son-dos-tramos.md) |
 | **Requisitos** | RF-KI-07, RF-PD-10, RQ-06, RNF-D-04 |
+| **Enmiendas** | Matizada por [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md) (admite en `/api/v1` un cambio no aditivo: quitar los campos y rutas de varios centros) y por [ADR-041](ADR-041-descarga-de-ficheros-diferidos-con-enlace-de-un-solo-uso.md) (una ruta de descarga sin sesión dentro de `/api/v1`) (referencia de vuelta añadida el 27-10-2026) |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

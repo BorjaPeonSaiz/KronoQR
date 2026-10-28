@@ -97,12 +97,24 @@ final class DetectIncidentsCommand extends Command
             'work_days_inspected' => $result->workDaysInspected,
             'anomalies' => $result->byType,
             'failures' => $result->failures,
+            // RN-19: anuncios de jornada subsanada, no cierres.
+            'recovered_work_days' => $result->recoveredWorkDays,
+            // RN-19: anuncios de jornada que recae, no reaperturas.
+            'relapsed_work_days' => $result->relapsedWorkDays,
         ]);
 
         $this->info($this->text('inspected', [
             'work_days' => $result->workDaysInspected,
             'days' => $result->daysInspected,
         ]));
+
+        if ($result->recoveredWorkDays > 0) {
+            $this->line($this->text('recovered', ['count' => $result->recoveredWorkDays]));
+        }
+
+        if ($result->relapsedWorkDays > 0) {
+            $this->line($this->text('relapsed', ['count' => $result->relapsedWorkDays]));
+        }
 
         if ($result->total() === 0) {
             $this->line($this->text('none'));

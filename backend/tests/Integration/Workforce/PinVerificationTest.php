@@ -271,7 +271,7 @@ it('paga exactamente una comparacion de hash bcrypt en cada rechazo', function (
     // tambien seria «una llamada», pero el hasher la descarta sin calcular nada.
     expect($comparados)->toHaveCount(1)
         ->and(password_get_info($comparados[0])['algoName'])->toBe('bcrypt');
-})->with('rechazos del PIN')->group('RS-03', 'RS-12');
+})->with('rechazos del PIN')->group('RN-25', 'RS-03', 'RS-12');
 
 /**
  * El `pin_hash` guardado de un empleado.
@@ -427,3 +427,26 @@ it('no abre un sobre sellado con la clave de otra instalacion', function (): voi
 
     expect(app(SealedPinOpener::class)->open($sobre))->toBeNull();
 })->group('RF-AT-11', 'RS-03');
+
+it('verifica el PIN de la persona suspendida en el portal y no en el quiosco', function (): void {
+    // RN-25, decision del propietario del 27-10-2026: la suspension impide
+    // fichar, no consultar el propio registro (RL-05).
+    $suspendida = empleadoConPin(PIN_BUENO, 'suspended');
+
+    $enElPortal = verificador()->verify($suspendida['code'], PIN_BUENO, PinOrigin::PORTAL);
+    $enElQuiosco = verificador()->verify($suspendida['code'], PIN_BUENO, PinOrigin::KIOSK);
+
+    expect($enElPortal->isVerified())->toBeTrue()
+        ->and($enElPortal->employeeUuid())->toBe($suspendida['uuid'])
+        ->and($enElQuiosco->isVerified())->toBeFalse()
+        ->and($enElQuiosco->employeeUuid())->toBeNull();
+})->group('RN-25', 'RL-05', 'RF-ID-06');
+
+it('no verifica en el portal el PIN de una persona de baja', function (): void {
+    $deBaja = empleadoConPin(PIN_BUENO, 'terminated');
+
+    $verificacion = verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::PORTAL);
+
+    expect($verificacion->isVerified())->toBeFalse()
+        ->and($verificacion->employeeUuid())->toBeNull();
+})->group('RN-14', 'RN-25', 'RS-03');

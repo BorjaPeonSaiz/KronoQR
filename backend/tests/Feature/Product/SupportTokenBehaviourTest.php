@@ -292,6 +292,8 @@ it('la policy de soporte rechaza a un actor de soporte aunque su token lleve sup
     'lista' => ['GET', '/api/v1/support/grants', []],
     'concesion' => ['POST', '/api/v1/support/grants', ['reason' => 'Me concedo mas acceso']],
     'revocacion' => ['DELETE', '/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60', []],
+    // Su propio rastro tampoco: la policy cierra antes del 404.
+    'usos' => ['GET', '/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60/uses', []],
 ])->group('RF-PD-11');
 
 // --- El perfil de cumplimiento lo fija el cliente (RL-01, RL-02, regla 14) ----

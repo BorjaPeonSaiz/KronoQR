@@ -127,10 +127,11 @@ it('no deja corregir a un auditor, que solo puede mirar', function (): void {
     }
 })->group('RF-ID-03', 'RF-PA-04', 'RS-04');
 
-it('no deja corregir a un responsable de departamento en esta fase', function (): void {
-    // RF-ID-03 completo —el alcance por departamento— es de la tarea 2.1. Hasta
-    // entonces, darle acceso seria darle el registro horario de TODA la
-    // instalacion, que es justo lo que ese requisito viene a impedir.
+it('no deja corregir a un responsable que no dirige ningun departamento', function (): void {
+    // La policy admite al rol (RF-ID-03), pero el alcance es por departamento:
+    // un responsable sin departamento no alcanza a nadie, y el `403` sale de
+    // ahi. El caso positivo —corregir dentro de su departamento— y el de un
+    // departamento ajeno estan en `ShiftCorrectionByDepartmentManagerTest`.
     ['employee' => $employee, 'entry' => $entry] = tramoParaAutorizacion();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
 

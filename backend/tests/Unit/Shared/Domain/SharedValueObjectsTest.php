@@ -248,8 +248,9 @@ it('rechaza una credencial con motivo y sin empleado', function (CredentialRejec
 })->with([
     'desconocida' => [CredentialRejectionReason::UNKNOWN],
     'revocada' => [CredentialRejectionReason::REVOKED],
+    'titular suspendido' => [CredentialRejectionReason::HOLDER_SUSPENDED],
     'mala firma' => [CredentialRejectionReason::INVALID_SIGNATURE],
-])->group('RS-03');
+])->group('RS-03', 'RN-25');
 
 it('no admite una credencial resuelta sin empleado detras', function (): void {
     expect(fn (): CredentialResolution => CredentialResolution::resolved(''))
@@ -264,7 +265,7 @@ it('solo deja fichar al empleado activo', function (EmploymentStatus $status, bo
     'activo' => [EmploymentStatus::ACTIVE, true],
     'suspendido' => [EmploymentStatus::SUSPENDED, false],
     'de baja' => [EmploymentStatus::TERMINATED, false],
-])->group('RN-14');
+])->group('RN-25', 'RN-14');
 
 it('pregunta al empleado si puede fichar en vez de comparar su estado por fuera', function (): void {
     $terminated = new EmployeeSnapshot('uuid-1', 'EMP-0001', 'Lucia', EmploymentStatus::TERMINATED, 1);
@@ -322,8 +323,9 @@ it('guarda el valor de columna de cada motivo de rechazo de credencial', functio
 })->with([
     'desconocida' => [CredentialRejectionReason::UNKNOWN, 'unknown'],
     'revocada' => [CredentialRejectionReason::REVOKED, 'revoked'],
+    'titular suspendido' => [CredentialRejectionReason::HOLDER_SUSPENDED, 'holder_suspended'],
     'mala firma' => [CredentialRejectionReason::INVALID_SIGNATURE, 'invalid_signature'],
-])->group('RS-03');
+])->group('RS-03', 'RN-25');
 
 it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $enabled): void {
     // RF-AT-12. **Sin valor por defecto** (regla dura 14): el valor de serie

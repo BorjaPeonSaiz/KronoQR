@@ -277,6 +277,7 @@ function authorizationMatrix(): array
         'GET api/v1/support/grants' => [$admin],
         'POST api/v1/support/grants' => [$admin],
         'DELETE api/v1/support/grants/{uuid}' => [$admin],
+        'GET api/v1/support/grants/{uuid}/uses' => [$admin],
         'GET api/v1/data-export' => [$admin],
         'POST api/v1/data-export' => [$admin],
         'GET api/v1/data-export/{uuid}/download' => [$admin],

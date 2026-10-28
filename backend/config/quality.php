@@ -104,6 +104,51 @@ return [
     'adr_path' => 'adr',
 
     /*
+     * El contrato de la API, autoridad #2 (CLAUDE.md). Relativa a docs_path.
+     *
+     * `docs:consistency` exige que cada operacion cite al menos un requisito
+     * del catalogo y que todo lo que cita el contrato exista en el doc 01: es la
+     * mitad mecanica del orden «doc 01 -> contrato -> codigo» (tarea 20.7 de la
+     * 2.3.0, V21-6-AR-1/2/3).
+     */
+    'contract_file' => 'api/openapi.yaml',
+
+    /*
+     * La otra mitad: el codigo. Dos listas de directorios, con comodines de
+     * `glob()`.
+     *
+     * - `must_cite`: cada fichero cita al menos un requisito del catalogo. Son
+     *   las dos puertas por las que entra comportamiento con regla: los
+     *   controladores (una ruta) y las politicas del dominio (una regla de
+     *   negocio). Los casos de uso y las ordenes de consola no estan, porque
+     *   entre ellos hay resultados, apoyos y metricas de operacion (doc 02 §8)
+     *   que no responden a un requisito del doc 01, y exigirlo daria falsos
+     *   positivos que se acabarian tapando con excepciones.
+     * - `must_exist`: todo requisito que se cita aqui existe en el catalogo. El
+     *   codigo de produccion de los cuatro artefactos; las pruebas las vigila
+     *   `qa:traceability`.
+     *
+     * Un patron que no encuentra directorio es una divergencia, no un silencio:
+     * ver {@see \App\Console\Commands\Quality\Support\SourceTree}.
+     */
+    'requirement_citations' => [
+        'must_cite' => [
+            base_path('app/Modules/*/Http/Controller'),
+            base_path('app/Modules/*/Domain/Policy'),
+        ],
+        'must_exist' => [
+            base_path('app'),
+            base_path('routes'),
+            base_path('config'),
+            base_path('database'),
+            $repoPath.'/frontend-kiosk/src',
+            $repoPath.'/frontend-admin/src',
+            $repoPath.'/frontend-portal/src',
+            $repoPath.'/packages/web-kit/src',
+        ],
+    ],
+
+    /*
      * El plan de implementacion desarrollado tarea por tarea. Relativa a
      * repo_path, y con espacio en el nombre porque asi se llama el directorio.
      *

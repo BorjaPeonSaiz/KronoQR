@@ -22,6 +22,7 @@ import { RouterLink } from 'vue-router'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import { describeIncidentContext } from './incidentContext'
 import { useIncidentsStore } from './incidents.store'
+import { isClosedBySystem } from './incidentPresentation'
 import { incidentSubject } from './incidentSubject'
 import type { Incident, IncidentOutcome } from '@/shared/api/types'
 
@@ -85,6 +86,11 @@ const conflictIncident = computed(() => store.conflict?.incident ?? null)
  * deberia pasar pero no es motivo para que el dialogo se rompa).
  */
 const conflictResolvedByName = computed(() => conflictIncident.value?.resolved_by?.name ?? null)
+
+/** El sistema la cerro porque la persona ficho (RN-19): sin autor y sin nota. */
+const conflictClosedBySystem = computed(
+  () => conflictIncident.value !== null && isClosedBySystem(conflictIncident.value),
+)
 
 function close(): void {
   emit('cancel')
@@ -175,6 +181,11 @@ function conflictMoment(): string {
                 moment: conflictMoment(),
               })
             }}
+          </template>
+          <template v-else-if="conflictClosedBySystem">
+            <span data-test="conflict-closed-by-system">{{
+              t('incidents.dialog.conflict.closedBySystem')
+            }}</span>
           </template>
           <template v-else>{{ t('incidents.dialog.conflict.resolvedByUnknown') }}</template>
         </p>

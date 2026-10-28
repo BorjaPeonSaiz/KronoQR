@@ -134,6 +134,23 @@ enum IncidentType: string
     }
 
     /**
+     * Si la incidencia se cierra sin persona cuando el hecho que la abrio queda
+     * subsanado (RN-19).
+     *
+     * Solo `rejected_pin_scan`. Su hallazgo es «falta un fichaje de esta
+     * persona», y si el fichaje aparece —llego tarde de la cola offline de otro
+     * quiosco— ya no falta nada que revisar. Lo que cuenta como subsanar lo decide
+     * `Attendance`, que es quien tiene los fichajes; aqui solo se dice que tipos
+     * admiten ese cierre. Ninguno mas: los demas describen algo que sigue siendo
+     * cierto aunque despues se corrija (un turno largo, un descanso corto) y
+     * cerrarlos sin nadie seria borrar la pregunta antes de que alguien la mire.
+     */
+    public function closesWhenRecovered(): bool
+    {
+        return $this === self::RejectedPinScan;
+    }
+
+    /**
      * El tipo que corresponde al valor que transporta el evento de dominio de
      * `Attendance`.
      *

@@ -13,7 +13,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * `GET /api/v1/auth/me` — usuario, rol y ambito de la sesion en curso.
+ * `GET /api/v1/auth/me` — usuario, rol y ambito de la sesion en curso
+ * (RF-ID-01, RF-ID-02).
  *
  * Relee la cuenta en lugar de devolver lo que dice el token: un rol retirado o
  * una cuenta desactivada tienen que notarse en la peticion siguiente y no

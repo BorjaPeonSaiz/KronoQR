@@ -15,9 +15,12 @@ use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\UseCase\AnomalyScanResult;
 use App\Modules\Attendance\Application\UseCase\DetectAttendanceAnomalies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
+use App\Modules\Attendance\Domain\Event\RejectedPinScanRecovered;
+use App\Modules\Attendance\Domain\Event\RejectedPinScanRelapsed;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\RecoveringScan;
 use App\Modules\Attendance\Domain\ValueObject\RejectedPinAttempt;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
@@ -56,7 +59,13 @@ final class InMemoryRejectedPinScans implements RejectedPinScans
     /** @var list<array{string, DateTimeImmutable, DateTimeImmutable}> */
     public array $recoveryQueries = [];
 
+    /** @var list<array{string, DateTimeImmutable, DateTimeImmutable}> */
+    public array $workDayQueries = [];
+
     /**
+     * Cada fichaje que subsana lleva un `scan_id` con su hora, para leer las
+     * aserciones sin tabla de correspondencias.
+     *
      * @param  list<RejectedPinAttempt>  $attempts
      * @param  array<string, list<DateTimeImmutable>>  $recovering
      */
@@ -74,14 +83,30 @@ final class InMemoryRejectedPinScans implements RejectedPinScans
         return $inWindow;
     }
 
+    public function rejectedOf(string $claimantUuid, DateTimeImmutable $fromOccurredAt, DateTimeImmutable $toOccurredAt): array
+    {
+        $this->workDayQueries[] = [$claimantUuid, $fromOccurredAt, $toOccurredAt];
+
+        $ofWorkDay = array_values(array_filter(
+            $this->attempts,
+            static fn (RejectedPinAttempt $a): bool => $a->claimantUuid === $claimantUuid && $a->occurredAt >= $fromOccurredAt && $a->occurredAt < $toOccurredAt,
+        ));
+
+        usort($ofWorkDay, static fn (RejectedPinAttempt $a, RejectedPinAttempt $b): int => [$a->occurredAt, $a->scanId] <=> [$b->occurredAt, $b->scanId]);
+
+        return $ofWorkDay;
+    }
+
     public function recoveringScansOf(string $employeeUuid, DateTimeImmutable $from, DateTimeImmutable $to): array
     {
         $this->recoveryQueries[] = [$employeeUuid, $from, $to];
 
-        return array_values(array_filter(
+        $inWindow = array_values(array_filter(
             $this->recovering[$employeeUuid] ?? [],
             static fn (DateTimeImmutable $at): bool => $at >= $from && $at <= $to,
         ));
+
+        return array_map(static fn (DateTimeImmutable $at): RecoveringScan => new RecoveringScan('recovering '.$at->format('H:i:s'), $at), $inWindow);
     }
 }
 
@@ -102,7 +127,7 @@ function rejectedPinDetectionAttempt(string $scanId, string $claimant, string $o
 }
 
 /**
- * @return array{result: AnomalyScanResult, anomalies: list<DetectedAnomaly>, metrics: array<string, int>, port: InMemoryRejectedPinScans}
+ * @return array{result: AnomalyScanResult, anomalies: list<DetectedAnomaly>, recovered: list<RejectedPinScanRecovered>, relapsed: list<RejectedPinScanRelapsed>, order: list<string>, metrics: array<string, int>, detection: array{findings: int, failures: int, recoveredWorkDays: int, relapsedWorkDays: int}|null, port: InMemoryRejectedPinScans}
  */
 function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDays = 7): array
 {
@@ -127,6 +152,17 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         public function anomaliesDetected(array $byPattern): void
         {
             $this->byPattern = $byPattern;
+        }
+    };
+
+    $detectionMetrics = new class implements IncidentDetectionMetrics
+    {
+        /** @var array{findings: int, failures: int, recoveredWorkDays: int, relapsedWorkDays: int}|null */
+        public ?array $published = null;
+
+        public function scanCompleted(int $workDaysInspected, int $findings, int $failures, int $recoveredWorkDays, int $relapsedWorkDays, DateTimeImmutable $at): void
+        {
+            $this->published = ['findings' => $findings, 'failures' => $failures, 'recoveredWorkDays' => $recoveredWorkDays, 'relapsedWorkDays' => $relapsedWorkDays];
         }
     };
 
@@ -231,10 +267,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
         },
         events: $events,
         anomalyMetrics: $anomalyMetrics,
-        detectionMetrics: new class implements IncidentDetectionMetrics
-        {
-            public function scanCompleted(int $workDaysInspected, int $findings, int $failures, DateTimeImmutable $at): void {}
-        },
+        detectionMetrics: $detectionMetrics,
         clock: FixedClock::at(REJECTED_PIN_DETECTION_NOW),
         logger: new NullLogger,
         caughtFailures: new RecordingCaughtFailures,
@@ -243,14 +276,27 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
     $result = $handler->handle(new DetectAnomaliesCommand($lookbackDays));
 
     $anomalies = [];
+    $recovered = [];
+    $relapsed = [];
+    $order = [];
 
     foreach ($events->published as $event) {
         if ($event instanceof AttendanceAnomalyDetected && $event->anomaly->type === AnomalyType::REJECTED_PIN_SCAN) {
             $anomalies[] = $event->anomaly;
+            $order[] = 'anomaly';
+        }
+
+        if ($event instanceof RejectedPinScanRecovered) {
+            $recovered[] = $event;
+        }
+
+        if ($event instanceof RejectedPinScanRelapsed) {
+            $relapsed[] = $event;
+            $order[] = 'relapse';
         }
     }
 
-    return ['result' => $result, 'anomalies' => $anomalies, 'metrics' => $anomalyMetrics->byPattern, 'port' => $port];
+    return ['result' => $result, 'anomalies' => $anomalies, 'recovered' => $recovered, 'relapsed' => $relapsed, 'order' => $order, 'metrics' => $anomalyMetrics->byPattern, 'detection' => $detectionMetrics->published, 'port' => $port];
 }
 
 it('agrupa cuatro intentos de la misma persona y dia en una incidencia con el primero', function (): void {
@@ -371,4 +417,215 @@ it('incluye rejected_pin_scan en el recuento por tipo y en la metrica', function
 
     expect($run['result']->byType)->toBe(['rejected_pin_scan' => 2])
         ->and($run['metrics'])->toBe(['rejected_pin_scan' => 2]);
+})->group('RN-19', 'RF-PR-01');
+
+// --- R3-AR-03 / R3-BE-02 · la ventana abierta y la subsanacion que llega tarde ---
+
+it('no abre nada mientras la ventana de 600 s del intento siga abierta', function (): void {
+    // El reloj esta a las 12:00:00: un intento de las 11:55 todavia puede
+    // subsanarse hasta las 12:05. Lo vera la pasada siguiente.
+    $port = new InMemoryRejectedPinScans([
+        rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-15 11:55:00'),
+    ]);
+
+    $run = rejectedPinDetectionRun($port);
+
+    expect($run['anomalies'])->toBe([])
+        ->and($run['recovered'])->toBe([])
+        ->and($run['result']->byType)->toBe([]);
+})->group('RN-19', 'RF-PR-01');
+
+it('abre la incidencia con los intentos sin subsanar aunque otro de la jornada espere su ventana', function (): void {
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans([
+        rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-15 07:00:00'),
+        rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-15 11:58:00', lockout: true),
+    ]));
+
+    expect($run['anomalies'])->toHaveCount(1)
+        ->and($run['anomalies'][0]->context['scan_id'])->toBe('0199-scan-1')
+        ->and($run['anomalies'][0]->context['attempts'])->toBe(1)
+        ->and($run['anomalies'][0]->context['lockout_attempts'])->toBe(0)
+        ->and($run['recovered'])->toBe([]);
+})->group('RN-19', 'RF-PR-01');
+
+it('cuenta en la incidencia solo los intentos sin subsanar, y el primero de ellos', function (): void {
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:00:00', '2026-03-14 09:00:00', lockout: true),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-14 15:00:00', '2026-03-14 15:00:10'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-14 07:05:00')]],
+    ));
+
+    expect($run['anomalies'])->toHaveCount(1)
+        ->and($run['anomalies'][0]->context['scan_id'])->toBe('0199-scan-2')
+        ->and($run['anomalies'][0]->context['occurred_at'])->toBe('2026-03-14T15:00:00.000000Z')
+        ->and($run['anomalies'][0]->context['attempts'])->toBe(1)
+        ->and($run['anomalies'][0]->context['lockout_attempts'])->toBe(0)
+        ->and($run['anomalies'][0]->context['max_sync_delay_seconds'])->toBe(10)
+        ->and($run['recovered'])->toBe([]);
+})->group('RN-19', 'RF-PR-01');
+
+it('anuncia la jornada subsanada entera para que se cierre su incidencia', function (): void {
+    // El caso de R3-BE-02: PIN erroneo a las 07:02 y el bueno a las 07:05 en
+    // otro quiosco sin red. Cuando el bueno llega, la jornada esta subsanada.
+    $port = new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:02:00'),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:03:00'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-14 07:05:00')]],
+    );
+
+    $run = rejectedPinDetectionRun($port);
+
+    expect($run['anomalies'])->toBe([])
+        ->and($run['recovered'])->toHaveCount(1)
+        ->and($run['recovered'][0]->employeeUuid())->toBe(REJECTED_PIN_DETECTION_ANA)
+        ->and($run['recovered'][0]->workDate())->toBe('2026-03-14')
+        ->and($run['recovered'][0]->siteId())->toBe(1)
+        ->and($run['recovered'][0]->occurredAt())->toEqual(rejectedPinDetectionUtc(REJECTED_PIN_DETECTION_NOW))
+        // El asiento del cierre nombra los dos intentos y el fichaje que
+        // subsana a ambos, una sola vez.
+        ->and($run['recovered'][0]->attemptScanIds())->toBe(['0199-scan-1', '0199-scan-2'])
+        ->and($run['recovered'][0]->recoveringScanIds())->toBe(['recovering 07:05:00'])
+        // La jornada entera se pide por sus limites civiles en Madrid (UTC+1).
+        ->and($port->workDayQueries)->toEqual([[
+            REJECTED_PIN_DETECTION_ANA,
+            rejectedPinDetectionUtc('2026-03-13 23:00:00'),
+            rejectedPinDetectionUtc('2026-03-14 23:00:00'),
+        ]])
+        // Ni el recuento ni la metrica cuentan un cierre como hallazgo...
+        ->and($run['result']->byType)->toBe([])
+        // ...pero la pasada si cuenta la jornada que anuncio.
+        ->and($run['result']->recoveredWorkDays)->toBe(1)
+        ->and($run['detection'])->toBe(['findings' => 0, 'failures' => 0, 'recoveredWorkDays' => 1, 'relapsedWorkDays' => 0]);
+})->group('RN-19', 'RF-PR-01');
+
+it('no anuncia la jornada si un intento suyo sin subsanar quedo fuera de la ventana de recepcion', function (): void {
+    // Ventana de 7 dias: desde el 08-03 a las 12:00. El intento de las 08:00 del
+    // 08-03 llego antes y no lo ve `rejectedBetween()`; el de las 13:00 si, y
+    // esta subsanado. La jornada entera no lo esta: la incidencia no se cierra.
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-08 08:00:00'),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-08 13:00:00'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-08 13:01:00')]],
+    ));
+
+    expect($run['recovered'])->toBe([])
+        ->and($run['anomalies'])->toBe([])
+        ->and($run['result']->recoveredWorkDays)->toBe(0);
+})->group('RN-19', 'RF-PR-01');
+
+it('no anuncia nada de una persona cuyo fichaje es de otra', function (): void {
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:00:00')],
+        [REJECTED_PIN_DETECTION_BEA => [rejectedPinDetectionUtc('2026-03-14 07:00:30')]],
+    ));
+
+    expect($run['recovered'])->toBe([]);
+})->group('RN-19');
+
+it('anuncia la jornada del intento aunque lo subsane un fichaje del dia civil siguiente, y no mira ese dia', function (): void {
+    // Madrid en marzo es UTC+1: el intento de las 23:58 del 13 (22:58 Z) lo
+    // subsana el fichaje de las 00:03 del 14 (23:03 Z), cinco minutos despues.
+    // La jornada es la del intento (RN-05): se anuncia la del 13 y solo se
+    // lee la del 13, entera.
+    $port = new InMemoryRejectedPinScans(
+        [rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-13 22:58:00')],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-13 23:03:00')]],
+    );
+
+    $run = rejectedPinDetectionRun($port);
+
+    expect($run['anomalies'])->toBe([])
+        ->and(array_map(static fn (RejectedPinScanRecovered $r): string => $r->workDate(), $run['recovered']))->toBe(['2026-03-13'])
+        ->and($run['recovered'][0]->recoveringScanIds())->toBe(['recovering 23:03:00'])
+        ->and($port->workDayQueries)->toEqual([[
+            REJECTED_PIN_DETECTION_ANA,
+            rejectedPinDetectionUtc('2026-03-12 23:00:00'),
+            rejectedPinDetectionUtc('2026-03-13 23:00:00'),
+        ]]);
+})->group('RN-19', 'RN-09', 'RN-05');
+
+// --- La jornada que recae (enmienda del 27-10-2026 de ADR-057 §2) ------------
+
+it('anuncia la jornada que recae, despues de su hallazgo, con sus intentos y el fichaje que subsano', function (): void {
+    // El intento de las 08:00 lo subsano el fichaje de las 08:03 (otro quiosco
+    // sin red); el de las 21:00 llego despues y nadie lo subsano. El hallazgo
+    // cuenta solo el de las 21:00, y la recaida lleva su contexto para que
+    // `Compliance` reabra la incidencia si la cerro el sistema.
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:00:00'),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-14 21:00:00', '2026-03-15 09:00:00'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-14 07:03:00')]],
+    ));
+
+    expect($run['anomalies'])->toHaveCount(1)
+        ->and($run['anomalies'][0]->context['scan_id'])->toBe('0199-scan-2')
+        ->and($run['recovered'])->toBe([])
+        ->and($run['relapsed'])->toHaveCount(1)
+        ->and($run['order'])->toBe(['anomaly', 'relapse'])
+        ->and($run['relapsed'][0]->employeeUuid())->toBe(REJECTED_PIN_DETECTION_ANA)
+        ->and($run['relapsed'][0]->workDate())->toBe('2026-03-14')
+        ->and($run['relapsed'][0]->siteId())->toBe(1)
+        ->and($run['relapsed'][0]->occurredAt())->toEqual(rejectedPinDetectionUtc(REJECTED_PIN_DETECTION_NOW))
+        ->and($run['relapsed'][0]->context())->toBe($run['anomalies'][0]->context)
+        ->and($run['relapsed'][0]->attemptScanIds())->toBe(['0199-scan-1', '0199-scan-2'])
+        ->and($run['relapsed'][0]->recoveringScanIds())->toBe(['recovering 07:03:00'])
+        // Anuncios, no reaperturas: lo cuenta la pasada y su metrica.
+        ->and($run['result']->relapsedWorkDays)->toBe(1)
+        ->and($run['detection'])->toBe(['findings' => 1, 'failures' => 0, 'recoveredWorkDays' => 0, 'relapsedWorkDays' => 1]);
+})->group('RN-19', 'RF-PR-01');
+
+it('anuncia la recaida aunque el intento subsanado se recibiera fuera de la ventana', function (): void {
+    // Ventana de 7 dias desde el 08-03 a las 12:00: el intento subsanado de
+    // las 08:00 del 08-03 ya no lo ve `rejectedBetween()`, pero la jornada se
+    // lee entera.
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-08 08:00:00'),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-08 13:00:00'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-08 08:01:00')]],
+    ));
+
+    expect($run['anomalies'])->toHaveCount(1)
+        ->and($run['relapsed'])->toHaveCount(1)
+        ->and($run['relapsed'][0]->attemptScanIds())->toBe(['0199-scan-1', '0199-scan-2']);
+})->group('RN-19', 'RF-PR-01');
+
+it('no anuncia recaida si ningun intento de la jornada esta subsanado', function (): void {
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:00:00'),
+            rejectedPinDetectionAttempt('0199-scan-2', REJECTED_PIN_DETECTION_ANA, '2026-03-14 21:00:00'),
+        ],
+        // El fichaje de otra persona no subsana nada.
+        [REJECTED_PIN_DETECTION_BEA => [rejectedPinDetectionUtc('2026-03-14 07:03:00')]],
+    ));
+
+    expect($run['anomalies'])->toHaveCount(1)
+        ->and($run['relapsed'])->toBe([])
+        ->and($run['result']->relapsedWorkDays)->toBe(0);
+})->group('RN-19', 'RF-PR-01');
+
+it('no anuncia recaida de una jornada subsanada entera ni de una pendiente', function (): void {
+    // Subsanada entera: cierre, no recaida. Pendiente: el intento de las 11:55
+    // tiene su ventana abierta a las 12:00 y no se juzga.
+    $run = rejectedPinDetectionRun(new InMemoryRejectedPinScans(
+        [
+            rejectedPinDetectionAttempt('0199-scan-1', REJECTED_PIN_DETECTION_ANA, '2026-03-14 07:00:00'),
+            rejectedPinDetectionAttempt('0199-scan-3', REJECTED_PIN_DETECTION_BEA, '2026-03-15 11:55:00'),
+        ],
+        [REJECTED_PIN_DETECTION_ANA => [rejectedPinDetectionUtc('2026-03-14 07:03:00')]],
+    ));
+
+    expect($run['relapsed'])->toBe([])
+        ->and($run['recovered'])->toHaveCount(1)
+        ->and($run['anomalies'])->toBe([]);
 })->group('RN-19', 'RF-PR-01');

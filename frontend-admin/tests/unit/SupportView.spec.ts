@@ -343,4 +343,141 @@ describe('pantalla de soporte', () => {
     // Sin boton de revocar en una fila ya revocada.
     expect(wrapper.find(`[data-test="revoke-${SUPPORT_GRANT_UUID}"]`).exists()).toBe(false)
   })
+
+  describe('usos de una concesion (RF-PD-11)', () => {
+    function usesPage(
+      data: { started_at: string; method: string | null; route: string | null }[],
+      meta: { page: number; total: number; total_pages: number },
+    ): Response {
+      return jsonResponse({ data, meta: { per_page: 25, ...meta } })
+    }
+
+    it('RF-PD-11: abre el dialogo con las ventanas, la nota de 15 minutos y la zona del centro', async () => {
+      stubRoutes({
+        '/site': () => jsonResponse(SITE),
+        [`/support/grants/${SUPPORT_GRANT_UUID}/uses`]: () =>
+          usesPage(
+            [
+              {
+                started_at: '2026-09-08T10:00:00.000000Z',
+                method: 'GET',
+                route: 'api/v1/diagnostics/errors',
+              },
+              { started_at: '2026-09-08T09:30:00.000000Z', method: null, route: null },
+            ],
+            { page: 1, total: 2, total_pages: 1 },
+          ),
+        '/support/grants': () => jsonResponse(supportGrantCollection([supportGrant()])),
+      })
+
+      const wrapper = await mountSupportView()
+
+      await wrapper.find(`[data-test="uses-${SUPPORT_GRANT_UUID}"]`).trigger('click')
+      await settle()
+
+      const dialog = wrapper.find('[role="dialog"]')
+
+      expect(dialog.exists()).toBe(true)
+      expect(dialog.find('[data-test="grant-uses-note"]').text()).toBe(
+        es.support.grant.uses.windowNote,
+      )
+
+      const rows = dialog.findAll('[data-test="grant-use-row"]')
+
+      expect(rows).toHaveLength(2)
+      expect(rows[0]?.text()).toContain('GET')
+      expect(rows[0]?.text()).toContain('api/v1/diagnostics/errors')
+      // 10:00 UTC son las 12:00 en Madrid (CEST), con la zona a la vista.
+      expect(rows[0]?.text()).toContain('12:00')
+      expect(rows[0]?.text()).toContain('CEST')
+      // Un asiento sin metodo ni ruta no deja la celda en blanco.
+      expect(rows[1]?.text()).toContain(es.common.empty)
+    })
+
+    it('RF-PD-11: sin usos enseña el estado vacio', async () => {
+      stubRoutes({
+        '/site': () => jsonResponse(SITE),
+        [`/support/grants/${SUPPORT_GRANT_UUID}/uses`]: () =>
+          usesPage([], { page: 1, total: 0, total_pages: 0 }),
+        '/support/grants': () => jsonResponse(supportGrantCollection([supportGrant()])),
+      })
+
+      const wrapper = await mountSupportView()
+
+      await wrapper.find(`[data-test="uses-${SUPPORT_GRANT_UUID}"]`).trigger('click')
+      await settle()
+
+      expect(wrapper.find('[role="dialog"]').text()).toContain(es.support.grant.uses.empty.title)
+    })
+
+    it('RF-PD-11: un fallo del servidor se avisa en el dialogo', async () => {
+      let calls = 0
+
+      stubRoutes({
+        '/site': () => jsonResponse(SITE),
+        [`/support/grants/${SUPPORT_GRANT_UUID}/uses`]: () => {
+          calls += 1
+
+          return calls === 1
+            ? problemResponse(500, 'urn:kronoqr:problem:internal')
+            : usesPage(
+                [{ started_at: '2026-09-08T10:00:00.000000Z', method: 'GET', route: 'api/v1/x' }],
+                { page: 1, total: 1, total_pages: 1 },
+              )
+        },
+        '/support/grants': () => jsonResponse(supportGrantCollection([supportGrant()])),
+      })
+
+      const wrapper = await mountSupportView()
+
+      await wrapper.find(`[data-test="uses-${SUPPORT_GRANT_UUID}"]`).trigger('click')
+      await settle(8)
+
+      const dialog = wrapper.find('[role="dialog"]')
+
+      expect(dialog.find('[role="alert"]').exists()).toBe(true)
+      expect(dialog.findAll('[data-test="grant-use-row"]')).toHaveLength(0)
+    })
+
+    it('RF-PD-11: pagina en el servidor', async () => {
+      const pages: string[] = []
+
+      stubRoutes({
+        '/site': () => jsonResponse(SITE),
+        [`/support/grants/${SUPPORT_GRANT_UUID}/uses`]: (url) => {
+          const page = new URL(url, 'http://localhost').searchParams.get('page') ?? '1'
+
+          pages.push(page)
+
+          return usesPage(
+            [
+              {
+                started_at: '2026-09-08T10:00:00.000000Z',
+                method: 'GET',
+                route: `api/v1/p${page}`,
+              },
+            ],
+            { page: Number(page), total: 40, total_pages: 2 },
+          )
+        },
+        '/support/grants': () => jsonResponse(supportGrantCollection([supportGrant()])),
+      })
+
+      const wrapper = await mountSupportView()
+
+      await wrapper.find(`[data-test="uses-${SUPPORT_GRANT_UUID}"]`).trigger('click')
+      await settle()
+
+      const next = wrapper
+        .find('[role="dialog"]')
+        .findAll('button')
+        .find((button) => button.text() === es.common.pagination.next)
+
+      await next?.trigger('click')
+      await settle(8)
+
+      expect(pages).toEqual(['1', '2'])
+      expect(wrapper.find('[role="dialog"]').text()).toContain('api/v1/p2')
+    })
+  })
 })

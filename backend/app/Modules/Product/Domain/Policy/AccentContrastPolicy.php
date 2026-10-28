@@ -10,7 +10,8 @@ use App\Modules\Product\Domain\ValueObject\SettingValue;
 use App\Modules\Shared\Domain\ValueObject\HexColor;
 
 /**
- * Un acento sin contraste suficiente solo se guarda si alguien lo confirma (MB2).
+ * Un acento sin contraste suficiente solo se guarda si alguien lo confirma
+ * (RF-PD-08, MB2).
  *
  * ## Que se mide y contra que: la MISMA regla que el panel
  *

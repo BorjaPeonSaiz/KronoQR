@@ -142,6 +142,37 @@ it('rechaza la tarjeta de un empleado dado de baja', function (): void {
         ->and($resolution->rejectionReason())->toBe(CredentialRejectionReason::REVOKED);
 })->group('RN-14', 'RS-03');
 
+it('rechaza la tarjeta vigente de una persona suspendida sin llamarla revocada', function (): void {
+    // RN-25: la suspension no revoca la tarjeta. El motivo es propio, sin
+    // titular para la fila, y el log usa el vocabulario de `scan_events`.
+    $context = verifierContext('suspended');
+    $payload = Credentials::issueFor($context['employee']);
+
+    /** @var list<array<string, mixed>> $registrado */
+    $registrado = [];
+
+    Log::listen(static function (MessageLogged $mensaje) use (&$registrado): void {
+        $registrado[] = $mensaje->context;
+    });
+
+    $resolution = resolver()->resolve($payload->toString());
+
+    expect($resolution->isResolved())->toBeFalse()
+        ->and($resolution->rejectionReason())->toBe(CredentialRejectionReason::HOLDER_SUSPENDED)
+        ->and($resolution->holder())->toBeNull()
+        ->and($registrado[0]['result'] ?? null)->toBe('rejected_suspended');
+})->group('RN-25', 'RS-03');
+
+it('sigue llamando revocada a la tarjeta revocada de una persona suspendida', function (): void {
+    // RN-25 no tapa una revocacion: si la tarjeta esta retirada, eso es lo
+    // que el registro tiene que decir.
+    $context = verifierContext('suspended');
+    $payload = Credentials::issueFor($context['employee'], revokedReason: 'Perdida');
+
+    expect(resolver()->resolve($payload->toString())->rejectionReason())
+        ->toBe(CredentialRejectionReason::REVOKED);
+})->group('RN-25', 'RF-QR-03');
+
 it('deja de aceptar la credencial anterior en cuanto se reemite', function (): void {
     // Gherkin «Reemision por perdida» del doc 01 §11.
     $context = verifierContext();

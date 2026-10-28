@@ -116,7 +116,7 @@ it('no anota a nadie con un codigo inexistente, una baja o un suspendido', funct
     'codigo inexistente' => [null],
     'baja' => ['terminated'],
     'suspendido' => ['suspended'],
-])->group('RN-19', 'RN-14', 'RS-03');
+])->group('RN-25', 'RN-19', 'RN-14', 'RS-03');
 
 it('no anota a nadie en el acierto', function (): void {
     $employee = pinClaimEmployee();

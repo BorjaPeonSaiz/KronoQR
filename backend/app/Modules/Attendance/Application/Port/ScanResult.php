@@ -10,7 +10,7 @@ use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use LogicException;
 
 /**
- * El desenlace detallado de un escaneo: los diez valores de
+ * El desenlace detallado de un escaneo: los once valores de
  * `scan_events.result` (doc 01 §5.5).
  *
  * **Nunca sale por la API.** RS-03 y la regla dura 17 obligan a que el rechazo
@@ -32,7 +32,7 @@ use LogicException;
  * que este docblock dejaba escrito: `ScanIntentPolicy` y `DebouncePolicy` tienen
  * que razonar sobre `clock_in` frente a `break_start` (ADR-024), asi que esos
  * cuatro casos son ahora {@see ClockingAction} y aqui quedan `forAction()` y
- * `action()` como unico puente. Los cinco rechazos se quedan —el de RN-18 lo
+ * `action()` como unico puente. Los seis rechazos se quedan —el de RN-18 lo
  * estreno la tarea ad hoc del 18-09-2026—: de ellos el
  * dominio solo necesita el motivo, no el valor de la columna.
  */
@@ -84,6 +84,16 @@ enum ScanResult: string
     case DISCARDED_UNPROCESSABLE = 'discarded_unprocessable';
 
     /**
+     * RN-25: la tarjeta de una persona **suspendida**. La tarjeta no esta
+     * revocada, y escribirlo como `rejected_revoked` hacia mentir al registro.
+     * Sin titular, sin incidencia y, hacia fuera, el mismo `422` generico que
+     * cualquier rechazo de credencial (RS-03, regla dura 17). Las filas
+     * anteriores a la 2.3.0 siguen como `rejected_revoked`: el log no se reescribe
+     * (regla dura 5).
+     */
+    case REJECTED_SUSPENDED = 'rejected_suspended';
+
+    /**
      * El valor de columna que corresponde a lo que el dominio decidio
      * ({@see ClockingAction}, ADR-024).
      *
@@ -112,7 +122,7 @@ enum ScanResult: string
      * el dominio pregunta «¿que fue el escaneo anterior?» y la respuesta esta
      * guardada en el vocabulario de la persistencia.
      *
-     * Los cinco rechazos devuelven `null`, el anti-rebote incluido: no creo
+     * Los seis rechazos devuelven `null`, el anti-rebote incluido: no creo
      * tramo, y por eso tampoco entra en la ventana de RF-AT-06. El de RN-18
      * tampoco, y ahi el `null` es la afirmacion mas fuerte del enum: un fichaje
      * irreconciliable **no puede** haber producido accion ninguna.
@@ -154,6 +164,7 @@ enum ScanResult: string
         'rejected_signature' => null,
         'rejected_out_of_order' => null,
         'discarded_unprocessable' => null,
+        'rejected_suspended' => null,
     ];
 
     /**
@@ -173,6 +184,7 @@ enum ScanResult: string
             ScanRejectionReason::INVALID_SIGNATURE => self::REJECTED_SIGNATURE,
             ScanRejectionReason::DEBOUNCE => self::REJECTED_DEBOUNCE,
             ScanRejectionReason::OUT_OF_ORDER => self::REJECTED_OUT_OF_ORDER,
+            ScanRejectionReason::HOLDER_SUSPENDED => self::REJECTED_SUSPENDED,
         };
     }
 
@@ -205,6 +217,74 @@ enum ScanResult: string
     {
         return ! $this->isAccepted();
     }
+
+    /**
+     * Los **rechazos de credencial**: el servidor decidio que la tarjeta no
+     * servia —desconocida, revocada, con mala firma o de una persona suspendida—
+     * y por eso el escaneo **no es un uso de la credencial** ni un fichaje.
+     *
+     * Es el unico conjunto que comparten los adaptadores que tienen que
+     * excluirlos: el uso de credencial de RN-16 ({@see CredentialScans}) y los
+     * desfases marcados ({@see FlaggedScans}), que no pueden abrir `clock_skew`
+     * por un rechazo de RN-20. Antes cada uno escribia su lista a mano, y un
+     * rechazo nuevo entraba en uno y se olvidaba en el otro.
+     *
+     * Quedan fuera el anti-rebote (la credencial es valida y acaba de
+     * funcionar, ADR-031), el de RN-18 (describe el registro, no la tarjeta) y
+     * el descarte del servidor (no decidio nada, ADR-061); quien tambien tenga
+     * que excluir esos lo anade el mismo.
+     *
+     * @return list<string>
+     */
+    public static function credentialRejections(): array
+    {
+        $results = [];
+
+        foreach (self::cases() as $result) {
+            if ($result->isCredentialRejection()) {
+                $results[] = $result->value;
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Ver {@see credentialRejections()}. **Una tabla y no un `match`**, por lo
+     * mismo que {@see action()}: cada valor se clasifica a mano y uno nuevo sin
+     * entrada lanza en lugar de quedar fuera por omision.
+     */
+    public function isCredentialRejection(): bool
+    {
+        if (! \array_key_exists($this->value, self::CREDENTIAL_REJECTIONS)) {
+            throw new LogicException(
+                'scan_events.result '.$this->value.' no declara si es un rechazo de credencial: '
+                .'anadelo a ScanResult::CREDENTIAL_REJECTIONS.'
+            );
+        }
+
+        return self::CREDENTIAL_REJECTIONS[$this->value];
+    }
+
+    /**
+     * Si cada desenlace es un rechazo de credencial. Ver
+     * {@see credentialRejections()}.
+     *
+     * @var array<string, bool>
+     */
+    private const array CREDENTIAL_REJECTIONS = [
+        'clock_in' => false,
+        'clock_out' => false,
+        'break_start' => false,
+        'break_end' => false,
+        'rejected_unknown' => true,
+        'rejected_revoked' => true,
+        'rejected_debounce' => false,
+        'rejected_signature' => true,
+        'rejected_out_of_order' => false,
+        'discarded_unprocessable' => false,
+        'rejected_suspended' => true,
+    ];
 
     /**
      * El anti-rebote es el unico desenlace que no crea tramo y **no es un

@@ -14,7 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\PurgeReviewReason;
 
 it('admite de diez a mil caracteres', function (int $length): void {
     expect(PurgeReviewReason::fromText(str_repeat('a', $length))->text)->toBe(str_repeat('a', $length));
-})->with([10, 1000])->group('RL-04');
+})->with([10, 1000])->group('RN-26', 'RL-04');
 
 it('rechaza nueve caracteres y mil uno, con el limite en el motivo', function (int $length, string $key, array $parameters): void {
     try {
@@ -29,13 +29,13 @@ it('rechaza nueve caracteres y mil uno, con el limite en el motivo', function (i
 })->with([
     'nueve' => [9, 'work-record-review.reason_too_short', ['min' => 10]],
     'mil uno' => [1001, 'work-record-review.reason_too_long', ['max' => 1000]],
-])->group('RL-04');
+])->group('RN-26', 'RL-04');
 
 it('recorta los espacios de los extremos antes de contar', function (): void {
     expect(PurgeReviewReason::fromText("  Incidente INC-7 investigado  \n")->text)->toBe('Incidente INC-7 investigado')
         ->and(fn (): PurgeReviewReason => PurgeReviewReason::fromText('   corto    '))
         ->toThrow(PurgeReviewRejected::class);
-})->group('RL-04');
+})->group('RN-26', 'RL-04');
 
 it('cuenta caracteres multibyte como uno', function (): void {
     // Diez eñes son diez caracteres y veinte bytes: valen. Mil eñes, tambien.
@@ -45,4 +45,4 @@ it('cuenta caracteres multibyte como uno', function (): void {
         ->toThrow(PurgeReviewRejected::class)
         ->and(fn (): PurgeReviewReason => PurgeReviewReason::fromText(str_repeat('ñ', 1001)))
         ->toThrow(PurgeReviewRejected::class);
-})->group('RL-04');
+})->group('RN-26', 'RL-04');

@@ -191,9 +191,44 @@ it('no atribuye ni marca nada a una persona suspendida', function (): void {
 
     expect(filaDelEscaneo($conVigente)->employee_id)->toBeNull()
         ->and(filaDelEscaneo($conVigente)->flagged_for_review)->toBeFalse()
+        // RN-25: la tarjeta vigente no esta revocada, y el registro no lo dice.
+        ->and(filaDelEscaneo($conVigente)->result)->toBe('rejected_suspended')
         ->and(filaDelEscaneo($conRevocada)->employee_id)->toBeNull()
-        ->and(filaDelEscaneo($conRevocada)->flagged_for_review)->toBeFalse();
-})->group('RN-20');
+        ->and(filaDelEscaneo($conRevocada)->flagged_for_review)->toBeFalse()
+        ->and(filaDelEscaneo($conRevocada)->result)->toBe('rejected_revoked');
+})->group('RN-25', 'RN-20');
+
+it('rechaza a la persona suspendida con el mismo cuerpo y las mismas consultas que una firma falsa', function (): void {
+    // RN-25 cambia la fila, no la respuesta (RS-03, regla dura 17): ni el
+    // cuerpo ni el trabajo dicen al quiosco que la persona esta suspendida. Y
+    // el reenvio devuelve lo mismo (regla dura 8).
+    $escenario = AttendanceFixtures::scenario();
+    $suspendida = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'suspended');
+    $tarjeta = Credentials::issueFor(AttendanceFixtures::employeeIdOf($suspendida))->toString();
+    $falsa = Credentials::signedWithUnknownKey()->toString();
+
+    // Calentamiento: la primera peticion paga cachés de arranque que no son del
+    // camino de rechazo.
+    escanearTarjetaRetirada($escenario['token'], $falsa, SCAN_BEFORE_REVOCATION_AFTER, Str::uuid7()->toString());
+
+    $deSuspendida = Str::uuid7()->toString();
+    $deFalsa = Str::uuid7()->toString();
+
+    [$respuestaSuspendida, $consultasSuspendida] = escaneoContado($escenario['token'], $tarjeta, SCAN_BEFORE_REVOCATION_AFTER, $deSuspendida);
+    [$respuestaFalsa, $consultasFalsa] = escaneoContado($escenario['token'], $falsa, SCAN_BEFORE_REVOCATION_AFTER, $deFalsa);
+
+    $respuestaSuspendida->assertStatus(422)->assertValidResponse();
+
+    expect(cuerpoCrudoSinScanId($respuestaSuspendida, $deSuspendida))->toBe(cuerpoCrudoSinScanId($respuestaFalsa, $deFalsa))
+        ->and($consultasSuspendida)->toBe($consultasFalsa)
+        ->and(filaDelEscaneo($deSuspendida)->result)->toBe('rejected_suspended')
+        ->and(filaDelEscaneo($deFalsa)->result)->toBe('rejected_signature');
+
+    $reenvio = escanearTarjetaRetirada($escenario['token'], $tarjeta, SCAN_BEFORE_REVOCATION_AFTER, $deSuspendida);
+
+    expect($reenvio->getContent())->toBe($respuestaSuspendida->getContent())
+        ->and(DB::table('scan_events')->where('scan_id', $deSuspendida)->count())->toBe(1);
+})->group('RN-25', 'RS-03', 'RF-AT-07');
 
 it('devuelve el mismo rechazo al reenviar el escaneo atribuido', function (): void {
     // Regla dura 8: el reenvio de la cola offline responde lo mismo, y la fila

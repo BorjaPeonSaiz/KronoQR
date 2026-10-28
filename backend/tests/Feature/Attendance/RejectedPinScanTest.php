@@ -271,6 +271,177 @@ it('no abre nada si el PIN correcto llega treinta segundos despues', function ()
     expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->count())->toBe(0);
 })->group('RN-19', 'RF-PR-01');
 
+it('no abre nada si la pasada llega con la ventana abierta y el PIN correcto llega dentro de ella', function (): void {
+    // R3-AR-03 y R3-BE-02 de la re-verificacion 2.2.0, invertida por la tarea
+    // 20.3: la pasada de las 04:30 no juzga un intento de las 04:25, cuya
+    // ventana sigue abierta hasta las 04:35. La del dia siguiente ya lo ve
+    // subsanado por el PIN correcto de las 04:31.
+    $scenario = rejectedPinScenario('2026-03-14 04:25:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T04:25:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-14 04:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->count())->toBe(0);
+
+    FrozenTime::at('2026-03-14 04:31:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T04:31:00Z')->assertOk();
+    rejectedPinDetect('2026-03-15 04:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->count())->toBe(0);
+})->group('RN-19', 'RF-PR-01');
+
+it('cierra la incidencia abierta cuando el PIN correcto llega tarde de la cola offline, y deja asiento de sistema', function (): void {
+    // PIN erroneo a las 07:02 en un quiosco con red; el bueno, a las 07:05 en
+    // otro sin red, no llega hasta el dia siguiente. La revision de esa
+    // madrugada abre la incidencia —la ventana estaba cerrada y no habia
+    // subsanacion— y la de despues la cierra.
+    $scenario = rejectedPinScenario('2026-03-14 07:02:00');
+    $attemptScanId = Str::uuid7()->toString();
+    rejectedPinPost($scenario, $attemptScanId, REJECTED_PIN_BAD, '2026-03-14T07:02:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-15 03:30:00');
+
+    $incident = DB::table('incidents')->where('type', 'rejected_pin_scan')->first();
+
+    expect($incident?->status)->toBe('open');
+
+    FrozenTime::at('2026-03-15 10:00:00');
+    $recoveringScanId = Str::uuid7()->toString();
+    rejectedPinPost($scenario, $recoveringScanId, REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+
+    /** @var list<array<string, mixed>> $detections */
+    $detections = [];
+    Log::listen(static function (MessageLogged $message) use (&$detections): void {
+        if ($message->message === 'attendance.incident_detection') {
+            $detections[] = $message->context;
+        }
+    });
+
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    // La pasada cuenta la jornada que anuncio, en el log y en su salida.
+    expect($detections)->toHaveCount(1)
+        ->and($detections[0]['recovered_work_days'])->toBe(1)
+        ->and(Artisan::output())->toContain(trans('console.detect_incidents.recovered', ['count' => 1]));
+
+    $closed = DB::table('incidents')->where('type', 'rejected_pin_scan')->get();
+
+    expect($closed)->toHaveCount(1)
+        ->and($closed->first()?->id)->toBe($incident?->id)
+        ->and($closed->first()?->status)->toBe('resolved')
+        ->and($closed->first()?->resolved_by_user_id)->toBeNull()
+        ->and($closed->first()?->resolution_note)->toBeNull();
+
+    $asiento = DB::table('audit_log')
+        ->where('action', 'incident.resolved')
+        ->where('subject_type', 'incident')
+        ->where('subject_id', $incident?->id)
+        ->get();
+
+    expect($asiento)->toHaveCount(1);
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode((string) $asiento->first()?->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($asiento->first()?->actor_type)->toBe('system')
+        ->and($asiento->first()?->actor_id)->toBeNull()
+        ->and($payload)->toMatchArray([
+            'employee_uuid' => $scenario['employee'],
+            'type' => 'rejected_pin_scan',
+            'outcome' => 'resolved',
+            'note' => null,
+            'closure' => 'recovered_by_employee',
+            'work_date' => '2026-03-14',
+            // Quien audite el cierre puede ir a `scan_events` con estos dos.
+            'attempt_scan_ids' => [$attemptScanId],
+            'recovering_scan_ids' => [$recoveringScanId],
+        ]);
+
+    // Y una pasada mas no reabre ni vuelve a cerrar nada.
+    rejectedPinDetect('2026-03-17 03:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->pluck('status')->all())->toBe(['resolved'])
+        ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(1);
+})->group('RN-19', 'RF-PR-01', 'RL-01');
+
+it('cierra la incidencia del dia del intento cuando la subsanacion cae ya en el dia civil siguiente', function (): void {
+    // Madrid en marzo es UTC+1. PIN erroneo a las 23:58 del 13 (22:58 Z) en un
+    // quiosco con red; el bueno, a las 00:03 del 14 (23:03 Z) en otro sin red,
+    // llega dos dias despues. La incidencia es de la jornada del 13, la del
+    // intento (RN-05), y es esa la que se cierra; el 14 no abre nada.
+    $scenario = rejectedPinScenario('2026-03-13 22:58:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-13T22:58:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-14 03:30:00');
+
+    expect(DB::table('incidents')->where('type', 'rejected_pin_scan')->pluck('work_date')->all())->toBe(['2026-03-13']);
+
+    FrozenTime::at('2026-03-15 10:00:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-13T23:03:00Z')->assertOk();
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    $incidents = DB::table('incidents')->where('type', 'rejected_pin_scan')->get(['work_date', 'status']);
+
+    expect($incidents)->toHaveCount(1)
+        ->and($incidents->first()?->work_date)->toBe('2026-03-13')
+        ->and($incidents->first()?->status)->toBe('resolved');
+})->group('RN-19', 'RN-09', 'RN-05', 'RF-PR-01');
+
+it('no cierra sola la incidencia con bloqueo de PIN aunque la persona acabe fichando a tiempo', function (): void {
+    // Tres PIN erroneos en un quiosco con red abren el bloqueo (RS-12); el
+    // bueno, a las 07:05 en otro quiosco sin red, llega al dia siguiente. La
+    // jornada queda subsanada, pero RN-19 pide hablar con la persona y
+    // restablecerle el PIN: la incidencia sigue abierta para quien la revisa.
+    $scenario = rejectedPinScenario('2026-03-14 07:02:00');
+
+    foreach (['07:02:00', '07:02:20', '07:02:40'] as $at) {
+        FrozenTime::at('2026-03-14 '.$at);
+        rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T'.$at.'Z')->assertStatus(422);
+    }
+
+    rejectedPinDetect('2026-03-15 03:30:00');
+
+    $incident = DB::table('incidents')->where('type', 'rejected_pin_scan')->first();
+
+    /** @var array<string, int|string> $context */
+    $context = json_decode((string) $incident?->context, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($incident?->status)->toBe('open')
+        ->and($context['lockout_attempts'])->toBeGreaterThan(0);
+
+    // El reenvio de la tablet sin red: su hora real esta dentro de la ventana
+    // de los tres intentos. El bloqueo ya expiro cuando llega.
+    FrozenTime::at('2026-03-15 10:00:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    expect(DB::table('incidents')->where('id', $incident?->id)->value('status'))->toBe('open')
+        ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(0);
+})->group('RN-19', 'RS-12', 'RF-PR-01');
+
+it('no toca la incidencia que una persona ya descarto aunque la subsanacion llegue despues', function (): void {
+    $scenario = rejectedPinScenario('2026-03-14 07:02:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T07:02:00Z')->assertStatus(422);
+    rejectedPinDetect('2026-03-15 03:30:00');
+
+    $resolver = ManagementUsers::withRole(UserRole::RRHH);
+
+    DB::table('incidents')->where('type', 'rejected_pin_scan')->update([
+        'status' => 'dismissed',
+        'resolved_at' => '2026-03-15 09:00:00+00',
+        'resolved_by_user_id' => $resolver->id,
+        'resolution_note' => 'Ficho con la tarjeta en otro quiosco.',
+    ]);
+
+    FrozenTime::at('2026-03-15 10:00:00');
+    rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_GOOD, '2026-03-14T07:05:00Z')->assertOk();
+    rejectedPinDetect('2026-03-16 03:30:00');
+
+    $incident = DB::table('incidents')->where('type', 'rejected_pin_scan')->first();
+
+    expect($incident?->status)->toBe('dismissed')
+        ->and($incident?->resolved_by_user_id)->toBe($resolver->id)
+        ->and($incident?->resolution_note)->toBe('Ficho con la tarjeta en otro quiosco.')
+        ->and(DB::table('audit_log')->where('action', 'incident.resolved')->count())->toBe(0);
+})->group('RN-19', 'RF-PR-01', 'RN-13');
+
 it('no anota ni abre nada con el codigo de alguien de baja', function (): void {
     $scenario = rejectedPinScenario();
 

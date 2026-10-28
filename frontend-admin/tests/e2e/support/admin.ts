@@ -1354,6 +1354,17 @@ export const SUPPORT_GRANT_REVOKED_UUID = '0199f4d0-2b3c-7d4e-9f5a-6b7c8d9e0a12'
 /** El token que el doble emite al conceder (`POST /support/grants`). Solo viaja una vez. */
 export const ISSUED_SUPPORT_TOKEN = '23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
 
+/**
+ * Las ventanas de uso que el doble devuelve para cualquier concesion
+ * (`GET /support/grants/{uuid}/uses`, RF-PD-11): 30, de la mas reciente a la
+ * mas antigua, para que haya segunda pagina con 25 por pagina.
+ */
+export const SUPPORT_GRANT_USES = Array.from({ length: 30 }, (_unused, index) => ({
+  started_at: new Date(Date.UTC(2026, 8, 8, 10, 0) - index * 15 * 60_000).toISOString(),
+  method: index === 0 ? 'GET' : 'POST',
+  route: `api/v1/diagnostics/errors/${index}`,
+}))
+
 /** Una concesion activa, con alcance `diagnostics` y sin usar todavia. */
 export const SUPPORT_GRANT_ACTIVE: SupportGrant = {
   uuid: SUPPORT_GRANT_UUID,
@@ -2699,6 +2710,23 @@ export async function stubManagementApi(
 
         target.status = 'revoked'
         await json(route, 200, target)
+        return
+      }
+
+      // Los usos de una concesion (`GET /support/grants/{uuid}/uses`, RF-PD-11).
+      if (method === 'GET' && /^\/api\/v1\/support\/grants\/[0-9a-f-]+\/uses$/.test(url.pathname)) {
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const perPage = Number(url.searchParams.get('per_page') ?? '25')
+
+        await json(route, 200, {
+          data: SUPPORT_GRANT_USES.slice((page - 1) * perPage, page * perPage),
+          meta: {
+            page,
+            per_page: perPage,
+            total: SUPPORT_GRANT_USES.length,
+            total_pages: Math.ceil(SUPPORT_GRANT_USES.length / perPage),
+          },
+        })
         return
       }
 

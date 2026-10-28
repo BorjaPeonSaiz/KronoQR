@@ -61,6 +61,8 @@ final readonly class TextfileIncidentDetectionMetrics implements IncidentDetecti
         int $workDaysInspected,
         int $findings,
         int $failures,
+        int $recoveredWorkDays,
+        int $relapsedWorkDays,
         DateTimeImmutable $at,
     ): void {
         TextfileExposition::write(self::FILE, [
@@ -76,6 +78,12 @@ final readonly class TextfileIncidentDetectionMetrics implements IncidentDetecti
             '# HELP incident_detection_last_failures Hallazgos que la ultima pasada NO pudo convertir en incidencia. Distinto de cero significa que hay trabajo que nadie ve en la bandeja.',
             '# TYPE incident_detection_last_failures gauge',
             'incident_detection_last_failures '.$failures,
+            '# HELP incident_detection_last_recovered_work_days Jornadas de PIN rechazado (RN-19) ya subsanadas que la ultima pasada anuncio para cerrar su incidencia sin persona. Son anuncios, no cierres: la mayoria nunca abrio incidencia.',
+            '# TYPE incident_detection_last_recovered_work_days gauge',
+            'incident_detection_last_recovered_work_days '.$recoveredWorkDays,
+            '# HELP incident_detection_last_relapsed_work_days Jornadas de PIN rechazado (RN-19) con algun intento subsanado y otro sin subsanar que la ultima pasada anuncio para reabrir la incidencia que cerro el sistema. Son anuncios, no reaperturas: la mayoria nunca se cerro.',
+            '# TYPE incident_detection_last_relapsed_work_days gauge',
+            'incident_detection_last_relapsed_work_days '.$relapsedWorkDays,
         ]);
     }
 }

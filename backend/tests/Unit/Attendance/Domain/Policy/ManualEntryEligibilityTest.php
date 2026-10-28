@@ -68,7 +68,7 @@ it('admite tramos de una persona en alta o de baja, y no de una suspendida', fun
     'en alta' => [EmploymentStatus::ACTIVE, null, true],
     'de baja' => [EmploymentStatus::TERMINATED, '2026-09-30', true],
     'suspendida' => [EmploymentStatus::SUSPENDED, null, false],
-])->group('RN-14', 'RF-PA-04');
+])->group('RN-25', 'RN-14', 'RF-PA-04');
 
 it('no admite a una persona de baja sin las dos fechas de su periodo de empleo', function (?string $hiredOn, ?string $terminatedOn): void {
     expect(personaParaElAltaManual(EmploymentStatus::TERMINATED, $hiredOn, $terminatedOn)->admitsEntries())->toBeFalse();

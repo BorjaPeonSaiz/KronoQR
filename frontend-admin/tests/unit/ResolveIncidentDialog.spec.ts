@@ -6,7 +6,9 @@
 // bandeja sustituya la fila, y que `Escape` cierra el dialogo.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ResolveIncidentDialog from '@/features/incidents/ResolveIncidentDialog.vue'
-import { incident } from './support/fixtures'
+import es from '@/shared/i18n/locales/es.json'
+import { useIncidentsStore } from '@/features/incidents/incidents.store'
+import { incident, incidentCollection } from './support/fixtures'
 import {
   createTestPinia,
   jsonResponse,
@@ -136,5 +138,64 @@ describe('ResolveIncidentDialog', () => {
     await wrapper.find('[role="dialog"]').trigger('keydown', { key: 'Escape' })
 
     expect(wrapper.emitted('cancel')).toHaveLength(1)
+  })
+  describe('conflicto al resolver (RN-19)', () => {
+    async function conflictFor(closed: ReturnType<typeof incident>): Promise<Wrapper> {
+      stubFetch((url, init) =>
+        init?.method === 'POST'
+          ? problemResponse(409, 'urn:kronoqr:problem:conflict')
+          : jsonResponse(incidentCollection(url.includes('status=resolved') ? [closed] : [])),
+      )
+
+      const pinia = createTestPinia()
+      const open = incident()
+
+      useIncidentsStore(pinia).entries = [open]
+
+      const wrapper = await mountView(ResolveIncidentDialog, {
+        props: { incident: open, timeZone: 'Europe/Madrid' },
+        pinia,
+      })
+
+      await wrapper.get('textarea').setValue('Corregido con el parte de turno.')
+      await settle()
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Confirmar'))
+        ?.trigger('click')
+      await settle(8)
+
+      return wrapper
+    }
+
+    it('RN-19: una incidencia cerrada por el sistema dice que se cerro sola, no que otra persona la resolvio', async () => {
+      const wrapper = await conflictFor(
+        incident({
+          status: 'resolved',
+          resolved_at: '2026-03-15T08:05:00.000000Z',
+          resolved_by: null,
+          resolution_note: null,
+        }),
+      )
+
+      expect(wrapper.get('[data-test="conflict-closed-by-system"]').text()).toBe(
+        es.incidents.dialog.conflict.closedBySystem,
+      )
+      expect(wrapper.text()).not.toContain(es.incidents.dialog.conflict.resolvedByUnknown)
+    })
+
+    it('RN-19: con autor sigue nombrando a la persona', async () => {
+      const wrapper = await conflictFor(
+        incident({
+          status: 'resolved',
+          resolved_at: '2026-03-15T08:05:00.000000Z',
+          resolved_by: { uuid: '0199f0aa-2222-7000-8000-0123456789ab', name: 'Marta Ruiz' },
+          resolution_note: 'Ya corregida.',
+        }),
+      )
+
+      expect(wrapper.find('[data-test="conflict-closed-by-system"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Marta Ruiz')
+    })
   })
 })

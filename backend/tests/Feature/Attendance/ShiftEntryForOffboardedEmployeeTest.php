@@ -125,7 +125,7 @@ it('sigue rechazando en employee_uuid a una persona suspendida', function (): vo
         ->assertJsonStructure(['errors' => ['employee_uuid']]);
 
     expect(DB::table('shift_entries')->count())->toBe(0);
-})->group('RN-14', 'RF-PA-04');
+})->group('RN-25', 'RN-14', 'RF-PA-04');
 
 // --- RN-05 (2.3.0): las horas escritas a mano no pasan del cese --------------
 

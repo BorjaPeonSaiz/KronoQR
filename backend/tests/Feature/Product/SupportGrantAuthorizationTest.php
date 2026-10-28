@@ -15,10 +15,10 @@ use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * Regla dura 18 y RQ-07: autorizacion negativa de las tres rutas de
+ * Regla dura 18 y RQ-07: autorizacion negativa de las cuatro rutas de
  * `/api/v1/support/grants`, rol por rol y token por token.
  *
- * Las tres son `[rol: admin]` (Anexo B del doc 01) y el ambito `support:*` es
+ * Las cuatro son `[rol: admin]` (Anexo B del doc 01) y el ambito `support:*` es
  * del administrador de instalacion (§7.3). Se comprueban las dos mitades: el
  * middleware que mira el ambito y la policy que mira el rol.
  *
@@ -47,6 +47,9 @@ function supportGrantRoutes(): array
         'lista' => ['GET', '/api/v1/support/grants', []],
         'concesion' => ['POST', '/api/v1/support/grants', ['reason' => 'Incidencia #123']],
         'revocacion' => ['DELETE', '/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60', []],
+        // G5: las ventanas de uso. Ningun rol distinto de admin, y el soporte
+        // tampoco consulta su propio rastro (ADR-020: no lleva `support:*`).
+        'usos' => ['GET', '/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60/uses', []],
     ];
 }
 
@@ -117,6 +120,8 @@ it('deja entrar a admin', function (): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
 
     Api::as($token)->get('/api/v1/support/grants')->assertOk();
+    // La ruta de usos pasa la policy: un uuid que no existe es 404, no 403.
+    Api::as($token)->get('/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60/uses')->assertNotFound();
     Api::as($token)->post('/api/v1/support/grants', ['reason' => 'Incidencia #123'])->assertStatus(201);
 
     expect(DB::table('support_grants')->count())->toBe(1);

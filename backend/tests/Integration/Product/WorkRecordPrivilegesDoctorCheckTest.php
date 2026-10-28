@@ -11,6 +11,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\WeakenedIncidentGuard;
 
 /*
  * `product:doctor` vigila entre actualizaciones los privilegios que ADR-057 §1 y
@@ -454,3 +455,104 @@ it('el aviso de las guardas y su que hacer estan en español y en ingles', funct
     expect($message)->not->toStartWith('doctor.');
     expect($fix)->not->toStartWith('doctor.');
 })->with(['es', 'en'])->group('RF-PD-13');
+
+// --- La reapertura de RN-19 (enmienda del 27-10-2026 de ADR-057 §2) --------------
+
+it('avisa si la funcion del trigger de incidencias ya no admite la reapertura, y no lo exige sin su migracion', function (): void {
+    // Una funcion reescrita con el rol de migracion: el trigger sigue ahi y
+    // activo, pero ya no es la de la enmienda. En una transaccion que se deshace.
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(<<<'SQL'
+            CREATE OR REPLACE FUNCTION public.incidents_guard_transition()
+            RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+            AS $kq$ BEGIN RETURN NEW; END $kq$
+            SQL);
+
+        $findings = privilegiosRegistroDoctor($migrator);
+
+        $migrator->table('migrations')->where('migration', ServiceInspector::INCIDENT_REOPENING_MIGRATION)->delete();
+
+        $without = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe(['outdated_trigger:incidents_guard_transition'])
+        ->and($without[0]->details['guard_issues'])->toBe([]);
+
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');
+
+it('la huella de la funcion de incidencias es la que deja la migracion de la reapertura', function (): void {
+    /** @var object{fingerprint: string} $row */
+    $row = DB::selectOne(
+        'SELECT '.ServiceInspector::GUARD_FUNCTION_FINGERPRINT_SQL.' AS fingerprint FROM pg_catalog.pg_proc p '
+        ."WHERE p.oid = 'public.incidents_guard_transition()'::regprocedure",
+    );
+
+    expect($row->fingerprint)->toBe(ServiceInspector::INCIDENT_REOPENING_FINGERPRINT);
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');
+
+it('la huella no cambia con la sangria ni con los retornos de carro', function (): void {
+    // Lo que cambia segun quien escriba la migracion o como se descargue el
+    // repositorio. Los saltos de linea si cuentan: ver la prueba siguiente.
+    // Con el rol de migracion el doctor ve privilegios de mas (`excess`); lo que
+    // importa aqui son las guardas.
+    $migrator = privilegiosRegistroMigrador();
+    $body = WeakenedIncidentGuard::body($migrator);
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(WeakenedIncidentGuard::replaceStatement(
+            "\r\n".preg_replace('/^[ \t]*/m', "\t   ", str_replace("\n", "\r\n\r\n", $body))."  \r\n",
+        ));
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings[0]->details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');
+
+it('la huella conserva los saltos de linea, que cierran los comentarios', function (): void {
+    // Quitar todos los blancos daria la misma huella al primero y al ultimo, y
+    // el ultimo no devuelve nada: su RETURN queda dentro del comentario.
+    $fingerprint = static function (string $body): string {
+        /** @var object{fingerprint: string} $row */
+        $row = DB::selectOne(
+            'SELECT '.ServiceInspector::GUARD_FUNCTION_FINGERPRINT_SQL.' AS fingerprint FROM (VALUES (?::text)) AS p(prosrc)',
+            [$body],
+        );
+
+        return $row->fingerprint;
+    };
+
+    $returns = $fingerprint("BEGIN\n  -- rejected_pin_scan\n  RETURN NEW;\nEND");
+
+    expect($returns)->toBe($fingerprint("\r\nBEGIN\r\n\t-- rejected_pin_scan\r\n\r\n    RETURN   NEW;\r\nEND  "));
+    expect($returns)->not->toBe($fingerprint("BEGIN\n  -- rejected_pin_scan RETURN NEW;\nEND"));
+})->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');
+
+it('avisa si la funcion del trigger de incidencias sigue nombrando rejected_pin_scan pero esta debilitada', function (string $weakening): void {
+    $migrator = privilegiosRegistroMigrador();
+    $body = WeakenedIncidentGuard::body($migrator);
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement(WeakenedIncidentGuard::replaceStatement(WeakenedIncidentGuard::weaken($body, $weakening)));
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe(['outdated_trigger:incidents_guard_transition']);
+})->with(WeakenedIncidentGuard::weakenings())->group('RF-PD-13', 'RS-07', 'RL-04', 'RN-19');

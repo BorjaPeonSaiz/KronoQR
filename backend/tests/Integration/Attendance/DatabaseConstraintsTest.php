@@ -551,6 +551,32 @@ it('rechaza por SQL directo un escaneo irreconciliable colgado de un tramo', fun
     });
 })->group('RN-18');
 
+it('acepta por SQL directo el rechazo de una persona suspendida sin titular, tramo ni acumulado', function (): void {
+    // RN-25: `rejected_suspended` es un valor de `result`, y la fila que escribe
+    // el caso de uso —sin titular, sin tramo, sin acumulado y sin marca— entra.
+    $fixture = attendanceFixture();
+
+    $id = insertScanEvent($fixture, ['result' => 'rejected_suspended', 'employee_id' => null, 'flagged_for_review' => false]);
+
+    expect(DB::table('scan_events')->where('id', $id)->value('result'))->toBe('rejected_suspended');
+})->group('RN-25');
+
+it('rechaza por SQL directo un rechazo de persona suspendida con acumulado o colgado de un tramo', function (): void {
+    // Las dos restricciones que gobiernan cualquier rechazo de credencial
+    // tambien gobiernan este: la equivalencia de `worked_minutes` lo nombra, y
+    // la del tramo lo cubre por el prefijo `rejected`.
+    $fixture = attendanceFixture();
+    $tramo = insertShiftEntry($fixture, $fixture['employee']);
+
+    expectRejectionBy('scan_events_chk_worked_minutes', function () use ($fixture): void {
+        insertScanEvent($fixture, ['result' => 'rejected_suspended', 'employee_id' => null, 'flagged_for_review' => false, 'worked_minutes' => 480]);
+    });
+
+    expectRejectionBy('scan_events_chk_rejected_has_no_shift_entry', function () use ($fixture, $tramo): void {
+        insertScanEvent($fixture, ['result' => 'rejected_suspended', 'employee_id' => null, 'flagged_for_review' => false, 'shift_entry_id' => $tramo]);
+    });
+})->group('RN-25');
+
 it('acepta la incidencia del fichaje irreconciliable y rechaza un tipo inventado', function (): void {
     // `incidents_chk_type`: el catalogo admite el tipo nuevo y **solo** el tipo
     // nuevo. La incidencia llega sin tramo, que es como la abre la revision

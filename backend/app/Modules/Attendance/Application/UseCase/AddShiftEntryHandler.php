@@ -67,8 +67,9 @@ use Illuminate\Database\ConnectionInterface;
  *
  * **Nada en el futuro** (RL-01, RL-04). La jornada y las dos marcas se
  * comparan con la hora del servidor mas `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`
- * ({@see ManualEntryHorizon}) antes de tocar el agregado: rellenar la jornada
- * teorica por adelantado o dejar escrita la salida «prevista» es un `422`.
+ * ({@see ManualEntryHorizon}) antes de tocar el agregado, y el agregado lo
+ * vuelve a exigir con el mismo horizonte (RN-24): rellenar la jornada teorica
+ * por adelantado o dejar escrita la salida «prevista» es un `422`.
  *
  * **Ni mas alla de la jornada ni del cese** (RN-05, 2.3.0). La cota de
  * continuacion —el descanso minimo entre jornadas del perfil, la misma que acota
@@ -157,9 +158,11 @@ final readonly class AddShiftEntryHandler
         );
         $settings = $this->settings->forSite($employee->siteId);
 
-        // Lo que no ha ocurrido no se anota. La jornada primero, porque una
-        // jornada futura con horas pasadas daria un error de RN-05 que no dice
-        // cual es el problema.
+        // Lo que no ha ocurrido no se anota (RN-24). La jornada primero, porque
+        // una jornada futura con horas pasadas daria un error de RN-05 que no
+        // dice cual es el problema. La regla la hace cumplir el agregado, que
+        // recibe el horizonte; se mira tambien aqui, antes de la ficha, para
+        // que el `422` de una persona de baja diga eso y no otra cosa.
         $horizon = ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes);
         $horizon->assertWorkDateAllowed($workDate);
         $horizon->assertTimesAllowed($times);
@@ -188,6 +191,7 @@ final readonly class AddShiftEntryHandler
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
             ClockingPolicies::forSettings($settings),
             $continuation,
+            $horizon,
         );
 
         // RN-05 frente a las otras jornadas de la persona, que el agregado no ve.

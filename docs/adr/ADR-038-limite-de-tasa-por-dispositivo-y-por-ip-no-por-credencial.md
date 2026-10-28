@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `docs/01-especificaciones-proyecto.md` §8 (RS-02) · `docs/requisitos.yaml` · `docs/02-stack-tecnologico-y-plan-implementacion.md` §7.1 · `backend/app/Http/RateLimiting/KioskRateLimit.php` |
 | **Requisitos** | RS-02, RS-03, RS-12, RF-AT-06 |
+| **Enmiendas** | Matizada por [ADR-059](ADR-059-con-una-dependencia-caida-el-fichaje-se-encola-y-el-resto-responde-503-con-rastro.md): qué hace el límite de tasa cuando su almacén no responde (referencia de vuelta añadida el 27-10-2026) |
 
 ## Contexto
 
