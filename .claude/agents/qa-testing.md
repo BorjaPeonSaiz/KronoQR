@@ -47,7 +47,7 @@ Sube de nivel solo cuando el nivel inferior no pueda cubrirlo. Una prueba de dom
 
 **Seguridad:**
 - Firma HMAC inválida, `key_id` desconocido, credencial revocada, empleado dado de baja: **todos devuelven la misma respuesta** y ninguno revela la causa.
-- Para **cada endpoint**, prueba negativa por cada rol que no debe acceder: 403 y registro en auditoría.
+- Para **cada endpoint**, prueba negativa por cada rol que no debe acceder: 403 (o el 401 que fije el contrato); asiento `access.denied` solo cuando la denegación es por alcance (`ScopeGuard`), no en los 403 por rol o por ámbito de token (doc 02 §9.4, doc 07 A-16).
 - Token de quiosco contra endpoints de gestión: rechazado.
 
 **Integridad:**
