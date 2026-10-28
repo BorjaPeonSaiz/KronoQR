@@ -8,6 +8,10 @@ use App\Exceptions\ProblemDetails;
 use App\Http\Controllers\Controller;
 use App\Modules\Reporting\Application\UseCase\DownloadReportExport;
 use App\Modules\Reporting\Domain\Exception\ReportExportLinkUnavailable;
+use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
+use App\Modules\Reporting\Http\Response\PeriodReportXlsx;
+use App\Modules\Reporting\Infrastructure\Export\PayrollCsvWriter;
+use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -79,6 +83,10 @@ final class ReportExportDownloadController extends Controller
         }
 
         $response = response()->download($export->filePath, $export->fileName ?? 'kronoqr-informe', [
+            // El tipo lo dice el formato pedido, no el contenido: sin fijarlo,
+            // `BinaryFileResponse` lo adivina y un CSV con BOM y `;` —el del
+            // producto— salia como `text/plain`, que el contrato no declara.
+            'Content-Type' => self::contentTypeOf($export->kind, $export->format, $export->filePath),
             // Las dos cabeceras que permiten comprobar que llego entero sin
             // abrirlo: la huella tal como consta en la fila y en `audit_log`, y las
             // filas de datos que lleva.
@@ -99,5 +107,26 @@ final class ReportExportDownloadController extends Controller
         $response->headers->set('Cache-Control', 'no-store, private');
 
         return $response;
+    }
+
+    /**
+     * El tipo que declara el contrato para el formato, con la codificacion del
+     * CSV.
+     *
+     * Todo CSV del producto es UTF-8 salvo el de nomina, que puede ir en
+     * ISO-8859-1 si la plantilla lo pide, y la fila no guarda con cual se
+     * escribio: la plantilla puede haber cambiado desde entonces. Se mira el
+     * fichero —pequeño, una fila por persona— en vez de suponer: si es UTF-8
+     * valido lo es (un ISO-8859-1 sin acentos es el mismo ASCII), y si no, es el
+     * otro. Symfony pondria `charset=utf-8` a cualquier `text/*` que no lo lleve.
+     */
+    private static function contentTypeOf(ReportExportKind $kind, string $format, string $path): string
+    {
+        return match (true) {
+            $format === 'xlsx' => PeriodReportXlsx::CONTENT_TYPE,
+            $format === 'pdf' => 'application/pdf',
+            $kind === ReportExportKind::Payroll && ! mb_check_encoding((string) file_get_contents($path), 'UTF-8') => PayrollCsvWriter::CONTENT_TYPE_LATIN1,
+            default => CsvDialect::CONTENT_TYPE,
+        };
     }
 }

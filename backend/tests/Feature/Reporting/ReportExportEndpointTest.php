@@ -254,7 +254,11 @@ it('el enlace entrega el fichero con sus cabeceras de comprobacion, y solo una v
 
     $token = tokenDelEnlace($enlace, $export->uuid);
 
-    $descarga = Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.$token)->assertOk();
+    $descarga = Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.$token)->assertValidResponse(200);
+
+    // El tipo del formato, no el que se adivina del contenido: este CSV con `;`
+    // salia como `text/plain`, que el contrato no declara (tarea 22.3).
+    expect($descarga->headers->get('Content-Type'))->toBe('text/csv; charset=utf-8');
 
     expect($descarga->headers->get('X-Kronoqr-Export-Sha256'))->toBe(hash('sha256', "uuid;horas\n1;08:00\n"))
         ->and($descarga->headers->get('X-Kronoqr-Export-Rows'))->toBe('1')
@@ -322,6 +326,25 @@ it('la descarga sin token responde 404 aunque haya un enlace vivo', function ():
 
     Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download')->assertValidResponse(404);
 })->group('RF-IN-06');
+
+it('entrega la nomina en ISO-8859-1 con su codificacion, y no con la de los demas CSV', function (): void {
+    // La plantilla de nomina puede pedir ISO-8859-1 y la fila no guarda cual se
+    // uso: anunciarla como UTF-8 haria que quien la abre viera «Pe�a».
+    $user = reportExportRequester();
+    $export = ReportExports::completedFor($user->id, contents: "uuid;nombre\n1;Pe\xF1a\n");
+
+    DB::table('report_exports')->where('uuid', $export->uuid)->update(['kind' => ReportExportKind::Payroll->value]);
+
+    $enlace = enlaceDeDescarga(Api::as(ManagementUsers::tokenFor($user))
+        ->get('/api/v1/reports/exports/'.$export->uuid)
+        ->json('data.download.url'));
+
+    $descarga = Api::guest()
+        ->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.tokenDelEnlace($enlace, $export->uuid))
+        ->assertValidResponse(200);
+
+    expect($descarga->headers->get('Content-Type'))->toBe('text/csv; charset=iso-8859-1');
+})->group('RF-IN-06', 'RF-IN-07');
 
 it('una exportacion purgada sigue en la lista y su descarga responde 404', function (): void {
     // Regla dura 5: la fila se queda. Lo que ya no se puede es descargarla, y eso

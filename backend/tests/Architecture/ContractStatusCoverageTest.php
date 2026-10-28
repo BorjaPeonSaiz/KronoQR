@@ -55,7 +55,6 @@ use Tests\Contract\Support\ContractSweep;
 const CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES = [
     'POST /api/v1/client-errors 400' => 'Declara 400 InvalidRequest (ValidationProblem, con errors). ReportClientErrorsRequest valida con 422 y no emite invalid-request; el unico 400 posible es el bad-request de un JSON mal formado (D6), sin errors, que el esquema rechaza.',
     'POST /api/v1/kiosk/pair/confirm 400' => 'Declara 400 InvalidRequest (ValidationProblem, con errors). ConfirmPairingRequest valida con 422 y no emite invalid-request; el unico 400 posible es el bad-request de un JSON mal formado (D6), sin errors, que el esquema rechaza.',
-    'GET /api/v1/reports/exports/{uuid}/download 200' => 'Declara text/csv para el CSV. La descarga no fija el tipo y BinaryFileResponse lo adivina por el contenido: un CSV con BOM y punto y coma, el del producto, sale como text/plain. Arreglo en ReportExportDownloadController (tipo segun el formato); hallazgo de la tarea 22.3.',
 ];
 
 /**
