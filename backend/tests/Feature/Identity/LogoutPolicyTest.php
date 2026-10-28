@@ -61,12 +61,12 @@ it('aplica la policy en la peticion de la ruta', function (): void {
 })->group('RQ-07');
 
 it('resuelve la ruta con la peticion que aplica la policy', function (): void {
-    $action = app('router')->getRoutes()->getByName('auth.logout')?->getActionName();
+    $action = resolve('router')->getRoutes()->getByName('auth.logout')?->getActionName();
 
     expect($action)->toBeString();
 
     /** @var class-string $action */
-    $parameter = (new ReflectionMethod($action, '__invoke'))->getParameters()[0];
+    $parameter = new ReflectionMethod($action, '__invoke')->getParameters()[0];
 
     expect((string) $parameter->getType())->toBe(LogoutRequest::class);
 })->group('RQ-07');

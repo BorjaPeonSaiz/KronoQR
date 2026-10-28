@@ -49,9 +49,9 @@ beforeEach(function (): void {
 
     $funnel = pdfCapAuthorizationFunnel();
     $slots = new RedisPdfRenderingSlots(
-        app(Redis::class),
-        app(LoggerInterface::class),
-        app(PdfRenderingMetrics::class),
+        resolve(Redis::class),
+        resolve(LoggerInterface::class),
+        resolve(PdfRenderingMetrics::class),
         PDF_CAP_AUTHORIZATION_SLOTS,
         $funnel,
     );
@@ -62,11 +62,11 @@ beforeEach(function (): void {
     app()->instance(InstructionsSheetRenderer::class, new ConcurrencyLimitedInstructionsSheetRenderer(new FakeInstructionsSheetRenderer, $slots, 0));
 
     // El motor, ocupado por otra composicion en curso.
-    app(Redis::class)->connection()->setex($funnel.'1', 60, 'otra-composicion');
+    resolve(Redis::class)->connection()->setex($funnel.'1', 60, 'otra-composicion');
 });
 
 afterEach(function (): void {
-    app(Redis::class)->connection()->del(pdfCapAuthorizationFunnel().'1');
+    resolve(Redis::class)->connection()->del(pdfCapAuthorizationFunnel().'1');
 });
 
 /**
