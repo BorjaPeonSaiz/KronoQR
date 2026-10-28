@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Testing\TestResponse;
 use Spectator\Middleware as SpectatorMiddleware;
+use Spectator\RequestFactory;
 use Spectator\Spectator;
 use Tests\Contract\Support\ContractSweep;
 use Tests\Contract\Support\ExhaustedRateLimiter;
@@ -204,6 +207,21 @@ it('senala la operacion que responde otro codigo del que se barre', function ():
     $linea = ContractSweep::discrepancy('GET /api/v1/settings', 401, ContractSweep::send(Api::as($admin), 'GET /api/v1/settings'));
 
     expect($linea)->toStartWith('GET /api/v1/settings: esperado 401, recibido 200');
+})->group('RQ-06');
+
+it('no atribuye a una operacion el incumplimiento que Spectator anoto en la peticion anterior', function (): void {
+    // La respuesta fabricada no pasa por el middleware de Spectator, que es el
+    // unico que reinicia lo validado: sin olvidarlo antes de cada envio, la
+    // excepcion de la peticion anterior saldria como incumplimiento de esta.
+    resolve(RequestFactory::class)->responseException = new RuntimeException('incumplimiento de la peticion anterior');
+
+    $discrepancias = ContractSweep::discrepanciesAmong(
+        ['GET /api/v1/health'],
+        200,
+        static fn (string $operation): TestResponse => TestResponse::fromBaseResponse(new Response('', 200)),
+    );
+
+    expect($discrepancias)->toBe([]);
 })->group('RQ-06');
 
 it('senala la respuesta que trae el codigo barrido pero no la forma del contrato', function (): void {

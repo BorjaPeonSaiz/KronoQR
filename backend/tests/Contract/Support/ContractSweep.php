@@ -156,6 +156,7 @@ final class ContractSweep
         $found = [];
 
         foreach ($operations as $operation) {
+            self::forgetLastValidation();
             $found[] = self::discrepancy($operation, $code, $send($operation));
         }
 
@@ -352,6 +353,7 @@ final class ContractSweep
     public static function send(Api $client, string $operation): TestResponse
     {
         [$method, $uri] = self::requestOf($operation);
+        self::forgetLastValidation();
 
         return $client->call($method, $uri);
     }
@@ -366,6 +368,7 @@ final class ContractSweep
     public static function sendWithUnknownField(Api $client, string $operation, array $field): TestResponse
     {
         [$method, $uri] = self::requestOf($operation);
+        self::forgetLastValidation();
 
         return $method === 'GET' ? $client->get($uri, $field) : $client->call($method, $uri, $field);
     }
@@ -378,8 +381,23 @@ final class ContractSweep
     public static function sendRaw(Api $client, string $operation, string $contentType, string $content): TestResponse
     {
         [$method, $uri] = self::requestOf($operation);
+        self::forgetLastValidation();
 
         return $client->raw($method, $uri, $contentType, $content);
+    }
+
+    /**
+     * Olvida lo que Spectator valido en la peticion anterior. `discrepancy()`
+     * lee `responseException` del singleton, y Spectator solo lo reinicia
+     * cuando su middleware resuelve el contrato: una peticion que no pasa por
+     * el (una ruta fuera del contrato, una respuesta fabricada) heredaria la
+     * excepcion de la anterior y saldria como incumplimiento suyo.
+     */
+    private static function forgetLastValidation(): void
+    {
+        $spectator = resolve(RequestFactory::class);
+        $spectator->requestException = null;
+        $spectator->responseException = null;
     }
 
     /**
