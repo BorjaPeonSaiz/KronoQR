@@ -121,8 +121,8 @@ it('rechaza igual antes y despues de la retirada, con el mismo cuerpo y las mism
     [$respuestaDespues, $consultasDespues] = escaneoContado($escenario['token'], $retirada, SCAN_BEFORE_REVOCATION_AFTER, $despues);
     [$respuestaFirma, $consultasFirma] = escaneoContado($escenario['token'], $falsa, SCAN_BEFORE_REVOCATION_BEFORE, $firma);
 
-    $respuestaAntes->assertStatus(422)->assertValidResponse();
-    $respuestaDespues->assertStatus(422)->assertValidResponse();
+    $respuestaAntes->assertStatus(422)->assertValidResponse(422);
+    $respuestaDespues->assertStatus(422)->assertValidResponse(422);
     $respuestaFirma->assertStatus(422);
 
     // Byte a byte, salvo el eco del `scan_id` (RS-03, regla dura 17).
@@ -217,7 +217,7 @@ it('rechaza a la persona suspendida con el mismo cuerpo y las mismas consultas q
     [$respuestaSuspendida, $consultasSuspendida] = escaneoContado($escenario['token'], $tarjeta, SCAN_BEFORE_REVOCATION_AFTER, $deSuspendida);
     [$respuestaFalsa, $consultasFalsa] = escaneoContado($escenario['token'], $falsa, SCAN_BEFORE_REVOCATION_AFTER, $deFalsa);
 
-    $respuestaSuspendida->assertStatus(422)->assertValidResponse();
+    $respuestaSuspendida->assertStatus(422)->assertValidResponse(422);
 
     expect(cuerpoCrudoSinScanId($respuestaSuspendida, $deSuspendida))->toBe(cuerpoCrudoSinScanId($respuestaFalsa, $deFalsa))
         ->and($consultasSuspendida)->toBe($consultasFalsa)
@@ -241,7 +241,7 @@ it('devuelve el mismo rechazo al reenviar el escaneo atribuido', function (): vo
     $primera = escanearTarjetaRetirada($escenario['token'], $retirada, SCAN_BEFORE_REVOCATION_BEFORE, $scanId);
     $reenvio = escanearTarjetaRetirada($escenario['token'], $retirada, SCAN_BEFORE_REVOCATION_BEFORE, $scanId);
 
-    $reenvio->assertStatus(422)->assertValidResponse();
+    $reenvio->assertStatus(422)->assertValidResponse(422);
 
     expect($reenvio->getContent())->toBe($primera->getContent())
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1);
@@ -268,7 +268,7 @@ it('reenvia un rechazo atribuido con las mismas consultas y el mismo cuerpo que 
     [$reenvioAtribuido, $consultasAtribuido] = escaneoContado($escenario['token'], $retirada, SCAN_BEFORE_REVOCATION_BEFORE, $atribuido);
     [$reenvioFirma, $consultasFirma] = escaneoContado($escenario['token'], $falsa, SCAN_BEFORE_REVOCATION_BEFORE, $firma);
 
-    $reenvioAtribuido->assertStatus(422)->assertValidResponse();
+    $reenvioAtribuido->assertStatus(422)->assertValidResponse(422);
 
     expect($consultasAtribuido)->toBe($consultasFirma)
         ->and(cuerpoCrudoSinScanId($reenvioAtribuido, $atribuido))->toBe(cuerpoCrudoSinScanId($reenvioFirma, $firma));

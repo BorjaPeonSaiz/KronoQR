@@ -115,7 +115,7 @@ it('la exportacion del informe se degrada igual que su consulta', function (): v
 
     Api::as(reportsToken())
         ->get('/api/v1/reports/period/export?from=2026-06-01&to=2026-06-07&granularity=range&group_by=employee&format=csv')
-        ->assertStatus(402);
+        ->assertValidResponse(402);
 })->group('RF-PD-05');
 
 it('el informe se degrada tambien cuando NO esta en el plan, con otro motivo', function (): void {
@@ -204,7 +204,7 @@ it('degradar la nomina NO degrada la exportacion legal', function (): void {
 
     Api::as(reportsToken())
         ->get('/api/v1/reports/payroll-export?from=2026-06-01&to=2026-06-07&format=csv')
-        ->assertStatus(402);
+        ->assertValidResponse(402);
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)))
         ->get('/api/v1/reports/legal-export?from=2026-06-01&to=2026-06-07')
@@ -594,7 +594,7 @@ it('la descarga del cuadro se degrada igual que su consulta', function (): void 
 
     Api::as(reportsToken())
         ->get('/api/v1/reports/adoption/export?format=csv&from=2026-05-01&to=2026-05-31')
-        ->assertStatus(402);
+        ->assertValidResponse(402);
 })->group('RF-PD-05', 'RF-IN-08');
 
 it('el cuadro de impacto no se enciende con los informes avanzados contratados', function (): void {
@@ -619,7 +619,7 @@ it('degradar el cuadro de impacto NO degrada el registro legal', function (): vo
 
     Api::as(reportsToken())
         ->get('/api/v1/reports/adoption?from=2026-05-01&to=2026-05-31')
-        ->assertStatus(402);
+        ->assertValidResponse(402);
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)))
         ->get('/api/v1/reports/legal-export?from=2026-06-01&to=2026-06-07')

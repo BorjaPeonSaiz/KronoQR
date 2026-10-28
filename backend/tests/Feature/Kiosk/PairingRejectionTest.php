@@ -132,7 +132,7 @@ it('devuelve exactamente el mismo cuerpo en los tres rechazos', function (): voi
     foreach (tresRechazos() as $caso => $credenciales) {
         $respuesta = sondeoRechazado($credenciales);
 
-        $respuesta->assertStatus(422)->assertValidResponse();
+        $respuesta->assertStatus(422)->assertValidResponse(422);
 
         $cuerpos[$caso] = (string) $respuesta->getContent();
     }
@@ -257,7 +257,7 @@ it('no distingue las tres causas del codigo tampoco en el confirm', function ():
             'name' => 'Cocina',
         ]);
 
-        $respuesta->assertStatus(422)->assertValidResponse();
+        $respuesta->assertStatus(422)->assertValidResponse(422);
 
         $cuerpos[$caso] = (string) $respuesta->getContent();
     }

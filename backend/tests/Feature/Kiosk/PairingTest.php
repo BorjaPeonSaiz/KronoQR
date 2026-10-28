@@ -107,7 +107,7 @@ it('vincula una tablet en tres pasos y la deja fichando', function (): void {
 
     // 1. La tablet pide. Es el unico caso que valida tambien la PETICION contra
     // el contrato: los demas ya dan por bueno el cuerpo que envia esta.
-    pedirCodigo()->assertStatus(201)->assertValidRequest()->assertValidResponse();
+    pedirCodigo()->assertStatus(201)->assertValidRequest()->assertValidResponse(201);
 
     $ticket = ticketNuevo();
 
@@ -118,7 +118,7 @@ it('vincula una tablet en tres pasos y la deja fichando', function (): void {
 
     // 2. Mientras nadie confirme, el sondeo dice `pending` y nada mas.
     $espera = sondear($ticket['pairing_id'], $ticket['pairing_secret']);
-    $espera->assertOk()->assertValidRequest()->assertValidResponse()
+    $espera->assertOk()->assertValidRequest()->assertValidResponse(200)
         ->assertExactJson(['status' => 'pending']);
 
     // 3. El administrador teclea el codigo.
@@ -127,7 +127,7 @@ it('vincula una tablet en tres pasos y la deja fichando', function (): void {
         'name' => 'Recepcion',
     ]);
 
-    $confirmacion->assertOk()->assertValidRequest()->assertValidResponse()
+    $confirmacion->assertOk()->assertValidRequest()->assertValidResponse(200)
         ->assertJsonPath('device.name', 'Recepcion')
         ->assertJsonPath('device.status', 'active')
         // Quiosco nuevo, no reactivacion.
@@ -145,7 +145,7 @@ it('vincula una tablet en tres pasos y la deja fichando', function (): void {
 
     // 4. La tablet lo recoge en su siguiente sondeo.
     $recogida = sondear($ticket['pairing_id'], $ticket['pairing_secret']);
-    $recogida->assertOk()->assertValidResponse()
+    $recogida->assertOk()->assertValidResponse(200)
         ->assertJsonPath('status', 'paired')
         ->assertJsonPath('device.name', 'Recepcion');
 
@@ -194,7 +194,7 @@ it('no entrega el token dos veces con la misma solicitud', function (): void {
 
     sondear($ticket['pairing_id'], $ticket['pairing_secret'])
         ->assertStatus(422)
-        ->assertValidResponse()
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-rejected');
 })->group('RF-PD-06', 'RS-03');
 
@@ -217,7 +217,7 @@ it('no admite confirmar dos veces el mismo codigo', function (): void {
         'name' => 'Otro nombre',
     ])
         ->assertStatus(422)
-        ->assertValidResponse()
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-code-rejected');
 
     expect(DB::table('devices')->count())->toBe(1);
@@ -247,7 +247,7 @@ it('rechaza un codigo caducado y deja pedir otro sin intervencion', function ():
         ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-rejected');
 
     // Y pedir otro codigo funciona, que es la salida del callejon.
-    pedirCodigo()->assertStatus(201)->assertValidResponse();
+    pedirCodigo()->assertStatus(201)->assertValidResponse(201);
 })->group('RF-PD-06');
 
 it('entrega el token de una solicitud ya confirmada aunque el codigo haya caducado', function (): void {
@@ -269,7 +269,7 @@ it('entrega el token de una solicitud ya confirmada aunque el codigo haya caduca
 
     sondear($ticket['pairing_id'], $ticket['pairing_secret'])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('status', 'paired');
 })->group('RF-PD-06');
 
@@ -301,7 +301,7 @@ it('reactiva la misma fila y el mismo uuid al sustituir una tablet averiada', fu
         'name' => 'Recepcion',
     ]);
 
-    $sustitucion->assertOk()->assertValidResponse()
+    $sustitucion->assertOk()->assertValidResponse(200)
         ->assertJsonPath('device.uuid', $uuid)
         ->assertJsonPath('device.reactivated', true)
         ->assertJsonPath('device.status', 'active');
@@ -329,7 +329,7 @@ it('rechaza el nombre de un quiosco ACTIVO con un 422 sobre el campo', function 
         'name' => 'Recepcion',
     ])
         ->assertStatus(422)
-        ->assertValidResponse()
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
         ->assertJsonStructure(['errors' => ['name']]);
 
@@ -390,7 +390,7 @@ it('lista los quioscos con lo que hace falta para detectar uno averiado', functi
 
     $listado = Api::as($token)->get('/api/v1/devices');
 
-    $listado->assertOk()->assertValidResponse()
+    $listado->assertOk()->assertValidResponse(200)
         ->assertJsonPath('devices.0.name', 'Recepcion')
         ->assertJsonPath('devices.0.status', 'active')
         // Recien vinculado: no ha latido nunca, y eso NO es lo mismo que estar al
@@ -417,7 +417,7 @@ it('desvincula un quiosco y devuelve la fila ya revocada', function (): void {
 
     Api::as($token)->post('/api/v1/devices/'.$uuid.'/unpair')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         // El estado de DESPUES, para que el panel repinte la fila sin volver a
         // pedir la lista.
         ->assertJsonPath('status', 'revoked')
@@ -451,7 +451,7 @@ it('responde 404 al desvincular un quiosco que no existe', function (): void {
     Api::as(panelDe())
         ->post('/api/v1/devices/0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81/unpair')
         ->assertStatus(404)
-        ->assertValidResponse();
+        ->assertValidResponse(404);
 })->group('RF-PD-06');
 
 // --- Cuando la instalacion no puede atender (RS-02) ---------------------------
@@ -471,7 +471,7 @@ it('responde 503 cuando hay demasiadas solicitudes vivas', function (): void {
 
     pedirCodigo()
         ->assertStatus(503)
-        ->assertValidResponse()
+        ->assertValidResponse(503)
         ->assertJsonPath('type', 'urn:kronoqr:problem:service-unavailable');
 })->group('RF-PD-06', 'RS-02', 'RQ-06');
 

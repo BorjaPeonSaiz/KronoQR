@@ -89,6 +89,24 @@ function enlaceDeDescarga(mixed $url): string
 }
 
 /**
+ * El token del enlace de descarga, despues de comprobar que el enlace apunta a
+ * la descarga de ESE informe.
+ *
+ * Las pruebas piden la descarga con la ruta escrita y este token, y no con la
+ * URL entera en una variable, para que la puerta del contrato sepa que
+ * operacion valida cada `assertValidResponse` (Q3).
+ */
+function tokenDelEnlace(string $enlace, string $exportUuid): string
+{
+    parse_str((string) parse_url($enlace, PHP_URL_QUERY), $query);
+
+    expect(parse_url($enlace, PHP_URL_PATH))->toBe('/api/v1/reports/exports/'.$exportUuid.'/download')
+        ->and($query['token'] ?? null)->toBeString();
+
+    return \is_string($query['token'] ?? null) ? $query['token'] : '';
+}
+
+/**
  * El cuerpo minimo de una peticion valida.
  *
  * @return array<string, mixed>
@@ -234,7 +252,9 @@ it('el enlace entrega el fichero con sus cabeceras de comprobacion, y solo una v
         ->get('/api/v1/reports/exports/'.$export->uuid)
         ->json('data.download.url'));
 
-    $descarga = Api::guest()->get($enlace)->assertOk();
+    $token = tokenDelEnlace($enlace, $export->uuid);
+
+    $descarga = Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.$token)->assertOk();
 
     expect($descarga->headers->get('X-Kronoqr-Export-Sha256'))->toBe(hash('sha256', "uuid;horas\n1;08:00\n"))
         ->and($descarga->headers->get('X-Kronoqr-Export-Rows'))->toBe('1')
@@ -247,7 +267,7 @@ it('el enlace entrega el fichero con sus cabeceras de comprobacion, y solo una v
 
     // Y el enlace esta gastado: repetir la URL —volver atras en el navegador,
     // reenviarla— responde `410` y no `404`, porque el fichero sigue ahi.
-    $repetida = Api::guest()->get($enlace)->assertValidResponse(410);
+    $repetida = Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.$token)->assertValidResponse(410);
 
     expect($repetida->json('type'))->toBe('urn:kronoqr:problem:report-export-link-used');
 
@@ -272,7 +292,7 @@ it('un enlace caducado responde 410 con su propio motivo', function (): void {
         ->where('uuid', $export->uuid)
         ->update(['download_token_expires_at' => '2020-01-01 00:00:00+00']);
 
-    $response = Api::guest()->get($enlace)->assertValidResponse(410);
+    $response = Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.tokenDelEnlace($enlace, $export->uuid))->assertValidResponse(410);
 
     expect($response->json('type'))->toBe('urn:kronoqr:problem:report-export-link-expired');
 })->group('RF-IN-06');

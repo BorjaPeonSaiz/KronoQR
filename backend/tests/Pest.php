@@ -33,8 +33,13 @@ pest()->extend(TestCase::class)->in('Feature', 'Integration', 'Contract');
  * a endpoints que leen y escriben de verdad —alta de empleado, acceso al panel—
  * y necesitan la misma base `fichaje_test`. Antes no la necesitaban porque no
  * habia endpoints.
+ *
+ * Y Contract desde la 2.3.0 (Q3): sus barridos piden cada operacion por HTTP
+ * con los tokens de la matriz de autorizacion, que se emiten en esa base, y
+ * por eso comparten tambien los dos enganches del historico de errores de
+ * abajo.
  */
-pest()->beforeAll(fn () => TestDatabase::ensureExists())->in('Integration', 'Feature');
+pest()->beforeAll(fn () => TestDatabase::ensureExists())->in('Integration', 'Feature', 'Contract');
 
 /*
  * El historico de errores comparte la sesion de la prueba y empieza vacio
@@ -58,7 +63,7 @@ pest()->beforeAll(fn () => TestDatabase::ensureExists())->in('Integration', 'Fea
  * verdad, como corre el producto. Las de integracion que si lo necesitan lo
  * llaman a mano.
  */
-pest()->beforeEach(fn () => ErrorHistoryConnection::shareTestTransaction())->in('Feature');
+pest()->beforeEach(fn () => ErrorHistoryConnection::shareTestTransaction())->in('Feature', 'Contract');
 
 /*
  * Y SE DESHACE AL TERMINAR CADA PRUEBA, que es la otra mitad y la que costo
@@ -74,4 +79,4 @@ pest()->beforeEach(fn () => ErrorHistoryConnection::shareTestTransaction())->in(
  *
  * `purge()` saca la conexion del gestor; la proxima prueba construye una limpia.
  */
-pest()->afterEach(fn () => ErrorHistoryConnection::release())->in('Feature');
+pest()->afterEach(fn () => ErrorHistoryConnection::release())->in('Feature', 'Contract');

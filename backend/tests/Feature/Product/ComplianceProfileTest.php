@@ -101,6 +101,15 @@ it('responde 404 antes de la puesta en marcha, cuando no hay centro', function (
     Api::as(profileAdminToken())->get('/api/v1/compliance-profile')->assertValidResponse(404);
 })->group('RF-PD-07');
 
+it('no cambia un umbral antes de la puesta en marcha, con el 404 del contrato', function (): void {
+    // Lo mismo al escribir: sin centro no hay perfil al que cambiarle nada.
+    SchemaOwner::connection()->table('sites')->delete();
+
+    $respuesta = Api::as(profileAdminToken())->patch('/api/v1/compliance-profile', ['min_rest_hours' => 10]);
+
+    $respuesta->assertValidResponse(404);
+})->group('RF-PD-07', 'RQ-06');
+
 it('cambia un umbral y devuelve el perfil completo', function (): void {
     $response = Api::as(profileAdminToken())
         ->patch('/api/v1/compliance-profile', ['min_rest_hours' => 10])

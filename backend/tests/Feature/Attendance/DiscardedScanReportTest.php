@@ -136,7 +136,7 @@ it('acusa todos los avisos y atribuye solo la tarjeta autentica y el codigo de q
 
     $respuesta = avisarDescartes($escenario['token'], [$porTarjeta, $porCodigo, $falsa, $inexistente, $deBaja, $basura]);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('acknowledged'))->toBe(array_column([$porTarjeta, $porCodigo, $falsa, $inexistente, $deBaja, $basura], 'scan_id'))
         ->and(filaDelAviso($porTarjeta['scan_id'])->attribution)->toBe('credential')
@@ -197,7 +197,7 @@ it('acusa igual un aviso repetido sin duplicar la fila ni la metrica', function 
     $primera = avisarDescartes($escenario['token'], [$aviso]);
     $segunda = avisarDescartes($escenario['token'], [$aviso]);
 
-    $segunda->assertOk()->assertValidResponse();
+    $segunda->assertOk()->assertValidResponse(200);
 
     expect($segunda->getContent())->toBe($primera->getContent())
         ->and(DB::table('discarded_scan_reports')->where('scan_id', $aviso['scan_id'])->count())->toBe(1)

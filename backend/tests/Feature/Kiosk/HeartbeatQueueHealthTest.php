@@ -66,7 +66,7 @@ function quioscoEnElPanel(string $deviceUuid): array
     $respuesta = Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
         ->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 
     /** @var list<array<string, mixed>> $quioscos */
     $quioscos = (array) $respuesta->json('devices');
@@ -100,7 +100,7 @@ it('trata igual que antes el latido de una PWA anterior que no declara su almace
     $quiosco = quioscoQueDeclaraSuCola();
 
     latidoDeCola($quiosco['token'], ['pending_queue_size' => 3])
-        ->assertOk()->assertValidRequest()->assertValidResponse();
+        ->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     /** @var object{pending_queue_size: int|null, queue_storage: string, unreported_discards: int} $fila */
     $fila = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
@@ -142,7 +142,7 @@ it('guarda la cola en memoria como desconocida y el panel la marca como fallo', 
         'pending_queue_size' => null,
         'queue_storage' => 'memory',
         'unreported_discards' => 2,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     /** @var object{pending_queue_size: int|null, queue_storage: string, unreported_discards: int} $fila */
     $fila = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
@@ -170,7 +170,7 @@ it('avisa en el panel de los descartes que la tablet no ha conseguido avisar', f
         'pending_queue_size' => 0,
         'queue_storage' => 'durable',
         'unreported_discards' => 4,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     $enElPanel = quioscoEnElPanel($quiosco['deviceUuid']);
 

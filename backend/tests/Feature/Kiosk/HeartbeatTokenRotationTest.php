@@ -103,7 +103,7 @@ it('no trae relevo mientras el token no ha pasado el 80 % de su vida', function 
     FrozenTime::at('2026-06-01 08:00:00');
     $quiosco = quioscoConTokenReal();
 
-    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     // La clave se OMITE, no viaja a `null`: el contrato la declara opcional.
     expect(array_key_exists('rotated_token', (array) $respuesta->json()))->toBeFalse()
@@ -115,7 +115,7 @@ it('trae el relevo pasado el 80 %, conforme al contrato, y el relevo funciona', 
     $quiosco = quioscoConTokenReal();
     tokenDeQuioscoEnElDia80($quiosco['deviceId']);
 
-    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidRequest()->assertValidResponse(200);
     $relevo = relevoDe($respuesta);
 
     expect($relevo)->not->toBe($quiosco['token'])
@@ -123,7 +123,7 @@ it('trae el relevo pasado el 80 %, conforme al contrato, y el relevo funciona', 
         ->and($quiosco['metrics']->tokenRotations)->toBe(['issued']);
 
     // El relevo firma el latido siguiente, que ya no trae otro relevo...
-    $siguiente = latidoCon($relevo)->assertOk()->assertValidResponse();
+    $siguiente = latidoCon($relevo)->assertOk()->assertValidResponse(200);
 
     expect(array_key_exists('rotated_token', (array) $siguiente->json()))->toBeFalse();
 
@@ -140,7 +140,7 @@ it('si la respuesta con el relevo se pierde, el token viejo sigue fichando y el 
     $perdido = relevoDe(latidoCon($quiosco['token'])->assertOk());
 
     FrozenTime::at('2026-06-01 08:01:00');
-    $reentregado = relevoDe(latidoCon($quiosco['token'])->assertOk()->assertValidResponse());
+    $reentregado = relevoDe(latidoCon($quiosco['token'])->assertOk()->assertValidResponse(200));
 
     expect($reentregado)->not->toBe($perdido)
         ->and($quiosco['metrics']->tokenRotations)->toBe(['issued', 'issued']);
@@ -193,7 +193,7 @@ it('si la rotacion falla, el latido responde igual sin relevo y el token sigue v
         }
     });
 
-    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidResponse();
+    $respuesta = latidoCon($quiosco['token'])->assertOk()->assertValidResponse(200);
 
     expect(array_key_exists('rotated_token', (array) $respuesta->json()))->toBeFalse()
         ->and($quiosco['metrics']->tokenRotations)->toBe(['failed'])
@@ -222,7 +222,7 @@ it('a los 90 dias simulados el quiosco sigue autenticando y sincronizando gracia
         $relevo = $respuesta->json('rotated_token.value');
 
         if (is_string($relevo)) {
-            $respuesta->assertValidResponse();
+            $respuesta->assertValidResponse(200);
             $relevos[] = $dia;
             $token = $relevo;
         }

@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
+use App\Modules\Identity\Application\Port\PasswordHasher;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Spectator\Spectator;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -120,10 +122,46 @@ it('pide terminar de entrar a una sesion pendiente y credenciales a quien no tie
         ->post('/api/v1/auth/password', $body)->assertStatus(401);
 })->group('RF-ID-10', 'RS-06');
 
+it('responde con el 409 del contrato si un admin restablece la contrasena mientras se cambia, y no cambia nada', function (): void {
+    // La carrera, sin concurrencia real: el hash de la contrasena nueva se
+    // calcula FUERA del candado, despues de comparar la actual, y es justo ahi
+    // donde un restablecimiento cruzado puede colarse. El doble del hasher lo
+    // cuela.
+    Spectator::using('openapi.yaml');
+    $user = ManagementUsers::withRole(UserRole::RRHH);
+    $token = ManagementUsers::tokenFor($user);
+    $real = resolve(PasswordHasher::class);
+    $hasher = new class($real, $user->id) implements PasswordHasher
+    {
+        public string $restablecida = '';
+
+        public function __construct(private readonly PasswordHasher $real, private readonly int $userId) {}
+
+        public function hash(string $password): string
+        {
+            $this->restablecida = $this->real->hash('Restablecida-Por-Un-Admin-1');
+            DB::table('users')->where('id', $this->userId)->update(['password' => $this->restablecida]);
+
+            return $this->real->hash($password);
+        }
+
+        public function matches(string $password, string $hash): bool
+        {
+            return $this->real->matches($password, $hash);
+        }
+    };
+    app()->instance(PasswordHasher::class, $hasher);
+
+    $respuesta = Api::as($token)->post('/api/v1/auth/password', [
+        'current_password' => ManagementUsers::PASSWORD, 'new_password' => OWN_PASSWORD_NEW,
+    ]);
+
+    $respuesta->assertValidResponse(409);
+    expect(DB::table('users')->where('id', $user->id)->value('password'))->toBe($hasher->restablecida);
+})->group('RF-ID-10', 'RQ-06');
+
 it('responde 401 a una sesion que un restablecimiento ya cerro', function (): void {
-    // El `409` de la carrera (hash cambiado entre la comparacion y la
-    // escritura) no se puede provocar por HTTP sin concurrencia real: lo cubre
-    // `ChangeOwnPasswordTest` (Unit). Aqui, que una sesion cerrada no fija nada.
+    // Una sesion cerrada no fija nada.
     $user = ManagementUsers::withRole(UserRole::RRHH);
     $token = ManagementUsers::tokenFor($user);
     DB::table('personal_access_tokens')->where('tokenable_id', $user->id)->delete();

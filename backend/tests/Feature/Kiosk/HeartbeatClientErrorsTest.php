@@ -135,7 +135,7 @@ it('capta los errores que el quiosco adjunta al latido y los acusa', function ()
 
     $respuesta->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('client_errors_accepted', 2);
 
     expect($sink->reports)->toHaveCount(2)
@@ -193,7 +193,7 @@ it('clasifica con el origen delante y no solo con el codigo', function (): void 
     latido($quiosco['token'], [
         errorDeCliente('kiosk.pin.seal_failed'),
         errorDeCliente('kiosk.clock.skew_detected', context: ['skew_seconds' => 412]),
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($quiosco['sink']->at(0)->level)->toBe(ErrorLevel::Critical)
         ->and($quiosco['sink']->at(1)->level)->toBe(ErrorLevel::Error)
@@ -209,7 +209,7 @@ it('acusa cero cuando el latido no trae errores', function (): void {
     latido($quiosco['token'])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('client_errors_accepted', 0);
 
     expect($quiosco['sink']->isEmpty())->toBeTrue();
@@ -224,7 +224,7 @@ it('sigue respondiendo al latido aunque el historico no pueda guardar nada', fun
 
     latido($quiosco['token'], [errorDeCliente('kiosk.camera.unavailable')])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('client_errors_accepted', 0);
 })->group('RF-PD-15', 'RF-KI-03');
 

@@ -53,7 +53,7 @@ it('ficha con una tarjeta emitida y firmada de verdad', function (): void {
             'qr_payload' => $payload->toString(),
         ]);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and($respuesta->json('work_date'))->toBe('2026-03-14')
@@ -87,7 +87,7 @@ it('rechaza con la respuesta generica una tarjeta con la firma manipulada', func
             'qr_payload' => $manipulado,
         ]);
 
-    $respuesta->assertStatus(422)->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidResponse(422);
 
     expect($respuesta->json('type'))->toBe('urn:kronoqr:problem:scan-rejected')
         ->and(DB::table('shift_entries')->count())->toBe(0)

@@ -111,7 +111,7 @@ it('ficha con el PIN cuando no hay tarjeta', function (): void {
 
     $respuesta = ficharConPin($escenario, $scanId);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and($respuesta->json('scan_id'))->toBe($scanId)
@@ -146,7 +146,7 @@ it('cierra el turno por PIN igual que por tarjeta', function (): void {
 
     $respuesta = ficharConPin($escenario, Str::uuid7()->toString(), occurredAt: '2026-03-14T15:00:00Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     // Entro con la tarjeta y sale con el PIN porque la dejo en la taquilla: cada
     // marca lleva su propio origen (docblock de `ScanOrigin`).
@@ -166,7 +166,7 @@ it('declara la intencion de pausa igual que el escaneo de tarjeta', function ():
     ficharConPin($escenario, $scanId, overrides: ['intent' => 'break_start'])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 
     expect(DB::table('scan_events')->where('scan_id', $scanId)->value('intent'))->toBe('break_start');
 })->group('RF-AT-11');
@@ -189,7 +189,7 @@ it('rechaza igual el PIN incorrecto, el codigo inexistente y el bloqueo', functi
             : $peticion['overrides'],
     );
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     expect($respuesta->json('type'))->toBe('urn:kronoqr:problem:scan-rejected')
         ->and($respuesta->json('detail'))->toBe('El escaneo no se ha podido registrar.')
@@ -227,7 +227,7 @@ it('rechaza sin distinguirlo cuando el bloqueo por intentos esta activo', functi
     $scanId = Str::uuid7()->toString();
     $respuesta = ficharConPin($escenario, $scanId, pin: PIN_DEL_EMPLEADO);
 
-    $respuesta->assertStatus(422)->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidResponse(422);
 
     expect($respuesta->json('detail'))->toBe('El escaneo no se ha podido registrar.')
         ->and(DB::table('shift_entries')->count())->toBe(0);
@@ -243,7 +243,7 @@ it('no deja fichar por PIN a quien esta de baja', function (): void {
 
     ficharConPin($escenario, Str::uuid7()->toString())
         ->assertStatus(422)
-        ->assertValidResponse();
+        ->assertValidResponse(422);
 
     expect(DB::table('shift_entries')->count())->toBe(0);
 })->group('RN-14', 'RF-AT-11');
@@ -397,7 +397,7 @@ it('publica la clave de sellado en el padron para que el quiosco pueda cerrar el
 
     $respuesta = Api::as($escenario['token'])->get('/api/v1/kiosk/roster');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('pin_sealing_public_key'))->toBe($escenario['publicKey']);
 })->group('RF-AT-11', 'RF-KI-03');
@@ -411,7 +411,7 @@ it('devuelve la clave nula cuando la instalacion no ofrece fichaje por PIN', fun
 
     $respuesta = Api::as($escenario['token'])->get('/api/v1/kiosk/roster');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('pin_sealing_public_key'))->toBeNull();
 })->group('RF-AT-11', 'RF-KI-03');
@@ -435,7 +435,7 @@ it('ficha la pausa y la vuelta por PIN igual que por tarjeta', function (): void
         overrides: ['intent' => 'break_start'],
     );
 
-    $pausa->assertOk()->assertValidRequest()->assertValidResponse();
+    $pausa->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($pausa->json('action'))->toBe('break_start')
         ->and($pausa->json('worked_minutes'))->toBe(240);
@@ -444,7 +444,7 @@ it('ficha la pausa y la vuelta por PIN igual que por tarjeta', function (): void
     FrozenTime::at('2026-03-14 10:30:00');
     $vuelta = ficharConPin($escenario, Str::uuid7()->toString(), occurredAt: '2026-03-14T10:30:00Z');
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('break_end')
         ->and($vuelta->json('work_date'))->toBe('2026-03-14')

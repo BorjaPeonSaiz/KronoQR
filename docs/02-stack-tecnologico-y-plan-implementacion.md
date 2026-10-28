@@ -1097,7 +1097,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | **Mutación** | Pest `--mutate` (o Infection) sobre `Modules/*/Domain` | **MSI ≥ 80 %**, aplicado entero en los dos casos de abajo. **En cada *push*, acotada a los ficheros de dominio que ese *push* cambia** (`make mutate-changed`, job `unit`); **completa** (`make mutate`) **de noche** (job `mutation`, `schedule`, lÃ­mite de 120 min) y en el disparo manual solo si se pide con el input `full_mutation` (decisiÃ³n del propietario del 13-10-2026) — §10.1 explica por qué la completa no cabe en el presupuesto de las etapas ①–③ |
 | Propiedades | Generación dirigida | Duraciones, DST, medianoche |
 | Integración | Pest + PostgreSQL real en contenedor | — |
-| Contrato | Spectator contra `openapi.yaml` | Toda respuesta valida el esquema |
+| Contrato | Spectator contra `openapi.yaml` | Toda respuesta valida el esquema. **Cada par (operación, código) declarado tiene su respuesta validada** (`ContractStatusCoverageTest`, desde la 2.3.0): con `assertValidResponse(<código>)` escrito o con un barrido de `tests/Contract` para los códigos compartidos (`401`, `403`, `404`, `400`, `415`, `422`, `429`, `503`). Los pares que la implementación no produce con la forma del contrato constan en la propia prueba con su motivo, y caducan solos |
 | Frontend unit | Vitest + Vue Test Utils | ≥ 70 % |
 | E2E | Playwright | Todos los escenarios críticos en verde |
 | Accesibilidad | `@axe-core/playwright` | 0 violaciones críticas o graves |

@@ -110,7 +110,7 @@ it('rechaza con 409 una ausencia que pisa otra activa de la misma persona', func
             'starts_on' => '2026-03-06',
             'ends_on' => '2026-03-09',
         ])
-        ->assertStatus(409)
+        ->assertValidResponse(409)
         ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
 
     expect(DB::table('absences')->count())->toBe(1);
@@ -238,7 +238,7 @@ it('responde 409 al corregir una version que ya no es la vigente', function (): 
 
     Api::as($contexto['token'])
         ->patch('/api/v1/absences/'.$original, ['reason' => 'Segunda, sobre la version vieja.'])
-        ->assertStatus(409)
+        ->assertValidResponse(409)
         ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
 })->group('RF-GP-04', 'RN-13');
 
@@ -284,7 +284,7 @@ it('responde 409 al anular algo que ya no es la version vigente', function (): v
 
     Api::as($contexto['token'])
         ->post('/api/v1/absences/'.$uuid.'/void', ['reason' => 'Otra vez.'])
-        ->assertStatus(409);
+        ->assertValidResponse(409);
 })->group('RF-GP-04');
 
 it('responde 404 sobre una ausencia que no existe', function (): void {

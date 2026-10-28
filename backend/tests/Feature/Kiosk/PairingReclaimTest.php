@@ -99,7 +99,7 @@ it('reemite el token del mismo quiosco y retira el anterior si la recogida se re
 
     $repetida = recogerDesde(RECOGIDA_IP, $ticket);
 
-    $repetida->assertOk()->assertValidRequest()->assertValidResponse()
+    $repetida->assertOk()->assertValidRequest()->assertValidResponse(200)
         ->assertJsonPath('status', 'paired')
         ->assertJsonPath('device.name', 'Recepcion');
 
@@ -152,7 +152,7 @@ it('rechaza la recogida repetida antes de 10 s, a los 60 s o desde otra direccio
 
     recogerDesde($ip, $ticket)
         ->assertStatus(422)
-        ->assertValidResponse()
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-rejected');
 
     // El token de la primera recogida sigue siendo el unico y sigue vivo.
@@ -210,7 +210,7 @@ it('no repite la recogida si el token de la primera ya se ha usado', function ()
 
     recogerDesde(RECOGIDA_IP, $ticket)
         ->assertStatus(422)
-        ->assertValidResponse()
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:pairing-rejected');
 
     expect(tokenVivo($ticket['token']))->toBeTrue()

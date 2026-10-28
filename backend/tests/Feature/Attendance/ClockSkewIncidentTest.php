@@ -96,7 +96,7 @@ function ficharConDesfase(array $escenario, string $occurredAt): string
         // importante de todo el fichero.
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 
     return $scanId;
 }

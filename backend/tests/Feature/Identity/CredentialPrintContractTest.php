@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Domain\ValueObject\CardFormat;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -143,3 +144,44 @@ it('rechaza con el 422 del contrato un campo que imprimir o entregar no admiten'
     'reimprimir' => ['print', 'reprint'],
     'entregar a nombre de otro' => ['deliver', 'delivered_by'],
 ])->group('RF-QR-04', 'RF-QR-06');
+
+it('no reimprime una tarjeta ya impresa, con el 409 del contrato', function (): void {
+    // ADR-034: no hay reimpresion. La segunda impresion de la misma credencial
+    // es un conflicto con su estado, no un formulario mal rellenado.
+    app()->instance(CardRenderer::class, new FakeCardRenderer);
+    $token = tokenDeRrhhParaImprimir();
+    $credencial = credencialPendienteDeImprimir($token);
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/print')->assertValidResponse(200);
+
+    $reimpresion = Api::as($token)->post('/api/v1/credentials/'.$credencial.'/print');
+
+    $reimpresion->assertValidResponse(409);
+})->group('RF-QR-04');
+
+it('deshace el lote entero con el 409 del contrato si alguien revoca una de sus tarjetas mientras se compone', function (): void {
+    // La carrera del contrato: la seleccion ve dos pendientes, y mientras se
+    // compone el PDF —fuera de la transaccion— alguien revoca una.
+    FrozenTime::at('2026-08-21 06:40:15');
+    $token = tokenDeRrhhParaImprimir();
+    $revocada = credencialPendienteDeImprimir($token);
+    credencialPendienteDeImprimir($token);
+    app()->instance(CardRenderer::class, new class($revocada) implements CardRenderer
+    {
+        public function __construct(private readonly string $revocadaEnParalelo) {}
+
+        public function render(array $cards, CardFormat $format): string
+        {
+            DB::table('credentials')->where('uuid', $this->revocadaEnParalelo)->update([
+                'revoked_at' => '2026-08-21 06:40:30+00',
+                'revoked_reason' => 'Perdida mientras se componia el lote',
+            ]);
+
+            return FakeCardRenderer::PDF_BYTES;
+        }
+    });
+
+    $lote = Api::as($token)->post('/api/v1/credentials/print-batch');
+
+    $lote->assertValidResponse(409);
+    expect(DB::table('credentials')->whereNotNull('printed_at')->count())->toBe(0);
+})->group('RF-QR-04');

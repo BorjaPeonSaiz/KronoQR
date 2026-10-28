@@ -224,7 +224,7 @@ it('deja el alta repetible mientras no se confirme y cerrada cuando ya lo esta',
 
     // Con uno ya activo, no: reemplazarlo es un acto de administracion
     // (`identity:2fa-reset`), no algo que se haga con una sesion pendiente.
-    Api::as($pending)->post('/api/v1/auth/2fa/enrol')->assertStatus(409);
+    Api::as($pending)->post('/api/v1/auth/2fa/enrol')->assertValidResponse(409);
 })->group('RF-ID-01', 'RS-06');
 
 it('rechaza confirmar sin haber dado de alta nada', function (): void {
@@ -232,7 +232,7 @@ it('rechaza confirmar sin haber dado de alta nada', function (): void {
 
     Api::as(ManagementUsers::pendingTokenFor($user))
         ->post('/api/v1/auth/2fa/confirm', ['code' => '000000'])
-        ->assertStatus(409);
+        ->assertValidResponse(409);
 })->group('RF-ID-01', 'RS-06');
 
 it('escribe en audit_log la activacion del segundo factor y nunca el secreto', function (): void {

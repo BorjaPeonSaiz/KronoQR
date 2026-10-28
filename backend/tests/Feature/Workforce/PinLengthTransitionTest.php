@@ -131,7 +131,7 @@ it('sigue dejando fichar en el quiosco con el PIN de seis emitido antes de pasar
             'pin_sealed' => EmployeePins::seal(PortalLogins::PIN, EmployeePins::configureSealing()),
         ]);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('employees')->where('uuid', $escenario['employee'])->value('pin_length'))->toBe(6);

@@ -74,7 +74,7 @@ it('ensena al administrador la incidencia sin persona con employee nulo y el qui
 
     $respuesta = Api::as($caso['admin'])->get('/api/v1/incidents');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('data.0.id'))->toBe($caso['id'])
         ->and($respuesta->json('data.0.employee'))->toBeNull()
@@ -89,7 +89,7 @@ it('no la ensena a un responsable de departamento', function (): void {
 
     $respuesta = Api::as($caso['responsable'])->get('/api/v1/incidents');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('data'))->toBe([])
         ->and($respuesta->json('meta.total'))->toBe(0);
@@ -103,7 +103,7 @@ it('deja al administrador resolverla y le niega al responsable', function (): vo
 
     Api::as($caso['admin'])->post('/api/v1/incidents/'.$caso['id'].'/resolve', $cuerpo)
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('employee', null)
         ->assertJsonPath('status', 'resolved');
 })->group('RN-22', 'RF-PA-05', 'RF-ID-03');
