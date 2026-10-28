@@ -5,11 +5,11 @@ declare(strict_types=1);
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -107,6 +107,7 @@ it('cuenta en el asiento siguiente las denegaciones que agrupo, en vez de perder
     // incidente tiene que poder decir cuantas veces lo intento esa cuenta. Un
     // numero en un apunte responde mejor que 341 filas identicas.
     config()->set('compliance.authorization_denial_window_seconds', 60);
+    FrozenTime::at('2026-06-15 10:00:00');
 
     ['token' => $token, 'ajenos' => $ajenos] = jefeDeCocinaConAjenos(4);
 
@@ -120,10 +121,11 @@ it('cuenta en el asiento siguiente las denegaciones que agrupo, en vez de perder
     // proposito: si caducara a la vez, la cuenta se perderia justo en el hueco
     // entre una ventana y la siguiente.
     //
-    // Se mueve el reloj de Carbon y no se espera: la caducidad de la cache lo
-    // consulta (`InteractsWithTime::currentTime()`), asi que dos minutos de viaje
-    // son dos minutos de cache sin `sleep()` en la suite.
-    Carbon::setTestNow(Carbon::now()->addMinutes(2));
+    // Se mueven los dos relojes y no se espera: la caducidad de la cache lee
+    // Carbon (`InteractsWithTime::currentTime()`), asi que dos minutos de viaje
+    // son dos minutos de cache sin `sleep()` en la suite. Moverlo solo a el
+    // dejaria el `Clock` del dominio en otro instante (FrozenTimeTest).
+    FrozenTime::at('2026-06-15 10:02:00');
 
     Api::as($token)->get('/api/v1/employees/'.$ajenos[3])->assertStatus(403);
 
