@@ -166,13 +166,13 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
     // busca la afirmacion, con su verbo.
     expect(preg_match('/aplica el 80\s*%\s+a\s+cada\s+fichero/iu', $ci.$makefile))->toBe(0);
 
-    // Sin mutantes (una rama cuyo unico cambio de dominio es una interfaz): solo
-    // se da por bueno si NO hay clases, traits ni enums entre lo cambiado. Un
+    // Sin mutantes: solo se da por bueno si todo son interfaces o si, repetida
+    // la pasada sin `--covered-only`, tampoco hay codigo que mutar. Un
     // `--ignore-min-score-on-zero-mutations` a ciegas dejaria pasar una clase
     // nueva sin ninguna prueba (con `--covered-only` sale tambien con cero
-    // mutantes).
+    // mutantes). El detalle lo fija MutationLogScriptTest.
     expect($makefile)->toContain("grep -q 'No mutations created'")
-        ->and($makefile)->toContain('solo_interfaces')
+        ->and($makefile)->toContain('elif sin_codigo "$$paths"; then')
         ->and($makefile)->not->toMatch('/--min=80\s+--ignore-min-score/');
 })->group('RNF-M-01', 'RQ-10');
 

@@ -1324,16 +1324,19 @@ endif
 # y por eso el valor va entre comillas dobles escapadas y no simples.
 #
 # SIN MUTANTES. Con cero mutantes Pest da nota 0 y falla («No mutations
-# created»; `ignoreMinScoreOnZeroMutations` es false). Lo que se distingue:
-#   - todos los ficheros cambiados son interfaces (no hay clase, trait ni enum:
-#     no hay cuerpo que mutar): se da por bueno, con un mensaje;
-#   - hay clases, traits o enums: SIGUE fallando. Con `--covered-only` una clase
-#     de dominio nueva SIN pruebas tambien sale con cero mutantes, y esa es
-#     justo la que la puerta tiene que parar. Por eso NO se usa
-#     `--ignore-min-score-on-zero-mutations`, que dejaria pasarla.
-#   Limite conocido: un enum que solo tiene casos (sin metodos) tambien da cero
-#   mutantes y sale rojo; se arregla con una prueba que lo recorra o, si no hay
-#   nada que probar, hablandolo en la revision.
+# created»; `ignoreMinScoreOnZeroMutations` es false). Con `--covered-only`
+# eso quiere decir una de dos cosas, y la puerta tiene que separarlas:
+#   - no hay codigo que mutar: todo son interfaces, o una excepcion que solo
+#     nombra su caso, o un enum sin metodos (`InvalidIncident`, `AuditAction`).
+#     Se da por bueno, con un mensaje;
+#   - hay codigo, pero ninguna prueba unitaria lo ejecuta: una clase de dominio
+#     nueva SIN pruebas sale igual, y esa es justo la que hay que parar. Falla.
+#   Si todo son interfaces se sabe sin ejecutar nada. Si no, se repite la
+#   pasada SIN `--covered-only` (MUTATE_PROBE_OPTIONS, solo crea los mutantes:
+#   los no cubiertos no se ejecutan): si tampoco crea ninguno, no hay codigo
+#   que mutar; si crea alguno, es codigo sin cubrir. Por eso NO se usa
+#   `--ignore-min-score-on-zero-mutations`, que dejaria pasar el segundo caso.
+#   La sonda solo corre cuando la pasada normal no crea mutantes.
 #
 # Por que esto no relaja RQ-10. El umbral --min=80 se sigue aplicando, entero,
 # sobre el subconjunto que cambia: un push que introduce una regla de negocio
@@ -1363,7 +1366,33 @@ endif
 # hace falta: su nota es la del conjunto. Solo aqui y no de noche: con
 # --parallel Pest no da notas por fichero, y la deuda ya existente pondria la
 # nocturna en rojo sin que nadie hubiera tocado nada.
+#
+# Cada pasada por fichero va entre dos lineas `[mutate-file] >>> <fichero>` y
+# `[mutate-file] <<< <fichero>: <estado>`. El log de la CI es uno solo y
+# .github/scripts/mutation-log.sh summary las aparta: la nota, el reparto y los
+# vivos del resumen son los del conjunto, y cada fichero sale en su propia
+# tabla con su nota y su estado. Sin esa separacion el resumen tomaba la nota
+# de la ultima pasada, contaba cada vivo dos veces y se callaba la nota si un
+# fichero no tenia mutantes.
+#
+# EL COSTE Y SU TOPE (MUTATE_FILE_MAX). Cada pasada vuelve a ejecutar la suite
+# Unit con Xdebug para saber que cubre cada prueba, antes de mutar nada.
+# Medido en la CI (run 40599610469, 27-10-2026, 13 ficheros y 532 mutantes):
+# 1 min 42 s de cobertura y 8 min 50 s de mutantes en la pasada del conjunto.
+# Las pasadas por fichero repiten la cobertura una vez cada una y se reparten
+# los mismos mutantes con menos paralelismo: unos 2 min por fichero mas su
+# parte de los mutantes, ~35 min para esos 13. En local, con 5 ficheros y la
+# maquina cargada, fueron unos 4 min por pasada. Con el tope de 12 el peor
+# caso del job `unit` queda en unos 50 min (8 de Feature y contrato, 10 del
+# conjunto y ~30 de pasadas), con margen frente a sus 90. Por encima del tope
+# no se muta fichero a fichero: se avisa en el log y en el resumen, y el 80 %
+# del conjunto se sigue exigiendo. Quien quiera la medida entera la repite con
+# MUTATE_FILE_MAX mas alto (en local, o en un disparo manual).
 MUTATE_FILE_MIN := 70
+MUTATE_FILE_MAX ?= 12
+# Las mismas opciones sin `--covered-only`: solo para saber si un fichero sin
+# mutantes cubiertos tiene codigo que mutar (ver «SIN MUTANTES», arriba).
+MUTATE_PROBE_OPTIONS := $(filter-out --covered-only,$(MUTATE_OPTIONS))
 mutate-changed: ## Mutacion acotada a Domain/*.php que cambian frente a MUTATE_BASE (por defecto origin/main)
 ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
@@ -1384,35 +1413,52 @@ else
 		exit 0; \
 	fi; \
 	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
+	sin_codigo() { \
+		plog="$$(mktemp)"; \
+		( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_PROBE_OPTIONS) --path=$$1 --testsuite=Unit" ) >"$$plog" 2>&1; \
+		r=1; grep -q 'No mutations created' "$$plog" && r=0; \
+		rm -f "$$plog"; \
+		return "$$r"; \
+	}; \
 	$(MAKE) --no-print-directory mutate-canary || exit $$?; \
 	echo "[make] Mutando lo cambiado frente a $$base: $$paths"; \
 	log="$$(mktemp)"; st="$$(mktemp)"; \
 	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$paths --testsuite=Unit --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
 	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
+	clases=""; n=0; \
+	for f in $$files; do \
+		if grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f"; then clases="$$clases $$f"; n=$$((n + 1)); fi; \
+	done; \
 	if [ "$$rc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
-		solo_interfaces=1; \
-		for f in $$files; do \
-			if grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f"; then solo_interfaces=0; fi; \
-		done; \
-		if [ "$$solo_interfaces" -eq 1 ]; then \
+		if [ "$$n" -eq 0 ]; then \
 			echo "[make] Sin mutantes: todos los ficheros de dominio cambiados son interfaces (sin cuerpo que mutar). Se da por bueno."; \
 			rc=0; \
+		elif sin_codigo "$$paths"; then \
+			echo "[make] Sin mutantes tampoco sin --covered-only: lo cambiado no tiene codigo que mutar (una excepcion que solo nombra su caso, un enum sin metodos). Se da por bueno."; \
+			rc=0; \
 		else \
-			echo "[make] ERROR: sin mutantes, pero entre lo cambiado hay clases, traits o enums. Una clase de dominio sin pruebas que la cubran (--covered-only) sale asi: escribe las pruebas unitarias."; \
+			echo "[make] ERROR: sin mutantes con --covered-only, pero sin esa opcion si los hay: es codigo de dominio sin pruebas unitarias que lo cubran. Escribe las pruebas."; \
 		fi; \
 	fi; \
-	if [ "$$rc" -eq 0 ] && [ "$$(printf '%s\n' "$$files" | wc -l)" -gt 1 ]; then \
-		for f in $$files; do \
-			grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f" || continue; \
-			echo "[make] Mutando $$f por separado (minimo $(MUTATE_FILE_MIN) por ciento por fichero)."; \
+	por_fichero=0; \
+	if [ "$$rc" -eq 0 ] && [ "$$n" -gt 1 ] && ! grep -q 'No mutations created' "$$log"; then por_fichero=1; fi; \
+	if [ "$$por_fichero" -eq 1 ] && [ "$$n" -gt $(MUTATE_FILE_MAX) ]; then \
+		echo "[mutate-file] AVISO: cambian $$n clases, traits o enums de dominio y el tope de pasadas por fichero es $(MUTATE_FILE_MAX) (MUTATE_FILE_MAX): no se muta cada uno por separado. El 80 por ciento sobre el conjunto si se ha exigido. Para medirlos, repite con MUTATE_FILE_MAX=$$n."; \
+	elif [ "$$por_fichero" -eq 1 ]; then \
+		for f in $$clases; do \
+			echo "[mutate-file] >>> $$f (minimo $(MUTATE_FILE_MIN) por ciento)"; \
 			( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$f --testsuite=Unit --min=$(MUTATE_FILE_MIN)"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
 			frc="$$(cat "$$st" 2>/dev/null)"; frc="$${frc:-1}"; \
-			if [ "$$frc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
-				echo "[make] $$f no tiene mutantes que la suite Unit cubra: no cuenta para el minimo por fichero."; \
-			elif [ "$$frc" -ne 0 ]; then \
-				echo "[make] ERROR: $$f no llega al $(MUTATE_FILE_MIN) por ciento por si solo; el conjunto lo tapaba."; \
-				rc="$$frc"; \
+			if [ "$$frc" -eq 0 ]; then \
+				estado="llega al minimo"; \
+			elif ! grep -q 'No mutations created' "$$log"; then \
+				estado="ERROR: no llega al $(MUTATE_FILE_MIN) por ciento por si solo; el conjunto lo tapaba"; rc="$$frc"; \
+			elif sin_codigo "$$f"; then \
+				estado="sin codigo que mutar"; \
+			else \
+				estado="ERROR: sin pruebas unitarias que lo cubran (sin --covered-only si tiene mutantes)"; rc=1; \
 			fi; \
+			echo "[mutate-file] <<< $$f: $$estado"; \
 		done; \
 	fi; \
 	rm -f "$$log" "$$st"; \

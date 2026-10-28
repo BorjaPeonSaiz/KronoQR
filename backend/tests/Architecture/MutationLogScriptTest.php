@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Symfony\Component\Process\Process;
+use Symfony\Component\Yaml\Yaml;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -107,8 +108,148 @@ it('ejecuta el canario con las mismas opciones que la mutacion del dominio y ant
     expect($makefile)->toMatch('/^MUTATION_CANARY_EXPECTED := '.MUTATION_LOG_SCRIPT_CANARY.'$/m')
         ->and($makefile)->toMatch('/^mutate: mutate-canary\b/m')
         ->and($makefile)->toContain('$(MAKE) --no-print-directory mutate-canary || exit $$?;')
-        ->and(substr_count($makefile, '$(PEST) $(MUTATE_OPTIONS) --path='))->toBe(3)
+        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=tests/MutationCanary/MutationCanary.php --testsuite=MutationCanary')
+        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80')
+        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$$paths --testsuite=Unit --min=80')
         ->and($makefile)->toContain('mutation-log.sh" canary "$(MUTATION_CANARY_EXPECTED)"');
+})->group('RQ-10');
+
+it('muta tambien por separado cada clase de dominio cambiada, con su minimo y su tope, y marca cada pasada para el resumen', function (): void {
+    // R2-QB-01: Pest da una nota por ejecucion y un fichero flojo quedaba
+    // tapado por los buenos del mismo cambio. La pasada por fichero usa las
+    // MISMAS opciones que el conjunto, que son las que el canario valida.
+    $makefile = Repo::contents('Makefile');
+
+    expect($makefile)->toMatch('/^MUTATE_FILE_MIN := 70$/m')
+        ->and($makefile)->toMatch('/^MUTATE_FILE_MAX \?= 12$/m')
+        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$$f --testsuite=Unit --min=$(MUTATE_FILE_MIN)')
+        ->and($makefile)->toContain('echo "[mutate-file] >>> $$f')
+        ->and($makefile)->toContain('echo "[mutate-file] <<< $$f: $$estado"')
+        ->and($makefile)->toContain('[ "$$n" -gt $(MUTATE_FILE_MAX) ]')
+        ->and($makefile)->toContain('echo "[mutate-file] AVISO: ');
+})->group('RQ-10');
+
+it('distingue un fichero sin codigo que mutar de uno sin pruebas repitiendo la pasada sin --covered-only', function (): void {
+    // Con `--covered-only`, «No mutations created» lo dan igual un enum sin
+    // metodos y una clase que ninguna prueba unitaria ejecuta. La sonda quita
+    // solo esa opcion: si tampoco crea mutantes, no hay codigo; si los crea,
+    // es codigo sin cubrir y la puerta falla, en el conjunto y por fichero.
+    $makefile = Repo::contents('Makefile');
+
+    expect($makefile)->toMatch('/^MUTATE_PROBE_OPTIONS := \$\(filter-out --covered-only,\$\(MUTATE_OPTIONS\)\)$/m')
+        ->and($makefile)->toContain('( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_PROBE_OPTIONS) --path=$$1 --testsuite=Unit" ) >"$$plog" 2>&1;')
+        ->and($makefile)->toContain('elif sin_codigo "$$paths"; then')
+        ->and($makefile)->toContain('elif sin_codigo "$$f"; then')
+        ->and($makefile)->toContain('estado="ERROR: sin pruebas unitarias que lo cubran');
+})->group('RQ-10');
+
+it('resume la pasada del conjunto aparte de las pasadas por fichero, sin contar dos veces un vivo', function (): void {
+    $vivoDelConjunto = "   UNTESTED  app/Modules/Kiosk/Domain/Weak.php  > Line 3: MaxToMin - ID: 1\n";
+    $vivosDeWeak = $vivoDelConjunto
+        ."   UNTESTED  app/Modules/Kiosk/Domain/Weak.php  > Line 4: FalseToTrue - ID: 2\n";
+    $salida = "[mutate-canary] Canario correcto: 4 untested, 3 tested. La pasada distingue un mutante muerto de uno vivo.\n"
+        .mutationLogScriptPestOutput('1 untested, 39 tested', '97.50%', $vivoDelConjunto)
+        ."[mutate-file] >>> app/Modules/Kiosk/Domain/Good.php (minimo 70 por ciento)\n"
+        .mutationLogScriptPestOutput('1 untested, 9 tested', '90.00%')
+        ."[mutate-file] <<< app/Modules/Kiosk/Domain/Good.php: llega al minimo\n"
+        ."[mutate-file] >>> app/Modules/Kiosk/Domain/NoCode.php (minimo 70 por ciento)\n"
+        ."\n  No mutations created.\n"
+        ."[mutate-file] <<< app/Modules/Kiosk/Domain/NoCode.php: sin codigo que mutar\n"
+        ."[mutate-file] >>> app/Modules/Kiosk/Domain/Weak.php (minimo 70 por ciento)\n"
+        .mutationLogScriptPestOutput('2 untested, 2 tested', '50.00%', $vivosDeWeak)
+        ."[mutate-file] <<< app/Modules/Kiosk/Domain/Weak.php: ERROR: no llega al 70 por ciento por si solo; el conjunto lo tapaba\n";
+
+    [$codigo, $texto] = mutationLogScriptRun('summary', [], $salida);
+
+    expect($codigo)->toBe(0)
+        ->and($texto)->toContain('| Puntuacion (MSI) | **97.50%** |')
+        ->and($texto)->toContain('| Mutantes | 1 untested, 39 tested |')
+        ->and($texto)->toContain('| 1 | `app/Modules/Kiosk/Domain/Weak.php` |')
+        ->and($texto)->not->toContain('| 3 | `app/Modules/Kiosk/Domain/Weak.php` |')
+        ->and($texto)->not->toContain('No mutations created')
+        ->and($texto)->toContain("| `app/Modules/Kiosk/Domain/Good.php` | 90.00% | llega al minimo |\n"
+            ."| `app/Modules/Kiosk/Domain/NoCode.php` | - | sin codigo que mutar |\n"
+            .'| `app/Modules/Kiosk/Domain/Weak.php` | 50.00% | ERROR: no llega al 70 por ciento por si solo; el conjunto lo tapaba |');
+})->group('RQ-10');
+
+it('dice en el resumen que una pasada por fichero no termino', function (): void {
+    $salida = mutationLogScriptPestOutput('0 untested, 40 tested', '100.00%')
+        ."[mutate-file] >>> app/Modules/Kiosk/Domain/Slow.php (minimo 70 por ciento)\n"
+        ."\n  7 Mutations for 1 Files created\n";
+
+    [, $texto] = mutationLogScriptRun('summary', [], $salida);
+
+    expect($texto)->toContain('| Puntuacion (MSI) | **100.00%** |')
+        ->and($texto)->toContain('| `app/Modules/Kiosk/Domain/Slow.php` | - | sin terminar |');
+})->group('RQ-10');
+
+it('avisa en el resumen cuando el tope deja sin pasadas por fichero', function (): void {
+    $salida = mutationLogScriptPestOutput('0 untested, 40 tested', '100.00%')
+        ."[mutate-file] AVISO: cambian 13 clases, traits o enums de dominio y el tope de pasadas por fichero es 12 (MUTATE_FILE_MAX).\n";
+
+    [, $texto] = mutationLogScriptRun('summary', [], $salida);
+
+    expect($texto)->toContain('| Puntuacion (MSI) | **100.00%** |')
+        ->and($texto)->toContain('**Sin pasadas por fichero.** cambian 13 clases');
+})->group('RQ-10');
+
+/**
+ * Los pasos `run:` de los workflows que pasan una orden por `tee` y no
+ * conservan su codigo de salida: el `run:` de GitHub es `bash -e` SIN
+ * `pipefail` salvo con `shell: bash` explicito, y entonces el paso toma el
+ * codigo de `tee`, que es 0.
+ *
+ * @param  array<mixed>  $workflow  El workflow ya leido como YAML.
+ * @return list<string> «job › paso» de cada paso que pierde el codigo.
+ */
+function mutationLogScriptTeeWithoutPipefail(array $workflow): array
+{
+    $sinPipefail = [];
+    $shellDelWorkflow = $workflow['defaults']['run']['shell'] ?? null;
+
+    foreach ((array) ($workflow['jobs'] ?? []) as $job => $definicion) {
+        $shellDelJob = $definicion['defaults']['run']['shell'] ?? $shellDelWorkflow;
+
+        foreach ((array) ($definicion['steps'] ?? []) as $indice => $paso) {
+            $orden = (string) ($paso['run'] ?? '');
+            $shell = $paso['shell'] ?? $shellDelJob;
+
+            if (preg_match('/\|\s*tee\b/', $orden) === 1
+                && $shell !== 'bash'
+                && preg_match('/^\s*set\s+-[a-z]*o\s+pipefail\b/m', $orden) !== 1) {
+                $sinPipefail[] = $job.' › '.($paso['name'] ?? '#'.$indice);
+            }
+        }
+    }
+
+    return $sinPipefail;
+}
+
+it('reconoce el paso que pasa una orden por tee sin conservar su codigo de salida', function (array $paso, bool $loPierde): void {
+    $workflow = ['jobs' => ['j' => ['steps' => [['name' => 'p', ...$paso]]]]];
+
+    expect(mutationLogScriptTeeWithoutPipefail($workflow))->toBe($loPierde ? ['j › p'] : []);
+})->with([
+    'tee sin pipefail' => [['run' => "make mutate 2>&1 | tee log\n"], true],
+    'pipefail en otra orden que no es set' => [['run' => "echo set -o pipefail\nmake mutate | tee log\n"], true],
+    'set -euo pipefail' => [['run' => "set -euo pipefail\nmake mutate | tee log\n"], false],
+    'set -o pipefail' => [['run' => "set -o pipefail\nmake mutate | tee log\n"], false],
+    'shell: bash explicito' => [['shell' => 'bash', 'run' => "make mutate | tee log\n"], false],
+    'sin tee' => [['run' => "make mutate >log\n"], false],
+])->group('RQ-10');
+
+it('ningun paso de los workflows pasa una orden por tee sin pipefail', function (): void {
+    $workflows = glob(Repo::file('.github/workflows/*.yml')) ?: [];
+    $sinPipefail = array_merge(...array_map(
+        static fn (string $fichero): array => array_map(
+            static fn (string $paso): string => basename($fichero).' › '.$paso,
+            mutationLogScriptTeeWithoutPipefail((array) Yaml::parseFile($fichero)),
+        ),
+        $workflows,
+    ));
+
+    expect(count($workflows))->toBeGreaterThan(5)
+        ->and($sinPipefail)->toBe([], 'Pasos con «| tee» que toman el codigo de tee y no el de la orden');
 })->group('RQ-10');
 
 it('deja que el directorio de OPcache apagado lo resuelva el shell que ejecuta Pest', function (): void {

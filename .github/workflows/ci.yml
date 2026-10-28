@@ -1052,6 +1052,7 @@ jobs:
         # justo lo que faltaba: antes, `continue-on-error: true` trataba los
         # dos casos igual (IMPORTANTE 5 de la auditoria).
         run: |
+          set -o pipefail
           make sast-community SEMGREP_FORMAT=json >sast-community.json || status=$?
           status=${status:-0}
           jq -r '(.results // []) | group_by(.extra.severity) | map("\(.[0].extra.severity): \(length)") | .[]' \
@@ -1145,6 +1146,7 @@ jobs:
         # hallazgos, y es lo primero que hay que leer al triar
         # (docs/runbooks/triaje-hallazgos-seguridad.md).
         run: |
+          set -o pipefail
           set +e
           make trivy-fs TRIVY_FS_SCANNERS=vuln TRIVY_FORMAT=json >trivy-fs.json
           estado=$?
@@ -1177,6 +1179,7 @@ jobs:
         # queda sin excepciones vigentes. Mismo tratamiento del codigo de
         # salida que en el paso anterior.
         run: |
+          set -o pipefail
           set +e
           make trivy-image TRIVY_IMAGE_SCANNERS=vuln TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
@@ -3698,8 +3701,12 @@ jobs:
         # El log entero va a un fichero (M8): `gh run view --log` lo corta
         # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
         # suben como artefacto.
+        # `set -o pipefail`: sin el, el `run:` de GitHub (bash -e sin pipefail)
+        # toma el codigo de `tee`, siempre 0, y la mutacion no podria fallar.
         if: always()
-        run: make mutate 2>&1 | tee "${RUNNER_TEMP}/mutacion-completa.log"
+        run: |
+          set -euo pipefail
+          make mutate 2>&1 | tee "${RUNNER_TEMP}/mutacion-completa.log"
 
       - name: Resumen
         if: always()

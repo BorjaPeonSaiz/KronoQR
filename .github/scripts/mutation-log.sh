@@ -22,6 +22,9 @@
 #       vivos, de mas a menos (M8: `gh run view --log` corta el log de la
 #       mutacion antes de la puntuacion, y el resumen del job era un texto
 #       fijo). Informativo: no falla por la puntuacion, eso lo hace `--min`.
+#       Las pasadas por fichero de `make mutate-changed` (entre
+#       «[mutate-file] >>>» y «[mutate-file] <<<») no cuentan para la nota
+#       ni para los vivos del conjunto: salen en una tabla propia.
 #
 # FICHERO es la salida de Pest ya capturada, con o sin colores. Con
 # `--parallel` Pest no imprime una linea por mutante, solo los vivos con su
@@ -53,6 +56,42 @@ reparto() {
   limpia "$1" | grep -E '^ ?Mutations: ' | tail -n 1 | sed 's/^ \{0,1\}Mutations: //; s/ *$//' || true
 }
 
+# El resumen de la pasada del conjunto: FICHERO ya limpio y sin las pasadas
+# por fichero.
+resumen_conjunto() {
+  nota=$(grep -E '^ ?Score: ' "$1" | tail -n 1 | sed 's/^ \{0,1\}Score: //; s/ *$//' || true)
+  generados=$(grep -E 'Mutations for [0-9]+ Files created' "$1" | tail -n 1 | sed 's/^ *//; s/ *$//' || true)
+  mutantes=$(reparto "$1")
+  canario=$(sed -n 's/^\[mutate-canary\] Canario correcto: \([^.]*\)\..*/\1/p' "$1" | tail -n 1)
+  if grep -q 'No mutations created' "$1"; then
+    printf 'Pest no ha creado ningun mutante (%sNo mutations created%s).\n' '`' '`'
+    motivo=$(grep -E '^\[make\]' "$1" | tail -n 1 || true)
+    [ -z "$motivo" ] || printf '%s\n' "$motivo"
+    return 0
+  fi
+  if [ -z "$generados" ]; then
+    motivo=$(grep -E '^\[make\]' "$1" | tail -n 1 || true)
+    printf 'No se ha mutado nada en esta pasada. %s\n' "${motivo:-El log completo va en el artefacto del job.}"
+    return 0
+  fi
+  if [ -z "$nota" ]; then
+    printf '**Sin puntuacion**: la pasada no llego al final. El log completo va en el artefacto del job.\n'
+    return 0
+  fi
+  printf '| | |\n|---|---|\n'
+  printf '| Puntuacion (MSI) | **%s** |\n' "$nota"
+  printf '| Canario | %s |\n' "${canario:-no consta en el log}"
+  printf '| Mutantes | %s |\n' "${mutantes:-?}"
+  printf '| Generados | %s |\n\n' "${generados:-?}"
+  vivos=$(sed -n 's/^ \{0,1\}UNTESTED \([^ ]*\) .*/\1/p' "$1" | sort | uniq -c | sort -k1,1nr -k2,2 || true)
+  if [ -z "$vivos" ]; then
+    printf 'Ningun mutante vivo.\n'
+    return 0
+  fi
+  printf 'Ficheros con mutantes vivos, de mas a menos. El diff de cada uno esta en el artefacto del job.\n\n'
+  printf '| Vivos | Fichero |\n|---:|---|\n'
+  printf '%s\n' "$vivos" | awk '{ printf "| %s | `%s` |\n", $1, $2 }'
+}
 [ "$#" -ge 2 ] || uso
 modo="$1"
 
@@ -88,43 +127,42 @@ summary)
     printf '[mutation-log] ERROR: no se puede leer %s\n' "$fichero" >&2
     exit 2
   }
-  nota=$(limpia "$fichero" | grep -E '^ ?Score: ' | tail -n 1 | sed 's/^ \{0,1\}Score: //; s/ *$//' || true)
-  generados=$(limpia "$fichero" | grep -E 'Mutations for [0-9]+ Files created' | tail -n 1 | sed 's/^ *//; s/ *$//' || true)
-  mutantes=$(reparto "$fichero")
-  canario=$(limpia "$fichero" | sed -n 's/^\[mutate-canary\] Canario correcto: \([^.]*\)\..*/\1/p' | tail -n 1)
+  limpio=$(mktemp)
+  conjunto=$(mktemp)
+  trap 'rm -f "$limpio" "$conjunto"' EXIT
+  limpia "$fichero" >"$limpio"
+  # Las pasadas por fichero de `make mutate-changed` van entre
+  # «[mutate-file] >>>» y «[mutate-file] <<<». Fuera de ellas queda la pasada
+  # del conjunto, que es la que da la nota, el reparto y los vivos; cada
+  # fichero sale despues en su propia tabla.
+  sed '/^\[mutate-file\] >>> /,/^\[mutate-file\] <<< /d' "$limpio" >"$conjunto"
   printf '### %s\n\n' "$titulo"
   # Si el canario falla, el log lleva SU salida, y su puntuacion no es la del
   # dominio: se dice eso y nada mas.
-  if limpia "$fichero" | grep -q '^\[mutate-canary\] ERROR'; then
+  if grep -q '^\[mutate-canary\] ERROR' "$conjunto"; then
     printf '**El canario ha fallado**: la mutacion del dominio no se ha ejecutado. El motivo esta en el log (artefacto del job).\n'
     exit 0
   fi
-  if limpia "$fichero" | grep -q 'No mutations created'; then
-    printf 'Pest no ha creado ningun mutante (%sNo mutations created%s).\n' '`' '`'
-    exit 0
+  resumen_conjunto "$conjunto"
+  aviso=$(sed -n 's/^\[mutate-file\] AVISO: //p' "$limpio" | tail -n 1)
+  if [ -n "$aviso" ]; then
+    printf '\n**Sin pasadas por fichero.** %s\n' "$aviso"
   fi
-  if [ -z "$generados" ]; then
-    motivo=$(limpia "$fichero" | grep -E '^\[make\]' | tail -n 1 || true)
-    printf 'No se ha mutado nada en esta pasada. %s\n' "${motivo:-El log completo va en el artefacto del job.}"
-    exit 0
+  por_fichero=$(awk '
+    function fila(f, n, e) { printf "| `%s` | %s | %s |\n", f, n, e }
+    /^\[mutate-file\] >>> / { if (f != "") fila(f, nota, "sin terminar"); f = $3; nota = "-"; next }
+    f != "" && /^ ?Score: / { nota = $0; sub(/^ ?Score: /, "", nota); sub(/ *$/, "", nota); next }
+    /^\[mutate-file\] <<< / {
+      linea = $0; sub(/^\[mutate-file\] <<< /, "", linea); i = index(linea, ": ")
+      fila(substr(linea, 1, i - 1), nota, substr(linea, i + 2)); f = ""; next
+    }
+    END { if (f != "") fila(f, nota, "sin terminar") }
+  ' "$limpio")
+  if [ -n "$por_fichero" ]; then
+    printf '\nCada fichero por separado (minimo propio, %sMUTATE_FILE_MIN%s):\n\n' '`' '`'
+    printf '| Fichero | Puntuacion | Estado |\n|---|---:|---|\n'
+    printf '%s\n' "$por_fichero"
   fi
-  if [ -z "$nota" ]; then
-    printf '**Sin puntuacion**: la pasada no llego al final. El log completo va en el artefacto del job.\n'
-    exit 0
-  fi
-  printf '| | |\n|---|---|\n'
-  printf '| Puntuacion (MSI) | **%s** |\n' "$nota"
-  printf '| Canario | %s |\n' "${canario:-no consta en el log}"
-  printf '| Mutantes | %s |\n' "${mutantes:-?}"
-  printf '| Generados | %s |\n\n' "${generados:-?}"
-  vivos=$(limpia "$fichero" | sed -n 's/^ \{0,1\}UNTESTED \([^ ]*\) .*/\1/p' | sort | uniq -c | sort -k1,1nr -k2,2 || true)
-  if [ -z "$vivos" ]; then
-    printf 'Ningun mutante vivo.\n'
-    exit 0
-  fi
-  printf 'Ficheros con mutantes vivos, de mas a menos. El diff de cada uno esta en el artefacto del job.\n\n'
-  printf '| Vivos | Fichero |\n|---:|---|\n'
-  printf '%s\n' "$vivos" | awk '{ printf "| %s | `%s` |\n", $1, $2 }'
   ;;
 *) uso ;;
 esac
