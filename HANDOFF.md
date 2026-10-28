@@ -89,7 +89,14 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 20 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** integrado: #212, `main` `5d234948` (28-10-2026). **Bloque 21** («Base de datos») en curso en `perf/purga-y-planes`.
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 20 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** integrado: #212, `main` `5d234948` (28-10-2026). **Bloque 21** («Base de datos») hecho en `perf/purga-y-planes`, pendiente de CI, revisiones y PR.
+
+Lo que conviene saber del bloque 21 (rama `perf/purga-y-planes`; planes medidos antes y después en el commit de cada tarea):
+
+- **21.1:** `work_record_purge_batch` lee lo vencido de cada tabla una vez por índice y lo parte en tandas; índice parcial sobre `LEAST(occurred_at, recorded_at)` de los escaneos sin tramo con `CREATE STATISTICS`. Sin nada vencido, de 573 ms a 2 ms. `inspect()` con un atraso grande todavía recorre `scan_events` (elección barata del planificador).
+- **21.2:** 19 índices de FK `RESTRICT` (`RestrictForeignKeyIndexesTest`), ausentes como anti-join, calendario con serie de enteros; `work_mem` se queda en 4MB (motivo en `infra/compose.prod.yaml`).
+- **21.3:** `MigrationsRoundTripTest` compara el catálogo tras cada `down()`/`up()`; corrigió tres `down()` (`2026_09_22_110000`, `2026_10_24_100000`, `2026_10_09_100000`: este último ya no devuelve a la aplicación escritura sobre `migrations`). En desarrollo, `fichaje_test` puede guardar funciones antiguas que `migrate:fresh` no borra: borrarlas a mano si sale «Restos tras deshacer».
+- **21.4:** `kioskScansBetween` y la historia de patrones van por índice; DB9 cerrado en el doc 07.
 
 Lo que conviene saber del bloque 20 (integrado: #212; decisiones en Engram `2.3.0/b20-decisiones`):
 
