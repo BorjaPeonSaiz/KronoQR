@@ -121,11 +121,60 @@ function wallClockAssertionsReaders(): array
     return wallClockAssertionsFilesMatching('/\b(?:hrtime|microtime)\s*\(/');
 }
 
+/**
+ * Lo que, en un fichero que usa WallClockBudget, mide o juzga el tiempo fuera
+ * de una prueba del grupo de rendimiento. Antes bastaba con que el fichero
+ * nombrara `WallClockBudget::` en alguna parte para eximirlo entero, y una
+ * prueba funcional del mismo fichero podia afirmar una duracion a pelo.
+ *
+ * - Una prueba sin `->group(…, 'performance')` no lee el reloj, no llama a
+ *   WallClockBudget y no afirma sobre la duracion que devuelve un ayudante
+ *   (`expect(…['seconds']…)`); puede imprimirla, que no falla por carga.
+ * - Un ayudante de nivel superior que lee el reloj y devuelve la duracion
+ *   suelta (sin la clave `seconds`) solo se llama desde pruebas del grupo: si
+ *   no, una prueba funcional podria juzgarla sin que la regla anterior lo viera.
+ *
+ * @return list<string> «linea N: lo encontrado», en orden.
+ */
+function wallClockAssertionsOutsidePerformance(string $source): array
+{
+    $offences = [];
+    $linea = static fn (int $offset): int => substr_count(substr($source, 0, $offset), "\n") + 1;
+
+    preg_match_all('/^function\s+(?<nombre>\w+)\(.*?^\}/ms', $source, $ayudantes, PREG_SET_ORDER);
+    $cronometros = array_values(array_map(
+        static fn (array $ayudante): string => $ayudante['nombre'],
+        array_filter(
+            $ayudantes,
+            static fn (array $ayudante): bool => preg_match('/\b(?:hrtime|microtime)\s*\(/', $ayudante[0]) === 1
+                && preg_match('/\'seconds\'\s*=>/', $ayudante[0]) !== 1,
+        ),
+    ));
+    $llamadaACronometro = $cronometros === [] ? '' : '|\b(?:'.implode('|', $cronometros).')\(';
+
+    preg_match_all('/^(?:it|test)\(.*?^\}\)(?<cadena>[^;]*);/ms', $source, $pruebas, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+    foreach ($pruebas as $prueba) {
+        if (str_contains($prueba['cadena'][0], "'".WallClockBudget::GROUP."'")) {
+            continue;
+        }
+
+        $juzgaElTiempo = '/\b(?:hrtime|microtime)\s*\(|WallClockBudget::|\bexpect\([^;]*?\[\s*\'seconds\'\s*\]'.$llamadaACronometro.'/s';
+
+        if (preg_match($juzgaElTiempo, $prueba[0][0], $hallado, PREG_OFFSET_CAPTURE) === 1) {
+            $offences[] = 'linea '.$linea($prueba[0][1] + $hallado[0][1]).': '.$hallado[0][0];
+        }
+    }
+
+    return $offences;
+}
+
 it('no lee el reloj de pared en una prueba funcional salvo a traves del presupuesto de la suite de rendimiento', function (): void {
     $sinPasar = array_values(array_filter(
         wallClockAssertionsReaders(),
         static fn (string $file): bool => ! array_key_exists($file, WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO)
-            && ! str_contains(wallClockAssertionsSource($file), 'WallClockBudget::'),
+            && (! str_contains(wallClockAssertionsSource($file), 'WallClockBudget::')
+                || wallClockAssertionsOutsidePerformance(wallClockAssertionsSource($file)) !== []),
     ));
 
     expect($sinPasar)->toBe(
@@ -136,6 +185,39 @@ it('no lee el reloj de pared en una prueba funcional salvo a traves del presupue
         .'de este fichero con su motivo.',
     );
 })->group('RQ-14');
+
+it('no deja que una prueba funcional juzgue el tiempo por compartir fichero con WallClockBudget', function (string $fuente, int $infracciones): void {
+    expect(wallClockAssertionsOutsidePerformance($fuente))->toHaveCount($infracciones);
+})->with([
+    'el ayudante mide y solo la prueba de rendimiento juzga' => [
+        "<?php\nfunction medir(): array\n{\n    \$t = hrtime(true);\n\n    return ['seconds' => (hrtime(true) - \$t) / 1e9];\n}\n\nit('a', function () {\n    expect(medir())->toHaveKey('seconds');\n})->group('x');\n\nit('b', function () {\n    WallClockBudget::expectMedianBelow(WallClockBudget::samples(fn () => medir()['seconds']), 1.0, 'y');\n})->group('x', 'performance');\n",
+        0,
+    ],
+    'una prueba funcional imprime la duracion sin juzgarla' => [
+        "<?php\nit('a', function () {\n    \$d = medir();\n    fwrite(STDERR, round(\$d['seconds'], 3).\" s\\n\");\n    expect(\$d['body'])->not->toBe('');\n})->group('x');\n",
+        0,
+    ],
+    'una prueba funcional afirma la duracion del ayudante' => [
+        "<?php\nit('a', function () {\n    expect(medir()['seconds'])->toBeLessThan(5.0);\n})->group('x');\n",
+        1,
+    ],
+    'una prueba funcional lee el reloj' => [
+        "<?php\nit('a', function () {\n    \$t = microtime(true);\n    accion();\n    expect(microtime(true) - \$t)->toBeLessThan(1.0);\n})->group('x');\n",
+        1,
+    ],
+    'una prueba funcional usa WallClockBudget' => [
+        "<?php\nit('a', function () {\n    WallClockBudget::expectMedianBelow([0.1], 1.0, 'y');\n})->group('x');\n",
+        1,
+    ],
+    'un ayudante que devuelve la duracion suelta, llamado solo desde rendimiento' => [
+        "<?php\nit('b', function () {\n    WallClockBudget::expectRatioBelow(cronometrar(fn () => 1) / 1.0, 1.5, 'y');\n})->group('x', 'performance');\n\nfunction cronometrar(callable \$f): float\n{\n    \$t = hrtime(true);\n    \$f();\n\n    return (hrtime(true) - \$t) / 1e6;\n}\n",
+        0,
+    ],
+    'un ayudante que devuelve la duracion suelta, llamado desde una prueba funcional' => [
+        "<?php\nit('a', function () {\n    expect(cronometrar(fn () => 1))->toBeLessThan(50.0);\n})->group('x');\n\nfunction cronometrar(callable \$f): float\n{\n    \$t = hrtime(true);\n    \$f();\n\n    return (hrtime(true) - \$t) / 1e6;\n}\n",
+        1,
+    ],
+])->group('RQ-14');
 
 it('solo exime ficheros que existen y siguen leyendo el reloj', function (): void {
     // Una excepcion que sobrevive a su fichero es un agujero esperando a alguien.
