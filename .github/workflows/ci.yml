@@ -681,10 +681,30 @@ jobs:
             base="${EVENT_BEFORE}"
           fi
           inicio_mutacion=$(date +%s)
-          make mutate-changed MUTATE_BASE="${base}"
+          # El log entero va a un fichero (M8): `gh run view --log` lo corta
+          # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
+          # suben como artefacto.
+          make mutate-changed MUTATE_BASE="${base}" 2>&1 | tee "${RUNNER_TEMP}/mutacion-acotada.log"
           # Para el presupuesto del run ①-③ (paso final): la mutacion de lo que
           # el cambio toca depende de cuanto dominio toque, no de la CI.
           echo "MUTATION_SECONDS=$(($(date +%s) - inicio_mutacion))" >>"$GITHUB_ENV"
+
+      - name: Resumen de la mutacion acotada
+        if: always()
+        run: |
+          log="${RUNNER_TEMP}/mutacion-acotada.log"
+          if [ -f "${log}" ]; then
+            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion acotada a lo que el cambio toca (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Subir el log completo de la mutacion acotada
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacion-acotada-log
+          path: ${{ runner.temp }}/mutacion-acotada.log
+          if-no-files-found: ignore
+          retention-days: 30
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -3633,6 +3653,12 @@ jobs:
   # un runner lento. Deja de formar parte de la CI manual de cierre de bloque;
   # alli manda `make mutate-changed` del job `unit`. Se puede pedir a mano con
   # el input `full_mutation`.
+  #
+  # Desde la 2.3.0 (tarea 22.5) el job hace tres cosas mas: el canario antes de
+  # mutar (R2-QB-06, dentro de `make mutate`), la puerta de la parte del
+  # dominio que la mutacion ve (`make mutate-scope`, M6) y el log entero como
+  # artefacto con la puntuacion y los ficheros con mutantes vivos en el resumen
+  # (M8, R2-QB-01). El MSI se lee del resumen del run, no de `gh run view --log`.
   #-----------------------------------------------------------------------------
   mutation:
     name: "Mutacion completa (RQ-10, nocturna)"
@@ -3653,20 +3679,49 @@ jobs:
           # con XDEBUG_MODE=coverage.
           coverage: xdebug
 
+      - name: Parte del dominio que la mutacion ve (cobertura Unit de Modules/*/Domain, M6)
+        # `--covered-only` solo muta lo que la suite Unit ejecuta. Esta puerta
+        # impide que esa parte encoja sin que nadie lo vea; el umbral y el
+        # motivo de no quitar la opcion estan junto a MUTATION_SCOPE_MIN en el
+        # Makefile. Va antes y no despues para que su rojo no dependa de que
+        # la mutacion termine en 120 min.
+        run: make mutate-scope
+
       - name: Mutacion COMPLETA sobre Modules/*/Domain (MSI >= 80 %)
-        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`.
-        run: make mutate
+        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`, y antes
+        # el canario (`make mutate-canary`, R2-QB-06).
+        # `if: always()`: si la puerta de arriba falla, la mutacion se mide
+        # igual; son dos preguntas distintas.
+        # El log entero va a un fichero (M8): `gh run view --log` lo corta
+        # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
+        # suben como artefacto.
+        if: always()
+        run: make mutate 2>&1 | tee "${RUNNER_TEMP}/mutacion-completa.log"
 
       - name: Resumen
         if: always()
         run: |
+          log="${RUNNER_TEMP}/mutacion-completa.log"
+          if [ -f "${log}" ]; then
+            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          fi
           {
-            echo "### Mutacion completa (RQ-10)"
             echo ""
             echo "MSI >= 80 % sobre Modules/*/Domain. En cada *push* solo se muta lo"
             echo "que ese push cambia (\`make mutate-changed\`, job \`unit\`); esta es la"
-            echo "pasada completa, nocturna y del disparo manual."
+            echo "pasada completa, nocturna y del disparo manual con \`full_mutation\`."
           } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Subir el log completo de la mutacion
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacion-completa-log
+          path: ${{ runner.temp }}/mutacion-completa.log
+          if-no-files-found: ignore
+          retention-days: 30
 
   #-----------------------------------------------------------------------------
   # gitleaks sobre TODAS las referencias (nocturno)

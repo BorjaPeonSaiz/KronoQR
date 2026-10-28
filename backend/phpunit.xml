@@ -82,6 +82,18 @@
         <testsuite name="Restore">
             <directory>tests/Restore</directory>
         </testsuite>
+        <!--
+            El canario de la mutacion (R2-QB-06). Lo muta `make mutate-canary`,
+            antes de `mutate` y de `mutate-changed`, para demostrar que la
+            pasada distingue un mutante muerto de uno vivo: Pest cuenta como
+            muerto cualquier fallo del proceso hijo, tambien los del entorno.
+            Va en su propia suite para que esa pasada no cargue la suite Unit
+            entera; `make test` la ejecuta como a las demas.
+            Tests\MutationCanary\MutationCanary lo explica.
+        -->
+        <testsuite name="MutationCanary">
+            <directory>tests/MutationCanary</directory>
+        </testsuite>
     </testsuites>
     <!--
         LA SUITE DE RENDIMIENTO NO CORRE CON LAS DEMAS (D4 de la 2.3.0, Q2).
@@ -105,6 +117,10 @@
     <source>
         <include>
             <directory>app</directory>
+            <!-- Sin cobertura, la mutacion acotada a lo cubierto no lo
+                 mutaria y el canario no cantaria nunca (suite MutationCanary,
+                 arriba). -->
+            <file>tests/MutationCanary/MutationCanary.php</file>
         </include>
     </source>
     <php>

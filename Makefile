@@ -250,7 +250,7 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration test-performance e2e-performance \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill restore-drill-pitr observability-check
 
 help: ## Muestra esta ayuda
@@ -293,6 +293,8 @@ help: ## Muestra esta ayuda
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
 	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
+	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
+	@echo "  make mutate-scope     Parte del dominio que la mutacion ve: cobertura de la suite Unit (nocturna)"
 	@echo "  make e2e              Playwright: quiosco, panel y portal"
 	@echo "  make e2e-performance  RNF-P-01: p95 y p99 de la latencia percibida sobre 60 escaneos (nocturna)"
 	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
@@ -1170,7 +1172,77 @@ endif
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
 	$(RUN_APP_XDEBUG) php -d memory_limit=$(COVERAGE_MEMORY_LIMIT) $(PEST) --coverage
 
-mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
+# Las opciones de Pest que comparten `mutate`, `mutate-changed` y
+# `mutate-canary`. Una sola definicion porque el canario solo vale si muta con
+# las MISMAS opciones que el dominio: una opcion que rompa el proceso hijo
+# (R2-QB-06 lo reprodujo con `--processes=8`) tiene que romper tambien el
+# canario. Cada opcion se explica en el comentario de `mutate`, abajo; lo que
+# cambia entre los tres es `--path`, `--testsuite` y `--min`.
+MUTATE_OPTIONS := --mutate --parallel --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides
+
+# El CANARIO (R2-QB-06 de la 2.2.0, tarea 22.5 de la 2.3.0). Pest Mutate da
+# por muerto un mutante cuando el proceso hijo sale con un codigo distinto de
+# cero, y eso incluye los fallos del propio entorno: memoria, una extension,
+# una opcion que el hijo no entiende. Medido (28-10-2026): el canario con
+# `--processes=8` da «7 tested», 100 %, y sin ella «4 untested, 3 tested».
+# Un dominio entero mutado asi saldria al 100 % sin que nada lo distinguiera
+# de un dominio bien probado.
+#
+# `tests/MutationCanary/MutationCanary.php` tiene dos metodos: uno con una
+# prueba que mata sus 3 mutantes y otro con una prueba que no mata ninguno de
+# sus 4. Se muta con MUTATE_OPTIONS y su propia suite (segundos, no la suite
+# Unit entera) y .github/scripts/mutation-log.sh exige EXACTAMENTE el reparto
+# de abajo. Mas «tested»: el hijo falla por su cuenta. Mas «untested»: el
+# mutante no llega al hijo (OPcache, ver tools/mutation/zzz-no-opcache.ini).
+# Corre antes de `mutate` y de `mutate-changed`, y si no da lo esperado
+# ninguna de las dos se ejecuta. Si se cambian a proposito el canario o los
+# mutadores de Pest (una version nueva), se ajusta esta cifra en la misma PR.
+MUTATION_CANARY_EXPECTED := 4 untested, 3 tested
+
+mutate-canary: ## Canario de la mutacion: la pasada distingue un mutante vivo de uno muerto (R2-QB-06)
+	@log="$$(mktemp)"; st="$$(mktemp)"; \
+	( $(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=tests/MutationCanary/MutationCanary.php --testsuite=MutationCanary'; echo $$? >"$$st" ) >"$$log" 2>&1; \
+	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
+	if [ "$$rc" -ne 0 ]; then \
+		cat "$$log"; \
+		echo "[make] ERROR: la pasada del canario de la mutacion ha fallado (codigo $$rc)."; \
+	else \
+		sh "$(CURDIR)/.github/scripts/mutation-log.sh" canary "$(MUTATION_CANARY_EXPECTED)" "$$log" || { rc=$$?; cat "$$log"; }; \
+	fi; \
+	rm -f "$$log" "$$st"; \
+	exit "$$rc"
+
+# LO QUE LA MUTACION NO VE (M6 de la 2.1.0, tarea 22.5 de la 2.3.0).
+#
+# `--covered-only` muta solo las lineas que la suite Unit ejecuta: un fichero
+# de dominio sin prueba unitaria no genera ningun mutante, y una linea sin
+# cubrir de un fichero cubierto tampoco. No se quita, y el motivo esta medido
+# (28-10-2026, copia en /tmp del contenedor): la suite Unit cubre el 88,33 %
+# de las sentencias de Modules/*/Domain (6620 de 7495). De las 875 que quedan
+# fuera, 536 estan en 117 ficheros sin ninguna prueba unitaria —excepciones
+# que solo construyen su mensaje, y valores de informes e importaciones que
+# prueban Feature e Integration— y 339 en lineas sueltas de ficheros cubiertos.
+# Sin `--covered-only` esas sentencias cuentan como mutantes vivos («uncovered»)
+# y el MSI bajaria al ~75 % (medido en la 2.2.0) sin que ninguna prueba sea
+# mas debil: mediria cuanto dominio prueba Feature en vez de la Unit.
+#
+# Lo que si se impide es que esa parte CREZCA en silencio: `mutate-scope` mide
+# la cobertura de la suite Unit sobre el dominio y falla por debajo de
+# MUTATION_SCOPE_MIN. Es la fraccion del dominio que la mutacion puede ver.
+# Un modulo nuevo sin pruebas unitarias la baja y la noche lo dice. El umbral
+# es la cifra medida, redondeada hacia abajo: se sube cuando se mida mas, no
+# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation`,
+# y no en cada push: es la suite Unit con Xdebug (48 s en el contenedor).
+# Con el bind mount de Docker Desktop la cifra local sale mas baja (faltan
+# ficheros en el recorrido de app/): se mide en una copia o en la CI.
+MUTATION_SCOPE_MIN    := 88
+MUTATION_SCOPE_CLOVER := storage/framework/cache/clover-unit.xml
+
+mutate-scope: ## Fraccion del dominio que la mutacion ve: cobertura Unit de Modules/*/Domain >= MUTATION_SCOPE_MIN (M6)
+	$(RUN_APP_XDEBUG) $(PEST) --testsuite=Unit --coverage-clover=$(MUTATION_SCOPE_CLOVER)
+	$(RUN_APP) php tools/coverage-gate.php $(MUTATION_SCOPE_CLOVER) $(MUTATION_SCOPE_MIN) 'app/Modules/*/Domain/*'
+
+mutate: mutate-canary ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
 	@echo "[make] La mutacion se ejecuta sobre Modules/*/Domain, que se escribe en la"
@@ -1216,7 +1288,7 @@ else
 # --parallel de la suite COMPLETA vive en pruebas Feature, que aqui no corren.
 # Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
+	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80'
 endif
 
 # `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
@@ -1241,6 +1313,15 @@ endif
 # fichero seria iterar `--path` de uno en uno (mas lenta, mismo coste en total
 # pero sin paralelismo entre ficheros) y NO esta decidida: la politica vigente
 # es la del 24-09-2026, el umbral sobre el subconjunto que cambia.
+#
+# EL `\$$(pwd)` ESCAPADO de la receta (28-10-2026). La orden va entre comillas
+# dobles, y sin escapar `$(pwd)` lo expandia el shell del anfitrion: en la CI
+# da igual (es el mismo `backend/`), pero en local, con `docker compose exec`,
+# PHP_INI_SCAN_DIR apuntaba a una ruta de Windows que el contenedor no tiene y
+# la mutacion acotada corria con OPcache encendido (medido: `opcache.enable_cli`
+# 1 con la receta antigua, 0 con esta), que es justo lo que
+# tools/mutation/zzz-no-opcache.ini apaga. Ahora lo expande el `sh` de dentro,
+# y por eso el valor va entre comillas dobles escapadas y no simples.
 #
 # SIN MUTANTES. Con cero mutantes Pest da nota 0 y falla («No mutations
 # created»; `ignoreMinScoreOnZeroMutations` es false). Lo que se distingue:
@@ -1292,9 +1373,10 @@ else
 		exit 0; \
 	fi; \
 	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
+	$(MAKE) --no-print-directory mutate-canary || exit $$?; \
 	echo "[make] Mutando lo cambiado frente a $$base: $$paths"; \
 	log="$$(mktemp)"; st="$$(mktemp)"; \
-	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=':$$(pwd)/tools/mutation' $(PEST) --mutate --parallel --path=$$paths --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
+	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$paths --testsuite=Unit --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
 	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
 	if [ "$$rc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
 		solo_interfaces=1; \
