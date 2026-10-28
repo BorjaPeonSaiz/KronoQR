@@ -53,7 +53,12 @@ return [
     /*
      * El middleware de validacion se antepone al grupo `api`, que es donde vive
      * routes/api_v1.php. Solo actua en las pruebas que llaman a Spectator::using().
+     *
+     * Y al grupo `channel-auth`, que es el de la unica ruta del contrato que
+     * vive fuera de `api`: `POST /api/v1/broadcasting/auth` (ver
+     * bootstrap/app.php). Sin el, Spectator no la veia y sus validaciones
+     * pasaban sin comprobar nada (Q3).
      */
-    'middleware_groups' => ['api'],
+    'middleware_groups' => ['api', 'channel-auth'],
 
 ];

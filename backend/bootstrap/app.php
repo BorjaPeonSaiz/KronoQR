@@ -139,9 +139,16 @@ return Application::configure(basePath: dirname(__DIR__))
              *
              * FUERA del grupo `api`, como estaba: el cliente de Pusher envia un
              * formulario y la puerta de tipos de contenido no tiene que verlo.
+             *
+             * EN SU PROPIO GRUPO, `channel-auth`, vacio. No anade nada en
+             * produccion: existe para que Spectator, que se engancha por grupo
+             * (`config/spectator.php`), valide tambien esta ruta contra el
+             * contrato. Sin grupo, todo `assertValidResponse()` sobre ella pasaba
+             * en verde sin mirar nada (Q3, bloque 22 de la 2.3.0).
              */
             Route::post('api/v1/broadcasting/auth', ChannelAuthorizationController::class)
                 ->middleware([
+                    'channel-auth',
                     'auth:sanctum',
                     'ability:'.TokenAbility::ATTENDANCE_READ->value,
                     'throttle:management',
@@ -259,6 +266,13 @@ return Application::configure(basePath: dirname(__DIR__))
          * trabajo y siguen adelante ante cualquier fallo: medir un fichaje no
          * puede impedirlo (regla dura 19).
          */
+        /*
+         * El grupo de la firma de los canales de WebSocket, vacio a proposito:
+         * ver la ruta `broadcasting.auth`, arriba. Spectator se antepone a el
+         * en las pruebas.
+         */
+        $middleware->group('channel-auth', []);
+
         $middleware->api(prepend: [
             PropagateTraceContext::class,
             RecordHttpMetrics::class,
