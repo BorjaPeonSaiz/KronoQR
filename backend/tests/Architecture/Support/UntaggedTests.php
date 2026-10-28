@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Architecture\Support;
 
+use App\Console\Commands\Quality\Support\RequirementCatalog;
+use App\Console\Commands\Quality\Support\RequirementTag;
 use App\Console\Commands\Quality\Support\TagScanner;
 use PhpToken;
 
@@ -20,18 +22,21 @@ use PhpToken;
  *   de cadenas (`it('…')` entre comillas), y solo el tokenizador distingue una
  *   llamada de un texto. Una prueba es una sentencia que empieza por `it(` o
  *   `test(`; esta etiquetada si su cadena lleva un `->group(` con una cadena
- *   con forma de requisito (`RF-…`, `RN-…`, `RQ-…`, `RNF-…`).
+ *   que es un requisito.
  * - **Playwright** se lee como texto, como hace {@see TagScanner}:
- *   `test('…', { tag: [...] }, …)`. Vale una etiqueta literal con forma de
+ *   `test('…', { tag: [...] }, …)`. Vale una etiqueta literal que es un
  *   requisito o una lista que se expande (`[...pass.requirements]`, tipada
  *   como `` `@${string}`[] ``): la de las pasadas de axe, que llevan el
  *   requisito de su pantalla.
+ *
+ * «Es un requisito» quiere decir lo mismo que en la matriz: un identificador
+ * para {@see RequirementTag}, el criterio de {@see TagScanner}, y que ademas
+ * figura en `docs/requisitos.yaml`. Antes bastaba con la forma (`R…-…`), y una
+ * errata como `RN-O5` o un requisito inventado como `RX-99` pasaban esta
+ * puerta sin que la prueba apareciera en la matriz bajo ningun requisito.
  */
 final class UntaggedTests
 {
-    /** Lo que alguien ha querido escribir como requisito. */
-    private const string REQUIREMENT = '/^@?R[A-Z]{0,3}-[\w.-]+$/';
-
     /** `test(` sin `.` delante: ni `test.describe(`, ni `test.step(`, ni `foo.test(`. */
     private const string PLAYWRIGHT_DECLARATION = '/(?<![\w.$])test\s*\(/';
 
@@ -39,7 +44,10 @@ final class UntaggedTests
      * La declaracion entera hasta su objeto de opciones con `tag`. El nombre
      * puede ir partido en varias cadenas unidas con `+`.
      */
-    private const string PLAYWRIGHT_TAGGED = '/^test\s*\(\s*(?:\'[^\'\n]*\'|"[^"\n]*"|`[^`]*`)(?:\s*\+\s*(?:\'[^\'\n]*\'|"[^"\n]*"|`[^`]*`))*\s*,\s*\{[^{}]*\btag\s*:\s*(?:\[[^\]]*(?:[\'"`]@R[A-Z]{0,3}-|\.\.\.)[^\]]*\]|[\'"`]@R[A-Z]{0,3}-)/';
+    private const string PLAYWRIGHT_TAGGED = '/^test\s*\(\s*(?:\'[^\'\n]*\'|"[^"\n]*"|`[^`]*`)(?:\s*\+\s*(?:\'[^\'\n]*\'|"[^"\n]*"|`[^`]*`))*\s*,\s*\{[^{}]*\btag\s*:\s*(?<tags>\[[^\]]*\]|[\'"`][^\'"`\n]*[\'"`])/';
+
+    /** Una cadena suelta del valor de `tag`. */
+    private const string PLAYWRIGHT_TAG_VALUE = '/[\'"`](?<value>[^\'"`\n]*)[\'"`]/';
 
     /**
      * Cadenas y comentarios de TypeScript. Solo se borran los comentarios —un
@@ -98,13 +106,57 @@ final class UntaggedTests
         foreach ($matches[0] as [, $offset]) {
             $declaration = substr($source, $offset, 2000);
 
-            if (preg_match(self::PLAYWRIGHT_TAGGED, $declaration) !== 1) {
+            if (! self::playwrightDeclarationCitesRequirement($declaration)) {
                 preg_match('/^test\s*\(\s*([\'"`])(?<name>.*?)\1/s', $declaration, $name);
                 $untagged[] = ['line' => substr_count(substr($source, 0, $offset), "\n") + 1, 'name' => $name['name'] ?? ''];
             }
         }
 
         return $untagged;
+    }
+
+    /**
+     * ¿Cita alguno de estos valores un requisito del catalogo? Con el mismo
+     * criterio que la matriz: identificador segun {@see RequirementTag} y
+     * presente en `docs/requisitos.yaml`.
+     *
+     * @param  list<string>  $values
+     */
+    private static function citesKnownRequirement(array $values): bool
+    {
+        return array_intersect(RequirementTag::classify($values)['requirements'], self::knownRequirements()) !== [];
+    }
+
+    /**
+     * Los identificadores del catalogo, leidos una vez.
+     *
+     * @return list<string>
+     */
+    private static function knownRequirements(): array
+    {
+        static $known = null;
+
+        return $known ??= array_keys(RequirementCatalog::fromFile(Repo::file('docs/requisitos.yaml'))->phases());
+    }
+
+    /**
+     * ¿Lleva la declaracion de Playwright un `tag` que cite un requisito? Una
+     * lista que se expande (`[...pass.requirements]`) se da por buena: su tipo
+     * ya exige `@${string}` y la pasada de axe la rellena con el de su pantalla.
+     */
+    private static function playwrightDeclarationCitesRequirement(string $declaration): bool
+    {
+        if (preg_match(self::PLAYWRIGHT_TAGGED, $declaration, $tagged) !== 1) {
+            return false;
+        }
+
+        if (str_contains($tagged['tags'], '...')) {
+            return true;
+        }
+
+        preg_match_all(self::PLAYWRIGHT_TAG_VALUE, $tagged['tags'], $values);
+
+        return self::citesKnownRequirement($values['value']);
     }
 
     /**
@@ -226,6 +278,7 @@ final class UntaggedTests
     private static function argumentsCiteRequirement(array $tokens): bool
     {
         $depth = 0;
+        $values = [];
 
         foreach ($tokens as $token) {
             $depth += match ($token->text) {
@@ -234,16 +287,16 @@ final class UntaggedTests
                 default => 0,
             };
 
-            if ($token->is(T_CONSTANT_ENCAPSED_STRING) && preg_match(self::REQUIREMENT, substr($token->text, 1, -1)) === 1) {
-                return true;
+            if ($token->is(T_CONSTANT_ENCAPSED_STRING)) {
+                $values[] = substr($token->text, 1, -1);
             }
 
             if ($depth === 0) {
-                return false;
+                break;
             }
         }
 
-        return false;
+        return self::citesKnownRequirement($values);
     }
 
     /**

@@ -111,6 +111,40 @@ it('reconoce una prueba de Pest sin etiqueta y no la confunde con una que la lle
     'con un atributo en una clase anonima del cuerpo' => ["it('a', function () { new class { #[Override] public function f(): void {} }; })->group('RN-05');", []],
 ])->group('RQ-13');
 
+/*
+ * La etiqueta se monta al ejecutar y no va escrita en la fuente:
+ * `qa:traceability` lee este fichero como texto, y la errata escrita dentro
+ * de un group le pareceria una etiqueta mal escrita de esta prueba, que hoy
+ * bloquea.
+ */
+it('no da por etiquetada la prueba de Pest cuyo unico requisito no es un requisito del catalogo', function (string $etiqueta): void {
+    $fuente = "<?php\nit('a', function () {})->group('".$etiqueta."');";
+
+    expect(array_column(UntaggedTests::pest($fuente), 'name'))->toBe(['a']);
+})->with([
+    'una errata: la letra O en vez del cero' => ['RN-O5'],
+    'un prefijo que no existe' => ['RX-99'],
+    'con forma de requisito, pero fuera del catalogo' => ['RN-99'],
+    'con forma de rango, que una etiqueta no puede ser' => ['RF-ID-04..09'],
+])->group('RQ-13');
+
+it('da por etiquetada la prueba de Pest que cita un requisito del catalogo junto a otros grupos', function (): void {
+    $requisito = 'RN-05';
+    $fuente = "<?php\nit('a', function () {})->group('performance', '".$requisito."');";
+
+    expect(UntaggedTests::pest($fuente))->toBe([]);
+})->group('RQ-13');
+
+it('no da por etiquetada la prueba de Playwright cuyo unico requisito no es un requisito del catalogo', function (string $etiqueta): void {
+    $fuente = "test('a', { tag: ['@".$etiqueta."'] }, async () => {})";
+
+    expect(array_column(UntaggedTests::playwright($fuente), 'name'))->toBe(['a']);
+})->with([
+    'una errata: la letra O en vez del cero' => ['RN-O5'],
+    'un prefijo que no existe' => ['RX-99'],
+    'con forma de requisito, pero fuera del catalogo' => ['RN-99'],
+])->group('RQ-13');
+
 it('reconoce una prueba de Playwright sin etiqueta y no la confunde con una que la lleva', function (string $source, array $untagged): void {
     expect(array_column(UntaggedTests::playwright($source), 'name'))->toBe($untagged);
 })->with([

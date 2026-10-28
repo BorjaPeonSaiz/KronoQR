@@ -1185,7 +1185,10 @@ Un comando recorre la suite, extrae las etiquetas y genera `docs/trazabilidad-pr
 ```bash
 php artisan qa:traceability            # Genera la matriz requisito → pruebas
 php artisan qa:traceability --check    # Falla si un requisito implementado no tiene prueba
+                                       # o si una etiqueta no lleva a ningún requisito
 ```
+
+Desde la 2.3.0 `--check` falla también por una etiqueta que no cuenta para ningún requisito: con forma de requisito sin serlo (`RN-O5`, con la letra O), que cita uno que no está en `docs/requisitos.yaml`, o colgada de una prueba saltada sin condición. Antes solo avisaba, y la prueba quedaba fuera de la matriz mientras quien la escribió la daba por contada. El criterio de qué es un requisito es uno solo (`RequirementTag`), el mismo para la matriz y para `EveryTestIsTaggedTest`, que exige que toda prueba cite al menos un requisito del catálogo.
 
 **La etapa 3 de la CI ejecuta `--check` y bloquea.** El alcance de la comprobación son los requisitos de las fases ya ejecutadas, tomados del Anexo A del documento 01: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
 

@@ -108,18 +108,39 @@ final class TraceabilityCommand extends Command
         }
     }
 
+    /**
+     * Ademas del requisito sin prueba, bloquea la etiqueta que no lleva a
+     * ningun requisito: con forma de requisito sin serlo (`RN-O5`), que cita
+     * uno que no esta en el catalogo, o colgada de una prueba saltada sin
+     * condicion (todas van en `malformed`, redactadas por el escaner). Hasta
+     * la 2.3.0 solo se avisaba, y un aviso en el log de la CI no lo lee nadie:
+     * la prueba quedaba fuera de la matriz mientras quien la escribio la daba
+     * por contada.
+     */
     private function check(TraceabilityReport $report): int
     {
-        foreach ($report->unknownTags() as $id => $tests) {
-            $this->log()->writeln('<comment>Aviso: '.count($tests).' prueba(s) citan '.$id.', que no figura en docs/requisitos.yaml.</comment>');
+        $unknown = $report->unknownTags();
+        $malformed = $report->scan()->malformed;
+
+        foreach ($unknown as $id => $tests) {
+            $this->log()->writeln('<error>'.count($tests).' prueba(s) citan '.$id.', que no figura en docs/requisitos.yaml.</error>');
         }
 
         $missing = $report->missingInScope();
+        $unreadable = count($unknown) + count($malformed);
 
-        if ($missing === []) {
+        if ($unreadable > 0) {
+            $this->log()->writeln('<error>Trazabilidad: '.$unreadable.' etiqueta(s) que no cuentan para ningun requisito (arriba). Corrige el identificador o, si es una prueba saltada, quita el salto o la prueba.</error>');
+        }
+
+        if ($missing === [] && $unreadable === 0) {
             $this->log()->writeln('<info>Trazabilidad: todos los requisitos de las fases ejecutadas tienen prueba.</info>');
 
             return self::SUCCESS;
+        }
+
+        if ($missing === []) {
+            return self::FAILURE;
         }
 
         $this->log()->writeln('<error>Trazabilidad: '.count($missing).' requisito(s) de una fase ya ejecutada sin ninguna prueba que los referencie.</error>');
