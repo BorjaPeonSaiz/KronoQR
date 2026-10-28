@@ -17,6 +17,14 @@ import { defineConfig, devices } from '@playwright/test'
 const PORT = 4174
 const BASE_URL = `http://127.0.0.1:${PORT}`
 
+// LA SUITE NOCTURNA DE RENDIMIENTO (D4 de la 2.3.0), como en el quiosco.
+// `perf-*.spec.ts` afirma presupuestos de reloj (RNF-P-04 en las tablas
+// grandes) y solo existe con `KRONOQR_E2E_PERFORMANCE=1`, que pone
+// `make e2e-performance` (job nocturno `performance-kiosk` de ci.yml); el
+// proyecto `admin` de cada push no los ve.
+const PERFORMANCE_SUITE = process.env['KRONOQR_E2E_PERFORMANCE'] === '1'
+const PERFORMANCE_SPECS = /perf-[\w-]+\.spec\.ts$/
+
 export default defineConfig({
   testDir: './tests/e2e',
   outputDir: './test-results',
@@ -51,8 +59,18 @@ export default defineConfig({
   projects: [
     {
       name: 'admin',
+      testIgnore: PERFORMANCE_SPECS,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 } },
     },
+    ...(PERFORMANCE_SUITE
+      ? [
+          {
+            name: 'admin-perf',
+            testMatch: PERFORMANCE_SPECS,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 } },
+          },
+        ]
+      : []),
   ],
 
   webServer: {

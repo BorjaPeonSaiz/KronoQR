@@ -40,6 +40,52 @@ const WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO = [
 ];
 
 /**
+ * Lo mismo en Playwright: los ficheros de E2E que declaran un presupuesto
+ * (`*_BUDGET_MS`) o restan dos lecturas del reloj, cada uno con donde corre y
+ * por que. Los NOCTURNOS (empiezan por «nocturna») viven en un proyecto que
+ * solo existe con KRONOQR_E2E_PERFORMANCE=1; la prueba de abajo lo comprueba en
+ * su playwright.config.ts. Los demas corren en cada push con un motivo escrito:
+ * un presupuesto nuevo en una suite funcional no entra sin pasar por aqui.
+ */
+const WALL_CLOCK_ASSERTIONS_E2E = [
+    'frontend-admin/tests/e2e/perf-large-tables.spec.ts' => 'nocturna: proyecto admin-perf; RNF-P-04 con la mediana de tres muestras (D4)',
+    'frontend-kiosk/tests/e2e/perf-scan-latency.spec.ts' => 'nocturna: proyecto kiosk-perf-latency; RNF-P-01 con p95 y p99 de 60 escaneos (KP3)',
+    'frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts' => 'avanza el reloj simulado lo que ha pasado de verdad; no afirma ninguna duracion',
+    'frontend-kiosk/tests/e2e/perf-lcp.spec.ts' => 'en cada push por decision de KP1 (2.2.1): mediana de tres cargas en frio, margen medido del 32 % en la CI; caza el orden de magnitud, no un 5 %',
+    'frontend-kiosk/tests/e2e/perf-scanner-ready.spec.ts' => 'en cada push por la tarea 17.10: mediana de varias cargas, 5 s frente a 3,4-3,5 s medidos; avisa por encima de 4 s',
+    'frontend-kiosk/tests/e2e/qr-decode-budget.spec.ts' => 'en cada push: mediana de 21 decodificaciones tras 5 de calentamiento, factor 18 sobre lo medido y por debajo de la regresion que caza (22 ms)',
+];
+
+/** Un presupuesto declarado o una duracion medida con el reloj del navegador o de Node. */
+const WALL_CLOCK_ASSERTIONS_E2E_PATTERN = '/\b[A-Z][A-Z0-9_]*_BUDGET_MS\b|\b(?:Date|performance)\.now\(\)\s*-\s*[A-Za-z_]/';
+
+/**
+ * Los ficheros de E2E de las tres SPA cuyo texto encaja con el patron,
+ * relativos a la raiz del repositorio.
+ *
+ * @return list<string>
+ */
+function wallClockAssertionsE2eReaders(): array
+{
+    $found = [];
+
+    foreach (['frontend-kiosk', 'frontend-admin', 'frontend-portal'] as $app) {
+        $finder = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(Repo::file($app.'/tests/e2e'), FilesystemIterator::SKIP_DOTS));
+
+        foreach ($finder as $file) {
+            if ($file instanceof SplFileInfo && str_ends_with($file->getFilename(), '.ts')
+                && preg_match(WALL_CLOCK_ASSERTIONS_E2E_PATTERN, (string) file_get_contents($file->getPathname())) === 1) {
+                $found[] = ModuleTree::relative($file->getPathname(), Repo::root());
+            }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
  * Los ficheros de prueba de las suites funcionales cuyo texto encaja con
  * `$pattern`, relativos a backend/.
  *
@@ -96,6 +142,44 @@ it('solo exime ficheros que existen y siguen leyendo el reloj', function (): voi
     expect(array_values(array_diff(array_keys(WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO), wallClockAssertionsReaders())))
         ->toBe([]);
 })->group('RQ-14');
+
+it('no mide tiempo en un E2E salvo en los ficheros listados con donde corren y por que', function (): void {
+    expect(array_values(array_diff(wallClockAssertionsE2eReaders(), array_keys(WALL_CLOCK_ASSERTIONS_E2E))))->toBe(
+        [],
+        'Estos E2E declaran un presupuesto de reloj o miden una duracion sin figurar en '
+        .'WALL_CLOCK_ASSERTIONS_E2E: el presupuesto va en un perf-*.spec.ts del proyecto nocturno '
+        .'(KRONOQR_E2E_PERFORMANCE=1) y la afirmacion funcional en su suite, sin reloj (D4).',
+    );
+})->group('RQ-14');
+
+it('solo lista E2E que existen y siguen midiendo tiempo', function (): void {
+    expect(array_values(array_diff(array_keys(WALL_CLOCK_ASSERTIONS_E2E), wallClockAssertionsE2eReaders())))
+        ->toBe([]);
+})->group('RQ-14');
+
+it('deja fuera de cada push los E2E de rendimiento nocturnos', function (string $config, string $proyectoDelPush, string $fichero): void {
+    $texto = Repo::contents($config);
+    $nocturnos = array_keys(array_filter(
+        WALL_CLOCK_ASSERTIONS_E2E,
+        static fn (string $motivo): bool => str_starts_with($motivo, 'nocturna'),
+    ));
+
+    expect($nocturnos)->toContain($fichero)
+        ->and($texto)->toContain("process.env['KRONOQR_E2E_PERFORMANCE'] === '1'")
+        ->and($texto)->toContain('...(PERFORMANCE_SUITE')
+        ->and($texto)->toContain($proyectoDelPush);
+})->with([
+    'panel: el proyecto admin ignora perf-*.spec.ts' => [
+        'frontend-admin/playwright.config.ts',
+        "name: 'admin',\n      testIgnore: PERFORMANCE_SPECS,",
+        'frontend-admin/tests/e2e/perf-large-tables.spec.ts',
+    ],
+    'quiosco: kiosk-qr ignora la latencia de 60 escaneos' => [
+        'frontend-kiosk/playwright.config.ts',
+        'perf-scan-latency\.spec\.ts$/,',
+        'frontend-kiosk/tests/e2e/perf-scan-latency.spec.ts',
+    ],
+])->group('RQ-14');
 
 it('afirma los presupuestos de reloj solo en pruebas del grupo de rendimiento', function (): void {
     // La otra mitad de la puerta, la de dentro de los ficheros: la guarda de
