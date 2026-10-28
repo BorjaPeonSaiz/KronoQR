@@ -1079,16 +1079,16 @@ export interface paths {
          *     dejaria a una persona sin poder cerrar sesion justo cuando sospecha que
          *     su token esta comprometido. Por eso **no declara `429`**.
          *
-         *     **El rastro depende de quien llama** (ADR-039, RS-13). Solo la cuenta
-         *     de gestion deja asiento `auth.logout` en `audit_log`. Los demas
-         *     portadores dejan unicamente la linea `auth.logged_out` del log tecnico,
-         *     cada uno en su canal y con el UUID en su campo: la sesion del portal en
-         *     el canal `portal`, con `employee_uuid`; un quiosco emparejado en el
-         *     canal `device`, con `device_uuid` y sin `employee_uuid`, porque un
-         *     dispositivo no es una persona de la plantilla. Un acceso de soporte
-         *     recibe `204` y no se le revoca nada ni deja rastro de cierre: su
-         *     credencial la retira el cliente (RF-PD-11, ADR-020). Nunca un nombre
-         *     (regla dura 21).
+         *     **Solo la admiten la gestion y el soporte** (ADR-039, regla dura 18).
+         *     Un token de quiosco o de portal recibe `403`, sin asiento y con el token
+         *     intacto: ningun cliente oficial la usa con ellos —el quiosco no cierra
+         *     sesion y el portal tiene `POST /api/v1/me/logout`— y con el token robado
+         *     de una tablet bastaria una llamada para dejarla sin servicio sin dejar
+         *     rastro. La credencial de un quiosco se retira desvinculandolo desde el
+         *     panel, que deja `device.revoked`. La cuenta de gestion deja asiento
+         *     `auth.logout` en `audit_log` (RS-13). Un acceso de soporte recibe `204`
+         *     y no se le revoca nada ni deja rastro de cierre: su credencial la retira
+         *     el cliente (RF-PD-11, ADR-020).
          */
         post: operations["logOut"];
         delete?: never;
@@ -15711,6 +15711,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
