@@ -426,6 +426,61 @@ it('borra en orden, por lotes y por generaciones, y devuelve lo borrado', functi
 
 })->group('RS-07', 'RL-02', 'RL-04', 'RN-13');
 
+it('con lote 1 borra las incidencias vencidas por su jornada o por su tramo, y inspect() cuenta las mismas', function (): void {
+    $cutoff = purgeFunctionCutoff(4);
+    $expired = (new DateTimeImmutable($cutoff))->modify('-10 days')->format('Y-m-d');
+
+    // Cada tramo trae su propia incidencia de su misma jornada: la del vencido
+    // es el caso (d), vencida y de tramo vencido; la del vigente, la que se
+    // queda.
+    $expiredEntry = purgeFunctionEntry($expired, corrections: 0);
+    $currentEntry = purgeFunctionEntry($cutoff, corrections: 0);
+
+    $incident = static fn (int $employee, string $workDate, ?int $entry, string $type): int => (int) DB::table('incidents')->insertGetId([
+        'employee_id' => $employee,
+        'work_date' => $workDate,
+        'shift_entry_id' => $entry,
+        'type' => $type,
+        'severity' => 'low',
+        'status' => 'open',
+        'detected_at' => $workDate.' 21:00:00+00',
+        'context' => json_encode([]),
+        'created_at' => $workDate.' 21:00:00+00',
+        'updated_at' => $workDate.' 21:00:00+00',
+    ]);
+
+    $a = $incident($expiredEntry['employee'], $cutoff, $expiredEntry['entry'], 'missing_break');
+    $b = $incident($currentEntry['employee'], $expired, $currentEntry['entry'], 'missing_break');
+    $c = $incident($currentEntry['employee'], $expired, null, 'insufficient_rest');
+    $idOf = static function (int $entry): int {
+        $id = DB::table('incidents')->where('shift_entry_id', $entry)->where('type', 'short_shift')->value('id');
+
+        return is_numeric($id) ? (int) $id : 0;
+    };
+    $d = $idOf($expiredEntry['entry']);
+    $kept = $idOf($currentEntry['entry']);
+
+    $inspected = [];
+
+    foreach ((new DatabaseWorkRecordArchive(DB::connection()))->inspect(new DateTimeImmutable($cutoff.' 00:00:00', new DateTimeZone('UTC'))) as $tally) {
+        $inspected[$tally->dataset] = $tally->rows;
+    }
+
+    $deleted = purgeFunctionCall($cutoff, 1);
+
+    expect($d)->toBeGreaterThan(0)
+        ->and($kept)->toBeGreaterThan(0)
+        ->and($deleted['incidents'] ?? null)->toBe(4)
+        ->and(DB::table('incidents')->whereIn('id', [$a, $b, $c, $d])->exists())->toBeFalse()
+        ->and(DB::table('incidents')->pluck('id')->all())->toBe([$kept])
+        // La paridad: lo que el informe previo dice que se va a borrar es lo
+        // que la funcion borra, tabla a tabla.
+        ->and($inspected['incidents'] ?? null)->toBe(4)
+        ->and($inspected)->toBe($deleted)
+        // Y una segunda llamada ya no encuentra nada.
+        ->and(array_sum(purgeFunctionCall($cutoff, 1)))->toBe(0);
+})->group('RS-07', 'RL-02', 'RL-04');
+
 it('una tabla temporal del rol de la aplicacion no la desvia', function (): void {
     $cutoff = purgeFunctionCutoff(4);
     $expired = (new DateTimeImmutable($cutoff))->modify('-1 day')->format('Y-m-d');

@@ -50,6 +50,14 @@ use Throwable;
  * days_without_activity` es siempre `days_in_period`, y esa igualdad se puede
  * comprobar.
  *
+ * **La serie es de enteros —dias desde el primero— y no de fechas.**
+ * `generate_series(date, date, interval)` es en realidad la de `timestamptz`, y
+ * PostgreSQL no sabe cuantas filas da: la estimaba siempre en 1 000, el
+ * calendario por la plantilla se iba a millones de filas estimadas para seis
+ * mil reales y la ordenacion final se planificaba para ese tamaño. La de
+ * enteros tiene funcion de soporte y estima exacto. De paso, `?::date + n` es
+ * una fecha sin pasar por la zona de la sesion.
+ *
  * ## Lo contratado se prorratea en la propia consulta
  *
  * `sum(weekly_hours) * 60 / 7` sobre los dias cubiertos es exactamente
@@ -174,7 +182,8 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                   FROM employees e
                  WHERE TRUE{$filters}
             ), calendar AS (
-                SELECT generate_series(?::date, ?::date, interval '1 day')::date AS work_date
+                SELECT ?::date + g.n AS work_date
+                  FROM generate_series(0, ?::date - ?::date) AS g(n)
             )
             SELECT count(*)                     AS days_without_contract,
                    count(DISTINCT s.employee_id) AS employees_without_contract
@@ -197,9 +206,10 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                AND (s.terminated_on IS NULL OR c.work_date <= s.terminated_on)
             SQL, [
             ...$bindings,
-            // `calendar`.
+            // `calendar`: el primer dia, y el ultimo menos el primero.
             $query->range->isoFrom(),
             $query->range->isoTo(),
+            $query->range->isoFrom(),
             // Los dos acotes del contrato, en el orden en que aparecen.
             $query->range->isoTo(),
             $query->range->isoFrom(),
@@ -252,7 +262,8 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                   LEFT JOIN departments dep ON dep.id = e.department_id
                  WHERE TRUE{$filters}
             ), calendar AS (
-                SELECT generate_series(?::date, ?::date, interval '1 day')::date AS work_date
+                SELECT ?::date + g.n AS work_date
+                  FROM generate_series(0, ?::date - ?::date) AS g(n)
             ), grid AS (
                 SELECT s.*,
                        c.work_date,
@@ -361,8 +372,9 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
 
         return [
             ...$bindings,
-            // `calendar`.
+            // `calendar`: el primer dia, y el ultimo menos el primero.
             ...$range,
+            $query->range->isoFrom(),
             // El recorte del cubo, que las cuatro granularidades usan salvo la
             // diaria: ahi el cubo es el propio dia y ya cae dentro del rango.
             ...($query->granularity === ReportGranularity::Day ? [] : $range),

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportNotificationChannel;
-use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -314,11 +313,18 @@ return new class extends Migration
     /**
      * Los cinco catalogos cerrados, compuestos **desde los enumerados del
      * dominio**.
+     *
+     * **Salvo estado y clase, que se quedan como eran el dia de esta
+     * migracion** (`pending … purged`; `period`, `payroll`). Los amplia
+     * `2026_10_22_100000`, y su `down()` vuelve a esta lista: leidos del
+     * enumerado de hoy, una instalacion nueva nacia aqui con los valores de la
+     * 2.3.0 y deshacer aquella no la devolvia al mismo esquema
+     * (`MigrationsRoundTripTest`). El estado final es el mismo.
      */
     private function declareClosedCatalogues(): void
     {
-        $statuses = self::quotedList(ReportExportStatus::names());
-        $kinds = self::quotedList(ReportExportKind::names());
+        $statuses = self::quotedList(['pending', 'running', 'completed', 'failed', 'purged']);
+        $kinds = self::quotedList(['period', 'payroll']);
         $failures = self::quotedList(ReportExportFailure::names());
         $channels = self::quotedList(ReportExportNotificationChannel::names());
 

@@ -52,9 +52,20 @@ use Illuminate\Database\ConnectionInterface;
  * posterior lo rechaza con `42501`: quien ejecute codigo con la credencial del
  * runtime no puede pedirle que borre la jornada de ayer.
  *
- * Las consultas de {@see self::inspect()} siguen aqui, con la misma forma que
- * los `DELETE` de la funcion: son las que cuentan y fechan lo que se va a
+ * Las consultas de {@see self::inspect()} siguen aqui, con el mismo criterio
+ * que los `DELETE` de la funcion: son las que cuentan y fechan lo que se va a
  * purgar para el informe y el asiento.
+ *
+ * ## Sin recorrer tablas enteras
+ *
+ * El `inspect` semanal y cada lote de la funcion entran por un indice, tambien
+ * cuando no hay nada vencido, que es lo normal. Por eso los escaneos y las
+ * incidencias se cuentan en **dos ramas disjuntas** y no con un `LEFT JOIN`
+ * y un `OR`, que ningun indice sirve: los que cuelgan de un tramo vencido, por
+ * `shift_entries_work_date_index` y la clave ajena; los escaneos sin tramo, por
+ * `scan_events_unattached_age_index`; las incidencias de una jornada vencida,
+ * por `incidents_work_date_index`. La segunda rama de las incidencias excluye
+ * las que ya cuenta la primera. `WorkRecordPurgeIndexUsageTest` ata los planes.
  *
  * ## Lotes, no transacciones
  *
@@ -111,18 +122,31 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
                 SELECT count(*) AS row_count,
                        min(i.work_date)::text AS oldest,
                        max(i.work_date)::text AS newest
-                FROM incidents i
-                LEFT JOIN shift_entries se ON se.id = i.shift_entry_id
-                WHERE i.work_date < ? OR se.work_date < ?
-            SQL, [$date, $date]),
+                FROM (
+                    SELECT i.work_date
+                    FROM incidents i
+                    WHERE i.work_date < ?
+                    UNION ALL
+                    SELECT i.work_date
+                    FROM incidents i
+                    JOIN shift_entries se ON se.id = i.shift_entry_id
+                    WHERE se.work_date < ? AND i.work_date >= ?
+                ) i
+            SQL, [$date, $date, $date]),
             $this->tally('scan_events', <<<'SQL'
                 SELECT count(*) AS row_count,
                        min(s.occurred_at)::date::text AS oldest,
                        max(s.occurred_at)::date::text AS newest
-                FROM scan_events s
-                LEFT JOIN shift_entries se ON se.id = s.shift_entry_id
-                WHERE (se.id IS NOT NULL AND se.work_date < ?)
-                   OR (se.id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?)
+                FROM (
+                    SELECT s.occurred_at
+                    FROM scan_events s
+                    JOIN shift_entries se ON se.id = s.shift_entry_id
+                    WHERE se.work_date < ?
+                    UNION ALL
+                    SELECT s.occurred_at
+                    FROM scan_events s
+                    WHERE s.shift_entry_id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?
+                ) s
             SQL, [$date, $instant]),
             // RN-22 (ADR-047): los avisos de fichaje descartado envejecen
             // con `scan_events`, por LEAST(occurred_at, recorded_at). No cuelgan de nada ni
