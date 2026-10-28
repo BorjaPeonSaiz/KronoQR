@@ -149,8 +149,7 @@ interface AuthenticationJournal
      * ningun rastro (2.2.0).
      *
      * @param  string|null  $subjectUuid  UUID publico de quien cierra sesion —cuenta de
-     *                                    gestion, empleado del portal o quiosco
-     *                                    emparejado (canal `device`)—, o `null` si el
+     *                                    gestion o empleado del portal—, o `null` si el
      *                                    token no cuelga de nadie identificable.
      */
     public function loggedOut(AuthChannel $channel, ?string $subjectUuid): void;

@@ -8,35 +8,35 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Quien puede cerrar su propia sesion por `POST /api/v1/auth/logout`
- * (RF-ID-01, RF-ID-05, regla dura 18; R4-QA-06 de la re-verificacion de la
- * 2.2.0).
+ * (RF-ID-01, regla dura 18, ADR-039).
  *
- * La ruta revoca el token de quien llama y nada mas: no lee ni escribe ningun
- * dato del cliente. Por eso la admite **todo portador que el producto emite**, y
- * esta policy los enumera en vez de devolver `true`: una cuenta de gestion
- * (`users`), una sesion del portal (`employees`), un quiosco (`devices`) y un
- * acceso de soporte (`support_grants`, al que el controlador responde `204` sin
- * tocar nada). Un `tokenable` de cualquier otra tabla recibe `403`.
+ * **Solo una cuenta de gestion (`users`) y un acceso de soporte
+ * (`support_grants`, al que el controlador responde `204` sin tocar nada).**
+ * Cualquier otro portador recibe `403`, sin asiento y con su token intacto:
  *
- * Hoy ese `403` no lo alcanza nadie, y no es un descuido: el autenticador de
- * Sanctum que registra `IdentityServiceProvider` ya falla cerrado ante un
- * `tokenable` que no reconoce, y responde `401` antes de llegar aqui. Las dos
- * listas tienen que decir lo mismo; si un dia aparece un quinto portador, esta
- * policy obliga a decidir si puede cerrar sesion en vez de heredarlo.
+ * - **un quiosco (`devices`)**, porque la tablet no cierra sesion y su token es
+ *   lo unico que la deja fichar. Con ese token robado, una llamada aqui la
+ *   dejaba sin servicio sin dejar rastro. La credencial de un quiosco se retira
+ *   desvinculandolo desde el panel, que deja `device.revoked`;
+ * - **una sesion del portal (`employees`)**, porque el portal cierra la suya por
+ *   `POST /api/v1/me/logout` ({@see PortalSessionPolicy}) y ningun cliente
+ *   oficial usa esta ruta con ese token.
+ *
+ * La lista se enumera en vez de devolver `true` para que un portador nuevo
+ * obligue a decidir si puede cerrar sesion aqui en vez de heredarlo.
  *
  * Se compara **la tabla y no la clase** por lo mismo que el resto del modulo
- * ({@see PortalSessionPolicy}, `LogoutController`): los modelos `Employee` y
- * `SupportGrant` viven en `Workforce` y `Product`, y este modulo no puede
- * importarlos (doc 02 §1.6, Deptrac).
+ * ({@see PortalSessionPolicy}, `LogoutController`): el modelo `SupportGrant`
+ * vive en `Product`, y este modulo no puede importarlo (doc 02 §1.6, Deptrac).
  */
 final class SessionPolicy
 {
     /**
-     * Las tablas de los cuatro `tokenable` que el producto emite.
+     * Las tablas de los `tokenable` que pueden llamar a la ruta.
      *
      * @var list<string>
      */
-    public const array BEARER_TABLES = ['users', 'employees', 'devices', 'support_grants'];
+    public const array BEARER_TABLES = ['users', 'support_grants'];
 
     /**
      * `POST /api/v1/auth/logout`.

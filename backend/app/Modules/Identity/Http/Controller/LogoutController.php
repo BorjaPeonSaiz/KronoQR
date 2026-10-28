@@ -14,7 +14,7 @@ use Illuminate\Http\Response;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**
- * `POST /api/v1/auth/logout` — cierre de sesion.
+ * `POST /api/v1/auth/logout` — cierre de sesion de una cuenta de gestion.
  *
  * Revoca **el token de esta llamada** y ninguno mas: cerrar sesion en el
  * portatil no puede echar a la misma persona de la tablet donde estaba
@@ -23,30 +23,25 @@ use Laravel\Sanctum\PersonalAccessToken;
  * Devuelve `204` sin cuerpo. No hay nada que contar y un cuerpo vacio con
  * estructura solo daria de que hablar al cliente.
  *
- * **Aqui se resuelve el canal y el sujeto, y nada mas.** Quien cierra sesion es
- * una cuenta de gestion (canal `management`), un empleado del portal (`portal`)
- * o un quiosco emparejado (`device`, con su UUID como `device_uuid` y nunca como
- * `employee_uuid`), y esa distincion solo se puede hacer donde esta la peticion. Lo que
- * se hace con ella —si deja asiento y con que actor— lo decide el caso de uso y
- * el escritor de auditoria, no este fichero.
- *
- * El empleado se reconoce por descarte y no por su clase: `Identity` no puede
- * importar el modelo `Employee` de `Workforce` (doc 02 §1.6, verificado por
- * Deptrac), que es el mismo criterio que ya usa `IdentityServiceProvider` con la
- * tabla del `tokenable`.
+ * **Quien puede llamarla lo decide {@see SessionPolicy}** en la peticion: una
+ * cuenta de gestion o un acceso de soporte (regla dura 18). Un quiosco o una
+ * sesion del portal reciben `403` antes de llegar aqui (ADR-039): ningun cliente
+ * oficial cierra sesion por esta ruta con esos tokens —el portal tiene
+ * `POST /api/v1/me/logout`— y con el token robado de una tablet bastaria una
+ * llamada para dejarla sin servicio sin asiento. Por eso aqui el canal es
+ * siempre `management`; lo que se hace con el —el asiento y su actor— lo decide
+ * el caso de uso y el escritor de auditoria, no este fichero.
  *
  * ## Un acceso de soporte NO cierra sesion aqui (RF-PD-11, ADR-020)
  *
- * Responde `204` y **no hace nada**. El descarte de arriba lo habria tratado
- * como una sesion de portal, con tres consecuencias malas a la vez: le habria
- * borrado el token **sin marcar `revoked_at`**, dejando una concesion que el
- * panel enseña «activa» y que ya no funciona —la peor de las dos
- * incoherencias—; habria escrito `auth.logout` en el canal del **portal del
- * empleado**, ensuciando el trail de acceso de la plantilla con la actividad
- * del fabricante; y habria dado una segunda via para retirar un acceso, cuando
- * `Product\Http\Policy\SupportGrantPolicy` niega esa potestad
- * al fabricante a proposito —nombrada en prosa: este modulo no conoce las
- * policies de `Product`— porque quien recibe el acceso no decide cuando se
+ * Responde `204` y **no hace nada**. Tratarlo como una sesion de gestion
+ * tendria tres consecuencias malas a la vez: le borraria el token **sin marcar
+ * `revoked_at`**, dejando una concesion que el panel enseña «activa» y que ya
+ * no funciona —la peor de las dos incoherencias—; escribiria `auth.logout` como
+ * si el fabricante fuera una cuenta del cliente; y daria una segunda via para
+ * retirar un acceso, cuando `Product\Http\Policy\SupportGrantPolicy` niega esa
+ * potestad al fabricante a proposito —nombrada en prosa: este modulo no conoce
+ * las policies de `Product`— porque quien recibe el acceso no decide cuando se
  * cierra.
  *
  * **No se delega en la revocacion real**, y es la parte deliberada: un token de
@@ -57,36 +52,17 @@ use Laravel\Sanctum\PersonalAccessToken;
  * la unica accion del ciclo de vida de una concesion que el fabricante decide,
  * y ademas le permitiria cerrar su propio rastro cuando le conviniera.
  *
- * Quien puede llamarla lo decide {@see SessionPolicy} en la peticion: los
- * cuatro portadores que el producto emite (regla dura 18).
- *
  * `204` y no `403` porque no hay nada que denegar: la peticion es valida y su
  * efecto —que no queda sesion abierta que cerrar— ya se cumple.
  */
 final class LogoutController extends Controller
 {
-    /**
-     * La tabla del `tokenable` de una sesion de gestion. Se compara la tabla y
-     * no la clase por lo mismo que hacen `IdentityServiceProvider` y
-     * `Compliance\Infrastructure\Audit\CurrentAuditContext`: el otro `tokenable`
-     * posible es `Employee`, de `Workforce`, y este modulo no puede importarlo.
-     */
-    private const string MANAGEMENT_TABLE = 'users';
-
-    /**
-     * La tabla del `tokenable` de un quiosco emparejado. Su cierre va al canal
-     * `device`, con el UUID del dispositivo como `device_uuid`: antes caia en el
-     * descarte del portal y salia como si fuera un empleado (tarea 22.6). El
-     * modelo vive en `Kiosk` y aqui no se importa, por lo mismo que arriba.
-     */
-    private const string DEVICE_TABLE = 'devices';
-
     public function __invoke(LogoutRequest $request, LogOutHandler $handler): Response
     {
         $user = $request->user();
 
         // Un acceso de soporte no tiene sesion que cerrar. Ver el docblock: ni
-        // se le borra el token ni se audita como si fuera un empleado.
+        // se le borra el token ni se audita como si fuera una cuenta del cliente.
         if ($user instanceof ManagementActor && $user->isSupportActor()) {
             return response()->noContent();
         }
@@ -98,13 +74,7 @@ final class LogoutController extends Controller
 
             $handler->handle(
                 $token->id,
-                match ($user->getTable()) {
-                    self::MANAGEMENT_TABLE => AuthChannel::MANAGEMENT,
-                    self::DEVICE_TABLE => AuthChannel::DEVICE,
-                    // `employees`: lo unico que queda tras SessionPolicy y el
-                    // descarte del soporte de arriba.
-                    default => AuthChannel::PORTAL,
-                },
+                AuthChannel::MANAGEMENT,
                 is_string($uuid) && $uuid !== '' ? $uuid : null,
             );
         }

@@ -8,15 +8,15 @@ use App\Modules\Identity\Infrastructure\Persistence\User;
 use Illuminate\Database\Eloquent\Model;
 
 /*
- * La policy de `POST /api/v1/auth/logout` (regla dura 18, R4-QA-06 de la
- * re-verificacion de la 2.2.0).
+ * La policy de `POST /api/v1/auth/logout` (regla dura 18, ADR-039).
  *
- * La ruta la usan los cuatro portadores que el producto emite, y eso lo prueba
- * por HTTP `AuthorizationMatrixTest` (siete actores, todos autorizados) y
- * `SupportTokenBehaviourTest` (el acceso de soporte). Lo que queda aqui es la
- * mitad que el HTTP no puede alcanzar: un `tokenable` de otra tabla no llega
- * nunca a la policy, porque el autenticador de Sanctum ya responde `401`. Se
- * prueba la policy directamente y que la peticion de la ruta la aplica.
+ * La ruta es de la gestion y del soporte: el quiosco y el portal reciben `403`.
+ * Por HTTP lo prueban `AuthorizationMatrixTest` (cada actor), `DeviceLogoutTest`
+ * (la denegacion sin efecto) y `SupportTokenBehaviourTest` (el acceso de
+ * soporte). Aqui se prueba la policy directamente, incluida la mitad que el HTTP
+ * no puede alcanzar —un `tokenable` de otra tabla no llega nunca a la policy,
+ * porque el autenticador de Sanctum ya responde `401`—, y que la peticion de la
+ * ruta la aplica.
  */
 
 /** Un modelo cualquiera sobre la tabla dada, sin tocar la base de datos. */
@@ -27,14 +27,21 @@ function logoutPolicyBearerOn(string $table): Model
     return $bearer->setTable($table);
 }
 
-it('deja cerrar su sesion a cada portador que el producto emite', function (string $table): void {
+it('deja cerrar su sesion a la gestion y al soporte', function (string $table): void {
     expect((new SessionPolicy)->logOut(logoutPolicyBearerOn($table)))->toBeTrue();
 })->with([
     'cuenta de gestion' => 'users',
-    'sesion de portal' => 'employees',
-    'quiosco' => 'devices',
     'acceso de soporte' => 'support_grants',
-])->group('RQ-07', 'RF-ID-05');
+])->group('RQ-07', 'RF-ID-01');
+
+it('no deja cerrar sesion por esta ruta al quiosco ni al portal', function (string $table): void {
+    // El portal cierra la suya por `/me/logout`; el quiosco no cierra sesion, y
+    // con su token robado se dejaba la tablet sin servicio (ADR-039).
+    expect((new SessionPolicy)->logOut(logoutPolicyBearerOn($table)))->toBeFalse();
+})->with([
+    'quiosco' => 'devices',
+    'sesion de portal' => 'employees',
+])->group('RQ-07', 'RF-ID-05', 'RS-13');
 
 it('no deja cerrar sesion a un portador de una tabla que el producto no emite', function (string $table): void {
     expect((new SessionPolicy)->logOut(logoutPolicyBearerOn($table)))->toBeFalse();

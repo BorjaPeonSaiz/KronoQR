@@ -200,8 +200,9 @@ final class AuthorizationMatrix
             'POST api/v1/auth/2fa/verify' => [$pendiente],
             'POST api/v1/auth/2fa/enrol' => [$pendiente],
             'POST api/v1/auth/2fa/confirm' => [$pendiente],
-            // Cerrar la propia sesion no lee ni escribe nada de nadie: todo portador.
-            'POST api/v1/auth/logout' => [$admin, $rrhh, $responsable, $auditor, $empleado, $quiosco, $pendiente],
+            // Cerrar la propia sesion: la gestion, tambien a medio entrar. El quiosco
+            // y el portal, `403` (ADR-039): el portal cierra por `/me/logout`.
+            'POST api/v1/auth/logout' => [$admin, $rrhh, $responsable, $auditor, $pendiente],
             'GET api/v1/auth/me' => [$admin, $rrhh, $responsable, $auditor],
             'POST api/v1/auth/password' => [$admin, $rrhh, $responsable, $auditor],
             'GET api/v1/me/workdays' => [$empleado],

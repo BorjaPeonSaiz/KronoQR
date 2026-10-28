@@ -30,34 +30,15 @@ enum AuthChannel: string
     case KIOSK_PIN = 'kiosk_pin';
 
     /**
-     * Un quiosco emparejado que cierra la sesion de su propio token
-     * (`POST /api/v1/auth/logout`, tarea 22.6).
-     *
-     * **No es una puerta de autenticacion**: el dispositivo no se autentica con
-     * credenciales, se empareja (RF-KI-*), asi que este canal nunca pasa por
-     * `kronoqr_auth_attempts_total` y las nueve series de la metrica siguen
-     * siendo las de los otros tres. Existe para que su cierre de sesion no salga
-     * en el canal del portal con el UUID del dispositivo haciendose pasar por
-     * el de un empleado: un dispositivo no es una persona de la plantilla.
-     */
-    case DEVICE = 'device';
-
-    /**
      * Sobre quien recae el hecho, en el vocabulario de `audit_log.subject_type`.
      *
      * El canal ya determina la clase de sujeto —el panel autentica cuentas de
-     * gestion, el portal y el PIN del quiosco a personas de la plantilla, y el
-     * canal `device` es el propio dispositivo—, asi que quien deja el rastro no
-     * tiene que declararlo y no puede equivocarse. Es tambien el prefijo del
-     * campo que lleva el UUID en el log tecnico: `employee_uuid` o `device_uuid`.
+     * gestion, las otras dos puertas autentican a personas de la plantilla—, asi
+     * que quien deja el rastro no tiene que declararlo y no puede equivocarse.
      */
     public function subjectType(): string
     {
-        return match ($this) {
-            self::MANAGEMENT => 'user',
-            self::PORTAL, self::KIOSK_PIN => 'employee',
-            self::DEVICE => 'device',
-        };
+        return $this === self::MANAGEMENT ? 'user' : 'employee';
     }
 
     /**
@@ -67,10 +48,6 @@ enum AuthChannel: string
      * tiene tipo para un empleado, asi que el asiento del portal o del quiosco
      * saldria atribuido a `system` (ADR-037). El reparto completo —y lo que si
      * deja rastro en las tres puertas— esta en
-     * `docs/adr/ADR-039-que-hechos-de-autenticacion-dejan-asiento.md`. El canal
-     * `device` tampoco: ADR-039 reserva el asiento de cierre al panel, y
-     * ampliarlo es una enmienda de ese ADR, no un caso mas aqui. Su rastro es la
-     * linea `auth.logged_out` con `device_uuid`. La decision completa sigue en
      * `docs/adr/ADR-039-que-hechos-de-autenticacion-dejan-asiento.md`.
      */
     public function sessionEventsAreAudited(): bool
