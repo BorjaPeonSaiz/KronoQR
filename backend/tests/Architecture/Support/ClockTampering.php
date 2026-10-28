@@ -18,8 +18,9 @@ use PhpToken;
  *
  *   1. Vincular o sustituir `Clock` a mano (`instance`, `bind`,
  *      `singleton`, `scoped` y sus variantes `*If`, `extend`, los dobles
- *      `mock`, `spy` y `partialMock` —de Laravel o de Pest— y el contenedor
- *      como array, `$this->app[Clock::class] = …`; tambien por la facade
+ *      `mock`, `spy` y `partialMock` de Laravel, que lo meten en el
+ *      contenedor, y el contenedor como array,
+ *      `$this->app[Clock::class] = …`; tambien por la facade
  *      `App::`), con el nombre corto, el nombre completo o un alias de
  *      importacion.
  *   2. Mover solo Carbon: `::setTestNow()` de cualquier clase (`Carbon`,
@@ -52,9 +53,13 @@ final class ClockTampering
 
         $offences = [];
 
-        // Como metodo (`app()->instance(`, `$this->mock(`), como estatico
-        // (`App::bind(`) o como funcion de Pest (`mock(`, `spy(`).
-        $binding = '/(?:->|::|(?<![\w$>:\\\\]))(instance|bind|singleton|scoped|bindIf|singletonIf|scopedIf|extend|mock|spy|partialMock)\(\s*('
+        // Vincular, como metodo (`app()->instance(`) o como estatico de la
+        // facade (`App::bind(`); y los dobles de Laravel, que son metodos de la
+        // prueba (`$this->mock(`, `spy(`, `partialMock(`) porque meten el doble
+        // en el contenedor. Un doble suelto —`Mockery::mock(Clock::class)`, el
+        // `mock()` de Pest— no toca el contenedor: solo cuenta si despues se
+        // vincula, y eso lo ve esta misma expresion.
+        $binding = '/(?:(?:->|::)(?:instance|bind|singleton|scoped|bindIf|singletonIf|scopedIf|extend)|->(?:mock|spy|partialMock))\(\s*('
             .implode('|', $names).')::class/';
 
         if (preg_match_all($binding, $code, $matches) > 0) {
