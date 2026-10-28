@@ -421,7 +421,7 @@ Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb
 
 Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un estilo propio. El criterio es deliberado: un producto que instalarán y mantendrán terceros no puede exigir aprender las manías de su autor, y las convenciones mayoritarias son las que cualquier desarrollador de PHP o de Vue ya conoce.
 
-**Regla que gobierna esta sección: una convención que no verifica una herramienta es una sugerencia.** Todo lo que sigue está atado a Pint, PHPStan, Deptrac, Rector, ESLint o `vue-tsc`, y bloquea en la CI. **Excepción: Rector es informativo hasta la 2.3.0** (decisión del propietario del 13-10-2026; ver §9.2). Lo que no se puede automatizar no se escribe aquí: se resuelve en revisión.
+**Regla que gobierna esta sección: una convención que no verifica una herramienta es una sugerencia.** Todo lo que sigue está atado a Pint, PHPStan, Deptrac, Rector, ESLint o `vue-tsc`, y bloquea en la CI. **Excepción: Rector es informativo hasta la 2.4.0** (decisión del propietario del 13-10-2026, aplazada el 28-10-2026; ver §9.2). Lo que no se puede automatizar no se escribe aquí: se resuelve en revisión.
 
 #### Backend (PHP y Laravel)
 
