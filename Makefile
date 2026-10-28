@@ -1388,9 +1388,13 @@ endif
 # Las pasadas por fichero repiten la cobertura una vez cada una y se reparten
 # los mismos mutantes con menos paralelismo: unos 2 min por fichero mas su
 # parte de los mutantes, ~35 min para esos 13. En local, con 5 ficheros y la
-# maquina cargada, fueron unos 4 min por pasada. Con el tope de 12 el peor
-# caso del job `unit` queda en unos 50 min (8 de Feature y contrato, 10 del
-# conjunto y ~30 de pasadas), con margen frente a sus 90. Por encima del tope
+# maquina cargada, fueron unos 4 min por pasada. A eso se suma la SONDA: un
+# fichero (o el conjunto) que sale sin mutantes se repite sin `--covered-only`,
+# otra cobertura de unos 2 min. Un fichero sin mutantes cuesta asi ~4 min y no
+# ~2. Con el tope de 12, el caso habitual (pasadas con mutantes) deja el job
+# `unit` en unos 50 min (8 de Feature y contrato, 10 del conjunto y ~30 de
+# pasadas); el peor, once ficheros sin mutantes y uno con ellos, en unos 75
+# (8 + 10 + 11 x 4 + ~11), todavia por debajo de sus 90. Por encima del tope
 # no se muta fichero a fichero: se avisa en el log y en el resumen, y el 80 %
 # del conjunto se sigue exigiendo. Quien quiera la medida entera la repite con
 # MUTATE_FILE_MAX mas alto (en local, o en un disparo manual).
