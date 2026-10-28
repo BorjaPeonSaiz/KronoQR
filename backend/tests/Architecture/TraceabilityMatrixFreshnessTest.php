@@ -66,7 +66,7 @@ function escaneoDelArbol(): TagScan
 
     $backend = \dirname(__DIR__, 2);
 
-    return $scan = (new TagScanner([
+    return $scan = new TagScanner([
         'pest' => [$backend.'/tests'],
         'playwright' => [
             Repo::file('frontend-kiosk/tests/e2e'),
@@ -74,7 +74,7 @@ function escaneoDelArbol(): TagScan
             Repo::file('frontend-portal/tests/e2e'),
         ],
         'k6' => [Repo::file('load-tests/k6')],
-    ], \dirname($backend)))->scan();
+    ], \dirname($backend))->scan();
 }
 
 /**

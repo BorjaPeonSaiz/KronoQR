@@ -205,24 +205,58 @@ it('avisa en el resumen cuando el tope deja sin pasadas por fichero', function (
 function mutationLogScriptTeeWithoutPipefail(array $workflow): array
 {
     $sinPipefail = [];
-    $shellDelWorkflow = $workflow['defaults']['run']['shell'] ?? null;
 
-    foreach ((array) ($workflow['jobs'] ?? []) as $job => $definicion) {
-        $shellDelJob = $definicion['defaults']['run']['shell'] ?? $shellDelWorkflow;
+    foreach (mutationLogScriptMap($workflow['jobs'] ?? null) as $job => $definicion) {
+        $definicion = mutationLogScriptMap($definicion);
+        $shellDelJob = mutationLogScriptDefaultShell($definicion) ?? mutationLogScriptDefaultShell($workflow);
 
-        foreach ((array) ($definicion['steps'] ?? []) as $indice => $paso) {
-            $orden = (string) ($paso['run'] ?? '');
-            $shell = $paso['shell'] ?? $shellDelJob;
+        foreach (mutationLogScriptMap($definicion['steps'] ?? null) as $indice => $paso) {
+            $paso = mutationLogScriptMap($paso);
 
-            if (preg_match('/\|\s*tee\b/', $orden) === 1
-                && $shell !== 'bash'
-                && preg_match('/^\s*set\s+-[a-z]*o\s+pipefail\b/m', $orden) !== 1) {
-                $sinPipefail[] = $job.' › '.($paso['name'] ?? '#'.$indice);
+            if (mutationLogScriptLosesExitCode($paso, $shellDelJob)) {
+                $sinPipefail[] = $job.' › '.(\is_string($paso['name'] ?? null) ? $paso['name'] : '#'.$indice);
             }
         }
     }
 
     return $sinPipefail;
+}
+
+/**
+ * Un nodo del YAML como mapa, o vacio si no lo es.
+ *
+ * @return array<mixed>
+ */
+function mutationLogScriptMap(mixed $nodo): array
+{
+    return \is_array($nodo) ? $nodo : [];
+}
+
+/**
+ * El `defaults.run.shell` de un workflow o de un job, si lo declara.
+ *
+ * @param  array<mixed>  $nodo
+ */
+function mutationLogScriptDefaultShell(array $nodo): ?string
+{
+    $shell = mutationLogScriptMap(mutationLogScriptMap($nodo['defaults'] ?? null)['run'] ?? null)['shell'] ?? null;
+
+    return \is_string($shell) ? $shell : null;
+}
+
+/**
+ * ¿Pasa el paso una orden por `tee` sin conservar su codigo de salida?
+ *
+ * @param  array<mixed>  $paso
+ */
+function mutationLogScriptLosesExitCode(array $paso, ?string $shellHeredado): bool
+{
+    $orden = \is_string($paso['run'] ?? null) ? $paso['run'] : '';
+    $shell = \is_string($paso['shell'] ?? null) ? $paso['shell'] : $shellHeredado;
+
+    return preg_match('/\|\s*tee\b/', $orden) === 1
+        && $shell !== 'bash'
+        && preg_match('/^\s*set\s+-[a-z]*o\s+pipefail\b/m', $orden) !== 1;
 }
 
 it('reconoce el paso que pasa una orden por tee sin conservar su codigo de salida', function (array $paso, bool $loPierde): void {

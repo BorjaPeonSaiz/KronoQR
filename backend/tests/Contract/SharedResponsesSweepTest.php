@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Spectator\Middleware as SpectatorMiddleware;
 use Spectator\RequestFactory;
 use Spectator\Spectator;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Tests\Contract\Support\ContractSweep;
 use Tests\Contract\Support\ExhaustedRateLimiter;
 use Tests\Contract\Support\OpenRateLimiter;
@@ -218,7 +218,7 @@ it('no atribuye a una operacion el incumplimiento que Spectator anoto en la peti
     $discrepancias = ContractSweep::discrepanciesAmong(
         ['GET /api/v1/health'],
         200,
-        static fn (string $operation): TestResponse => TestResponse::fromBaseResponse(new Response('', 200)),
+        static fn (string $operation): TestResponse => TestResponse::fromBaseResponse(new SymfonyResponse('', 200)),
     );
 
     expect($discrepancias)->toBe([]);
