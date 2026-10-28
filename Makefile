@@ -247,7 +247,7 @@ $(file >.env,$(file <.env.example))
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
+.PHONY: help up down restart build ps logs shell seed test test-unit test-integration test-performance e2e-performance \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
@@ -268,6 +268,7 @@ help: ## Muestra esta ayuda
 	@echo "  make test             Toda la suite"
 	@echo "  make test-unit        Dominio, sin base de datos"
 	@echo "  make test-arch        Solo las pruebas de arquitectura (Pest Arch)"
+	@echo "  make test-performance Suite nocturna de rendimiento: presupuestos de reloj en mediana (D4)"
 	@echo "  make quality          Pint + PHPStan 9 + Deptrac + Rector + ShellCheck + shfmt"
 	@echo "  make php-lint         Solo Pint y PHPStan       (etapa 1 de la CI)"
 	@echo "  make deptrac          Solo Deptrac              (etapa 2 de la CI)"
@@ -293,6 +294,7 @@ help: ## Muestra esta ayuda
 	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
 	@echo "  make e2e              Playwright: quiosco, panel y portal"
+	@echo "  make e2e-performance  RNF-P-01: p95 y p99 de la latencia percibida sobre 60 escaneos (nocturna)"
 	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
 	@echo "  make changelog        Genera el CHANGELOG desde los commits convencionales"
 	@echo "  make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)"
@@ -507,6 +509,35 @@ else ifeq ($(CONTRACT_MAX_SKIPPED),)
 else
 	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Contract,Feature"
 endif
+
+# LA SUITE NOCTURNA DE RENDIMIENTO (D4 de la 2.3.0; Q2, V21-2-QA-2, KP3).
+#
+# Un presupuesto de reloj dentro de una suite funcional falla cuando la maquina
+# va cargada, no cuando el producto empeora: PeriodReportVolumeTest puso `main`
+# en rojo tres veces (5,000977 s, 5,61 s y 5,88 s frente a 5 s). Decision del
+# propietario: la afirmacion funcional se queda en su suite y la de tiempo pasa
+# aqui, con la mediana de varias pasadas.
+#
+# `test-performance` ejecuta SOLO las pruebas de Pest con ->group('performance')
+# —todas las suites a la vez: Unit, Integration y Feature—, que phpunit.xml
+# excluye de cualquier otra pasada. Necesita PostgreSQL, Redis y Chrome, como
+# `make test`. `e2e-performance` es la mitad del navegador: RNF-P-01 con p95 y
+# p99 sobre 60 escaneos con la camara simulada (KP3), en un proyecto de
+# Playwright que solo existe con KRONOQR_E2E_PERFORMANCE=1.
+#
+# Las dos las ejecuta el job nocturno `performance` de ci.yml; en local, a mano.
+# Tests\Support\Time\WallClockBudget explica la mediana y la pasada de
+# calentamiento, y `WallClockAssertionsTest` (Architecture) impide que un
+# presupuesto de reloj vuelva a una suite funcional.
+test-performance: ## Suite nocturna de rendimiento: presupuestos de reloj con la mediana de varias pasadas
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
+else
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --group=performance
+endif
+
+e2e-performance: ## Latencia percibida del fichaje (RNF-P-01): p95 y p99 sobre 60 escaneos con camara simulada
+	KRONOQR_E2E_PERFORMANCE=1 npm --prefix frontend-kiosk run test:e2e -- --project=kiosk-perf-latency
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:
 # Deptrac razona sobre imports y Pest Arch ve lo que no aparece en ningun `use`

@@ -154,29 +154,15 @@ function jornadasDe(array $facts, string $employeeUuid): array
 it('carga los hechos de 500 empleados por 92 dias con el descanso resuelto', function (): void {
     volumenDeCumplimiento();
 
-    /** @var ComplianceFactsReader $reader */
-    $reader = app(ComplianceFactsReader::class);
-
-    $inicio = microtime(true);
-
-    $facts = $reader->factsFor(
+    $facts = app(ComplianceFactsReader::class)->factsFor(
         // Del jueves 1 de enero al jueves 2 de abril: 92 dias, el techo sincrono.
         consultaDeCumplimiento(AccessScope::unrestricted(), '2026-01-01', '2026-04-02'),
         weekStartsOn: 1,
     );
 
-    $segundos = microtime(true) - $inicio;
-
     // La ventana se amplia a semanas completas: del lunes 29 de diciembre al
     // domingo 5 de abril, que son 47 dias pares. 500 x 47 = 23.500 filas.
     expect($facts)->toHaveCount(23_500);
-
-    // El presupuesto es el `statement_timeout` de la vista (10 s). El plan lo
-    // vigila la asercion de abajo; esto traduce el plan a lo que nota quien
-    // abre la pantalla. Sin instrumentacion se afirma; bajo `make coverage`,
-    // que construye estas 23.500 filas con Xdebug midiendo, se anuncia
-    // (CI-COB-01).
-    WallClockBudget::expectBelow($segundos, 10.0, 'RF-PA-06');
 
     // Y el descanso esta resuelto en TODAS: la primera jornada de la ventana
     // tiene la suya de diciembre, fuera del rango pedido.
@@ -187,6 +173,23 @@ it('carga los hechos de 500 empleados por 92 dias con el descanso resuelto', fun
 
     expect($sinDescanso)->toBe([]);
 })->group('RN-10', 'RF-PA-06');
+
+it('carga los hechos de 500 empleados por 92 dias dentro del techo de la vista, en mediana', function (): void {
+    volumenDeCumplimiento();
+
+    /** @var ComplianceFactsReader $reader */
+    $reader = app(ComplianceFactsReader::class);
+
+    // El presupuesto es el `statement_timeout` de la vista (10 s). El plan lo
+    // vigilan las pruebas de la suite de integracion; esto traduce el plan a lo
+    // que nota quien abre la pantalla.
+    $muestras = WallClockBudget::samples(static fn (): float => WallClockBudget::seconds(static fn () => $reader->factsFor(
+        consultaDeCumplimiento(AccessScope::unrestricted(), '2026-01-01', '2026-04-02'),
+        weekStartsOn: 1,
+    )));
+
+    WallClockBudget::expectMedianBelow($muestras, 10.0, 'RF-PA-06');
+})->group('RF-PA-06', 'performance');
 
 it('resuelve el descanso contra la jornada anterior de verdad y no contra el dia anterior', function (): void {
     // Las jornadas son los dias pares: entre el 2 y el 4 de enero hay un dia sin

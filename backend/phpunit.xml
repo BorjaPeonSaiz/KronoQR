@@ -83,6 +83,25 @@
             <directory>tests/Restore</directory>
         </testsuite>
     </testsuites>
+    <!--
+        LA SUITE DE RENDIMIENTO NO CORRE CON LAS DEMAS (D4 de la 2.3.0, Q2).
+
+        Las pruebas con presupuesto de reloj llevan ->group('performance') y se
+        quedan fuera de toda pasada normal: `make test`, `test-integration`,
+        `test-contract`, los jobs ③ y ④, la cobertura y la mutacion. Las ejecuta
+        solo `make test-performance` (Pest pidiendo ese grupo), el job nocturno
+        `performance` de ci.yml, que juzga la mediana de varias pasadas. Un
+        presupuesto de reloj en una suite funcional falla cuando la maquina va
+        cargada, no cuando el producto empeora (PeriodReportVolumeTest puso
+        `main` en rojo tres veces). PHPUnit quita de esta exclusion el grupo que
+        se pide por linea de ordenes, asi que no hace falta otra configuracion.
+        Tests\Support\Time\WallClockBudget explica el resto.
+    -->
+    <groups>
+        <exclude>
+            <group>performance</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>

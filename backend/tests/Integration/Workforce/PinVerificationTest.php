@@ -361,7 +361,7 @@ it('tarda lo mismo, en mediana, con un codigo inexistente que con un PIN incorre
     // los cientos de un bcrypt de coste 12: una razon de decenas. 1,5 deja sitio
     // al ruido de un contenedor compartido sin dejarselo a esa asimetria.
     WallClockBudget::expectRatioBelow(max($medianas) / min($medianas), 1.5, 'RS-03');
-})->group('RS-03', 'RS-12');
+})->group('RS-03', 'RS-12', 'performance');
 
 /**
  * Milisegundos que tarda una llamada, con reloj monotono.

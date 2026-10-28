@@ -121,8 +121,8 @@ on:
         required: false
         default: false
   schedule:
-    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`
-    # y `secrets-history` (ver sus comentarios). Todos los demas de este fichero
+    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`,
+    # `secrets-history`, `performance` y `performance-kiosk` (ver sus comentarios). Todos los demas de este fichero
     # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
     # `clean-install`/`update`, que sin la exclusion explicita habrian
     # arrastrado el pipeline entero, y `install`/`update` con el, cada noche. Hora fuera del horario de trabajo habitual
@@ -3694,3 +3694,126 @@ jobs:
 
       - name: gitleaks sobre todas las referencias (0 hallazgos)
         run: make secrets-scan SECRETS_SCAN_SCOPE=all
+
+  #-----------------------------------------------------------------------------
+  # Suite nocturna de rendimiento — D4 de la 2.3.0 (Q2, V21-2-QA-2, V2-QB-1, KP3)
+  #
+  # Los presupuestos de reloj salieron de las suites funcionales: fallaban
+  # cuando el runner iba cargado, no cuando el producto empeoraba
+  # (PeriodReportVolumeTest puso `main` en rojo tres veces con 5,000977 s,
+  # 5,61 s y 5,88 s frente a 5 s). Decision del propietario: la afirmacion
+  # funcional se queda en su suite y la de TIEMPO viene aqui, con la mediana de
+  # varias pasadas. Ningun presupuesto ha cambiado; cambia donde se mide.
+  #
+  # Dos jobs y no uno, por el mismo motivo que `mutation` no vive en `coverage`:
+  # la mitad de Pest necesita PostgreSQL, Redis y Chrome, y la del navegador
+  # necesita Node y Playwright. Mismo `if` que `coverage`: de noche y a mano,
+  # nunca en un push.
+  #-----------------------------------------------------------------------------
+  performance:
+    name: "Rendimiento · Pest (D4, nocturna)"
+    runs-on: ubuntu-24.04
+    # Siembra los volumenes de RNF-P-05 (500 empleados x 2 años) varias veces y
+    # repite cada medida seis veces (una de calentamiento y cinco que se juzgan).
+    timeout-minutes: 60
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # Sin cobertura: lo que se mide es el producto, no Xdebug (CI-COB-01).
+          coverage: none
+
+      - name: Esperar a PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
+      - name: Chrome para Browsershot (el PDF del registro propio se mide con el motor real)
+        uses: ./.github/actions/chrome-for-pdf
+
+      - name: Presupuestos de reloj en mediana (Pest, grupo performance)
+        # Sin omitidas: aqui Chrome esta instalado y la unica prueba condicionada
+        # (el PDF de un año) tiene que ejecutarse.
+        run: bash .github/scripts/pest-max-skipped.sh run 0 "make test-performance"
+
+  performance-kiosk:
+    name: "Rendimiento · quiosco, RNF-P-01 (D4, nocturna)"
+    runs-on: ubuntu-24.04
+    # Sesenta escaneos con la camara simulada, uno cada ~2 s, mas instalar
+    # Chromium y construir el quiosco.
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Cache de los navegadores de Playwright
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar Chromium (con dependencias del sistema)
+        run: npx playwright install --with-deps chromium
+
+      - name: Latencia percibida del fichaje, p95 y p99 sobre 60 escaneos (RNF-P-01, KP3)
+        run: make e2e-performance
+
+      - name: Subir los artefactos de Playwright SOLO si algo ha fallado
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-kiosk
+          path: frontend-kiosk/test-results/
+          retention-days: 14
+          if-no-files-found: warn

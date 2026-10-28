@@ -14,6 +14,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Samples;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -165,55 +166,64 @@ it('ejecuta el mismo numero de consultas en los tres rechazos', function (): voi
         ->toHaveCount(1, 'Los rechazos no cuestan lo mismo: '.json_encode($consultas));
 })->group('RS-03', 'RF-PD-06');
 
-it('consume el mismo tiempo en los tres rechazos', function (): void {
-    // La comprobacion que exige el requisito. El suelo configurado —25 ms de
-    // serie— absorbe la varianza de PostgreSQL, que es lo que sin el hace que un
-    // acierto de indice y un fallo de indice se distingan con suficientes
-    // muestras.
+/**
+ * La mediana de lo que tarda cada uno de los tres rechazos, en milisegundos.
+ *
+ * Intercaladas y no en bloques: si la maquina se ralentiza a mitad de la
+ * prueba —otra prueba, el recolector, la CI— el sesgo cae por igual sobre los
+ * tres casos en vez de sobre el que se estuviera midiendo.
+ *
+ * @return non-empty-array<string, float>
+ */
+function pairingRejectionMedians(): array
+{
     $casos = tresRechazos();
-    $suelo = Config::integer('security.rejection_floor_ms');
-
-    expect($suelo)->toBeGreaterThan(0, 'La suite tiene el suelo de RS-03 del emparejamiento desactivado.');
 
     /** @var array<string, list<float>> $muestras */
     $muestras = array_fill_keys(array_keys($casos), []);
 
-    // Intercaladas y no en bloques: si la maquina se ralentiza a mitad de la
-    // prueba —otra prueba, el recolector, la CI— el sesgo cae por igual sobre los
-    // tres casos en vez de sobre el que se estuviera midiendo.
     for ($ronda = 0; $ronda < 8; $ronda++) {
         foreach ($casos as $caso => $credenciales) {
-            $inicio = hrtime(true);
-            sondeoRechazado($credenciales);
-            $muestras[$caso][] = (hrtime(true) - $inicio) / 1_000_000;
+            $muestras[$caso][] = WallClockBudget::seconds(static fn () => sondeoRechazado($credenciales)) * 1000;
         }
     }
 
     /** @var non-empty-array<string, float> $medianas */
     $medianas = array_map(Samples::median(...), $muestras);
 
-    foreach ($medianas as $caso => $mediana) {
-        expect($mediana)->toBeGreaterThanOrEqual(
-            $suelo * 0.9,
-            "El caso «{$caso}» ha tardado {$mediana} ms, por debajo del suelo de {$suelo} ms.",
-        );
-    }
+    return $medianas;
+}
 
-    // Banda de 15 ms entre la mediana mas rapida y la mas lenta. No es cero
-    // —esto corre en un contenedor compartido con PostgreSQL y cada muestra es
-    // una peticion HTTP entera, no una llamada a un adaptador— pero es un orden
-    // de magnitud menor que lo que hace falta para distinguir dos casos a traves
-    // de la red con un numero razonable de intentos.
-    $dispersion = max($medianas) - min($medianas);
+it('no deja ninguno de los tres rechazos por debajo del suelo de tiempo configurado', function (): void {
+    // El suelo configurado —25 ms de serie— absorbe la varianza de PostgreSQL,
+    // que es lo que sin el hace que un acierto de indice y un fallo de indice
+    // se distingan con suficientes muestras. Es un SUELO: una maquina cargada
+    // solo puede alejar la medida de el, asi que esta prueba no depende de la
+    // carga y se queda en la suite de feature.
+    $suelo = Config::integer('security.rejection_floor_ms');
 
-    expect($dispersion)->toBeLessThan(
-        15.0,
-        'Los rechazos se distinguen por tiempo: '.json_encode(array_map(
-            static fn (float $ms): float => round($ms, 2),
-            $medianas,
-        )),
-    );
+    expect($suelo)->toBeGreaterThan(0, 'La suite tiene el suelo de RS-03 del emparejamiento desactivado.');
+
+    $lentos = array_filter(pairingRejectionMedians(), static fn (float $mediana): bool => $mediana < $suelo * 0.9);
+
+    expect($lentos)->toBe([], "Rechazos por debajo del suelo de {$suelo} ms: ".json_encode($lentos));
 })->group('RS-03', 'RF-PD-06');
+
+it('consume el mismo tiempo en los tres rechazos', function (): void {
+    // La comprobacion que exige el requisito. Banda de 15 ms entre la mediana
+    // mas rapida y la mas lenta. No es cero —esto corre en un contenedor
+    // compartido con PostgreSQL y cada muestra es una peticion HTTP entera, no
+    // una llamada a un adaptador— pero es un orden de magnitud menor que lo que
+    // hace falta para distinguir dos casos a traves de la red con un numero
+    // razonable de intentos. En la suite nocturna de rendimiento (D4): la
+    // banda es de reloj, y una maquina cargada la ensancha sin que el producto
+    // haya cambiado.
+    $medianas = pairingRejectionMedians();
+
+    fwrite(STDERR, 'RS-03 emparejamiento (ms): '.json_encode(array_map(static fn (float $ms): float => round($ms, 2), $medianas))."\n");
+
+    WallClockBudget::expectBelow(max($medianas) - min($medianas), 15.0, 'RS-03', 'ms');
+})->group('RS-03', 'RF-PD-06', 'performance');
 
 it('no distingue las tres causas del codigo tampoco en el confirm', function (): void {
     // La ruta del panel esta autenticada, asi que aqui no se protege un secreto:

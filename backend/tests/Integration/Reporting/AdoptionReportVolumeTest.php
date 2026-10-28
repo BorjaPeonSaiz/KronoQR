@@ -44,7 +44,8 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * `/informe-nuevo` paso 5: por debajo de 5 s con volumen real, respuesta directa.
  * La cifra del reloj depende de la maquina y por eso **no es lo unico que se
  * comprueba**: el `EXPLAIN ANALYZE` es lo que sigue valiendo mañana en otro
- * servidor.
+ * servidor. El reloj se afirma en la suite nocturna de rendimiento,
+ * con la mediana de varias pasadas (D4, {@see WallClockBudget}).
  *
  * ## `scan_events` se lee por indice, no entera (DB5)
  *
@@ -215,27 +216,14 @@ function volumenDelCuadro(): array
     return ['site' => $site];
 }
 
-it('compone el cuadro de dos periodos sobre dos años de historico dentro del presupuesto', function (): void {
+it('compone el cuadro de dos periodos sobre dos años de historico, con el periodo anterior', function (): void {
     volumenDelCuadro();
 
-    /** @var ReadAdoptionReport $caso */
-    $caso = app(ReadAdoptionReport::class);
-
-    $empezo = microtime(true);
-    $cuadro = $caso->handle(
+    $cuadro = app(ReadAdoptionReport::class)->handle(
         new AdoptionReportCriteria(from: '2026-01-01', to: '2026-01-31'),
         maxRangeDays: DateRange::MAXIMUM_DAYS,
         maxRows: 20000,
     );
-    $tardo = microtime(true) - $empezo;
-
-    // La cifra medida se deja a mano con `KRONOQR_PRINT_PLAN=1`, igual que en el
-    // informe por periodo: es el numero que se pega en el informe de la tarea y
-    // el que hay que volver a mirar el dia que alguien toque una consulta.
-    if (getenv('KRONOQR_PRINT_PLAN') !== false) {
-        fwrite(STDOUT, 'RNF-P-05: cuadro de impacto de '.EMPLEADOS_DEL_CUADRO.' empleados y dos periodos en '
-            .round($tardo, 3)." s\n");
-    }
 
     expect($cuadro->indicators)->toHaveCount(12)
         // 98 % de jornadas completas: una de cada cincuenta queda abierta.
@@ -243,10 +231,30 @@ it('compone el cuadro de dos periodos sobre dos años de historico dentro del pr
         // Y con periodo anterior, que es la mitad del trabajo: enero se compara
         // contra los 31 dias que terminan el 31 de diciembre.
         ->and($cuadro->indicator(AdoptionIndicatorKey::WorkDaysCompleteRatio)?->previous)->not->toBeNull();
+})->group('RF-IN-08');
 
-    // Sin instrumentacion se afirma; bajo `make coverage` se anuncia (CI-COB-01).
-    WallClockBudget::expectBelow($tardo, 5.0, 'RNF-P-05');
-})->group('RNF-P-05', 'RF-IN-08');
+it('compone el cuadro de dos periodos sobre dos años de historico dentro del presupuesto, en mediana', function (): void {
+    volumenDelCuadro();
+
+    /** @var ReadAdoptionReport $caso */
+    $caso = app(ReadAdoptionReport::class);
+
+    $muestras = WallClockBudget::samples(static fn (): float => WallClockBudget::seconds(static fn () => $caso->handle(
+        new AdoptionReportCriteria(from: '2026-01-01', to: '2026-01-31'),
+        maxRangeDays: DateRange::MAXIMUM_DAYS,
+        maxRows: 20000,
+    )));
+
+    // La cifra medida se deja a mano con `KRONOQR_PRINT_PLAN=1`, igual que en el
+    // informe por periodo: es el numero que se pega en el informe de la tarea y
+    // el que hay que volver a mirar el dia que alguien toque una consulta.
+    if (getenv('KRONOQR_PRINT_PLAN') !== false) {
+        fwrite(STDOUT, 'RNF-P-05: cuadro de impacto de '.EMPLEADOS_DEL_CUADRO.' empleados y dos periodos en '
+            .round(WallClockBudget::median($muestras), 3)." s de mediana\n");
+    }
+
+    WallClockBudget::expectMedianBelow($muestras, 5.0, 'RNF-P-05');
+})->group('RNF-P-05', 'performance');
 
 it('resuelve el recuento de jornadas completas sin recorrer dos años de shift_entries', function (): void {
     /*

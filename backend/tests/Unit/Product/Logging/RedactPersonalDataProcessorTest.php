@@ -144,7 +144,9 @@ it('cuesta poco por linea', function (): void {
      * holgado para que un patron catastrofico (retroceso exponencial) no pase
      * desapercibido. Una linea tipica del fichaje —mensaje corto y seis claves
      * de contexto— por debajo de 0,5 ms de media, con margen de sobra sobre lo
-     * que se mide en el contenedor de desarrollo (anotado en el commit).
+     * que se mide en el contenedor de desarrollo (anotado en el commit). En la
+     * suite nocturna de rendimiento (D4): la mediana de varias pasadas de 500
+     * lineas cada una.
      */
     $processor = new RedactPersonalDataProcessor;
     $record = redactPersonalDataRecord('attendance.scan_processed', [
@@ -157,18 +159,15 @@ it('cuesta poco por linea', function (): void {
     ]);
 
     $vueltas = 500;
-    $inicio = hrtime(true);
 
-    for ($i = 0; $i < $vueltas; $i++) {
-        $processor($record);
-    }
+    $muestras = WallClockBudget::samples(static fn (): float => WallClockBudget::seconds(static function () use ($processor, $record, $vueltas): void {
+        for ($i = 0; $i < $vueltas; $i++) {
+            $processor($record);
+        }
+    }) * 1000 / $vueltas);
 
-    $mediaMs = (hrtime(true) - $inicio) / $vueltas / 1_000_000;
-
-    // Sin instrumentacion se afirma; bajo `make coverage` y la mutacion, que
-    // corren con Xdebug en modo coverage, se anuncia (CI-COB-01).
-    WallClockBudget::expectBelowMilliseconds($mediaMs, 0.5, 'RF-PD-15');
-})->group('RF-PD-15');
+    WallClockBudget::expectMedianBelow($muestras, 0.5, 'RF-PD-15', 'ms');
+})->group('RF-PD-15', 'performance');
 
 /*
  * ---------------------------------------------------------------------------
