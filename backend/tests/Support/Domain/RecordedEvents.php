@@ -46,6 +46,28 @@ final class RecordedEvents
     }
 
     /**
+     * La jornada (`YYYY-MM-DD`) de CADA recalculo del lote, en orden.
+     *
+     * Es lo que la proyeccion `daily_totals` escribe: si un tramo se atribuyera
+     * a otro dia, aqui apareceria esa otra fecha.
+     *
+     * @param  list<DomainEvent>  $events
+     * @return list<string>
+     */
+    public static function dailyTotalsWorkDates(array $events): array
+    {
+        $totals = array_values(array_filter(
+            $events,
+            static fn (DomainEvent $event): bool => $event instanceof DailyTotalsRecalculated,
+        ));
+
+        return array_map(
+            static fn (DailyTotalsRecalculated $event): string => $event->workDate->isoDate,
+            $totals,
+        );
+    }
+
+    /**
      * @param  list<DomainEvent>  $events
      * @return list<string>
      */
