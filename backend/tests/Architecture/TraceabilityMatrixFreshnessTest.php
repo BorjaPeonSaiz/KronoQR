@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Console\Commands\Quality\Support\PhaseOrder;
 use App\Console\Commands\Quality\Support\RequirementCatalog;
+use App\Console\Commands\Quality\Support\TagScan;
 use App\Console\Commands\Quality\Support\TagScanner;
 use App\Console\Commands\Quality\Support\TraceabilityReport;
 use Tests\Architecture\Support\Repo;
@@ -48,25 +49,24 @@ use Tests\Architecture\Support\Repo;
  */
 
 /**
- * Las pruebas etiquetadas que hay en el arbol, por herramienta.
+ * El arbol explorado con el mismo extractor que `qa:traceability`.
  *
  * Los directorios son los mismos que declara `quality.test_paths` y la ruta base
  * la misma que pasa el comando (`dirname(base_path())`). Se explora una sola
- * vez: son 400 ficheros y las cinco pruebas de abajo miran el mismo resultado.
- *
- * @return array<string, int>
+ * vez: son mas de mil ficheros, y el recuento y la matriz regenerada salen del
+ * mismo resultado.
  */
-function pruebasEtiquetadasPorHerramienta(): array
+function escaneoDelArbol(): TagScan
 {
-    static $recuento = null;
+    static $scan = null;
 
-    if ($recuento !== null) {
-        return $recuento;
+    if ($scan instanceof TagScan) {
+        return $scan;
     }
 
     $backend = \dirname(__DIR__, 2);
 
-    $scan = (new TagScanner([
+    return $scan = (new TagScanner([
         'pest' => [$backend.'/tests'],
         'playwright' => [
             Repo::file('frontend-kiosk/tests/e2e'),
@@ -75,8 +75,18 @@ function pruebasEtiquetadasPorHerramienta(): array
         ],
         'k6' => [Repo::file('load-tests/k6')],
     ], \dirname($backend)))->scan();
+}
 
-    return $recuento = [
+/**
+ * Las pruebas etiquetadas que hay en el arbol, por herramienta.
+ *
+ * @return array<string, int>
+ */
+function pruebasEtiquetadasPorHerramienta(): array
+{
+    $scan = escaneoDelArbol();
+
+    return [
         'pest' => \count($scan->by('pest')),
         'playwright' => \count($scan->by('playwright')),
         'k6' => \count($scan->by('k6')),
@@ -116,26 +126,15 @@ function faseEnCursoDeclarada(): int
  */
 function matrizRegenerada(): string
 {
-    $backend = \dirname(__DIR__, 2);
     $config = Repo::contents('backend/config/quality.php');
 
     preg_match('/\'phase_execution_order\'\s*=>\s*\[([\d,\s]+)\]/', $config, $orden);
     preg_match('/\'skipped_in_ci\'\s*=>\s*\[(?<entries>[^\]]*)\]/', $config, $omitidas);
     preg_match_all('/\'(?<file>[^\']+)\'\s*=>\s*\d+/', $omitidas['entries'] ?? '', $ficheros);
 
-    $scan = (new TagScanner([
-        'pest' => [$backend.'/tests'],
-        'playwright' => [
-            Repo::file('frontend-kiosk/tests/e2e'),
-            Repo::file('frontend-admin/tests/e2e'),
-            Repo::file('frontend-portal/tests/e2e'),
-        ],
-        'k6' => [Repo::file('load-tests/k6')],
-    ], \dirname($backend)))->scan();
-
     return (new TraceabilityReport(
         RequirementCatalog::fromFile(Repo::file('docs/requisitos.yaml')),
-        $scan,
+        escaneoDelArbol(),
         new PhaseOrder(array_map(intval(...), array_map(trim(...), explode(',', $orden[1] ?? '')))),
         faseEnCursoDeclarada(),
         $ficheros['file'],
@@ -148,12 +147,18 @@ function matrizRegenerada(): string
  * contenedor son `html/tests/…`) y las de Playwright y k6 a
  * `frontend-*\/tests/e2e/…` y `load-tests/k6/…` (en el contenedor llegan con el
  * montaje delante, `/var/www/repo/…`).
+ *
+ * Una suite de Pest es cualquier directorio de `tests/` que empiece por
+ * mayuscula, sin lista cerrada: con la lista, `MutationCanary` (tarea 22.5)
+ * salia `html/tests/…` en un lado y `backend/tests/…` en el otro y la
+ * comparacion fallaba siempre en la CI. Las de Playwright son `tests/e2e`, en
+ * minuscula, y las normaliza la segunda expresion.
  */
 function matrizNormalizada(string $matriz): string
 {
     return (string) preg_replace(
         [
-            '#[\w.-]+/tests/(?=(?:Unit|Integration|Feature|Contract|Architecture|Restore)/)#',
+            '#[\w.-]+/tests/(?=[A-Z][\w-]*/)#',
             '#(?<![\w./-])[\w./-]*/(?=(?:frontend-(?:kiosk|admin|portal)/tests/e2e|load-tests/k6)/)#',
         ],
         ['backend/tests/', ''],
@@ -246,6 +251,9 @@ it('lleva las rutas a la forma de la CI, sea cual sea el directorio desde el que
     'contenedor' => ['html/tests/Unit/Attendance/Domain/MidnightShiftTest.php:40', 'backend/tests/Unit/Attendance/Domain/MidnightShiftTest.php:40'],
     'una copia' => ['kq22a/tests/Feature/Health/ReadinessProbeTest.php:30', 'backend/tests/Feature/Health/ReadinessProbeTest.php:30'],
     'la CI' => ['backend/tests/Integration/Reporting/PeriodReportVolumeTest.php:9', 'backend/tests/Integration/Reporting/PeriodReportVolumeTest.php:9'],
+    'una suite nueva en el contenedor' => ['html/tests/MutationCanary/MutationCanaryTest.php:17', 'backend/tests/MutationCanary/MutationCanaryTest.php:17'],
+    'una suite nueva en la CI' => ['backend/tests/MutationCanary/MutationCanaryTest.php:17', 'backend/tests/MutationCanary/MutationCanaryTest.php:17'],
+    'una suite que todavia no existe' => ['kq22a/tests/Performance/ScanLatencyTest.php:12', 'backend/tests/Performance/ScanLatencyTest.php:12'],
     'playwright en la CI' => ['frontend-kiosk/tests/e2e/scan.spec.ts:51', 'frontend-kiosk/tests/e2e/scan.spec.ts:51'],
     'playwright desde el montaje del contenedor' => ['/var/www/repo/frontend-admin/tests/e2e/shell.spec.ts:61', 'frontend-admin/tests/e2e/shell.spec.ts:61'],
     'k6 desde el montaje del contenedor' => ['/var/www/repo/load-tests/k6/scan-peak.js:120', 'load-tests/k6/scan-peak.js:120'],
