@@ -61,8 +61,9 @@ use Illuminate\Database\ConnectionInterface;
  * `occurred_at BETWEEN` sin columna de cabecera recorria la tabla entera cada
  * noche. El indice ya existia para el cuadro de adopcion, asi que no cuesta
  * escritura nueva en el fichaje; la hora de pared UTC es la misma escala que el
- * instante, porque UTC no cambia de hora. Los extremos se pasan ya en UTC y sin
- * zona, con la misma forma que la expresion.
+ * instante, porque UTC no cambia de hora. Los extremos viajan con su desfase y
+ * PostgreSQL los pasa a esa misma forma; asi ninguna hora sin zona se
+ * escribe en PHP.
  */
 final readonly class EloquentCredentialScans implements CredentialScans
 {
@@ -83,9 +84,9 @@ final readonly class EloquentCredentialScans implements CredentialScans
             // que el servidor decidiera: no entra.
             ->whereNotIn('scan_events.result', [...ScanResult::credentialRejections(), ScanResult::DISCARDED_UNPROCESSABLE->value])
             // La expresion del indice, tal cual (ver el docblock).
-            ->whereRaw("(scan_events.occurred_at AT TIME ZONE 'UTC') BETWEEN ?::timestamp AND ?::timestamp", [
-                $this->utcWallTime($from),
-                $this->utcWallTime($to),
+            ->whereRaw("(scan_events.occurred_at AT TIME ZONE 'UTC') BETWEEN (?::timestamptz AT TIME ZONE 'UTC') AND (?::timestamptz AT TIME ZONE 'UTC')", [
+                $from->format('Y-m-d H:i:s.uP'),
+                $to->format('Y-m-d H:i:s.uP'),
             ])
             ->orderBy('scan_events.occurred_at')
             ->orderBy('scan_events.scan_id')
@@ -146,15 +147,5 @@ final readonly class EloquentCredentialScans implements CredentialScans
         // `TIMESTAMPTZ` y PostgreSQL la devuelve en la zona de la sesion, que no
         // tiene por que ser la misma manana.
         return $instant->setTimezone(new DateTimeZone('UTC'));
-    }
-
-    /**
-     * El instante como hora de pared UTC sin zona, la forma de
-     * `occurred_at AT TIME ZONE 'UTC'`. Con microsegundos: el extremo es
-     * inclusivo y no puede perder el escaneo del ultimo instante.
-     */
-    private function utcWallTime(DateTimeImmutable $instant): string
-    {
-        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
     }
 }
