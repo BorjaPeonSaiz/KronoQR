@@ -97,6 +97,8 @@ Lo que conviene saber del bloque 21 (rama `perf/purga-y-planes`; planes medidos 
 - **21.2:** 19 índices de FK `RESTRICT` (`RestrictForeignKeyIndexesTest`), ausentes como anti-join, calendario con serie de enteros; `work_mem` se queda en 4MB (motivo en `infra/compose.prod.yaml`).
 - **21.3:** `MigrationsRoundTripTest` compara el catálogo tras cada `down()`/`up()`; corrigió tres `down()` (`2026_09_22_110000`, `2026_10_24_100000`, `2026_10_09_100000`: este último ya no devuelve a la aplicación escritura sobre `migrations`). En desarrollo, `fichaje_test` puede guardar funciones antiguas que `migrate:fresh` no borra: borrarlas a mano si sale «Restos tras deshacer».
 - **21.4:** `kioskScansBetween` y la historia de patrones van por índice; DB9 cerrado en el doc 07.
+- **Revisión:** el paso 4 de la purga (tramos por generaciones) conserva el `DELETE … LIMIT` repetido: medido, unos 4 s de los 4,2 s con siete meses vencidos y casi todo son las cuatro FK que apuntan a `shift_entries`; leerlos una vez tardó lo mismo (comentario de la migración y nota de ADR-057). `RestrictForeignKeyIndexesTest` falla si aparece una FK `RESTRICT` compuesta.
+- **Pendiente:** las FK `SET NULL`/`CASCADE` sin índice (`*_by_user_id`, `departments.manager_user_id`, `employees.department_id`, `device_pairing_requests.device_id`, `scan_processing_failures.device_id`, `role_has_permissions.role_id`) quedan sin indexar a propósito: sus padres casi nunca se borran. Revisar si alguno empieza a borrarse en lote.
 
 Lo que conviene saber del bloque 20 (integrado: #212; decisiones en Engram `2.3.0/b20-decisiones`):
 

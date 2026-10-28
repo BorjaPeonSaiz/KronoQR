@@ -24,6 +24,18 @@ use Tests\Support\Database\RefreshDatabaseAsOwner;
  * los puede usar porque `columna = $1` implica que no es nula. Con las tablas
  * vacias de la prueba el plan natural seria leerlas enteras, que es lo barato.
  *
+ * ## Alcance
+ *
+ * **Solo las claves ajenas `RESTRICT` y `NO ACTION`** (`confdeltype` `r` y
+ * `a`): son las que hacen que borrar al padre falle o se arrastre, y las que
+ * recorre la purga del registro. Las `SET NULL` y `CASCADE` tambien lanzan una
+ * consulta por fila borrada del padre, pero sus padres (usuarios, departamentos,
+ * dispositivos) casi nunca se borran: quedan fuera a proposito.
+ *
+ * **Y solo de una columna.** Hoy no hay ninguna compuesta; si aparece, la
+ * primera prueba falla, porque comprobar que su indice empieza por todas sus
+ * columnas, en el orden de la clave, es otra consulta que nadie ha escrito.
+ *
  * Con el rol dueño ({@see RefreshDatabaseAsOwner}): `FOR KEY SHARE` pide un
  * privilegio que la aplicacion no tiene en varias de estas tablas, y
  * PostgreSQL ejecuta la comprobacion real como dueño de la tabla hija.
@@ -33,7 +45,8 @@ uses(RefreshDatabaseAsOwner::class);
 
 /**
  * Las claves ajenas de una columna `RESTRICT` o `NO ACTION` del esquema
- * `public`, con su tabla y su columna.
+ * `public`, con su tabla y su columna. Las compuestas no salen aqui: las
+ * cuenta {@see restrictCompositeForeignKeys()}.
  *
  * @return list<object{tabla: string, columna: string, restriccion: string}>
  */
@@ -56,7 +69,33 @@ function restrictForeignKeys(): array
     return $rows;
 }
 
+/**
+ * Las claves ajenas compuestas `RESTRICT` o `NO ACTION` del esquema `public`.
+ *
+ * @return list<string>
+ */
+function restrictCompositeForeignKeys(): array
+{
+    /** @var list<object{nombre: string}> $rows */
+    $rows = DB::select(<<<'SQL'
+        SELECT c.conrelid::regclass::text || '.' || c.conname AS nombre
+          FROM pg_constraint c
+         WHERE c.contype = 'f'
+           AND c.confdeltype IN ('r', 'a')
+           AND c.connamespace = 'public'::regnamespace
+           AND pg_catalog.cardinality(c.conkey) > 1
+         ORDER BY 1
+        SQL);
+
+    return array_map(static fn (object $row): string => $row->nombre, $rows);
+}
+
 it('toda clave ajena RESTRICT tiene un indice valido que empieza por su columna', function (): void {
+    // Una compuesta no se puede vigilar con la consulta de abajo, que solo
+    // mira la primera columna del indice: antes de añadirla, hay que
+    // ampliar esta prueba.
+    expect(restrictCompositeForeignKeys())->toBe([], 'Claves ajenas RESTRICT compuestas que esta prueba no sabe vigilar');
+
     $keys = restrictForeignKeys();
 
     $missing = [];
