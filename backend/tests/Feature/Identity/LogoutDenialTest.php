@@ -36,7 +36,7 @@ use Tests\Support\Workforce\WorkforceFixtures;
 
 uses(RefreshDatabase::class);
 
-const DEVICE_LOGOUT_TARJETA = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
+const LOGOUT_DENIAL_TARJETA = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
@@ -49,7 +49,7 @@ beforeEach(function (): void {
  *
  * @return array{0: TestResponse<Response>, 1: list<array<string, mixed>>}
  */
-function deviceLogoutLlamada(string $token): array
+function logoutDenialLlamada(string $token): array
 {
     $apuntes = [];
 
@@ -72,7 +72,7 @@ function deviceLogoutLlamada(string $token): array
 it('deniega el cierre de sesion a un quiosco sin asiento y con la tablet fichando despues', function (): void {
     $escenario = AttendanceFixtures::scenario();
 
-    [$respuesta, $cierres] = deviceLogoutLlamada($escenario['token']);
+    [$respuesta, $cierres] = logoutDenialLlamada($escenario['token']);
 
     $respuesta->assertValidResponse(403);
 
@@ -84,7 +84,7 @@ it('deniega el cierre de sesion a un quiosco sin asiento y con la tablet fichand
     FrozenTime::at('2026-03-14 07:02:31');
     app()->instance(
         CredentialResolver::class,
-        FakeCredentialResolver::new()->resolving(DEVICE_LOGOUT_TARJETA, $escenario['employee']),
+        FakeCredentialResolver::new()->resolving(LOGOUT_DENIAL_TARJETA, $escenario['employee']),
     );
     $scanId = Str::uuid7()->toString();
 
@@ -93,7 +93,7 @@ it('deniega el cierre de sesion a un quiosco sin asiento y con la tablet fichand
         ->post('/api/v1/scan', [
             'scan_id' => $scanId,
             'occurred_at' => '2026-03-14T07:02:31Z',
-            'qr_payload' => DEVICE_LOGOUT_TARJETA,
+            'qr_payload' => LOGOUT_DENIAL_TARJETA,
         ])
         ->assertValidResponse(200);
 
@@ -105,7 +105,7 @@ it('deniega el cierre de sesion a un token del portal sin asiento y con el token
     $employee = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel del control'));
     $token = PortalLogins::open($employee);
 
-    [$respuesta, $cierres] = deviceLogoutLlamada($token);
+    [$respuesta, $cierres] = logoutDenialLlamada($token);
 
     $respuesta->assertValidResponse(403);
 
@@ -121,7 +121,7 @@ it('no deja linea de cierre ni asiento cuando llama un acceso de soporte', funct
     // ruta le responde `204` y no le revoca nada.
     $issued = SupportGrants::issue(scope: SupportScope::Configuration);
 
-    [$respuesta, $cierres] = deviceLogoutLlamada($issued->token);
+    [$respuesta, $cierres] = logoutDenialLlamada($issued->token);
 
     $respuesta->assertStatus(204);
 

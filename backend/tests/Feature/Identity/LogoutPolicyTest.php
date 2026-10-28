@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * La policy de `POST /api/v1/auth/logout` (regla dura 18, ADR-039).
  *
  * La ruta es de la gestion y del soporte: el quiosco y el portal reciben `403`.
- * Por HTTP lo prueban `AuthorizationMatrixTest` (cada actor), `DeviceLogoutTest`
+ * Por HTTP lo prueban `AuthorizationMatrixTest` (cada actor), `LogoutDenialTest`
  * (la denegacion sin efecto) y `SupportTokenBehaviourTest` (el acceso de
  * soporte). Aqui se prueba la policy directamente, incluida la mitad que el HTTP
  * no puede alcanzar —un `tokenable` de otra tabla no llega nunca a la policy,

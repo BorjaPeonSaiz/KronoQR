@@ -175,6 +175,6 @@ canal `device` en `AuthChannel` ni asiento ni línea de log para él**. Si algú
 necesitara que el quiosco cerrara su propia sesión, eso es una enmienda de este ADR —qué rastro deja y
 con qué actor—, no un caso más en el controlador.
 
-Lo prueban `tests/Feature/Identity/DeviceLogoutTest.php` (el `403` del quiosco y del portal sin
+Lo prueban `tests/Feature/Identity/LogoutDenialTest.php` (el `403` del quiosco y del portal sin
 efecto, y la tablet fichando después), `LogoutPolicyTest` y la fila de la ruta en
 `AuthorizationMatrix`.
