@@ -9,7 +9,7 @@ use Tests\Support\Shared\SuiteTemporaryDirectory;
  * La suite no deja ficheros en el `/tmp` de la maquina (Q10 de la verificacion
  * de la 2.1.0). El porque esta en `SuiteTemporaryDirectory`.
  *
- * Las dos ultimas pruebas lanzan un `php` aparte porque lo que se comprueba es
+ * Las tres ultimas pruebas lanzan un `php` aparte porque lo que se comprueba es
  * lo que pasa cuando un proceso termina, y eso no se puede ver desde dentro del
  * propio proceso. Trabajan sobre una base propia dentro del directorio de la
  * pasada, asi que no tocan el `/tmp` de nadie.
@@ -72,4 +72,25 @@ it('recoge lo que dejo una pasada muerta y respeta el de una pasada viva', funct
 
     expect(file_exists($muerta))->toBeFalse()
         ->and(is_dir($viva))->toBeTrue();
+})->group('RQ-12');
+
+it('no deja que un hijo de pcntl_fork que termina con exit borre el directorio de su padre', function (): void {
+    // Los hijos heredan la funcion de apagado; sin comparar el pid, el `exit`
+    // del hijo borraria el directorio del padre a mitad de la pasada. El
+    // padre espera al hijo, mira si su directorio sigue y termina, y entonces
+    // si lo borra.
+    $base = suiteTemporaryDirectorySandbox();
+    $script = 'require '.var_export(dirname(__DIR__, 3).'/vendor/autoload.php', true).';'
+        .'$d = Tests\Support\Shared\SuiteTemporaryDirectory::install();'
+        .'$hijo = pcntl_fork();'
+        .'if ($hijo === 0) { exit(0); }'
+        .'pcntl_waitpid($hijo, $estado);'
+        .'echo $d, "\n", is_dir($d) ? "sigue" : "borrado";';
+
+    $proceso = new Process([PHP_BINARY, '-r', $script], null, ['TMPDIR' => $base]);
+    $proceso->mustRun();
+    [$directorioDelPadre, $trasElHijo] = explode("\n", $proceso->getOutput());
+
+    expect($trasElHijo)->toBe('sigue')
+        ->and(file_exists($directorioDelPadre))->toBeFalse();
 })->group('RQ-12');
