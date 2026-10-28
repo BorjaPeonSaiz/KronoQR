@@ -13,6 +13,9 @@ use Tests\Support\Shared\SuiteTemporaryDirectory;
  * lo que pasa cuando un proceso termina, y eso no se puede ver desde dentro del
  * propio proceso. Trabajan sobre una base propia dentro del directorio de la
  * pasada, asi que no tocan el `/tmp` de nadie.
+ *
+ * Vive en Feature y no en Unit porque lanza procesos: era el fichero mas lento
+ * de la suite unitaria y la llevo por encima de su presupuesto de 5 s en la CI.
  */
 
 /**
