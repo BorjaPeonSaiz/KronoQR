@@ -89,7 +89,13 @@ Lo que se aprobó con el plan:
 - Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
 - La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
 
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 20 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** integrado: #212, `main` `5d234948` (28-10-2026). **Bloque 21** integrado: #213, `main` `5c1a38a0` (28-10-2026). **Bloque 22** («Pruebas que no prueban y autorización») en curso en `test/pruebas-2.3.0`, en dos tandas: 22a (22.1, 22.2, 22.3, 22.8) y 22b (22.4 a 22.6).
+**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 20 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** integrado: #212, `main` `5d234948` (28-10-2026). **Bloque 21** integrado: #213, `main` `5c1a38a0` (28-10-2026). **Bloque 22** («Pruebas que no prueban y autorización») en curso en `test/pruebas-2.3.0`, en dos tandas: 22a (22.1, 22.2, 22.3, 22.8) y 22b (22.4 a 22.6). **22a hecha (28-10-2026)**, sin push; sigue la 22b.
+
+Lo que conviene saber del bloque 22 (tanda 22a; detalle en Engram `2.3.0/b22` y `2.3.0/b22-contrato`):
+
+- **22.2:** `EveryTestIsTaggedTest` exige etiqueta de requisito en toda prueba de Pest y Playwright; `TraceabilityMatrixFreshnessTest` compara la matriz entera (regenerar con `make traceability` tras tocar etiquetas).
+- **22.3:** todos los pares (operación, código) validados: barridos en `tests/Contract/SharedResponsesSweepTest` y `DependencyUnavailableSweepTest` + puerta `ContractStatusCoverageTest`. Un `assertValidResponse()` sin código literal ya no cubre ningún par. Spectator no veía `POST /broadcasting/auth` (grupo vacío `channel-auth`). Contrato: `BadRequestProblem`, `InvalidRequest` = `oneOf` validación/D6, `UnreadableBody` en `client-errors` y `kiosk/pair/confirm` (decisión del propietario 28-10). Descarga diferida con el `Content-Type` de su formato.
+- **Pendiente:** unas noventa operaciones con cuerpo declaran el 415 de D6 pero no su 400 (`UnreadableBody`); el preámbulo lo cubre en prosa. Para las notas de la versión: el 400 del quiosco y de `me/login` puede llegar como `bad-request` sin `errors`.
 
 Lo que conviene saber del bloque 21 (integrado: #213; planes medidos antes y después en el commit de cada tarea):
 
@@ -399,8 +405,7 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
   `ConfirmPairing`, `GeneratePeriodReport`, `ReadAdoptionReport`, `SendWeeklySummaries` y `PayrollExportController`:
   el 409 sale con `detail: ""` (el ejemplo de `SiteNotConfigured` promete texto) y se registra como ERROR (no hay
   `dontReport`). Arreglo: `::make()` en todos y `dontReport(InstallationSiteMissing::class)`. Cambia comportamiento.
-- CT5 vivo: la descarga CSV de `/reports/exports/{uuid}/download` sale como `text/plain`; su 200 no se valida.
-- El 400 `InvalidRequest` de `POST /client-errors` probablemente nunca sale; la descripción de `ServiceUnavailable`
+- ~~CT5~~ y ~~el 400 de `POST /client-errors`~~: cerrados en la 22.3 (`21c7a0b5`, `733d4e9a`). La descripción de `ServiceUnavailable`
   cita una respuesta `DependencyUnavailable` que no existe en el contrato.
 - El 409 «sin centro» de `kiosk/pair/confirm` solo lo produce una prueba con un código de relleno; V6-BE-4 (ramas de
   esquema que ninguna prueba produce) sigue abierto.
