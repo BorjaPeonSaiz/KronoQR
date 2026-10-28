@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Architecture\Support;
 
+use App\Modules\Shared\Application\Port\Clock;
 use PhpToken;
 
 /*
@@ -34,7 +35,7 @@ use PhpToken;
 final class ClockTampering
 {
     /** Nombre completo del puerto, sin barra inicial. */
-    public const string CLOCK_PORT = 'App\\Modules\\Shared\\Application\\Port\\Clock';
+    public const string CLOCK_PORT = Clock::class;
 
     /**
      * @return list<string> Una descripcion por infraccion, en orden de aparicion.
@@ -90,7 +91,7 @@ final class ClockTampering
         $import = '/\buse\s+\\\\?'.preg_quote(self::CLOCK_PORT, '/').'\s+as\s+(\w+)\s*;/';
 
         if (preg_match_all($import, $code, $matches) > 0) {
-            $names = [...$names, ...$matches[1]];
+            return [...$names, ...$matches[1]];
         }
 
         return $names;
