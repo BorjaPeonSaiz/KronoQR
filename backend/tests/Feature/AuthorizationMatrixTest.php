@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
+use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Route as Router;
+use Tests\Architecture\Support\Repo;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Http\AuthorizationMatrix;
 use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\FakeInstructionsSheetRenderer;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 
 /*
@@ -296,3 +299,131 @@ it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', 
     expect($discrepancies)->toHaveCount(1)
         ->and($discrepancies[0])->toStartWith('GET api/v1/settings · admin: autorizado, recibido 403');
 })->group('RQ-07');
+
+/*
+ * ---------------------------------------------------------------------------
+ * CADA AMBITO DE UN ACTOR ABRE ALGO (V4-QA-2 de la verificacion de la 2.2.0)
+ * ---------------------------------------------------------------------------
+ *
+ * La matriz fija que recibe cada actor, pero no que cada ambito que lleva en el
+ * token le sirva para algo. Un ambito concedido que ninguna ruta autorizada
+ * consume es una de dos cosas: un permiso de mas que alguien activara sin
+ * querer el dia que una ruta lo pida, o un menu del panel que se enciende con
+ * ese ambito y lleva a un `403` (V2-PA-01: el auditor con `attendance:read` veia
+ * la presencia en el menu y el servidor se la negaba).
+ *
+ * Los ambitos de gestion salen de `docs/api/role-abilities.json`, que
+ * `RoleCatalogTest` ata a la tabla `role_has_permissions`; los del portal, el
+ * quiosco y la sesion pendiente son los que emiten `PortalLogins`,
+ * `AttendanceFixtures` y el acceso con segundo factor (doc 02 §7.3).
+ */
+
+/**
+ * Los ambitos que lleva el token de cada actor de la matriz.
+ *
+ * @return array<string, list<string>>
+ */
+function authorizationMatrixAbilitiesByActor(): array
+{
+    /** @var array{roles: array<string, list<string>>} $catalog */
+    $catalog = json_decode(Repo::contents('docs/api/role-abilities.json'), true, 512, JSON_THROW_ON_ERROR);
+
+    return [
+        AuthorizationMatrix::ADMIN => $catalog['roles']['admin'],
+        AuthorizationMatrix::RRHH => $catalog['roles']['rrhh'],
+        AuthorizationMatrix::RESPONSABLE => $catalog['roles']['responsable_departamento'],
+        AuthorizationMatrix::AUDITOR => $catalog['roles']['auditor'],
+        AuthorizationMatrix::EMPLEADO => [TokenAbility::SELF_READ->value],
+        AuthorizationMatrix::QUIOSCO => [
+            TokenAbility::SCAN_WRITE->value,
+            TokenAbility::ROSTER_READ->value,
+            TokenAbility::HEARTBEAT_WRITE->value,
+        ],
+        AuthorizationMatrix::TWO_FACTOR_PENDING => [TokenAbility::TWO_FACTOR_PENDING->value],
+    ];
+}
+
+/**
+ * Las claves de la matriz cuyo middleware `ability:` acepta un ambito
+ * (`CheckForAnyAbility`: la lista separada por comas significa «o»).
+ *
+ * @return list<string>
+ */
+function authorizationMatrixRoutesRequiring(string $ability): array
+{
+    $keys = [];
+
+    foreach (Router::getRoutes()->getRoutes() as $route) {
+        $declared = array_values(array_filter(
+            $route->gatherMiddleware(),
+            static fn (mixed $middleware): bool => \is_string($middleware) && str_starts_with($middleware, 'ability:'),
+        ));
+        $abilities = explode(',', substr((string) ($declared[0] ?? 'ability:'), \strlen('ability:')));
+
+        $keys[] = \in_array($ability, $abilities, true) ? authorizationMatrixKeysOf($route) : [];
+    }
+
+    return array_values(array_unique(array_merge(...$keys)));
+}
+
+/**
+ * Los pares «actor · ambito» que no abren ninguna ruta que la matriz le
+ * autorice a ese actor.
+ *
+ * @param  array<string, list<string>>  $abilitiesByActor
+ * @return list<string>
+ */
+function authorizationMatrixAbilitiesThatOpenNothing(array $abilitiesByActor): array
+{
+    $routes = AuthorizationMatrix::routes();
+    $found = [];
+
+    foreach ($abilitiesByActor as $actor => $abilities) {
+        foreach ($abilities as $ability) {
+            $opened = array_filter(
+                authorizationMatrixRoutesRequiring($ability),
+                static fn (string $key): bool => \in_array($actor, $routes[$key] ?? [], true),
+            );
+            $found[] = $opened === [] ? $actor.' · '.$ability : null;
+        }
+    }
+
+    return array_values(array_filter($found));
+}
+
+it('no concede a ningun actor un ambito que no le abra ninguna ruta', function (): void {
+    // La unica excepcion, a la vista: `audit:read` de `admin`. El contrato lo
+    // dice («Hoy no lo exige ninguna ruta», `openapi.yaml`, `securitySchemes`)
+    // y `SupportScope` lo razona: lo contempla la tabla del doc 02 §7.3 para el
+    // visor del registro de auditoria, que aun no existe. La prueba siguiente
+    // obliga a revisar la excepcion el dia que una ruta lo pida.
+    $excepciones = [AuthorizationMatrix::ADMIN.' · '.TokenAbility::AUDIT_READ->value];
+
+    $sinRuta = authorizationMatrixAbilitiesThatOpenNothing(authorizationMatrixAbilitiesByActor());
+
+    expect(array_values(array_diff($sinRuta, $excepciones)))->toBe(
+        [],
+        'Ambito(s) concedido(s) que no abren ninguna ruta al actor que los lleva: '.implode(', ', array_diff($sinRuta, $excepciones)),
+    )->and($sinRuta)->toBe($excepciones);
+})->group('RQ-07', 'RF-ID-02');
+
+it('mantiene audit:read sin ninguna ruta que lo exija', function (): void {
+    // Si aparece el visor de auditoria, la excepcion de arriba sobra y hay que
+    // decidir quien lo lee, incluido el acceso de soporte `read_only`, que
+    // tambien lleva este ambito (`SupportScope`, ADR-020).
+    expect(authorizationMatrixRoutesRequiring(TokenAbility::AUDIT_READ->value))->toBe([]);
+})->group('RQ-07', 'RF-PD-11');
+
+it('detecta un ambito concedido que no abre nada', function (): void {
+    // El control: con los ambitos del auditor anteriores a la 2.2.1, los dos
+    // que perdio salen en la lista. Sin esto, una funcion que nunca encontrara
+    // nada pasaria la primera prueba.
+    $sinRuta = authorizationMatrixAbilitiesThatOpenNothing([
+        AuthorizationMatrix::AUDITOR => ManagementUsers::legacyAuditorAbilities(),
+    ]);
+
+    expect($sinRuta)->toBe([
+        AuthorizationMatrix::AUDITOR.' · '.TokenAbility::ATTENDANCE_READ->value,
+        AuthorizationMatrix::AUDITOR.' · '.TokenAbility::AUDIT_READ->value,
+    ]);
+})->group('RQ-07', 'RF-ID-02');
