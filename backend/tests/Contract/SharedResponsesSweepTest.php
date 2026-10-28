@@ -47,6 +47,9 @@ beforeEach(function (): void {
 /** Un JSON valido con un campo que ninguna operacion admite. */
 const SHARED_RESPONSES_SWEEP_UNKNOWN_FIELD = ['campo_que_no_existe' => 1];
 
+/** Un cuerpo declarado JSON que no lo es: le falta el valor y el cierre (D6). */
+const SHARED_RESPONSES_SWEEP_MALFORMED_JSON = '{"campo":';
+
 /**
  * Los siete tokens de la matriz, con el limitador abierto: un centenar de
  * peticiones con el mismo token no pueden toparse con el cupo de una zona.
@@ -109,16 +112,47 @@ it('responde 415 con la forma del contrato a un cuerpo que no es JSON, en cada o
     expect($discrepancias)->toBe([], implode("\n", $discrepancias));
 })->group('RQ-06', 'RQ-14');
 
-it('responde 400 con la forma del contrato a un campo que la operacion no admite, en cada operacion que lo declara', function (): void {
+it('responde 400 con la forma del contrato a un JSON mal formado, en cada operacion que lo declara', function (): void {
+    // D6: el `400` que puede darse en toda operacion con cuerpo, lo valide
+    // ella con `400` o con `422`. El esquema lo distingue por el `type`
+    // (`BadRequestProblem`, sin `errors`), asi que un `invalid-request` aqui
+    // tambien saldria como discrepancia.
     $tokens = sharedResponsesSweepTokens();
 
-    $discrepancias = ContractSweep::discrepancies(400, static fn (string $operation) => ContractSweep::sendWithUnknownField(
+    $discrepancias = ContractSweep::discrepancies(400, static fn (string $operation) => ContractSweep::sendRaw(
+        ContractSweep::clientAllowed($operation, $tokens),
+        $operation,
+        'application/json',
+        SHARED_RESPONSES_SWEEP_MALFORMED_JSON,
+    ));
+
+    expect($discrepancias)->toBe([], implode("\n", $discrepancias))
+        ->and(ContractSweep::sweptOperations(400))->toContain('POST /api/v1/client-errors', 'POST /api/v1/kiosk/pair/confirm');
+})->group('RQ-06', 'RQ-14');
+
+it('responde 400 con la forma del contrato a un campo que la operacion no admite, en cada operacion que valida con 400', function (): void {
+    // La otra forma del `400`: `invalid-request` con `errors`, en las que
+    // validan con `400` y no con `422` —el camino del quiosco y el acceso al
+    // portal—. Las que lo declaran como `UnreadableBody` validan con `422` y
+    // las barre el `422`.
+    $tokens = sharedResponsesSweepTokens();
+    $validanCon400 = [
+        ...ContractSweep::declaringResponse(400, 'InvalidRequest'),
+        ...ContractSweep::declaringResponse(400, 'InvalidQuery'),
+    ];
+
+    $discrepancias = ContractSweep::discrepanciesAmong($validanCon400, 400, static fn (string $operation) => ContractSweep::sendWithUnknownField(
         ContractSweep::clientAllowed($operation, $tokens),
         $operation,
         SHARED_RESPONSES_SWEEP_UNKNOWN_FIELD,
     ));
 
-    expect($discrepancias)->toBe([], implode("\n", $discrepancias));
+    // Las cifras del dia en que se escribio: ocho con cuerpo y el padron, y
+    // las dos que validan con `422` fuera.
+    expect($discrepancias)->toBe([], implode("\n", $discrepancias))
+        ->and($validanCon400)->toHaveCount(9)
+        ->and(ContractSweep::declaringResponse(400, 'UnreadableBody'))
+        ->toBe(['POST /api/v1/client-errors', 'POST /api/v1/kiosk/pair/confirm']);
 })->group('RQ-06', 'RQ-14');
 
 it('responde 422 con la forma del contrato a un campo que la operacion no admite, en cada operacion que lo declara', function (): void {

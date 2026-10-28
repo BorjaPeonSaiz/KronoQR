@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use LogicException;
 use Spectator\RequestFactory;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Yaml\Yaml;
 use Tests\Architecture\Support\ContractCoverage;
 use Tests\Architecture\Support\Repo;
 use Tests\Support\Http\Api;
@@ -77,8 +78,7 @@ final class ContractSweep
             'POST /api/v1/broadcasting/auth' => 'El 403 de la firma lo decide la policy del canal, con el canal en el cuerpo y el difusor real: lo valida PresenceChannelAuthorizationTest.',
         ],
         400 => [
-            'POST /api/v1/client-errors' => 'Discrepancia: declara 400 InvalidRequest, pero ReportClientErrorsRequest valida con 422 y nunca emite invalid-request.',
-            'POST /api/v1/kiosk/pair/confirm' => 'Discrepancia: declara 400 InvalidRequest, pero ConfirmPairingRequest valida con 422 y nunca emite invalid-request.',
+            'GET /api/v1/kiosk/roster' => 'Un GET no lleva cuerpo que leer, asi que el 400 de un JSON mal formado (D6) no puede darse: su 400 es el invalid-request de la consulta (InvalidQuery), que valida RosterDisclosureTest.',
         ],
         404 => [
             'GET /api/v1/compliance-profile' => self::SINGLETON,
@@ -131,13 +131,31 @@ final class ContractSweep
      */
     public static function discrepancies(int $code, Closure $send): array
     {
+        return self::discrepanciesAmong(self::sweptOperations($code), $code, $send);
+    }
+
+    /**
+     * Como {@see self::discrepancies()}, pero sobre las operaciones dadas: para
+     * comprobar **otra** forma de provocar un codigo que su barrido ya cubre
+     * —el `400` de validacion, ademas del de un JSON mal formado—.
+     *
+     * La puerta no lo cuenta como barrido, y a proposito: lo que cubre lo
+     * decide quien lo llama, no `SET_ASIDE`, y un subconjunto no puede dar por
+     * cubierto el codigo entero.
+     *
+     * @param  list<string>  $operations
+     * @param  Closure(string): TestResponse<Response>  $send
+     * @return list<string>
+     */
+    public static function discrepanciesAmong(array $operations, int $code, Closure $send): array
+    {
         if (resolve(RequestFactory::class)->getSpec() === null) {
             throw new LogicException('El barrido necesita el contrato cargado: Spectator::using(\'openapi.yaml\').');
         }
 
         $found = [];
 
-        foreach (self::sweptOperations($code) as $operation) {
+        foreach ($operations as $operation) {
             $found[] = self::discrepancy($operation, $code, $send($operation));
         }
 
@@ -204,6 +222,46 @@ final class ContractSweep
             self::responses(),
             static fn (array $codes): bool => \in_array($code, $codes, true),
         ));
+    }
+
+    /**
+     * Las operaciones del contrato cuyo codigo es la respuesta compartida dada
+     * de `components.responses`: las que declaran el `400` como
+     * `InvalidRequest` validan el cuerpo con `400`, y las que lo declaran como
+     * `UnreadableBody`, no.
+     *
+     * @return list<string>
+     */
+    public static function declaringResponse(int $code, string $component): array
+    {
+        $document = Yaml::parseFile(Repo::file('docs/api/openapi.yaml'));
+        $paths = \is_array($document) && \is_array($document['paths'] ?? null) ? $document['paths'] : [];
+        $reference = '#/components/responses/'.$component;
+        $operations = [];
+
+        foreach ($paths as $path => $item) {
+            foreach (\is_array($item) ? $item : [] as $verb => $operation) {
+                if (self::referenceOf($operation, $code) === $reference) {
+                    $operations[] = strtoupper((string) $verb).' '.$path;
+                }
+            }
+        }
+
+        sort($operations);
+
+        return $operations;
+    }
+
+    /**
+     * El `$ref` de la respuesta del codigo en una operacion del YAML, o null si
+     * no la declara o la escribe en linea.
+     */
+    private static function referenceOf(mixed $operation, int $code): mixed
+    {
+        $responses = \is_array($operation) && \is_array($operation['responses'] ?? null) ? $operation['responses'] : [];
+        $response = $responses[$code] ?? null;
+
+        return \is_array($response) ? $response['$ref'] ?? null : null;
     }
 
     /**

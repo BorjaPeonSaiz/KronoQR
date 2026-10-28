@@ -53,9 +53,21 @@ use Tests\Contract\Support\ContractSweep;
  * @var array<string, string>
  */
 const CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES = [
-    'POST /api/v1/client-errors 400' => 'Declara 400 InvalidRequest (ValidationProblem, con errors). ReportClientErrorsRequest valida con 422 y no emite invalid-request; el unico 400 posible es el bad-request de un JSON mal formado (D6), sin errors, que el esquema rechaza.',
-    'POST /api/v1/kiosk/pair/confirm 400' => 'Declara 400 InvalidRequest (ValidationProblem, con errors). ConfirmPairingRequest valida con 422 y no emite invalid-request; el unico 400 posible es el bad-request de un JSON mal formado (D6), sin errors, que el esquema rechaza.',
+    // Vacia desde la 22.3: las dos que tuvo (el `400` de `client-errors` y de
+    // `kiosk/pair/confirm`, declarado como `invalid-request` cuando lo unico
+    // que podian dar era el `bad-request` de D6) se arreglaron en el contrato.
 ];
+
+/**
+ * {@see CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES} con su tipo declarado: de
+ * la constante, PHPStan ve el valor, y vacia no le deja comprobar nada.
+ *
+ * @return array<string, string>
+ */
+function contractStatusCoverageKnownDiscrepancies(): array
+{
+    return CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES;
+}
 
 /**
  * Cada par `METODO /ruta CODIGO` que declara el contrato.
@@ -115,7 +127,7 @@ function contractStatusCoverageCovered(): array
 
     return $covered = array_values(array_unique([
         ...array_keys(ContractCoverage::validatedPairs($operations, $files)),
-        ...array_merge(...array_map(static fn (int $code): array => ContractSweep::sweptPairs($code), array_unique($swept))),
+        ...array_merge(...array_map(ContractSweep::sweptPairs(...), array_unique($swept))),
     ]));
 }
 
@@ -137,7 +149,7 @@ it('valida cada codigo de respuesta que declara cada operacion del contrato', fu
     $sinCubrir = array_values(array_diff(
         contractStatusCoverageDeclared(),
         contractStatusCoverageCovered(),
-        array_keys(CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES),
+        array_keys(contractStatusCoverageKnownDiscrepancies()),
     ));
 
     expect($sinCubrir)->toBe(
@@ -150,7 +162,7 @@ it('valida cada codigo de respuesta que declara cada operacion del contrato', fu
 
 it('no guarda como discrepancia conocida un par que ya esta cubierto o que el contrato ya no declara', function (): void {
     $caducados = array_values(array_filter(
-        array_keys(CONTRACT_STATUS_COVERAGE_KNOWN_DISCREPANCIES),
+        array_keys(contractStatusCoverageKnownDiscrepancies()),
         static fn (string $pair): bool => in_array($pair, contractStatusCoverageCovered(), true)
             || ! in_array($pair, contractStatusCoverageDeclared(), true),
     ));

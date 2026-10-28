@@ -9582,6 +9582,16 @@ export interface components {
             cause?: "opening_moved" | "opening_voided" | "entry_not_continued" | "next_entry_not_continued";
         };
         /**
+         * BadRequestProblem
+         * @description La peticion no se ha podido leer (D6): `Content-Type` JSON con un cuerpo
+         *     que no es JSON valido. **Sin `errors`**, porque no se ha leido ningun
+         *     campo; el cliente la distingue de `ValidationProblem` por el `type`.
+         */
+        BadRequestProblem: components["schemas"]["Problem"] & {
+            /** @enum {string} */
+            type: "urn:kronoqr:problem:bad-request";
+        };
+        /**
          * ScanRejected
          * @description **La unica respuesta de rechazo de un escaneo.** Todos los campos estan fijados
          *     a un valor unico y no se admiten miembros adicionales, de modo que el contrato
@@ -13829,13 +13839,59 @@ export interface components {
          *     cabecera `Idempotency-Key` no coincide con `scan_id`. Es un fallo del
          *     cliente, y ninguna de sus causas dice nada sobre credenciales: el rechazo de
          *     un escaneo NUNCA llega por aqui, sino como `422`.
+         *
+         *     **Dos formas, distintas por `type`.** Si el cuerpo se ha leido y algun
+         *     campo no cumple, `urn:kronoqr:problem:invalid-request` con `errors` por
+         *     campo (`ValidationProblem`). Si el cuerpo ni siquiera se ha podido leer
+         *     —`Content-Type` JSON con un cuerpo que no es JSON valido (D6)—,
+         *     `urn:kronoqr:problem:bad-request` **sin** `errors` (`BadRequestProblem`):
+         *     no hay campo que senalar porque no se ha leido ninguno. Las dos son
+         *     terminales: reenviar lo mismo dara lo mismo.
          */
         InvalidRequest: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                "application/problem+json": components["schemas"]["ValidationProblem"] | components["schemas"]["BadRequestProblem"];
+            };
+        };
+        /**
+         * @description La consulta lleva un parametro que la operacion no admite. Se rechaza en
+         *     vez de ignorarse (`RejectsUnknownInput`), con `errors` por parametro. Es
+         *     un `GET`: no lleva cuerpo, asi que el `400` de un JSON mal formado (D6)
+         *     no puede darse aqui.
+         */
+        InvalidQuery: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
                 "application/problem+json": components["schemas"]["ValidationProblem"];
+            };
+        };
+        /**
+         * @description El cuerpo lleva `Content-Type` JSON (`application/json` o `+json`) pero
+         *     no es JSON valido (D6). No se ha leido ni guardado nada, y no hay
+         *     `errors`: no hay campo que senalar porque no se ha leido ninguno. Los
+         *     campos que no cumplen se rechazan con `422`, no por aqui. En las rutas
+         *     con sesion se responde despues de autenticar. `title` y `detail`, en el
+         *     idioma negociado.
+         */
+        UnreadableBody: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "urn:kronoqr:problem:bad-request",
+                 *       "title": "Peticion mal formada",
+                 *       "status": 400,
+                 *       "detail": "La peticion no se ha podido interpretar."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["BadRequestProblem"];
             };
         };
         /**
@@ -15216,7 +15272,7 @@ export interface operations {
                     "application/json": components["schemas"]["KioskRoster"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
+            400: components["responses"]["InvalidQuery"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
@@ -15391,7 +15447,7 @@ export interface operations {
                     "application/json": components["schemas"]["PairingConfirmed"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
+            400: components["responses"]["UnreadableBody"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["SiteNotConfigured"];
@@ -19434,7 +19490,7 @@ export interface operations {
                     "application/json": components["schemas"]["ClientErrorsAccepted"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
+            400: components["responses"]["UnreadableBody"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             415: components["responses"]["UnsupportedMediaType"];
