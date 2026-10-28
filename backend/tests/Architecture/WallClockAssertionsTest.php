@@ -33,6 +33,7 @@ use Tests\Support\Time\WallClockBudget;
 const WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO = [
     'tests/Feature/Attendance/UnprocessableScanDiscardTest.php' => 'afirma un SUELO (el relleno hasta el doble del de RS-03): una maquina cargada solo lo aleja',
     'tests/Feature/Health/CircuitBreakerWiringTest.php' => 'escribe un instante en el fichero del cortacircuitos; no mide nada',
+    'tests/Integration/Database/ParallelRequestsBarrierTest.php' => 'compara el ORDEN de dos lecturas del reloj monotono (soltar antes que empezar), no una duracion: una maquina cargada no lo invierte',
     'tests/Integration/Install/InstallInterruptionTest.php' => 'plazo de espera de un proceso hijo, no una afirmacion de tiempo',
     'tests/Integration/Schema/MigrationsRoundTripTest.php' => 'solo informa de lo que tardan las migraciones; no lo afirma',
     'tests/Integration/Schema/UnusedJsonbIndexesMigrationTest.php' => 'afirma que una migracion ESPERA a un bloqueo (cota inferior): una maquina cargada solo la alarga',
