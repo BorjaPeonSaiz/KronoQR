@@ -10,13 +10,14 @@
 //
 // El backend no participa: dobles de `support/admin.ts`.
 //
-// Las pruebas del marco en si no llevan etiqueta de requisito a proposito (tarea 3.7, decision 10 de la ficha):
 // `docs/requisitos.yaml` no tiene un RF/RN/RQ para «el menu de navegacion del
-// panel» en si mismo -RF-PA-01 es la vista en vivo de presencia, no el menu-;
-// lo unico que rige esta pantalla es la guia visual (doc 06 §6 regla 11, que
-// no es un requisito con `id`) y el WCAG 2.2 AA general (doc 01 §6.5, sin
-// `id` propio en el catalogo). Inventar una etiqueta aqui falsearia la
-// matriz de trazabilidad.
+// panel» en si mismo, y lo que rige esta pantalla —la guia visual (doc 06 §6
+// regla 11) y el WCAG 2.2 AA (doc 01 §6.5)— no tiene `id`. Hasta la 2.3.0 estas
+// pruebas iban sin etiqueta; desde la tarea 22.2 toda prueba lleva una
+// (`EveryTestIsTaggedTest`), y cada una cita el requisito de lo que recorre: la
+// ficha de un empleado (RF-GP-01), las diecinueve secciones que el modelo de
+// roles le abre a un administrador (RF-ID-02) y los idiomas activos, que son
+// configuracion y no codigo (RF-PD-01).
 import { expect, test, type Page } from '@playwright/test'
 import { EMPLOYEE_UUID, logInAsAdmin, stubManagementApi } from './support/admin'
 import { expectNoBlockingViolations } from './support/axe'
@@ -58,27 +59,32 @@ test.beforeEach(async ({ page }) => {
   await logInAsAdmin(page)
 })
 
-test('la seccion activa lleva aria-current, tambien desde la ficha de un empleado', async ({
-  page,
-}) => {
-  const nav = page.getByRole('banner').getByRole('navigation')
-  const employees = nav.getByRole('link', { name: 'Plantilla' })
+test(
+  'la seccion activa lleva aria-current, tambien desde la ficha de un empleado',
+  { tag: ['@RF-GP-01'] },
+  async ({ page }) => {
+    const nav = page.getByRole('banner').getByRole('navigation')
+    const employees = nav.getByRole('link', { name: 'Plantilla' })
 
-  await expect(page).toHaveURL(/\/employees$/)
-  await expect(employees).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: 'Presencia' })).not.toHaveAttribute('aria-current')
+    await expect(page).toHaveURL(/\/employees$/)
+    await expect(employees).toHaveAttribute('aria-current', 'page')
+    await expect(nav.getByRole('link', { name: 'Presencia' })).not.toHaveAttribute('aria-current')
 
-  // La ficha no tiene entrada de menu: cuelga de «Plantilla» (meta.section).
-  await page.goto(`/employees/${EMPLOYEE_UUID}`)
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-  await expect(employees).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: 'Presencia' })).not.toHaveAttribute('aria-current')
+    // La ficha no tiene entrada de menu: cuelga de «Plantilla» (meta.section).
+    await page.goto(`/employees/${EMPLOYEE_UUID}`)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(employees).toHaveAttribute('aria-current', 'page')
+    await expect(nav.getByRole('link', { name: 'Presencia' })).not.toHaveAttribute('aria-current')
 
-  await nav.getByRole('link', { name: 'Presencia' }).click()
-  await expect(page).toHaveURL(/\/live$/)
-  await expect(nav.getByRole('link', { name: 'Presencia' })).toHaveAttribute('aria-current', 'page')
-  await expect(employees).not.toHaveAttribute('aria-current')
-})
+    await nav.getByRole('link', { name: 'Presencia' }).click()
+    await expect(page).toHaveURL(/\/live$/)
+    await expect(nav.getByRole('link', { name: 'Presencia' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(employees).not.toHaveAttribute('aria-current')
+  },
+)
 
 // Pedido del propietario (tarea 4.1): «Impacto y adopcion» y «Nomina» tienen
 // entrada propia, asi que al estar en ellas «Informes» NO debe quedar activa.
@@ -135,50 +141,56 @@ test(
   },
 )
 
-test('por debajo de md el menu se apila y las diecinueve secciones siguen visibles', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 700, height: 900 })
+test(
+  'por debajo de md el menu se apila y las diecinueve secciones siguen visibles',
+  { tag: ['@RF-ID-02'] },
+  async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 900 })
 
-  const banner = page.getByRole('banner')
-  const nav = banner.getByRole('navigation')
+    const banner = page.getByRole('banner')
+    const nav = banner.getByRole('navigation')
 
-  for (const section of SECTIONS) {
-    // `exact: true`: «Cumplimiento» es subcadena de «Perfil de cumplimiento»
-    // (RF-PA-06/RF-PD-07, tarea 3.4) y una coincidencia por subcadena
-    // encontraria las dos.
-    await expect(nav.getByRole('link', { name: section, exact: true })).toBeVisible()
-  }
-  await expect(nav.getByRole('link')).toHaveCount(SECTIONS.length)
+    for (const section of SECTIONS) {
+      // `exact: true`: «Cumplimiento» es subcadena de «Perfil de cumplimiento»
+      // (RF-PA-06/RF-PD-07, tarea 3.4) y una coincidencia por subcadena
+      // encontraria las dos.
+      await expect(nav.getByRole('link', { name: section, exact: true })).toBeVisible()
+    }
+    await expect(nav.getByRole('link')).toHaveCount(SECTIONS.length)
 
-  // Apilado: la cabecera termina antes de que empiece el contenido, y ninguno
-  // de los dos se sale del ancho de la ventana.
-  const header = await banner.boundingBox()
-  const main = await page.getByRole('main').boundingBox()
+    // Apilado: la cabecera termina antes de que empiece el contenido, y ninguno
+    // de los dos se sale del ancho de la ventana.
+    const header = await banner.boundingBox()
+    const main = await page.getByRole('main').boundingBox()
 
-  assertPainted(header, 'La cabecera')
-  assertPainted(main, 'El contenido')
-  expect(main.y).toBeGreaterThanOrEqual(header.y + header.height)
-  expect(header.x + header.width).toBeLessThanOrEqual(700)
-  expect(main.x + main.width).toBeLessThanOrEqual(700)
+    assertPainted(header, 'La cabecera')
+    assertPainted(main, 'El contenido')
+    expect(main.y).toBeGreaterThanOrEqual(header.y + header.height)
+    expect(header.x + header.width).toBeLessThanOrEqual(700)
+    expect(main.x + main.width).toBeLessThanOrEqual(700)
 
-  await expectNoBlockingViolations(page)
-})
+    await expectNoBlockingViolations(page)
+  },
+)
 
 // Una instalacion solo en español no descarga el catalogo en ingles (V21-5-PA-4,
 // V5-PA-5): cada idioma es un trozo aparte y solo se pide el que se pinta.
-test('una instalacion solo en español no descarga el catalogo en ingles', async ({ page }) => {
-  const scripts: string[] = []
+test(
+  'una instalacion solo en español no descarga el catalogo en ingles',
+  { tag: ['@RF-PD-01'] },
+  async ({ page }) => {
+    const scripts: string[] = []
 
-  page.on('request', (request) => {
-    if (request.resourceType() === 'script') {
-      scripts.push(new URL(request.url()).pathname)
-    }
-  })
+    page.on('request', (request) => {
+      if (request.resourceType() === 'script') {
+        scripts.push(new URL(request.url()).pathname)
+      }
+    })
 
-  await page.reload()
-  await expect(page.getByRole('navigation', { name: 'Secciones del panel' })).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('navigation', { name: 'Secciones del panel' })).toBeVisible()
 
-  expect(scripts.some((path) => /\/assets\/es-[\w-]+\.js$/.test(path))).toBe(true)
-  expect(scripts.some((path) => /\/assets\/en-[\w-]+\.js$/.test(path))).toBe(false)
-})
+    expect(scripts.some((path) => /\/assets\/es-[\w-]+\.js$/.test(path))).toBe(true)
+    expect(scripts.some((path) => /\/assets\/en-[\w-]+\.js$/.test(path))).toBe(false)
+  },
+)

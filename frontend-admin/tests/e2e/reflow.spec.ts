@@ -12,8 +12,9 @@
 // dentro de una tabla ancha, que escapa del `overflow` de su contenedor si este no
 // es el bloque contenedor (`relative`).
 //
-// Sin etiqueta de requisito, como `shell.spec.ts`: WCAG 2.2 AA general, sin `id` propio
-// en el catalogo de requisitos.
+// Cada pasada lleva el requisito de su pantalla, el mismo que su pasada de axe
+// (`support/axeRoutes.ts`): el WCAG 2.2 AA del doc 01 §6.5 no tiene `id` en el
+// catalogo, y desde la tarea 22.2 de la 2.3.0 toda prueba lleva etiqueta.
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, stubManagementApi } from './support/admin'
 import { AXE_ROUTE_PASSES } from './support/axeRoutes'
@@ -23,20 +24,24 @@ const NARROW = { width: 320, height: 640 }
 const SCREENS = Object.entries(AXE_ROUTE_PASSES).filter(([, pass]) => pass.access === 'admin')
 
 for (const [name, pass] of SCREENS) {
-  test(`${name} (${pass.path}) no desborda la pagina a 320 px`, async ({ page }) => {
-    await page.setViewportSize(NARROW)
-    await stubManagementApi(page, { role: 'admin' })
-    await logInAsAdmin(page)
+  test(
+    `${name} (${pass.path}) no desborda la pagina a 320 px`,
+    { tag: [...pass.requirements] },
+    async ({ page }) => {
+      await page.setViewportSize(NARROW)
+      await stubManagementApi(page, { role: 'admin' })
+      await logInAsAdmin(page)
 
-    await page.goto(pass.path)
-    await expect(page.getByRole('heading', { level: 1, name: pass.heading })).toBeVisible()
-    await page.waitForLoadState('networkidle')
+      await page.goto(pass.path)
+      await expect(page.getByRole('heading', { level: 1, name: pass.heading })).toBeVisible()
+      await page.waitForLoadState('networkidle')
 
-    const widths = await page.evaluate(() => ({
-      document: document.documentElement.scrollWidth,
-      viewport: document.documentElement.clientWidth,
-    }))
+      const widths = await page.evaluate(() => ({
+        document: document.documentElement.scrollWidth,
+        viewport: document.documentElement.clientWidth,
+      }))
 
-    expect(widths.document).toBeLessThanOrEqual(widths.viewport)
-  })
+      expect(widths.document).toBeLessThanOrEqual(widths.viewport)
+    },
+  )
 }

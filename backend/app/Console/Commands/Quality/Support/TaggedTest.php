@@ -38,9 +38,8 @@ final readonly class TaggedTest
      * pruebas del mismo fichero se ejecutan en la CI y cubren lo que dicen.
      *
      * Aqui y no en el informe para que `qa:traceability` y la puerta de nivel
-     * (`TestLevelGateTest`) decidan lo mismo: hasta la 2.3.0 solo la aplicaba el
-     * informe, y la puerta contaba como nivel cubierto una prueba que la CI no
-     * ejecuta nunca (V1-QA-2).
+     * (`TestLevelGateTest`) decidan lo mismo: si solo la aplicara el informe, la
+     * puerta contaria como nivel cubierto una prueba que la CI no ejecuta nunca.
      *
      * Se compara por el FINAL de la ruta porque la prueba llega relativa al
      * padre de `base_path()` —`html/tests/…` en el contenedor, `backend/tests/…`

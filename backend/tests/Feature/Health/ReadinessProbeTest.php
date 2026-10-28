@@ -155,4 +155,4 @@ it('no dice que dependencia ha fallado', function (): void {
     foreach (['database', 'redis', 'pgsql', 'postgres', 'sql', '6379', '5432'] as $pista) {
         expect(strtolower($sinBaseDeDatos))->not->toContain($pista);
     }
-});
+})->group('RF-PD-13');
