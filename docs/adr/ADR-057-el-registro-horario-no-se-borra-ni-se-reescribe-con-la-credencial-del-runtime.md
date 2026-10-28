@@ -350,3 +350,14 @@ Desde el bloque 20, una `rejected_pin_scan` se cierra sin persona cuando la jorn
 - Feature: `tests/Feature/Attendance/RejectedPinScanReopeningTest.php`, con el escenario de los tres quioscos.
 - Unitarias: `tests/Unit/Compliance/Domain/IncidentReopeningTest.php`, `tests/Unit/Attendance/Domain/Event/RejectedPinScanRelapsedTest.php` y la recaída en `tests/Unit/Attendance/Application/RejectedPinScanDetectionTest.php`.
 - Vigilancia: `WorkRecordPrivilegesUpdateScriptTest`, `WorkRecordPrivilegesDoctorCheckTest` y `WorkRecordGuardListsParityTest` (la función que admite la reapertura, por su huella, y `UPDATE (context)` se exigen con la migración aplicada, y no sin ella; un cuerpo debilitado que sigue nombrando `rejected_pin_scan` falla en el script y en el doctor; la huella de las dos copias coincide entre sí y con la de la base migrada).
+
+## Nota del 28-10-2026 (2.3.0, bloque 21): §3 encuentra lo vencido por índice
+
+**No cambia ninguna decisión de §3: cambia cómo la función encuentra las filas** (V21-5-BE-1 y V5-BD-1 de la 2.2.1). Lo que borra, el corte máximo, los privilegios, la transacción única y el tope de `p_batch` filas por sentencia siguen igual.
+
+- **Antes:** cada lote era `DELETE … WHERE id IN (SELECT … LIMIT p_batch)`. Para los escaneos, el `SELECT` era un `LEFT JOIN` con `shift_entries` y un `OR` entre el tramo vencido y `LEAST(occurred_at, recorded_at)`, que ningún índice servía: un `Seq Scan on scan_events` en cada lote, también para devolver cero. Y repetir un `LIMIT` dentro de la misma transacción vuelve a leer lo que el lote anterior acaba de borrar.
+- **Ahora** (migración `2026_10_28_100100`): lo vencido de cada tabla se lee una vez por su índice y se parte en tandas de `p_batch` identificadores. Los hijos de un tramo vencido (correcciones, incidencias y escaneos) se borran por tandas de tramos, por el índice de su clave ajena y con `LIMIT p_batch` dentro de la tanda. Lo que envejece por su propia fecha se borra por la clave primaria. Los tramos siguen por generaciones.
+- **El orden de borrado** sigue siendo de hijo a padre. Los tres hijos de un tramo se borran tanda a tanda, y no tabla a tabla, pero entre ellos no hay ninguna clave ajena.
+- **Índices** (migración `2026_10_28_100000`): `scan_events_unattached_age_index` (parcial, `WHERE shift_entry_id IS NULL`) con sus estadísticas de expresión, `discarded_scan_reports_age_index` e `incidents_work_date_index`. `DatabaseWorkRecordArchive::inspect()` cuenta en dos ramas disjuntas con los mismos índices.
+- **Medida** (4,5 años, 951 149 escaneos y 385 310 tramos): sin nada vencido, la llamada baja de 573 ms y unos 37 000 bloques a 2 ms y 49 bloques. Con siete meses vencidos (52 500 tramos), baja de 9,5 s a 4,2 s.
+- **Prueba:** `backend/tests/Integration/Compliance/WorkRecordPurgeIndexUsageTest.php`.
