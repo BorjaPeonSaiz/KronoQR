@@ -292,7 +292,7 @@ Todos los de este bloque: 🤖 `seguridad-cumplimiento` · Opus 5.5 → corrige:
 
 ### Autorización
 
-- [ ] **Pruebas negativas:** cada endpoint tiene una por cada rol no autorizado (403 y entrada en auditoría), y el token de quiosco se rechaza en los endpoints de gestión.
+- [ ] **Pruebas negativas:** cada endpoint tiene una por cada rol no autorizado (403, o el 401 que fije el contrato), y el token de quiosco se rechaza en los endpoints de gestión. **Asiento `access.denied` solo en la denegación por alcance** (`ScopeGuard`): un 403 por rol o por ámbito de token no escribe asiento, porque RS-05 registra divulgaciones y no intentos, y el asiento por intento sería la vía de amplificación que ADR-037 excluye (doc 02 §9.4, «Autorización negativa»; doc 07, A-16).
   - 🤖 `qa-testing` · Opus 5.5
 - [ ] **Portal:**
   - bloqueo creciente del PIN;
