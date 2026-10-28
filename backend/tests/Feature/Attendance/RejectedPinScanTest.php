@@ -26,6 +26,7 @@ use Tests\Support\Compliance\RecordingIncidentResolutionMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -513,7 +514,7 @@ it('no deja ver ni resolver la incidencia a quien hoy recibe 403', function (str
     $token = match ($actor) {
         'quiosco' => $scenario['token'],
         'auditor' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)),
-        'empleado' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO)),
+        'empleado' => PortalLogins::open($scenario['employee']),
         default => throw new LogicException($actor),
     };
 

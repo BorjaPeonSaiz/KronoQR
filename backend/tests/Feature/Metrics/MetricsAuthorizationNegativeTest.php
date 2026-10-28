@@ -82,7 +82,7 @@ function rolesDelCatalogo(): array
         'rrhh' => [UserRole::RRHH],
         'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
         'auditor' => [UserRole::AUDITOR],
-        'empleado' => [UserRole::EMPLEADO],
+        'cuenta con rol empleado' => [UserRole::EMPLEADO],
         'quiosco' => [UserRole::KIOSK],
     ];
 }

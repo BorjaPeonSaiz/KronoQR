@@ -6,6 +6,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -82,7 +83,7 @@ it('no deja al quiosco acercarse a la importacion', function (): void {
     // da acceso a la plantilla por ninguna via (RS-04).
     WorkforceFixtures::site();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(AttendanceFixtures::kioskToken())
         ->upload('/api/v1/employees/import', ['mode' => 'validate'], ['file' => anImportFile()])
         ->assertValidResponse(403);
 })->group('RF-GP-05', 'RS-04');

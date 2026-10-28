@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
 use PragmaRX\Google2FA\Google2FA;
 use Spatie\Permission\Models\Permission;
+use Tests\Support\Attendance\AttendanceFixtures;
 
 /**
  * Cuentas de gestion para las pruebas de feature.
@@ -91,15 +92,17 @@ final class ManagementUsers
     }
 
     /**
-     * Token de **quiosco**: el que llevaria una tablet (RF-ID-04).
+     * Token de una **cuenta de `users` con rol `kiosk`, que no es un quiosco**.
      *
-     * Cuelga de una cuenta con rol `kiosk` en lugar de un dispositivo porque los
-     * dispositivos son de la tarea 1.5. Lo que importa para la prueba de RS-04
-     * es el ambito del token —`scan:write`, `roster:read`, `heartbeat:write`— y
-     * ese es exactamente el que lleva: si aun asi alcanzara un endpoint de
-     * gestion, el fallo seria real.
+     * El producto no la emite: el quiosco de verdad es un dispositivo
+     * emparejado, y su token es
+     * {@see AttendanceFixtures::kioskToken()}. Esta
+     * existe para el caso que la policy cubre y el ambito no: una cuenta que
+     * lleva `scan:write` y pasa el middleware `ability`, y a la que solo detiene
+     * que su `tokenable` no es una fila de `devices` (RF-ID-04). Fuera de esas
+     * pruebas, el portador del quiosco es el dispositivo (A3).
      */
-    public static function kioskToken(): string
+    public static function kioskRoleAccountToken(): string
     {
         $device = self::withRole(UserRole::KIOSK);
 

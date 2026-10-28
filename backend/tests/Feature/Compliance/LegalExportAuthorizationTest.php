@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
  * Regla dura 18 y RQ-07: `GET /api/v1/reports/legal-export` con su prueba de
@@ -51,10 +53,11 @@ it('no deja exportar sin token', function (): void {
     expect(DB::table('audit_log')->where('action', 'legal_export.generated')->count())->toBe(0);
 })->group('RF-ID-03', 'RL-06', 'RS-04');
 
-it('no deja exportar a un empleado', function (): void {
+it('no deja exportar a una sesion de portal', function (): void {
     // Un empleado consulta LO SUYO por el portal, con `self:read` (ADR-015). La
-    // exportacion legal completa es otra cosa: es la plantilla entera.
-    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+    // exportacion legal completa es otra cosa: es la plantilla entera. La
+    // sesion es la que abre `POST /me/login` (R4-QA-07).
+    $token = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($token)
         ->get('/api/v1/reports/legal-export', peticionDeExportacionLegal())

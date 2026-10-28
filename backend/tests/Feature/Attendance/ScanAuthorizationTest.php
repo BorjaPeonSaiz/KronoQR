@@ -13,6 +13,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -87,7 +88,7 @@ it('deniega el fichaje a cada rol de gestion', function (UserRole $rol): void {
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RS-04', 'RQ-07', 'RF-ID-02');
 
 it('deniega el fichaje a una cuenta con rol kiosk que no es un dispositivo', function (): void {
@@ -100,7 +101,7 @@ it('deniega el fichaje a una cuenta con rol kiosk que no es un dispositivo', fun
     // usuario por tablet» en lugar de emparejar el dispositivo (RF-ID-04).
     [$scanId, $cuerpo] = escaneoValido();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->withHeaders(['Idempotency-Key' => $scanId])
         ->post('/api/v1/scan', $cuerpo)
         ->assertStatus(403);
@@ -144,7 +145,7 @@ it('no revela nada sobre la credencial en una respuesta denegada', function (): 
     foreach (['tarjeta-buena', 'tarjeta-inventada'] as $payload) {
         $scanId = Str::uuid7()->toString();
 
-        $respuesta = Api::as(ManagementUsers::kioskToken())
+        $respuesta = Api::as(ManagementUsers::kioskRoleAccountToken())
             ->withHeaders(['Idempotency-Key' => $scanId])
             ->post('/api/v1/scan', [
                 'scan_id' => $scanId,
@@ -167,7 +168,7 @@ it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos',
     // con la causa a tres metros de distancia.
     config()->set('kiosk.rate_limits.scan_per_device', 2);
 
-    $tablet = ManagementUsers::kioskToken();
+    $tablet = ManagementUsers::kioskRoleAccountToken();
 
     for ($i = 0; $i < 2; $i++) {
         [$scanId, $cuerpo] = escaneoValido();
@@ -190,7 +191,7 @@ it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos',
     // La otra tablet del mismo hotel, con la misma IP, sigue fichando.
     [$scanId, $cuerpo] = escaneoValido();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->withHeaders(['Idempotency-Key' => $scanId])
         ->post('/api/v1/scan', $cuerpo)
         ->assertStatus(403);
@@ -217,8 +218,21 @@ it('deniega tambien el fichaje de pausa a cada rol de gestion y al portal', func
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    // El portal del empleado: su token es el de un `empleado`, y que la persona
-    // sea la titular de la jornada no le da potestad para fichar desde fuera del
-    // quiosco (RF-AT-11 tiene su propio endpoint y su propio ambito).
-    'empleado (portal)' => [UserRole::EMPLEADO],
+    // Una cuenta de `users` con rol `empleado`, que el producto no emite. La
+    // sesion de portal de verdad va en la prueba siguiente (R4-QA-07).
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RS-04', 'RQ-07', 'RF-AT-12');
+
+it('deniega tambien el fichaje de pausa a una sesion de portal', function (): void {
+    // Que la persona sea la titular de la jornada no le da potestad para fichar
+    // desde fuera del quiosco (RF-AT-11 tiene su propio endpoint y su ambito).
+    [$scanId, $cuerpo] = escaneoValido();
+    $portal = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
+
+    Api::as($portal)
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', [...$cuerpo, 'intent' => 'break_start'])
+        ->assertStatus(403);
+
+    expect(DB::table('scan_events')->count())->toBe(0);
+})->group('RS-04', 'RQ-07', 'RF-AT-12', 'RF-ID-07');

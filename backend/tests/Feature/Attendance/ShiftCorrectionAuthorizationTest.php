@@ -10,9 +10,11 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -95,12 +97,14 @@ it('no deja corregir sin token', function (): void {
     expect(DB::table('shift_corrections')->count())->toBe(0);
 })->group('RF-ID-03', 'RF-PA-04', 'RS-04');
 
-it('no deja corregir a un empleado ni a un quiosco', function (string $role): void {
+it('no deja corregir a un empleado ni a un quiosco', function (Closure $portador): void {
     // Un empleado no corrige nada, ni siquiera lo suyo: si pudiera, el registro
     // horario dejaria de ser un registro y pasaria a ser una declaracion. Y un
-    // quiosco menos todavia — su token vive colgado de una pared (RS-04).
+    // quiosco menos todavia — su token vive colgado de una pared (RS-04). Los
+    // dos con el token que emite el producto: la sesion de `POST /me/login` y
+    // el de un dispositivo emparejado (A3, R4-QA-07).
     ['employee' => $employee, 'entry' => $entry] = tramoParaAutorizacion();
-    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::from($role)));
+    $token = $portador($employee);
 
     foreach (operacionesDeCorreccion($employee, $entry) as [$metodo, $ruta, $cuerpo]) {
         Api::as($token)->call($metodo, $ruta, $cuerpo)->assertStatus(403);
@@ -111,8 +115,8 @@ it('no deja corregir a un empleado ni a un quiosco', function (string $role): vo
     expect(DB::table('shift_corrections')->count())->toBe(0)
         ->and(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0);
 })->with([
-    'empleado' => UserRole::EMPLEADO->value,
-    'quiosco' => UserRole::KIOSK->value,
+    'sesion de portal de la titular' => [static fn (string $employee): string => PortalLogins::open($employee)],
+    'quiosco' => [static fn (string $employee): string => AttendanceFixtures::kioskToken()],
 ])->group('RF-ID-03', 'RF-PA-04');
 
 it('no deja corregir a un auditor, que solo puede mirar', function (): void {

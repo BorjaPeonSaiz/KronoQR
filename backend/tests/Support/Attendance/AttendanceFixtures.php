@@ -70,6 +70,20 @@ final class AttendanceFixtures
     }
 
     /**
+     * El token de un quiosco de verdad: un dispositivo emparejado en el centro
+     * de la instalacion, con el ambito exacto de {@see self::tokenFor()}.
+     *
+     * Es el portador de toda prueba que diga «el quiosco no entra aqui» (RS-04,
+     * A3 de la verificacion de la 2.1.0). Una cuenta de `users` con rol `kiosk`
+     * no es un quiosco: el producto no la emite, y una policy que mire el
+     * `tokenable` la trata distinto. Crea el centro si aun no hay ninguno.
+     */
+    public static function kioskToken(): string
+    {
+        return self::tokenFor(self::device(WorkforceFixtures::site())['id']);
+    }
+
+    /**
      * Centro, departamento, empleado y quiosco, listos para fichar.
      *
      * @return array{site: int, department: int, employee: string, device: int, deviceUuid: string, token: string}

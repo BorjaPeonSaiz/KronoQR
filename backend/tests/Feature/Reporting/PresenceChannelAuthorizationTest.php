@@ -16,6 +16,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -175,27 +176,20 @@ it('niega el canal a un auditor, tambien con un token que aun tenga el ambito', 
     autorizarCanal($anterior, 'presence.all')->assertStatus(403);
 })->group('RF-ID-03', 'RF-ID-02', 'RS-04');
 
-it('niega el canal a un empleado y a un token de quiosco', function (string $rol): void {
+it('niega los dos canales a una sesion de portal y a un quiosco', function (Closure $portador): void {
     // Al quiosco y al portal les falta el ambito `attendance:read`, asi que ni
-    // llegan al callback del canal. El resultado desde fuera es el mismo `403`.
-    escenarioDeCanales();
-
-    $token = $rol === 'kiosk'
-        ? ManagementUsers::kioskToken()
-        : ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+    // llegan al callback del canal. Los dos con el token que emite el producto:
+    // la sesion de `POST /me/login` y el de un dispositivo emparejado, cuyos tres
+    // ambitos son `scan:write`, `roster:read` y `heartbeat:write` (A3, R4-QA-07).
+    $escenario = escenarioDeCanales();
+    $token = $portador($escenario['site']);
 
     autorizarCanal($token, 'presence.all')->assertStatus(403);
-    autorizarCanal($token, 'presence.department.1')->assertStatus(403);
-})->with(['kiosk', 'empleado'])->group('RF-ID-03', 'RS-04', 'RF-ID-04');
-
-it('niega el canal a un token de dispositivo real, que es el caso que importa', function (): void {
-    // El token de una tablet colgada en una pared: sus tres ambitos son
-    // `scan:write`, `roster:read` y `heartbeat:write`, y ninguno abre esto.
-    $escenario = escenarioDeCanales();
-    $device = AttendanceFixtures::device($escenario['site']);
-
-    autorizarCanal(AttendanceFixtures::tokenFor($device['id']), 'presence.all')->assertStatus(403);
-})->group('RS-04', 'RF-ID-04');
+    autorizarCanal($token, 'presence.department.'.$escenario['cocina'])->assertStatus(403);
+})->with([
+    'sesion de portal' => [static fn (int $site): string => PortalLogins::open(WorkforceFixtures::employee($site))],
+    'quiosco' => [static fn (int $site): string => AttendanceFixtures::tokenFor(AttendanceFixtures::device($site)['id'])],
+])->group('RF-ID-03', 'RS-04', 'RF-ID-04');
 
 it('deniega sin token', function (): void {
     escenarioDeCanales();

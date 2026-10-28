@@ -18,6 +18,7 @@ use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -294,7 +295,7 @@ it('responde igual con token y sin el, porque la marca no es de nadie', function
 
     $sinToken = Api::guest()->get('/api/v1/branding')->assertValidResponse(200)->json();
     $conAdmin = Api::as(marcaToken())->get('/api/v1/branding')->assertValidResponse(200)->json();
-    $conQuiosco = Api::as(ManagementUsers::kioskToken())->get('/api/v1/branding')->assertValidResponse(200)->json();
+    $conQuiosco = Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/branding')->assertValidResponse(200)->json();
 
     expect($sinToken)->toBe($conAdmin)->and($sinToken)->toBe($conQuiosco);
 })->group('RF-PD-08');
@@ -303,9 +304,9 @@ it('el quiosco puede leer la marca pero no cambiarla', function (): void {
     // Regla dura 18: el poder no esta en leer la marca, esta en escribirla. El
     // ambito `settings:*` no lo tiene un token de quiosco, asi que el guard corta
     // antes que la policy — y por eso es 403 de ambito y no de rol.
-    Api::as(ManagementUsers::kioskToken())->get('/api/v1/branding')->assertValidResponse(200);
+    Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/branding')->assertValidResponse(200);
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(AttendanceFixtures::kioskToken())
         ->patch('/api/v1/settings', ['settings' => ['BRANDING_APP_NAME' => 'Hotel Intruso']])
         ->assertValidResponse(403);
 })->group('RF-PD-08', 'RS-03');
@@ -752,7 +753,7 @@ it('deniega cambiar el aviso de privacidad a cada rol que no es administrador', 
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RF-KI-09', 'RL-09', 'RS-04', 'RQ-07');
 
 // --- El plazo de conservacion del aviso (2.3.0, bloque 8) --------------------

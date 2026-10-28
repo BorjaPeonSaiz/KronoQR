@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -268,7 +269,7 @@ it('deniega los tres endpoints de segundo factor a un token de quiosco', functio
     // RS-04: el token de una tablet lleva `scan:write`, `roster:read` y
     // `heartbeat:write`. Ninguno abre esta puerta, y si la abriera, quien robase
     // la tablet podria canjearla por una sesion de gestion.
-    Api::as(ManagementUsers::kioskToken())->post($uri, ['code' => '000000'])->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->post($uri, ['code' => '000000'])->assertStatus(403);
 })->with([
     'verificar' => '/api/v1/auth/2fa/verify',
     'dar de alta' => '/api/v1/auth/2fa/enrol',

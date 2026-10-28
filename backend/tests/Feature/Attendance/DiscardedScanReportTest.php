@@ -18,6 +18,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -271,13 +272,13 @@ it('deniega el aviso a cada rol de gestion', function (UserRole $rol): void {
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RN-22', 'RS-04', 'RQ-07');
 
 it('deniega el aviso a una cuenta con rol de quiosco que no es un dispositivo', function (): void {
     escenarioDeDescartes();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->post('/api/v1/scan/discarded', ['reports' => [avisoPin('E1')]])
         ->assertStatus(403);
 
@@ -297,8 +298,9 @@ it('deniega el aviso a un quiosco cuyo token no tiene scan:write', function (): 
 })->group('RN-22', 'RS-04', 'RQ-07');
 
 it('deniega el aviso a una sesion de portal', function (): void {
-    $empleado = ManagementUsers::withRole(UserRole::EMPLEADO);
-    $portal = $empleado->createToken('Portal', [TokenAbility::SELF_READ->value])->plainTextToken;
+    // La sesion que abre `POST /me/login` de verdad (R4-QA-07), no una cuenta
+    // de `users` con el ambito puesto a mano.
+    $portal = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($portal)->post('/api/v1/scan/discarded', ['reports' => [avisoPin('E1')]])->assertStatus(403);
 })->group('RN-22', 'RS-04', 'RQ-07');

@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -58,16 +60,17 @@ it('no deja consultar el registro horario de nadie a un quiosco', function (): v
     // ambitos son `scan:write`, `roster:read` y `heartbeat:write`; ninguno abre
     // esta puerta, y si la abriera, un quiosco robado se llevaria el registro
     // horario completo de la plantilla.
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(AttendanceFixtures::kioskToken())
         ->get('/api/v1/employees/'.empleadoConsultable().'/workdays')
         ->assertStatus(403);
 })->group('RF-PA-03', 'RQ-07', 'RS-04', 'RF-ID-04');
 
-it('no deja consultar el registro horario de otro a una cuenta de empleado', function (): void {
+it('no deja consultar el registro horario de otro a una sesion de portal', function (): void {
     // RF-ID-07 y ADR-015: el empleado consulta LO SUYO en el portal, con codigo y
     // PIN y ambito `self:read`. El `self` del Anexo B se sirve en
-    // `GET /api/v1/me/workdays`, no aqui: esta ruta es la de gestion.
-    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+    // `GET /api/v1/me/workdays`, no aqui: esta ruta es la de gestion. La sesion
+    // es la que abre `POST /me/login` (R4-QA-07).
+    $token = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($token)
         ->get('/api/v1/employees/'.empleadoConsultable().'/workdays')

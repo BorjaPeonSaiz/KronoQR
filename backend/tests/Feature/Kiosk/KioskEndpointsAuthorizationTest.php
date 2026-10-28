@@ -78,7 +78,7 @@ it('no deja entrar a los endpoints del quiosco a ningun rol de gestion', functio
     'rrhh' => UserRole::RRHH->value,
     'auditor' => UserRole::AUDITOR->value,
     'responsable de departamento' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
-    'empleado' => UserRole::EMPLEADO->value,
+    'cuenta con rol empleado' => UserRole::EMPLEADO->value,
 ])->group('RQ-07', 'RS-04', 'RF-ID-02');
 
 it('no deja entrar a los endpoints del quiosco a una sesion de portal', function (string $method, string $uri, array $body): void {

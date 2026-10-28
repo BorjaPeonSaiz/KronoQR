@@ -6,6 +6,7 @@ use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -225,7 +226,7 @@ it('no deja cambiar la marca con un token de quiosco', function (): void {
     $contexto = teletrabajoContexto();
     $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
 
-    Api::as(ManagementUsers::kioskToken())->patch('/api/v1/employees/'.$uuid, ['teleworking' => true])
+    Api::as(AttendanceFixtures::kioskToken())->patch('/api/v1/employees/'.$uuid, ['teleworking' => true])
         ->assertStatus(403);
 
     expect(teletrabajoMarca($uuid))->toBeFalse();
@@ -287,7 +288,7 @@ it('no deja filtrar por teletrabajo a quien no puede listar la plantilla', funct
         ->get('/api/v1/employees', ['teleworking' => 'true'])
         ->assertStatus(403);
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(AttendanceFixtures::kioskToken())
         ->get('/api/v1/employees', ['teleworking' => 'true'])
         ->assertStatus(403);
 })->group('RF-GP-01', 'RQ-07');

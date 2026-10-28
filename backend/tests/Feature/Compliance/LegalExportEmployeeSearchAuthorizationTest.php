@@ -76,7 +76,7 @@ function portadoresSinBusquedaLegal(): array
         // La sesion real del portal, con `self:read`: consulta lo suyo y nada mas.
         'empleado (portal)' => [static fn (string $employee): string => PortalLogins::open($employee)],
         // Un token colgado de una pared no pregunta por DNI (RS-04).
-        'quiosco (cuenta)' => [static fn (string $employee): string => ManagementUsers::kioskToken()],
+        'quiosco (cuenta)' => [static fn (string $employee): string => ManagementUsers::kioskRoleAccountToken()],
         'quiosco (dispositivo)' => [static fn (string $employee): string => AttendanceFixtures::tokenFor(
             AttendanceFixtures::device(WorkforceFixtures::onlySiteId())['id'],
         )],

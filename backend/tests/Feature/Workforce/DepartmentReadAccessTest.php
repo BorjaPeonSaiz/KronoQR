@@ -9,6 +9,7 @@ use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -188,7 +189,7 @@ it('no deja leer el catalogo al quiosco ni al portal del empleado', function ():
     $portal = PortalLogins::open(WorkforceFixtures::employee($site, $cocina));
 
     // act / assert
-    foreach ([ManagementUsers::kioskToken(), $portal] as $token) {
+    foreach ([AttendanceFixtures::kioskToken(), $portal] as $token) {
         // Cada token resuelve su propio portador: el guard de Sanctum cachea el
         // usuario dentro de la misma aplicacion de prueba.
         Auth::forgetGuards();

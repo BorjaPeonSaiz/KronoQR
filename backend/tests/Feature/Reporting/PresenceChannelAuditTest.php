@@ -204,5 +204,5 @@ it('niega el canal por rol sin dejar asiento de lectura', function (UserRole $ro
     expect(asientosDeSuscripcion())->toBe([]);
 })->with([
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RS-05', 'RQ-07');

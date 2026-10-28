@@ -12,6 +12,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
@@ -263,7 +264,7 @@ it('no deja entrar por /me a ningun rol de gestion', function (string $role): vo
     'rrhh' => UserRole::RRHH->value,
     'auditor' => UserRole::AUDITOR->value,
     'responsable de departamento' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
-    'empleado' => UserRole::EMPLEADO->value,
+    'cuenta con rol empleado' => UserRole::EMPLEADO->value,
 ])->group('RF-ID-07', 'RQ-07');
 
 it('no deja entrar por /me a un quiosco', function (): void {
@@ -272,8 +273,8 @@ it('no deja entrar por /me a un quiosco', function (): void {
     // registro horario de alguien.
     dosEmpleadosYUnPortal();
 
-    Api::as(ManagementUsers::kioskToken())->get('/api/v1/me/workdays')->assertStatus(403);
-    Api::as(ManagementUsers::kioskToken())->get('/api/v1/me/export')->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/me/workdays')->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->get('/api/v1/me/export')->assertStatus(403);
 })->group('RF-ID-07', 'RQ-07', 'RS-04', 'RF-ID-04');
 
 it('no deja entrar por /me sin token', function (string $uri): void {

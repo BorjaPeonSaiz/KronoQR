@@ -15,6 +15,7 @@ use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
@@ -413,13 +414,13 @@ it('deniega el PDF a cada rol de gestion', function (string $role): void {
     'rrhh' => UserRole::RRHH->value,
     'auditor' => UserRole::AUDITOR->value,
     'responsable de departamento' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
-    'empleado' => UserRole::EMPLEADO->value,
+    'cuenta con rol empleado' => UserRole::EMPLEADO->value,
 ])->group('RF-ID-07', 'RQ-07');
 
 it('deniega el PDF a un quiosco y sin token', function (): void {
     pdfPropioContexto();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(AttendanceFixtures::kioskToken())
         ->get('/api/v1/me/export', ['format' => 'pdf'])
         ->assertStatus(403);
 
