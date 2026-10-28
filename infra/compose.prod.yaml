@@ -780,6 +780,13 @@ services:
       # PGOPTIONS de `app`.
       - -c
       - jit=off
+      # `work_mem` se queda en el valor de serie (4MB), y es una decision medida
+      # (bloque 21 de la 2.3.0, V21-5-BE-3). El informe mensual de 500 personas,
+      # el techo de RNF-P-05, agrega en memoria (126 kB) con 4MB. Con 6 308
+      # personas, doce veces el techo, la ordenacion desborda 17,5 MB a disco
+      # con 4MB y tambien con 16MB: subirlo no lo arregla y multiplica la memoria
+      # de cada nodo de cada conexion (max_connections=100). Lo que si se corrigio
+      # es la estimacion del calendario (serie de enteros), que inflaba el plan.
       - -c
       - wal_level=replica
       - -c

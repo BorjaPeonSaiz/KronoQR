@@ -82,8 +82,13 @@ final readonly class DatabaseLivePresenceReader implements LivePresenceReader
 
         $counts = $this->counts($filters, $bindings);
 
+        // Por `se.employee_id`, la columna del `ON`, y no por `se.id`: con la del
+        // `ON`, PostgreSQL reconoce «sin tramo abierto» como un anti-join y lo
+        // estima bien. Con `se.id IS NULL` lo trataba como un filtro sobre una
+        // columna que nunca es nula y estimaba una sola fila para miles de
+        // ausentes, con un bucle anidado sobre `devices` por cada una.
         $rows = $this->rows(
-            $filters.($status === PresenceStatus::Present ? ' AND se.id IS NOT NULL' : ' AND se.id IS NULL'),
+            $filters.($status === PresenceStatus::Present ? ' AND se.employee_id IS NOT NULL' : ' AND se.employee_id IS NULL'),
             $bindings,
         );
 
