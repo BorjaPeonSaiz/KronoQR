@@ -1,5 +1,5 @@
 // Datos y ayudantes de las tablas grandes del panel (V5-PA-1, RC1 · RF-IN-01,
-// RF-IN-03, RF-PA-06, RNF-P-04), compartidos por la prueba funcional
+// RF-IN-03, RF-PA-06), compartidos por la prueba funcional
 // (`large-tables.spec.ts`, en cada push) y por la de tiempo
 // (`perf-large-tables.spec.ts`, nocturna). Una afirmacion contra el reloj
 // dentro de la suite funcional falla cuando el runner va cargado, no cuando el

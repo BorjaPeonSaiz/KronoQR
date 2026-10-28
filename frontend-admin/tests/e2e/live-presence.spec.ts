@@ -1,4 +1,4 @@
-// Presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03, RNF-P-04).
+// Presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03).
 //
 // Reverb se simula con `routeWebSocket`: el doble habla el protocolo Pusher
 // justo lo suficiente (saludo, confirmacion de suscripcion, pong) para que el
@@ -6,7 +6,7 @@
 // todas las pestañas conectadas. Lo que se prueba es lo que ve la persona: que
 // la lista cambia sin recargar, y que cuando el canal no esta, la pantalla lo
 // dice y sigue actualizandose por sondeo.
-import type { BrowserContext, Page, WebSocketRoute } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { LivePresenceBoard, LivePresenceEntry } from '@/shared/api/types'
 import {
@@ -18,68 +18,7 @@ import {
   stubManagementApi,
 } from './support/admin'
 import { expectNoBlockingViolations } from './support/axe'
-
-interface FakeReverb {
-  readonly sockets: WebSocketRoute[]
-  /** Empuja un evento a todas las pestañas suscritas. */
-  push(entry: LivePresenceEntry, occurredAt: string): void
-}
-
-/** Un Reverb de mentira que acepta cualquier suscripcion firmada. */
-async function fakeReverb(
-  context: BrowserContext,
-  behaviour: 'up' | 'down' = 'up',
-): Promise<FakeReverb> {
-  const sockets: WebSocketRoute[] = []
-
-  await context.routeWebSocket(/\/app\/kronoqr/, (ws) => {
-    if (behaviour === 'down') {
-      ws.close({ code: 1006, reason: 'reverb caido' })
-
-      return
-    }
-
-    sockets.push(ws)
-    ws.send(
-      JSON.stringify({
-        event: 'pusher:connection_established',
-        data: JSON.stringify({ socket_id: `${sockets.length}.1`, activity_timeout: 120 }),
-      }),
-    )
-    ws.onMessage((raw) => {
-      const message = JSON.parse(String(raw)) as { event: string; data?: { channel?: string } }
-
-      if (message.event === 'pusher:subscribe') {
-        ws.send(
-          JSON.stringify({
-            event: 'pusher_internal:subscription_succeeded',
-            channel: message.data?.channel,
-            data: '{}',
-          }),
-        )
-      }
-
-      if (message.event === 'pusher:ping') {
-        ws.send(JSON.stringify({ event: 'pusher:pong', data: '{}' }))
-      }
-    })
-  })
-
-  return {
-    sockets,
-    push(entry, occurredAt) {
-      for (const ws of sockets) {
-        ws.send(
-          JSON.stringify({
-            event: 'presence.updated',
-            channel: 'private-presence.all',
-            data: JSON.stringify({ entry, occurred_at: occurredAt }),
-          }),
-        )
-      }
-    },
-  }
-}
+import { boardOf, fakeReverb } from './support/livePresence'
 
 async function openLive(page: Page, board?: LivePresenceBoard) {
   const api = await stubManagementApi(page, board === undefined ? {} : { liveBoard: board })
@@ -268,46 +207,18 @@ test(
 )
 
 test(
-  'con 500 personas la pantalla pinta rapido y no mete las 500 filas en el DOM',
-  { tag: ['@RF-PA-01', '@RNF-P-04'] },
+  'con 500 personas la pantalla las cuenta todas y no mete las 500 filas en el DOM',
+  { tag: ['@RF-PA-01'] },
   async ({ context, page }) => {
     await fakeReverb(context)
-    const data: LivePresenceEntry[] = Array.from({ length: 500 }, (_, index) => ({
-      ...LIVE_ENTRY,
-      employee_uuid: `0199f0c2-1f4a-7c3e-9b21-${String(index).padStart(12, '0')}`,
-      full_name: `Persona ${String(index).padStart(3, '0')} Apellido`,
-      department: { id: (index % 10) + 1, name: `Departamento ${(index % 10) + 1}` },
-    }))
-    const board: LivePresenceBoard = {
-      data,
-      meta: { ...LIVE_BOARD.meta, present_count: 500, absent_count: 0, total: 500 },
-    }
-    await openLive(page, board)
+    // Lo que tarda en pintarse (RNF-P-04, LCP < 1,5 s) lo mide en frio y con
+    // la CPU a x4 `perf-live-presence.spec.ts`, en la suite nocturna (D4).
+    await openLive(page, boardOf(500))
 
     await expect(page.getByTestId('present-count')).toHaveText('500')
     const painted = await page.getByTestId('presence-entry').count()
     expect(painted).toBeGreaterThan(0)
     expect(painted).toBeLessThan(120)
-
-    // LCP de la navegacion a /live, medido en el propio navegador (RNF-P-04: < 1,5 s).
-    const lcp = await page.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          let last = 0
-          const observer = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-              last = entry.startTime
-            }
-          })
-          observer.observe({ type: 'largest-contentful-paint', buffered: true })
-          setTimeout(() => {
-            observer.disconnect()
-            resolve(last)
-          }, 500)
-        }),
-    )
-    expect(lcp).toBeGreaterThan(0)
-    expect(lcp).toBeLessThan(1_500)
   },
 )
 

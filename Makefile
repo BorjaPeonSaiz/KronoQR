@@ -296,7 +296,7 @@ help: ## Muestra esta ayuda
 	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
 	@echo "  make mutate-scope     Parte del dominio que la mutacion ve: cobertura de la suite Unit (nocturna)"
 	@echo "  make e2e              Playwright: quiosco, panel y portal"
-	@echo "  make e2e-performance  RNF-P-01 del quiosco y RNF-P-04 de las tablas del panel, en el navegador (nocturna)"
+	@echo "  make e2e-performance  RNF-P-01 del quiosco y RNF-P-04 del panel (bloquean); volumenes grandes del panel (avisan)"
 	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
 	@echo "  make changelog        Genera el CHANGELOG desde los commits convencionales"
 	@echo "  make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)"
@@ -520,9 +520,11 @@ endif
 # —todas las suites a la vez: Unit, Integration y Feature—, que phpunit.xml
 # excluye de cualquier otra pasada. Necesita PostgreSQL, Redis y Chrome, como
 # `make test`. `e2e-performance` es la mitad del navegador: RNF-P-01 con p95 y
-# p99 sobre 60 escaneos con la camara simulada (KP3) y RNF-P-04 en las tablas
-# grandes del panel (mediana de tres muestras), en proyectos de Playwright que
-# solo existen con KRONOQR_E2E_PERFORMANCE=1.
+# p99 sobre 60 escaneos con la camara simulada (KP3) y RNF-P-04, el LCP de la
+# presencia en vivo con 500 personas (mediana de tres cargas en frio), que
+# bloquean; y el objetivo interno de las tablas de volumen grande del panel,
+# que avisa sin bloquear. Todo en proyectos de Playwright que solo existen con
+# KRONOQR_E2E_PERFORMANCE=1.
 #
 # Las ejecutan los jobs nocturnos `performance` y `performance-kiosk` de ci.yml;
 # en local, a mano. Tests\Support\Time\WallClockBudget explica la mediana y la
@@ -537,7 +539,7 @@ endif
 
 # Las dos mitades se ejecutan siempre, aunque falle la primera: son dos
 # requisitos distintos y un rojo del quiosco no debe ocultar el del panel.
-e2e-performance: ## Rendimiento en el navegador: RNF-P-01 del quiosco (p95 y p99 de 60 escaneos) y RNF-P-04 de las tablas grandes del panel
+e2e-performance: ## Rendimiento en el navegador: RNF-P-01 del quiosco, RNF-P-04 de la presencia en vivo y aviso de los volumenes grandes del panel
 	@rc=0; \
 	KRONOQR_E2E_PERFORMANCE=1 npm --prefix frontend-kiosk run test:e2e -- --project=kiosk-perf-latency || rc=1; \
 	KRONOQR_E2E_PERFORMANCE=1 npm --prefix frontend-admin run test:e2e -- --project=admin-perf || rc=1; \

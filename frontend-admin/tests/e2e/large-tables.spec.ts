@@ -8,11 +8,11 @@
 //     region se recorre con el teclado y avanza sin pintar todas las filas;
 //   - que axe no encuentra violaciones criticas ni graves a 1024 y a 768 px.
 //
-// LO QUE NO SE MIDE AQUI ES EL TIEMPO. Que la pantalla quede interactiva en
-// menos de 1,5 s (RNF-P-04) y que ninguna tarea larga pase de su tope lo afirma
-// `perf-large-tables.spec.ts`, en la suite nocturna de rendimiento
-// (`make e2e-performance`, D4 de la 2.3.0): aqui un runner cargado ponia la
-// rama en rojo sin que el panel hubiera empeorado.
+// LO QUE NO SE MIDE AQUI ES EL TIEMPO. Lo que tarda la pantalla en quedar
+// interactiva y sus tareas largas los mide `perf-large-tables.spec.ts`, en la
+// suite nocturna de rendimiento (`make e2e-performance`, D4 de la 2.3.0), como
+// objetivo interno que avisa y no bloquea: aqui un runner cargado ponia la rama
+// en rojo sin que el panel hubiera empeorado.
 //
 // La impresion y el «buscar en la pagina» NO funcionan sobre las filas que no
 // estan pintadas: es el coste asumido de virtualizar, y la guia de RRHH remite a

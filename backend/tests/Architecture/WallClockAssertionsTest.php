@@ -48,7 +48,8 @@ const WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO = [
  * un presupuesto nuevo en una suite funcional no entra sin pasar por aqui.
  */
 const WALL_CLOCK_ASSERTIONS_E2E = [
-    'frontend-admin/tests/e2e/perf-large-tables.spec.ts' => 'nocturna: proyecto admin-perf; RNF-P-04 con la mediana de tres muestras (D4)',
+    'frontend-admin/tests/e2e/perf-live-presence.spec.ts' => 'nocturna, bloquea: proyecto admin-perf; RNF-P-04 tal como se promete, LCP de la presencia con 500 personas en la mediana de tres cargas en frio',
+    'frontend-admin/tests/e2e/perf-large-tables.spec.ts' => 'nocturna, avisa: proyecto admin-perf; objetivo interno de los volumenes grandes, que no es promesa (decision del propietario del 28-10-2026)',
     'frontend-kiosk/tests/e2e/perf-scan-latency.spec.ts' => 'nocturna: proyecto kiosk-perf-latency; RNF-P-01 con p95 y p99 de 60 escaneos (KP3)',
     'frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts' => 'avanza el reloj simulado lo que ha pasado de verdad; no afirma ninguna duracion',
     'frontend-kiosk/tests/e2e/perf-lcp.spec.ts' => 'en cada push por decision de KP1 (2.2.1): mediana de tres cargas en frio, margen medido del 32 % en la CI; caza el orden de magnitud, no un 5 %',
@@ -56,8 +57,12 @@ const WALL_CLOCK_ASSERTIONS_E2E = [
     'frontend-kiosk/tests/e2e/qr-decode-budget.spec.ts' => 'en cada push: mediana de 21 decodificaciones tras 5 de calentamiento, factor 18 sobre lo medido y por debajo de la regresion que caza (22 ms)',
 ];
 
-/** Un presupuesto declarado o una duracion medida con el reloj del navegador o de Node. */
-const WALL_CLOCK_ASSERTIONS_E2E_PATTERN = '/\b[A-Z][A-Z0-9_]*_BUDGET_MS\b|\b(?:Date|performance)\.now\(\)\s*-\s*[A-Za-z_]/';
+/**
+ * Un presupuesto o un objetivo declarado, una duracion medida con el reloj del
+ * navegador o de Node, o un LCP leido del navegador (`live-presence.spec.ts`
+ * lo afirmaba en cada push hasta la 2.3.0 sin que esta puerta lo viera).
+ */
+const WALL_CLOCK_ASSERTIONS_E2E_PATTERN = '/\b[A-Z][A-Z0-9_]*_(?:BUDGET|TARGET)_MS\b|\b(?:Date|performance)\.now\(\)\s*-\s*[A-Za-z_]|largest-contentful-paint/';
 
 /**
  * Los ficheros de E2E de las tres SPA cuyo texto encaja con el patron,
@@ -256,12 +261,33 @@ it('deja fuera de cada push los E2E de rendimiento nocturnos', function (string 
         "name: 'admin',\n      testIgnore: PERFORMANCE_SPECS,",
         'frontend-admin/tests/e2e/perf-large-tables.spec.ts',
     ],
+    'panel: el proyecto admin ignora tambien el LCP de la presencia' => [
+        'frontend-admin/playwright.config.ts',
+        "name: 'admin',\n      testIgnore: PERFORMANCE_SPECS,",
+        'frontend-admin/tests/e2e/perf-live-presence.spec.ts',
+    ],
     'quiosco: kiosk-qr ignora la latencia de 60 escaneos' => [
         'frontend-kiosk/playwright.config.ts',
         'perf-scan-latency\.spec\.ts$/,',
         'frontend-kiosk/tests/e2e/perf-scan-latency.spec.ts',
     ],
 ])->group('RQ-14');
+
+it('en la nocturna del panel, la promesa bloquea y el objetivo interno avisa', function (string $fichero, bool $bloquea): void {
+    // Decision del propietario del 28-10-2026: RNF-P-04 es la presencia en
+    // vivo con 500 empleados y bloquea; los volumenes grandes son un objetivo
+    // interno que se mide y avisa sin poner la nocturna en rojo (doc 02 §10.1).
+    $texto = Repo::contents($fichero);
+    $motivo = WALL_CLOCK_ASSERTIONS_E2E[$fichero] ?? '';
+
+    expect($motivo)->toStartWith($bloquea ? 'nocturna, bloquea' : 'nocturna, avisa')
+        ->and(str_contains($texto, "'@RNF-P-04'"))->toBe($bloquea)
+        ->and(str_contains($texto, 'expect(median('))->toBe($bloquea)
+        ->and(str_contains($texto, 'warnAboveTarget('))->toBe(! $bloquea);
+})->with([
+    'LCP de la presencia con 500 personas' => ['frontend-admin/tests/e2e/perf-live-presence.spec.ts', true],
+    'informe de 20 000 filas y 3 000 hallazgos' => ['frontend-admin/tests/e2e/perf-large-tables.spec.ts', false],
+])->group('RQ-14', 'RNF-P-04');
 
 it('afirma los presupuestos de reloj solo en pruebas del grupo de rendimiento', function (): void {
     // La otra mitad de la puerta, la de dentro de los ficheros: la guarda de

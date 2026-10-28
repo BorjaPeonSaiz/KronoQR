@@ -1,26 +1,30 @@
-// RNF-P-04 en las tablas grandes del panel, en la suite NOCTURNA de
-// rendimiento (D4 de la 2.3.0; separado de `large-tables.spec.ts`, que prueba
-// lo mismo sin reloj en cada push).
+// Las tablas de volumen grande del panel, en la suite NOCTURNA de rendimiento
+// (D4 de la 2.3.0; separado de `large-tables.spec.ts`, que prueba la funcion
+// sin reloj en cada push).
 //
-// QUE FIJA. Con la API simulada sirviendo 20 000 filas de informe y 3 000
-// hallazgos de cumplimiento, y la CPU a ×4 (el portatil de recepcion), la
-// pantalla queda interactiva —primera fila pintada— en menos de 1,5 s, y
-// ninguna tarea larga (`longtask`) pasa de su tope ni al generar ni al
-// desplazar.
+// QUE MIDE. Con la API simulada sirviendo 20 000 filas de informe y 3 000
+// hallazgos de cumplimiento, y la CPU a ×4 (el portatil de recepcion), lo que
+// tarda la pantalla en quedar interactiva —primera fila pintada— y la tarea
+// larga (`longtask`) mas larga al cargar y al desplazar.
 //
-// POR QUE AQUI Y NO EN LA SUITE FUNCIONAL. La misma afirmacion en
-// `large-tables.spec.ts` dio 1 626 ms frente a 1 500 en el run 40722198667,
-// con el resto de la suite en verde: es la carga del runner, no el panel. Se
-// juzga la MEDIANA de tres muestras EN FRIO —un contexto de navegador nuevo
-// por muestra, sin cache ni estado de la anterior—, como `perf-lcp.spec.ts`
-// del quiosco, para que un pico aislado no sea un rojo.
+// UN OBJETIVO INTERNO, NO LA PROMESA (decision del propietario, 28-10-2026).
+// RNF-P-04 promete el panel de presencia en vivo con 500 empleados, y eso lo
+// mide y lo BLOQUEA `perf-live-presence.spec.ts`. Estos volumenes no se han
+// prometido: sus umbrales (1,5 s interactivo; 300 ms de tarea larga al generar
+// el informe, 200 ms en el resto) se siguen midiendo, pero AVISAN —anotacion
+// y `::warning` en el resumen del job— sin poner la nocturna en rojo. Lo que si
+// falla es que la pantalla no llegue a pintar filas. Medido en el anfitrion con
+// CPU ×4 y en frio, la carga de los hallazgos pasa de 200 ms de tarea larga;
+// arreglarlo (paginar, trocear la carga) es trabajo del producto, no de esta
+// prueba.
 //
-// LO QUE SE CRONOMETRA ES EL PANEL. El doble de la API sirve el cuerpo ya
-// serializado (`support/largeTables.ts`): con `route.fulfill({ json })` Node
-// serializaba los ~12 MB del informe dentro de la ventana medida. Solo existe con
-// KRONOQR_E2E_PERFORMANCE=1 (proyecto `admin-perf`, `make e2e-performance`,
-// job nocturno `performance-kiosk` de ci.yml).
-import type { Browser, Page, TestInfo } from '@playwright/test'
+// COMO. La MEDIANA de tres muestras EN FRIO —un contexto de navegador nuevo
+// por muestra—, como `perf-lcp.spec.ts` del quiosco. El doble de la API sirve
+// el cuerpo ya serializado (`support/largeTables.ts`): con
+// `route.fulfill({ json })` Node serializaba los ~12 MB del informe dentro de
+// la ventana medida. Solo existe con KRONOQR_E2E_PERFORMANCE=1 (proyecto
+// `admin-perf`, `make e2e-performance`, job nocturno `performance-kiosk`).
+import type { Browser, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { logIn } from './support/admin'
 import {
@@ -29,32 +33,24 @@ import {
   openReportForm,
   resetLongTasks,
   serveBigData,
-  throttleCpu,
 } from './support/largeTables'
+import { coldPage, median, SAMPLES, warnAboveTarget } from './support/perf'
 
-/** RNF-P-04: interactiva en menos de 1,5 s. */
-const INTERACTIVE_BUDGET_MS = 1_500
-const LONG_TASK_BUDGET_MS = 200
+/** Objetivo interno: interactiva en menos de 1,5 s. */
+const INTERACTIVE_TARGET_MS = 1_500
+const LONG_TASK_TARGET_MS = 200
 /**
  * Solo al GENERAR el informe de 20 000 filas, con CPU ×4: leer y `JSON.parse` de un
  * cuerpo de ~12 MB son ~100 ms medidos con ×4 en una sola tarea que el navegador
  * no puede partir. El resto (desplazar, la tabla de cumplimiento) sigue en 200 ms.
  * Bajarlo exige paginar o transmitir el informe en el servidor, no tocar la tabla.
  */
-const REPORT_LOAD_LONG_TASK_BUDGET_MS = 300
-/** Muestras por medida. Impar, para que la mediana sea un valor medido. */
-const SAMPLES = 3
+const REPORT_LOAD_LONG_TASK_TARGET_MS = 300
 
 interface Sample {
   readonly interactiveMs: number
   readonly longestLoadTaskMs: number
   readonly longestScrollTaskMs: number
-}
-
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-
-  return sorted[Math.floor(sorted.length / 2)] ?? Number.POSITIVE_INFINITY
 }
 
 /** Desplaza la region hasta la mitad y devuelve la tarea larga mas larga del desplazamiento. */
@@ -109,29 +105,6 @@ async function complianceSample(page: Page): Promise<Sample> {
   return { interactiveMs, longestLoadTaskMs, longestScrollTaskMs }
 }
 
-/**
- * Una pagina en un contexto nuevo, con la CPU estrangulada, el doble de la API
- * y la sesion abierta: cada muestra empieza en frio. Las opciones del contexto
- * son las del proyecto, que un `browser.newContext()` no hereda solo.
- */
-async function coldPage(browser: Browser, info: TestInfo): Promise<Page> {
-  const { baseURL, viewport, locale, timezoneId } = info.project.use
-  const context = await browser.newContext({
-    ...(baseURL === undefined ? {} : { baseURL }),
-    ...(viewport === undefined ? {} : { viewport }),
-    ...(locale === undefined ? {} : { locale }),
-    ...(timezoneId === undefined ? {} : { timezoneId }),
-  })
-  const page = await context.newPage()
-
-  await throttleCpu(page)
-  await observeLongTasks(page)
-  await serveBigData(page)
-  await logIn(page)
-
-  return page
-}
-
 async function samplesOf(
   browser: Browser,
   take: (page: Page) => Promise<Sample>,
@@ -141,6 +114,9 @@ async function samplesOf(
   for (let index = 0; index < SAMPLES; index += 1) {
     const page = await coldPage(browser, test.info())
 
+    await observeLongTasks(page)
+    await serveBigData(page)
+    await logIn(page)
     samples.push(await take(page))
     await page.context().close()
   }
@@ -159,37 +135,49 @@ async function samplesOf(
 }
 
 test(
-  'el informe de 20 000 filas queda interactivo en menos de 1,5 s y sin tareas largas, en la mediana de tres muestras',
-  { tag: ['@RNF-P-04', '@RF-IN-01'] },
+  'mide el informe de 20 000 filas frente al objetivo interno de 1,5 s y sin tareas largas, y avisa si lo pasa',
+  { tag: ['@RF-IN-01'] },
   async ({ browser }) => {
     const samples = await samplesOf(browser, reportSample)
 
-    expect(median(samples.map((sample) => sample.interactiveMs))).toBeLessThan(
-      INTERACTIVE_BUDGET_MS,
+    warnAboveTarget(
+      'Informe de 20 000 filas, interactivo',
+      median(samples.map((sample) => sample.interactiveMs)),
+      INTERACTIVE_TARGET_MS,
     )
-    expect(median(samples.map((sample) => sample.longestLoadTaskMs))).toBeLessThan(
-      REPORT_LOAD_LONG_TASK_BUDGET_MS,
+    warnAboveTarget(
+      'Informe de 20 000 filas, tarea larga al generar',
+      median(samples.map((sample) => sample.longestLoadTaskMs)),
+      REPORT_LOAD_LONG_TASK_TARGET_MS,
     )
-    expect(median(samples.map((sample) => sample.longestScrollTaskMs))).toBeLessThan(
-      LONG_TASK_BUDGET_MS,
+    warnAboveTarget(
+      'Informe de 20 000 filas, tarea larga al desplazar',
+      median(samples.map((sample) => sample.longestScrollTaskMs)),
+      LONG_TASK_TARGET_MS,
     )
   },
 )
 
 test(
-  'los 3 000 hallazgos de cumplimiento quedan interactivos en menos de 1,5 s y sin tareas largas, en la mediana de tres muestras',
-  { tag: ['@RNF-P-04', '@RF-PA-06'] },
+  'mide los 3 000 hallazgos de cumplimiento frente al objetivo interno de 1,5 s y sin tareas largas, y avisa si lo pasa',
+  { tag: ['@RF-PA-06'] },
   async ({ browser }) => {
     const samples = await samplesOf(browser, complianceSample)
 
-    expect(median(samples.map((sample) => sample.interactiveMs))).toBeLessThan(
-      INTERACTIVE_BUDGET_MS,
+    warnAboveTarget(
+      '3 000 hallazgos, interactivo',
+      median(samples.map((sample) => sample.interactiveMs)),
+      INTERACTIVE_TARGET_MS,
     )
-    expect(median(samples.map((sample) => sample.longestLoadTaskMs))).toBeLessThan(
-      LONG_TASK_BUDGET_MS,
+    warnAboveTarget(
+      '3 000 hallazgos, tarea larga al cargar',
+      median(samples.map((sample) => sample.longestLoadTaskMs)),
+      LONG_TASK_TARGET_MS,
     )
-    expect(median(samples.map((sample) => sample.longestScrollTaskMs))).toBeLessThan(
-      LONG_TASK_BUDGET_MS,
+    warnAboveTarget(
+      '3 000 hallazgos, tarea larga al desplazar',
+      median(samples.map((sample) => sample.longestScrollTaskMs)),
+      LONG_TASK_TARGET_MS,
     )
   },
 )

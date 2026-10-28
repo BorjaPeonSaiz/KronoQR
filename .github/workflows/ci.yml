@@ -3845,8 +3845,9 @@ jobs:
   performance-kiosk:
     name: "Rendimiento · navegador, RNF-P-01 y RNF-P-04 (D4, nocturna)"
     runs-on: ubuntu-24.04
-    # Sesenta escaneos con la camara simulada, uno cada ~2 s, y las tablas
-    # grandes del panel con tres muestras cada una, mas instalar Chromium y
+    # Sesenta escaneos con la camara simulada, uno cada ~2 s, el LCP de la
+    # presencia en vivo y las tablas grandes del panel con tres muestras en
+    # frio cada uno (las tablas avisan y no bloquean), mas instalar Chromium y
     # construir el quiosco y el panel. El id del job sigue siendo
     # `performance-kiosk`: lo citan la cabecera y WallClockAssertionsTest.
     timeout-minutes: 20
@@ -3875,7 +3876,7 @@ jobs:
       - name: Instalar Chromium (con dependencias del sistema)
         run: npx playwright install --with-deps chromium
 
-      - name: Latencia percibida del fichaje (RNF-P-01, KP3) y tablas grandes del panel (RNF-P-04)
+      - name: Latencia percibida del fichaje (RNF-P-01, KP3), LCP de la presencia en vivo (RNF-P-04) y aviso de las tablas grandes
         run: make e2e-performance
 
       - name: Subir los artefactos de Playwright SOLO si algo ha fallado
