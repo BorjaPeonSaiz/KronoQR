@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/auth/session.store'
 import { routes } from '@/router'
 import { registerAuthGuard } from '@/router/guards'
@@ -21,6 +21,27 @@ function flatRecords(records: readonly RouteRecordRaw[]): RouteRecordRaw[] {
     ...(record.children !== undefined ? flatRecords(record.children) : []),
   ])
 }
+
+/**
+ * Las vistas diferidas, importadas una vez antes de la primera prueba
+ * (V21-2-PA-1). `router.push` resuelve el `import()` de la pantalla de destino
+ * dentro de la prueba, y la primera vez es en frio: con la CPU cargada —la suite
+ * entera en paralelo— la guarda del asistente, que lleva a `OnboardingView`,
+ * pasaba de los 5 s del limite en 4 de cada 5 pasadas locales. Lo que se prueba
+ * aqui es la guarda, no lo que tarda Vite en transformar una vista: con el
+ * modulo ya en la cache, cada `push` resuelve al momento.
+ */
+async function warmUpLazyViews(records: readonly RouteRecordRaw[]): Promise<void> {
+  const lazy = flatRecords(records).flatMap((record) =>
+    typeof record.component === 'function' ? [record.component] : [],
+  )
+  await Promise.all(lazy.map((load) => (load as () => Promise<unknown>)()))
+}
+
+/** Holgado: solo lo paga la primera pasada en frio, y no es lo que se mide. */
+const WARM_UP_TIMEOUT_MS = 60_000
+
+beforeAll(() => warmUpLazyViews(routes), WARM_UP_TIMEOUT_MS)
 
 beforeEach(() => {
   window.sessionStorage.clear()
