@@ -44,26 +44,25 @@ use Illuminate\Database\ConnectionInterface;
  * no tiene es tramo, de ahi el respaldo de `shift_entry_id`.
  *
  * Se une con `employees` y con `devices` para devolver el **UUID publico** del
- * empleado y el rotulo del quiosco, y con `shift_entries` para el UUID del tramo
+ * empleado y el rotulo del quiosco, y busca en `shift_entries` el UUID del tramo
  * cuando lo hubo. Una clave interna filtrada hacia arriba obligaria a quien la
  * recibe a saber de que tabla salio.
  *
- * ## Una consulta, y sin indice que la sirva
+ * ## Una consulta, por el indice de la hora UTC
  *
  * Los dos hallazgos miran las mismas filas —la coincidencia agrupa por quiosco y
  * RN-16 por persona— y el conjunto de una ventana de treinta dias cabe
  * holgadamente en memoria: son los fichajes de un hotel, no un historico. Dos
  * consultas obligarian a mantener dos filtros que tienen que decir lo mismo.
  *
- * **Ningun indice de `scan_events` sirve este rango**, y
- * conviene decirlo en vez de citar los que hay: los dos compuestos empiezan por
- * `employee_id` y por `device_id`, asi que un `WHERE occurred_at BETWEEN …` sin
- * columna de cabecera termina en recorrido secuencial. **Se acepta**: corre una
- * vez al dia, de madrugada, fuera del camino de fichaje, y a cuatro anos un
- * hotel de doscientas personas tiene del orden de 1,2 M de filas. El indice
- * parcial por `occurred_at` queda anotado como pendiente con su umbral de coste;
- * anadirlo hoy seria pagar escritura en **cada** fichaje para ahorrar segundos
- * en un proceso nocturno.
+ * **La ventana se filtra por `(occurred_at AT TIME ZONE 'UTC')`**, la
+ * expresion de `scan_events_occurred_at_utc_index`, y no por `occurred_at`: los
+ * dos compuestos de la tabla empiezan por `employee_id` y por `device_id`, y un
+ * `occurred_at BETWEEN` sin columna de cabecera recorria la tabla entera cada
+ * noche. El indice ya existia para el cuadro de adopcion, asi que no cuesta
+ * escritura nueva en el fichaje; la hora de pared UTC es la misma escala que el
+ * instante, porque UTC no cambia de hora. Los extremos se pasan ya en UTC y sin
+ * zona, con la misma forma que la expresion.
  */
 final readonly class EloquentCredentialScans implements CredentialScans
 {
@@ -75,7 +74,6 @@ final readonly class EloquentCredentialScans implements CredentialScans
         $rows = $this->connection->table('scan_events')
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->join('devices', 'devices.id', '=', 'scan_events.device_id')
-            ->leftJoin('shift_entries', 'shift_entries.id', '=', 'scan_events.shift_entry_id')
             ->whereIn('scan_events.origin', ['qr_kiosk', 'pin_kiosk'])
             // La lista de lo que NO entra, clasificada caso a caso en
             // `ScanResult::credentialRejections()`: con un `NOT LIKE
@@ -84,9 +82,10 @@ final readonly class EloquentCredentialScans implements CredentialScans
             // descarte del servidor (ADR-061) tampoco es un uso de la credencial
             // que el servidor decidiera: no entra.
             ->whereNotIn('scan_events.result', [...ScanResult::credentialRejections(), ScanResult::DISCARDED_UNPROCESSABLE->value])
-            ->whereBetween('scan_events.occurred_at', [
-                $from->format('Y-m-d H:i:s.uP'),
-                $to->format('Y-m-d H:i:s.uP'),
+            // La expresion del indice, tal cual (ver el docblock).
+            ->whereRaw("(scan_events.occurred_at AT TIME ZONE 'UTC') BETWEEN ?::timestamp AND ?::timestamp", [
+                $this->utcWallTime($from),
+                $this->utcWallTime($to),
             ])
             ->orderBy('scan_events.occurred_at')
             ->orderBy('scan_events.scan_id')
@@ -96,7 +95,11 @@ final readonly class EloquentCredentialScans implements CredentialScans
                 'devices.name as device_name',
                 'scan_events.occurred_at',
                 'scan_events.scan_id',
-                'shift_entries.uuid as shift_entry_uuid',
+                // Por la clave primaria, escaneo a escaneo, y no con un `LEFT
+                // JOIN`: con la union el planificador preferia leer
+                // `shift_entries` entera, un coste que crece con el historico y
+                // no con la ventana.
+                $this->connection->raw('(SELECT se.uuid FROM shift_entries se WHERE se.id = scan_events.shift_entry_id) AS shift_entry_uuid'),
                 // El DESFASE, no la marca: `flagged_for_review` es
                 // verdadera para todo fichaje por PIN, y filtrar por ella dejaba
                 // sin RN-16 justo al camino que mas facil es prestar.
@@ -143,5 +146,15 @@ final readonly class EloquentCredentialScans implements CredentialScans
         // `TIMESTAMPTZ` y PostgreSQL la devuelve en la zona de la sesion, que no
         // tiene por que ser la misma manana.
         return $instant->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
+     * El instante como hora de pared UTC sin zona, la forma de
+     * `occurred_at AT TIME ZONE 'UTC'`. Con microsegundos: el extremo es
+     * inclusivo y no puede perder el escaneo del ultimo instante.
+     */
+    private function utcWallTime(DateTimeImmutable $instant): string
+    {
+        return $instant->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
     }
 }

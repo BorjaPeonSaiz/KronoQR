@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Infrastructure\Persistence;
 
 use App\Modules\Attendance\Application\Port\AnomalousPatternHistory;
+use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -69,6 +70,11 @@ final readonly class EloquentAnomalousPatternHistory implements AnomalousPattern
             // Por el patron y no por el tipo: `anomalous_pattern` cubre los dos
             // indicios, y una coincidencia sistematica abierta no puede silenciar
             // una secuencia imposible, que es otra cosa y se revisa distinto.
+            // Solo las incidencias de patron llevan `pattern` en el contexto, asi
+            // que el tipo no cambia el resultado: es el predicado del indice
+            // parcial `incidents_anomalous_pattern_index`, y sin el la pasada
+            // nocturna leia `incidents` entera.
+            ->where('incidents.type', AnomalyType::ANOMALOUS_PATTERN->value)
             ->whereRaw("incidents.context ->> 'pattern' = ?", [$pattern])
             ->groupBy('employees.uuid')
             ->select([
