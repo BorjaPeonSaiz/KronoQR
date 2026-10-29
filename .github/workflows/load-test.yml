@@ -1,5 +1,6 @@
-# KronoQR — prueba de carga k6 sobre las imagenes de entrega (RQ-08, RNF-P-06,
-# RNF-P-02 y RNF-P-08).
+# KronoQR — prueba de carga k6 sobre las imagenes de entrega (RQ-08): regresion
+# de RNF-P-02, RNF-P-06 y RNF-P-08 frente a la linea base del runner, NO su
+# umbral (V21-5-QA-02; el umbral se juzga en hardware de referencia).
 #
 # POR QUE UN WORKFLOW PROPIO Y NO `ci.yml` NI `release.yml` (decision 12 de la
 # ficha 3.6, plan 06). Las etapas ①-③ de `ci.yml` tienen que seguir por debajo
@@ -13,11 +14,20 @@
 # y la vista de cumplimiento) contra las TRES IMAGENES DE ENTREGA, instaladas desde
 # el paquete del §11.6.1 con el instalador real -no contra la imagen de
 # desarrollo, y no contra el arbol del repositorio-, exactamente como hace el
-# job `clean-install` (etapa ⑧) de `ci.yml`. El umbral bloqueante es el que
-# fija el doc 02 §9.2: RNF-P-06, 50 fichajes/s con p95 < 150 ms. El fichaje por
-# PIN tiene presupuesto propio, RNF-P-08 (p95 < 400 ms, p99 < 800 ms, cifras
-# estimadas): paga un bcrypt de coste 12 que no se rebaja (decision del
-# propietario, 15-10-2026).
+# job `clean-install` (etapa ⑧) de `ci.yml`. El umbral que fija el doc 02 §9.2
+# —RNF-P-06, 50 fichajes/s con p95 < 150 ms— NO se juzga aqui (ver abajo): este
+# runner no puede ni ofrecer ni sostener 50/s, y un «OK RNF-P-06» suyo no mide
+# capacidad (V21-5-QA-02). El fichaje por PIN tiene presupuesto propio,
+# RNF-P-08 (p95 < 400 ms, p99 < 800 ms, cifras estimadas): paga un bcrypt de
+# coste 12 que no se rebaja (decision del propietario, 15-10-2026), y tampoco
+# se juzga aqui.
+#
+# TRES DESENLACES Y NO DOS (V21-5-QA-01). Verde, rojo y «no fiable». El tercero
+# sale cuando el runner iba mas de 3 veces mas lento que en la linea base
+# (`DEGRADED_MACHINE_RATIO` de aggregate.js), cuando la pasada no es comparable
+# con ella o cuando falta medida: ni verde ni rojo, repetir la pasada. El job
+# no sale verde con un «no fiable» —seria un verde que no se ha ganado—, pero la
+# anotacion y el resumen del job dicen «NO FIABLE» y no «rojo».
 #
 # EL RUNNER PUBLICO NO ES EL HARDWARE DE REFERENCIA. GitHub da 4 vCPU/16 GB a
 # este workflow; el numero que vale para decirle a un cliente que su servidor
@@ -350,12 +360,15 @@ jobs:
         with:
           node-version: "24"
 
-      - name: "Carga k6: RNF-P-06 (50 fichajes/s, p95 < 150 ms) y RQ-08"
+      - name: "Carga k6: regresion frente a la linea base del runner (RQ-08; el umbral de RNF-P-06 no se juzga aqui)"
         # El veredicto de load-tests/k6/run.sh ES el del job: sin
-        # continue-on-error y sin capturar el codigo de salida, un veredicto
-        # rojo (1) o una medida no fiable (2) rompen este paso y el job entero
-        # sale en rojo. La subida de resultados, mas abajo, lleva `if:
-        # always()` justo para que eso no se pierda.
+        # continue-on-error, un veredicto rojo o una medida no fiable rompen
+        # este paso. Lo que se captura es solo QUE veredicto fue, para decirlo
+        # con su nombre: `make` sale con 2 ante cualquier fallo de la receta, asi
+        # que el codigo de salida no distingue un rojo de un «no fiable», y
+        # run.sh lo deja escrito en `.results/verdict.txt` (V21-5-QA-01). La
+        # subida de resultados, mas abajo, lleva `if: always()` justo para que
+        # nada se pierda.
         #
         # Las variables K6_* de abajo son la interfaz que describe la
         # ficha de la tarea 3.6 para `load-tests/k6/run.sh` (aprovisionamiento
@@ -378,7 +391,9 @@ jobs:
           # umbral, que se mide en
           # el hardware de referencia con `make load-test` (decision 19, ficha
           # 3.6). Contrato, RQ-03, RS-03, verificacion posterior y regla 21
-          # siguen bloqueando.
+          # siguen bloqueando; con el runner mas de 3x mas lento que en la linea
+          # base, lo que depende de la maquina (las latencias, la tasa y la
+          # separacion de RS-03 en ms) da «no fiable» en vez de rojo (V21-5-QA-01).
           K6_LATENCY_VERDICT: baseline
           # La aplicacion medida y el guion con el que se midio: distintos solo
           # con `app_ref`. Los dos viajan a summary.json.
@@ -386,11 +401,29 @@ jobs:
           K6_HARNESS_SHA: ${{ steps.shas.outputs.harness }}
           K6_RUNNER: "github-${{ runner.os }}-${{ runner.arch }}"
         run: |
+          estado=0
           make load-test \
             INSTANCES="${INSTANCES}" \
             DURATION="${DURATION}" \
             NETWORK=kronoqr-app \
-            K6_COMPOSE_ARGS="--env-file paquete/.env -f paquete/docker-compose.yml"
+            K6_COMPOSE_ARGS="--env-file paquete/.env -f paquete/docker-compose.yml" || estado=$?
+          resultados=load-tests/k6/.results
+          veredicto="$(cat "${resultados}/verdict.txt" 2>/dev/null || echo sin_veredicto)"
+          lentitud="$(jq -r '.machine.slowdown // "n/d"' "${resultados}/summary.json" 2>/dev/null || echo n/d)"
+          if [ "${estado}" -eq 0 ]; then
+            mensaje="Verde frente a la linea base del runner. El umbral de RNF-P-06 (50 fichajes/s) no se juzga aqui: se mide con make load-test en hardware de referencia."
+          else
+            case "${veredicto}" in
+            rojo) titulo="Carga en rojo"; mensaje="Regresion frente a la linea base o fallo de integridad: el detalle esta en la salida de run.sh y en summary.json." ;;
+            no_fiable_runner_degradado) titulo="Carga NO FIABLE (runner degradado)"; mensaje="El runner iba ${lentitud} veces mas lento que en la linea base (maximo 3x): no es un rojo ni un verde. Repite la pasada." ;;
+            no_comparable) titulo="Carga NO FIABLE (no comparable)"; mensaje="La pasada no usa los parametros de baseline.json: no se compara. Mide con los mismos o regenera la linea base." ;;
+            no_fiable) titulo="Carga NO FIABLE (sin datos suficientes)"; mensaje="Hay requisitos sin muestras suficientes para juzgarlos. Repite la pasada." ;;
+            *) titulo="Carga sin veredicto"; mensaje="run.sh termino sin dejar veredicto (salida ${estado}): mira su salida." ;;
+            esac
+            echo "::error title=${titulo}::${mensaje}"
+          fi
+          printf '### Prueba de carga\n\n%s\n' "${mensaje}" >>"${GITHUB_STEP_SUMMARY}"
+          exit "${estado}"
 
       - name: Resultados de la carga (CSV, logs y summary.json)
         if: always()

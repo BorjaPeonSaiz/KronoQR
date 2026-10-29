@@ -24,6 +24,11 @@
 // distintos— o, en RNF-P-08, no trae la latencia del PIN en unidades de
 // velocidad de la maquina. No se compara y sale con 2 (R5-QA-02).
 //
+// Y UN QUINTO, `unreliable` («no fiable»), que tampoco es rojo ni verde: el
+// runner iba mas de `DEGRADED_MACHINE_RATIO` veces mas lento que en la linea
+// base, y un rojo de lo que depende de la maquina no distingue una regresion de
+// un runner degradado. Sale con 2: repite la pasada (V21-5-QA-01).
+//
 // Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo lleva `RS-03-RN-18`, que publica
 // cuanto se separa el `422` de RN-18 de los tres rechazos de credencial. A-13
 // (doc 07 §6) acepto esa diferencia SIN suelo de tiempo y pidio la cifra, no una
@@ -32,8 +37,13 @@
 // QUE PUBLICA `summary.json`, ademas de lo evidente:
 //
 //   verdicts['<requisito>']       `{ status, detail }`. `status` es `pass`,
-//                                 `fail`, `unmeasurable` o —solo en
-//                                 `RS-03-RN-18`— `info`.
+//                                 `fail`, `unmeasurable`, `not_comparable`,
+//                                 `unreliable` o —solo en `RS-03-RN-18`—
+//                                 `info`.
+//   machine                       velocidad de la maquina de la pasada y de la
+//                                 linea base, cuantas veces mas lenta iba
+//                                 (`slowdown`), el maximo (`max_slowdown`) y si
+//                                 la pasada cuenta como de un runner degradado.
 //   reject_classes.<clase>        `signature`, `unknown` y `revoked`: muestras,
 //                                 minimo y percentiles del rechazo de
 //                                 credencial. Es lo que compara RS-03.
@@ -120,6 +130,38 @@ const BASELINE_REGRESSION_RATIO = 1.25
  * lo que costaria una regresion global seria que el cociente no detecta.
  */
 const BASELINE_GROSS_RATIO = 3
+
+/**
+ * Cuantas veces mas lento que en la linea base puede ir el runner antes de que
+ * la pasada deje de ser fiable (V21-5-QA-01, tarea 23.1 de la 2.3.0).
+ *
+ * QUE SE COMPARA. La velocidad de la maquina de esta pasada —la mediana de los
+ * p50 de las tres clases de rechazo de credencial, `machineSpeedOf`— frente a la
+ * de la linea base (la misma mediana sobre `baseline.reject_classes`). Solo en
+ * modo `baseline` y solo con una linea base COMPARABLE: en hardware de
+ * referencia se juzga el umbral del requisito, y una maquina lenta alli es un
+ * rojo de verdad; con otra carga, la velocidad no es comparable.
+ *
+ * POR QUE 3, Y POR QUE EL MISMO NUMERO QUE LA GUARDA GRUESA. Con el mismo
+ * codigo, una maquina N veces mas lenta lleva el p95 en milisegundos a unas N
+ * veces el de la linea base. Por encima de `BASELINE_GROSS_RATIO`, la guarda
+ * gruesa sale roja POR CONSTRUCCION, y desde dentro de la pasada no se puede
+ * distinguir un runner degradado de una regresion que frene todo por igual.
+ * Las tres pasadas de la linea base variaron hasta 2,48 veces la mediana (260
+ * frente a 104,7 ms) y siguen siendo fiables; el run 38746064846, que salio
+ * rojo y 35 min despues verde con un comentario de diferencia, iba unas 15.
+ *
+ * QUE CAMBIA, Y QUE NO. Con la maquina por encima de este factor, un ROJO de lo
+ * que depende de la maquina —RNF-P-02, RNF-P-06 en su tasa, RNF-P-08 y la
+ * separacion de RS-03 en milisegundos— pasa a `unreliable` («no fiable»): ni
+ * rojo ni verde, salida 2, repite la pasada. Un verde sigue siendo verde: se
+ * cumplio con la maquina peor. Y lo que no depende de la maquina sigue siendo
+ * rojo: un rechazo al empleado, un reenvio distinto, un 5xx, un `check()`
+ * fallido o un rechazo por debajo del suelo de tiempo constante. Si la
+ * regresion global es del producto, la pasada saldra «no fiable» una y otra
+ * vez, y eso tambien se ve.
+ */
+const DEGRADED_MACHINE_RATIO = 3
 
 /** Cuanto puede caer la tasa de tramos frente a la linea base (modo `baseline`). */
 const BASELINE_RATE_TOLERANCE = 0.8
@@ -640,6 +682,25 @@ function analyse(results, options = {}) {
   /** El desenlace de un veredicto que depende de la linea base y no la tiene. */
   const withoutBaseline = baselineNotComparable ? 'not_comparable' : 'unmeasurable'
 
+  // EL RUNNER DEGRADADO (V21-5-QA-01, ver `DEGRADED_MACHINE_RATIO`): cuantas
+  // veces mas lenta iba la maquina que en la linea base. Solo en modo
+  // `baseline` y con una linea base comparable.
+  const machineSlowdown =
+    machineSpeedMs === null || baselineSpeedMs === null || baselineSpeedMs <= 0 ? null : machineSpeedMs / baselineSpeedMs
+  const machineDegraded =
+    mode === 'baseline' && baselineComparable && machineSlowdown !== null && machineSlowdown > DEGRADED_MACHINE_RATIO
+  const degradedDetail =
+    `NO FIABLE: el runner iba ${twoDecimals(machineSlowdown)} veces mas lento que en la linea base ` +
+    `(velocidad de la maquina ${round(machineSpeedMs)} ms frente a ${round(baselineSpeedMs)} ms; por encima de ` +
+    `${DEGRADED_MACHINE_RATIO}x no se distingue una regresion de un runner degradado). Repite la pasada.`
+
+  /**
+   * El rojo de algo que depende de la maquina, con el runner degradado, no es
+   * rojo: es «no fiable». Cualquier otro desenlace se queda como esta.
+   */
+  const unlessDegraded = (status) => (machineDegraded && status === 'fail' ? 'unreliable' : status)
+  const degradedPrefix = (status) => (status === 'unreliable' ? `${degradedDetail} ` : '')
+
   /** La coletilla que explica por que el umbral no se esta juzgando. */
   const thresholdNotJudged =
     'El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): ' +
@@ -746,14 +807,17 @@ function analyse(results, options = {}) {
       baselineNormalisedP95,
     })
 
+    const status = !latencyMeasurable ? 'unmeasurable' : !baselineUsable ? withoutBaseline : unlessDegraded(judgement.status)
+
     verdict(
       'RNF-P-02',
-      !latencyMeasurable ? 'unmeasurable' : !baselineUsable ? withoutBaseline : judgement.status,
+      status,
       !latencyMeasurable
         ? noSamplesDetail
         : !baselineUsable
           ? `${noBaselineDetail} ${thresholdNotJudged}`
-          : machineSpeedDetail({
+          : degradedPrefix(status) +
+            machineSpeedDetail({
               judgement,
               p95: write.p95,
               samples: write.samples,
@@ -836,21 +900,24 @@ function analyse(results, options = {}) {
     // Un rechazo a un fichaje valido es una jornada perdida con linea base y
     // sin ella: una pasada «no comparable» no puede esconderlo detras de un
     // «no evaluable».
+    // Con el runner degradado, solo la TASA pasa a «no fiable»: un rechazo al
+    // empleado (`alwaysRequired`) no depende de la maquina y sigue siendo rojo.
+    const status = !alwaysRequired
+      ? 'fail'
+      : !baselineUsable
+        ? withoutBaseline
+        : unlessDegraded(shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE ? 'pass' : 'fail')
+
     verdict(
       'RNF-P-06',
-      !alwaysRequired
-        ? 'fail'
-        : !baselineUsable
-          ? withoutBaseline
-          : shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE
-            ? 'pass'
-            : 'fail',
+      status,
       !baselineUsable
         ? `${peakMeasured}. ${noBaselineDetail} ${thresholdNotJudged}`
         : // La degradacion encolable NO se juzga aqui: en este runner es el
           // sintoma de la CPU compartida y ya esta contada en la tasa. Lo que
           // se exige es que la tasa no caiga respecto a lo que esta maquina ya
           // demostro sostener.
+          degradedPrefix(status) +
           `${peakMeasured}; minimo ${allowedRate}/s (${BASELINE_RATE_TOLERANCE}x la ${baselineReference}). ` +
           thresholdNotJudged,
     )
@@ -1031,9 +1098,12 @@ function analyse(results, options = {}) {
       baselineNormalisedP95: baselinePinNormalisedP95,
     })
 
+    const status = unlessDegraded(judgement.status)
+
     verdict(
       'RNF-P-08',
-      judgement.status,
+      status,
+      degradedPrefix(status) +
       machineSpeedDetail({
         judgement,
         p95: pinAttended.p95,
@@ -1096,21 +1166,26 @@ function analyse(results, options = {}) {
   const floorRespected = minima.every((minimum) => minimum >= rejectionFloorMs)
   const rejectMeasurable = measured.length === REJECT_CLASSES.length
 
+  // Con el runner degradado, solo la SEPARACION pasa a «no fiable»: se mide en
+  // milisegundos y crece con la cola de una maquina lenta. Un rechazo por debajo
+  // del suelo no lo produce ninguna lentitud y sigue siendo rojo.
+  const spreadOk = medianSpread <= REJECT_SPREAD_BUDGET_MS && minimumSpread <= REJECT_SPREAD_BUDGET_MS
+  const rejectStatus = !rejectMeasurable
+    ? 'unmeasurable'
+    : !floorRespected
+      ? 'fail'
+      : unlessDegraded(spreadOk ? 'pass' : 'fail')
+
   verdict(
     'RS-03',
-    !rejectMeasurable
-      ? 'unmeasurable'
-      : medianSpread <= REJECT_SPREAD_BUDGET_MS &&
-          minimumSpread <= REJECT_SPREAD_BUDGET_MS &&
-          floorRespected
-        ? 'pass'
-        : 'fail',
-    !rejectMeasurable
-      ? `solo ${measured.length} de ${REJECT_CLASSES.length} clases con muestras suficientes ` +
-        `(${REJECT_SAMPLES_FLOOR} respuestas 422 y el ${REJECT_SAMPLES_RATIO_FLOOR * 100} % de las ofrecidas)`
-      : `separacion de medianas ${medianSpread.toFixed(1)} ms y de minimos ` +
-        `${minimumSpread.toFixed(1)} ms (tope ${REJECT_SPREAD_BUDGET_MS}); suelo de ` +
-        `${rejectionFloorMs} ms ${floorRespected ? 'respetado' : 'NO respetado'} sobre el minimo de cada clase`,
+    rejectStatus,
+    degradedPrefix(rejectStatus) +
+      (!rejectMeasurable
+        ? `solo ${measured.length} de ${REJECT_CLASSES.length} clases con muestras suficientes ` +
+          `(${REJECT_SAMPLES_FLOOR} respuestas 422 y el ${REJECT_SAMPLES_RATIO_FLOOR * 100} % de las ofrecidas)`
+        : `separacion de medianas ${medianSpread.toFixed(1)} ms y de minimos ` +
+          `${minimumSpread.toFixed(1)} ms (tope ${REJECT_SPREAD_BUDGET_MS}); suelo de ` +
+          `${rejectionFloorMs} ms ${floorRespected ? 'respetado' : 'NO respetado'} sobre el minimo de cada clase`),
   )
 
   // --- RS-03-RN-18: la separacion del cuarto rechazo, INFORMATIVA -------------
@@ -1328,6 +1403,15 @@ function analyse(results, options = {}) {
     // `threshold` (el de serie) juzga RNF-P-02 y RNF-P-06 contra el requisito;
     // `baseline`, contra la pasada anterior de la MISMA maquina (decision 19).
     latency_verdict_mode: mode,
+    // La velocidad de la maquina frente a la de la linea base y si la pasada
+    // cuenta como hecha en un runner degradado (V21-5-QA-01, `DEGRADED_MACHINE_RATIO`).
+    machine: {
+      speed_ms: round(machineSpeedMs),
+      baseline_speed_ms: round(baselineSpeedMs),
+      slowdown: machineSlowdown === null ? null : Math.round(machineSlowdown * 100) / 100,
+      max_slowdown: DEGRADED_MACHINE_RATIO,
+      degraded: machineDegraded,
+    },
     rejection_floor_ms: rejectionFloorMs,
     debounce_seconds: options.debounceSeconds ?? null,
     scenarios,
@@ -1448,6 +1532,10 @@ function analyse(results, options = {}) {
  * decir si hay regresion, y un 0 ahi seria un verde que no se ha ganado. Lo que
  * cambia es el texto, que dice POR QUE (R5-QA-02): no es que falten muestras,
  * es que la linea base se tomo con otra carga.
+ *
+ * **`unreliable` sale con 2 tambien** (V21-5-QA-01): el runner iba tan lento
+ * que un rojo de lo que depende de la maquina no distingue una regresion de un
+ * runner degradado. Ni verde ni rojo: repite la pasada.
  */
 function exitCodeOf(summary) {
   const statuses = Object.values(summary.verdicts).map((entry) => entry.status)
@@ -1456,7 +1544,7 @@ function exitCodeOf(summary) {
     return 1
   }
 
-  return statuses.includes('unmeasurable') || statuses.includes('not_comparable') ? 2 : 0
+  return ['unmeasurable', 'not_comparable', 'unreliable'].some((status) => statuses.includes(status)) ? 2 : 0
 }
 
 // --- Informe legible ---------------------------------------------------------
@@ -1465,7 +1553,14 @@ function formatReport(summary) {
   const lines = []
   const say = (line) => lines.push(line)
   const fmt = (value) => (value === null || value === undefined ? '     n/d' : value.toFixed(1).padStart(8))
-  const label = { pass: 'OK   ', fail: 'FALLA', unmeasurable: 'S/MED', not_comparable: 'NOCMP', info: 'INFO ' }
+  const label = {
+    pass: 'OK   ',
+    fail: 'FALLA',
+    unmeasurable: 'S/MED',
+    not_comparable: 'NOCMP',
+    unreliable: 'NOFIA',
+    info: 'INFO ',
+  }
 
   say(
     `Instancias: ${summary.instance_ids.join(', ')}   duracion: ${summary.duration_seconds} s   ` +
@@ -1591,11 +1686,23 @@ function formatReport(summary) {
   const failed = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'fail')
   const unmeasurable = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'unmeasurable')
   const notComparable = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'not_comparable')
+  const unreliable = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'unreliable')
 
   say('')
 
   if (failed.length > 0) {
     say(`VEREDICTO: rojo en ${failed.map(([requirement]) => requirement).join(', ')}.`)
+  } else if (unreliable.length > 0) {
+    // Antes que «no comparable»: con la linea base comparable no puede haber
+    // ninguno de los dos a la vez, y este dice que hacer (repetir la pasada).
+    say(
+      `VEREDICTO: no fiable. El runner iba ${summary.machine.slowdown} veces mas lento que en la linea base ` +
+        `(maximo ${summary.machine.max_slowdown}x): ${unreliable.map(([requirement]) => requirement).join(', ')} ` +
+        'no se dan ni por rojos ni por verdes. Repite la pasada.' +
+        (unmeasurable.length > 0
+          ? ` Ademas, sin datos suficientes para ${unmeasurable.map(([requirement]) => requirement).join(', ')}.`
+          : ''),
+    )
   } else if (notComparable.length > 0) {
     // Antes que «no fiable»: es la causa mas concreta, y la que dice que hacer.
     say(

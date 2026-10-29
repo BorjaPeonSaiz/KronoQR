@@ -1009,8 +1009,9 @@ test('[RNF-P-08] en modo linea base un runner tres veces mas lento con el mismo 
 })
 
 test('[RNF-P-08] en modo linea base un PIN por encima de 3x la linea base en ms es rojo aunque el cociente cuadre', () => {
-  // 780 ms con rechazos de 99 ms: 7,88 rechazos, pero 780 > 750.
-  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(780), rejectDurationMs: 99 }), {
+  // 780 ms con rechazos de 85 ms: 9,18 rechazos, pero 780 > 750. El runner va
+  // 2,83 veces mas lento, por debajo de los 3x que lo hacen no fiable.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(780), rejectDurationMs: 85 }), {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
   })
@@ -1254,9 +1255,10 @@ test('[RNF-P-02] un runner tres veces mas lento con el mismo codigo sigue en ver
 })
 
 test('[RNF-P-02] un p95 por encima de 3x la linea base en ms es rojo aunque el cociente cuadre', () => {
-  // 330 ms con rechazos de 99 ms: 3,33 rechazos, pero 330 > 300. Una
-  // ralentizacion global frena tambien los rechazos y el cociente no la ve.
-  const summary = runAnalysis(greenRun({ scanDurationMs: 330, rejectDurationMs: 99 }), {
+  // 340 ms con rechazos de 85 ms: 4 rechazos, por debajo de 4,17, pero 340 > 300.
+  // Una ralentizacion global frena tambien los rechazos y el cociente no la ve.
+  // El runner va 2,83 veces mas lento: por debajo de 3x, la guarda gruesa manda.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 340, rejectDurationMs: 85 }), {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
   })
@@ -1349,3 +1351,174 @@ for (const run of VERSIONED_BASELINE.baseline_of.runs) {
     assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
   })
 }
+
+// --- V21-5-QA-01: con el runner degradado, «no fiable» y no rojo --------------
+//
+// El run 38746064846 salio rojo con la maquina unas 15 veces mas lenta que en la
+// linea base, y 35 min despues salio verde con un comentario de diferencia: lo
+// pusieron en rojo la guarda gruesa de 3x y RS-03, que se juzga en ms. La
+// velocidad de la maquina de `asBaseline()` son rechazos de 30 ms: por encima
+// de 90 ms (3x) la pasada no es fiable para lo que depende de la maquina.
+
+test('[V21-5-QA-01][RNF-P-02][RNF-P-08] un runner 15 veces mas lento da no fiable y no rojo', () => {
+  // El mismo codigo en una maquina 15 veces mas lenta: rechazos de 450 ms, p95
+  // de 1500 ms y PIN de 3750 ms. Los dos cocientes cuadran; la guarda gruesa no.
+  const summary = runAnalysis(
+    greenRun({ scanDurationMs: 1500, rejectDurationMs: 450, pinDurations: Array(20).fill(3750) }),
+    { latencyVerdictMode: 'baseline', baseline: asBaseline() },
+  )
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unreliable')
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'unreliable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /^NO FIABLE: el runner iba 15 veces mas lento que en la linea base/)
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[V21-5-QA-01] publica cuanto mas lenta iba la maquina que en la linea base', () => {
+  const summary = runAnalysis(greenRun({ rejectDurationMs: 450 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.deepEqual(summary.machine, {
+    speed_ms: 450,
+    baseline_speed_ms: 30,
+    slowdown: 15,
+    max_slowdown: 3,
+    degraded: true,
+  })
+})
+
+test('[V21-5-QA-01][RNF-P-02] un runner exactamente 3 veces mas lento sigue juzgandose, y la guarda gruesa da rojo', () => {
+  // Rechazos de 90 ms: 3x justos, no por encima. 360 ms son 4 rechazos (maximo
+  // 4,17), pero 360 > 300.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 360, rejectDurationMs: 90 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(summary.machine.degraded, false)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /ROJO por la guarda gruesa/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[V21-5-QA-01][RNF-P-02] un runner 3,1 veces mas lento con la guarda gruesa superada da no fiable', () => {
+  // Rechazos de 93 ms: 3,1x. 372 ms son 4 rechazos, y 372 > 300.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 372, rejectDurationMs: 93 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(summary.machine.degraded, true)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unreliable')
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[V21-5-QA-01][RNF-P-02] un runner degradado no convierte en no fiable lo que sigue en verde', () => {
+  // 4 veces mas lento, y el p95 en 2,42 rechazos y 290 ms: dentro de las dos
+  // condiciones. Lo que se midio se cumplio aun con la maquina peor.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 290, rejectDurationMs: 120 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(summary.machine.degraded, true)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+})
+
+test('[V21-5-QA-01][RNF-P-06] con el runner degradado una tasa por debajo de la linea base da no fiable', () => {
+  // 47 tramos/s frente a un minimo de 48, con rechazos de 450 ms.
+  const summary = runAnalysis(greenRun({ shiftProducing: 47, rejectDurationMs: 450, scanDurationMs: 1500 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'unreliable')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /minimo 48\/s/)
+})
+
+test('[V21-5-QA-01][RNF-P-06] con el runner degradado un rechazo al empleado sigue siendo rojo', () => {
+  // Un 403 sobre un fichaje valido es una jornada perdida en cualquier maquina.
+  const summary = runAnalysis(greenRun({ extraScanStatus: '403', rejectDurationMs: 450, scanDurationMs: 1500 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[V21-5-QA-01][RS-03] con el runner degradado una separacion de 30 ms entre clases da no fiable', () => {
+  // Medianas de 450, 450 y 480 ms: 30 ms de separacion, con la maquina 15x.
+  const summary = runAnalysis(
+    greenRun({ rejectDurationMs: 450, scanDurationMs: 1500, revokedDurations: [450, ...Array(19).fill(480)] }),
+    { latencyVerdictMode: 'baseline', baseline: asBaseline() },
+  )
+
+  assert.equal(statusOf(summary, 'RS-03'), 'unreliable')
+  assert.match(summary.verdicts['RS-03'].detail, /separacion de medianas 30\.0 ms/)
+})
+
+test('[V21-5-QA-01][RS-03] con el runner degradado un rechazo por debajo del suelo sigue siendo rojo', () => {
+  // Una maquina lenta no hace mas rapido un rechazo: 24 ms con suelo de 25 es el
+  // suelo de tiempo constante roto, vaya como vaya el runner.
+  const summary = runAnalysis(
+    greenRun({ rejectDurationMs: 450, scanDurationMs: 1500, revokedDurations: Array(20).fill(24) }),
+    { latencyVerdictMode: 'baseline', baseline: asBaseline() },
+  )
+
+  assert.equal(summary.machine.degraded, true)
+  assert.equal(statusOf(summary, 'RS-03'), 'fail')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[V21-5-QA-01][RS-03] en modo umbral una maquina lenta no es excusa: la separacion es roja', () => {
+  // En hardware de referencia se juzga el requisito, no la regresion: alli no
+  // hay «runner degradado» que valga.
+  const summary = runAnalysis(
+    greenRun({ rejectDurationMs: 450, scanDurationMs: 1500, revokedDurations: [450, ...Array(19).fill(480)] }),
+    { baseline: asBaseline() },
+  )
+
+  assert.equal(summary.machine.degraded, false)
+  assert.equal(statusOf(summary, 'RS-03'), 'fail')
+})
+
+test('[V21-5-QA-01] contra una linea base de otra carga no se declara degradado: no hay con que comparar', () => {
+  const summary = runAnalysis(greenRun({ rejectDurationMs: 450, scanDurationMs: 1500 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ instances: 3 }),
+  })
+
+  assert.equal(summary.machine.degraded, false)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
+})
+
+test('[V21-5-QA-01] el veredicto legible dice «no fiable» y por que, no «rojo»', () => {
+  const summary = runAnalysis(
+    greenRun({ scanDurationMs: 1500, rejectDurationMs: 450, pinDurations: Array(20).fill(3750) }),
+    { latencyVerdictMode: 'baseline', baseline: asBaseline() },
+  )
+
+  const report = formatReport(summary)
+
+  assert.match(report, /NOFIA RNF-P-02: NO FIABLE/)
+  assert.match(
+    report,
+    /VEREDICTO: no fiable\. El runner iba 15 veces mas lento que en la linea base \(maximo 3x\): RNF-P-02, RNF-P-08 no se dan ni por rojos ni por verdes\. Repite la pasada\./,
+  )
+  assert.doesNotMatch(report, /VEREDICTO: rojo/)
+})
+
+test('[V21-5-QA-01] la pasada mas lenta de la linea base versionada no cuenta como runner degradado', () => {
+  // 260 ms frente a la mediana de 104,7: 2,48x, la mayor dispersion medida.
+  const slowest = VERSIONED_BASELINE.baseline_of.runs.find((run) => run.run_id === '38659326956')
+  const lines = [
+    ...greenRun({ scanDurationMs: slowest.write_path_p95, rejectDurationMs: slowest.reject_p50 }),
+    ...OTHER_SCENARIO_ROWS,
+  ]
+  const summary = runAnalysis(lines, WORKFLOW_PARAMETERS)
+
+  assert.equal(summary.machine.degraded, false)
+})
