@@ -728,7 +728,9 @@ describe('EmployeeDetailView', () => {
           if (url.endsWith('/offboard') && init?.method === 'POST') {
             bodies.push(JSON.parse(String(init.body)))
 
-            return jsonResponse(employee({ hired_at: hiredAt, status: 'terminated', terminated_at: cese }))
+            return jsonResponse(
+              employee({ hired_at: hiredAt, status: 'terminated', terminated_at: cese }),
+            )
           }
 
           return null
@@ -743,7 +745,9 @@ describe('EmployeeDetailView', () => {
         await settle()
 
         expect(bodies).toHaveLength(1)
-        expect((bodies[0] as Record<string, unknown>)['apply_now']).toBe(aplicaYa ? true : undefined)
+        expect((bodies[0] as Record<string, unknown>)['apply_now']).toBe(
+          aplicaYa ? true : undefined,
+        )
       },
     )
 

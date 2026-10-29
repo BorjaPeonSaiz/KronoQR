@@ -174,7 +174,10 @@ it('abre una sola scan_before_revocation por persona y jornada con los escaneos 
 it('dice offboarding cuando la persona esta de baja con la tarjeta todavia vigente', function (): void {
     $escenario = escenarioDeRevision();
     $baja = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated');
-    $tarjeta = Credentials::issueFor(AttendanceFixtures::employeeIdOf($baja))->toString();
+    $bajaId = AttendanceFixtures::employeeIdOf($baja);
+    // El escaneo cae en el dia del cese: despues ya no se marca (RN-20 acotada al cese).
+    DB::table('employees')->where('id', $bajaId)->update(['terminated_at' => '2026-08-15']);
+    $tarjeta = Credentials::issueFor($bajaId)->toString();
 
     fichajeConTarjeta($escenario['token'], $tarjeta, '2026-08-15T08:00:00Z')->assertStatus(422);
 
