@@ -86,7 +86,13 @@ function currentQuery(): ComplianceSummaryQuery {
   }
 }
 
+let loadGeneration = 0
+
 async function load(): Promise<void> {
+  loadGeneration += 1
+
+  const generation = loadGeneration
+
   tableReady.value = false
   loading.value = true
   error.value = null
@@ -97,7 +103,7 @@ async function load(): Promise<void> {
     // Mientras llega la respuesta, el formateo de fechas se calienta: su primera vez cuesta
     // decenas de ms que, si no, caerian en la tarea que pinta la tabla.
     setTimeout(() => {
-      warmInstantFormatting(locale.value)
+      warmInstantFormatting(locale.value, summary.value?.meta.time_zone)
     }, 0)
 
     const result = await request
@@ -123,7 +129,11 @@ async function load(): Promise<void> {
   if (summary.value !== null) {
     await nextTick()
     await yieldToMain()
-    tableReady.value = true
+
+    // Una carga posterior ya ha retirado la tabla: la suya la monta, no esta.
+    if (generation === loadGeneration) {
+      tableReady.value = true
+    }
   }
 }
 
