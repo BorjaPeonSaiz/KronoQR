@@ -22,10 +22,10 @@ final readonly class TraceabilityReport
      * evidencia de que «cada obligacion tiene una prueba automatica que la
      * verifica EN CADA CAMBIO», y de k6 eso es falso: la prueba de carga dura
      * minutos, necesita la pila levantada y corre a mano y en la etiqueta de
-     * cada version mayor (RQ-08). Una entrada de
-     * k6 acredita que el umbral se midio en la ultima version mayor, no que se
-     * este verificando hoy, y quien lee la matriz tiene que poder distinguirlo
-     * sin salir de la fila.
+     * cada version menor o mayor (RQ-08). Una entrada de k6 acredita que el
+     * escenario corrio en la ultima de ellas, no que se este verificando hoy, y
+     * quien lee la matriz tiene que poder distinguirlo sin salir de la fila. Y
+     * en el runner no juzga el umbral: ver `quality.measured_off_ci`.
      *
      * Es texto fijo por herramienta, no una fecha: dos ejecuciones sobre el
      * mismo arbol tienen que producir el mismo fichero.
@@ -57,6 +57,13 @@ final readonly class TraceabilityReport
     private const string NEVER_IN_CI = 'la CI la omite siempre: no cuenta como cobertura';
 
     /**
+     * El marcador de una entrada de k6 para un requisito de
+     * `quality.measured_off_ci`: la herramienta que lo citaria corre en la CI,
+     * pero alli no juzga su umbral (V21-5-QA-02).
+     */
+    private const string THRESHOLD_OFF_CI = 'en la CI no mide el umbral: no cuenta como cobertura';
+
+    /**
      * Las pruebas que CUBREN cada requisito: todas las etiquetadas menos las
      * que la CI omite siempre. Es lo que decide `--check`.
      *
@@ -76,6 +83,10 @@ final readonly class TraceabilityReport
      * @param  list<string>  $skippedInCi  Ficheros de Pest, relativos a backend/,
      *                                     cuyas pruebas condicionadas al entorno
      *                                     la CI omite siempre (`quality.skipped_in_ci`).
+     * @param  array<string, string>  $measuredOffCi  Requisitos cuyo umbral solo
+     *                                                se mide fuera de la CI, con
+     *                                                donde se mide
+     *                                                (`quality.measured_off_ci`).
      */
     public function __construct(
         private RequirementCatalog $catalog,
@@ -83,15 +94,39 @@ final readonly class TraceabilityReport
         private PhaseOrder $order,
         private int $currentPhase,
         private array $skippedInCi = [],
+        private array $measuredOffCi = [],
     ) {
         $this->listed = $scan->byRequirement();
-        $this->tests = array_filter(array_map(
-            fn (array $tests): array => array_values(array_filter(
-                $tests,
-                fn (TaggedTest $test): bool => ! $this->isSkippedInCi($test),
-            )),
-            $this->listed,
-        ));
+
+        $tests = [];
+
+        foreach ($this->listed as $id => $listed) {
+            $counted = array_values(array_filter(
+                $listed,
+                fn (TaggedTest $test): bool => ! $this->isSkippedInCi($test)
+                    && ! $this->isThresholdOffCi($test, (string) $id),
+            ));
+
+            if ($counted !== []) {
+                $tests[$id] = $counted;
+            }
+        }
+
+        $this->tests = $tests;
+    }
+
+    /**
+     * ¿Es la entrada de k6 de un requisito cuyo umbral la CI no mide
+     * (V21-5-QA-02)? La prueba de carga corre en la CI, pero en el runner
+     * compara con su linea base y no juzga el umbral: contarla como cobertura
+     * de RNF-P-06 era dar por medidos 50 fichajes/s que nadie habia medido.
+     *
+     * Es por requisito y no por prueba: el mismo escenario sigue cubriendo lo
+     * que si acredita en el runner (RQ-08, que la prueba de carga corra).
+     */
+    public function isThresholdOffCi(TaggedTest $test, string $requirement): bool
+    {
+        return $test->tool === 'k6' && isset($this->measuredOffCi[$requirement]);
     }
 
     /**
@@ -217,6 +252,7 @@ final readonly class TraceabilityReport
             ...$this->summarySection(),
             ...$this->missingSection(),
             ...$this->matrixSection(),
+            ...$this->offCiSection(),
             ...$this->conditionalSection(),
             ...$this->warningSection(),
             '',
@@ -245,8 +281,11 @@ final readonly class TraceabilityReport
             '- **Playwright, en cada push** — etapa ⑦, E2E con cámara simulada.',
             '- **k6, a mano y en cada etiqueta `vX.Y.0`** — la prueba de carga dura minutos y necesita la',
             '  pila levantada, así que está fuera del pipeline de cada cambio (RQ-08, doc 02 §10.1). Una',
-            '  entrada de k6 acredita que el umbral **se midió en la última versión mayor**, no que se',
-            '  esté verificando hoy. Se marca `(k6: a mano y en cada etiqueta vX.Y.0)`.',
+            '  entrada de k6 acredita que el escenario **corrió en la última versión menor o mayor**, no que',
+            '  se esté verificando hoy. Se marca `(k6: a mano y en cada etiqueta vX.Y.0)`. En el runner de',
+            '  la CI compara con su propia línea base y **no juzga el umbral** del requisito: los requisitos',
+            '  cuyo umbral solo se mide fuera de la CI (`quality.measured_off_ci`) no se dan por cubiertos',
+            '  por k6 y se enumeran en «Umbrales que la CI no mide».',
             '',
             '**Una entrada sin marcador se verifica en cada push.** Solo se anota lo que se aparta de ahí,',
             'que es lo único que hay que ver de un vistazo.',
@@ -310,7 +349,7 @@ final readonly class TraceabilityReport
 
         foreach ($missing as $requirement) {
             $rows[] = '| `'.$requirement->id.'` | '.$requirement->phase.' | '.self::cell($requirement->title)
-                .(isset($this->listed[$requirement->id]) ? ' (solo tiene pruebas que '.self::NEVER_IN_CI.')' : '')
+                .$this->whyUncounted($requirement->id)
                 .' |';
         }
 
@@ -325,6 +364,25 @@ final readonly class TraceabilityReport
     }
 
     /**
+     * Por que un requisito con pruebas etiquetadas sale sin prueba: lo que no
+     * cuenta de lo que lo cita.
+     */
+    private function whyUncounted(string $id): string
+    {
+        $listed = $this->listed[$id] ?? [];
+
+        if ($listed === []) {
+            return '';
+        }
+
+        $offCi = array_filter($listed, fn (TaggedTest $test): bool => $this->isThresholdOffCi($test, $id));
+
+        return $offCi === []
+            ? ' (solo tiene pruebas que '.self::NEVER_IN_CI.')'
+            : ' (solo la citan pruebas de k6, que en la CI no miden su umbral: no cuentan como cobertura)';
+    }
+
+    /**
      * @return list<string>
      */
     private function matrixSection(): array
@@ -332,14 +390,58 @@ final readonly class TraceabilityReport
         $rows = ['| Requisito | Fase | Pruebas | Enunciado |', '|---|---|---|---|'];
 
         foreach ($this->catalog->requirements as $requirement) {
-            $tests = $this->listed[$requirement->id] ?? [];
+            $id = $requirement->id;
+            $tests = $this->listed[$id] ?? [];
 
-            $rows[] = '| `'.$requirement->id.'` | '.$requirement->phase.' | '
-                .($tests === [] ? '—' : implode('<br>', array_map($this->describe(...), $tests)))
-                .' | '.self::cell($requirement->title).' |';
+            $rows[] = '| `'.$id.'` | '.$requirement->phase.' | '
+                .($tests === [] ? '—' : implode('<br>', array_map(
+                    fn (TaggedTest $test): string => $this->describe($test, $id),
+                    $tests,
+                )))
+                .' | '.self::cell($requirement->title)
+                .(isset($this->measuredOffCi[$id]) ? ' (umbral medido fuera de la CI: ver «Umbrales que la CI no mide»)' : '')
+                .' |';
         }
 
         return ['## Matriz', '', ...$rows, ''];
+    }
+
+    /**
+     * Los requisitos cuyo UMBRAL no mide la CI (`quality.measured_off_ci`,
+     * V21-5-QA-02), con donde se mide.
+     *
+     * Se enumeran aparte porque la matriz se lee como «esto esta verificado», y
+     * un umbral de capacidad que solo se mide en hardware de referencia no lo
+     * verifica ninguna prueba de la CI: las que lo citan cubren la
+     * configuracion que lo sirve, no la cifra.
+     *
+     * @return list<string>
+     */
+    private function offCiSection(): array
+    {
+        $heading = ['## Umbrales que la CI no mide', ''];
+
+        if ($this->measuredOffCi === []) {
+            return [...$heading, 'Ninguno.', ''];
+        }
+
+        $phases = $this->catalog->phases();
+        $rows = ['| Requisito | Fase | Dónde se mide |', '|---|---|---|'];
+
+        foreach ($this->measuredOffCi as $id => $where) {
+            $rows[] = '| `'.$id.'` | '.($phases[$id] ?? '—').' | '.self::cell($where).' |';
+        }
+
+        return [
+            ...$heading,
+            'La CI no juzga su umbral: la prueba de carga del runner compara con su propia línea base,',
+            'no con la cifra del requisito. Sus entradas de k6 se enumeran en la matriz, marcadas, pero',
+            '**no cuentan como cobertura**; las demás pruebas que lo citan verifican la configuración que',
+            'lo sirve, no la cifra. Hasta que se mida donde dice la tabla, es un objetivo de diseño.',
+            '',
+            ...$rows,
+            '',
+        ];
     }
 
     /**
@@ -416,9 +518,9 @@ final readonly class TraceabilityReport
         return [...$lines, ...($warnings === [] ? ['Ninguno.'] : $warnings), ''];
     }
 
-    private function describe(TaggedTest $test): string
+    private function describe(TaggedTest $test, string $requirement): string
     {
-        return '`'.$test->reference().'` — '.self::cell($test->name).$this->mark($test);
+        return '`'.$test->reference().'` — '.self::cell($test->name).$this->mark($test, $requirement);
     }
 
     /**
@@ -430,12 +532,16 @@ final readonly class TraceabilityReport
      * dar por «en cada push» algo que no lo es es justo el fallo que este
      * marcador existe para evitar.
      */
-    private function mark(TaggedTest $test): string
+    private function mark(TaggedTest $test, string $requirement): string
     {
         $notes = [];
 
         if (! in_array($test->tool, self::EVERY_PUSH, true)) {
             $notes[] = self::OFF_CADENCE[$test->tool] ?? $test->tool.': frecuencia sin declarar';
+        }
+
+        if ($this->isThresholdOffCi($test, $requirement)) {
+            $notes[] = self::THRESHOLD_OFF_CI;
         }
 
         if ($this->isSkippedInCi($test)) {

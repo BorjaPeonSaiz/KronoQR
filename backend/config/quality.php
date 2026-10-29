@@ -234,4 +234,30 @@ return [
         'tests/Integration/Install/FpmPoolRenderTest.php' => 19,
     ],
 
+    /*
+     * Requisitos cuyo UMBRAL no mide la CI, con donde se mide (V21-5-QA-02,
+     * tarea 23.1 de la 2.3.0).
+     *
+     * La prueba de carga corre en el runner de GitHub (`load-test.yml`), pero
+     * alli compara con su propia linea base y no juzga la cifra del requisito
+     * (decision 19 de la ficha 3.6, doc 02 §9.2): el runner no ofrece ni
+     * sostiene 50 fichajes/s. Su «OK RNF-P-06» no mide capacidad, y la matriz lo
+     * contaba como cobertura. Para los requisitos de esta lista, las entradas de
+     * k6 se enumeran en la matriz, marcadas, pero NO cubren nada; las demas
+     * pruebas que los citan —la configuracion de PostgreSQL y del borde que
+     * sirve el pico— siguen contando, porque verifican lo que dicen. La matriz
+     * los enumera ademas en «Umbrales que la CI no mide».
+     *
+     * Un requisito sale de esta lista cuando la CI juzgue su umbral, no cuando
+     * alguien lo mida una vez a mano: la matriz describe lo que se verifica en
+     * cada version, y una medicion suelta no lo es.
+     *
+     * Lista literal y sin comillas ni corchetes en el texto:
+     * `TraceabilityMatrixFreshnessTest` la lee como texto, sin arrancar el
+     * framework.
+     */
+    'measured_off_ci' => [
+        'RNF-P-06' => 'make load-test INSTANCES=10 en el hardware de referencia del doc 02 §11.6.2, modo threshold. Nunca se ha medido (K6-1, doc 07 A-11): hasta entonces es un objetivo de diseño',
+    ],
+
 ];

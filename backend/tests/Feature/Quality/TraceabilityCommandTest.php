@@ -220,7 +220,10 @@ it('da por cubierto un requisito cuya unica prueba es un escenario de k6', funct
         ."- { id: RNF-P-02, fase: 0, titulo: Latencia del fichaje }\n"
         ."- { id: RQ-08, fase: 0, titulo: Prueba de carga }\n");
     useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06 RNF-P-02 RQ-08')]));
-    config(['quality.current_phase' => 0]);
+    // Sin umbrales declarados fuera de la CI: lo que se prueba aqui es el
+    // formato de k6, no la reserva de `quality.measured_off_ci`, que tiene sus
+    // propias pruebas mas abajo.
+    config(['quality.current_phase' => 0, 'quality.measured_off_ci' => []]);
 
     // Etiquetada SOLO con RQ-13: esta prueba verifica el escaner, no el pico de
     // 50 fichajes/s. Citar aqui RNF-P-06 haria figurar en la matriz una prueba
@@ -258,6 +261,58 @@ it('escribe en cada entrada cada cuanto se ejecuta esa prueba', function (): voi
     // en cada push y no llevan nada, que es lo que mantiene la matriz legible.
     expect($output)->toContain('(k6: a mano y en cada etiqueta vX.Y.0)');
     expect($output)->not->toContain('automática que la verifica en cada cambio');
+})->group('RQ-13');
+
+it('NO da por cubierto con k6 un requisito cuyo umbral se mide fuera de la CI', function (): void {
+    // V21-5-QA-02. En el runner, load-test.yml compara con su linea base y no
+    // juzga los 50 fichajes/s de RNF-P-06: su «OK RNF-P-06» no mide capacidad,
+    // y la matriz lo contaba como si la midiera.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06')]));
+    config([
+        'quality.current_phase' => 0,
+        'quality.measured_off_ci' => ['RNF-P-06' => 'make load-test en hardware de referencia'],
+    ]);
+
+    [$exit, $output] = Commands::run('qa:traceability --check');
+
+    expect($exit)->toBe(1);
+    expect($output)->toContain('RNF-P-06');
+})->group('RQ-13');
+
+it('sigue contando con k6 los demas requisitos del mismo escenario', function (): void {
+    // La reserva es por requisito y no por escenario: RQ-08 —que la prueba de
+    // carga exista y corra en cada etiqueta— si lo acredita el runner.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n"
+        ."- { id: RQ-08, fase: 0, titulo: Prueba de carga }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06 RQ-08')]));
+    config([
+        'quality.current_phase' => 0,
+        'quality.measured_off_ci' => ['RNF-P-06' => 'make load-test en hardware de referencia'],
+    ]);
+
+    [, $output] = Commands::run('qa:traceability --output=-');
+
+    // Dos requisitos, uno con prueba (RQ-08) y otro sin ella (RNF-P-06).
+    expect($output)->toContain('| 0 | sí | 2 | 1 | 1 |')
+        ->and($output)->toContain('| `RNF-P-06` | 0 | 50 fichajes por segundo en el cambio de turno (solo la citan pruebas de k6, que en la CI no miden su umbral: no cuentan como cobertura) |')
+        ->and($output)->not->toContain('| `RQ-08` | 0 | Prueba de carga |');
+})->group('RQ-13');
+
+it('enseña aparte los umbrales que la CI no mide y marca su entrada de k6', function (): void {
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06')]));
+    config([
+        'quality.current_phase' => 0,
+        'quality.measured_off_ci' => ['RNF-P-06' => 'make load-test en hardware de referencia'],
+    ]);
+
+    [, $output] = Commands::run('qa:traceability --output=-');
+
+    expect($output)->toContain('## Umbrales que la CI no mide')
+        ->and($output)->toContain('| `RNF-P-06` | 0 | make load-test en hardware de referencia |')
+        ->and($output)->toContain('scan (k6: a mano y en cada etiqueta vX.Y.0, en la CI no mide el umbral: no cuenta como cobertura)')
+        ->and($output)->toContain('| 0 | sí | 1 | 0 | 1 |');
 })->group('RQ-13');
 
 it('NO da por cubierto un requisito cuya unica prueba la CI omite siempre', function (): void {

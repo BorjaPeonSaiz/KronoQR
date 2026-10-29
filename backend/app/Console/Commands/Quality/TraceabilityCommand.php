@@ -63,12 +63,18 @@ final class TraceabilityCommand extends Command
         /** @var array<string, int> $skippedInCi */
         $skippedInCi = config()->array('quality.skipped_in_ci', []);
 
+        // Los requisitos cuyo umbral la CI no mide (V21-5-QA-02): sus entradas
+        // de k6 no cuentan como cobertura.
+        /** @var array<string, string> $measuredOffCi */
+        $measuredOffCi = config()->array('quality.measured_off_ci', []);
+
         return new TraceabilityReport(
             RequirementCatalog::fromFile($docs.'/'.config()->string('quality.requirements_file')),
             (new TagScanner($paths, dirname(base_path())))->scan(),
             new PhaseOrder($order),
             config()->integer('quality.current_phase'),
             array_map(strval(...), array_keys($skippedInCi)),
+            $measuredOffCi,
         );
     }
 
