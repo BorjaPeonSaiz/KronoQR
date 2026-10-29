@@ -65,6 +65,7 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     teleworking: false,
     pin_status: 'issued',
     anonymized_at: null,
+    offboarding: null,
     ...overrides,
   }
 }

@@ -1961,43 +1961,69 @@ export interface paths {
          *     posterior de su tarjeta recibe el mismo rechazo generico que un codigo
          *     inexistente (regla dura 17).
          *
-         *     **La baja es efectiva en el momento en que se registra**, sea cual sea
-         *     `terminated_at`, y **tambien el mismo dia del cese**: registrada a las
-         *     10:00 con `terminated_at` de hoy, la persona ya no ficha a las 15:00.
-         *     Por eso se registra cuando la persona ha terminado su ultimo turno. Si
-         *     tenia un turno abierto, su salida se rechaza y el turno queda abierto
-         *     para que se cierre con una correccion (RF-PA-04, RF-PR-01).
+         *     **En el acto o programada, segun la fecha de cese** (RN-14, ADR-062 §3).
+         *     «Hoy» es la **fecha civil del centro** (`Site.timezone`, ADR-040) en el
+         *     instante en que el servidor recibe la peticion, no la fecha UTC ni la
+         *     del navegador: a las 00:30 del dia 3 en Canarias, el 3 ya es hoy aunque
+         *     en UTC aun sea el 2.
          *
-         *     **`terminated_at` no puede ser posterior a hoy** (RN-14, decision del
-         *     propietario de 02-10-2026). «Hoy» es la **fecha civil del centro**
-         *     (`Site.timezone`, ADR-040) en el instante en que el servidor recibe la
-         *     peticion, no la fecha UTC ni la del navegador: a las 00:30 del dia 3
-         *     en el centro, el 3 ya se admite aunque en UTC aun sea el 2. Una fecha
-         *     posterior responde `422` con el detalle en `errors.terminated_at`, **no
-         *     cambia nada y no deja asiento**, como cualquier otro `422`. Tampoco
-         *     puede ser anterior a la fecha de alta (`422`, mismo campo). Hacia atras
-         *     no hay mas limite: una baja que se registra dias despues de producirse
-         *     es el caso normal, y los tramos que la persona fichara despues de esa
-         *     fecha se conservan tal cual (regla dura 5).
+         *     | `terminated_at` | Sin `apply_now` | Con `apply_now: true` |
+         *     |---|---|---|
+         *     | Anterior a la fecha de alta | `422` en `terminated_at` | igual |
+         *     | Anterior a hoy, no anterior al alta | **Baja en el acto** | igual |
+         *     | Hoy | **Baja programada**: se aplica al terminar el dia | **Baja en el acto** (despido con efecto inmediato) |
+         *     | Posterior a hoy | **Baja programada** | `422` en `apply_now` |
+         *     | Alta futura y cese igual a esa fecha | **Baja sin efectos**, en el acto (la contratacion que no llego a empezar) | igual |
          *
-         *     **Una contratacion que no llego a empezar** (fecha de alta posterior a
-         *     hoy, con el mismo «hoy» del centro de arriba y no con otro reloj) solo
-         *     admite como fecha de cese **la propia fecha de alta**: es una
-         *     baja sin efectos, porque la persona nunca llego a trabajar. Cualquier
-         *     otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
-         *     admitida.
+         *     **Baja en el acto.** `status` pasa a `terminated`, y **todas** las
+         *     credenciales activas —la tarjeta en uso y la reemision pendiente de
+         *     imprimir, si la hay— quedan revocadas en la misma transaccion, cada una
+         *     con su asiento `credential.revoked`. Sus sesiones abiertas del portal se
+         *     cierran. Un escaneo posterior de su tarjeta recibe el mismo rechazo
+         *     generico que un codigo inexistente (regla dura 17). Asiento
+         *     `employee.offboarded`. Con `apply_now` y cese de hoy, la persona ya no
+         *     ficha desde ese momento: si tenia un turno abierto, su salida se
+         *     rechaza y el turno queda abierto para cerrarlo con una correccion
+         *     (RF-PA-04, RF-PR-01).
+         *
+         *     **Baja programada.** La ficha sigue `active` (o `suspended`) con
+         *     `terminated_at` = la fecha, y `offboarding.state` es `scheduled`.
+         *     Tarjetas, PIN y portal no cambian: la persona **ficha hasta su ultimo
+         *     dia**, tambien la salida de su ultimo turno. Asiento
+         *     `employee.offboarding_scheduled`. Una tarea del sistema la hace efectiva
+         *     el dia civil siguiente al cese, con el mismo efecto que la baja en el
+         *     acto y asiento `employee.offboarded` con actor `system`; espera mientras
+         *     la jornada del cese pueda crecer, como mucho hasta el segundo dia civil
+         *     despues del cese. **Desde que hay fecha de cese, ningun tramo nuevo
+         *     puede caer en una jornada posterior a ella**, por fichaje ni a mano,
+         *     aunque la tarea no haya pasado.
+         *
+         *     **Reprogramar** es volver a llamar a esta operacion sobre una baja
+         *     programada: con otra fecha de hoy o posterior, sigue programada y deja
+         *     `employee.offboarding_scheduled` con la fecha anterior; con una
+         *     fecha anterior a hoy, o con hoy y `apply_now`, se hace efectiva en el
+         *     acto. La misma fecha sin `apply_now` no cambia nada y no deja asiento.
+         *     **Pasado el cese de una baja programada, su fecha ya no cambia**: otra
+         *     fecha responde `409` con `urn:kronoqr:problem:offboarding-due`, y la
+         *     misma la hace efectiva en el acto. Para anular,
+         *     `POST /api/v1/employees/{uuid}/offboard/cancel`.
+         *
+         *     **Es una desactivacion logica y nunca un borrado** (regla dura 5). La
+         *     ficha, sus tramos y sus jornadas siguen ahi: el registro horario se
+         *     conserva cuatro años (RL-02). Hacia atras no hay mas limite que el
+         *     alta: una baja que se registra dias despues de producirse es el caso
+         *     normal, y los tramos que la persona fichara despues de esa fecha se
+         *     conservan tal cual. Una peticion rechazada (`422`) **no cambia nada y
+         *     no deja asiento**.
          *
          *     **Sin centro configurado no hay baja** (`409`, `urn:kronoqr:problem:conflict`):
-         *     «hoy» se resuelve con la zona del centro y nunca cae a UTC. Repetir la
-         *     baja de quien ya esta de baja es `409` con
+         *     «hoy» se resuelve con la zona del centro y nunca cae a UTC. Dar de baja
+         *     a quien ya tiene la baja efectiva es `409` con
          *     `urn:kronoqr:problem:employee-terminated`.
          *
          *     **Tras la baja, los dias trabajados hasta el cese se completan a mano**
          *     con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
          *     entre la fecha de alta y la de cese.
-         *
-         *     **No hay baja programada en esta version**: un fin de contrato futuro
-         *     se registra el ultimo dia, al terminar el turno. Es de la 2.3.0.
          *
          *     **Bajas anteriores a la 2.2.0 con fecha de cese futura.** Una
          *     instalacion que viene de la 2.1.0 puede tener fichas `terminated` con
@@ -2006,6 +2032,53 @@ export interface paths {
          *     baja.
          */
         post: operations["offboardEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/offboard/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anulacion de una baja programada
+         * @description Anula una **baja programada** (RN-14, RF-GP-03, ADR-062 §3): la ficha
+         *     sigue en alta y pierde su fecha de cese (`terminated_at: null`,
+         *     `offboarding: null`). Tarjetas, PIN y portal no han cambiado nunca, asi
+         *     que no hay nada que reactivar. Deja el asiento
+         *     `employee.offboarding_cancelled` con la fecha anulada.
+         *
+         *     **Solo mientras la fecha de cese no haya pasado**: con hoy —la fecha
+         *     civil del centro— igual o anterior al cese. Pasada la fecha, la baja
+         *     ya rige aunque la tarea del sistema no la haya aplicado todavia, y la
+         *     anulacion responde `409` con `urn:kronoqr:problem:offboarding-due`. Si
+         *     la persona sigue trabajando, la via es readmitirla o corregir la fecha
+         *     de cese cuando la baja sea efectiva (ADR-062 §6 y §7).
+         *
+         *     **Una baja efectiva no se anula** (`409`,
+         *     `urn:kronoqr:problem:employee-terminated`), y sin baja programada no hay
+         *     nada que anular (`409`, `urn:kronoqr:problem:offboarding-not-scheduled`).
+         *     Ningun `409` cambia nada ni deja asiento. Sin centro configurado,
+         *     `409` con `urn:kronoqr:problem:conflict`, como la baja.
+         *
+         *     Sin cuerpo: un cuerpo con campos responde `422`.
+         */
+        post: operations["cancelScheduledOffboarding"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8291,10 +8364,11 @@ export interface components {
             /**
              * Format: date
              * @description Fecha de cese. Obligatoria en cuanto el estado es `terminated`: sin
-             *     ella, la retencion de RL-02 no sabe cuando empieza a contar. Desde
-             *     la 2.2.0 nunca es posterior a la fecha en que se registro la baja
-             *     (RN-14); una ficha dada de baja con la 2.1.0 puede traer una fecha
-             *     futura, y se devuelve tal cual.
+             *     ella, la retencion de RL-02 no sabe cuando empieza a contar. **Con
+             *     un estado distinto de `terminated`, es una baja programada** (RN-14,
+             *     desde la 2.3.0): la persona ficha hasta ese dia incluido. Una ficha
+             *     dada de baja con la 2.1.0 puede traer una fecha futura con
+             *     `terminated`, y se devuelve tal cual.
              */
             terminated_at: string | null;
             /**
@@ -8315,6 +8389,30 @@ export interface components {
              * @example null
              */
             anonymized_at: string | null;
+            /**
+             * @description La baja de la persona (RN-14, ADR-062 §3): `null` sin fecha de cese,
+             *     `scheduled` con una baja programada y `effective` con la baja ya
+             *     efectiva. Se deriva de `status` y `terminated_at`, que siguen
+             *     diciendo lo mismo que antes.
+             */
+            offboarding: components["schemas"]["EmployeeOffboarding"] | null;
+        };
+        /**
+         * EmployeeOffboarding
+         * @description La baja de una persona (RN-14, ADR-062 §3). **`scheduled`**: tiene
+         *     fecha de cese y aun no es efectiva; sigue en alta, ficha hasta ese dia
+         *     y la tarea del sistema la aplica el dia civil siguiente. **`effective`**:
+         *     `status` es `terminated`. No es un estado nuevo de `status`: «baja
+         *     programada» es una persona que no esta de baja y ya tiene fecha de cese.
+         */
+        EmployeeOffboarding: {
+            /** @enum {string} */
+            state: "scheduled" | "effective";
+            /**
+             * Format: date
+             * @description Fecha de cese, la misma que `Employee.terminated_at`.
+             */
+            terminated_at: string;
         };
         /**
          * Teleworking
@@ -8462,6 +8560,11 @@ export interface components {
              * @example null
              */
             anonymized_at: string | null;
+            /**
+             * @description La baja de la persona, como en `Employee.offboarding`: se deriva de
+             *     `status` y `terminated_at`, que el responsable ya ve.
+             */
+            offboarding: components["schemas"]["EmployeeOffboarding"] | null;
         };
         /**
          * ScopedEmployeeCollection
@@ -8552,20 +8655,27 @@ export interface components {
         };
         /**
          * OffboardEmployeeRequest
-         * @description Baja logica de un empleado (RF-GP-03).
+         * @description Baja logica de un empleado, en el acto o programada (RF-GP-03, RN-14).
          */
         OffboardEmployeeRequest: {
             /**
              * Format: date
-             * @description Fecha de cese, **nunca anterior a la de alta ni posterior a hoy**
-             *     (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
-             *     momento en que el servidor recibe la peticion; una fecha futura
-             *     responde `422` en este campo. Hoy mismo se admite. Si la fecha de
-             *     alta es posterior a ese mismo hoy, la unica admitida es la propia fecha de
-             *     alta. Es el dato desde el que cuenta la retencion de RL-02. La baja
-             *     es efectiva al registrarla, no en esta fecha.
+             * @description Fecha de cese, **nunca anterior a la de alta** (`422` en este
+             *     campo). Anterior a hoy, la baja es efectiva en el acto; hoy o
+             *     posterior, queda programada salvo `apply_now` (RN-14). «Hoy» es la
+             *     fecha civil del centro (`Site.timezone`) en el momento en que el
+             *     servidor recibe la peticion. Si la fecha de alta es posterior a ese
+             *     mismo hoy, un cese igual al alta es una baja sin efectos en el acto.
+             *     Es el dato desde el que cuenta la retencion de RL-02.
              */
             terminated_at: string;
+            /**
+             * @description «Aplicar ya» (RN-14, ADR-062 §3), `false` si no se envía: con un cese de hoy, la baja es
+             *     efectiva en el acto en lugar de programarse. Es el despido con
+             *     efecto inmediato. Con un cese anterior a hoy no cambia nada (ya es
+             *     en el acto); con uno posterior responde `422` en este campo.
+             */
+            apply_now?: boolean;
             /**
              * @description Motivo del cese, para el registro de auditoria. Sin datos de salud ni
              *     juicios de valor: es un texto operativo, no un expediente.
@@ -14072,6 +14182,30 @@ export interface components {
             };
         };
         /**
+         * @description La baja programada no se puede anular en el estado actual de la ficha
+         *     (RN-14, ADR-062 §3). **`type` distingue las causas**:
+         *
+         *     - `urn:kronoqr:problem:offboarding-due` — **la fecha de cese ya ha
+         *       pasado** en la zona del centro: la baja rige aunque la tarea del
+         *       sistema no la haya aplicado todavia. Si la persona sigue trabajando,
+         *       se readmite o se corrige la fecha cuando la baja sea efectiva (ADR-062 §6 y §7).
+         *     - `urn:kronoqr:problem:offboarding-not-scheduled` — la ficha no tiene
+         *       baja programada: nada que anular. Se recarga la ficha.
+         *     - `urn:kronoqr:problem:employee-terminated` — la baja ya es efectiva y
+         *       no se anula.
+         *     - `urn:kronoqr:problem:conflict` — la instalacion no tiene centro.
+         *
+         *     Ninguno cambia nada ni deja asiento.
+         */
+        ScheduledOffboardingConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La peticion no cumple el contrato: falta un campo, un formato no es
          *     valido o un identificador referenciado no existe.
          *
@@ -16482,7 +16616,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Empleado dado de baja. */
+            /**
+             * @description Baja registrada: efectiva (`status: terminated`,
+             *     `offboarding.state: effective`) o programada (`status` sin cambio,
+             *     `offboarding.state: scheduled`).
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -16498,8 +16636,9 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no cumple el contrato. Ademas de los errores de forma,
-             *     `errors.terminated_at` señala una fecha de cese **posterior a hoy en
-             *     la zona del centro** o **anterior a la fecha de alta**. No se ha
+             *     `errors.terminated_at` señala una fecha de cese **anterior a la
+             *     fecha de alta**, y `errors.apply_now` un `apply_now: true` con una
+             *     fecha de cese **posterior a hoy en la zona del centro**. No se ha
              *     cambiado nada: ni el estado, ni las credenciales, ni `audit_log`.
              */
             422: {
@@ -16510,6 +16649,41 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ValidationProblem"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    cancelScheduledOffboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Baja programada anulada. La ficha sigue en alta y sin fecha de cese. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Employee"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ScheduledOffboardingConflict"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };
