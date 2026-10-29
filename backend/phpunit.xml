@@ -25,7 +25,7 @@
     <!--
         Las cinco suites del doc 02 §2 y §9.1. Unit no toca base de datos ni
         arranca el framework y debe terminar dentro del presupuesto de
-        `UNIT_SUITE_MAX_SECONDS` del Makefile (5 s), que es la unica fuente y la
+        `UNIT_SUITE_MAX_SECONDS` del Makefile (6 s), que es la unica fuente y la
         que aplica `make test-unit`: es la suite que se ejecuta mientras se
         escribe una regla de negocio.
         Contract y Architecture se pueblan en las tareas 0.6 y 0.3.

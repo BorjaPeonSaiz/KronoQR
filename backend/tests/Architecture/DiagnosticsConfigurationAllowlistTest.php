@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsConfigurationAllowlist;
+use Tests\Architecture\Support\Repo;
 
 /*
  * El filtro de secretos del paquete de diagnostico (RF-PD-09, RS-08, ADR-020,
@@ -34,27 +35,9 @@ use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsConfigurationAllow
  */
 function clavesDelEnvExample(): array
 {
-    // SIN `base_path()`: esta suite es unitaria y no arranca la aplicacion (doc
-    // 02 §9.5, presupuesto de duracion de `make test-unit`). Las dos rutas
-    // cubren los dos arboles reales: el de la CI, donde `backend/` cuelga de la
-    // raiz del repositorio, y el contenedor de desarrollo, que monta la raiz de
-    // solo lectura en `/var/www/repo`.
-    $candidates = [\dirname(__DIR__, 5).'/.env.example', '/var/www/repo/.env.example'];
-
-    $contents = false;
-
-    foreach ($candidates as $candidate) {
-        if (is_file($candidate)) {
-            $contents = file_get_contents($candidate);
-
-            break;
-        }
-    }
-
-    expect($contents)->toBeString('No se encuentra el .env.example en '.implode(' ni en ', $candidates)
-        .': esta prueba no puede afirmar nada sin el.');
-
-    preg_match_all('/^([A-Z][A-Z0-9_]*)=/m', (string) $contents, $matches);
+    // `Repo` resuelve la raiz en la CI y en el contenedor, que la monta de solo
+    // lectura en `/var/www/repo`; si falta el fichero, falla en vez de no afirmar nada.
+    preg_match_all('/^([A-Z][A-Z0-9_]*)=/m', Repo::contents('.env.example'), $matches);
 
     /** @var list<string> $keys */
     $keys = array_values(array_unique($matches[1]));

@@ -20,7 +20,8 @@ use App\Support\Version\DeployedVersion;
  * su propio contrato y el fallo aparecería en la instalacion del cliente, no
  * aqui.
  *
- * Suite unitaria: PHP puro, sin framework y sin base de datos. Los ficheros de
+ * Suite Architecture y no Unit porque escribe en disco (el presupuesto de `make
+ * test-unit`): PHP puro, sin framework y sin base de datos. Los ficheros de
  * apoyo son temporales y se borran al terminar cada prueba.
  */
 

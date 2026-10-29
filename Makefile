@@ -416,7 +416,18 @@ endif
 # sobre el arranque). Si una tarea futura vuelve a rozarlo, la pregunta correcta
 # es si esas pruebas deberian ser unitarias, no si el techo puede subir otra
 # vez.
-UNIT_SUITE_MAX_SECONDS ?= 5
+#
+# 29-10-2026 (bloque 22 de la 2.3.0, decision del propietario): de 5 a 6 s. Con
+# 5 236 pruebas y el mismo codigo, la CI midio 4,38 y 4,54 s en unos runs y 5,05,
+# 5,14 y 5,22 s en otros: ruido del runner, no una prueba lenta. Las pruebas
+# suman 3,6 s (JUnit) y la mas lenta tarda 0,13 s, en el primer uso del
+# vocabulario de ErrorTextAllowlist. Se hizo primero la pregunta de arriba: seis
+# ficheros que leen o escriben en disco (TagScanner, RequirementCatalog,
+# DiagnosticsConfigurationAllowlist, DevelopmentSeederGuard, DeployedVersion y
+# JsonDiagnosticsBundleWriter) pasaron a Architecture, y eso solo gano unos
+# 0,15 s. En paralelo, con 4 procesos, tarda 3,45 s: se descarto porque el
+# arranque de los procesos pesa mas que las pruebas.
+UNIT_SUITE_MAX_SECONDS ?= 6
 
 # Maximo de pruebas omitidas (`skipped`) que tolera `test-unit`; vacio, sin
 # comprobar (local). La CI lo fija a 0: la suite unitaria no tiene ninguna
