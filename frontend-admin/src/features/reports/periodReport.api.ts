@@ -7,6 +7,7 @@
 // del servidor, que es el unico que lee la proyeccion de jornadas (regla dura 7).
 import { requestJson } from '@kronoqr/web-kit/http'
 import type { PeriodReport, ReportGranularity, ReportGrouping } from '@/shared/api/types'
+import { ReportReaderLost, startReportReader } from './periodReportChunks'
 
 /** Lo que se pide al informe, en la forma que usa el panel (camelCase). */
 export interface PeriodReportQuery {
@@ -28,8 +29,37 @@ export interface PeriodReportQuery {
   includeOpenShifts?: boolean
 }
 
-export function generatePeriodReport(query: PeriodReportQuery): Promise<PeriodReport> {
+/**
+ * Genera el informe. El cuerpo se lee en un Worker y en trozos (`periodReportChunks.ts`):
+ * `onHead` recibe el informe con sus primeras filas en cuanto estan, para pintar sin
+ * esperar a las 20 000; la promesa se resuelve con todas.
+ */
+export async function generatePeriodReport(
+  query: PeriodReportQuery,
+  onHead?: (partial: PeriodReport) => void,
+): Promise<PeriodReport> {
+  const reader = startReportReader(onHead)
+
+  try {
+    return await requestPeriodReport(query, reader.read)
+  } catch (failure) {
+    // El Worker se perdio con el cuerpo en la mano: se vuelve a pedir, ya sin el.
+    if (failure instanceof ReportReaderLost) {
+      return requestPeriodReport(query)
+    }
+
+    throw failure
+  } finally {
+    reader.dispose()
+  }
+}
+
+function requestPeriodReport(
+  query: PeriodReportQuery,
+  readBody?: (response: Response) => Promise<unknown>,
+): Promise<PeriodReport> {
   return requestJson<PeriodReport>('/api/v1/reports/period', {
+    ...(readBody === undefined ? {} : { readBody }),
     query: {
       // `undefined` no se serializa: sin filtro no se manda el parametro.
       from: query.from,

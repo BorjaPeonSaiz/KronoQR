@@ -30,6 +30,12 @@ const props = defineProps<{
   rows: readonly PeriodReportRow[]
   /** Zona del centro, para el encabezado. Los periodos ya vienen expresados en ella. */
   timeZone: string
+  /**
+   * Cuantas filas tendra el informe cuando termine de llegar, si aun llegan: `aria-rowcount`
+   * declara el total y no las que hay (la lectura por Worker entrega las primeras filas antes
+   * que las demas, `periodReportChunks.ts`). Sin valor, las que hay.
+   */
+  totalRows?: number | undefined
 }>()
 
 /** Alto fijo de fila: la celda del sujeto lleva nombre y codigo en dos lineas. */
@@ -44,6 +50,7 @@ const items = computed(() => props.rows)
 const { visibleRows, totalHeight } = useVirtualRows(items, {
   rowHeight: ROW_HEIGHT_PX,
   scroller,
+  overscan: 3,
 })
 
 /**
@@ -128,7 +135,8 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
   >
     <div
       role="table"
-      :aria-rowcount="rows.length + 1"
+      :aria-rowcount="(totalRows ?? rows.length) + 1"
+      :aria-busy="totalRows !== undefined"
       :aria-label="caption"
       class="text-left"
       :style="{ minWidth: `max(100%, ${gridMinWidth})` }"

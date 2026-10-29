@@ -21,7 +21,7 @@ import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
-import { formatInstant } from '@kronoqr/web-kit/datetime'
+import { formatInstant, warmInstantFormatting } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
@@ -89,6 +89,8 @@ const includeOpenShifts = ref(false)
 const report = shallowRef<PeriodReport | null>(null)
 const loading = ref(false)
 const error = ref<unknown>(null)
+// Con las primeras filas ya en pantalla y el resto aun llegando (`periodReportChunks.ts`).
+const receiving = ref(false)
 
 /**
  * El instante de generacion, resuelto en la zona del centro (regla dura 3):
@@ -220,7 +222,19 @@ async function submit(): Promise<void> {
   backgroundError.value = null
 
   try {
-    report.value = await generatePeriodReport(query)
+    const request = generatePeriodReport(query, (partial) => {
+      // Las primeras filas se pintan sin esperar a las 20 000.
+      report.value = partial
+      generatedQuery.value = query
+      receiving.value = true
+    })
+
+    // Mientras llega el informe, el formateo de fechas se calienta: su primera vez cuesta decenas
+    // de ms que, si no, caerian en la tarea que pinta las primeras filas.
+    setTimeout(() => {
+      warmInstantFormatting(locale.value)
+    }, 0)
+    report.value = await request
     generatedQuery.value = query
 
     announce(t('reports.period.announce.results', { count: report.value.meta.row_count }))
@@ -241,6 +255,7 @@ async function submit(): Promise<void> {
     }
   } finally {
     loading.value = false
+    receiving.value = false
   }
 }
 
@@ -382,7 +397,7 @@ const fieldClass =
       </button>
     </form>
 
-    <LoadingPanel v-if="loading" :label="t('reports.period.loading')" class="mt-4" />
+    <LoadingPanel v-if="loading && !receiving" :label="t('reports.period.loading')" class="mt-4" />
 
     <template v-else-if="error !== null">
       <ErrorNotice :error="error" :field-labels="fieldLabels" class="mt-4" />
@@ -547,7 +562,21 @@ const fieldClass =
 
       <!-- El contenedor con desplazamiento (region enfocable y con nombre) vive
            en la tabla: es el que virtualiza las filas. -->
-      <PeriodReportTable v-else :rows="report.data" :time-zone="report.meta.time_zone" />
+      <template v-else>
+        <p
+          v-if="receiving"
+          role="status"
+          class="mt-4 text-sm text-kq-text-muted"
+          data-test="report-receiving"
+        >
+          {{ t('reports.period.receiving', { total: report.meta.row_count }) }}
+        </p>
+        <PeriodReportTable
+          :rows="report.data"
+          :total-rows="receiving ? report.meta.row_count : undefined"
+          :time-zone="report.meta.time_zone"
+        />
+      </template>
 
       <!-- Los criterios, tal cual los da el servidor. No se reordenan ni se
            resumen: son parte del informe (`/informe-nuevo`, paso 1). -->

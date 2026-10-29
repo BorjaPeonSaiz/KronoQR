@@ -965,6 +965,7 @@
       "subtitle": "Horas trabajadas en un periodo, con sus agregados por departamento o centro y su comparación con las horas contratadas. Los criterios con los que se ha calculado aparecen debajo de la tabla.",
       "generate": "Generar informe",
       "loading": "Generando el informe…",
+      "receiving": "Cargando el resto de las filas ({total} en total)…",
       "contractCoverage": "Hay {days} días-persona del periodo sin contrato registrado, que afectan a {employees} persona(s). Esos días no suman horas contratadas: la desviación de esas filas está incompleta.",
       "contractCoverageLink": "Registrar contratos desde la ficha de cada persona",
       "filters": {

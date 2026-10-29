@@ -184,3 +184,19 @@ describe('ComplianceFindingsGroupTable virtualizada (RC1, RF-PA-06, RNF-P-04)', 
     expect(scroller.attributes('aria-label')).toContain('Europe/Madrid')
   })
 })
+
+describe('PeriodReportTable mientras llegan las filas (RF-IN-01, RNF-P-04)', () => {
+  it('declara el total del informe y no las filas recibidas, y se marca ocupada', async () => {
+    const rows = Array.from({ length: 100 }, (_, index) => reportRow(index + 1))
+    const wrapper = await mountView(PeriodReportTable, {
+      props: { rows, timeZone: 'Atlantic/Canary', totalRows: 20_000 },
+    })
+
+    await settle()
+
+    const table = wrapper.find('[role="table"]')
+
+    expect(table.attributes('aria-rowcount')).toBe('20001')
+    expect(table.attributes('aria-busy')).toBe('true')
+  })
+})
