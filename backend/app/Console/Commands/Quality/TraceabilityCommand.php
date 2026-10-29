@@ -63,7 +63,7 @@ final class TraceabilityCommand extends Command
         /** @var array<string, int> $skippedInCi */
         $skippedInCi = config()->array('quality.skipped_in_ci', []);
 
-        // Los requisitos cuyo umbral la CI no mide (V21-5-QA-02): sus entradas
+        // Los requisitos cuyo umbral la CI no mide (doc 02): sus entradas
         // de k6 no cuentan como cobertura.
         /** @var array<string, string> $measuredOffCi */
         $measuredOffCi = config()->array('quality.measured_off_ci', []);

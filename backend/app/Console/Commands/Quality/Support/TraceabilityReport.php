@@ -59,7 +59,7 @@ final readonly class TraceabilityReport
     /**
      * El marcador de una entrada de k6 para un requisito de
      * `quality.measured_off_ci`: la herramienta que lo citaria corre en la CI,
-     * pero alli no juzga su umbral (V21-5-QA-02).
+     * pero alli no juzga su umbral.
      */
     private const string THRESHOLD_OFF_CI = 'en la CI no mide el umbral: no cuenta como cobertura';
 
@@ -116,8 +116,8 @@ final readonly class TraceabilityReport
     }
 
     /**
-     * ¿Es la entrada de k6 de un requisito cuyo umbral la CI no mide
-     * (V21-5-QA-02)? La prueba de carga corre en la CI, pero en el runner
+     * ¿Es la entrada de k6 de un requisito cuyo umbral la CI no mide? La
+     * prueba de carga corre en la CI, pero en el runner
      * compara con su linea base y no juzga el umbral: contarla como cobertura
      * de RNF-P-06 era dar por medidos 50 fichajes/s que nadie habia medido.
      *
@@ -408,7 +408,7 @@ final readonly class TraceabilityReport
 
     /**
      * Los requisitos cuyo UMBRAL no mide la CI (`quality.measured_off_ci`,
-     * V21-5-QA-02), con donde se mide.
+     * doc 02), con donde se mide.
      *
      * Se enumeran aparte porque la matriz se lee como «esto esta verificado», y
      * un umbral de capacidad que solo se mide en hardware de referencia no lo
