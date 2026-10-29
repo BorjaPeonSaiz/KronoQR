@@ -1,0 +1,2134 @@
+# KronoQR — puertas que bloquean la integracion en `main` (doc 02 §10.1, tarea 23.3).
+#
+#   ⑧  Instalacion limpia                     `clean-install`
+#   ⑧b Actualizacion desde la version anterior `update`
+#   Cobertura (RNF-M-01)                       `coverage`  (dominio >= 90 %, global >= 75 %; el 70 % del
+#                                              frontend lo aplica Vitest en la etapa ⑥, en cada push y PR)
+#
+# POR QUE ESTAS TRES SON UN WORKFLOW APARTE Y NO JOBS DE `ci.yml`. Hasta la 2.2.1
+# corrian solo en `main`, en etiquetas, a mano (y la cobertura de noche): nadie las
+# veia en rojo antes de fusionar (Q4, R2-QA-03). La decision del propietario es que
+# corran en CADA pull request a `main` y que sean comprobaciones obligatorias de la
+# rama. `ci.yml` no puede ganar un `pull_request`: su run del PR crearia, con los
+# MISMOS nombres y sobre el MISMO commit, todos los demas jobs como «skipped», y
+# GitHub da por buena una comprobacion obligatoria omitida: un «skipped» mas
+# reciente taparia un rojo del run del push. Aqui, `pull_request` solo crea estos
+# tres checks, y ningun otro workflow los crea con el mismo nombre.
+#
+# NOMBRES DE LOS CHECKS (los que se marcan como obligatorios en la proteccion de
+# `main`; NO renombrar sin cambiarla a la vez, o el PR espera para siempre):
+#
+#   «⑧ Instalacion limpia»
+#   «⑧b Actualizacion desde la version anterior»
+#   «Cobertura (RNF-M-01)»
+#
+# Dos formas de ejecutarse, con la misma definicion de los jobs:
+#
+#   · `pull_request` a `main`   -> los tres jobs, siempre. El check se llama como el
+#                                  `name:` del job, sin prefijo.
+#   · `workflow_call` desde `ci.yml` -> `ci.yml` decide cuales (inputs `installs` y
+#                                  `coverage`) con las condiciones de siempre: ⑧ y ⑧b
+#                                  en dispatch, etiqueta `v*` y push a `main`; la
+#                                  cobertura en `schedule` y dispatch. El check se llama
+#                                  «<job llamador> / <name>», distinto del del PR a
+#                                  proposito. En un push a una rama no corre ninguno.
+#
+# Fork (el repositorio es publico). En `pull_request` un fork recibe un
+# `GITHUB_TOKEN` de solo lectura y NINGUN secreto; ademas este workflow no lee
+# `secrets.*`, y por eso `ci.yml` lo llama SIN `secrets: inherit`. No se usa
+# `pull_request_target`, que ejecutaria codigo del PR con el contexto del
+# repositorio base. La aprobacion de la ejecucion para colaboradores externos es
+# ajuste del repositorio (Settings → Actions → «Fork pull request workflows»).
+#
+# Los tres jobs son los mismos que vivian en `ci.yml`, movidos sin tocar sus pasos.
+
+name: Puertas de integracion
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+    inputs:
+      installs:
+        description: "Ejecuta ⑧ (clean-install) y ⑧b (update)."
+        type: boolean
+        required: false
+        default: false
+      coverage:
+        description: "Ejecuta la cobertura (RNF-M-01)."
+        type: boolean
+        required: false
+        default: false
+      apk_index_stamp:
+        description: "Refresco forzado de la capa de paquetes Alpine (mismo input que ci.yml). Vacio = sello diario de make."
+        type: string
+        required: false
+        default: ""
+
+# Solo lectura: estos jobs leen el codigo y suben artefactos de diagnostico.
+permissions:
+  contents: read
+
+# En un PR, empujar de nuevo cancela la ejecucion anterior (ya no interesa). Llamado
+# desde `ci.yml`, la concurrencia la gobierna el llamador (`ci-<ref>-<evento>`); aqui el
+# grupo lleva el run_id y los inputs para no coincidir con el del llamador (un grupo
+# igual cancela al llamado) ni entre las dos llamadas del mismo run.
+concurrency:
+  group: gates-${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || format('{0}-{1}-{2}', github.run_id, inputs.installs, inputs.coverage) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Fuente de verdad: infra/docker/php/Dockerfile e infra/docker/node/Dockerfile
+  # (los mismos valores que `ci.yml`).
+  PHP_VERSION: "8.4"
+  NODE_VERSION: "24"
+
+jobs:
+  #-----------------------------------------------------------------------------
+  # ⑧ Instalacion limpia (doc 02 §10.1, RQ-11 · RF-PD-02)
+  #-----------------------------------------------------------------------------
+  # LO QUE ESTA ETAPA COMPRUEBA, Y POR QUE NO LO PUEDE COMPROBAR NADA MAS.
+  #
+  # El instalador es el unico artefacto del producto que se ejecuta UNA vez, en
+  # una maquina a la que el fabricante no tiene acceso, delante de alguien que no
+  # conoce el sistema. No hay segunda oportunidad ni forma de entrar a
+  # arreglarlo. Una prueba unitaria puede afirmar que el script llama a Docker;
+  # solo una maquina virgen puede afirmar que el sistema queda EN MARCHA.
+  #
+  # Cuatro escenarios, y el orden importa:
+  #
+  #   A  --check-only sobre la maquina virgen: fase 1 en verde, sin escribir.
+  #   B  Fallo seguro: puerto ocupado a proposito -> salida 2 y NADA escrito. Va
+  #      ANTES de instalar, que es cuando de verdad se puede comprobar que no ha
+  #      escrito nada: despues, cualquier resto seria ambiguo.
+  #   C  Instalacion completa siguiendo SOLO la guia -> salida 0, /health y
+  #      /ready respondiendo, las tres SPA servidas y el esquema aplicado sin un
+  #      solo dato de demostracion.
+  #   D  Segunda ejecucion sobre la instalacion buena -> salida 3, y la
+  #      instalacion SIGUE EN PIE despues (idempotencia: re-ejecutar no rompe).
+  #   E  Fallo DENTRO de la fase 4 -> salida 4, vuelta atras COMPLETA (sin
+  #      contenedores, sin volumenes, sin directorios, .env byte a byte igual) y
+  #      reintento posible. Va entre B y C porque deja la maquina limpia.
+  #   F  El camino POR DEFECTO: la observabilidad encendida, levantada de verdad
+  #      sobre la instalacion de C.
+  #
+  # LOS ESCENARIOS A-E INSTALAN CON LA OBSERVABILIDAD APAGADA y el F la
+  # enciende sobre la instalacion ya en pie. Se hace en dos tiempos porque los
+  # cinco servicios del perfil son imagenes publicas de terceros (~690 MiB) sin
+  # una linea de codigo de KronoQR: repetir su descarga en cada instalacion de
+  # la etapa anadiria minutos y el limite de descargas anonimas de Docker Hub a
+  # una puerta que tiene que ser fiable. Encenderlo UNA vez, al final, cubre lo
+  # que de verdad faltaba —que el camino por defecto del cliente arranca— sin
+  # pagarlo tres veces.
+  #
+  # CUANDO SE EJECUTA. Desde la tarea 23.3 (Q4): en CADA pull request a `main` (este
+  # workflow, `pull_request`) y, llamado desde `ci.yml`, en cada etiqueta `vX.Y.Z`,
+  # en cada push a `main` y a mano con «Run workflow». En un push a una rama NO
+  # corre: cuesta entre 6 y 18 minutos y ponerlo en cada push convertiria una CI de
+  # 15 minutos en una que nadie espera. El PR es el punto donde se decide si entra.
+  clean-install:
+    name: "⑧ Instalacion limpia"
+    runs-on: ubuntu-24.04
+    # Generoso a proposito: construye tres imagenes -una de ellas compila las
+    # tres SPA con `npm ci`-, levanta la pila DOS veces (el escenario E la tira
+    # entera) y descarga las cinco imagenes de observabilidad. Estimacion en
+    # frio, sin cache de Actions: 20-30 min. Con cache: 10-15.
+    timeout-minutes: 50
+    # `github.ref == 'refs/heads/main'` es CIERTO tambien en un evento
+    # `schedule` (dispara contra la rama por defecto): sin la exclusion
+    # explicita, la entrada de cron de `coverage` habria arrastrado esta etapa
+    # de 6-18 minutos cada noche sin que nadie lo hubiera pedido.
+    if: github.event_name == 'pull_request' || inputs.installs
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: "Puerta de release: la clave publica del fabricante esta puesta"
+        # Solo cuando se publica una version de verdad. Una imagen de ENTREGA
+        # construida sin la clave publica rechaza la licencia recien pagada del
+        # cliente con motivo `no_public_key`, y el sintoma apunta al sitio
+        # equivocado: el hotel llamaria pidiendo otra clave cuando lo que hay
+        # que rehacer es la imagen (tarea 5.3, hallazgo I3).
+        #
+        # NO se ejecuta en `main` ni a mano: ahi estas imagenes son de PRUEBA y
+        # deben poder llevarla vacia, porque la suite genera su propio par en
+        # cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: make release-gate
+
+      - name: Construir las tres imagenes de entrega
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
+
+      - name: El borde sirve las tres SPA (comprobacion de 30 s, antes de instalar nada)
+        # ADELANTA EL HALLAZGO, no lo duplica. Los escenarios C y siguientes ya
+        # piden estas rutas, pero tardan entre 20 y 30 minutos en llegar ahi: un
+        # 403 por una directiva `index` que falta -lo que rompio la cuarta
+        # ejecucion de esta etapa- no merece esperar todo el ciclo. Arranca la
+        # imagen sola, sin base de datos y sin aplicacion, y pide las cuatro
+        # rutas que definen si el borde sirve lo que tiene que servir.
+        #
+        # Es la misma orden que se ejecuta en local con `make nginx-smoke`, que
+        # es lo que esta etapa no puede ofrecer: aqui no se puede depurar.
+        run: make nginx-smoke
+
+      - name: Etiquetarlas como las nombra compose.prod.yaml
+        # El instalador fija IMAGE_TAG desde el fichero VERSION, y el fichero de
+        # compose compone <IMAGE_REGISTRY>/<php|nginx|postgres>:<IMAGE_TAG>. Se
+        # reetiquetan aqui, en el runner, para que el escenario C ejercite el
+        # camino REAL del instalador -incluida su rama de "las imagenes ya estan
+        # en el disco, no hay nada que descargar", que es la que usa un cliente
+        # sin salida a internet- sin publicar nada en ningun registro.
+        run: |
+          version="$(cat VERSION)"
+          docker tag kronoqr/app:ci      "kronoqr/php:${version}"
+          docker tag kronoqr/postgres:ci "kronoqr/postgres:${version}"
+          docker tag kronoqr/nginx:ci    "kronoqr/nginx:${version}"
+
+      - name: Armar el paquete de entrega con lo mismo que recibe el cliente
+        # §11.6.1. Se copia a un directorio aparte y se instala DESDE AHI: si el
+        # instalador dependiera de algo que solo existe en el repositorio, aqui
+        # se veria. La lista de lo que entra vive en infra/scripts/package.sh
+        # desde la tarea 5.7, porque la necesitan dos jobs y tres paquetes.
+        # `tools/` NO entra: es del fabricante y firma licencias (§7.7, RS-08),
+        # y aunque package.sh ya lo comprueba, aqui se vuelve a afirmar: es la
+        # clase de cosa que se comprueba dos veces.
+        run: |
+          set -euo pipefail
+          bash infra/scripts/package.sh paquete
+          test -x paquete/install.sh
+          test -x paquete/update.sh
+          test -x paquete/doctor.sh
+          test -f paquete/versions.txt
+          test ! -e paquete/tools
+          ls -la paquete
+
+      - name: Ningun enlace de la documentacion entregada apunta fuera del paquete
+        # El cliente no tiene el repositorio: un enlace relativo a algo que no
+        # viaja en el paquete es un 404 en el peor momento, que es cuando
+        # alguien sigue la guia con una incidencia delante.
+        run: bash infra/scripts/check-package-links.sh paquete
+
+
+      - name: Rellenar lo marcado [CLIENTE], como haria el IT del hotel
+        # Un certificado de verdad en el directorio de certificados: el borde se
+        # niega a arrancar sin el y ese camino tiene que quedar ejercitado.
+        #
+        # Y con VALORES PROPIOS, no los de la plantilla. Desde la revision de la
+        # 5.4, la fase 1 compara `APP_URL` y las tres redes contra `.env.example`
+        # y se niega a instalar si siguen con el ejemplo: con
+        # `APP_URL=https://localhost` el sistema arranca, todo pasa —la
+        # verificacion sondea 127.0.0.1— y ningun quiosco puede llegar a el.
+        # Si la etapa se rellenara con la plantilla, probaria justo el camino
+        # que el producto rechaza.
+        #
+        # Lo hace .github/scripts/prepare-package-env.sh (tarea 5.7): el mismo
+        # relleno lo necesitan el escenario E y los paquetes del job de
+        # actualizacion, y cuatro copias del mismo `sed` acabarian diciendo
+        # cosas distintas. El porque del certificado con propietario 101 esta
+        # en la cabecera de ese script.
+        run: bash .github/scripts/prepare-package-env.sh paquete
+
+
+      - name: El compose es valido tambien con la observabilidad encendida
+        run: |
+          set -euo pipefail
+          cd paquete
+          servicios="$(IMAGE_TAG="$(cat VERSION)" DB_PASSWORD=x DB_MIGRATION_PASSWORD=x \
+            GRAFANA_ADMIN_PASSWORD=x COMPOSE_PROFILES=observability \
+            docker compose -f docker-compose.yml config --services | sort | tr '\n' ' ')"
+          echo "servicios: ${servicios}"
+          test "${servicios}" = "alertmanager app blackbox-exporter grafana horizon loki nginx node-exporter postgres prometheus redis retention-guard reverb scheduler tempo "
+
+      - name: "A · --check-only en la maquina virgen: fase 1 verde y nada escrito"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo ./install.sh --check-only
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          grep -q '^APP_KEY=$' .env
+
+      - name: "B · Fallo seguro: puerto 443 ocupado, salida 2 y maquina intacta"
+        run: |
+          set -euo pipefail
+          cd paquete
+          # Un proceso cualquiera escuchando donde el producto quiere publicar.
+          sudo python3 -m http.server 443 --bind 0.0.0.0 >/dev/null 2>&1 &
+          ocupante=$!
+          for _ in $(seq 1 20); do
+            ss -ltnH 'sport = :443' | grep -q . && break
+            sleep 0.5
+          done
+
+          set +e
+          sudo ./install.sh >salida-b.log 2>&1
+          codigo=$?
+          set -e
+          sudo kill "${ocupante}" || true
+
+          cat salida-b.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 y fue ${codigo}"; exit 1; }
+          # El mensaje tiene que decir QUE HACER, no solo que falla (§3.5).
+          grep -q 'Que hacer' salida-b.log
+          grep -q 'sport = :443' salida-b.log
+          # Y NADA escrito: ni contenedores, ni volumenes, ni secretos, ni
+          # directorios de datos.
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          grep -q '^APP_KEY=$'   .env
+          grep -q '^IMAGE_TAG=$' .env
+          test ! -d /var/backups/fichaje
+      - name: "E · Fallo dentro de la fase 4: vuelta atras COMPLETA, salida 4"
+        # LOS DOS BLOQUEANTES DE LA REVISION, EN UN SOLO ESCENARIO.
+        #
+        # (1) Sin `trap ... ERR`, un fallo no capturado despues de empezar a
+        #     escribir mataba el script con su codigo crudo: sin vuelta atras,
+        #     con el .env a medias y con `.env.kronoqr-pre-install` huerfano. El
+        #     reintento salia 3 —«ya hay secretos generados»— sin un solo
+        #     contenedor levantado: un callejon sin salida.
+        # (2) Las acciones de deshacer usaban `rmdir`, y `${BACKUP_PATH}/wal` es
+        #     un bind mount donde PostgreSQL archiva desde el primer segundo:
+        #     `rmdir` fallaba sobre un directorio no vacio y CUALQUIER fallo de
+        #     la fase 4 acababa en 5 («intervencion manual») en vez de 4,
+        #     contradiciendo al propio mensaje del instalador.
+        #
+        # Como se fuerza el fallo sin tocar el instalador: se rompe la migracion
+        # con una credencial de migracion que la base no conoce. El esquema no
+        # se aplica, la fase 4 llama a la vuelta atras, y lo que se exige es que
+        # la maquina quede LIMPIA y el codigo sea 4.
+        run: |
+          set -euo pipefail
+          # `sudo cp -a`: los certificados son del uid 101 y la clave es 0400,
+          # asi que el usuario del runner no puede copiarlos ni conservar su
+          # propietario. Se copia con privilegios y se devuelve el resto del
+          # arbol al runner, dejando `certs/` como estaba: es el estado que la
+          # fase 1 exige y el que este escenario tiene que ejercitar.
+          sudo rm -rf paquete-e && sudo cp -a paquete paquete-e
+          sudo chown -R "$(id -u):$(id -g)" paquete-e
+          # El mismo relleno que el escenario C, con otro destino de copias y
+          # otros puertos para no chocar con la instalacion que ya esta en pie.
+          bash .github/scripts/prepare-package-env.sh paquete-e \
+            --backup-path /var/backups/fichaje-e --http-port 8081 --https-port 8444
+          cd paquete-e
+          # LA ROTURA: la aplicacion no encuentra la base. postgres y redis
+          # arrancan sanos —la fase 4 los espera y los da por buenos— y el fallo
+          # ocurre en las MIGRACIONES, que es el punto donde ya hay
+          # contenedores, volumenes y directorios creados por esta ejecucion.
+          # Es justo el estado en el que la vuelta atras tiene algo que deshacer.
+          sed -i -e 's@^DB_HOST=.*@DB_HOST=una-base-que-no-existe@' .env
+          cp .env .env.antes
+
+          set +e
+          sudo ./install.sh >salida-e.log 2>&1
+          codigo=$?
+          set -e
+          tail -40 salida-e.log
+
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'Deshaciendo' salida-e.log
+          grep -q 'Vuelta atras completada' salida-e.log
+
+          # Vuelta atras COMPLETA quiere decir esto, no una frase:
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          test ! -d /var/backups/fichaje-e
+          # El .env vuelve a ser BYTE A BYTE el del cliente, y la copia previa
+          # no queda huerfana.
+          sudo cmp .env.antes .env
+          test ! -e .env.kronoqr-pre-install
+
+      - name: "E · Y despues del fallo se puede reintentar sin callejon sin salida"
+        # Es la mitad que faltaba: que la vuelta atras deje el servidor en un
+        # estado desde el que el IT del hotel PUEDE volver a ejecutar. Con el
+        # .env a medias, el reintento salia 3 y no habia forma de avanzar.
+        run: |
+          set -euo pipefail
+          cd paquete-e
+          sed -i -e 's@^DB_HOST=.*@DB_HOST=postgres@' .env
+          set +e
+          sudo ./install.sh --check-only >reintento-e.log 2>&1
+          codigo=$?
+          set -e
+          tail -10 reintento-e.log
+          test "${codigo}" -eq 0 || { echo "El reintento deberia salir 0 y salio ${codigo}"; exit 1; }
+
+
+      - name: "J · Interrumpido en la fase 4 (SIGTERM): vuelta atras COMPLETA, salida 4"
+        # R6-PL-01. Un corte de SSH (SIGHUP), un `kill` (SIGTERM) o Ctrl+C
+        # (SIGINT) a mitad de la fase 4 dejaban el .env con secretos, los
+        # contenedores y los volumenes, y el reintento salia 3: el mismo
+        # callejon sin salida que el escenario E cerro para los errores. Desde
+        # entonces install.sh arma INT, TERM y HUP junto con el ERR de la fase 3.
+        #
+        # Se interrumpe con SIGTERM porque es la unica de las tres que se puede
+        # mandar de forma fiable a un proceso en segundo plano: bash IGNORA
+        # SIGINT en lo que lanza con `&` desde un guion, y SIGHUP sigue el mismo
+        # camino de codigo que SIGTERM (lo cubre, sin Docker y con HUP incluido,
+        # backend/tests/Integration/Install/InstallInterruptionTest.php).
+        # Se manda al `bash ./install.sh` y no a `sudo`: es el proceso que
+        # tiene los traps. Sus subshells tienen la misma linea de
+        # ordenes y tambien la reciben, que es justo el caso que la guarda de
+        # BASHPID tiene que aguantar sin deshacer dos veces.
+        #
+        # Va DETRAS de E y DELANTE de C, como E: usa el mismo proyecto de
+        # Compose (`kronoqr`) y tiene que dejar el runner como lo encontro.
+        run: |
+          set -euo pipefail
+          sudo rm -rf paquete-j && sudo cp -a paquete paquete-j
+          sudo chown -R "$(id -u):$(id -g)" paquete-j
+          bash .github/scripts/prepare-package-env.sh paquete-j \
+            --backup-path /var/backups/fichaje-j --http-port 8082 --https-port 8445
+          cd paquete-j
+          cp .env .env.antes
+
+          # Con traza (`bash -x` a un fichero aparte, fd 9): si el instalador
+          # muriera antes de la fase 4 se imprime, filtrando las lineas con
+          # secretos. La linea de ordenes del hijo pasa a ser `bash -x ./install.sh`.
+          sudo bash -c 'exec 9>salida-j.trace; export BASH_XTRACEFD=9; exec bash -x ./install.sh' >salida-j.log 2>&1 &
+          lanzador=$!
+
+          # Espera por CONDICION: la fase 4 empezada Y contenedores del proyecto
+          # creados, que es cuando la vuelta atras tiene algo que deshacer.
+          en_fase_4=0
+          for _ in $(seq 1 300); do
+            if grep -q 'Fase 4 de 5' salida-j.log &&
+              [ -n "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)" ]; then
+              en_fase_4=1
+              break
+            fi
+            # Vivo o no, por `ps` y no por `kill -0`: el lanzador es `sudo`, y
+            # segun la version de la imagen del runner su uid real ya es root y
+            # `kill -0` devuelve EPERM aunque siga vivo. Asi fallo el 07-10-2026
+            # (imagen 20260901): el bucle se rendia en la primera vuelta y el
+            # instalador terminaba entero sin senal. Un zombi (`Z`) ya salio.
+            estado="$(ps -o stat= -p "${lanzador}" 2>/dev/null || true)"
+            case "${estado}" in
+              '' | Z*) break ;;
+            esac
+            sleep 1
+          done
+          if [ "${en_fase_4}" -ne 1 ]; then
+            set +e
+            wait "${lanzador}"
+            codigo=$?
+            set -e
+            cat salida-j.log
+            echo "--- traza (ultimas 60 lineas, sin secretos)"
+            sudo grep -vE 'set_env_value|set_generated_secret|random_|_KEY|PASSWORD|SECRET' salida-j.trace | tail -60 || true
+            echo "El instalador no llego a la fase 4 con contenedores creados (salio con ${codigo}): no hay nada que interrumpir."
+            exit 1
+          fi
+
+          sudo pkill -TERM -f '^bash -x \./install\.sh'
+
+          set +e
+          wait "${lanzador}"
+          codigo=$?
+          set -e
+          tail -40 salida-j.log
+
+          if grep -q 'instalado y verificado' salida-j.log; then
+            echo "La instalacion termino antes de la senal: el escenario no ha probado nada."
+            exit 1
+          fi
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'senal TERM' salida-j.log
+          grep -q 'tmux' salida-j.log
+          grep -q 'Vuelta atras completada' salida-j.log
+
+          # Lo mismo que exige E: maquina limpia y .env byte a byte el del cliente.
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          test ! -d /var/backups/fichaje-j
+          sudo cmp .env.antes .env
+          test ! -e .env.kronoqr-pre-install
+
+      - name: "J · Y el reintento no sale 3"
+        # `--check-only` solo ejecuta la fase 1, asi que las TRES senales de la
+        # fase 2 («instalacion previa», salida 3) se comprueban una a una: sin
+        # contenedores, sin volumenes y sin APP_KEY en el .env. Con las tres
+        # ausentes y la fase 1 en verde, un `./install.sh` de verdad pasaria.
+        run: |
+          set -euo pipefail
+          cd paquete-j
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          grep -q '^APP_KEY=$' .env
+          set +e
+          sudo ./install.sh --check-only >reintento-j.log 2>&1
+          codigo=$?
+          set -e
+          tail -10 reintento-j.log
+          test "${codigo}" -eq 0 || { echo "El reintento deberia salir 0 y salio ${codigo}"; exit 1; }
+
+      - name: "C · Instalacion limpia siguiendo solo la guia"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo ./install.sh | tee salida-c.log
+          # Ninguna linea JSON del log tecnico en la salida del instalador (V1-PL-01):
+          # ni el INFO de la migracion de saneado ni el WARNING del cortacircuitos.
+          lineas_json="$(grep -c '^{"message"' salida-c.log || true)"
+          test "${lineas_json}" = "0" || { echo "La salida de install.sh trae ${lineas_json} lineas JSON del log"; grep '^{"message"' salida-c.log; exit 1; }
+          # Lo que la guia promete que se ve al terminar.
+          grep -q 'instalado y verificado' salida-c.log
+          grep -q 'SIGUIENTE PASO'         salida-c.log
+          # NINGUN SECRETO EN LA SALIDA (§3.5, RS-08). Se comprueba contra los
+          # valores que el instalador acaba de escribir en el .env, que es la
+          # unica forma honesta de hacerlo: buscar "algo que parezca una clave"
+          # daria verde con cualquier fuga real.
+          for clave in APP_KEY QR_SIGNING_KEY_CURRENT BACKUP_ENCRYPTION_KEY \
+                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD BACKUP_DB_PASSWORD \
+                       IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD BACKUP_WAL_KEY; do
+            valor="$(sudo sed -n "s/^${clave}=//p" .env | head -1)"
+            test -n "${valor}"
+            if grep -qF -- "${valor}" salida-c.log; then
+              echo "FUGA: el valor de ${clave} aparece en la salida del instalador."
+              exit 1
+            fi
+          done
+          # Permisos del .env (§7.7) y del archivo de WAL (uid de PostgreSQL).
+          test "$(sudo stat -c '%a' .env)" = "600"
+          test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/wal)" = "70:70:750"
+          # ADR-045: informes de retencion junto a las copias, con el uid de la
+          # aplicacion, y el volumen de ficheros generados creado por Compose.
+          test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/reports/retention)" = "1000:1000:750"
+          # ADR-049 / A3-R2: la raiz de las copias se monta en solo lectura y cada subdirectorio
+          # se monta aparte con create_host_path: false, asi que el instalador los crea TODOS
+          # con el uid de la aplicacion. La clave del WAL se DERIVA de la maestra y esta en el .env.
+          for d in daily base metrics reports; do
+            test "$(sudo stat -c '%u:%g:%a' "/var/backups/fichaje/${d}")" = "1000:1000:750"
+          done
+          sudo grep -Eq '^BACKUP_WAL_KEY=[0-9a-f]{64}$' .env
+          test -n "$(docker volume ls -q --filter name=^kronoqr_app-storage$)"
+
+      - name: "C · Las dos sondas responden lo que dice el contrato"
+        run: |
+          set -euo pipefail
+          curl -fsS -k https://127.0.0.1/api/v1/health | tee health.json
+          curl -fsS -k https://127.0.0.1/api/v1/ready  | tee ready.json
+          # La version que informa la sonda es la que se instalo, no `latest`.
+          grep -qF "$(cat VERSION)" health.json
+
+      - name: "C · El log de una orden lanzada con exec va al log del contenedor, no a la terminal"
+        # V1-PL-01, V21-4-PL-2: `docker compose exec` no pasa por el entrypoint, no
+        # hereda KQ_CONTAINER_MAIN y su log va a /proc/1/fd/2 (ConsoleAwareStreamHandler).
+        # La marca va en el contexto como UUID: el saneado de ADR-048 recorta las
+        # palabras que no estan en su vocabulario, pero conserva los UUID intactos.
+        # HOME en /tmp: psysh (tinker) quiere escribir su configuracion y, sin
+        # permiso en el HOME del usuario de la imagen, lo diria por la salida de error.
+        run: |
+          set -euo pipefail
+          cd paquete
+          marca="$(cat /proc/sys/kernel/random/uuid)"
+          sudo docker compose exec -T -e HOME=/tmp app php artisan tinker \
+            --execute="\\Illuminate\\Support\\Facades\\Log::warning('redis.circuit_opened', ['trace_id' => '${marca}']);" 2>err.txt
+          cat err.txt
+          test ! -s err.txt || { echo "La orden ha dejado algo en la salida de error de la terminal"; exit 1; }
+          sudo docker compose logs --no-color app | grep -qF "${marca}" ||
+            { echo "La linea no ha llegado al log del contenedor app"; exit 1; }
+
+      - name: "C · Las tres SPA se sirven, y el portal solo desde su red"
+        run: |
+          set -euo pipefail
+          curl -fsS -k https://127.0.0.1/admin/ | grep -qi '<!doctype html'
+          curl -fsS -k https://127.0.0.1/kiosk/ | grep -qi '<!doctype html'
+          # El portal, NO: la peticion llega desde el anfitrion, fuera de
+          # PORTAL_INTERNAL_CIDR (RF-ID-08). Un 403 aqui es el resultado bueno.
+          codigo="$(curl -s -k -o /dev/null -w '%{http_code}' https://127.0.0.1/portal/)"
+          test "${codigo}" = "403" || { echo "El portal respondio ${codigo}, se esperaba 403"; exit 1; }
+
+      - name: "C · Cero datos de demostracion, y los catalogos de producto puestos"
+        run: |
+          set -euo pipefail
+          cd paquete
+          consulta() {
+            sudo docker compose --env-file .env -f docker-compose.yml exec -T postgres \
+              psql -U fichaje_migrator -d fichaje -Atqc "$1"
+          }
+          # El perfil de convenio y los catalogos SI: los siembran las
+          # migraciones, son dato de producto (regla dura 14).
+          test "$(consulta 'SELECT count(*) FROM compliance_profiles')" -ge 1
+          test "$(consulta 'SELECT count(*) FROM roles')" -ge 1
+          # Personas, fichajes y cuentas: NI UNO. El instalador no crea usuarios
+          # y no siembra demostracion.
+          test "$(consulta 'SELECT count(*) FROM employees')"     -eq 0
+          test "$(consulta 'SELECT count(*) FROM shift_entries')" -eq 0
+          test "$(consulta 'SELECT count(*) FROM users')"         -eq 0
+          # AUD-1: las copias se hacen con un rol PROPIO de solo lectura, distinto
+          # del migrador, y el planificador (que las lanza) lleva ese, no el otro.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          test "$(consulta "SELECT rolreplication FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "t"
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
+          test "$(sudo docker compose --env-file .env -f docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' .env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' .env)"
+          # AUD-1 / PIN-10: NINGUN contenedor de runtime (app, horizon, reverb,
+          # scheduler, nginx) tiene la contrasena del migrador ni la de
+          # mantenimiento; solo scheduler tiene la clave de cifrado y las
+          # credenciales de copia; app recibe toda la configuracion no privilegiada.
+          bash ../.github/scripts/assert-runtime-env.sh .env docker-compose.yml
+
+      - name: "C · La comprobacion de runtime falla ante cada incumplimiento (prueba de la prueba)"
+        # A3-10. assert-runtime-env.sh dio falsos negativos (un alias en app, un .env con
+        # comillas y nota). Una comprobacion de seguridad que nunca ha fallado no demuestra
+        # nada: aqui se le hace cada trampa a una pila de juguete y tiene que fallar.
+        run: bash .github/scripts/assert-runtime-env-selftest.sh
+
+      - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
+        run: |
+          set -euo pipefail
+          cd paquete
+          set +e
+          sudo ./install.sh >salida-d.log 2>&1
+          codigo=$?
+          set -e
+          cat salida-d.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'update.sh'            salida-d.log
+          grep -q 'No se ha tocado nada' salida-d.log
+          # Idempotencia de verdad: despues de la segunda ejecucion el sistema
+          # sigue respondiendo. Un instalador que "no rompe nada" pero deja el
+          # servicio caido no es idempotente.
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+      - name: "F · El camino de serie: la observabilidad encendida, de verdad"
+        # POR QUE ESTE PASO EXISTE. Los escenarios anteriores instalan con
+        # `COMPOSE_PROFILES=` vacio, y el cliente recibe `observability`: el
+        # camino POR DEFECTO —el que van a tener veinte instalaciones de veinte
+        # hoteles— no se levantaba nunca de extremo a extremo. Comprobar el
+        # fichero de compose con `config` demuestra que el perfil existe, no que
+        # arranque.
+        #
+        # Aqui se enciende el perfil sobre la instalacion que ya esta en pie, que
+        # es ademas la operacion real que hara un cliente que lo apago y se
+        # arrepiente. Cuesta la descarga de las cinco imagenes publicas (~690 MiB,
+        # medido) y no otra migracion. La INSTALACION con el perfil encendido desde
+        # el principio, tal como la deja la guia, es el escenario G de mas abajo
+        # (I4, 2.2.0).
+        #
+        # La descarga va aparte y con reintento a proposito: asi un limite de
+        # Docker Hub se distingue de un perfil mal escrito, en vez de aparecer
+        # como «la observabilidad no arranca».
+        run: |
+          set -euo pipefail
+          cd paquete
+          # `sudo env` y no `VAR=x sudo -E`: con env_reset en sudoers -lo normal-
+          # `-E` puede rechazarse por politica y las variables se perderian en
+          # silencio. El .env es 0600 de root, asi que el sudo si hace falta.
+          imagenes="$(sudo env COMPOSE_PROFILES=observability \
+            docker compose -f docker-compose.yml --env-file .env config --images |
+            grep -Ev '^kronoqr/')"
+          echo "${imagenes}"
+          for imagen in ${imagenes}; do
+            for intento in 1 2 3; do
+              docker pull --quiet "${imagen}" >/dev/null && break
+              if [ "${intento}" -eq 3 ]; then
+                echo "No se ha podido descargar ${imagen} tras 3 intentos."
+                echo "Esto es un problema de acceso al registro publico, NO del perfil."
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
+      - name: "F · Los cinco servicios del perfil quedan en pie"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo sed -i 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=observability|' .env
+          sudo docker compose --env-file .env -f docker-compose.yml up -d
+          for servicio in prometheus node-exporter alertmanager grafana loki; do
+            for _ in $(seq 1 30); do
+              estado="$(sudo docker compose --env-file .env -f docker-compose.yml ps \
+                --format '{{.Service}} {{.State}}' | awk -v s="${servicio}" '$1 == s {print $2}')"
+              [ "${estado}" = "running" ] && break
+              sleep 2
+            done
+            test "${estado}" = "running" || {
+              echo "${servicio} no esta en marcha (${estado:-ausente})"
+              sudo docker compose --env-file .env -f docker-compose.yml logs --tail 40 "${servicio}"
+              exit 1
+            }
+            echo "${servicio}: ${estado}"
+          done
+          # Y el fichaje sigue en pie despues de encender el perfil: es lo que
+          # de verdad importa de esta operacion.
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # node-exporter tiene que poder LEER el arbol de copias: es de donde
+          # salen las metricas que avisan de que la copia de anoche fallo.
+          sudo docker compose --env-file .env -f docker-compose.yml exec -T node-exporter \
+            ls /var/backups/metrics >/dev/null
+
+      - name: "G · Segunda pasada: el procedimiento LITERAL de la guia, con la observabilidad encendida"
+        # I4 (2.2.0). Los escenarios A-F rellenan el `.env` con otros valores y
+        # APAGAN la observabilidad (prepare-package-env.sh, modo por defecto): el
+        # camino que sigue un cliente, que es copiar `.env.example`, poner lo de
+        # su bloque «Lo minimo que hay que rellenar» y dejar el resto como viene,
+        # no se ejecutaba NUNCA. Asi paso I1 —el instalador rechazaba el unico
+        # valor de METRICS_ALLOW_CIDR que deja a Prometheus leer /metrics— con la
+        # etapa en verde, y la guia decia que este procedimiento «esta probado en
+        # cada publicacion».
+        #
+        # Aqui se retira la instalacion de C-F (misma maquina, mismos puertos) y se
+        # instala otra DESDE UN PAQUETE NUEVO con `--literal`: `METRICS_ALLOW_CIDR`
+        # de serie y `COMPOSE_PROFILES=observability`. Lo que se exige despues es lo
+        # que la guia promete: instalado y verificado, `doctor.sh` sin fallos y
+        # `/metrics` raspado por Prometheus.
+        #
+        # Las imagenes de observabilidad ya estan en el runner (las descarga el
+        # escenario F): esto no anade descargas.
+        run: |
+          set -euo pipefail
+          sudo docker compose --env-file paquete/.env -f paquete/docker-compose.yml \
+            --profile '*' down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+
+          bash infra/scripts/package.sh paquete-g
+          # La VLAN de quioscos es la MISMA de la plantilla (2.2.1, bloque 13): un
+          # hotel cuya VLAN es 10.0.20.0/24 la declara tal cual, y el instalador
+          # avisa de que coincide con el ejemplo pero no se niega a instalar.
+          bash .github/scripts/prepare-package-env.sh paquete-g --literal --kiosk-vlan 10.0.20.0/24
+          cd paquete-g
+          # Lo que la guia deja como viene, tal como viene.
+          grep -q '^COMPOSE_PROFILES=observability' .env
+          grep -q '^METRICS_ALLOW_CIDR=172.29.0.20/32' .env
+          grep -q '^KIOSK_VLAN_CIDR=10.0.20.0/24$' .env
+          grep -q '^KIOSK_VLAN_CIDR=10.0.20.0/24$' .env.example
+
+          sudo ./install.sh | tee salida-g.log
+          grep -q 'instalado y verificado' salida-g.log
+          grep -qF '[aviso] KIOSK_VLAN_CIDR=10.0.20.0/24 coincide con el ejemplo de la plantilla' salida-g.log
+          if grep -F '[FALLA]' salida-g.log | grep -q 'KIOSK_VLAN_CIDR'; then
+            echo "KIOSK_VLAN_CIDR igual a la plantilla no puede ser un fallo de la fase 1"
+            exit 1
+          fi
+
+      - name: "G · doctor.sh sale sin fallos (avisos si, fallos no)"
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          # Sale 0 con avisos y 6 con algun fallo. Los avisos esperados de un
+          # paquete recien instalado —correo de desarrollo, sin destinatarios de
+          # alerta, portal fuera de la red del runner— no son fallos.
+          sudo ./doctor.sh | tee doctor-g.log
+
+      - name: "G · doctor.sh avisa de que las copias no salen del servidor (V5-DV-05)"
+        # BACKUP_PATH esta en el disco raiz del runner, el mismo que /var/lib/docker y que
+        # los datos de PostgreSQL: es exactamente el caso que el aviso describe. Tiene que
+        # AVISAR (el texto, en los dos idiomas) y NO fallar (la salida sigue siendo 0, que
+        # `set -e` y `pipefail` exigen). Un destino de red o de otro disco no avisa, y eso
+        # lo cubren la prueba de la sonda y la medida de lib/offsite.sh.
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          sudo ./doctor.sh --lang es | tee doctor-g-offsite-es.log
+          grep -q 'Las copias no salen del servidor' doctor-g-offsite-es.log
+          sudo ./doctor.sh --lang en | tee doctor-g-offsite-en.log
+          grep -q 'The backups do not leave the server' doctor-g-offsite-en.log
+
+      - name: "G · Prometheus raspa /metrics: el target kronoqr-api esta up"
+        # `up == 1` exige un 200 de /metrics a traves de nginx, asi que un
+        # METRICS_ALLOW_CIDR que no cubra a Prometheus (403) deja `up == 0`. Es
+        # exactamente el fallo de I1. Se espera por condicion, no por `sleep`: el
+        # primer raspado tarda lo que tarde el intervalo.
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          consulta='http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22kronoqr-api%22%7D'
+          respuesta=""
+          for _ in $(seq 1 40); do
+            respuesta="$(sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+              wget -qO- "${consulta}" || true)"
+            if grep -qE '\[[0-9.]+,"1"\]' <<<"${respuesta}"; then
+              echo "kronoqr-api: up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Prometheus no consigue raspar /metrics tras 200 s. Respuesta: ${respuesta}"
+          sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+            wget -qO- 'http://127.0.0.1:9090/api/v1/targets' || true
+          exit 1
+
+      - name: "H · Ficheros generados: genera horizon, descarga app, purga scheduler (ADR-045)"
+        # R3-PL-01, BLOQUEANTE DE LA 2.2.0. app, horizon y scheduler son tres
+        # contenedores de la misma imagen y, hasta el volumen `app-storage`, cada
+        # uno tenia su propio storage/app: la exportacion integra pedida desde el
+        # panel la escribia horizon y app respondia 404. Ninguna prueba de Pest
+        # puede verlo (un solo proceso), asi que se recorre aqui, sobre la
+        # instalacion de G: exportacion pedida por la API como la pide el panel
+        # (admin con 2FA) y descargada con su huella; recreacion de los tres;
+        # informe de retencion leido en el anfitrion y la consulta de
+        # operacion.md §3.1 tal cual; un ZIP borrado a mano (asiento
+        # file_missing y metrica); caducidad (la purga de scheduler lo borra);
+        # `kill` de horizon a mitad (el .work-<uuid> queda y la purga lo
+        # retira); doctor.sh en verde y storage/app app:app 700 en la imagen.
+        #
+        # Los plazos se acortan, no se esperan: el detalle esta en la cabecera
+        # del script. Medido en docker-in-docker: 70-80 s.
+        env:
+          KQ_E2E_APP_IMAGE: kronoqr/app:ci
+        run: bash .github/scripts/generated-files-e2e.sh paquete-g
+
+      - name: "I · Copias: WAL cifrado, copia autenticada, RPO continuo y montajes de BACKUP_PATH (ADR-049)"
+        # R5-DV-02, R5-DV-04, R5-DV-01 y A3-R2 (bloque 20). Lo que solo se ve en la instalacion
+        # que deja el instalador: PostgreSQL archiva CIFRADO con la clave que le llega por el
+        # .env y falla cerrado sin ella; la raiz de BACKUP_PATH es de solo lectura para el
+        # runtime (la matriz entera, `horizon` incluido); un bit cambiado, un `.sha256` borrado,
+        # una copia renombrada o un manifiesto alterado NO restauran; parar el archivado se ve
+        # en la metrica en menos de 2 minutos SIN esperar a ninguna copia (con el rol real
+        # fichaje_backup, sin pg_monitor); doctor.sh falla con una clave del WAL que no deriva
+        # de la maestra; y la clave no sale del contenedor de postgres. El detalle, en la
+        # cabecera del script.
+        run: bash .github/scripts/backup-wal-e2e.sh clean paquete-g
+
+      - name: "K · Redis parado: el fichaje y las sondas responden en tiempo acotado (R3-CH-01)"
+        # Mide en Linux lo que R3-CH-01 midio en Docker Desktop (bloque 22). Con `redis`
+        # PARADO (sin eliminar: su nombre sale del DNS de la red) hace dos rondas de /health,
+        # /ready y POST /scan/pin, y falla si la segunda supera 3 s o si el fichaje responde
+        # 5xx. Arranca redis de nuevo al terminar, pase lo que pase. Va despues de G, H e I,
+        # que dependen del estado de Redis. El detalle, en la cabecera del script.
+        run: bash .github/scripts/chaos-redis-probe.sh paquete-g
+
+      - name: Trivy sobre la imagen de borde recien construida (bloqueante)
+        # Por `make`, como TODAS las demas invocaciones de Trivy del
+        # repositorio. Este paso llamaba al binario `trivy` a pelo y el runner
+        # no lo tiene: `command not found`, exit 127. Era el unico sitio del
+        # arbol que se saltaba la regla de «una sola via por herramienta», y
+        # fue el unico que se rompio por eso.
+        run: make trivy-image TRIVY_IMAGES="kronoqr/nginx:ci"
+
+      - name: Diagnostico si algo ha fallado
+        if: failure()
+        # Los dos paquetes: el de la instalacion buena y el del escenario de
+        # fallo seguro. Cual de los dos existe depende de donde se haya roto.
+        run: |
+          for dir in paquete paquete-e paquete-j paquete-g; do
+            [ -d "${dir}" ] || continue
+            echo "=============== ${dir} ==============="
+            [ -f "${dir}/.env" ] || continue
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" ps || true
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" logs --tail 80 || true
+          done
+          echo "=============== estado global ==============="
+          docker ps -a --filter label=com.docker.compose.project=kronoqr || true
+          docker volume ls --filter name=^kronoqr_ || true
+
+
+      - name: Subir las salidas del instalador
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: instalacion-limpia
+          # TODAS las salidas, no solo la del escenario B. La primera ejecucion
+          # de esta etapa fallo en E y el artefacto solo traia `salida-b.log`:
+          # hubo que reproducir el fallo a ciegas en local. Un diagnostico que
+          # necesita una segunda ronda de informacion es exactamente lo que este
+          # producto no se puede permitir.
+          #
+          # El .env NO se sube: lleva los secretos que el instalador acaba de
+          # generar. Solo las salidas, que el escenario C comprueba libres de
+          # secretos valor a valor.
+          path: |
+            paquete/salida-b.log
+            paquete/salida-c.log
+            paquete/salida-d.log
+            paquete-e/salida-e.log
+            paquete-e/reintento-e.log
+            paquete-j/salida-j.log
+            paquete-j/reintento-j.log
+            paquete-g/salida-g.log
+            paquete-g/doctor-g.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  update:
+    name: "⑧b Actualizacion desde la version anterior"
+    runs-on: ubuntu-24.04
+    # Dos juegos de imagenes (la version anterior y esta), una instalacion, una
+    # actualizacion, una reinstalacion y una actualizacion con vuelta atras
+    # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min. Desde la 2.3.0
+    # (tarea 6.8) suma cinco escenarios de fallo (U3s, U3i, U3m, U3n, U3p). Medido en la CI manual
+    # 39412494631: U3s 1,3 min, U3i 1,5 y U3m 1,3 (la espera de 180 s al borde no se agota: la sonda de
+    # /health falla antes). Por eso el tope vuelve a 90.
+    timeout-minutes: 90
+    # Ver el comentario de `clean-install`: la decision de cuando corre es de `ci.yml`.
+    if: github.event_name == 'pull_request' || inputs.installs
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Resolver cual es la version anterior instalable
+        # RQ-11 pide «actualizacion desde la version anterior». La matriz del
+        # §11.6.5 dice que esa version es una ETIQUETA publicada, pero la
+        # primera etiqueta con instalador todavia no existe: v2.0.0 es anterior
+        # a la tarea 5.4. Hasta que exista, la version anterior es el `main`
+        # previo a este commit, que es ademas lo que cada integracion en main
+        # deberia poder actualizar. Cuando VERSION no ha cambiado (el caso
+        # normal entre dos integraciones), el paquete nuevo recibe una version
+        # SINTETICA —siguiente parche con sufijo -ci— para que haya salto que
+        # probar: el actualizador no es distinto por eso, y el numero no se
+        # publica en ninguna parte.
+        #
+        # Si la version anterior no tiene instalador, el job lo dice y termina
+        # en verde: no hay nada real que probar y fingirlo seria peor.
+        id: anterior
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          ref=""
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ -n "${EVENT_BEFORE}" ] &&
+            [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
+            git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+            ref="${EVENT_BEFORE}"
+          fi
+          if [ -z "${ref}" ]; then
+            git fetch --no-tags origin main >/dev/null 2>&1 || true
+            ref="$(git rev-parse origin/main 2>/dev/null || true)"
+          fi
+          if [ -z "${ref}" ] || ! git cat-file -e "${ref}:infra/scripts/install.sh" 2>/dev/null; then
+            echo "::notice title=Sin version anterior instalable::El commit anterior (${ref:-desconocido}) no lleva install.sh; no hay actualizacion real que probar."
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          old_version="$(git show "${ref}:VERSION" | head -n 1 | tr -d '[:space:]')"
+          new_version="$(head -n 1 VERSION | tr -d '[:space:]')"
+          synthetic=false
+          open_cycle=false
+          if [ "${old_version}" = "${new_version}" ]; then
+            IFS=. read -r major minor patch <<<"${new_version%%-*}"
+            new_version="${major}.${minor}.$((patch + 1))-ci"
+            synthetic=true
+            # CICLO ABIERTO: si `infra/versions.txt` acaba en una linea `V *` de
+            # una version POSTERIOR a la instalada (p. ej. `2.2.0 *` mientras
+            # VERSION sigue en 2.1.0), el paquete nuevo ES esa version: congelar
+            # su `*` y anadir una sintetica detras deja la matriz desordenada
+            # (frontera igual a la de la version anterior) y update.sh la
+            # rechaza. Se conserva la linea abierta tal cual.
+            abierta="$(sed -n -E 's/^([^ #]+) \*$/\1/p' infra/versions.txt | tail -n 1)"
+            if [ -n "${abierta}" ] && [ "${abierta}" != "${old_version}" ]; then
+              new_version="${abierta}"
+              open_cycle=true
+            fi
+          fi
+          echo "Version anterior: ${old_version} (${ref}) -> version de destino: ${new_version} (sintetica: ${synthetic})"
+          {
+            echo "skip=false"
+            echo "ref=${ref}"
+            echo "old_version=${old_version}"
+            echo "new_version=${new_version}"
+            echo "synthetic=${synthetic}"
+            echo "open_cycle=${open_cycle}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Arbol de la version anterior
+        if: steps.anterior.outputs.skip != 'true'
+        run: git worktree add --detach anterior "${{ steps.anterior.outputs.ref }}"
+
+      - name: Construir las imagenes de la version anterior
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
+        if: steps.anterior.outputs.skip != 'true'
+        # Con SU Makefile y SU arbol: son las imagenes que ese cliente tiene en
+        # el disco. Se etiquetan como las nombra su compose y se hace ANTES de
+        # construir las nuevas, porque `build-ci-images` reutiliza los tags :ci.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          make -C anterior build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${old}" ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
+          docker tag kronoqr/app:ci      "kronoqr/php:${old}"
+          docker tag kronoqr/postgres:ci "kronoqr/postgres:${old}"
+          docker tag kronoqr/nginx:ci    "kronoqr/nginx:${old}"
+
+      - name: Construir las imagenes de esta version
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          new="${{ steps.anterior.outputs.new_version }}"
+          make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${new}" ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
+          docker tag kronoqr/app:ci      "kronoqr/php:${new}"
+          docker tag kronoqr/postgres:ci "kronoqr/postgres:${new}"
+          docker tag kronoqr/nginx:ci    "kronoqr/nginx:${new}"
+
+      - name: Armar los dos paquetes de entrega
+        if: steps.anterior.outputs.skip != 'true'
+        # El anterior con SU package.sh si ya lo tiene; si no, con la lista que
+        # ese arbol llevaba inline en su ci.yml (5.4-5.6). El nuevo, con el de
+        # este arbol. Con version sintetica, la matriz del paquete nuevo la
+        # incorpora: la linea `*` se congela a la ultima migracion real y se
+        # anade la sintetica, exactamente como haria un `chore(release)`.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          if [ -f anterior/infra/scripts/package.sh ]; then
+            bash anterior/infra/scripts/package.sh paquete-anterior
+          else
+            mkdir -p paquete-anterior/certs paquete-anterior/docs
+            cp anterior/infra/compose.prod.yaml  paquete-anterior/docker-compose.yml
+            cp anterior/.env.example             paquete-anterior/.env.example
+            cp anterior/VERSION                  paquete-anterior/VERSION
+            cp anterior/infra/scripts/install.sh anterior/infra/scripts/backup.sh \
+               anterior/infra/scripts/restore.sh anterior/infra/scripts/restore-drill.sh paquete-anterior/
+            cp -r anterior/infra/scripts/lib     paquete-anterior/lib
+            cp -r anterior/infra/observability   paquete-anterior/observability
+            cp -r anterior/docs/cliente          paquete-anterior/docs/cliente
+            cp -r anterior/docs/runbooks         paquete-anterior/docs/runbooks
+            chmod +x paquete-anterior/*.sh
+          fi
+          bash infra/scripts/package.sh paquete-nuevo
+          if [ "${{ steps.anterior.outputs.synthetic }}" = "true" ]; then
+            printf '%s\n' "${new}" >paquete-nuevo/VERSION
+          fi
+          if [ "${{ steps.anterior.outputs.synthetic }}" = "true" ] &&
+            [ "${{ steps.anterior.outputs.open_cycle }}" != "true" ]; then
+            # LA FRONTERA ES LA ULTIMA MIGRACION DEL ARBOL ANTERIOR, no del nuevo:
+            # es lo que esa version instalada tiene, y lo que un `chore(release)`
+            # real habria congelado. Con la del arbol nuevo, toda migracion
+            # añadida desde la etiqueta quedaria atribuida a la version ya
+            # instalada y update.sh se negaria —bien— a adivinar (primera vez que
+            # se vio: tarea 5.9, con dos migraciones nuevas; 5.7 y 5.8 no traian
+            # ninguna).
+            # Si la version abierta todavia no trae migraciones (un ciclo recien
+            # abierto), esa ultima migracion es la frontera de la version
+            # anterior: repetirla es una matriz invalida y update.sh la rechaza.
+            # Es lo que congelaria un `chore(release)` sin migraciones: `-`.
+            ultima="$(ls anterior/backend/database/migrations | sed -n 's/\.php$//p' | sort | tail -n 1)"
+            frontera_previa="$(grep -v '^#' paquete-nuevo/versions.txt | awk 'NF == 2 && $2 != "*" && $2 != "-" { b = $2 } END { print b }')"
+            if [ "${ultima}" = "${frontera_previa}" ]; then
+              ultima="-"
+            fi
+            sed -i "s/^\([0-9][^ ]*\) \*$/\1 ${ultima}/" paquete-nuevo/versions.txt
+            printf '%s *\n' "${new}" >>paquete-nuevo/versions.txt
+          fi
+          echo "--- versions.txt del paquete nuevo ---"
+          grep -v '^#' paquete-nuevo/versions.txt | grep .
+          # La matriz tiene que decir que el salto esta soportado, o el
+          # escenario no prueba lo que dice probar.
+          bash paquete-nuevo/update.sh --supported-sources | grep -qx "${old}"
+          bash paquete-nuevo/update.sh --chain "${old}"
+          # Y un origen que el flujo real rechaza (la 2.1.0, D3) no tiene cadena: sale con 2
+          # y dice a que version ir PRIMERO (V6-PL-04, tarea 6.6).
+          bash .github/scripts/update-faults-e2e.sh chain-check "${old}" "${new}"
+          test ! -e paquete-nuevo/.env
+          test ! -e paquete-anterior/tools
+          test ! -e paquete-nuevo/tools
+
+      - name: Rellenar el paquete anterior como haria el IT del hotel
+        if: steps.anterior.outputs.skip != 'true'
+        # SOLO el anterior: el nuevo se queda sin .env y sin certificado, que
+        # es como llega, y es update.sh quien los copia de la instalacion.
+        #
+        # Y con una clave de licencia INVALIDA a proposito: la actualizacion
+        # tiene que completarse igual (RF-PD-05, RF-PD-10, regla dura 15). Una
+        # licencia que no verifica no puede dejar a un cliente sin correcciones
+        # de seguridad sobre su registro legal.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/prepare-package-env.sh paquete-anterior
+          sed -i 's|^LICENSE_KEY=.*|LICENSE_KEY=KQL1.no-es-una-licencia.firma-invalida|' paquete-anterior/.env
+          grep -q '^LICENSE_KEY=KQL1' paquete-anterior/.env
+
+      - name: Instalar la version anterior
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          cd paquete-anterior
+          sudo ./install.sh | tee salida-instalacion.log
+          grep -q 'instalado y verificado' salida-instalacion.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | tee ../health-antes.json
+          grep -qF "\"version\":\"${old}\"" ../health-antes.json
+
+      - name: Datos que tienen que sobrevivir a la actualizacion
+        if: steps.anterior.outputs.skip != 'true'
+        # Una cuenta de gestion, creada por consola, deja fila en users y
+        # asientos en audit_log: es lo minimo que hace significativos los
+        # conteos y la verificacion de la cadena antes y despues.
+        run: |
+          set -euo pipefail
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          printf 'Semilla-CI-2026-Actualizacion!\n' | compose exec -T app php artisan identity:create-user \
+            --name='Semilla CI' --email=semilla@kronoqr.ci.local --role=admin
+          consulta() { compose exec -T postgres psql -U fichaje_migrator -d fichaje -Atqc "$1"; }
+          {
+            echo "users=$(consulta 'SELECT count(*) FROM users')"
+            echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
+          } | tee conteos-antes.txt
+          grep -q '^users=1$' conteos-antes.txt
+          compose exec -T app php artisan compliance:verify-audit-chain
+
+      - name: "Informes de retencion de la version anterior, con trampas, para el rescate de U1 (ADR-045)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Hasta la 2.1.0 vivian dentro del contenedor y una actualizacion los
+        # borraba. Se siembran en el `scheduler` anterior dos validos, un enlace,
+        # otro nombre y uno anidado, y en BACKUP_PATH/reports/retention un enlace
+        # plantado desde `app` hacia un fichero de root (F1). Lo que se exige
+        # esta en la cabecera de .github/scripts/retention-rescue-e2e.sh.
+        run: bash .github/scripts/retention-rescue-e2e.sh seed paquete-anterior
+
+      - name: "Segmentos de WAL en claro de la version anterior, para cifrarlos en sitio al actualizar (ADR-049)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La 2.1.0 archivaba el WAL SIN CIFRAR. Se dejan >= 3 segmentos `.gz` y se anotan sus
+        # fechas: tras actualizar no puede quedar ninguno en claro (<= 120 s) y cada uno tiene
+        # que conservar su mtime. Si la version anterior ya archivase cifrado, la semilla se
+        # salta (no hay nada heredado que migrar).
+        run: bash .github/scripts/backup-wal-e2e.sh upgrade-seed paquete-anterior
+
+      - name: "Cambios del cliente en observability/, para que sobrevivan a la actualizacion (RNF-D-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        # El cliente edita un umbral y anade un fichero suyo en el directorio de la
+        # version anterior. U1 comprueba despues que viajan al directorio nuevo. La
+        # huella `observability.sha256` la entrega package.sh desde esta version; si
+        # la version anterior de esta etapa aun no la entregaba, se genera aqui desde
+        # su observability/ ANTES de editarlo, que es exactamente lo que habria
+        # hecho su package.sh.
+        #
+        # El fichero editado (blackbox.yml) solo se edita si el paquete nuevo lo trae
+        # igual que el anterior: si no, la edicion seria un conflicto legitimo (gana
+        # el paquete) y no probaria lo que esta etapa quiere probar.
+        run: |
+          set -euo pipefail
+          if [ ! -f paquete-anterior/observability.sha256 ]; then
+            . infra/scripts/lib/observability-merge.sh
+            kq_obs_manifest paquete-anterior/observability >paquete-anterior/observability.sha256
+          fi
+          printf 'fichero del cliente (CI)\n' >paquete-anterior/observability/loki/cliente-ci.txt
+          if cmp -s anterior/infra/observability/blackbox/blackbox.yml infra/observability/blackbox/blackbox.yml; then
+            printf '# edicion del cliente (CI)\n' >>paquete-anterior/observability/blackbox/blackbox.yml
+            echo "editado=1" >observability-cliente.txt
+          else
+            echo "editado=0" >observability-cliente.txt
+          fi
+          cat observability-cliente.txt
+
+      - name: "U0 · Un perfil ES con 3 anos: --check-only sale con 2 y no toca nada (RF-PD-07, RL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La migracion del suelo legal de la retencion rechaza un perfil `ES` con
+        # menos de 4 anos. Si update.sh lo descubriera a mitad, habria copia
+        # previa, mantenimiento y vuelta atras; la comprobacion de la fase 1 lo
+        # detiene antes. Se baja el plazo del perfil instalado a 3, se exige la
+        # salida 2 con el perfil en el mensaje y la instalacion intacta, y se
+        # restaura el valor. Si la version anterior ya tuviera el CHECK, se
+        # retira para poder escribir el 3 y se repone igual al terminar.
+        run: |
+          set -euo pipefail
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          consulta() { compose exec -T postgres psql -U fichaje_migrator -d fichaje -v ON_ERROR_STOP=1 -Atqc "$1"; }
+          check=compliance_profiles_chk_retention_floor_es
+          habia="$(consulta "SELECT count(*) FROM pg_constraint WHERE conname = '${check}'")"
+          original="$(consulta "SELECT retention_years FROM compliance_profiles WHERE jurisdiction = 'ES' ORDER BY id LIMIT 1")"
+          test -n "${original}"
+          restaurar() {
+            consulta "UPDATE compliance_profiles SET retention_years = ${original} WHERE jurisdiction = 'ES'" >/dev/null
+            if [ "${habia}" = "1" ]; then
+              consulta "ALTER TABLE compliance_profiles ADD CONSTRAINT ${check} CHECK (split_part(jurisdiction, '-', 1) <> 'ES' OR retention_years >= 4)" >/dev/null
+            fi
+          }
+          trap restaurar EXIT
+          consulta "ALTER TABLE compliance_profiles DROP CONSTRAINT IF EXISTS ${check}" >/dev/null
+          consulta "UPDATE compliance_profiles SET retention_years = 3 WHERE jurisdiction = 'ES'" >/dev/null
+          cd paquete-nuevo
+          set +e
+          sudo ./update.sh --check-only >salida-u0.log 2>&1
+          codigo=$?
+          set -e
+          cat salida-u0.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 y fue ${codigo}"; exit 1; }
+          grep -q 'conserva 3 anos' salida-u0.log
+          grep -q 'Perfil de cumplimiento dentro del suelo legal' salida-u0.log
+          grep -q 'La instalacion no se ha tocado' salida-u0.log
+          # Sin tocar nada: el paquete nuevo sigue sin .env y la instalacion sigue
+          # en la version anterior, sirviendo.
+          test ! -e .env
+          cd ..
+          grep -qF "\"version\":\"${{ steps.anterior.outputs.old_version }}\"" <(curl -fsS -k https://127.0.0.1/api/v1/health)
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # Con el plazo repuesto, la fase 1 ya no se queja de esto.
+          restaurar
+          trap - EXIT
+          cd paquete-nuevo
+          sudo ./update.sh --check-only >salida-u0b.log 2>&1 || { cat salida-u0b.log; exit 1; }
+          grep -q 'Perfil de cumplimiento dentro del suelo legal' salida-u0b.log
+          grep -q '\[ok\].*Perfil de cumplimiento dentro del suelo legal' salida-u0b.log
+
+      - name: "U1 · Actualizar: salida 0, version nueva, datos intactos e informe en el servidor"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          cd paquete-nuevo
+          sudo ./update.sh | tee salida-u1.log
+          cd ..
+          grep -q 'actualizado y verificado' paquete-nuevo/salida-u1.log
+          grep -q "PUNTO DE CONTROL ${new}" paquete-nuevo/salida-u1.log
+          grep -q 'Copia previa verificada' paquete-nuevo/salida-u1.log
+          grep -q 'Cadena de auditoria integra DESPUES' paquete-nuevo/salida-u1.log
+          # Una actualizacion limpia NUNCA repara privilegios (ADR-057, tarea 6.4): el rol
+          # ya sale con el estado exacto de las migraciones. Si una migracion futura toca los
+          # privilegios y olvida lib/work-record-privileges.sh, update.sh repararia (y avisaria)
+          # y esto lo para.
+          grep -q 'tiene exactamente los privilegios previstos sobre el registro horario' paquete-nuevo/salida-u1.log
+          if grep -q 'tenia privilegios distintos de los previstos sobre el registro horario' paquete-nuevo/salida-u1.log; then
+            echo "update.sh ha reparado privilegios en una actualizacion limpia: alinear lib/work-record-privileges.sh con las migraciones"
+            exit 1
+          fi
+          # Tarea 7.3 (ADR-057 §4): update.sh concilia el registro completo con su auditoria
+          # tras migrar y lo deja en la salida. Solo informa; aqui se exige que se ejecute y
+          # que no se haya cortado ni roto (que diga «sin discrepancias» o liste clases lo
+          # decide el contenido de la instalacion de partida, no este paso).
+          grep -qi 'conciliacion completa del registro horario con su auditoria' paquete-nuevo/salida-u1.log
+          if grep -q 'registro horario con su auditoria no ha terminado\|registro horario con su auditoria ha fallado' paquete-nuevo/salida-u1.log; then
+            echo "La conciliacion del registro horario de update.sh no ha dado resultado"
+            exit 1
+          fi
+          curl -fsS -k https://127.0.0.1/api/v1/health | tee health-despues.json
+          grep -qF "\"version\":\"${new}\"" health-despues.json
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # El mantenimiento se ha retirado: una ruta de gestion responde 401
+          # (sin sesion), no 503.
+          codigo="$(curl -s -k -o /dev/null -w '%{http_code}' -H 'Accept: application/json' https://127.0.0.1/api/v1/auth/me)"
+          test "${codigo}" = "401" || { echo "Se esperaba 401 tras actualizar y fue ${codigo}"; exit 1; }
+          consulta() { sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T postgres psql -U fichaje_migrator -d fichaje -Atqc "$1"; }
+          {
+            echo "users=$(consulta 'SELECT count(*) FROM users')"
+            echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
+          } | tee conteos-despues.txt
+          # Los usuarios no cambian; audit_log crece EXACTAMENTE en uno: el asiento
+          # system.updated que el paso 5 escribe desde el cierre de la Fase 5.
+          test "$(grep '^users=' conteos-antes.txt)" = "$(grep '^users=' conteos-despues.txt)"
+          # AUD-1: la actualizacion desde una 2.1.0 (copias con el migrador) crea el
+          # rol de solo lectura y reescribe BACKUP_DB_* en el .env NUEVO.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          sudo grep -qx 'BACKUP_DB_USERNAME=fichaje_backup' paquete-nuevo/.env
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' paquete-nuevo/.env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' paquete-nuevo/.env)"
+          test "$(sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          # Y tras actualizar DESDE UNA 2.1.0 (que llevaba el .env entero en todos los
+          # contenedores) los cinco runtime ya no tienen credenciales privilegiadas.
+          bash .github/scripts/assert-runtime-env.sh paquete-nuevo/.env paquete-nuevo/docker-compose.yml
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
+          test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
+          consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'
+          # Ninguna migracion pendiente, y el informe donde dice la guia.
+          sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
+            run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator --pending=1
+          # El directorio de informes es 0750 del uid de la aplicacion: el comodin
+          # lo expande root, no la shell del runner (que no puede listarlo).
+          sudo ls -la /var/backups/fichaje/reports/
+          sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log'
+          # El .env viajo al paquete nuevo con sus permisos y la etiqueta nueva;
+          # el certificado, con su propietario.
+          test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
+          sudo grep -q "^IMAGE_TAG=${new}$" paquete-nuevo/.env
+          test "$(sudo stat -c '%u' paquete-nuevo/certs/tls.key)" = "101"
+          # V7-SC-1: el directorio anterior queda RETIRADO. Su compose original,
+          # renombrado; cualquier orden de Compose desde alli falla con el mensaje
+          # que remite al vigente; y la pantalla final dice cual es el vigente.
+          grep -q 'DIRECTORIO VIGENTE' paquete-nuevo/salida-u1.log
+          test -f "paquete-anterior/docker-compose.yml.retirado-${old}"
+          if retirado="$(cd paquete-anterior && sudo docker compose config 2>&1)"; then
+            echo "docker compose config desde el directorio anterior deberia fallar"; exit 1
+          fi
+          grep -q 'ESTE DIRECTORIO ESTA RETIRADO' <<<"${retirado}"
+          test "$(sudo stat -c '%a' paquete-anterior/.env)" = "600"
+
+      - name: "U1 · Los cambios del cliente en observability/ viajan al directorio nuevo y se avisa (RNF-D-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          grep -q 'Tus cambios en observability/ viajan al directorio nuevo' paquete-nuevo/salida-u1.log
+          grep -q 'cliente-ci.txt' paquete-nuevo/salida-u1.log
+          test "$(cat paquete-nuevo/observability/loki/cliente-ci.txt)" = 'fichero del cliente (CI)'
+          if grep -q '^editado=1$' observability-cliente.txt; then
+            tail -n 1 paquete-nuevo/observability/blackbox/blackbox.yml | grep -qx '# edicion del cliente (CI)'
+            grep -q 'blackbox/blackbox.yml' paquete-nuevo/salida-u1.log
+          fi
+          # La copia del cliente sigue donde estaba y la del paquete nuevo conserva su huella.
+          test -f paquete-anterior/observability/loki/cliente-ci.txt
+          test -f paquete-nuevo/observability.sha256
+          # Y lo del paquete que el cliente no toco es lo del paquete.
+          cmp infra/observability/prometheus/render-config.sh paquete-nuevo/observability/prometheus/render-config.sh
+
+      - name: "U1 · update.sh deja la huella de observability/ y el compose etiqueta con ella a los seis servicios que leen observability/ al arrancar (V4-DV-4)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Prometheus solo lee sus reglas al arrancar y Alertmanager renderiza su configuracion en el
+        # entrypoint. Con el directorio del paquete reutilizado (in place) la definicion de esos
+        # servicios no cambia, y `up -d` los dejaba con las reglas de la version anterior sin avisar.
+        # La huella de `observability/` en el .env, leida como etiqueta por el compose, hace que
+        # `up -d` los recree cuando cambia CUALQUIER fichero (tambien una edicion del cliente que
+        # viaja con la fusion). Aqui se exige la cadena entera que SI se puede comprobar sin
+        # arrancar la observabilidad (esta etapa instala con COMPOSE_PROFILES vacio): que update.sh
+        # escribio la huella correcta, y que el compose nuevo la pone en los seis servicios que leen observability/ al arrancar.
+        # Que `up -d` recree de verdad al cambiar una etiqueta es semantica de Docker Compose.
+        run: |
+          set -euo pipefail
+          . infra/scripts/lib/observability-merge.sh
+          esperada="$(kq_obs_manifest paquete-nuevo/observability | sha256sum | cut -c1-16)"
+          actual="$(sudo sed -n 's/^KQ_OBSERVABILITY_REVISION=//p' paquete-nuevo/.env)"
+          test -n "${actual}" || { echo "update.sh no ha escrito KQ_OBSERVABILITY_REVISION en el .env nuevo"; exit 1; }
+          test "${actual}" = "${esperada}" || { echo "huella del .env (${actual}) distinta de la de observability/ (${esperada})"; exit 1; }
+          configuracion="$(sudo env COMPOSE_PROFILES=observability docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml config)"
+          test "$(grep -c "kronoqr.observability.revision: ${esperada}$" <<<"${configuracion}")" -eq 6
+          # La huella va en el .env y no en la imagen: no es un secreto, y el .env sigue en 0600.
+          test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
+
+      - name: "U1 · Ventana de mantenimiento medida: cifra y reparto por fases (V6-DV-9)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La cifra de `operacion.md` §11 sale de AQUI, no de una estimacion: el informe de
+        # update.sh trae la ventana entera (de `artisan down` a `artisan up`) y su reparto
+        # por fases —parada de trabajadores, copia previa, migraciones, arranque y
+        # verificacion—. La descarga de imagenes NO esta en la ventana: es del paso 1
+        # (`check_images`), antes del mantenimiento. Se imprime y va al resumen del job;
+        # el tope solo detecta una regresion gorda con la base casi vacia de esta etapa.
+        run: |
+          set -euo pipefail
+          informe="$(sudo sh -c 'ls -t /var/backups/fichaje/reports/update-*.log | head -n 1')"
+          sudo cat "${informe}" | grep -E 'Ventana de mantenimiento' | tee ventana.txt
+          segundos="$(sed -n 's/.*Ventana de mantenimiento: \([0-9][0-9]*\) s.*/\1/p' ventana.txt | head -n 1)"
+          test -n "${segundos}" || { echo "El informe no trae la ventana de mantenimiento"; exit 1; }
+          grep -q 'por fases: workers=.* backup=.* migrations=.* start=' ventana.txt
+          {
+            echo "### Ventana de mantenimiento de la actualizacion (503 en toda la API salvo las sondas)"
+            echo
+            echo '```'
+            cat ventana.txt
+            echo '```'
+          } >>"${GITHUB_STEP_SUMMARY}"
+          test "${segundos}" -le 180 || { echo "La ventana de mantenimiento fue de ${segundos} s con la base casi vacia (tope de regresion: 180 s)"; exit 1; }
+
+      - name: "U1 · Rescate de los informes de retencion: solo los validos, 0640, sin seguir enlaces"
+        if: steps.anterior.outputs.skip != 'true'
+        # `docker compose cp` de verdad sobre el `scheduler` PARADO de la version
+        # anterior. Medido en docker-in-docker (2.1.0 -> 2.2.0): instalar,
+        # sembrar y actualizar, 2 min 20 s; la comprobacion, 1 s.
+        #
+        # El servicio del que salen depende de la version anterior. En la 2.1.0
+        # cada contenedor tenia su propio `storage/app` y el informe sembrado
+        # en `scheduler` solo se ve ahi. Desde la 2.2.0 (ADR-045) `storage/app`
+        # es un volumen compartido: `update.sh` recorre `app`, `horizon` y
+        # `scheduler`, lo encuentra en el primero y ya no lo repite. Exigir
+        # «de scheduler» puso en rojo esta etapa en cuanto la version anterior
+        # fue una con el volumen; lo que importa es que se rescate, de donde sea.
+        run: |
+          set -euo pipefail
+          grep -Eq 'Informes de retencion de (app|horizon|scheduler)' paquete-nuevo/salida-u1.log
+          bash .github/scripts/retention-rescue-e2e.sh check paquete-nuevo
+
+      - name: "U1 · WAL heredado cifrado en sitio, copia de la 2.1.0 con bandera explicita, restore_command y candado (ADR-049)"
+        if: steps.anterior.outputs.skip != 'true'
+        # En <= 120 s no queda ningun `.gz` en claro y cada heredado conserva su fecha; `restore.sh`
+        # sobre una copia de la 2.1.0 sale 6 sin `--accept-unauthenticated` y pasa con ella y su
+        # `.sha256`; `kronoqr-restore-wal` devuelve 200 ante un heredado sin bandera o un hueco y 1
+        # solo en el final real; el candado de la actualizacion no queda en BACKUP_PATH ni en
+        # /var/log/kronoqr; y los montajes son los de la matriz.
+        run: bash .github/scripts/backup-wal-e2e.sh upgrade-check paquete-nuevo
+
+      - name: "U1 · Ningun secreto en la salida, el informe ni el detalle"
+        if: steps.anterior.outputs.skip != 'true'
+        # Valor a valor, contra el .env recien escrito (.github/scripts/assert-no-secrets.sh).
+        # El informe se publica en BACKUP_PATH/reports como uid 1000 (lo lee el paquete
+        # de diagnostico). El detalle tecnico NO esta ahi: vive solo en
+        # /var/log/kronoqr, root:root 0600, fuera del alcance del runtime (puede
+        # llevar datos personales). Los comodines los expande root.
+        run: |
+          set -euo pipefail
+          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log')
+          mapfile -t detalles < <(sudo sh -c 'ls /var/log/kronoqr/update-*.detalle.log')
+          test "${#informes[@]}" -ge 1
+          test "${#detalles[@]}" -ge 1
+          # Tambien la copia local del informe que queda junto al detalle.
+          mapfile -t locales < <(sudo sh -c 'ls /var/log/kronoqr/update-*.log')
+          bash .github/scripts/assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log "${informes[@]}" "${locales[@]}"
+          for fichero in "${informes[@]}"; do
+            test "$(sudo stat -c '%u:%a' "${fichero}")" = "1000:640"
+          done
+          for fichero in "${locales[@]}"; do
+            test "$(sudo stat -c '%u:%a' "${fichero}")" = "0:600"
+          done
+          test "$(sudo stat -c '%u:%a' /var/log/kronoqr)" = "0:700"
+          # Y NINGUN detalle en el directorio que escribe el runtime.
+          test -z "$(sudo sh -c 'ls /var/backups/fichaje/reports/*.detalle.log 2>/dev/null')"
+
+      - name: "U1 · Privilegios del registro horario: estado exacto tras actualizar, y detecta y repara un exceso y un defecto (tarea 6.4, ADR-057 §1)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Las MISMAS funciones que usa el paso 5 de `update.sh` (verify/repair), cargadas
+        # con `.` contra la instalacion recien actualizada. Se simula lo que la
+        # provision `2026_08_19_099000` (GRANT ... ON ALL TABLES) haria al repetirse:
+        # un UPDATE de tabla de mas en el registro horario y un INSERT de columna en
+        # el perfil de cumplimiento, mas un INSERT de menos en scan_events.
+        run: |
+          set -euo pipefail
+          cd paquete-nuevo
+          bash -c '
+            set -Eeuo pipefail
+            . ./update.sh
+            CFG_DB_USERNAME=fichaje_app; CFG_DB_MIGRATION_USERNAME=fichaje_migrator; CFG_DB_DATABASE=fichaje
+            compose_new() { sudo docker compose --env-file .env -f docker-compose.yml "$@"; }
+            work_record_privileges_expected compose_new
+            test "$(work_record_privileges_drift compose_new)" = "ok"
+            psql_alterar() { compose_new exec -T postgres psql -U fichaje_migrator -d fichaje -v ON_ERROR_STOP=1 -qc "$1"; }
+            psql_alterar "GRANT UPDATE ON shift_entries TO fichaje_app; GRANT INSERT (jurisdiction) ON compliance_profiles TO fichaje_app; REVOKE INSERT ON scan_events FROM fichaje_app"
+            drift="$(work_record_privileges_drift compose_new)"
+            echo "deriva detectada: ${drift}"
+            grep -q "shift_entries:UPDATE" <<<"${drift}"
+            grep -q "compliance_profiles.jurisdiction:INSERT" <<<"${drift}"
+            grep -q "scan_events:INSERT" <<<"${drift}"
+            repair_work_record_privileges
+            test "$(work_record_privileges_drift compose_new)" = "ok"
+          '
+
+      - name: "U2 · Segunda ejecucion: salida 3 y el sistema sigue en pie"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          cd paquete-nuevo
+          set +e
+          sudo ./update.sh >salida-u2.log 2>&1
+          codigo=$?
+          set -e
+          cat salida-u2.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'YA esta en la version' salida-u2.log
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+
+      - name: "U3 · Vuelta atras: fallo inyectado al arrancar la version nueva, salida 4 y conteos intactos"
+        if: steps.anterior.outputs.skip != 'true'
+        # Se vuelve a la version anterior desde cero (instalacion limpia) y se
+        # rompe la imagen del borde de la version nueva: una imagen que termina
+        # nada mas arrancar. Las migraciones se aplican, la aplicacion nueva
+        # pasa su verificacion interna, y al publicar el borde este no llega a
+        # estar en pie: es el fallo del paso 5 que RF-PD-10 exige deshacer solo.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          sudo rm -f paquete-nuevo/.env
+          sudo rm -rf paquete-nuevo/certs
+          mkdir -p paquete-nuevo/certs
+          # U1 retiro el directorio anterior; deshacerlo es un `mv` (runbook §5.1).
+          sudo mv "paquete-anterior/docker-compose.yml.retirado-${old}" paquete-anterior/docker-compose.yml
+          bash .github/scripts/prepare-package-env.sh paquete-anterior
+          (cd paquete-anterior && sudo ./install.sh >salida-reinstalacion.log 2>&1) || { tail -40 paquete-anterior/salida-reinstalacion.log; exit 1; }
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          printf 'Semilla-CI-2026-Actualizacion!\n' | compose exec -T app php artisan identity:create-user \
+            --name='Semilla CI' --email=semilla@kronoqr.ci.local --role=admin
+          consulta() { compose exec -T postgres psql -U fichaje_migrator -d fichaje -Atqc "$1"; }
+          {
+            echo "users=$(consulta 'SELECT count(*) FROM users')"
+            echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
+          } | tee conteos-antes-u3.txt
+
+          docker tag "kronoqr/nginx:${new}" "kronoqr/nginx:${new}-sana"
+          docker pull --quiet alpine:3.20 >/dev/null
+          docker tag alpine:3.20 "kronoqr/nginx:${new}"
+
+          # AUD-1: el .env de la version anterior es el de la vuelta atras y NO se
+          # toca (el paso del rol de copias solo escribe el del paquete nuevo).
+          env_antes="$(sudo md5sum < paquete-anterior/.env)"
+
+          cd paquete-nuevo
+          set +e
+          sudo ./update.sh >salida-u3.log 2>&1
+          codigo=$?
+          set -e
+          cd ..
+          tail -60 paquete-nuevo/salida-u3.log
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q "PUNTO DE CONTROL ${new}" paquete-nuevo/salida-u3.log
+          grep -q 'VUELTA ATRAS COMPLETADA' paquete-nuevo/salida-u3.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | tee health-u3.json
+          grep -qF "\"version\":\"${old}\"" health-u3.json
+          test "$(sudo md5sum < paquete-anterior/.env)" = "${env_antes}" || { echo 'La actualizacion fallida ha tocado el .env de la version anterior'; exit 1; }
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          {
+            echo "users=$(consulta 'SELECT count(*) FROM users')"
+            echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
+          } | tee conteos-despues-u3.txt
+          # Datos intactos tras la vuelta atras. Y el asiento system.restored_from_backup
+          # sobre la cadena restaurada (cierre de la Fase 5, regla dura 6) SOLO si la
+          # version que queda en pie conoce la accion: un verificador anterior revienta
+          # con una accion fuera de su catalogo, asi que update.sh no lo escribe y lo
+          # deja en el informe. Con la 2.1.0 como version anterior es la segunda rama;
+          # al publicar la siguiente, la primera. Las dos se exigen, no se toleran.
+          test "$(grep '^users=' conteos-antes-u3.txt)" = "$(grep '^users=' conteos-despues-u3.txt)"
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes-u3.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues-u3.txt)"
+          # LA MISMA pregunta que hace update.sh y CON LA MISMA FUNCION
+          # (infra/scripts/lib/app-commands.sh). Habia dos copias de la misma
+          # tuberia contra `grep -q`, y esa tuberia responde NO cuando la
+          # respuesta es SI: `grep -q` cierra el tubo al encontrar la linea y el
+          # cliente de Docker, que aun esta volcando el catalogo, termina con 1.
+          # Las dos copias no tienen por que equivocarse a la vez, asi que este
+          # paso pasaba o fallaba segun a cual le tocara (35697335929 en verde,
+          # 35700735466 en rojo, con el mismo codigo de la version anterior).
+          # Si la funcion sale con 2 -no se ha podido preguntar- el paso falla:
+          # no hay respuesta valida, y tolerarlo devolveria la no-determinacion.
+          # shellcheck source=infra/scripts/lib/app-commands.sh
+          . infra/scripts/lib/app-commands.sh
+          # La biblioteca fija IFS (doc 02 3.5: un fichero que se carga con `.` se
+          # lo impone a quien lo carga); el resto del paso sigue con el de bash.
+          unset IFS
+          conoce=0
+          kq_app_knows_command compose compliance:record-system-event || conoce=$?
+          test "${conoce}" -ne 2 || { echo "No se ha podido preguntar a la version anterior si conoce compliance:record-system-event: ${KQ_APP_COMMAND_ERROR}"; exit 1; }
+          if [ "${conoce}" -eq 0 ]; then
+            test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
+            consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
+          else
+            test "$despues" -eq "$antes" || { echo "audit_log paso de ${antes} a ${despues}: la version anterior no conoce system.restored_from_backup y no debia escribirse nada"; exit 1; }
+            grep -q "NO escrito: la version restaurada" paquete-nuevo/salida-u3.log
+          fi
+          compose exec -T app php artisan compliance:verify-audit-chain
+          sudo sh -c "grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log"
+
+      - name: "U3 · Ningun secreto en la salida ni en los informes de la vuelta atras"
+        if: steps.anterior.outputs.skip != 'true'
+        # El camino que vuelca `compose ps`, logs y la salida de restore.sh es
+        # este, no el de exito: es el que hay que revisar.
+        run: |
+          set -euo pipefail
+          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log /var/log/kronoqr/update-*.log')
+          bash .github/scripts/assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log "${informes[@]}"
+
+      - name: "U3 · Senal durante la actualizacion (SIGINT en la fase de migracion): vuelta atras, el mensaje en pantalla y salida 4 (V3-PL-01)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Una actualizacion interrumpida (Ctrl+C, corte de SSH, `kill`) vuelve atras
+        # sola, y ahora LO DICE: las lineas finales van a la salida de error (y a
+        # /dev/tty si existe). Se separan stdout y stderr a proposito: el mensaje tiene
+        # que estar en el segundo.
+        #
+        # Es SIGINT, la que mas se manda a mano. Bash IGNORA SIGINT en lo que lanza con
+        # `&` desde un guion y una disposicion ignorada al arrancar no se puede atrapar;
+        # `perl` la deja en su valor por defecto antes de `exec`. Se manda al `bash` de
+        # update.sh y no a `sudo`, que es el proceso con los traps (como el escenario J).
+        #
+        # Va entre la vuelta atras de U3 y su reintento: la instalacion esta en la
+        # version anterior y la imagen de borde de la nueva sigue rota, asi que, si la
+        # senal NO surtiera efecto, la actualizacion fallaria igualmente por el borde
+        # y con la misma salida 4 pero SIN la linea «senal INT», que es lo que se exige.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          cd paquete-nuevo
+          perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV' \
+            sudo bash -c 'exec bash ./update.sh' >salida-u3s.log 2>err-u3s.log &
+          lanzador=$!
+          en_fase_4=0
+          for _ in $(seq 1 600); do
+            if grep -q 'Paso 4 de 7' salida-u3s.log; then
+              en_fase_4=1
+              break
+            fi
+            estado="$(ps -o stat= -p "${lanzador}" 2>/dev/null || true)"
+            case "${estado}" in
+              '' | Z*) break ;;
+            esac
+            sleep 0.5
+          done
+          if [ "${en_fase_4}" -ne 1 ]; then
+            set +e
+            wait "${lanzador}"
+            codigo=$?
+            set -e
+            cat salida-u3s.log err-u3s.log
+            echo "update.sh no llego al paso 4 (salio con ${codigo}): no hay migracion que interrumpir."
+            exit 1
+          fi
+          sudo pkill -INT -f '^bash \./update\.sh'
+          set +e
+          wait "${lanzador}"
+          codigo=$?
+          set -e
+          echo "--- stdout"; tail -25 salida-u3s.log
+          echo "--- stderr"; cat err-u3s.log
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'senal INT' err-u3s.log || { echo "La salida de error no dice que la actualizacion se interrumpio por SIGINT"; exit 1; }
+          grep -q 'VUELTA ATRAS COMPLETADA' err-u3s.log || { echo "La salida de error no dice que se ha vuelto atras"; exit 1; }
+          grep -q 'Salida 4' err-u3s.log
+          cd ..
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml \
+            exec -T app php artisan compliance:verify-audit-chain
+
+      - name: "U3s · Ctrl+C al GRUPO de procesos DURANTE LA VUELTA ATRAS: tres senales y salida 4, no 5 (V21-3-PL-01, V21-3-PL-03)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Un terminal manda Ctrl+C a TODO el grupo en primer plano: a update.sh, a sudo y a cada
+        # `docker compose` que lance. El escenario anterior solo se la mandaba al `bash` del
+        # actualizador, y eso no ve lo que la 2.3.0 corrige (cada orden de la vuelta atras corre
+        # en su propia sesion). Se provoca una migracion que falla (imagen `php` con una migracion
+        # de prueba, sin tocar el producto) y se mandan TRES SIGINT al grupo, de verdad: al
+        # empezar la vuelta atras, durante la restauracion y al relanzar. Se exige salida 4,
+        # VUELTA ATRAS COMPLETADA, el motivo intacto (migration_failed), la migracion nombrada
+        # en pantalla y en el informe, el asiento de auditoria y la API atendiendo (401).
+        # Detalle de como se arranca en la cabecera de .github/scripts/update-faults-e2e.sh.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh rollback-sigint "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3i · Ctrl+C al grupo DURANTE LAS MIGRACIONES (migracion lenta): salida 4 y motivo interrupted; U1b · doctor.sh con el mantenimiento puesto (V21-3-PL-02, V21-3-PL-03, V21-3-PL-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Imagen `php` con una migracion que duerme 120 s y falla. Con ella en marcha (el
+        # mantenimiento esta puesto) se ejecuta doctor.sh: tiene que salir 6 y marcar [FALLA] la
+        # API de gestion en 503. Despues, SIGINT al grupo: salida 4, «interrumpido por el operador
+        # (senal INT)», la migracion en curso nombrada, `reason=interrupted` en el asiento.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh migration-sigint "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3m · Salida 5 y camino manual: las ordenes impresas, en orden, hasta el 401 (V21-3-PL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La vuelta atras no consigue relanzar la version anterior (su imagen de nginx termina al
+        # arrancar): salida 5. Se corrige la causa y se EJECUTAN las ordenes que imprime, tal como
+        # salen. La vuelta atras automatica ya retiro el mantenimiento (`artisan up`) antes de fallar:
+        # la API da 401 ya antes del 3b. El 503 y la FALLA de doctor.sh se prueban en U3n.
+        # La sonda `app.maintenance_mode` de la imagen nueva se comprueba aparte, en un contenedor
+        # suelto con `artisan down`. Espera 3 minutos al borde que no arranca (KQ_WAIT_APPLICATION).
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh manual-path "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3n · Salida 5 con la copia SIN restaurar: las ordenes 1, 1b, 1c y 2 impresas, hasta el 4c (V21-3-PL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La restauracion automatica no termina (el restore.sh de la imagen de prueba rechaza la de
+        # update.sh): salida 5 con el bloque completo, sin la linea «1-2» y sin el paso 5. Se ejecutan
+        # TODAS las ordenes impresas, en orden: parar, matar los contenedores de un solo uso, cerrar las
+        # sesiones, restaurar de verdad, relanzar, retirar el mantenimiento, 401 y cadena de auditoria.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh manual-path-restore "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3p · Un fallo DESPUES del 401 no se deshace: salida 5 sin vuelta atras, version nueva en servicio (decision del 20-10-2026)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Horizon no arranca (punto de entrada de la imagen de prueba). La actualizacion llega al 401 y
+        # falla despues: salida 5, SIN VUELTA ATRAS, la version NUEVA en servicio, ningun asiento de vuelta
+        # atras y los mismos recuentos. Dos SIGINT al grupo durante la espera no cambian nada. Despues se
+        # arregla la causa y se ejecuta la orden 3 impresa. Sustituye al antiguo «reintentar tras la vuelta
+        # atras» (que dejaba la version nueva en servicio): esta etapa termina igual, con la nueva en pie, y el
+        # reintento tras una vuelta atras sigue cubierto por P3.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/update-faults-e2e.sh forward-only "${{ steps.anterior.outputs.old_version }}" "${{ steps.anterior.outputs.new_version }}"
+
+      - name: "U3 · Y con la version nueva ya en servicio, repetir update.sh dice que ya esta en ella: salida 3"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          # Las imagenes y la matriz que dejaron los escenarios U3s, U3i, U3m, U3n y U3p (migracion de
+          # prueba, nginx de la version anterior roto, horizon roto): P0 en adelante parte de las buenas.
+          bash .github/scripts/update-faults-e2e.sh restore-images "${old}" "${new}"
+          cd paquete-nuevo
+          set +e
+          sudo ./update.sh >salida-u3b.log 2>&1
+          codigo=$?
+          set -e
+          tail -20 salida-u3b.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'YA esta en la version' salida-u3b.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+
+      - name: "U4 · La copia previa de la actualizacion se restaura en una base limpia (RF-PR-04, RQ-09)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La copia previa la hace la version ANTERIOR antes de actualizar: mientras esa version
+        # sea la 2.1.0 es un volcado sin autenticar y solo se restaura con la bandera explicita,
+        # que tambien acepta una copia KQE1 (ADR-049 §4). Cuando la version minima de origen sea
+        # >= 2.2.0 la bandera sobra y se retira (R6-DV-10).
+        run: |
+          set -euo pipefail
+          sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
+            run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database --accept-unauthenticated
+
+      - name: "P0 · Registro local y paquetes FIJADOS POR DIGEST (A6-2, ADR-053)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Hasta aqui todos los paquetes se armaban SIN KQ_IMAGES_LOCK: el camino
+        # que recibe un cliente (docker-compose.yml con `@sha256:`, images.lock)
+        # solo se ejercitaba en release.yml, cuando ya no hay vuelta. Aqui se
+        # levanta un registro local, se empujan las imagenes de esta version, se
+        # escriben sus digests REALES en un images.lock y se arma el paquete con
+        # package.sh, igual que la publicacion. Son dos locks:
+        #   · sano: las tres imagenes buenas.
+        #   · roto: igual, pero el borde es alpine (termina al arrancar). Sustituye
+        #     al truco de U3 (reetiquetar), que con una referencia por digest no
+        #     serviria: Docker manda por el digest y no por la etiqueta.
+        # `registry:2` por etiqueta: es un andamio de la CI que no llega a ningun
+        # entregable; la imagen de un cliente nunca sale de aqui.
+        #
+        # LAS IMAGENES DE AQUI NO ESTAN FIRMADAS (las construye esta misma ejecucion,
+        # no release.yml), asi que los install.sh/update.sh de P1, P2, P2b y P3 llevan
+        # `--skip-signature-check`: la verificacion cosign (B18, ADR-053) no tiene firma
+        # que encontrar. Es una opcion de la linea de ordenes y no un interruptor del
+        # .env a proposito: queda a la vista en el log y en el informe de la
+        # actualizacion. La verificacion en si la ejercita ImageSignatureTest (Pest) con
+        # un cosign falso, y la real la hace el job `firmar` de release.yml al publicar.
+        # Los escenarios sin digest (etiqueta suelta) no verifican nada y no la necesitan.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          reg=localhost:5000/kronoqr
+          docker run -d --name registro-ci -p 127.0.0.1:5000:5000 registry:2
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:5000/v2/ >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
+
+          # La version nueva (sana) y el borde roto, empujados con la etiqueta de la version.
+          docker tag "kronoqr/php:${new}"      "${reg}/php:${new}"
+          docker tag "kronoqr/postgres:${new}" "${reg}/postgres:${new}"
+          docker tag "kronoqr/nginx:${new}"    "${reg}/nginx:${new}"
+          docker push --quiet "${reg}/php:${new}"
+          docker push --quiet "${reg}/postgres:${new}"
+          docker push --quiet "${reg}/nginx:${new}"
+          digest() { docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}'; }
+          d_php="$(digest "${reg}/php:${new}")"
+          d_pg="$(digest "${reg}/postgres:${new}")"
+          d_nginx="$(digest "${reg}/nginx:${new}")"
+          docker pull --quiet alpine:3.20 >/dev/null
+          docker tag alpine:3.20 "${reg}/nginx:${new}-roto"
+          docker push --quiet "${reg}/nginx:${new}-roto"
+          d_nginx_roto="$(digest "${reg}/nginx:${new}-roto")"
+          for d in "${d_php}" "${d_pg}" "${d_nginx}" "${d_nginx_roto}"; do
+            [[ "${d}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "digest ilegible: '${d}'"; exit 1; }
+          done
+          printf 'php %s\nnginx %s\npostgres %s\n' "${d_php}" "${d_nginx}" "${d_pg}" >images-sano.lock
+          printf 'php %s\nnginx %s\npostgres %s\n' "${d_php}" "${d_nginx_roto}" "${d_pg}" >images-roto.lock
+
+          # Las imagenes de la version ANTERIOR, solo con nombre local: son las que
+          # la vuelta atras tiene que encontrar por su etiqueta.
+          docker tag "kronoqr/php:${old}"      "${reg}/php:${old}"
+          docker tag "kronoqr/postgres:${old}" "${reg}/postgres:${old}"
+          docker tag "kronoqr/nginx:${old}"    "${reg}/nginx:${old}"
+
+          for variante in sano roto; do
+            KQ_IMAGES_LOCK="${PWD}/images-${variante}.lock" bash infra/scripts/package.sh "paquete-fijado-${variante}"
+            # La misma matriz de versiones ya ajustada del paquete nuevo (version
+            # sintetica o ciclo abierto): es lo unico que difiere del package.sh de arriba.
+            cp paquete-nuevo/VERSION paquete-nuevo/versions.txt "paquete-fijado-${variante}/"
+            test -f "paquete-fijado-${variante}/images.lock"
+            test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' "paquete-fijado-${variante}/docker-compose.yml" | grep -c '@sha256:')" -eq 3
+          done
+          grep -q "@${d_nginx_roto}" paquete-fijado-roto/docker-compose.yml
+          grep -q "@${d_nginx}" paquete-fijado-sano/docker-compose.yml
+          # P1 instala paquete-fijado-sano (deja .env, certs/ y branding/ de root):
+          # P3 superpone esta replica intacta, como haria un cliente con el tar.
+          cp -a paquete-fijado-sano paquete-fijado-sano-p3
+
+      - name: "P1 · Instalacion limpia desde el paquete fijado: descarga por digest y deja la etiqueta"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          new="${{ steps.anterior.outputs.new_version }}"
+          reg=localhost:5000/kronoqr
+          sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          # Fuera las referencias del registro: install.sh tiene que DESCARGARLAS por digest.
+          docker rmi "${reg}/php:${new}" "${reg}/postgres:${new}" "${reg}/nginx:${new}" "${reg}/nginx:${new}-roto"
+          bash .github/scripts/prepare-package-env.sh paquete-fijado-sano
+          sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-fijado-sano/.env
+          (cd paquete-fijado-sano && sudo ./install.sh --skip-signature-check >salida-p1.log 2>&1) || { tail -60 paquete-fijado-sano/salida-p1.log; exit 1; }
+          grep -q 'instalado y verificado' paquete-fijado-sano/salida-p1.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          compose() { sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml "$@"; }
+          d_php="$(awk '$1 == "php" { print $2 }' paquete-fijado-sano/images.lock)"
+          # El contenedor corre la referencia FIJADA, no la etiqueta suelta...
+          sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+          # ...y la imagen de postgres esta en local POR SU DIGEST, que es la referencia que
+          # `restore-drill.sh --mode pitr` nombra (images.lock, ADR-053), y no solo por
+          # etiqueta.
+          d_pg="$(awk '$1 == "postgres" { print $2 }' paquete-fijado-sano/images.lock)"
+          docker image inspect "${reg}/postgres@${d_pg}" >/dev/null
+          docker image inspect "${reg}/postgres:${new}" >/dev/null
+          ! grep -F '[aviso]' paquete-fijado-sano/salida-p1.log | grep -qi 'etiquetar'
+
+      - name: "P1b · ¿Se admite actualizar in place desde la version anterior? (solo desde la 2.2.0)"
+        id: inplace
+        if: steps.anterior.outputs.skip != 'true'
+        # update.sh rechaza en el paso 1 actualizar in place desde una version
+        # anterior a la 2.2.0 (check_in_place_source): la copia previa la haria la
+        # imagen nueva con el superusuario en BACKUP_DB_* y la vuelta atras dejaria
+        # la version vieja con montajes de copias que no sabe usar. Mientras la
+        # version anterior sea la 2.1.0, P2 comprueba ese rechazo y P2b/P3 no
+        # tienen sentido; desde que sea la 2.2.0 vuelven a correr enteros.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          menor="$(printf '%s\n%s\n' "${old%%[-+]*}" 2.2.0 | sort -V | head -n 1)"
+          if [ "${menor}" = "2.2.0" ]; then echo "ok=true" >>"${GITHUB_OUTPUT}"; else echo "ok=false" >>"${GITHUB_OUTPUT}"; fi
+
+      - name: "P2 · Vuelta atras IN PLACE con el paquete fijado: vuelve a la version anterior, no a la nueva"
+        if: steps.anterior.outputs.skip != 'true'
+        # El escenario del bloqueante de la revision: el digest va como valor por
+        # defecto en el docker-compose.yml NUEVO, y en modo in-place la vuelta atras
+        # usa ese mismo compose con el .env viejo. Sin anular el digest, la imagen
+        # resolvia a php:<vieja>@<digest nuevo>, Docker levantaba la version NUEVA y
+        # la vuelta atras acababa en `rollback_incomplete`. Se instala la version
+        # anterior, se superpone el paquete roto (el borde es alpine) SOBRE el mismo
+        # directorio y se actualiza: tiene que salir con 4 y con la version anterior
+        # en pie, y el contenedor tiene que correr la IMAGEN anterior.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          reg=localhost:5000/kronoqr
+          sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          # U3b (lado a lado, salida 0) retiro otra vez el directorio anterior.
+          if [ -f "paquete-anterior/docker-compose.yml.retirado-${old}" ]; then
+            sudo mv "paquete-anterior/docker-compose.yml.retirado-${old}" paquete-anterior/docker-compose.yml
+          fi
+          bash .github/scripts/prepare-package-env.sh paquete-anterior
+          sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-anterior/.env
+          (cd paquete-anterior && sudo ./install.sh >salida-p2-instalacion.log 2>&1) || { tail -60 paquete-anterior/salida-p2-instalacion.log; exit 1; }
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          id_vieja="$(docker image inspect -f '{{.Id}}' "${reg}/php:${old}")"
+          # IN PLACE: los ficheros del paquete nuevo sobre el directorio de la instalacion.
+          # El .env y certs/ no viajan en el paquete, asi que se conservan.
+          cp -a paquete-fijado-roto/. paquete-anterior/
+          test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' paquete-anterior/docker-compose.yml | grep -c '@sha256:')" -eq 3
+          cd paquete-anterior
+          set +e
+          sudo ./update.sh --skip-signature-check >salida-p2.log 2>&1
+          codigo=$?
+          set -e
+          cd ..
+          tail -60 paquete-anterior/salida-p2.log
+          if [ "${{ steps.inplace.outputs.ok }}" != "true" ]; then
+            # Desde una anterior a la 2.2.0: rechazo en el paso 1, sin tocar nada.
+            test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 (in place rechazado desde ${old}) y fue ${codigo}"; exit 1; }
+            grep -q 'no se puede actualizar con el paquete descomprimido ENCIMA' paquete-anterior/salida-p2.log
+            curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+            test "$(sudo docker inspect -f '{{.Image}}' "$(compose ps -q app)")" = "${id_vieja}"
+            test ! -e paquete-anterior/.env.kronoqr-pre-update
+            sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+            exit 0
+          fi
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'VUELTA ATRAS COMPLETADA' paquete-anterior/salida-p2.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # La prueba que importa: el contenedor corre la IMAGEN anterior.
+          id_en_pie="$(sudo docker inspect -f '{{.Image}}' "$(compose ps -q app)")"
+          test "${id_en_pie}" = "${id_vieja}" || { echo "La vuelta atras ha dejado una imagen distinta de la anterior (${id_en_pie} frente a ${id_vieja})"; exit 1; }
+          # La copia del .env de la vuelta atras pasa a ser el .env (lleva todos los
+          # secretos: no queda una segunda), con la etiqueta anterior y la marca.
+          test ! -e paquete-anterior/.env.kronoqr-pre-update
+          sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+          sudo grep -q '^# KQ_ROLLBACK_DIGESTS' paquete-anterior/.env
+
+      - name: "P2b · Copia previa fallida IN PLACE: no recrea nada y la version anterior sigue con SU imagen (V7-RV-1)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # El defecto: si la copia previa fallaba in place, `lift_maintenance` hacia
+        # `up -d horizon scheduler` con el docker-compose.yml de la instalacion, que
+        # ya es el del paquete nuevo con el digest nuevo por defecto. Compose
+        # recreaba horizon y scheduler con la imagen NUEVA sobre el esquema VIEJO y
+        # el mensaje decia «no se ha tocado». Ahora los vuelve a ARRANCAR (`start`).
+        # Se parte de lo que deja P2 (version anterior en pie, in place), se
+        # superpone el paquete sano y se hace fallar la copia quitando al uid 1000
+        # la escritura en daily/. Tiene que salir con 2, con los MISMOS contenedores
+        # (ninguno recreado, tampoco postgres ni redis) y con la imagen anterior.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          reg=localhost:5000/kronoqr
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          id_vieja="$(docker image inspect -f '{{.Id}}' "${reg}/php:${old}")"
+          declare -A antes=()
+          for s in app postgres redis horizon scheduler; do antes[$s]="$(compose ps -q "$s")"; done
+          cp -a paquete-fijado-sano-p3/. paquete-anterior/
+          sudo chmod 0550 /var/backups/fichaje/daily
+          cd paquete-anterior
+          set +e
+          sudo ./update.sh --skip-signature-check >salida-p2b.log 2>&1
+          codigo=$?
+          set -e
+          cd ..
+          sudo chmod 0750 /var/backups/fichaje/daily
+          tail -40 paquete-anterior/salida-p2b.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 (copia previa fallida) y fue ${codigo}"; exit 1; }
+          grep -q 'LA COPIA PREVIA HA FALLADO' paquete-anterior/salida-p2b.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          for s in app postgres redis horizon scheduler; do
+            test "$(compose ps -q "$s")" = "${antes[$s]}" || { echo "${s} se ha recreado"; exit 1; }
+            test "$(sudo docker inspect -f '{{.State.Running}}' "${antes[$s]}")" = "true" || { echo "${s} no esta en marcha"; exit 1; }
+          done
+          for s in app horizon scheduler; do
+            test "$(sudo docker inspect -f '{{.Image}}' "${antes[$s]}")" = "${id_vieja}" || { echo "${s} corre una imagen distinta de la anterior"; exit 1; }
+          done
+          # La copia del .env pasa a ser el .env (V7-RV-2): ni una segunda copia de
+          # los secretos, ni un .env con el que un `up` a mano levantaria la nueva.
+          test ! -e paquete-anterior/.env.kronoqr-pre-update
+          sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+          sudo grep -qx 'IMAGE_DIGEST_PHP=' paquete-anterior/.env
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: "P3a · Playwright para el quiosco (mismo npm ci y misma cache de Chromium que el job ⑦)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # crazy-max/ghaction-github-runtime exporta a GITHUB_ENV el token de la
+        # cache y de los resultados de Actions. Los scripts de instalacion de
+        # npm y de Playwright no lo necesitan: se anula en el paso.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: npm ci
+
+      - name: "P3a · Cache de los navegadores de Playwright"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: "P3a · Quiosco abierto ANTES de actualizar: empleados con PIN, emparejamiento y primer fichaje (version anterior)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad previa de la tarea 3.2 (bloque 3 de la 2.2.1; RF-AT-11, RF-KI-07,
+        # RF-PD-10). Un quiosco que YA estaba en uso cuando se actualiza no es lo
+        # mismo que uno nuevo: conserva token, roster y un Service Worker con la
+        # PWA y las cabeceras de la version anterior. Aqui se prepara esa tablet.
+        #
+        # Este escenario solo corre con una version anterior >= 2.2.0 (`inplace.ok`),
+        # que ya sirve la CSP con `wasm-unsafe-eval`: NO reproduce el incidente de
+        # la demo (PWA 2.1.0 en cache, CSP sin esa directiva, «Código no válido»),
+        # que cubre `frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts`. Lo que caza
+        # es la compatibilidad de una PWA YA EN CACHE (token, roster, Service
+        # Worker y sus cabeceras) con el servidor nuevo despues de `update.sh`.
+        #
+        # Sobre la version ANTERIOR que deja P2b (instalada in place, sin datos):
+        # administrador y centro por la API, tres empleados con PIN, y un Chromium
+        # con perfil PERSISTENTE que se empareja por consola (`kiosk:pairing-code`),
+        # deja la PWA en cache bajo su Service Worker y ficha por PIN con el
+        # primero. P3 actualiza; P3b reabre ese perfil. Va ANTES de P3 porque el
+        # navegador tiene que haberse usado antes de `update.sh`. Detalle en la
+        # cabecera de .github/scripts/kiosk-pin-after-update.{sh,mjs}. Los PIN no
+        # se imprimen.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          bash .github/scripts/kiosk-pin-after-update.sh before paquete-anterior
+
+      - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          new="${{ steps.anterior.outputs.new_version }}"
+          cp -a paquete-fijado-sano-p3/. paquete-anterior/
+          cd paquete-anterior
+          sudo ./update.sh --skip-signature-check >salida-p3.log 2>&1 || { tail -60 salida-p3.log; exit 1; }
+          cd ..
+          grep -q 'actualizado y verificado' paquete-anterior/salida-p3.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          d_php="$(awk '$1 == "php" { print $2 }' paquete-anterior/images.lock)"
+          sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+
+      - name: "P3b · El quiosco abierto antes de actualizar ficha por PIN despues (RF-AT-11, RF-KI-07, RF-PD-10)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad posterior de la tarea 3.2. Reabre el perfil que dejo P3a (token,
+        # roster y Service Worker con la PWA de la version ANTERIOR) contra el nginx
+        # de la version NUEVA y exige: el documento sale del Service Worker (la
+        # tablet sirve su PWA de cache); sigue emparejado; ficha por PIN desde lo
+        # que tenia en cache, sin bloqueos de CSP ni de WebAssembly; y, tras el
+        # plan B del runbook (desregistrar el Service Worker y vaciar caches),
+        # ficha por PIN con el build nuevo bajo las cabeceras nuevas.
+        #
+        # Con `inplace.ok` la version anterior es >= 2.2.0 y ya sirve
+        # `wasm-unsafe-eval`: esto NO reproduce el incidente de la demo (PWA 2.1.0
+        # en cache, CSP sin esa directiva), que cubre `kiosk-upgrade.spec.ts`, ni
+        # la actualizacion urgente (la 2.2.0 no la conoce). Caza la compatibilidad
+        # de la PWA en cache con el servidor nuevo tras `update.sh`.
+        # Trazabilidad: RF-AT-11, RF-KI-07 y RF-PD-10. `qa:traceability` solo lee
+        # `tests/e2e` de las tres SPA, Pest y k6: este paso es evidencia de la CI,
+        # no cuenta en la matriz.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: |
+          set -euo pipefail
+          bash .github/scripts/kiosk-pin-after-update.sh after paquete-anterior
+
+      - name: Diagnostico si algo ha fallado
+        if: failure() && steps.anterior.outputs.skip != 'true'
+        run: |
+          for dir in paquete-anterior paquete-nuevo paquete-fijado-sano; do
+            [ -f "${dir}/.env" ] || continue
+            echo "=============== ${dir} ==============="
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" ps -a || true
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" logs --tail 80 app nginx postgres || true
+          done
+          echo "=============== informes ==============="
+          sudo sh -c 'for f in /var/backups/fichaje/reports/update-*.log /var/log/kronoqr/update-*.log; do echo "--- $f"; cat "$f"; done' || true
+
+      - name: Subir las salidas del actualizador
+        if: always() && steps.anterior.outputs.skip != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: actualizacion
+          # Sin ningun .env: llevan los secretos de la instalacion de prueba.
+          # Las salidas se comprueban libres de secretos valor a valor.
+          path: |
+            paquete-anterior/salida-instalacion.log
+            paquete-anterior/salida-reinstalacion.log
+            paquete-nuevo/salida-u1.log
+            paquete-nuevo/salida-u2.log
+            paquete-nuevo/salida-u3.log
+            paquete-nuevo/salida-u3r.log
+            paquete-nuevo/err-u3r.log
+            paquete-nuevo/salida-u3i.log
+            paquete-nuevo/err-u3i.log
+            paquete-nuevo/doctor-u1b.log
+            paquete-nuevo/salida-u3m.log
+            paquete-nuevo/err-u3m.log
+            paquete-nuevo/salida-u3n.log
+            paquete-nuevo/err-u3n.log
+            paquete-nuevo/salida-u3p.log
+            paquete-nuevo/err-u3p.log
+            paquete-nuevo/doctor-u3m-antes.log
+            paquete-nuevo/doctor-u3m-despues.log
+            paquete-nuevo/product-doctor-u3m-antes.log
+            paquete-nuevo/product-doctor-u3m.log
+            paquete-nuevo/salida-u3b.log
+            paquete-fijado-sano/salida-p1.log
+            paquete-anterior/salida-p2-instalacion.log
+            paquete-anterior/salida-p2.log
+            paquete-anterior/salida-p2b.log
+            paquete-anterior/salida-p3.log
+            kiosk-pin-estado/diagnostico/
+          retention-days: 14
+          if-no-files-found: warn
+
+  #-----------------------------------------------------------------------------
+  # Cobertura — RNF-M-01: dominio >= 90 %, global >= 75 % (doc 02 §9.2)
+  #
+  # NO es una de las ocho etapas numeradas del §10.1: es una puerta de calidad
+  # aparte, y su coste no encaja en el presupuesto de ninguna de ellas.
+  # `make coverage` instrumenta con Xdebug la suite ENTERA —Unit, Integration,
+  # Feature y Contract juntas, no solo Unit— porque el umbral de dominio se
+  # mide sobre el mismo informe Clover que el umbral global (`tools/coverage-
+  # gate.php` acota el segundo del primero, no repite la ejecucion). Medido en
+  # este runner (09-09-2026): ~15 minutos, memoria de PHP en 3G
+  # (`COVERAGE_MEMORY_LIMIT` del Makefile — con el 1G de costumbre, Xdebug
+  # agota la memoria a mitad de la suite).
+  #
+  # Correr esto en cada PUSH habria duplicado, con Xdebug encendido, un trabajo
+  # que la etapa ③ ya paga sin el, y una CI que nadie espera se acaba ignorando.
+  # Corre, en cambio, en cada pull request a `main` (tarea 23.3, R2-QA-03: antes solo
+  # de noche y a mano, y un `skipped` en el push de `main` se leia como verde) y
+  # llamado desde `ci.yml` de noche (`schedule`) y a mano (`workflow_dispatch`).
+  # `make coverage` falla si el dominio baja del 90 % o el global del 75 %: la
+  # puerta se aplica igual en el PR, no solo informa.
+  #
+  # PostgreSQL y Redis: la misma imagen y los mismos roles que los jobs `unit`
+  # e `integration` — la suite completa toca Feature e Integration, que
+  # necesitan base de datos real.
+  #-----------------------------------------------------------------------------
+  coverage:
+    name: "Cobertura (RNF-M-01)"
+    runs-on: ubuntu-24.04
+    # 50 (R6-DV-08): medido 16-25 min de los 30 anteriores, y la cobertura con
+    # Xdebug es de los pasos que mas varian entre runners.
+    timeout-minutes: 50
+    if: github.event_name == 'pull_request' || inputs.coverage
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: xdebug
+
+      - name: Esperar a PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
+      - name: Chrome para Browsershot (la suite completa incluye los PDF con motor real)
+        # Misma accion que el job de integracion (ver alli).
+        uses: ./.github/actions/chrome-for-pdf
+
+      - name: Cobertura — dominio >= 90 %, global >= 75 % (doc 02 §9.2)
+        run: make coverage
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Cobertura (RNF-M-01)"
+            echo ""
+            echo "Umbrales: dominio >= 90 %, global >= 75 %. Detalle linea a linea en el"
+            echo "log de \`make coverage\` de este mismo job."
+          } >>"$GITHUB_STEP_SUMMARY"

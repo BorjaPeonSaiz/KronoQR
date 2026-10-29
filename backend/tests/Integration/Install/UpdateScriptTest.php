@@ -533,14 +533,15 @@ it('pregunta lo mismo y con la misma funcion en update.sh y en la etapa 8b', fun
     // arreglar una. Ni el script ni el workflow pueden volver a preguntarlo
     // con una tuberia, ni tapar el error con 2>/dev/null.
     $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
-    $workflow = (string) file_get_contents(Repo::file('.github/workflows/ci.yml'));
+    $workflow = (string) file_get_contents(Repo::file('.github/workflows/gates.yml'));
+    $ci = (string) file_get_contents(Repo::file('.github/workflows/ci.yml'));
 
     expect($actualizador)->toContain('lib/app-commands.sh')
         ->and($actualizador)->toContain('kq_app_knows_command compose_rollback compliance:record-system-event')
         ->and($workflow)->toContain('infra/scripts/lib/app-commands.sh')
         ->and($workflow)->toContain('kq_app_knows_command compose compliance:record-system-event');
 
-    foreach (['update.sh' => $actualizador, 'ci.yml' => $workflow] as $nombre => $contenido) {
+    foreach (['update.sh' => $actualizador, 'gates.yml' => $workflow, 'ci.yml' => $ci] as $nombre => $contenido) {
         expect(preg_match('/artisan list --raw[^\n]*\|[^\n]*grep/', $contenido))->toBe(
             0,
             $nombre.' vuelve a preguntar por un comando con `artisan list --raw | grep`: esa tuberia '

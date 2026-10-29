@@ -325,7 +325,8 @@ it('update.sh sin poder consultar Sigstore sigue (aviso) y lo anota en el inform
 it('install.sh y update.sh llaman a la verificacion antes de descargar, usan el 7 y la CI de las imagenes sin firmar usa la opcion', function (): void {
     $install = Repo::contents('infra/scripts/install.sh');
     $update = Repo::contents('infra/scripts/update.sh');
-    $ci = Repo::contents('.github/workflows/ci.yml');
+    // ⑧b vive en gates.yml desde la 23.3.
+    $ci = Repo::contents('.github/workflows/gates.yml');
 
     foreach ([$install, $update] as $script) {
         expect($script)->toContain('. "${SCRIPT_DIR}/lib/image-signature.sh"')

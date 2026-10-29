@@ -192,7 +192,8 @@ it('la vuelta atras in-place anula los digests, la primera publicacion es explic
     $update = Repo::contents('infra/scripts/update.sh');
     $guard = Repo::contents('.github/scripts/assert-image-tags-free.sh');
     $release = Repo::contents('.github/workflows/release.yml');
-    $ci = Repo::contents('.github/workflows/ci.yml');
+    // ⑧b vive en gates.yml desde la 23.3.
+    $ci = Repo::contents('.github/workflows/gates.yml');
 
     // Vuelta atras in-place: las tres variables, vacias y con marca, en la copia
     // del .env; al completarse, esa copia pasa a ser el .env (no queda una

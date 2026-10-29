@@ -957,7 +957,8 @@ it('trae doctor.sh, carga la tabla comun de codigos y lo invocan install.sh y up
     // script en el repositorio y por eso no lo vio: ahora mira tambien la
     // lista de lo que se copia y la comprobacion de la etapa ⑧.
     $package = repoContents('infra/scripts/package.sh');
-    $workflow = repoContents('.github/workflows/ci.yml');
+    // ⑧ vive en gates.yml desde la 23.3.
+    $workflow = repoContents('.github/workflows/gates.yml');
 
     expect($package)->toContain('infra/scripts/doctor.sh')
         ->and($package)->toMatch('/for script in [^;]*\bdoctor\b[^;]*; do/')
@@ -1056,10 +1057,12 @@ it('prueba la instalacion limpia en un runner virgen antes de publicar version',
     // entrega y que afirma los cuatro escenarios. Que la instalacion funcione lo
     // dice la propia etapa cuando se ejecuta; que nadie la haya vaciado en un
     // momento de prisa lo dice esta prueba.
-    $workflow = repoContents('.github/workflows/ci.yml');
+    // La etapa vive en gates.yml desde la 23.3 (corre en cada PR a main); ci.yml la llama.
+    $workflow = repoContents('.github/workflows/gates.yml');
 
     expect($workflow)->toContain('clean-install');
     expect($workflow)->toContain('⑧ Instalacion limpia');
+    expect(repoContents('.github/workflows/ci.yml'))->toContain('uses: ./.github/workflows/gates.yml');
 
     // Los cuatro escenarios de la etapa, cada uno con su afirmacion.
     foreach ([
@@ -1124,7 +1127,8 @@ it('entrega el actualizador con la matriz de versiones y prueba la actualizacion
     // update.sh y versions.txt, que el job `update` existe con sus escenarios y
     // que la lista del paquete vive en un solo sitio.
     $package = repoContents('infra/scripts/package.sh');
-    $workflow = repoContents('.github/workflows/ci.yml');
+    // ⑧b vive en gates.yml desde la 23.3.
+    $workflow = repoContents('.github/workflows/gates.yml');
 
     foreach (['update.sh', 'versions.txt', 'CHANGELOG.md'] as $file) {
         expect($package)->toContain($file);
@@ -1303,3 +1307,66 @@ it('ejecuta la suite Restore en el job restore-cycle, con la conexion exportada 
         ->and($job)->toContain('--testsuite=Restore')
         ->and($job)->toContain('pest-max-skipped.sh run 0 ');
 })->group('RNF-D-05', 'RQ-09', 'RQ-13');
+
+it('corre ⑧, ⑧b y la cobertura en cada PR a main desde gates.yml, sin dar a ci.yml un pull_request ni secretos', function (): void {
+    // Tarea 23.3 (Q4, R2-QA-03). Las tres son comprobaciones obligatorias de `main`.
+    // `ci.yml` no puede tener `pull_request`: su run del PR crearia todos los demas
+    // jobs, con los mismos nombres y en el mismo commit, como «skipped», y GitHub da
+    // por buena una comprobacion obligatoria omitida (taparia un rojo del push).
+    $sinComentarios = static fn (string $yaml): string => (string) preg_replace('/^\s*#.*$/m', '', $yaml);
+    $ci = $sinComentarios(repoContents('.github/workflows/ci.yml'));
+    $gates = $sinComentarios(repoContents('.github/workflows/gates.yml'));
+
+    expect($ci)->not->toMatch('/\bpull_request(_target)?\s*:/')
+        ->and($ci)->not->toContain('secrets: inherit')
+        ->and($ci)->not->toMatch('/name:\s*"(⑧|⑧b|Cobertura)/u');
+
+    // gates.yml: PR a main y llamada desde ci.yml; nunca `pull_request_target` (ejecutaria
+    // codigo del PR con el contexto del repositorio base), ni secretos, ni mas permisos que
+    // lectura (un PR desde un fork no recibe nada de eso).
+    expect($gates)->toMatch('/^on:\n  pull_request:\n    branches: \[main\]\n  workflow_call:/m')
+        ->and($gates)->not->toContain('pull_request_target')
+        ->and($gates)->not->toMatch('/\$\{\{\s*secrets\./')
+        ->and($gates)->not->toMatch('/^\s*secrets:/m')
+        ->and($gates)->not->toContain('continue-on-error')
+        ->and($gates)->toMatch('/^permissions:\n  contents: read\n/m')
+        ->and(substr_count($gates, 'permissions:'))->toBe(1);
+
+    // Los nombres EXACTOS de los checks: son los de la proteccion de la rama.
+    foreach ([
+        'clean-install' => ['⑧ Instalacion limpia', 'inputs.installs'],
+        'update' => ['⑧b Actualizacion desde la version anterior', 'inputs.installs'],
+        'coverage' => ['Cobertura (RNF-M-01)', 'inputs.coverage'],
+    ] as $job => [$nombre, $entrada]) {
+        expect(preg_match('/^  '.$job.':\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\z)/ms', $gates, $m))->toBe(1);
+        expect($m[1] ?? '')->toContain('name: "'.$nombre.'"')
+            ->and($m[1] ?? '')->toContain("if: github.event_name == 'pull_request' || ".$entrada);
+    }
+
+    // Y la cobertura aplica sus umbrales (RNF-M-01: 90 / 75) tambien en el PR.
+    expect($gates)->toContain('run: make coverage')
+        ->and(repoContents('Makefile'))->toMatch('/^DOMAIN_COVERAGE_MIN\s*:=\s*90\s*$/m')
+        ->and(repoContents('Makefile'))->toMatch('/^GLOBAL_COVERAGE_MIN\s*:=\s*75\s*$/m')
+        ->and(repoContents('Makefile'))->toContain('--min=$(GLOBAL_COVERAGE_MIN)')
+        ->and(repoContents('Makefile'))->toContain("php tools/coverage-gate.php \$(CLOVER) \$(DOMAIN_COVERAGE_MIN) 'app/Modules/*/Domain/*'");
+
+    // ci.yml las llama con las condiciones de siempre: ⑧ y ⑧b nunca en `schedule`.
+    expect(preg_match('/^  gate-installs:\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\z)/ms', $ci, $installs))->toBe(1);
+    expect($installs[1] ?? '')->toContain('uses: ./.github/workflows/gates.yml')
+        ->and($installs[1] ?? '')->toContain('installs: true')
+        ->and($installs[1] ?? '')->toContain('coverage: false')
+        ->and($installs[1] ?? '')->toContain("github.event_name != 'schedule'")
+        ->and($installs[1] ?? '')->toContain("startsWith(github.ref, 'refs/tags/v')")
+        ->and($installs[1] ?? '')->toContain("github.ref == 'refs/heads/main'");
+    expect(preg_match('/^  gate-coverage:\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\z)/ms', $ci, $cobertura))->toBe(1);
+    expect($cobertura[1] ?? '')->toContain('uses: ./.github/workflows/gates.yml')
+        ->and($cobertura[1] ?? '')->toContain('installs: false')
+        ->and($cobertura[1] ?? '')->toContain('coverage: true')
+        ->and($cobertura[1] ?? '')->toContain("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'");
+
+    // La proteccion de la rama vive en el runbook con los mismos nombres.
+    $runbook = repoContents('docs/runbooks/fallo-de-ci.md');
+    foreach (['⑧ Instalacion limpia', '⑧b Actualizacion desde la version anterior', 'Cobertura (RNF-M-01)'] as $nombre) {
+        expect($runbook)->toContain('`'.$nombre.'`');
+    }
+})->group('RNF-M-01', 'RQ-11', 'RQ-13');
