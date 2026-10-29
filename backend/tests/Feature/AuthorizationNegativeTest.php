@@ -77,6 +77,7 @@ function managementEndpoints(): array
         'dar de baja' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/offboard', [
             'terminated_at' => '2026-09-30',
         ]],
+        'anular una baja programada' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/offboard/cancel', []],
         'listar departamentos' => ['GET', '/api/v1/departments', []],
         'ver un departamento' => ['GET', '/api/v1/departments/1', []],
         'crear un departamento' => ['POST', '/api/v1/departments', ['name' => 'Recepcion']],

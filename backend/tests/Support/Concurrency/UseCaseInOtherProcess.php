@@ -197,6 +197,7 @@ final class UseCaseInOtherProcess
             'offboard' => static fn (): mixed => app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand(
                 uuid: $spec['employee'],
                 terminatedAt: $spec['terminated_on'],
+                applyNow: true,
             )),
             'import' => static fn (): mixed => app(ImportEmployeesHandler::class)->handle(
                 new ImportEmployeesCommand(path: $spec['path'], apply: true, confirmChecksum: $spec['checksum']),

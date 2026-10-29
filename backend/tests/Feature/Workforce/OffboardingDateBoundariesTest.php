@@ -26,8 +26,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * Los instantes van en UTC y escritos a mano, con su hora local al lado: un
  * valor limite calculado en la prueba repetiria el mismo error que el codigo.
- * `OffboardingDateRuleTest` cubre ya Canarias a las 00:30 con cese el dia 3 y
- * Madrid a las 23:30 con cese el dia 3; aqui estan las demas esquinas.
+ * Desde la 2.3.0 el cese de hoy se programa, y es «Aplicar ya» (`apply_now`) lo que lo
+ * hace efectivo en el acto: aqui se prueba esa baja en el acto con hoy, y el `422`
+ * en `apply_now` con mañana. La programada esta en `ScheduledOffboardingTest`.
  */
 
 uses(RefreshDatabase::class);
@@ -101,12 +102,12 @@ function loQueLaBajaRechazadaNoToca(string $uuid): array
     ];
 }
 
-it('admite el cese en el dia civil del centro en la frontera de la medianoche', function (string $ahora, string $zona, string $cese): void {
+it('aplica ya el cese de hoy en el dia civil del centro en la frontera de la medianoche', function (string $ahora, string $zona, string $cese): void {
     FrozenTime::at($ahora);
     $persona = personaEnLaFronteraDeLaBaja($zona);
 
     Api::as(tokenDeLasFronterasDeLaBaja())
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese, 'apply_now' => true])
         ->assertValidResponse(200)
         ->assertJsonPath('terminated_at', $cese);
 
@@ -126,17 +127,17 @@ it('admite el cese en el dia civil del centro en la frontera de la medianoche', 
     'Canarias, 23:30 del 25 de octubre, ya en invierno (23:30 UTC), cese el 25' => ['2026-10-25 23:30:00', 'Atlantic/Canary', '2026-10-25'],
 ])->group('RN-14', 'RF-GP-03');
 
-it('rechaza con 422 el cese de mañana en la frontera de la medianoche y no toca ficha, tarjetas, auditoria ni portal', function (string $ahora, string $zona, string $cese): void {
+it('rechaza con 422 aplicar ya el cese de mañana en la frontera de la medianoche y no toca ficha, tarjetas, auditoria ni portal', function (string $ahora, string $zona, string $cese): void {
     FrozenTime::at($ahora);
     $persona = personaEnLaFronteraDeLaBaja($zona);
     PortalLogins::open($persona);
     $antes = loQueLaBajaRechazadaNoToca($persona);
 
     Api::as(tokenDeLasFronterasDeLaBaja())
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese, 'apply_now' => true])
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
-        ->assertJsonStructure(['errors' => ['terminated_at']]);
+        ->assertJsonStructure(['errors' => ['apply_now']]);
 
     expect(loQueLaBajaRechazadaNoToca($persona))->toBe($antes)
         ->and($antes['employee']['status'])->toBe('active')

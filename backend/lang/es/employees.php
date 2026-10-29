@@ -19,11 +19,17 @@ return [
 
         'termination_before_hiring' => 'La fecha de cese (:terminated_on) es anterior a la de alta (:hired_on).',
 
-        'termination_after_today' => 'La fecha de cese (:terminated_on) es posterior a hoy (:today). La baja es '
-            .'efectiva al registrarla; regístrala el último día, cuando haya terminado su turno.',
+        'apply_now_requires_due_termination' => '«Aplicar ya» solo vale con una fecha de cese de hoy o anterior, y el '
+            .'último día (:terminated_on) aún no ha llegado (hoy es :today). Quítalo para programar la baja, o pon la '
+            .'fecha de hoy.',
 
-        'not_started_termination_must_be_hire_date' => 'Esta persona aún no ha empezado a trabajar (alta el '
-            .':hired_on). La única fecha de cese posible es la de alta, :hired_on.',
+        'offboarding_not_scheduled' => 'Esta persona no tiene ninguna baja programada.',
+
+        'offboarding_due' => 'La fecha de cese (:terminated_on) ya ha pasado (hoy es :today). La baja ya rige y no se '
+            .'puede anular.',
+
+        'offboarding_due_reschedule' => 'La fecha de cese (:terminated_on) ya ha pasado (hoy es :today) y ya no se '
+            .'puede cambiar. Con esa misma fecha, la baja se aplica en el acto.',
 
         'record_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de '
             .'conservación: ya no admite contratos ni ausencias.',

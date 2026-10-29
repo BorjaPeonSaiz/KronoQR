@@ -39,6 +39,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
 use App\Modules\Attendance\Infrastructure\Adapter\ConfiguredScanDiscardSettings;
+use App\Modules\Attendance\Infrastructure\Adapter\DatabaseFinalWorkDayActivity;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
 use App\Modules\Attendance\Infrastructure\Adapter\ScanFailureTransience;
 use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
@@ -70,6 +71,7 @@ use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Attendance\Infrastructure\Projection\DatabaseDailyTotalsProjection;
+use App\Modules\Shared\Application\Port\FinalWorkDayActivity;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -110,6 +112,11 @@ final class AttendanceServiceProvider extends ServiceProvider
     {
         $this->app->bind(WorkDayRepository::class, EloquentWorkDayRepository::class);
         $this->app->bind(ScanLog::class, EloquentScanLog::class);
+
+        // RN-14, ADR-062 §4: la tarea de las bajas programadas pregunta al
+        // registro horario si la jornada del cese aun puede crecer, por un
+        // puerto de Shared, porque la cota de continuacion es de este modulo.
+        $this->app->bind(FinalWorkDayActivity::class, DatabaseFinalWorkDayActivity::class);
         $this->app->bind(EventPublisher::class, LaravelEventBus::class);
 
         // RN-21: el lote depende del contrato y no de la clase final, para que

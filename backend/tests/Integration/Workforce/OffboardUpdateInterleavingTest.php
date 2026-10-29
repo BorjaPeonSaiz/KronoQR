@@ -109,6 +109,7 @@ function darDeBajaIntercalado(string $uuid): void
         uuid: $uuid,
         terminatedAt: OFFBOARD_UPDATE_INTERLEAVING_LAST_DAY,
         reason: 'Fin de contrato de temporada',
+        applyNow: true,
     ));
 }
 

@@ -135,6 +135,16 @@ final class EmployeePolicy
     }
 
     /**
+     * Anular una baja programada (RN-14, ADR-062 §10): los mismos que pueden
+     * programarla. Metodo propio para que la autorizacion negativa pruebe esta
+     * ruta por separado (regla dura 18).
+     */
+    public function cancelOffboarding(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::writers());
+    }
+
+    /**
      * Restablecer el PIN (RF-ID-09). Rol RRHH, como pide el Anexo B del doc 01.
      *
      * **Permiso propio y no `update`.** Restablecer un PIN da acceso al registro

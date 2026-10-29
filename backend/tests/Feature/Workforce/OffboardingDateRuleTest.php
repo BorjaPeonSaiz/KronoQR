@@ -14,14 +14,13 @@ use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * **LA FECHA DE CESE NO PUEDE SER POSTERIOR A HOY EN EL CENTRO** (RN-14,
- * RF-GP-03, 2.2.0; hallazgos R4-SC-01, R3-AR-01, R3-BE-01, R3-PA-06).
+ * **LA FECHA DE CESE DECIDE SI LA BAJA ES EN EL ACTO O PROGRAMADA** (RN-14,
+ * RF-GP-03, ADR-062 §3).
  *
- * La baja es efectiva al registrarla: revoca las tarjetas y corta el fichaje en
- * el acto. Con una fecha de cese futura, la persona se quedaba sin fichar ni
- * poder anotar su jornada hasta el cese. Ahora una fecha posterior a hoy
- * responde `422` en `terminated_at` y **no cambia nada**: ni la ficha, ni las
- * tarjetas, ni `audit_log`.
+ * Anterior a hoy, en el acto. Hoy o posterior, programada: la persona sigue en
+ * alta y ficha hasta su ultimo dia. «Aplicar ya» hace efectiva en el acto la de
+ * hoy, y con una fecha futura responde `422` en `apply_now` **sin cambiar nada**:
+ * ni la ficha, ni las tarjetas, ni `audit_log`.
  *
  * «Hoy» es la fecha civil del centro (`sites.timezone`) en el instante en que
  * llega la baja, y el reloj se detiene con `FrozenTime` para probar las
@@ -74,22 +73,45 @@ function estadoAntesDeLaBajaConFecha(string $uuid): array
     ];
 }
 
-it('rechaza un cese posterior a hoy con 422 en terminated_at y no cambia nada', function (): void {
+it('programa la baja con un cese futuro: sigue en alta, con su tarjeta y su asiento de baja programada', function (): void {
+    FrozenTime::at('2026-10-02 10:00:00');
+    $persona = personaParaLaBajaConFecha();
+
+    Api::as(tokenDeLaBajaConFecha())
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-31', 'reason' => 'Fin de contrato'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('status', 'active')
+        ->assertJsonPath('terminated_at', '2026-10-31')
+        ->assertJsonPath('offboarding.state', 'scheduled')
+        ->assertJsonPath('offboarding.terminated_at', '2026-10-31');
+
+    $estado = estadoAntesDeLaBajaConFecha($persona);
+
+    expect($estado['employee']['status'])->toBe('active')
+        ->and($estado['active_cards'])->toBe(1)
+        ->and(DB::table('audit_log')->where('action', 'employee.offboarding_scheduled')->count())->toBe(1)
+        ->and(DB::table('audit_log')->where('action', 'employee.offboarded')->count())->toBe(0)
+        ->and(DB::table('audit_log')->where('action', 'credential.revoked')->count())->toBe(0);
+})->group('RN-14', 'RF-GP-03');
+
+it('rechaza aplicar ya un cese futuro con 422 en apply_now y no cambia nada', function (): void {
     FrozenTime::at('2026-10-02 10:00:00');
     $persona = personaParaLaBajaConFecha();
     $antes = estadoAntesDeLaBajaConFecha($persona);
 
     Api::as(tokenDeLaBajaConFecha())
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-31', 'reason' => 'Fin de contrato'])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-31', 'apply_now' => true])
         ->assertValidRequest()
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
-        ->assertJsonPath('errors.terminated_at.0', 'La fecha de cese (2026-10-31) es posterior a hoy (2026-10-02). La baja es '
-            .'efectiva al registrarla; regístrala el último día, cuando haya terminado su turno.');
+        ->assertJsonPath('errors.apply_now.0', '«Aplicar ya» solo vale con una fecha de cese de hoy o anterior, y el '
+            .'último día (2026-10-31) aún no ha llegado (hoy es 2026-10-02). Quítalo para programar la baja, o pon la '
+            .'fecha de hoy.');
 
-    // Nada a medias: la ficha sigue igual, la tarjeta activa y ningun asiento.
     expect(estadoAntesDeLaBajaConFecha($persona))->toBe($antes)
         ->and($antes['employee']['status'])->toBe('active')
+        ->and($antes['employee']['terminated_at'])->toBeNull()
         ->and($antes['active_cards'])->toBe(1);
 })->group('RN-14', 'RF-GP-03');
 
@@ -102,34 +124,38 @@ it('dice lo mismo en ingles a quien pide ingles', function (): void {
 
     Api::as(tokenDeLaBajaConFecha())
         ->withHeaders(['Accept-Language' => 'en'])
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-03'])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-03', 'apply_now' => true])
         ->assertValidResponse(422)
-        ->assertJsonPath('errors.terminated_at.0', 'The termination date (2026-10-03) is later than today (2026-10-02). '
-            .'Offboarding takes effect as soon as it is recorded; record it on the last day, once the shift is over.');
+        ->assertJsonPath('errors.apply_now.0', '"Apply now" only works with a termination date of today or earlier, '
+            .'and the last day (2026-10-03) has not arrived yet (today is 2026-10-02). Clear it to schedule the '
+            .'offboarding, or set today\'s date.');
 
     expect(estadoAntesDeLaBajaConFecha($persona))->toBe($antes);
 })->group('RN-14', 'RF-GP-03');
 
-it('resuelve hoy con la fecha civil del centro y no con la UTC', function (string $ahora, string $zona, string $cese, int $estado): void {
+it('resuelve hoy con la fecha civil del centro y no con la UTC', function (string $ahora, string $zona, string $cese, bool $aplicarYa, int $codigo, string $estado): void {
     FrozenTime::at($ahora);
     $persona = personaParaLaBajaConFecha($zona);
 
     Api::as(tokenDeLaBajaConFecha())
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese])
-        ->assertValidResponse($estado);
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => $cese, 'apply_now' => $aplicarYa])
+        ->assertValidResponse($codigo);
 
-    expect(DB::table('employees')->where('uuid', $persona)->value('status'))->toBe($estado === 200 ? 'terminated' : 'active');
+    expect(DB::table('employees')->where('uuid', $persona)->value('status'))->toBe($estado);
 })->with([
     // 23:30 UTC del dia 2 son las 00:30 del dia 3 en Canarias: el 3 ya es hoy.
-    'Canarias a las 00:30 del dia 3, cese el 3' => ['2026-10-02 23:30:00', 'Atlantic/Canary', '2026-10-03', 200],
+    'Canarias a las 00:30 del dia 3, aplicar ya el 3' => ['2026-10-02 23:30:00', 'Atlantic/Canary', '2026-10-03', true, 200, 'terminated'],
+    // ... y el 2 ya es ayer: la baja es en el acto aunque no se pida.
+    'Canarias a las 00:30 del dia 3, cese el 2' => ['2026-10-02 23:30:00', 'Atlantic/Canary', '2026-10-02', false, 200, 'terminated'],
     // 21:30 UTC del dia 2 son las 23:30 del dia 2 en Madrid: el 3 es mañana.
-    'Madrid a las 23:30 del dia 2, cese el 3' => ['2026-10-02 21:30:00', 'Europe/Madrid', '2026-10-03', 422],
-    'cese hoy' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2026-10-02', 200],
-    'cese el dia del alta' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2026-01-01', 200],
-    'cese el dia anterior al alta' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2025-12-31', 422],
+    'Madrid a las 23:30 del dia 2, aplicar ya el 3' => ['2026-10-02 21:30:00', 'Europe/Madrid', '2026-10-03', true, 422, 'active'],
+    // ... y el 2 todavia es hoy: sin aplicar ya, se programa.
+    'Madrid a las 23:30 del dia 2, cese el 2' => ['2026-10-02 21:30:00', 'Europe/Madrid', '2026-10-02', false, 200, 'active'],
+    'cese el dia del alta' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2026-01-01', false, 200, 'terminated'],
+    'cese el dia anterior al alta' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2025-12-31', false, 422, 'active'],
 ])->group('RN-14', 'RF-GP-03');
 
-it('a una persona que aun no ha empezado solo la da de baja en su fecha de alta', function (): void {
+it('a una persona que aun no ha empezado programa el cese en su alta y solo con aplicar ya la da de baja sin efectos', function (): void {
     FrozenTime::at('2026-10-02 10:00:00');
     $persona = personaParaLaBajaConFecha();
     DB::table('employees')->where('uuid', $persona)->update(['hired_at' => '2026-10-15']);
@@ -138,14 +164,28 @@ it('a una persona que aun no ha empezado solo la da de baja en su fecha de alta'
     Api::as($token)
         ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-02'])
         ->assertValidResponse(422)
-        ->assertJsonPath('errors.terminated_at.0', 'Esta persona aún no ha empezado a trabajar (alta el 2026-10-15). '
-            .'La única fecha de cese posible es la de alta, 2026-10-15.');
+        ->assertJsonPath('errors.terminated_at.0', 'La fecha de cese (2026-10-02) es anterior a la de alta (2026-10-15).');
 
+    // El extra de un solo dia: ficha el 15 y la tarea le aplica la baja.
     Api::as($token)
         ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-15'])
         ->assertValidResponse(200)
+        ->assertJsonPath('status', 'active')
+        ->assertJsonPath('offboarding.state', 'scheduled');
+
+    // «Aplicar ya» con un cese futuro que no es el alta: 422.
+    Api::as($token)
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-20', 'apply_now' => true])
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['apply_now']]);
+
+    // La contratacion que no llego a empezar: la unica excepcion.
+    Api::as($token)
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-15', 'apply_now' => true])
+        ->assertValidResponse(200)
         ->assertJsonPath('status', 'terminated')
-        ->assertJsonPath('terminated_at', '2026-10-15');
+        ->assertJsonPath('terminated_at', '2026-10-15')
+        ->assertJsonPath('offboarding.state', 'effective');
 })->group('RN-14', 'RF-GP-03');
 
 it('sin centro configurado no da de baja a nadie y no cae a UTC', function (): void {
@@ -158,5 +198,5 @@ it('sin centro configurado no da de baja a nadie y no cae a UTC', function (): v
         ->assertValidResponse(409)
         ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
 
-    expect(DB::table('audit_log')->where('action', 'employee.offboarded')->count())->toBe(0);
+    expect(DB::table('audit_log')->whereIn('action', ['employee.offboarded', 'employee.offboarding_scheduled'])->count())->toBe(0);
 })->group('RN-14', 'RF-GP-03');

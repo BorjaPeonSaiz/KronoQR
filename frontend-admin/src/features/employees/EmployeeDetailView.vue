@@ -451,6 +451,18 @@ const hireIsFuture = computed(
     employee.value.hired_at > offboardToday.value,
 )
 
+/**
+ * La baja que este dialogo registra es en el acto: con cese de hoy, o con el
+ * cese en el alta que aun no ha llegado (la baja sin efectos). Un cese anterior
+ * ya es en el acto sin pedirlo.
+ */
+const appliesNow = computed(
+  () =>
+    terminatedAt.value !== '' &&
+    (terminatedAt.value === offboardToday.value ||
+      (hireIsFuture.value && terminatedAt.value === employee.value?.hired_at)),
+)
+
 /** La fecha mas tardia admitida: hoy, o la del alta si esta aun no ha llegado. */
 const offboardMax = computed(() =>
   hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value,
@@ -536,6 +548,10 @@ async function confirmOffboard(): Promise<void> {
     await offboardEmployee(props.uuid, {
       terminated_at: terminatedAt.value,
       reason: offboardReason.value,
+      // RN-14: el servidor programa una baja con cese de hoy salvo «Aplicar
+      // ya». Este dialogo promete una baja efectiva al confirmarla —y, con el
+      // alta por llegar, una baja sin efectos—, asi que la pide en el acto.
+      ...(appliesNow.value ? { apply_now: true } : {}),
     })
     await invalidate()
     announce(t('employees.announce.offboarded'))

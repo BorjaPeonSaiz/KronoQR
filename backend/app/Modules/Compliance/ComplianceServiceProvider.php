@@ -104,6 +104,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportEmployeeDirectory;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePurgeReviewLedger;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseScheduledOffboardingRecord;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseSiteTimezoneAuditReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
@@ -150,6 +151,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Port\ScheduledOffboardingRecord;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
@@ -159,6 +161,8 @@ use App\Modules\Workforce\Domain\Event\DepartmentManagerChanged;
 use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingCancelled;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingScheduled;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
@@ -198,6 +202,10 @@ final class ComplianceServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // ADR-062 §4: la tarea de las bajas programadas comprueba en la cadena
+        // que la baja la programo alguien por el producto.
+        $this->app->bind(ScheduledOffboardingRecord::class, DatabaseScheduledOffboardingRecord::class);
+
         $this->app->singleton(
             AuditTrail::class,
             static fn (): DatabaseAuditTrail => new DatabaseAuditTrail(DB::connection()),
@@ -890,6 +898,9 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(EmployeeHired::class, [RecordWorkforceChange::class, 'hired']);
         Event::listen(EmployeeProfileUpdated::class, [RecordWorkforceChange::class, 'updated']);
         Event::listen(EmployeeOffboarded::class, [RecordWorkforceChange::class, 'offboarded']);
+        // ADR-062 §9: la baja programada y su anulacion.
+        Event::listen(EmployeeOffboardingScheduled::class, [RecordWorkforceChange::class, 'offboardingScheduled']);
+        Event::listen(EmployeeOffboardingCancelled::class, [RecordWorkforceChange::class, 'offboardingCancelled']);
         Event::listen(DepartmentCreated::class, [RecordWorkforceChange::class, 'departmentCreated']);
         Event::listen(DepartmentRenamed::class, [RecordWorkforceChange::class, 'departmentRenamed']);
         // RF-ID-10, ADR-051 §5: un `role_assignment.changed` por cuenta afectada.

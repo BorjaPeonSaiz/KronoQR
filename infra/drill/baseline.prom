@@ -72,6 +72,10 @@ pattern_detection_last_failures 0
 pattern_detection_last_run_timestamp_seconds @NOW@
 incidents_metrics_timestamp_seconds @NOW@
 
+# --- Bajas programadas (workforce.yml) -----------------------------------------
+kronoqr_scheduled_offboardings_overdue 0
+kronoqr_scheduled_offboardings_last_run_timestamp_seconds @NOW@
+
 # --- Ficheros generados (generated-files.yml) ---------------------------------
 generated_files_overdue 0
 generated_files_remove_failed_total 0

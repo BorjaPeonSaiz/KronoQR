@@ -127,6 +127,10 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'kiosk_token_rotations_total',
         'kiosk_unreported_discards',
         'kronoqr_auth_attempts_total',
+        // ADR-062 §4: la tarea de las bajas programadas. Recuentos sin persona.
+        'kronoqr_offboardings_applied_total',
+        'kronoqr_scheduled_offboardings_last_run_timestamp_seconds',
+        'kronoqr_scheduled_offboardings_overdue',
         'license_limit_exceeded_total',
         'manual_corrections_total',
         'pin_fallback_scans_total',

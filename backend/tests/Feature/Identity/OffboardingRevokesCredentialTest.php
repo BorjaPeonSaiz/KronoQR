@@ -72,7 +72,7 @@ function cuerpoSinScanId(TestResponse $respuesta): array
 function darDeBaja(string $employeeUuid): void
 {
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
-        ->post('/api/v1/employees/'.$employeeUuid.'/offboard', ['terminated_at' => '2026-09-14'])
+        ->post('/api/v1/employees/'.$employeeUuid.'/offboard', ['terminated_at' => '2026-09-14', 'apply_now' => true])
         ->assertValidRequest()
         ->assertValidResponse(200);
 }
@@ -172,7 +172,7 @@ it('una baja que falla no deja la credencial revocada', function (): void {
     Credentials::issueFor($employeeId);
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
-        ->post('/api/v1/employees/'.$escenario['employee'].'/offboard', ['terminated_at' => '2026-09-14'])
+        ->post('/api/v1/employees/'.$escenario['employee'].'/offboard', ['terminated_at' => '2026-09-14', 'apply_now' => true])
         ->assertStatus(409);
 
     expect(DB::table('credentials')->where('employee_id', $employeeId)->whereNull('revoked_at')->count())->toBe(1);

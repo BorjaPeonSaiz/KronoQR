@@ -17,6 +17,8 @@ use App\Modules\Workforce\Domain\Event\DepartmentManagerChanged;
 use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingCancelled;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingScheduled;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
 use DateTimeImmutable;
 
@@ -112,12 +114,61 @@ final readonly class RecordWorkforceChange
 
     public function offboarded(EmployeeOffboarded $event): void
     {
-        $this->record(AuditAction::EmployeeOffboarded, AuditSubject::of('employee'), [
+        $payload = [
             'employee_uuid' => $event->employeeUuid,
             'terminated_on' => $event->terminatedOn,
             // El motivo NO: es texto libre y quien lo escribe puede poner un
             // nombre o un dato de salud. Basta con saber si lo hubo.
             'has_reason' => $event->reason !== null,
+        ];
+
+        // «Aplicar ya» con cese de hoy: el despido con efecto inmediato (RN-14).
+        if ($event->applyNow) {
+            $payload['apply_now'] = true;
+        }
+
+        // La aplico la tarea al vencer (ADR-062 §4): el actor es `system`, y el
+        // asiento dice que dia tocaba y cuantos llego tarde.
+        if ($event->scheduled) {
+            $payload['scheduled'] = true;
+            $payload['due_on'] = $event->dueOn;
+            $payload['days_late'] = $event->daysLate;
+
+            if ($event->deferred) {
+                $payload['deferred'] = true;
+            }
+        }
+
+        $this->record(AuditAction::EmployeeOffboarded, AuditSubject::of('employee'), $payload, $event->occurredAt());
+    }
+
+    /**
+     * Baja programada o reprogramada (RN-14, ADR-062 §9). La fecha anterior
+     * solo viaja al reprogramar: su ausencia dice que es la primera.
+     */
+    public function offboardingScheduled(EmployeeOffboardingScheduled $event): void
+    {
+        $payload = [
+            'employee_uuid' => $event->employeeUuid,
+            'terminated_on' => $event->terminatedOn,
+            'has_reason' => $event->reason !== null,
+        ];
+
+        if ($event->previousTerminatedOn !== null) {
+            $payload['previous_terminated_on'] = $event->previousTerminatedOn;
+        }
+
+        $this->record(AuditAction::EmployeeOffboardingScheduled, AuditSubject::of('employee'), $payload, $event->occurredAt());
+    }
+
+    /**
+     * Anulacion de una baja programada (RN-14, ADR-062 §9), con la fecha anulada.
+     */
+    public function offboardingCancelled(EmployeeOffboardingCancelled $event): void
+    {
+        $this->record(AuditAction::EmployeeOffboardingCancelled, AuditSubject::of('employee'), [
+            'employee_uuid' => $event->employeeUuid,
+            'terminated_on' => $event->terminatedOn,
         ], $event->occurredAt());
     }
 

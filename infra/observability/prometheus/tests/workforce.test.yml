@@ -1,0 +1,129 @@
+# KronoQR — pruebas unitarias de rules/workforce.yml (RN-14, ADR-062 §4).
+rule_files:
+  - ../rules/workforce.yml
+
+evaluation_interval: 1m
+
+tests:
+
+  #-----------------------------------------------------------------------------
+  # ScheduledOffboardingOverdue: > 0 sostenido dos horas dispara; justo antes,
+  # no; con 0, nunca; y un pico de una pasada que se resuelve, tampoco.
+  #-----------------------------------------------------------------------------
+  - name: overdue_sostenido_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_scheduled_offboardings_overdue'
+        values: "1x200"
+    alert_rule_test:
+      - eval_time: 119m
+        alertname: ScheduledOffboardingOverdue
+        exp_alerts: []
+      - eval_time: 121m
+        alertname: ScheduledOffboardingOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: workforce
+            exp_annotations:
+              summary: "Hay 1 baja(s) programada(s) sin aplicar mas de un dia despues de su cese"
+              description: >-
+                La ultima pasada de workforce:apply-scheduled-offboardings no ha
+                podido hacer efectiva una baja programada pasado su tope. Nadie ha
+                fichado despues del cese, pero sus tarjetas siguen activas y falta
+                el asiento employee.offboarded. Busca workforce.scheduled_offboarding_failed
+                y workforce.scheduled_offboarding_without_audit en el log y lanza
+                la tarea a mano (repetirla es seguro). Si la tarea ha dejado de
+                correr, lo dice ScheduledOffboardingTaskAbsent, no esta.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  - name: overdue_cero_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_scheduled_offboardings_overdue'
+        values: "0x300"
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ScheduledOffboardingOverdue
+        exp_alerts: []
+
+  - name: overdue_de_una_pasada_no_dispara
+    interval: 1m
+    input_series:
+      # El tope: vale 1 durante la hora hasta la pasada siguiente, que la aplica.
+      - series: 'kronoqr_scheduled_offboardings_overdue'
+        values: "0x10 1x60 0x200"
+    alert_rule_test:
+      - eval_time: 200m
+        alertname: ScheduledOffboardingOverdue
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ScheduledOffboardingTaskAbsent: un latido que no se mueve en mas de 2 h, o
+  # que no existe, dispara tras 30 min; uno que se mueve cada hora, no.
+  #-----------------------------------------------------------------------------
+  - name: tarea_parada_dispara
+    interval: 1m
+    input_series:
+      # El ultimo latido fue en el instante 0 y ya no se mueve.
+      - series: 'kronoqr_scheduled_offboardings_last_run_timestamp_seconds'
+        values: "0x300"
+    alert_rule_test:
+      # time() - 0 > 7200 desde el minuto 121; con for: 30m, a partir del 151.
+      - eval_time: 149m
+        alertname: ScheduledOffboardingTaskAbsent
+        exp_alerts: []
+      - eval_time: 152m
+        alertname: ScheduledOffboardingTaskAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: workforce
+            exp_annotations:
+              summary: "La tarea de las bajas programadas lleva mas de 2 h sin correr"
+              description: >-
+                workforce:apply-scheduled-offboardings deberia terminar una pasada
+                cada hora. Sin ella las bajas programadas vencidas no se aplican y
+                el recuento de las pendientes se queda congelado. Nadie puede fichar
+                despues de su cese, pero sus tarjetas siguen activas. Comprueba que
+                el planificador esta en marcha y lanza la tarea a mano.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  - name: tarea_sin_latido_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_scheduled_offboardings_overdue'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: ScheduledOffboardingTaskAbsent
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: ScheduledOffboardingTaskAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: workforce
+            exp_annotations:
+              summary: "La tarea de las bajas programadas lleva mas de 2 h sin correr"
+              description: >-
+                workforce:apply-scheduled-offboardings deberia terminar una pasada
+                cada hora. Sin ella las bajas programadas vencidas no se aplican y
+                el recuento de las pendientes se queda congelado. Nadie puede fichar
+                despues de su cese, pero sus tarjetas siguen activas. Comprueba que
+                el planificador esta en marcha y lanza la tarea a mano.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  - name: tarea_horaria_no_dispara
+    interval: 1m
+    input_series:
+      # Un latido cada hora, en segundos desde el instante 0.
+      - series: 'kronoqr_scheduled_offboardings_last_run_timestamp_seconds'
+        values: "0x59 3600x59 7200x59 10800x59 14400x59"
+    alert_rule_test:
+      - eval_time: 290m
+        alertname: ScheduledOffboardingTaskAbsent
+        exp_alerts: []

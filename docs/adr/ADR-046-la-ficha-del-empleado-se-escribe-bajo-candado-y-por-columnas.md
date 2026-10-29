@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada — **aprobada con condiciones** por `seguridad-cumplimiento` el 2 de octubre de 2026. Las condiciones A-1 a A-5 y las invariantes 1-9 del dictamen están incorporadas a este texto. A-2 se cumple con un orden distinto del que proponía el dictamen (§1.3), **aprobado por `seguridad-cumplimiento` el 2 de octubre de 2026 en su segunda pasada**, tras comprobarlo en el código |
+| **Estado** | Aceptada — **aprobada con condiciones** por `seguridad-cumplimiento` el 2 de octubre de 2026. Las condiciones A-1 a A-5 y las invariantes 1-9 del dictamen están incorporadas a este texto. A-2 se cumple con un orden distinto del que proponía el dictamen (§1.3), **aprobado por `seguridad-cumplimiento` el 2 de octubre de 2026 en su segunda pasada**, tras comprobarlo en el código. **Enmendada por [ADR-062](ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md) el 29-10-2026**: `terminated` deja de ser final por la readmisión, el disparador sobre el estado existe y la importación propone la readmisión (ver la enmienda al final) |
 | **Fecha** | 2 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 17 de la 2.2.0, hallazgos R7-RV-01 y R4-BE-01) · `seguridad-cumplimiento` (revisión y condiciones) |
 | **Afecta a** | Precisa [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) (orden de candados de la cadena, puerto `SerializedLedgerWrite`) y [ADR-002](ADR-002-arquitectura-hexagonal-en-el-nucleo.md) (variante ligera de `Workforce`) · `Workforce\Application\Port\EmployeeRepository`, `EloquentEmployeeRepository`, `EloquentEmployeePinRepository`, `HashedEmployeePinVerifier` · los casos de uso de §1.2 · listeners de `EmployeeOffboarded` (`Identity`, `Compliance`) |
@@ -316,3 +316,37 @@ Funcionales (dueños `backend-laravel` para las unitarias y `qa-testing` para el
 - Las de arquitectura de §6, puntos 9 y 10.
 - Del dominio, este ADR solo añade el caso `employee_terminated` a `ImportMessageCode` (un error, no un
   aviso), con su prueba unitaria.
+
+## Enmienda del 29-10-2026: baja programada y readmisión (ADR-062)
+
+[ADR-062](ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md)
+concreta las decisiones D16 y D17 del propietario (18-10-2026). Cambia este ADR en cuatro puntos. El
+orden de candados de §1, `FOR NO KEY UPDATE` de §2, la escritura por columnas de §3 y el *rehash* de
+§4 siguen tal cual.
+
+1. **`terminated` ya no es final.** Hay un camino legítimo que sale de él, la readmisión
+   (`RehireEmployeeHandler`), que abre un periodo de alta nuevo en la misma ficha. Es una escritura por
+   columnas más, `saveRehire()`. Escribe `status`, `hired_at` y `terminated_at` con el predicado
+   inverso, `WHERE uuid = ? AND status = 'terminated'`: cero filas es `EmployeeNotTerminated`
+   (`409`). `saveProfile()` y `saveTermination()` conservan su predicado `status <> 'terminated'`.
+   La corrección de la fecha de cese (ADR-062 §7) escribe solo `terminated_at`, con `status =
+   'terminated'`. Ningún método escribe la fila entera.
+2. **El disparador existe.** La alternativa descartada «Un disparador que impida salir de
+   `terminated`» se reconsidera, como anunciaba: `employees_guard_employment_transition` admite solo
+   las transiciones de ADR-062 §2 y responde `42501` a las demás. Desde que existe un camino
+   legítimo, el predicado ya no basta por sí solo.
+3. **El orden de candados crece a la derecha de la ficha**: filas padre → cadena → `employees` →
+   `employment_periods` y `employment_contracts` → `credentials` → sesiones del portal. La tarea que
+   aplica las bajas programadas (`ApplyDueOffboardings`), la anulación y la readmisión, individual o
+   en lote (en orden de `id`), siguen la regla general de §1.1. Se añaden a la tabla de §1.2 con sus
+   pruebas de §6, punto 3.
+4. **La importación ya no rechaza la fila de una persona de baja** (§5, primer punto): la planifica
+   como `rehire`, con el aviso `rehire_proposed` (ADR-062 §6). El código `employee_terminated` de
+   `ImportMessageCode` deja de emitirse, y se conserva en el enumerado para leer informes antiguos.
+   Los dos puntos siguientes de §5, la baja que confirma entre la comprobación y la aplicación o
+   dentro de la propia aplicación, no cambian.
+
+La prueba funcional del punto 6 de §6, «Baja con fecha futura: `422`…», se sustituye por la de la baja
+programada de ADR-062 (cese de hoy o futuro sin `apply_now`: persona en alta, tarjetas y portal sin cambios, asiento
+`employee.offboarding_scheduled`; cese de hoy con `apply_now`: baja en el acto; cese futuro con `apply_now`: `422`), con el mismo reloj falso, las mismas zonas y los mismos días de
+cambio de hora.

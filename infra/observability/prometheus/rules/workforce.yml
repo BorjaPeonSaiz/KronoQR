@@ -1,0 +1,63 @@
+# KronoQR — plantilla: la tarea que aplica las bajas programadas (RN-14, ADR-062 §4).
+#
+# `workforce:apply-scheduled-offboardings` corre cada hora y aplica cada baja
+# programada el dia civil siguiente a su cese, o como mucho al empezar el segundo
+# (el tope del aplazamiento por un turno de noche o una pausa del ultimo dia). Al
+# terminar cada pasada publica dos series en /metrics (Redis), sin etiquetas que
+# identifiquen a nadie:
+#
+# - `kronoqr_scheduled_offboardings_overdue`: las bajas programadas cuyo cese paso
+#   hace mas de un dia y siguen sin aplicar. Con la tarea sana vale 0; en el tope
+#   puede valer mas durante la hora que tarda la pasada siguiente, y por eso la
+#   espera es de dos horas. SOLO SE MUEVE SI LA PASADA CORRE: con la tarea parada
+#   se queda en el valor de la ultima.
+# - `kronoqr_scheduled_offboardings_last_run_timestamp_seconds`: cuando termino la
+#   ultima pasada. Es el latido, y lo que vigila que la tarea siga corriendo.
+#
+# NADIE FICHA DESPUES DEL CESE mientras tanto: la regla de las jornadas no depende
+# de la tarea. Lo que queda a medias es lo que la tarea hace: las tarjetas siguen
+# activas, el portal abierto y el asiento employee.offboarded sin escribir. Por eso
+# es Media y va al IT: la causa es tecnica, no de RRHH. Con Redis caido las dos
+# series desaparecen: la de vida salta y AlmacenDeMetricasCaido dice por que.
+
+groups:
+  - name: kronoqr-workforce
+    interval: 60s
+    rules:
+      - alert: ScheduledOffboardingOverdue
+        expr: kronoqr_scheduled_offboardings_overdue > 0
+        for: 2h
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: workforce
+        annotations:
+          summary: "Hay {{ $value }} baja(s) programada(s) sin aplicar mas de un dia despues de su cese"
+          description: >-
+            La ultima pasada de workforce:apply-scheduled-offboardings no ha
+            podido hacer efectiva una baja programada pasado su tope. Nadie ha
+            fichado despues del cese, pero sus tarjetas siguen activas y falta
+            el asiento employee.offboarded. Busca workforce.scheduled_offboarding_failed
+            y workforce.scheduled_offboarding_without_audit en el log y lanza
+            la tarea a mano (repetirla es seguro). Si la tarea ha dejado de
+            correr, lo dice ScheduledOffboardingTaskAbsent, no esta.
+          runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+      - alert: ScheduledOffboardingTaskAbsent
+        expr: >-
+          absent(kronoqr_scheduled_offboardings_last_run_timestamp_seconds)
+          or (time() - kronoqr_scheduled_offboardings_last_run_timestamp_seconds) > 7200
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: workforce
+        annotations:
+          summary: "La tarea de las bajas programadas lleva mas de 2 h sin correr"
+          description: >-
+            workforce:apply-scheduled-offboardings deberia terminar una pasada
+            cada hora. Sin ella las bajas programadas vencidas no se aplican y
+            el recuento de las pendientes se queda congelado. Nadie puede fichar
+            despues de su cese, pero sus tarjetas siguen activas. Comprueba que
+            el planificador esta en marcha y lanza la tarea a mano.
+          runbook_url: docs/runbooks/turno-abierto-prolongado.md

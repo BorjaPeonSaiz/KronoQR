@@ -51,7 +51,6 @@ it('la usan los endpoints que pueden responder que la persona ya esta de baja', 
         ->toBe('#/components/responses/EmployeeConflict');
 })->with([
     'modificacion' => ['/api/v1/employees/{uuid}', 'patch'],
-    'baja' => ['/api/v1/employees/{uuid}/offboard', 'post'],
     'restablecimiento del PIN' => ['/api/v1/employees/{uuid}/pin/reset', 'post'],
     'entrega del PIN' => ['/api/v1/employees/{uuid}/pin/deliver', 'post'],
 ])->group('RN-14', 'RF-GP-01', 'RF-GP-03', 'RF-ID-09');
@@ -64,3 +63,19 @@ it('la importacion declara los dos type de su 409', function (): void {
 
     expect(tiposDeLosEjemplosDeBaja($ejemplos))->toBe([ProblemDetails::TYPE_CONFLICT, ProblemDetails::TYPE_EMPLOYEE_TERMINATED]);
 })->group('RN-14', 'RF-GP-05');
+
+it('la baja declara en su 409 el de ya de baja, el de la baja programada vencida y el generico', function (): void {
+    // Reprogramar una baja cuyo cese ya paso es `offboarding-due` (ADR-062 §3),
+    // que el resto de la ficha no puede responder: por eso la baja tiene su
+    // propia respuesta y no la comun.
+    expect(Contract::value('paths', '/api/v1/employees/{uuid}/offboard', 'post', 'responses', '409', '$ref'))
+        ->toBe('#/components/responses/OffboardConflict');
+
+    $ejemplos = Contract::map('components', 'responses', 'OffboardConflict', 'content', 'application/problem+json', 'examples');
+
+    expect(tiposDeLosEjemplosDeBaja($ejemplos))->toBe([
+        ProblemDetails::TYPE_CONFLICT,
+        ProblemDetails::TYPE_EMPLOYEE_TERMINATED,
+        ProblemDetails::TYPE_OFFBOARDING_DUE,
+    ]);
+})->group('RN-14', 'RF-GP-03');

@@ -113,6 +113,37 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         $this->refuseIfNothingWritten($affected, $employee);
     }
 
+    public function dueScheduledOffboardings(string $today): array
+    {
+        /** @var list<string> $uuids */
+        $uuids = $this->scheduledOffboardingsDueBefore($today)
+            ->orderBy('id')
+            ->pluck('uuid')
+            ->all();
+
+        return $uuids;
+    }
+
+    public function countScheduledOffboardingsDueBefore(string $date): int
+    {
+        return $this->scheduledOffboardingsDueBefore($date)->count();
+    }
+
+    /**
+     * La baja programada se deriva del par estado–fecha (ADR-062 §3). La consulta
+     * la sirve el indice parcial `scheduled_offboardings`, que solo tiene esas
+     * filas.
+     *
+     * @return Builder<Employee>
+     */
+    private function scheduledOffboardingsDueBefore(string $date): Builder
+    {
+        return Employee::query()
+            ->where('status', '<>', EmploymentStatus::TERMINATED->value)
+            ->whereNotNull('terminated_at')
+            ->where('terminated_at', '<', $date);
+    }
+
     /**
      * La ficha por su UUID, **si no esta de baja** (ADR-046 §3).
      *

@@ -366,6 +366,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
                         $command->occurredAt,
                         $holder->issuedAt,
                         $holder->withdrawnAt ?? $recordedAt,
+                        $this->employmentEndOf($holder->terminatedOn, $holder->siteId),
                     ),
                 // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
                 // para la fila. Nulo en todo lo demas.
@@ -436,7 +437,29 @@ final readonly class RegisterScanHandler implements ScanRegistration
         // El primer instante de la fecha civil del alta, en la zona del centro.
         $hiredAt = WorkDate::fromIsoDate($employee->hiredOn, $timezone)->startsAt();
 
-        return (new WithdrawnCredentialPolicy)->requiresReview($command->occurredAt, $hiredAt, $recordedAt);
+        return (new WithdrawnCredentialPolicy)->requiresReview(
+            $command->occurredAt,
+            $hiredAt,
+            $recordedAt,
+            $employee->terminatedOn === null ? null : WorkDate::fromIsoDate($employee->terminatedOn, $timezone)->endsAt(),
+        );
+    }
+
+    /**
+     * El final del dia civil del cese en la zona del centro, o `null` sin cese o
+     * sin zona (RN-20, RN-14): despues de ese instante una tarjeta retirada no
+     * pide revision. La zona solo se consulta en este camino, el de una tarjeta
+     * autentica de alguien con fecha de cese.
+     */
+    private function employmentEndOf(?string $terminatedOn, ?int $siteId): ?DateTimeImmutable
+    {
+        if ($terminatedOn === null || $siteId === null) {
+            return null;
+        }
+
+        $timezone = $this->calendar->timezoneOf($siteId);
+
+        return $timezone instanceof DateTimeZone ? WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt() : null;
     }
 
     /**
@@ -534,72 +557,12 @@ final readonly class RegisterScanHandler implements ScanRegistration
             return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor->occurredAt, $flaggedForReview);
         }
 
-        // RN-18, el **fichaje irreconciliable**. Se pregunta al agregado —que es
-        // quien sabe que tramos tiene esta jornada y en que estado— si este
-        // escaneo puede llegar a encajar en ella, y si no puede se resuelve aqui
-        // de una vez.
-        //
-        // **La accion decidida viaja en la pregunta** porque hay dos formas de no
-        // encajar, una por camino: al cerrar, no ser posterior a la entrada del
-        // turno abierto (RN-03); al abrir, pisar un tramo **ya cerrado** que
-        // sigue vivo despues (RN-02). Las dos las contesta
-        // {@see WorkDay::outOfOrderScanFor()}, que es el unico sitio donde estan
-        // escritas, con sus dos limites opuestos.
-        //
-        // **Por que despues del anti-rebote y antes de decidir nada mas.** Un
-        // reenvio dentro de la ventana de gracia sigue siendo anti-rebote y viaja
-        // en su `200` (RF-AT-06, ADR-031): comprobar RN-18 antes convertiria en
-        // rechazo el reintento de un fichaje que ya se acepto. Y se comprueba
-        // antes de tocar la jornada porque a partir de aqui todo camino escribe.
-        //
-        // Lo que sigue **no lo reintenta nadie**: por eso es un rechazo con su
-        // propio resultado, marcado para revision (RN-15 marca por desfase; aqui
-        // la marca es la regla misma), y no una excepcion que el `catch` de
-        // carreras confundiria con contencion.
-        //
-        // **Lo que NO es un fichaje irreconciliable: la carrera.** La decision de
-        // abrir o cerrar se tomo con `hasOpenEntry` leido antes, y la jornada
-        // destino se carga despues, con una instantanea mas nueva: diez lecturas
-        // simultaneas de la misma tarjeta —`ScanIdempotencyConcurrencyTest`—
-        // producen a menudo una que decidio «abrir» sin ver turno abierto y se
-        // encuentra con el tramo del ganador ya abierto. Ese escaneo tiene que
-        // chocar contra RN-01, reintentar y salir por el anti-rebote, no llevarse
-        // un `422` por haber pasado la tarjeta a la vez que su companero (regla
-        // dura 19). Quien lo garantiza es el agregado, que en el camino de
-        // apertura **solo mira los tramos cerrados**; aqui no hace falta ninguna
-        // condicion, y ponerla dejaria RN-18 sin la mitad que cubre RN-02.
-        $outOfOrder = $workDay->outOfOrderScanFor($resolution->action, $command->occurredAt);
+        // Dos formas de que el escaneo no tenga sitio en la jornada, antes de
+        // escribir nada: despues del cese (RN-14) o irreconciliable (RN-18).
+        $unplaceable = $this->unplaceable($command, $recordedAt, $employee, $workDay, $resolution);
 
-        // **Y la mitad que el agregado no puede ver.** RN-02 es por empleado y
-        // **a traves de jornadas**; el agregado solo conoce la suya. Un turno de
-        // noche cerrado el 14 a las 22:00 y terminado el 15 a las 06:00 vive en
-        // la jornada del 14 (RN-05, regla dura 4), asi que una entrada encolada
-        // con `occurred_at` a las 02:00 del 15 carga una jornada vacia, no
-        // encuentra nada que contradecir y llega a `clockIn()` — donde la
-        // restriccion de exclusion la aborta con un `500`, tres reintentos y un
-        // `503` por elemento. Ese era el defecto original de RN-18, intacto por
-        // el otro lado.
-        //
-        // Se pregunta **solo al abrir**, que es cuando puede pasar: si esta
-        // resolucion cierra, hay un turno abierto, y ningun tramo cerrado vigente
-        // puede terminar despues de su entrada sin haber violado ya RN-02. Una
-        // consulta de mas por cada salida del cambio de turno no la paga nadie.
-        if (! $outOfOrder instanceof OutOfOrderScan && $resolution->opensEntry()) {
-            $overlapped = $this->workDays->closedEntryEndingAfter($employee->employeeUuid, $command->occurredAt);
-
-            if ($overlapped instanceof TimeRange) {
-                $outOfOrder = OutOfOrderScan::overlappingClosedEntry($overlapped, $command->occurredAt);
-            }
-        }
-
-        if ($outOfOrder instanceof OutOfOrderScan) {
-            return $this->reject(
-                $command,
-                $recordedAt,
-                $employee->employeeUuid,
-                ScanResult::REJECTED_OUT_OF_ORDER,
-                flaggedForReview: true,
-            );
+        if ($unplaceable instanceof RegisterScanResult) {
+            return $unplaceable;
         }
 
         if ($resolution->opensEntry()) {
@@ -679,6 +642,106 @@ final readonly class RegisterScanHandler implements ScanRegistration
             workDate: $workDay->workDate()->isoDate,
             workedMinutes: $workedMinutes,
         );
+    }
+
+    /**
+     * El rechazo de un escaneo que no tiene sitio en la jornada destino, o `null`
+     * si lo tiene: abriria un tramo despues del cese (RN-14) o no encaja con los
+     * tramos que ya hay (RN-18). Separado de {@see processResolved()} por la
+     * complejidad ciclomatica del §3.5.
+     */
+    private function unplaceable(
+        RegisterScanCommand $command,
+        DateTimeImmutable $recordedAt,
+        EmployeeSnapshot $employee,
+        WorkDay $workDay,
+        ClockingResolution $resolution,
+    ): ?RegisterScanResult {
+        // RN-14 (2.3.0): ningun tramo nuevo en una jornada posterior al cese,
+        // tambien con la baja programada que la tarea todavia no ha aplicado.
+        // Con la jornada destino ya resuelta: la salida del turno de noche y la
+        // vuelta de la pausa del ultimo dia son de la jornada del cese y pasan.
+        // Rechazo generico (regla dura 17), sin marca de revision: la tarjeta
+        // queda atribuida a su titular, como una tarjeta posterior a su retirada
+        // (RN-20); el PIN, sin persona.
+        if (ScanIntentPolicy::opensAfterTermination($resolution, $workDay->workDate(), $employee->terminatedOn)) {
+            return $this->reject(
+                $command,
+                $recordedAt,
+                $command->origin === ScanOrigin::QR_KIOSK ? $employee->employeeUuid : null,
+                ScanResult::REJECTED_UNKNOWN,
+            );
+        }
+
+        // RN-18, el **fichaje irreconciliable**. Se pregunta al agregado —que es
+        // quien sabe que tramos tiene esta jornada y en que estado— si este
+        // escaneo puede llegar a encajar en ella, y si no puede se resuelve aqui
+        // de una vez.
+        //
+        // **La accion decidida viaja en la pregunta** porque hay dos formas de no
+        // encajar, una por camino: al cerrar, no ser posterior a la entrada del
+        // turno abierto (RN-03); al abrir, pisar un tramo **ya cerrado** que
+        // sigue vivo despues (RN-02). Las dos las contesta
+        // {@see WorkDay::outOfOrderScanFor()}, que es el unico sitio donde estan
+        // escritas, con sus dos limites opuestos.
+        //
+        // **Por que despues del anti-rebote y antes de decidir nada mas.** Un
+        // reenvio dentro de la ventana de gracia sigue siendo anti-rebote y viaja
+        // en su `200` (RF-AT-06, ADR-031): comprobar RN-18 antes convertiria en
+        // rechazo el reintento de un fichaje que ya se acepto. Y se comprueba
+        // antes de tocar la jornada porque a partir de aqui todo camino escribe.
+        //
+        // Lo que sigue **no lo reintenta nadie**: por eso es un rechazo con su
+        // propio resultado, marcado para revision (RN-15 marca por desfase; aqui
+        // la marca es la regla misma), y no una excepcion que el `catch` de
+        // carreras confundiria con contencion.
+        //
+        // **Lo que NO es un fichaje irreconciliable: la carrera.** La decision de
+        // abrir o cerrar se tomo con `hasOpenEntry` leido antes, y la jornada
+        // destino se carga despues, con una instantanea mas nueva: diez lecturas
+        // simultaneas de la misma tarjeta —`ScanIdempotencyConcurrencyTest`—
+        // producen a menudo una que decidio «abrir» sin ver turno abierto y se
+        // encuentra con el tramo del ganador ya abierto. Ese escaneo tiene que
+        // chocar contra RN-01, reintentar y salir por el anti-rebote, no llevarse
+        // un `422` por haber pasado la tarjeta a la vez que su companero (regla
+        // dura 19). Quien lo garantiza es el agregado, que en el camino de
+        // apertura **solo mira los tramos cerrados**; aqui no hace falta ninguna
+        // condicion, y ponerla dejaria RN-18 sin la mitad que cubre RN-02.
+        $outOfOrder = $workDay->outOfOrderScanFor($resolution->action, $command->occurredAt);
+
+        // **Y la mitad que el agregado no puede ver.** RN-02 es por empleado y
+        // **a traves de jornadas**; el agregado solo conoce la suya. Un turno de
+        // noche cerrado el 14 a las 22:00 y terminado el 15 a las 06:00 vive en
+        // la jornada del 14 (RN-05, regla dura 4), asi que una entrada encolada
+        // con `occurred_at` a las 02:00 del 15 carga una jornada vacia, no
+        // encuentra nada que contradecir y llega a `clockIn()` — donde la
+        // restriccion de exclusion la aborta con un `500`, tres reintentos y un
+        // `503` por elemento. Ese era el defecto original de RN-18, intacto por
+        // el otro lado.
+        //
+        // Se pregunta **solo al abrir**, que es cuando puede pasar: si esta
+        // resolucion cierra, hay un turno abierto, y ningun tramo cerrado vigente
+        // puede terminar despues de su entrada sin haber violado ya RN-02. Una
+        // consulta de mas por cada salida del cambio de turno no la paga nadie.
+        if (! $outOfOrder instanceof OutOfOrderScan && $resolution->opensEntry()) {
+            $overlapped = $this->workDays->closedEntryEndingAfter($employee->employeeUuid, $command->occurredAt);
+
+            if ($overlapped instanceof TimeRange) {
+                $outOfOrder = OutOfOrderScan::overlappingClosedEntry($overlapped, $command->occurredAt);
+            }
+        }
+
+        if ($outOfOrder instanceof OutOfOrderScan) {
+            return $this->reject(
+                $command,
+                $recordedAt,
+                $employee->employeeUuid,
+                ScanResult::REJECTED_OUT_OF_ORDER,
+                flaggedForReview: true,
+            );
+        }
+
+        return null;
     }
 
     /**

@@ -7,7 +7,11 @@ namespace App\Modules\Workforce\Domain\Model;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
+use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
+use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
+use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingDue;
+use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingNotDue;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
 use InvalidArgumentException;
@@ -176,52 +180,161 @@ final readonly class Employee
     }
 
     /**
-     * Baja **logica** (RF-GP-03, regla dura 5): cambia el estado y fija la fecha.
+     * Baja **logica** (RF-GP-03, regla dura 5): fija la fecha de cese y, si toca,
+     * cambia el estado. Nada se borra: la ficha, sus tramos y sus jornadas siguen
+     * ahi (RL-02).
      *
-     * Nada se borra. La ficha, sus tramos y sus jornadas siguen ahi: el registro
-     * horario se conserva cuatro anos (RL-02) y una inspeccion puede pedir el de
-     * alguien que ya no trabaja en el hotel.
+     * **En el acto o programada, segun la fecha** (RN-14):
      *
-     * **La baja es efectiva al registrarla** (RN-14, 2.2.0): por eso la fecha de
-     * cese no puede ser posterior a hoy. Se admite hoy y el pasado hasta el alta
-     * incluida. Si el alta aun no ha llegado —una contratacion que se cae antes
-     * de empezar—, la unica fecha admitida es la del alta: una baja sin efectos.
+     * | Cese | Sin `$applyNow` | Con `$applyNow` |
+     * |---|---|---|
+     * | Anterior al alta | {@see InvalidEmploymentPeriod} | igual |
+     * | Anterior a hoy | en el acto | igual |
+     * | Hoy | programada | en el acto |
+     * | Posterior a hoy | programada | {@see ImmediateOffboardingNotDue} |
+     * | Alta futura y cese igual al alta | programada (el extra de un solo dia) | en el acto, sin efectos |
      *
-     * Las dos fechas son **civiles** y se comparan como `Y-m-d`, nunca como
+     * **Programada** es el mismo estado con fecha de cese: la persona sigue en
+     * alta (o suspendida) y ficha hasta ese dia. No hay un estado nuevo; lo dice
+     * {@see self::isOffboardingScheduled()}. Llamarlo otra vez sobre una baja
+     * programada la reprograma con la fecha nueva, o la hace efectiva si la nueva
+     * lo pide.
+     *
+     * Las fechas son **civiles** y se comparan como `Y-m-d`, nunca como
      * instantes. `$today` es la fecha civil del centro en el instante en que el
      * servidor recibe la baja, y la resuelve el caso de uso con el puerto `Clock`
-     * y la zona del centro (regla dura 2): aqui no se calcula ninguna fecha. El
-     * huso del objeto no importa, solo su fecha.
+     * y la zona del centro (regla dura 2). `$applyNow` es un dato de la
+     * decision, no del canal: la peticion lo valida primero, pero lo garantiza
+     * este metodo.
      *
      * @throws EmployeeAlreadyTerminated
      * @throws InvalidEmploymentPeriod
+     * @throws ImmediateOffboardingNotDue
+     * @throws ScheduledOffboardingDue cuando se cambia la fecha de una baja programada cuyo cese ya paso
      */
-    public function offboard(DateTimeImmutable $terminatedOn, DateTimeImmutable $today): self
+    public function offboard(DateTimeImmutable $terminatedOn, DateTimeImmutable $today, bool $applyNow = false): self
     {
-        if ($this->status === EmploymentStatus::TERMINATED) {
-            throw EmployeeAlreadyTerminated::withUuid($this->uuid);
-        }
+        $this->refuseIfTerminated();
 
         $termination = self::civilDate($terminatedOn);
         $hiring = self::civilDate($this->hiredAt);
         $todayDate = self::civilDate($today);
 
-        if ($hiring > $todayDate) {
-            // El alta todavia no ha llegado: la persona no ha trabajado ningun
-            // dia, y la unica baja coherente es la que no deja ninguno.
-            if ($termination !== $hiring) {
-                throw InvalidEmploymentPeriod::notStartedTerminationMustBeHireDate($termination, $hiring);
-            }
-        } elseif ($termination > $todayDate) {
-            throw InvalidEmploymentPeriod::terminationAfterToday($termination, $todayDate);
+        $this->refuseToMoveDueOffboarding($termination, $today);
+
+        // Antes que «Aplicar ya»: una fecha imposible se corrige en su campo.
+        if ($termination < $hiring) {
+            throw InvalidEmploymentPeriod::terminationBeforeHiring($termination, $hiring);
         }
 
-        // Anterior al alta lo rechaza el constructor, con su propio texto.
+        $effectiveNow = self::takesEffectNow($termination, $hiring, $todayDate, $applyNow);
+
+        if (! $effectiveNow && $applyNow) {
+            throw ImmediateOffboardingNotDue::forTermination($termination, $todayDate);
+        }
+
         return $this->with(
-            status: EmploymentStatus::TERMINATED,
+            status: $effectiveNow ? EmploymentStatus::TERMINATED : $this->status,
             terminatedAt: $terminatedOn->setTime(0, 0),
             terminatedAtGiven: true,
         );
+    }
+
+    /**
+     * La tabla de {@see self::offboard()}: con estas fechas, ¿la baja es en el
+     * acto? Todas son fechas civiles `Y-m-d`.
+     */
+    private static function takesEffectNow(string $termination, string $hiring, string $today, bool $applyNow): bool
+    {
+        return $termination < $today
+            || ($applyNow && ($termination === $today
+                // La contratacion que no llego a empezar: con el cese en su
+                // alta futura, «Aplicar ya» es la baja sin efectos. Sin el, es el
+                // extra de un solo dia y se programa como cualquier otra.
+                || ($hiring > $today && $termination === $hiring)));
+    }
+
+    /**
+     * Una baja programada solo cambia de fecha mientras su cese no ha pasado:
+     * pasado, ya rige. La misma fecha si se admite, y por la tabla de
+     * {@see self::offboard()} la hace efectiva en el acto.
+     *
+     * @throws ScheduledOffboardingDue
+     */
+    private function refuseToMoveDueOffboarding(string $termination, DateTimeImmutable $today): void
+    {
+        if (! $this->isOffboardingDue($today) || ! $this->terminatedAt instanceof DateTimeImmutable) {
+            return;
+        }
+
+        $current = self::civilDate($this->terminatedAt);
+
+        if ($current !== $termination) {
+            throw ScheduledOffboardingDue::forReschedule($current, self::civilDate($today));
+        }
+    }
+
+    /**
+     * Anula una baja programada (RN-14): la ficha pierde su fecha de cese y sigue
+     * como estaba. Solo **mientras el cese no haya pasado** (hoy <= cese): pasada
+     * la fecha la baja ya rige por la regla de las jornadas, la haya aplicado la
+     * tarea o no, y deshacerla borraria el hecho de que no podia fichar.
+     *
+     * @throws EmployeeAlreadyTerminated
+     * @throws OffboardingNotScheduled
+     * @throws ScheduledOffboardingDue
+     */
+    public function cancelScheduledOffboarding(DateTimeImmutable $today): self
+    {
+        $this->refuseIfTerminated();
+
+        if (! $this->terminatedAt instanceof DateTimeImmutable) {
+            throw OffboardingNotScheduled::withUuid($this->uuid);
+        }
+
+        $termination = self::civilDate($this->terminatedAt);
+        $todayDate = self::civilDate($today);
+
+        if ($termination < $todayDate) {
+            throw ScheduledOffboardingDue::forTermination($termination, $todayDate);
+        }
+
+        return $this->with(status: $this->status, terminatedAt: null, terminatedAtGiven: true);
+    }
+
+    /**
+     * La tarea del sistema hace efectiva una baja programada **vencida**: su
+     * fecha de cese es anterior a hoy (RN-14). La fecha no cambia, aunque la
+     * tarea llegue dias tarde: es la del cese, no la de la aplicacion.
+     *
+     * @throws ScheduledOffboardingNotDue cuando no hay baja programada o no ha vencido
+     */
+    public function applyScheduledOffboarding(DateTimeImmutable $today): self
+    {
+        if (! $this->isOffboardingDue($today)) {
+            throw ScheduledOffboardingNotDue::withUuid($this->uuid);
+        }
+
+        return $this->with(status: EmploymentStatus::TERMINATED);
+    }
+
+    /**
+     * Baja programada: tiene fecha de cese y la baja aun no es efectiva. Se
+     * deriva del par estado–fecha y no de un valor propio de `status`.
+     */
+    public function isOffboardingScheduled(): bool
+    {
+        return $this->status !== EmploymentStatus::TERMINATED && $this->terminatedAt instanceof DateTimeImmutable;
+    }
+
+    /**
+     * Baja programada cuyo cese es anterior a hoy: la tarea ya la puede aplicar.
+     */
+    public function isOffboardingDue(DateTimeImmutable $today): bool
+    {
+        return $this->isOffboardingScheduled()
+            && $this->terminatedAt instanceof DateTimeImmutable
+            && self::civilDate($this->terminatedAt) < self::civilDate($today);
     }
 
     /**

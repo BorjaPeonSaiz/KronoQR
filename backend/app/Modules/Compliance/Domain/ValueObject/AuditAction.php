@@ -263,6 +263,23 @@ enum AuditAction: string
     case EmployeeOffboarded = 'employee.offboarded';
 
     /**
+     * La baja **programada** y su anulacion (**RN-14**, **RF-GP-03**, ADR-062 §9).
+     *
+     * Programar una baja no revoca nada todavia, pero fija desde que dia esa
+     * persona deja de tener jornadas: desde que existe la fecha, ningun tramo
+     * puede caer despues. Por eso tiene asiento propio, con quien la programo y
+     * cuando, y tambien lo tiene la anulacion. La baja que la tarea aplica al
+     * vencer es {@see self::EmployeeOffboarded} con actor `system`: el mismo hecho
+     * legal que la baja en el acto, no una accion nueva.
+     *
+     * El payload lleva `employee_uuid` y fechas (`terminated_on`, y
+     * `previous_terminated_on` al reprogramar), nunca el motivo libre (regla dura
+     * 21).
+     */
+    case EmployeeOffboardingScheduled = 'employee.offboarding_scheduled';
+    case EmployeeOffboardingCancelled = 'employee.offboarding_cancelled';
+
+    /**
      * Alta y cambio de un departamento (**RF-GP-02**, **RF-ID-03**, AUD-2).
      *
      * Familia «cambia roles, permisos o parametros del calculo»: un departamento

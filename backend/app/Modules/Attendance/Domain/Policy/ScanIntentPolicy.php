@@ -152,6 +152,30 @@ final readonly class ScanIntentPolicy
     }
 
     /**
+     * **Ningun tramo nuevo despues del cese** (RN-14, RN-05, 2.3.0): `true` si
+     * este escaneo abriria un tramo en una jornada posterior a la fecha de cese
+     * de la persona, la fije una baja efectiva o una programada que la tarea aun
+     * no ha aplicado.
+     *
+     * Se pregunta con la jornada **ya resuelta** (`$workDate`, la del agregado
+     * destino), no con la fecha civil del escaneo, y por eso no corta lo que la
+     * jornada del cese todavia admite (regla dura 4):
+     *
+     * - la salida del turno de noche del ultimo dia cierra un tramo, no abre uno;
+     * - la vuelta de una pausa abre un tramo en la jornada que la pausa cerro, la
+     *   del cese;
+     * - la entrada del dia siguiente abre la jornada siguiente, y esa no.
+     *
+     * Quien llama rechaza con el rechazo generico (regla dura 17, RS-03). La
+     * persona no se queda sin fichar nada que le correspondiera: despues del cese
+     * no hay jornada que registrar.
+     */
+    public static function opensAfterTermination(ClockingResolution $resolution, WorkDate $workDate, ?string $terminatedOn): bool
+    {
+        return $terminatedOn !== null && $resolution->opensEntry() && $workDate->isoDate > $terminatedOn;
+    }
+
+    /**
      * Sin tramo abierto solo se puede abrir uno; lo que se decide aqui es **en
      * que jornada**.
      *
@@ -200,30 +224,36 @@ final readonly class ScanIntentPolicy
      */
     private function breakToContinue(DateTimeImmutable $scanAt, ?AcceptedScan $lastAccepted): ?string
     {
-        if (! $lastAccepted instanceof AcceptedScan) {
-            return null;
+        return $lastAccepted instanceof AcceptedScan && $this->breakMayStillEnd($lastAccepted, $scanAt)
+            ? $lastAccepted->breakInProgressShiftEntry()
+            : null;
+    }
+
+    /**
+     * **¿Puede todavia volverse en `$at` de la pausa que dejo `$lastAccepted`?**
+     * Es la regla de {@see breakToContinue()}, publica porque la necesita
+     * tambien quien pregunta si la jornada del cese aun puede crecer (RN-14): la
+     * vuelta de una pausa del ultimo dia es un tramo de esa jornada.
+     *
+     * Las tres condiciones de arriba, mas el tope de RN-05 (2.3.0): una jornada
+     * se continua, como mucho, hasta el dia civil siguiente al suyo. Una vuelta
+     * posterior abre jornada nueva; nunca se rechaza (regla dura 19).
+     */
+    public function breakMayStillEnd(AcceptedScan $lastAccepted, DateTimeImmutable $at): bool
+    {
+        if ($lastAccepted->breakInProgressShiftEntry() === null || ! $lastAccepted->precedes($at)) {
+            return false;
         }
 
-        $continues = $lastAccepted->breakInProgressShiftEntry();
-
-        if ($continues === null || ! $lastAccepted->precedes($scanAt)) {
-            return null;
-        }
-
-        // RN-05, el tope (2.3.0): una jornada se continua, como mucho, hasta el
-        // dia civil siguiente al suyo. Una vuelta posterior abre jornada nueva;
-        // nunca se rechaza (regla dura 19).
         $workDate = $lastAccepted->workDate;
 
-        if ($workDate instanceof WorkDate && $scanAt >= $workDate->next()->endsAt()) {
-            return null;
+        if ($workDate instanceof WorkDate && $at >= $workDate->next()->endsAt()) {
+            return false;
         }
 
         // Estricto: con 12 h de descanso minimo, 11 h 59 sigue siendo pausa y
         // 12 h 00 exactas ya son dos jornadas. Misma semantica `[inicio, fin)`
         // que el resto del dominio, y la misma cota que el alta manual.
-        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $scanAt)
-            ? $continues
-            : null;
+        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $at);
     }
 }

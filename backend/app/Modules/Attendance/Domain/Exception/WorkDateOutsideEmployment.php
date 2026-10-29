@@ -7,9 +7,10 @@ namespace App\Modules\Attendance\Domain\Exception;
 use App\Modules\Shared\Domain\Exception\BusinessRejection;
 
 /**
- * Un tramo escrito a mano para una persona **dada de baja** cae en una jornada
- * fuera de su periodo de empleo: posterior a su fecha de cese o anterior a su
- * fecha de alta (RN-14, RF-PA-04, 2.2.0).
+ * Un tramo escrito a mano cae en una jornada fuera del periodo de empleo: para
+ * una persona **dada de baja**, posterior a su fecha de cese o anterior a su
+ * fecha de alta (RN-14, RF-PA-04, 2.2.0); para una con la **baja programada**,
+ * posterior a su fecha de cese (2.3.0).
  *
  * Tras la baja se pueden completar a mano los dias trabajados hasta el cese
  * —un olvido de los ultimos dias, un fichaje de la cola offline que llego
@@ -44,6 +45,24 @@ final class WorkDateOutsideEmployment extends AttendanceDomainException implemen
                 'The work date %s is outside the employment period %s..%s of an offboarded employee (RN-14).',
                 $workDate,
                 $hiredOn,
+                $terminatedOn,
+            ),
+        );
+    }
+
+    /**
+     * Una persona con la **baja programada** (en alta, con fecha de cese): la
+     * jornada es posterior a su cese (RN-14, 2.3.0). Desde que hay fecha de cese
+     * ningun tramo nuevo cae despues, aunque la baja aun no se haya aplicado.
+     */
+    public static function afterTermination(string $workDate, string $terminatedOn): self
+    {
+        return new self(
+            'attendance.errors.work_date_after_termination',
+            ['terminated_on' => $terminatedOn],
+            sprintf(
+                'The work date %s is after the termination date %s of a scheduled offboarding (RN-14).',
+                $workDate,
                 $terminatedOn,
             ),
         );

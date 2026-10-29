@@ -45,16 +45,28 @@ final readonly class CredentialHolder
          * baja: entonces el caso de uso compara con la recepcion del escaneo.
          */
         public ?DateTimeImmutable $withdrawnAt,
+        /**
+         * Fecha civil de cese del titular (`Y-m-d`), si la tiene, y el centro
+         * en cuya zona se lee (RN-14, 2.3.0). Despues de ese dia no hay jornada
+         * que revisar, aunque la tarjeta se retirara mas tarde.
+         */
+        public ?string $terminatedOn = null,
+        public ?int $siteId = null,
     ) {}
 
-    public static function of(string $employeeUuid, DateTimeImmutable $issuedAt, ?DateTimeImmutable $withdrawnAt): self
-    {
+    public static function of(
+        string $employeeUuid,
+        DateTimeImmutable $issuedAt,
+        ?DateTimeImmutable $withdrawnAt,
+        ?string $terminatedOn = null,
+        ?int $siteId = null,
+    ): self {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('Un titular de credencial necesita su UUID.');
         }
 
         $utc = new DateTimeZone('UTC');
 
-        return new self($employeeUuid, $issuedAt->setTimezone($utc), $withdrawnAt?->setTimezone($utc));
+        return new self($employeeUuid, $issuedAt->setTimezone($utc), $withdrawnAt?->setTimezone($utc), $terminatedOn, $siteId);
     }
 }

@@ -7,6 +7,9 @@ use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Identity\Application\Command\RotateSigningKeyCommand;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
+use App\Modules\Workforce\Application\UseCase\ApplyDueOffboardings;
+use App\Modules\Workforce\Application\UseCase\OffboardEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\PlanEmployeeImport;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -109,7 +112,7 @@ function bajaEnLaCarrera(string $token, string $persona): callable
 {
     return static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post(
         '/api/v1/employees/'.$persona.'/offboard',
-        ['terminated_at' => OFFBOARD_UPDATE_RACE_LAST_DAY, 'reason' => 'Fin de contrato'],
+        ['terminated_at' => OFFBOARD_UPDATE_RACE_LAST_DAY, 'reason' => 'Fin de contrato', 'apply_now' => true],
     ));
 }
 
@@ -585,3 +588,113 @@ it('treinta altas a la vez que dos modificaciones que escriben el mismo correo: 
         ->and(array_unique($exitosPorRonda))->toBe([1])
         ->and(DB::table('employees')->where('email', 'like', 'compartido.%')->count())->toBe(OFFBOARD_UPDATE_RACE_ROUNDS);
 })->group('RF-GP-01', 'RL-04');
+
+it('treinta fichajes del dia del cese a la vez que la tarea de las bajas programadas: ningun tramo despues del cese', function (): void {
+    // ADR-062 §5. La persona tiene la baja programada con cese ayer y la cola de
+    // la tablet entrega una entrada de ese dia mientras pasa la tarea: o el
+    // tramo confirma antes y la tarea aplaza (la jornada del cese sigue
+    // abierta), o la tarea confirma antes y el fichaje se rechaza, o se cruzan y
+    // la persona queda de baja con un tramo abierto DE LA JORNADA DEL CESE, que
+    // es legal. Otra persona en la misma situacion ficha a la vez una entrada de
+    // hoy: se rechaza siempre, haya pasado la tarea o no.
+    $site = WorkforceFixtures::site('Hotel de la carrera');
+    $quiosco = AttendanceFixtures::tokenFor(AttendanceFixtures::device($site)['id']);
+    app()->instance(ScanMetrics::class, new RecordingScanMetrics);
+
+    $tanda = tandaContraLaBaja(static function (int $ronda) use ($quiosco): array {
+        $ultimoDia = personaParaLaCarrera($ronda);
+        $diaSiguiente = personaParaLaCarrera($ronda + 1000);
+        programarBajaEnLaCarrera($ultimoDia, '2026-10-01');
+        programarBajaEnLaCarrera($diaSiguiente, '2026-10-01');
+        app()->instance(
+            CredentialResolver::class,
+            FakeCredentialResolver::new()
+                ->resolving(OFFBOARD_UPDATE_RACE_CARD, $ultimoDia)
+                ->resolving(OFFBOARD_UPDATE_RACE_CARD.'b', $diaSiguiente),
+        );
+        $escaneo = static fn (string $tarjeta, string $instante): callable => static function () use ($quiosco, $tarjeta, $instante): string {
+            $scanId = Str::uuid7()->toString();
+
+            return desenlaceHttpDeLaCarrera(Api::as($quiosco)
+                ->withHeaders(['Idempotency-Key' => $scanId])
+                ->post('/api/v1/scan', ['scan_id' => $scanId, 'occurred_at' => $instante, 'qr_payload' => $tarjeta]));
+        };
+
+        return [
+            $escaneo(OFFBOARD_UPDATE_RACE_CARD, '2026-10-01T15:00:00Z'),
+            $escaneo(OFFBOARD_UPDATE_RACE_CARD.'b', '2026-10-02T09:59:00Z'),
+            static function (): string {
+                try {
+                    return 'task:'.app(ApplyDueOffboardings::class)->handle()->failed;
+                } catch (QueryException $exception) {
+                    return 'sqlstate:'.$exception->getCode();
+                }
+            },
+        ];
+    });
+
+    /** @var list<object{uuid: string}> $tramosTrasElCese */
+    $tramosTrasElCese = DB::select(<<<'SQL'
+        SELECT e.uuid::text AS uuid
+          FROM shift_entries s
+          JOIN employees e ON e.id = s.employee_id
+         WHERE e.terminated_at IS NOT NULL
+           AND s.work_date > e.terminated_at
+    SQL);
+
+    expect(desenlacesImposibles($tanda['rondas']))->toBe([])
+        ->and($tanda['abrazos'])->toBe(0)
+        ->and(contradiccionesTrasLaCarrera())->toBe([])
+        ->and($tramosTrasElCese)->toBe([])
+        ->and(array_diff(array_keys(desenlacesEnLaPosicion($tanda['rondas'], 0)), ['http:200', 'http:422']))->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 1))->toBe(['http:422' => OFFBOARD_UPDATE_RACE_ROUNDS])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 2))->toBe(['task:0' => OFFBOARD_UPDATE_RACE_ROUNDS]);
+})->group('RN-14', 'RN-05', 'RF-GP-03', 'RL-04');
+
+/**
+ * Programa la baja por el caso de uso, con su asiento, antes del cese: la tarea
+ * no aplica una baja sin el. Vuelve al reloj de la carrera.
+ */
+function programarBajaEnLaCarrera(string $persona, string $cese): void
+{
+    FrozenTime::at('2026-09-30 10:00:00');
+    app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand($persona, $cese));
+    FrozenTime::at(OFFBOARD_UPDATE_RACE_NOW);
+}
+
+it('treinta anulaciones y reprogramaciones a la vez que la tarea de las bajas programadas: una sola baja y ningun abrazo mortal', function (): void {
+    // ADR-062 §5, fila 4. Con el cese pasado, la anulacion responde siempre 409
+    // (offboarding-due), haya pasado la tarea o no; la misma fecha la aplica en
+    // el acto, y compite con la tarea: la que llega segunda relee y ve la baja
+    // ya efectiva (409 employee-terminated, o la tarea no hace nada).
+    WorkforceFixtures::site('Hotel de la carrera');
+    $token = tokenDeLaCarrera();
+
+    $tanda = tandaContraLaBaja(static function (int $ronda) use ($token): array {
+        $persona = personaParaLaCarrera($ronda);
+        programarBajaEnLaCarrera($persona, '2026-10-01');
+
+        return [
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post('/api/v1/employees/'.$persona.'/offboard/cancel')),
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post(
+                '/api/v1/employees/'.$persona.'/offboard',
+                ['terminated_at' => '2026-10-01'],
+            )),
+            static function (): string {
+                try {
+                    return 'task:'.app(ApplyDueOffboardings::class)->handle()->failed;
+                } catch (QueryException $exception) {
+                    return 'sqlstate:'.$exception->getCode();
+                }
+            },
+        ];
+    });
+
+    expect(desenlacesImposibles($tanda['rondas']))->toBe([])
+        ->and($tanda['abrazos'])->toBe(0)
+        ->and(contradiccionesTrasLaCarrera())->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 0))->toBe(['http:409' => OFFBOARD_UPDATE_RACE_ROUNDS])
+        ->and(array_diff(array_keys(desenlacesEnLaPosicion($tanda['rondas'], 1)), ['http:200', 'http:409']))->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 2))->toBe(['task:0' => OFFBOARD_UPDATE_RACE_ROUNDS])
+        ->and(DB::table('employees')->where('status', 'terminated')->count())->toBe(OFFBOARD_UPDATE_RACE_ROUNDS);
+})->group('RN-14', 'RF-GP-03', 'RL-04');

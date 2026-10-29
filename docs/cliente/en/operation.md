@@ -895,6 +895,8 @@ stopped running):
 | `EspacioEnDiscoBajo` | < 20 % free on `/` | High | IT | [`espacio-en-disco.md`](../../runbooks/espacio-en-disco.md) (in Spanish) | `docker system df`; free up old images before touching anything in the record |
 | `MetricasDelAnfitrionAusentes` | No host metrics | Medium | IT | [`espacio-en-disco.md`](../../runbooks/espacio-en-disco.md) (in Spanish) | Check that `node-exporter` is still up |
 | `TurnoAbiertoProlongado` | Shift open > 12 h | Medium | HR | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Ask the person what time they left; the system never closes the shift on its own |
+| `ScheduledOffboardingOverdue` | `kronoqr_scheduled_offboardings_overdue > 0` for 2 h: a scheduled offboarding is still not applied more than a day after its termination date | Medium | IT | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) §7 | Nobody has clocked in after the termination date; run `workforce:apply-scheduled-offboardings` by hand and check why it failed |
+| `ScheduledOffboardingTaskAbsent` | `kronoqr_scheduled_offboardings_last_run_timestamp_seconds` has not moved for more than 2 h, or is missing, for 30 min: the scheduled offboardings task is not running | Medium | IT | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) §7 | Check the `scheduler` and run `workforce:apply-scheduled-offboardings` by hand |
 | `DescansoEntreJornadasInsuficiente` | Rest below the legal minimum | Medium | HR | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Check that the hours are correct before treating it as a scheduling matter |
 | `MetricaDeIncidenciasAusente` / `DeteccionDeIncidenciasAusente` | Silence of the nightly detection | Medium | IT | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Check that the `scheduler` is still alive |
 | `DeteccionDeIncidenciasConFallos` | Last night's run failed | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor`, and if it points at the reconciliation, follow that runbook instead |
@@ -2040,6 +2042,26 @@ record file** an employee downloads from the portal is called
 system writes when it revokes the card of someone who left reads «Employee
 left (RN-14)»; in the database and the audit log it is still stored the same
 way.
+
+**When updating to 2.3.0: an offboarding dated today or later is scheduled.**
+Up to 2.2.x an offboarding took effect as soon as it was recorded and a future
+termination date was rejected. From 2.3.0 **a termination date of today or
+later schedules the offboarding**: the person stays employed, with their card,
+PIN and portal, and clocks in until their last day, including the clock-out of
+their last night shift. A system task (`workforce:apply-scheduled-offboardings`,
+every hour) makes it effective the day after the termination date, with the
+usual effect: cards revoked, portal closed and the `employee.offboarded` audit
+entry, here with the `system` actor. If the person still has the last day's shift
+or a break open, it waits, at most until the second day after the termination
+date. **For a dismissal with immediate effect**, tick «Apply now» with today's
+date. A scheduled offboarding can be cancelled or moved while its termination
+date has not passed. From the moment there is a termination date, **nobody can
+clock in or record hours on a later work day**, even if the task has not applied
+it yet. Offboardings already recorded do not change. If the task cannot apply an
+offboarding, `ScheduledOffboardingOverdue` fires and `./doctor.sh` says so
+(`scheduler.scheduled_offboardings`); what to do is in
+[`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in
+Spanish) §7.
 
 ### 11.1 The tablet app: when it changes version
 

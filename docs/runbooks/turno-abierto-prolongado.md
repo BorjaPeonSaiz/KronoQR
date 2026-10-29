@@ -215,3 +215,58 @@ tanto **no se pierden**: la pasada revisa los últimos días y, además, todos l
 **Una incidencia sin responsable no se pierde**: sigue abierta y visible en la
 bandeja, pero **nadie recibe el aviso por correo**. Si aparecen varias, lo que
 falta es asignar el responsable del departamento en el panel.
+
+---
+
+## 7. Las bajas programadas (`ScheduledOffboardingOverdue` y `ScheduledOffboardingTaskAbsent`)
+
+**Qué las dispara.**
+
+- `ScheduledOffboardingOverdue`: `kronoqr_scheduled_offboardings_overdue > 0`
+  durante 2 h. La **última pasada** de la tarea `workforce:apply-scheduled-offboardings`
+  encontró bajas programadas cuya fecha de cese pasó hace más de un día y no pudo
+  hacerlas efectivas. La serie solo se mueve cuando la tarea corre: con la tarea
+  parada se queda como estaba, y esta alerta no lo ve.
+- `ScheduledOffboardingTaskAbsent`: la tarea lleva más de 2 h sin terminar una pasada
+  (`kronoqr_scheduled_offboardings_last_run_timestamp_seconds`), o la serie no
+  existe, durante 30 min. Es la que avisa del planificador parado.
+
+Las dos, severidad media, para el IT del cliente.
+
+**Qué significa, y qué no.** La tarea corre cada hora y aplica cada baja programada
+el día civil siguiente al cese. Si la persona tenía un turno abierto o una pausa del
+último día, espera, como mucho hasta que empieza el segundo día después del cese
+(RN-14). Pasado ese tope, la serie de pendientes no debería valer más de 0 durante
+más de una pasada. **Nadie ha fichado después del cese**: ningún tramo puede caer en
+una jornada posterior a la fecha de cese, se haya aplicado la baja o no. Lo que queda
+a medias es lo que hace la tarea: las tarjetas de esa persona siguen activas, su
+portal abierto, y falta el asiento `employee.offboarded` con actor `system`.
+
+**Una baja que la tarea se niega a aplicar.** Antes de aplicar, la tarea comprueba
+que la fecha de cese la programó alguien desde el panel, con su asiento
+`employee.offboarding_scheduled`. Si la fecha se escribió por fuera del producto,
+no la aplica: deja `workforce.scheduled_offboarding_without_audit` en el log y la
+persona sigue pendiente. **Eso no es una avería: es una escritura directa en la
+base** que hay que explicar. Mira quién la hizo antes de tocar nada
+([`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md)) y, si
+la baja es real, regístrala desde el panel.
+
+**Qué hacer.**
+
+```bash
+# ¿Corre el planificador?
+docker compose ps scheduler
+# ¿Por qué falló? Una línea por persona, con employee_uuid y la clase del error
+docker compose logs --since 3h scheduler | grep workforce.scheduled_offboarding_failed
+# ¿Alguna sin asiento de programación?
+docker compose logs --since 3h scheduler | grep workforce.scheduled_offboarding_without_audit
+# Lánzala a mano: repetirla es seguro y no deja asientos dobles
+docker compose exec -T app php artisan workforce:apply-scheduled-offboardings
+```
+
+`./doctor.sh` lo comprueba también (`scheduler.scheduled_offboardings`) contra la
+base, sin necesidad de Alertmanager y aunque la tarea lleve días sin correr. Si la
+orden a mano falla con la misma persona, el motivo queda además en el histórico de
+errores del panel ([`errores-en-el-panel.md`](errores-en-el-panel.md) §3). Si tras
+aplicarla la persona sigue con un turno abierto del último día, se cierra con una
+corrección, como cualquier turno abierto (§3 de este documento).

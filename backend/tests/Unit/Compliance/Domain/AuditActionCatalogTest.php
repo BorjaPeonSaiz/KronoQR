@@ -261,3 +261,21 @@ it('distingue la restauracion manual de la vuelta atras del actualizador', funct
         ->and(AuditAction::SystemRestoredFromBackup->event())->toBe(AuditableEvent::InstallationLifecycle)
         ->and(AuditAction::SystemRestoredFromBackup->requiresSystemActor())->toBeTrue();
 })->group('RL-04', 'RF-PD-10');
+
+it('nombra la baja programada y su anulacion con su valor estable y en la familia de la plantilla', function (AuditAction $action, string $value): void {
+    // ADR-062 §9: programar una baja fija desde que dia la persona deja de tener
+    // jornadas, y anularla lo deshace; las dos dejan asiento de quien lo hizo.
+    // La que aplica la tarea sigue siendo `employee.offboarded`, con actor system.
+    expect($action->value)->toBe($value)
+        ->and($action->event())->toBe(AuditableEvent::PersonalDataAccess)
+        ->and($action->requiresSystemActor())->toBeFalse();
+})->with([
+    'baja programada' => [AuditAction::EmployeeOffboardingScheduled, 'employee.offboarding_scheduled'],
+    'baja programada anulada' => [AuditAction::EmployeeOffboardingCancelled, 'employee.offboarding_cancelled'],
+])->group('RS-07', 'RN-14', 'RF-GP-03');
+
+it('no crea una accion propia para la baja que aplica la tarea', function (): void {
+    // ADR-062 §9: es el mismo hecho legal que la baja en el acto.
+    expect(AuditAction::tryFrom('employee.terminated'))->toBeNull()
+        ->and(AuditAction::EmployeeOffboarded->requiresSystemActor())->toBeFalse();
+})->group('RS-07', 'RN-14');

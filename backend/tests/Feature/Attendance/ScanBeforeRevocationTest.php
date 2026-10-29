@@ -157,6 +157,8 @@ it('compara con la recepcion cuando la tarjeta sigue vigente y la persona esta d
     $escenario = AttendanceFixtures::scenario();
     $baja = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated');
     $bajaId = AttendanceFixtures::employeeIdOf($baja);
+    // Cese despues de los escaneos: uno posterior al cese no se marca (RN-20, 2.3.0).
+    DB::table('employees')->where('id', $bajaId)->update(['terminated_at' => '2026-09-30']);
     $tarjeta = Credentials::issueFor($bajaId)->toString();
 
     $encolado = Str::uuid7()->toString();
@@ -319,7 +321,9 @@ it('marca y atribuye el escaneo de la carrera con la baja posterior al alta, y n
         ->and(filaDelEscaneo($scanId)->employee_id)->toBe($titularId)
         ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBe($marcado);
 })->with([
-    'posterior al alta' => ['2026-08-15T08:00:00Z', true],
+    // El cese del fixture es el 30 de junio: despues de el, no se marca (2.3.0).
+    'posterior al alta y anterior al cese' => ['2026-06-15T08:00:00Z', true],
+    'posterior al cese' => ['2026-08-15T08:00:00Z', false],
     'anterior al alta' => ['2025-12-31T22:59:59Z', false],
 ])->group('RN-20', 'RN-14');
 
