@@ -22,7 +22,7 @@ En hostelería eso es especialmente incómodo:
 |---|---|
 | Turnos de noche que cruzan las 12 de la noche | Los sistemas genéricos parten el turno en dos y descuadran las horas |
 | Jornada partida en cocina y sala | Varias entradas y salidas el mismo día |
-| Alta rotación en temporada | Altas continuas, gente que empieza mañana y aún no puede fichar |
+| Alta rotación en temporada | Altas continuas, gente que empieza mañana y aún no puede fichar; bajas que hay que acordarse de registrar el último día, y la misma gente que vuelve al año siguiente |
 | Muchos empleados sin correo de empresa ni móvil de empresa | Cualquier sistema que dependa del email o del smartphone deja gente fuera |
 | Red wifi que a veces falla | Justo en el cambio de turno, cuando fichan 30 personas a la vez |
 
@@ -60,7 +60,7 @@ Desde el panel web, en su ordenador:
 
 ### 3.3 Para Recursos Humanos
 
-- Da de alta y de baja a los empleados, registra sus contratos y crea y renombra departamentos. Ni los contratos ni los departamentos se dan de baja ni se eliminan: un cambio de contrato crea uno nuevo y el anterior queda en el histórico.
+- Da de alta y de baja a los empleados, registra sus contratos y crea y renombra departamentos. **La baja de fin de temporada se registra cuando se conoce**, con su fecha de cese: la persona sigue fichando hasta su último día y el sistema aplica la baja al día siguiente; hasta esa fecha se puede anular. **Quien vuelve la temporada siguiente se da de alta de nuevo con un botón** y un solo dato, la fecha de alta, uno a uno o varios a la vez: conserva su ficha, su historial y su PIN, y recibe una tarjeta nueva. Si la fecha de cese se puso antes del último día trabajado, se corrige con un motivo y queda constancia del cambio. Ni los contratos ni los departamentos se dan de baja ni se eliminan: un cambio de contrato crea uno nuevo y el anterior queda en el histórico.
 - **Emite las tarjetas QR** y las imprime: en formato tarjeta de crédito, o en hojas A4 con varias por página para dar de alta a 40 personas de temporada en una tarde.
 - Registra la **entrega** de cada tarjeta (fecha y quién la entregó).
 - Consulta un **panel de estado de credenciales** que responde a la pregunta clave: *¿quién está de alta pero todavía no puede fichar?*
@@ -151,7 +151,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Diseño | Nombre, departamento, centro y QR. Con el logotipo y colores del hotel |
 | Resistencia y reposición | El código se imprime con **corrección de errores de nivel alto (Q)** y un tamaño mínimo garantizado. Cuánto aguanta depende del soporte que elija el hotel —papel, cartulina o PVC plastificado—, así que **el producto no promete ninguna tolerancia al desgaste**: una tarjeta que deja de leerse se repone, cuesta alrededor de un euro y se revoca, emite e imprime el mismo día. Mientras tanto, esa persona **ficha con su código de empleado y su PIN**, así que no hay ni una jornada sin registro |
 | Registro de entrega | Fecha y responsable de la entrega, con traza |
-| Revocación | Pérdida, robo o baja: la tarjeta deja de funcionar de inmediato y se emite otra el mismo día |
+| Revocación | Pérdida, robo o baja: la tarjeta deja de funcionar de inmediato (en una baja programada, cuando la baja se hace efectiva) y se emite otra el mismo día |
 | Panel de estado | Emitida / pendiente de imprimir / pendiente de entregar / revocada. Responde a "¿quién no puede fichar todavía?" |
 | Cambio de clave de firma | Se puede renovar la clave de seguridad reimprimiendo las tarjetas poco a poco, sin dejar a nadie sin fichar ni un solo día |
 
@@ -187,7 +187,7 @@ Alta y baja de empleados con los datos mínimos necesarios; departamentos y cont
 
 **El correo electrónico del empleado es un campo opcional.** El producto no depende de él en ningún punto.
 
-**La baja de un empleado nunca borra su historial**: se desactiva, su tarjeta se revoca y su registro se conserva los cuatro años que marca la ley.
+**La baja de un empleado nunca borra su historial**: se desactiva, su tarjeta se revoca y su registro se conserva los cuatro años que marca la ley. La baja se puede dejar programada para el último día, y quien vuelve lo hace en su misma ficha, con un periodo de alta nuevo: el registro de cada temporada se conserva junto al de las demás.
 
 ### 5.6 Accesos y permisos
 
@@ -236,7 +236,7 @@ Eso permite afirmar ante una inspección no solo que "confiamos en que nadie lo 
 - **Datos mínimos**: del DNI **no se guarda el número, ni siquiera cifrado**: solo una huella criptográfica irreversible que permite comprobar si un DNI ya está dado de alta, pero de la que nadie —tampoco el fabricante— puede recuperar el número original. El correo es opcional. La foto del empleado es opcional y viene desactivada.
 - **Aviso de privacidad visible en la propia tablet**, con enlace o QR a la política completa.
 - **Derechos del trabajador**: procedimientos para acceso, rectificación (mediante corrección trazada), limitación y portabilidad. La supresión queda condicionada al deber legal de conservar cuatro años.
-- **Retención diferenciada**: registros de jornada y auditoría 4 años; registros técnicos 90 días. **Los datos de quien se fue no se quedan para siempre**: cuando ya no queda nada de su registro de jornada ni la auditoría del año de su baja, y han pasado los años que el hotel fije desde la baja (4 de serie), la purga de retención retira de su ficha nombre, correo, PIN, foto y documento, y borra sus contratos y sus ausencias. Lo mismo con las cuentas del personal de gestión que se fue. Como toda purga, no es automática: la autoriza una persona del hotel y queda anotada. Ese plazo, y si lo que queda en la ficha (fechas, centro, departamento, idioma y si teletrabajaba) basta para reconocer a alguien en un hotel pequeño, los valida la asesoría o el delegado de protección de datos del hotel.
+- **Retención diferenciada**: registros de jornada y auditoría 4 años; registros técnicos 90 días. **Los datos de quien se fue no se quedan para siempre**: cuando ya no queda nada de su registro de jornada ni la auditoría del año de su baja, y han pasado los años que el hotel fije desde la última baja (4 de serie), la purga de retención retira de su ficha nombre, correo, PIN, foto y documento, y borra sus contratos y sus ausencias. Lo mismo con las cuentas del personal de gestión que se fue. Como toda purga, no es automática: la autoriza una persona del hotel y queda anotada. Ese plazo, y si lo que queda en la ficha (fechas, centro, departamento, idioma y si teletrabajaba) basta para reconocer a alguien en un hotel pequeño, los valida la asesoría o el delegado de protección de datos del hotel.
 - **Cifrado**: en tránsito siempre, y en reposo para las copias de seguridad y para los datos que se guardan en la tablet.
 - **Los datos están en el servidor del hotel, en la Unión Europea.** No salen a ninguna nube del fabricante.
 
