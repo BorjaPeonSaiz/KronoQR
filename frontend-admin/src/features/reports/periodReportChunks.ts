@@ -96,6 +96,9 @@ export interface ReportReader {
  */
 export function startReportReader(onHead?: (partial: PeriodReport) => void): ReportReader {
   const worker = openWorker()
+  // Un Worker que ha emitido `error` esta muerto (el chunk dio 404, el modulo no evalua): no se le
+  // vuelve a hablar, porque `postMessage` a un Worker muerto no falla y la promesa no se resolveria.
+  let failed = false
   // Cierto cuando el Worker avisa de que ya arranco; falso si falla o tarda demasiado.
   const ready = new Promise<boolean>((resolve) => {
     if (worker === null) {
@@ -115,7 +118,9 @@ export function startReportReader(onHead?: (partial: PeriodReport) => void): Rep
       }
     })
     worker.addEventListener('error', () => {
+      failed = true
       clearTimeout(timer)
+      worker.terminate()
       resolve(false)
     })
   })
@@ -128,7 +133,7 @@ export function startReportReader(onHead?: (partial: PeriodReport) => void): Rep
       // se lee en el hilo principal, donde recibir 12 MB es una tarea de ~100 ms con la CPU ×4
       // (y el navegador lo paga cediendo el hilo otro tanto despues). No todos los navegadores
       // pueden transferir una corriente; en ese caso se lee a mano, como sin Worker.
-      if (worker !== null && body !== null && (await ready)) {
+      if (worker !== null && body !== null && (await ready) && !failed) {
         try {
           return await parseInWorker(
             worker,
@@ -146,7 +151,7 @@ export function startReportReader(onHead?: (partial: PeriodReport) => void): Rep
 
       const buffer = await response.arrayBuffer()
 
-      if (worker === null) {
+      if (worker === null || failed) {
         return parseHere(buffer)
       }
 
@@ -207,6 +212,7 @@ function parseInWorker(
     function detach(): void {
       worker.removeEventListener('message', onMessage)
       worker.removeEventListener('error', onError)
+      worker.removeEventListener('messageerror', onError)
     }
 
     function finish(settle: () => void): void {
@@ -257,6 +263,7 @@ function parseInWorker(
 
     worker.addEventListener('message', onMessage)
     worker.addEventListener('error', onError)
+    worker.addEventListener('messageerror', onError)
 
     try {
       send()
