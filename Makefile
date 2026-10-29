@@ -1146,7 +1146,7 @@ MUTATE_PATHS := $(subst $(space),$(comma),$(strip $(DOMAIN_PATHS)))
 # Base contra la que `mutate-changed` calcula que ha cambiado. `origin/main`
 # por defecto (uso local: "que cambia mi rama frente a main"); la CI la
 # sobreescribe por push (`make mutate-changed MUTATE_BASE=<sha-anterior>`),
-# resuelta con el mismo criterio que el job `update` de ci.yml
+# resuelta con el mismo criterio que el job `update` de gates.yml
 # (github.event.before si es un commit valido, si no origin/main). No se
 # resuelve aqui con `:=` porque eso ejecutaria git en CADA invocacion de make,
 # incluida `make help`, y fallaria sin red antes de que el objetivo se
