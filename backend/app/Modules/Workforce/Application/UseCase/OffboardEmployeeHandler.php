@@ -8,47 +8,54 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingScheduled;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use DateTimeImmutable;
 
 /**
- * Baja de empleado (RF-GP-03, RN-14).
+ * Baja de empleado, **en el acto o programada** (RF-GP-03, RN-14).
  *
  * **Desactivacion logica, nunca borrado** (regla dura 5). Ni esta clase ni el
- * repositorio tienen un `delete`: la ficha cambia de estado y gana su fecha de
- * cese, y todo lo demas —tramos, jornadas, escaneos— sigue exactamente donde
- * estaba. El registro horario se conserva cuatro anos (RL-02) y una inspeccion
- * puede pedir el de alguien que ya no trabaja en el hotel.
+ * repositorio tienen un `delete`: la ficha gana su fecha de cese y, si la baja es
+ * efectiva, cambia de estado; todo lo demas —tramos, jornadas, escaneos— sigue
+ * exactamente donde estaba (RL-02).
  *
- * **La fecha de cese no puede ser posterior a hoy** (RN-14, 2.2.0). «Hoy» es la
- * fecha civil **del centro** (`sites.timezone`, ADR-040) en el instante en que
- * el servidor recibe la baja, y se resuelve aqui con el puerto `Clock`: nunca la
- * fecha UTC ni `APP_TIMEZONE`. Sin centro no hay «hoy» que resolver, y la baja
- * falla con {@see InstallationSiteMissing} (`409`) en lugar de caer a UTC. La
- * regla la aplica el dominio ({@see Employee::offboard()}); la validacion de la
- * peticion solo conoce la fecha UTC y no la comprueba.
+ * **Que baja es, lo decide el dominio** ({@see Employee::offboard()}) con la
+ * fecha de cese, «hoy» y «Aplicar ya». «Hoy» es la fecha civil **del centro**
+ * (`sites.timezone`, ADR-040) en el instante en que el servidor recibe la baja,
+ * y se resuelve aqui con el puerto `Clock`: nunca la fecha UTC ni
+ * `APP_TIMEZONE`. Sin centro no hay «hoy» que resolver, y la baja falla con
+ * {@see InstallationSiteMissing} (`409`) en lugar de caer a UTC.
+ *
+ * - **Efectiva**: publica {@see EmployeeOffboarded}. `Identity` revoca las
+ *   tarjetas y cierra el portal y `Compliance` escribe `employee.offboarded`, los
+ *   dos en listeners sincronos y en el orden de ADR-046 (cadena → ficha →
+ *   tarjetas).
+ * - **Programada**: publica {@see EmployeeOffboardingScheduled}, que solo deja
+ *   asiento. La persona ficha hasta su ultimo dia, y la aplica
+ *   {@see ApplyDueOffboardings}. Reprogramar a la misma fecha no cambia nada y
+ *   no deja asiento: un asiento que dice que se toco la ficha cuando no se toco
+ *   miente.
  *
  * **Bajo el candado de la cadena y con la fila bloqueada** (ADR-046). La lectura
- * es `findForUpdate()` dentro de `withChainLock()`: una modificacion o una
- * importacion simultanea esperan a que esta baja confirme y despues la ven, en
- * vez de reescribir una ficha leida antes y deshacerla. La escritura es
- * `saveTermination()`, que solo toca `status` y `terminated_at` y lleva el
- * predicado `status <> 'terminated'`.
+ * es `findForUpdate()` dentro de `withChainLock()`: una modificacion, una
+ * importacion, una anulacion o la tarea simultaneas esperan a que esta baja
+ * confirme y despues la ven. La escritura es `saveTermination()`, que solo toca
+ * `status` y `terminated_at` y lleva el predicado `status <> 'terminated'`.
  *
- * **Una transaccion con todo lo que la baja arrastra**. El evento
- * se publica dentro: `Identity` revoca la credencial y cierra el portal
- * (RN-14) y `Compliance` escribe el asiento `employee.offboarded`, los dos en
- * listeners sincronos y en el orden de ADR-046 (cadena → ficha → tarjetas). Si
- * cualquiera falla, la baja no se confirma: una baja sin traza, o una persona de
- * baja con la tarjeta aun activa, es peor que una baja que hay que repetir.
+ * **Una transaccion con todo lo que la baja arrastra**: si un listener falla, la
+ * baja no se confirma. Una baja sin traza, o una persona de baja con la tarjeta
+ * aun activa, es peor que una baja que hay que repetir.
  */
 final readonly class OffboardEmployeeHandler
 {
@@ -61,9 +68,10 @@ final readonly class OffboardEmployeeHandler
     ) {}
 
     /**
-     * @throws EmployeeAlreadyTerminated cuando ya estaba de baja
-     * @throws InvalidEmploymentPeriod cuando el cese es anterior al alta, posterior a hoy, o el alta aun no llego
-     * @throws InstallationSiteMissing antes de la puesta en marcha: sin centro no hay «hoy» (R-4)
+     * @throws EmployeeAlreadyTerminated cuando la baja ya era efectiva
+     * @throws InvalidEmploymentPeriod cuando el cese es anterior al alta
+     * @throws ImmediateOffboardingNotDue «Aplicar ya» con un cese posterior a hoy
+     * @throws InstallationSiteMissing antes de la puesta en marcha: sin centro no hay «hoy»
      */
     public function handle(OffboardEmployeeCommand $command): ?Employee
     {
@@ -92,18 +100,39 @@ final readonly class OffboardEmployeeHandler
                 return null;
             }
 
-            $terminated = $employee->offboard(new DateTimeImmutable($command->terminatedAt), $today);
+            $offboarded = $employee->offboard(new DateTimeImmutable($command->terminatedAt), $today, $command->applyNow);
 
-            $this->employees->saveTermination($terminated);
+            if ($offboarded->status === EmploymentStatus::TERMINATED) {
+                $this->employees->saveTermination($offboarded);
+                $this->events->publish(new EmployeeOffboarded(
+                    employeeUuid: $offboarded->uuid,
+                    terminatedOn: $command->terminatedAt,
+                    reason: $command->reason,
+                    occurredAt: $receivedAt,
+                    // Solo dice algo con el cese de hoy: con uno pasado la baja
+                    // era en el acto con o sin el indicador.
+                    applyNow: $command->applyNow && $command->terminatedAt === $today->format('Y-m-d'),
+                ));
 
-            $this->events->publish(new EmployeeOffboarded(
-                employeeUuid: $terminated->uuid,
+                return $offboarded;
+            }
+
+            $previous = $employee->terminatedAt?->format('Y-m-d');
+
+            if ($previous === $command->terminatedAt) {
+                return $employee;
+            }
+
+            $this->employees->saveTermination($offboarded);
+            $this->events->publish(new EmployeeOffboardingScheduled(
+                employeeUuid: $offboarded->uuid,
                 terminatedOn: $command->terminatedAt,
+                previousTerminatedOn: $previous,
                 reason: $command->reason,
                 occurredAt: $receivedAt,
             ));
 
-            return $terminated;
+            return $offboarded;
         });
     }
 }

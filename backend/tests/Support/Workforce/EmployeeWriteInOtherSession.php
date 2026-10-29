@@ -147,6 +147,7 @@ final class EmployeeWriteInOtherSession
                     uuid: $spec['employee'],
                     terminatedAt: $spec['terminated_on'],
                     reason: 'Baja registrada desde otra sesion',
+                    applyNow: true,
                 )),
                 'update' => app(UpdateEmployeeHandler::class)->handle(new UpdateEmployeeCommand(
                     uuid: $spec['employee'],

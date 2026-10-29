@@ -635,6 +635,16 @@ return [
         'whole_staff' => 'whole staff',
     ],
 
+    'apply_scheduled_offboardings' => [
+        'no_site' => 'There is no work site yet: without one no offboarding could have been scheduled (RF-PD-03).',
+        'summary' => 'Today is :today at the site. Scheduled offboardings applied: :applied. Deferred because the '
+            .'last working day can still grow: :deferred.',
+        'overdue' => ':count scheduled offboarding(s) are still not applied more than a day after their termination '
+            .'date. Nobody has been able to clock in after it; check the log («workforce.scheduled_offboarding_failed»).',
+        'failures' => ':count scheduled offboarding(s) could not be applied and will be retried on the next run. '
+            .'Look for «workforce.scheduled_offboarding_failed» in the log.',
+    ],
+
     'detect_incidents' => [
         'invalid_days' => '--days expects a whole number of days greater than zero and got «:value». '
             .'Without a valid value the window is not guessed: reviewing too much opens incidents on '

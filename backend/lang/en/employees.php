@@ -15,11 +15,14 @@ return [
         'termination_before_hiring' => 'The termination date (:terminated_on) is earlier than the start date '
             .'(:hired_on).',
 
-        'termination_after_today' => 'The termination date (:terminated_on) is later than today (:today). '
-            .'Offboarding takes effect as soon as it is recorded; record it on the last day, once the shift is over.',
+        'apply_now_requires_due_termination' => '"Apply now" only works with a termination date of today or earlier, '
+            .'and the last day (:terminated_on) has not arrived yet (today is :today). Clear it to schedule the '
+            .'offboarding, or set today\'s date.',
 
-        'not_started_termination_must_be_hire_date' => 'This person has not started working yet (start date '
-            .':hired_on). The only possible termination date is the start date, :hired_on.',
+        'offboarding_not_scheduled' => 'This person has no scheduled offboarding.',
+
+        'offboarding_due' => 'The termination date (:terminated_on) has already passed (today is :today). The '
+            .'offboarding already applies and cannot be cancelled.',
 
         'record_minimised' => 'This person\'s record was minimised on :anonymized_on when its retention period '
             .'ended: it no longer accepts contracts or absences.',

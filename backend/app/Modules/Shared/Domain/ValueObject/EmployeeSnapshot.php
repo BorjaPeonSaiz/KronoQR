@@ -42,7 +42,12 @@ final readonly class EmployeeSnapshot
          * persona de baja (RN-14, 2.2.0). El fichaje no la mira.
          */
         public ?string $hiredOn = null,
-        /** Fecha civil de cese (`employees.terminated_at`, `Y-m-d`), o `null` si no esta de baja. */
+        /**
+         * Fecha civil de cese (`employees.terminated_at`, `Y-m-d`), o `null` sin
+         * baja. Con un estado distinto de `terminated` es una baja programada
+         * (RN-14): el fichaje y el alta manual no admiten tramos nuevos en una
+         * jornada posterior.
+         */
         public ?string $terminatedOn = null,
     ) {
         if ($employeeUuid === '') {

@@ -343,6 +343,23 @@ final class MetricCatalogue
                 ['action', 'role'],
                 self::managementAccountZeroSeries(),
             ),
+            // ADR-062 §4: la tarea que aplica las bajas programadas.
+            new MetricDefinition(
+                'kronoqr_offboardings_applied_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Bajas programadas vencidas que trato la tarea horaria, por desenlace: aplicada, aplazada porque la jornada del cese aun puede crecer, o fallida (RN-14). Sin uuid.',
+                ['outcome'],
+                ['outcome=applied', 'outcome=deferred', 'outcome=failed'],
+            ),
+            new MetricDefinition(
+                'kronoqr_scheduled_offboardings_overdue',
+                MetricType::Gauge,
+                MetricStorage::LabelledHash,
+                'Bajas programadas que siguen sin aplicar mas de un dia despues de su cese, al terminar la ultima pasada de la tarea (RN-14). Deberia ser 0.',
+                [],
+                ['value'],
+            ),
 
             // ---------------------------------------------------------------
             // Credenciales.

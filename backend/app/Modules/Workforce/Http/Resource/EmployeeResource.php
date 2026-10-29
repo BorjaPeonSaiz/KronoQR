@@ -76,6 +76,25 @@ final class EmployeeResource extends JsonResource
             // entera. Es lo que dice que la ficha esta minimizada, no los nombres
             // vacios. Lo reciben los dos esquemas, tambien el del responsable.
             'anonymized_at' => UtcInstant::format($employee->anonymizedAt),
+            // RN-14, ADR-062 §3: la baja, derivada del par estado–fecha. La
+            // reciben los dos esquemas: no dice nada que `status` y
+            // `terminated_at` no digan ya.
+            'offboarding' => self::offboarding($employee),
+        ];
+    }
+
+    /**
+     * @return array{state: string, terminated_at: string}|null
+     */
+    private static function offboarding(Employee $employee): ?array
+    {
+        if ($employee->terminatedAt === null) {
+            return null;
+        }
+
+        return [
+            'state' => $employee->isOffboardingScheduled() ? 'scheduled' : 'effective',
+            'terminated_at' => $employee->terminatedAt->format('Y-m-d'),
         ];
     }
 }

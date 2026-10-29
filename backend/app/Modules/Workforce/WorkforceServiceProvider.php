@@ -23,6 +23,7 @@ use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Application\Port\ManagementAccountLookup;
+use App\Modules\Workforce\Application\Port\OffboardingMetrics;
 use App\Modules\Workforce\Application\Port\ParentRowLocks;
 use App\Modules\Workforce\Application\Port\PinCandidateSource;
 use App\Modules\Workforce\Application\Port\PinHasher;
@@ -58,7 +59,9 @@ use App\Modules\Workforce\Infrastructure\Adapter\RandomEmployeeCodeGenerator;
 use App\Modules\Workforce\Infrastructure\Adapter\RandomPinCandidateSource;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
+use App\Modules\Workforce\Infrastructure\Console\ApplyScheduledOffboardingsCommand;
 use App\Modules\Workforce\Infrastructure\Console\CorrectSiteTimezoneCommand;
+use App\Modules\Workforce\Infrastructure\Metrics\RedisOffboardingMetrics;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseManagementAccountLookup;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseParentRowLocks;
@@ -166,6 +169,9 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(PinPolicyProvider::class, ConfiguredPinPolicyProvider::class);
         $this->app->bind(PinMetrics::class, RedisPinMetrics::class);
 
+        // ADR-062 §4: las dos series de la tarea de las bajas programadas.
+        $this->app->bind(OffboardingMetrics::class, RedisOffboardingMetrics::class);
+
         /*
          * El hasher del PIN, detras de un puerto.
          *
@@ -256,6 +262,8 @@ final class WorkforceServiceProvider extends ServiceProvider
                 // RN-23, ADR-056 §3: la unica via para corregir la zona horaria
                 // con registro horario. No se programa: se ejecuta a mano.
                 CorrectSiteTimezoneCommand::class,
+                // RN-14, ADR-062 §4: aplica las bajas programadas vencidas. Cada hora.
+                ApplyScheduledOffboardingsCommand::class,
             ]);
         }
     }

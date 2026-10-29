@@ -159,6 +159,8 @@ use App\Modules\Workforce\Domain\Event\DepartmentManagerChanged;
 use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingCancelled;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboardingScheduled;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
@@ -890,6 +892,9 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(EmployeeHired::class, [RecordWorkforceChange::class, 'hired']);
         Event::listen(EmployeeProfileUpdated::class, [RecordWorkforceChange::class, 'updated']);
         Event::listen(EmployeeOffboarded::class, [RecordWorkforceChange::class, 'offboarded']);
+        // ADR-062 §9: la baja programada y su anulacion.
+        Event::listen(EmployeeOffboardingScheduled::class, [RecordWorkforceChange::class, 'offboardingScheduled']);
+        Event::listen(EmployeeOffboardingCancelled::class, [RecordWorkforceChange::class, 'offboardingCancelled']);
         Event::listen(DepartmentCreated::class, [RecordWorkforceChange::class, 'departmentCreated']);
         Event::listen(DepartmentRenamed::class, [RecordWorkforceChange::class, 'departmentRenamed']);
         // RF-ID-10, ADR-051 §5: un `role_assignment.changed` por cuenta afectada.

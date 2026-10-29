@@ -154,7 +154,7 @@ it('si la baja confirma entre el informe y su aplicacion, la aplicacion entera f
     expect($informe->countOf(ImportOutcome::UPDATE))->toBe(1);
 
     Api::as($token)
-        ->post('/api/v1/employees/'.$youssef.'/offboard', ['terminated_at' => '2026-10-02'])
+        ->post('/api/v1/employees/'.$youssef.'/offboard', ['terminated_at' => '2026-10-02', 'apply_now' => true])
         ->assertValidResponse(200);
 
     $empleados = DB::table('employees')->count();
@@ -182,7 +182,7 @@ it('si la baja llega entre la peticion de comprobar y la de aplicar, la aplicaci
         ->assertJsonPath('summary.update', 1);
 
     Api::as($token)
-        ->post('/api/v1/employees/'.$youssef.'/offboard', ['terminated_at' => '2026-10-02'])
+        ->post('/api/v1/employees/'.$youssef.'/offboard', ['terminated_at' => '2026-10-02', 'apply_now' => true])
         ->assertValidResponse(200);
 
     importarConBaja($token, ImportFiles::csv(ficheroConUnaBaja()), 'apply', huellaDeLaImportacionConBaja($comprobado))

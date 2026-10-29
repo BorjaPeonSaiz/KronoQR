@@ -141,6 +141,7 @@ final class AuthorizationMatrix
             'POST api/v1/employees/import' => [$admin, $rrhh],
             'PATCH api/v1/employees/{uuid}' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/offboard' => [$admin, $rrhh],
+            'POST api/v1/employees/{uuid}/offboard/cancel' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/pin/reset' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/pin/deliver' => [$admin, $rrhh],
             'GET api/v1/employees/{uuid}/contracts' => [$admin, $rrhh],

@@ -62,6 +62,7 @@ use App\Modules\Reporting\Http\Controller\ReportExportController;
 use App\Modules\Reporting\Http\Controller\ReportExportDownloadController;
 use App\Modules\Workforce\Http\Controller\AbsenceController;
 use App\Modules\Workforce\Http\Controller\AbsenceImportController;
+use App\Modules\Workforce\Http\Controller\CancelScheduledOffboardingController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeeImportController;
@@ -1371,6 +1372,12 @@ Route::middleware([
     Route::post('/employees/{uuid}/offboard', OffboardEmployeeController::class)
         ->whereUuid('uuid')
         ->name('employees.offboard');
+
+    // La anulacion de una baja programada (RN-14, ADR-062 §3): POST con nombre
+    // propio por lo mismo, y solo mientras el cese no haya pasado.
+    Route::post('/employees/{uuid}/offboard/cancel', CancelScheduledOffboardingController::class)
+        ->whereUuid('uuid')
+        ->name('employees.offboard.cancel');
 
     /*
      * PIN del empleado (tarea 1.13, RF-ID-09).

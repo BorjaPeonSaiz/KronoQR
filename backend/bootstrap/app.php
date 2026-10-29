@@ -77,10 +77,13 @@ use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
 use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
+use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
+use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
+use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingDue;
 use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
@@ -637,6 +640,27 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::employeeTerminated($exception->getMessage()));
 
         /*
+         * La baja programada (RN-14, ADR-062 §3). Su cese ya paso: ni se anula ni
+         * cambia de fecha (`409` `offboarding-due`, con las fechas en el idioma
+         * negociado). Sin baja programada no hay nada que anular (`409`
+         * `offboarding-not-scheduled`). «Aplicar ya» con un cese futuro es una
+         * errata del formulario: `422` colgado de `apply_now`.
+         */
+        $exceptions->render(static fn (ScheduledOffboardingDue $exception): mixed => ProblemDetails::offboardingDue(
+            ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
+        ));
+        $exceptions->render(static fn (OffboardingNotScheduled $exception): mixed => ProblemDetails::offboardingNotScheduled(
+            ProblemDetails::translated(OffboardingNotScheduled::TRANSLATION_KEY, [], $exception->getMessage()),
+        ));
+        $exceptions->render(static fn (ImmediateOffboardingNotDue $exception): mixed => ProblemDetails::validationFailed([
+            'apply_now' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
          * La zona horaria del centro ya esta fija (RN-23, ADR-056): `409` con
          * `type` propio, `urn:kronoqr:problem:site-time-zone-locked`, y el
          * `detail` en el idioma negociado. Antes que `WorkforceConflict`, que es
@@ -714,9 +738,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]));
 
         /*
-         * La fecha de cese no es admisible (RF-GP-03, RN-14): anterior al alta,
-         * posterior a hoy en el centro (2.2.0), o distinta del alta cuando el
-         * alta aun no ha llegado. `422` colgado de `terminated_at`, en el idioma
+         * La fecha de cese no es admisible (RF-GP-03, RN-14): anterior al alta.
+         * Una fecha futura ya no lo es: programa la baja. `422` colgado de `terminated_at`, en el idioma
          * negociado y con las fechas concretas, y sin nada escrito: el dominio
          * lo decide antes de tocar la ficha.
          */

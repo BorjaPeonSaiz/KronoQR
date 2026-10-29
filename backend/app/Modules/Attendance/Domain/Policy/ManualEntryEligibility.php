@@ -28,15 +28,18 @@ use DateTimeZone;
  *   solo pueden entrar por aqui.
  * - **Suspendida**: no. Ni la suspension tiene fecha de fin que acote nada, ni
  *   es la situacion que esta regla resuelve.
+ * - **Con baja programada** (en alta o suspendida, con fecha de cese; 2.3.0):
+ *   lo de su estado, y ninguna jornada posterior al cese. Desde que hay fecha
+ *   de cese, ningun tramo nuevo cae despues, la haya aplicado ya la tarea o no.
  *
  * **Y sus marcas, ni mas alla del dia del cese** (RN-05, 2.3.0): con
- * {@see assertTimesAllowed()} ninguna marca de una persona de baja pasa de la
- * cota de continuacion contada desde el final de su dia de cese. Esta comprobacion
- * la usan tambien las correcciones, que no dependen del estado de la persona
- * salvo en esto.
+ * {@see assertTimesAllowed()} ninguna marca de una persona con fecha de cese pasa
+ * de la cota de continuacion contada desde el final de su dia de cese. Esta
+ * comprobacion la usan tambien las correcciones, que no dependen del estado de la
+ * persona salvo en esto.
  *
- * **Solo el camino manual del panel pasa por aqui.** El escaneo del quiosco no
- * cambia: una persona de baja no ficha (RN-14).
+ * **Solo el camino manual del panel pasa por aqui.** El escaneo del quiosco
+ * aplica la misma regla de jornadas con {@see ScanIntentPolicy::opensAfterTermination()}.
  *
  * Las fechas son civiles y se comparan como `Y-m-d`, que ordena igual como
  * cadena que como fecha. No conoce el reloj (regla dura 2).
@@ -67,8 +70,12 @@ final readonly class ManualEntryEligibility
     }
 
     /**
-     * La jornada declarada, para una persona de baja, cae entre su alta y su
-     * cese, ambos incluidos. Para cualquier otra no comprueba nada.
+     * La jornada declarada cae dentro del periodo de empleo (RN-14, RF-PA-04):
+     *
+     * - **Dada de baja**: entre su alta y su cese, ambos incluidos.
+     * - **Con baja programada** (en alta o suspendida, con fecha de cese): nunca
+     *   despues del cese (2.3.0). Hacia atras, como cualquier persona en alta.
+     * - Sin fecha de cese: no comprueba nada.
      *
      * @throws WorkDateOutsideEmployment
      */
@@ -77,7 +84,19 @@ final readonly class ManualEntryEligibility
         $hiredOn = $this->employee->hiredOn;
         $terminatedOn = $this->employee->terminatedOn;
 
-        if ($this->employee->status !== EmploymentStatus::TERMINATED || $hiredOn === null || $terminatedOn === null) {
+        if ($terminatedOn === null) {
+            return;
+        }
+
+        if ($this->employee->status !== EmploymentStatus::TERMINATED) {
+            if ($workDate->isoDate > $terminatedOn) {
+                throw WorkDateOutsideEmployment::afterTermination($workDate->isoDate, $terminatedOn);
+            }
+
+            return;
+        }
+
+        if ($hiredOn === null) {
             return;
         }
 
@@ -87,9 +106,10 @@ final readonly class ManualEntryEligibility
     }
 
     /**
-     * Las marcas de un tramo escrito a mano, para una persona de baja, no pasan
-     * de la cota de continuacion contada desde el final de su dia de cese (RN-05,
-     * RN-14, RF-PA-04). Para cualquier otra no comprueba nada.
+     * Las marcas de un tramo escrito a mano, para una persona con fecha de cese
+     * —de baja o con la baja programada—, no pasan de la cota de continuacion
+     * contada desde el final de su dia de cese (RN-05, RN-14, RF-PA-04). Para
+     * cualquier otra no comprueba nada.
      *
      * **El final del dia del cese** es la medianoche del dia siguiente en la zona
      * del centro ({@see WorkDate::endsAt()}), y la cota se suma en segundos
@@ -113,7 +133,7 @@ final readonly class ManualEntryEligibility
     ): void {
         $terminatedOn = $this->employee->terminatedOn;
 
-        if ($this->employee->status !== EmploymentStatus::TERMINATED || $terminatedOn === null) {
+        if ($terminatedOn === null) {
             return;
         }
 

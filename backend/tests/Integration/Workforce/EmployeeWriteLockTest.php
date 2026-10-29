@@ -91,7 +91,7 @@ function tomarLaFichaComoElCasoDeUso(string $modo, string $uuid): void
         'FOR UPDATE' => DB::select('SELECT id FROM employees WHERE uuid = ? FOR UPDATE', [$uuid]),
         'modificada' => $repositorio->saveProfile($ficha->updateProfile(lastName: 'Apellido Nuevo'), statusChanged: false),
         'dada de baja' => $repositorio->saveTermination(
-            $ficha->offboard(new DateTimeImmutable('2026-10-02'), new DateTimeImmutable('2026-10-02')),
+            $ficha->offboard(new DateTimeImmutable('2026-10-02'), new DateTimeImmutable('2026-10-02'), true),
         ),
         default => throw new RuntimeException('Modo desconocido: '.$modo),
     };

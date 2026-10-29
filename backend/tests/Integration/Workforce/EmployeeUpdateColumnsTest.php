@@ -84,7 +84,7 @@ function escritorDeLaFicha(string $escritor): callable
             status: 'suspended',
         )),
         'baja' => static fn (): mixed => app(OffboardEmployeeHandler::class)->handle(
-            new OffboardEmployeeCommand(uuid: $persona, terminatedAt: '2026-10-02'),
+            new OffboardEmployeeCommand(uuid: $persona, terminatedAt: '2026-10-02', applyNow: true),
         ),
         'restablecimiento del PIN' => static fn (): mixed => app(ResetEmployeePinHandler::class)->handle(
             new ResetEmployeePinCommand($persona),

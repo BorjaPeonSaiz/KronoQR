@@ -253,6 +253,20 @@ final class ProblemDetails
     public const string TYPE_SITE_TIME_ZONE_LOCKED = 'urn:kronoqr:problem:site-time-zone-locked';
 
     /**
+     * **La fecha de cese de una baja programada ya ha pasado** (RN-14, ADR-062
+     * §3): la baja rige aunque la tarea no la haya aplicado, y ni se anula ni
+     * cambia de fecha. Tipo propio porque la accion siguiente no es corregir el
+     * formulario: es readmitir o corregir la fecha cuando la baja sea efectiva.
+     */
+    public const string TYPE_OFFBOARDING_DUE = 'urn:kronoqr:problem:offboarding-due';
+
+    /**
+     * Se pide anular una baja programada que no existe (RN-14): no hay nada que
+     * anular, y se recarga la ficha.
+     */
+    public const string TYPE_OFFBOARDING_NOT_SCHEDULED = 'urn:kronoqr:problem:offboarding-not-scheduled';
+
+    /**
      * Las horas pisarian a **otro tramo vigente** de la misma persona (RN-02).
      *
      * Mismo acotamiento que {@see self::TYPE_SHIFT_ALREADY_OPEN}: rutas de
@@ -644,6 +658,28 @@ final class ProblemDetails
         return self::response(
             self::TYPE_EMPLOYEE_TERMINATED,
             'La persona ya esta dada de baja',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de una baja programada cuyo cese ya paso (RN-14). {@see self::TYPE_OFFBOARDING_DUE} */
+    public static function offboardingDue(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_OFFBOARDING_DUE,
+            'La fecha de cese ya ha pasado',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` sin baja programada que anular (RN-14). {@see self::TYPE_OFFBOARDING_NOT_SCHEDULED} */
+    public static function offboardingNotScheduled(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_OFFBOARDING_NOT_SCHEDULED,
+            'No hay baja programada',
             JsonResponse::HTTP_CONFLICT,
             $detail,
         );

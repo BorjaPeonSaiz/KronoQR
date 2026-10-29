@@ -92,13 +92,34 @@ interface EmployeeRepository
     public function saveProfile(Employee $employee, bool $statusChanged): void;
 
     /**
-     * Escribe la baja (ADR-046 §3): `status` y `terminated_at`, y nada mas. Con el
-     * mismo predicado `status <> 'terminated'` y la misma lectura de cero filas
-     * que {@see self::saveProfile()}: una baja no se repite ni pisa otra.
+     * Escribe la baja (ADR-046 §3): `status` y `terminated_at`, y nada mas. La
+     * usan la baja en el acto, la programada, su anulacion y la tarea que la
+     * aplica. Con el mismo predicado `status <> 'terminated'` y la misma lectura
+     * de cero filas que {@see self::saveProfile()}: una baja no se repite ni pisa
+     * otra.
      *
      * @throws EmployeeAlreadyTerminated
      */
     public function saveTermination(Employee $employee): void;
+
+    /**
+     * Las bajas programadas **vencidas** (RN-14, ADR-062 §4): personas que no
+     * estan de baja y tienen una fecha de cese anterior a `$today`, en orden de
+     * `id` para que dos pasadas tomen las fichas en el mismo orden. Lectura sin
+     * candado: la tarea vuelve a leer cada una con {@see self::findForUpdate()}.
+     *
+     * @param  string  $today  fecha civil del centro, `Y-m-d`
+     * @return list<string> los `uuid`
+     */
+    public function dueScheduledOffboardings(string $today): array;
+
+    /**
+     * Cuantas bajas programadas tienen la fecha de cese anterior a `$date`. Con
+     * `$date` = ayer, las que siguen sin aplicar pasado el tope de la tarea.
+     *
+     * @param  string  $date  fecha civil, `Y-m-d`
+     */
+    public function countScheduledOffboardingsDueBefore(string $date): int;
 
     /**
      * Pagina de la plantilla que cumple los filtros, ordenada de forma estable.

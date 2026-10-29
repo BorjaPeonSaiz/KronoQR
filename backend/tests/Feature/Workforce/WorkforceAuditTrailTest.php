@@ -179,6 +179,7 @@ it('deja employee.offboarded con la fecha de cese y sin el motivo libre', functi
     Api::as($contexto['token'])->post('/api/v1/employees/'.$uuid.'/offboard', [
         'terminated_at' => '2026-09-14',
         'reason' => 'Baja voluntaria de Lucia por traslado',
+        'apply_now' => true,
     ])->assertValidResponse(200);
 
     $asientos = asientosDePlantilla('employee.offboarded');
@@ -186,6 +187,7 @@ it('deja employee.offboarded con la fecha de cese y sin el motivo libre', functi
     expect($asientos)->toHaveCount(1)
         ->and($asientos[0]['actor_id'])->toBe($contexto['user'])
         ->and($asientos[0]['payload'])->toEqual([
+            'apply_now' => true,
             'employee_uuid' => $uuid,
             'has_reason' => true,
             'terminated_on' => '2026-09-14',
@@ -246,7 +248,7 @@ it('mantiene integra la cadena de audit_log tras alta, cambio, baja y departamen
     // El ingles tiene que estar activo: de serie solo lo esta el español (bloque 26).
     InstallationLocale::set('es', ['es', 'en']);
     Api::as($contexto['token'])->patch('/api/v1/employees/'.$uuid, ['locale' => 'en'])->assertValidResponse(200);
-    Api::as($contexto['token'])->post('/api/v1/employees/'.$uuid.'/offboard', ['terminated_at' => '2026-09-14'])
+    Api::as($contexto['token'])->post('/api/v1/employees/'.$uuid.'/offboard', ['terminated_at' => '2026-09-14', 'apply_now' => true])
         ->assertValidResponse(200);
     Api::as($contexto['token'])->post('/api/v1/departments', ['name' => 'Spa'])->assertValidResponse(201);
 

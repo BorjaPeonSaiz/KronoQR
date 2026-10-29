@@ -1896,6 +1896,7 @@ final readonly class ErrorVocabulary
         'offboard',
         'offboarded',
         'offboarding',
+        'offboardings',
         'offline',
         'offset',
         'ofrece',

@@ -425,3 +425,20 @@ it('no continua una pausa mas alla del dia siguiente a su jornada: abre jornada 
     'pausa de la jornada del 15' => ['2026-03-15', ClockingAction::BREAK_END],
     'pausa de la jornada del 14' => ['2026-03-14', ClockingAction::CLOCK_IN],
 ])->group('RN-05', 'RF-AT-12', 'RN-10');
+
+// --- RN-14 (2.3.0): ningun tramo nuevo en una jornada posterior al cese ------
+
+it('no abre tramo en una jornada posterior al cese, con la baja aplicada o solo programada', function (ClockingResolution $resolution, string $jornada, ?string $cese, bool $rechaza): void {
+    $workDate = WorkDate::fromIsoDate($jornada, new DateTimeZone('Europe/Madrid'));
+
+    expect(ScanIntentPolicy::opensAfterTermination($resolution, $workDate, $cese))->toBe($rechaza);
+})->with([
+    'la entrada del dia siguiente al cese' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2026-10-31', '2026-10-30', true],
+    'la entrada del propio dia del cese' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2026-10-30', '2026-10-30', false],
+    // El turno de noche del ultimo dia cierra a las 06:00 en la jornada del cese.
+    'la salida del turno de noche del cese' => [fn (): ClockingResolution => ClockingResolution::clockOut(), '2026-10-30', '2026-10-30', false],
+    // La vuelta de la pausa continua la jornada que la pausa cerro: la del cese.
+    'la vuelta de la pausa del dia del cese' => [fn (): ClockingResolution => ClockingResolution::breakEnd('shift-entry-1'), '2026-10-30', '2026-10-30', false],
+    'la pausa cierra, no abre' => [fn (): ClockingResolution => ClockingResolution::breakStart(), '2026-10-31', '2026-10-30', false],
+    'sin fecha de cese' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2026-10-31', null, false],
+])->group('RN-14', 'RN-05', 'RF-AT-02');

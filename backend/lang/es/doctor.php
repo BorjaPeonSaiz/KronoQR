@@ -195,6 +195,14 @@ return [
                 'warning_unknown' => 'No se puede leer :path, donde el planificador deja la medida que lanza cada '
                     .'minuto.',
             ],
+            'scheduled_offboardings' => [
+                'ok' => 'No hay bajas programadas pendientes de aplicar pasado su plazo.',
+                'warning' => ':count baja(s) programada(s) siguen sin aplicar mas de un dia despues de su fecha de cese. '
+                    .'Nadie ha podido fichar despues del cese, pero sus tarjetas siguen activas y falta el asiento de '
+                    .'la baja.',
+                'warning_unknown' => 'No se ha podido comprobar si hay bajas programadas sin aplicar. El fichaje no se '
+                    .'ve afectado.',
+            ],
         ],
 
         // --- Correo ----------------------------------------------------------
@@ -782,6 +790,14 @@ return [
                 'warning_unknown' => "El directorio de metricas tiene que ser del usuario 1000:\n"
                     ."  ls -l :path\n"
                     .'Ver docs/runbooks/restaurar-backup.md §4.3.',
+            ],
+            'scheduled_offboardings' => [
+                'warning' => "Comprueba que el planificador esta en marcha y lanza la tarea a mano (repetirla es seguro):\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose exec -T app php artisan workforce:apply-scheduled-offboardings\n"
+                    .'Ver docs/runbooks/turno-abierto-prolongado.md §7.',
+                'warning_unknown' => "Vuelve a ejecutar `docker compose exec app php artisan product:doctor` cuando la base de datos responda.\n"
+                    .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
             ],
         ],
 

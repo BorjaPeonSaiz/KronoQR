@@ -97,6 +97,16 @@ final class InterleavingEmployeeRepository implements EmployeeRepository
         $this->inner->saveTermination($employee);
     }
 
+    public function dueScheduledOffboardings(string $today): array
+    {
+        return $this->inner->dueScheduledOffboardings($today);
+    }
+
+    public function countScheduledOffboardingsDueBefore(string $date): int
+    {
+        return $this->inner->countScheduledOffboardingsDueBefore($date);
+    }
+
     public function search(
         AccessScope $scope,
         ?int $departmentId,

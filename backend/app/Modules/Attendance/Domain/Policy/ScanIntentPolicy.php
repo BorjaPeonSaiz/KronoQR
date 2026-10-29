@@ -152,6 +152,30 @@ final readonly class ScanIntentPolicy
     }
 
     /**
+     * **Ningun tramo nuevo despues del cese** (RN-14, RN-05, 2.3.0): `true` si
+     * este escaneo abriria un tramo en una jornada posterior a la fecha de cese
+     * de la persona, la fije una baja efectiva o una programada que la tarea aun
+     * no ha aplicado.
+     *
+     * Se pregunta con la jornada **ya resuelta** (`$workDate`, la del agregado
+     * destino), no con la fecha civil del escaneo, y por eso no corta lo que la
+     * jornada del cese todavia admite (regla dura 4):
+     *
+     * - la salida del turno de noche del ultimo dia cierra un tramo, no abre uno;
+     * - la vuelta de una pausa abre un tramo en la jornada que la pausa cerro, la
+     *   del cese;
+     * - la entrada del dia siguiente abre la jornada siguiente, y esa no.
+     *
+     * Quien llama rechaza con el rechazo generico (regla dura 17, RS-03). La
+     * persona no se queda sin fichar nada que le correspondiera: despues del cese
+     * no hay jornada que registrar.
+     */
+    public static function opensAfterTermination(ClockingResolution $resolution, WorkDate $workDate, ?string $terminatedOn): bool
+    {
+        return $terminatedOn !== null && $resolution->opensEntry() && $workDate->isoDate > $terminatedOn;
+    }
+
+    /**
      * Sin tramo abierto solo se puede abrir uno; lo que se decide aqui es **en
      * que jornada**.
      *

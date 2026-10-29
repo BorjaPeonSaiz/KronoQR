@@ -42,6 +42,7 @@ const BUSINESS_REJECTION_FAILURES = [
     'Modules\Reporting\Domain\Exception\InvalidAdoptionFacts' => 'recuentos imposibles: una consulta mal escrita',
     'Modules\Reporting\Domain\Exception\InvalidReportExportTransition' => 'transicion que ninguna peticion puede provocar',
     'Modules\Shared\Domain\Exception\InvalidElapsedTime' => 'duracion negativa medida sin pasar por los agregados',
+    'Modules\Workforce\Domain\Exception\ScheduledOffboardingNotDue' => 'la tarea aplica una baja programada que no ha vencido: defecto del llamador',
 
     // --- Una configuracion de la instalacion que no puede ser.
     'Modules\Attendance\Domain\Exception\InvalidClockingPolicy' => 'umbrales de RN-07 y RN-08 incompatibles en la configuracion',

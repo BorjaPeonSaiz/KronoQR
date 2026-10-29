@@ -635,6 +635,16 @@ return [
         'whole_staff' => 'plantilla completa',
     ],
 
+    'apply_scheduled_offboardings' => [
+        'no_site' => 'Todavia no hay centro de trabajo: sin el no se ha podido programar ninguna baja (RF-PD-03).',
+        'summary' => 'Hoy es :today en el centro. Bajas programadas aplicadas: :applied. Aplazadas porque la jornada '
+            .'del cese aun puede crecer: :deferred.',
+        'overdue' => ':count baja(s) programada(s) siguen sin aplicar mas de un dia despues de su cese. Nadie ha '
+            .'podido fichar despues del cese; revisa el log («workforce.scheduled_offboarding_failed»).',
+        'failures' => ':count baja(s) programada(s) no se pudieron aplicar y se reintentaran en la proxima pasada. '
+            .'Busca «workforce.scheduled_offboarding_failed» en el log.',
+    ],
+
     'detect_incidents' => [
         'invalid_days' => '--days espera un numero entero de dias mayor que cero y ha llegado «:value». '
             .'Sin valor valido no se adivina la ventana: revisar de mas abre incidencias sobre '

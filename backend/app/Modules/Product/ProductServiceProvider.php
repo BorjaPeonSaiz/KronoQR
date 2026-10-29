@@ -144,6 +144,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\PendingDiagnosticsAudit
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScanDiscardBudgetProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScheduledOffboardingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
@@ -1912,6 +1913,15 @@ final class ProductServiceProvider extends ServiceProvider
                         metrics: new TextfileMetricsReader(
                             Config::string('observability.metrics.textfile_path'),
                         ),
+                        clock: $app->make(Clock::class),
+                    ),
+                    /*
+                     * Las bajas programadas sin aplicar pasado su tope (ADR-062
+                     * §4). Detras del latido: si el planificador no corre, esta
+                     * es su consecuencia mas visible para RRHH.
+                     */
+                    new ScheduledOffboardingsProbe(
+                        database: DB::connection(),
                         clock: $app->make(Clock::class),
                     ),
                     new MailProbe(

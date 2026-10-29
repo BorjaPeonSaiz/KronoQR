@@ -240,7 +240,6 @@ final class PendingDomainCommentCleanup
         'Modules/Workforce/Domain/Exception/EmployeeAlreadyTerminated.php',
         'Modules/Workforce/Domain/Exception/EmployeeRecordMinimised.php',
         'Modules/Workforce/Domain/Exception/InvalidAbsencePeriod.php',
-        'Modules/Workforce/Domain/Exception/InvalidEmploymentPeriod.php',
         'Modules/Workforce/Domain/Model/Absence.php',
         'Modules/Workforce/Domain/Model/Department.php',
         'Modules/Workforce/Domain/Model/Employee.php',

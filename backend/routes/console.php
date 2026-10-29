@@ -393,6 +393,30 @@ $detectIncidents = ScheduledTaskOutput::toLog(Schedule::command('attendance:dete
 $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-incidents', $detectIncidents));
 
 /*
+ * Bajas programadas (RN-14, RF-GP-03, ADR-062 §4).
+ *
+ *   workforce:apply-scheduled-offboardings
+ *
+ * CADA HORA Y NO A UNA HORA DEL CENTRO, a proposito. La baja se aplica una sola
+ * vez, el dia civil siguiente al cese, y la pasada compara fechas civiles de la
+ * zona del centro: un dia de 23 o 25 horas tiene 23 o 25 pasadas, una pasada
+ * perdida la cubre la siguiente, y el aplazamiento de un turno de noche del
+ * ultimo dia se resuelve solo. Programar «las 00:05 del centro» en UTC se
+ * moveria dos veces al año.
+ *
+ * El minuto 7 la aparta del cambio de hora en punto de las demas tareas
+ * horarias. Es idempotente; `withoutOverlapping` evita pasadas simultaneas que
+ * se esperarian en el candado de la cadena. Sale con FAILURE si una persona
+ * fallo, y `onFailure()` lo deja en el log. La alerta es
+ * `ScheduledOffboardingOverdue`, sobre `kronoqr_scheduled_offboardings_overdue`.
+ */
+$applyScheduledOffboardings = ScheduledTaskOutput::toLog(Schedule::command('workforce:apply-scheduled-offboardings')
+    ->hourlyAt(7)
+    ->withoutOverlapping()
+    ->runInBackground());
+$applyScheduledOffboardings->onFailure(LogScheduledCommandFailure::of('workforce:apply-scheduled-offboardings', $applyScheduledOffboardings));
+
+/*
  * Deteccion de patrones anomalos de uso de credencial (RF-PR-06, RN-16,
  * tarea 3.11).
  *

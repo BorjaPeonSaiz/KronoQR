@@ -114,15 +114,30 @@ it('no acota las jornadas de quien no esta de baja', function (EmploymentStatus 
     'suspendida' => [EmploymentStatus::SUSPENDED],
 ])->group('RN-14', 'RF-PA-04');
 
-it('decide por el estado y no por que la instantanea traiga fecha de cese', function (EmploymentStatus $status): void {
-    // Solo la baja acota. Una instantanea en alta con las dos fechas no deberia
-    // existir, pero si existiera, su jornada no se rechazaria por ellas.
-    $persona = personaParaElAltaManual($status, '2026-03-01', '2026-09-30');
+it('con la baja programada rechaza una jornada posterior al cese, aunque la tarea no la haya aplicado', function (EmploymentStatus $status): void {
+    // RN-14 (2.3.0): desde que hay fecha de cese ningun tramo nuevo cae
+    // despues, este la baja aplicada o no.
+    $programada = personaParaElAltaManual($status, '2026-03-01', '2026-09-30');
 
-    expect(sinRechazoDelAltaManual(fn () => $persona->assertWorkDateAllowed(jornadaParaElAltaManual('2026-10-15'))))->toBeTrue();
+    $rechazo = rechazoDelAltaManual(fn () => $programada->assertWorkDateAllowed(jornadaParaElAltaManual('2026-10-01')));
+
+    expect($rechazo->translationKey)->toBe('attendance.errors.work_date_after_termination')
+        ->and($rechazo->parameters)->toBe(['terminated_on' => '2026-09-30'])
+        ->and($rechazo->getMessage())->toBe('The work date 2026-10-01 is after the termination date 2026-09-30 of a scheduled offboarding (RN-14).');
 })->with([
     'en alta' => [EmploymentStatus::ACTIVE],
     'suspendida' => [EmploymentStatus::SUSPENDED],
+])->group('RN-14', 'RF-PA-04');
+
+it('con la baja programada admite el dia del cese y los anteriores, tambien los previos al alta', function (string $jornada): void {
+    $programada = personaParaElAltaManual(EmploymentStatus::ACTIVE, '2026-03-01', '2026-09-30');
+
+    expect(sinRechazoDelAltaManual(fn () => $programada->assertWorkDateAllowed(jornadaParaElAltaManual($jornada))))->toBeTrue();
+})->with([
+    'el dia del cese' => ['2026-09-30'],
+    'el dia anterior' => ['2026-09-29'],
+    // A una persona en alta no se le aplica el limite por la fecha de alta.
+    'antes del alta' => ['2026-02-01'],
 ])->group('RN-14', 'RF-PA-04');
 
 it('no compara contra una fecha que falta: a esa baja ya no la admite admitsEntries', function (?string $hiredOn, ?string $terminatedOn, string $jornada): void {
@@ -207,14 +222,33 @@ it('dice en el mensaje tecnico cual es el limite, sin datos de la persona', func
     );
 })->group('RN-05', 'RN-14');
 
-it('no acota las marcas de quien no esta de baja', function (EmploymentStatus $status): void {
-    $persona = personaParaElAltaManual($status, '2026-03-01', '2026-10-10');
+it('no acota las marcas de quien no tiene fecha de cese', function (EmploymentStatus $status): void {
+    $persona = personaParaElAltaManual($status, '2026-03-01', null);
 
     expect(sinRechazoDelAltaManual(fn () => $persona->assertTimesAllowed(
         ShiftEntryTimes::closed(Instants::utc('2026-10-20 08:00'), Instants::utc('2026-10-20 15:00')),
         ContinuationCeilingFactory::standard(),
         Instants::madrid(),
     )))->toBeTrue();
+})->with([
+    'en alta' => [EmploymentStatus::ACTIVE],
+    'suspendida' => [EmploymentStatus::SUSPENDED],
+])->group('RN-05', 'RN-14', 'RF-PA-04');
+
+it('con la baja programada acota las marcas igual que con la baja efectiva', function (EmploymentStatus $status): void {
+    // Cese el 10: el turno de noche del ultimo dia cabe, la entrada del 13 no.
+    $programada = personaParaElAltaManual($status, '2026-03-01', '2026-10-10');
+
+    expect(sinRechazoDelAltaManual(fn () => $programada->assertTimesAllowed(
+        ShiftEntryTimes::closed(Instants::utc('2026-10-10 20:00'), Instants::utc('2026-10-11 04:00')),
+        ContinuationCeilingFactory::standard(),
+        Instants::madrid(),
+    )))->toBeTrue()
+        ->and(rechazoPorElCese(fn () => $programada->assertTimesAllowed(
+            ShiftEntryTimes::closed(Instants::utc('2026-10-13 06:00'), Instants::utc('2026-10-13 13:00')),
+            ContinuationCeilingFactory::standard(),
+            Instants::madrid(),
+        ))->mark)->toBe(FutureMark::ClockIn);
 })->with([
     'en alta' => [EmploymentStatus::ACTIVE],
     'suspendida' => [EmploymentStatus::SUSPENDED],

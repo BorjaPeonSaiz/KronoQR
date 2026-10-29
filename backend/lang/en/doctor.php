@@ -163,6 +163,14 @@ return [
                     .'of minutes and check again.',
                 'warning_unknown' => ':path, where the scheduler leaves its every-minute measurement, cannot be read.',
             ],
+            'scheduled_offboardings' => [
+                'ok' => 'There are no scheduled offboardings pending past their deadline.',
+                'warning' => ':count scheduled offboarding(s) are still not applied more than a day after their '
+                    .'termination date. Nobody has been able to clock in after it, but their cards are still active '
+                    .'and the offboarding audit entry is missing.',
+                'warning_unknown' => 'Could not check whether there are scheduled offboardings not applied. Clocking in '
+                    .'is not affected.',
+            ],
         ],
 
         'mail' => [
@@ -721,6 +729,14 @@ return [
                 'warning_unknown' => "The metrics directory must belong to user 1000:\n"
                     ."  ls -l :path\n"
                     .'See docs/runbooks/restaurar-backup.md §4.3.',
+            ],
+            'scheduled_offboardings' => [
+                'warning' => "Check that the scheduler is running and run the task by hand (running it again is safe):\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose exec -T app php artisan workforce:apply-scheduled-offboardings\n"
+                    .'See docs/runbooks/turno-abierto-prolongado.md §7.',
+                'warning_unknown' => "Run `docker compose exec app php artisan product:doctor` again once the database responds.\n"
+                    .'If the problem persists, check the database checks in this same report first.',
             ],
         ],
 
