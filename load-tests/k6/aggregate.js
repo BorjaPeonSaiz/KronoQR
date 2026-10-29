@@ -1693,12 +1693,20 @@ function formatReport(summary) {
   if (failed.length > 0) {
     say(`VEREDICTO: rojo en ${failed.map(([requirement]) => requirement).join(', ')}.`)
   } else if (unreliable.length > 0) {
-    // Antes que «no comparable»: con la linea base comparable no puede haber
-    // ninguno de los dos a la vez, y este dice que hacer (repetir la pasada).
+    // Antes que «no comparable»: «no fiable» exige una linea base comparable, y
+    // con ella solo queda «no comparable» el requisito que la linea base no
+    // trae (RNF-P-08 sin `pin_path.p95_over_reject_p50`). Pueden darse los dos
+    // a la vez: el veredicto dice primero que repetir la pasada y despues que
+    // rehacer la linea base, sin callar ninguno.
     say(
       `VEREDICTO: no fiable. El runner iba ${summary.machine.slowdown} veces mas lento que en la linea base ` +
         `(maximo ${summary.machine.max_slowdown}x): ${unreliable.map(([requirement]) => requirement).join(', ')} ` +
         'no se dan ni por rojos ni por verdes. Repite la pasada.' +
+        (notComparable.length > 0
+          ? ` Ademas, no comparable: ${notComparable.map(([requirement]) => requirement).join(', ')}; la linea ` +
+            'base no trae lo necesario para juzgarlos. Rehazla con baseline.js a partir de las pasadas que la ' +
+            'construyeron.'
+          : '') +
         (unmeasurable.length > 0
           ? ` Ademas, sin datos suficientes para ${unmeasurable.map(([requirement]) => requirement).join(', ')}.`
           : ''),

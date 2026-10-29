@@ -1374,6 +1374,22 @@ test('[V21-5-QA-01][RNF-P-02][RNF-P-08] un runner 15 veces mas lento da no fiabl
   assert.equal(exitCodeOf(summary), 2)
 })
 
+test('[V21-5-QA-01][RNF-P-08] el veredicto no fiable no calla el no comparable de una linea base sin PIN', () => {
+  // La maquina 15 veces mas lenta y una linea base comparable en carga pero sin
+  // `pin_path.p95_over_reject_p50`: RNF-P-02 no es fiable y RNF-P-08 no es
+  // comparable, a la vez.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 1500, rejectDurationMs: 450 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ pin_path: { p50: 708.6, p95: 895.2 } }),
+  })
+
+  const report = formatReport(summary)
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unreliable')
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'not_comparable')
+  assert.match(report, /VEREDICTO: no fiable\. .*Repite la pasada\. Ademas, no comparable: RNF-P-08; .*baseline\.js/)
+})
+
 test('[V21-5-QA-01] publica cuanto mas lenta iba la maquina que en la linea base', () => {
   const summary = runAnalysis(greenRun({ rejectDurationMs: 450 }), {
     latencyVerdictMode: 'baseline',
