@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. Revisión de `seguridad-cumplimiento` pendiente sobre §2, §3.3, §4 y §8. Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese) y 25.6 (panel) |
+| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. El 29-10-2026 decidió además que la baja con cese de hoy también se programa, con «Aplicar ya» (`apply_now`) para el efecto inmediato (§3). Revisión de `seguridad-cumplimiento` pendiente sobre §2, §3.3, §4 y §8. Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese) y 25.6 (panel) |
 | **Fecha** | 29 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 25 de la 2.3.0, tarea 25.1; V3-AR-6 y R4-SC-01 en seguimiento) |
 | **Afecta a** | **Enmienda** [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md): «`terminated` es final», el disparador descartado y la fila de una persona de baja en la importación. Precisa [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) por su enmienda del 29-10-2026 (D15) · Respeta [ADR-006](ADR-006-los-turnos-no-se-parten-a-medianoche.md), [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-025](ADR-025-frontera-de-dependencias-del-nucleo.md), [ADR-028](ADR-028-limites-del-plan-no-bloquean.md), [ADR-034](ADR-034-el-token-nace-al-imprimir-no-al-emitir.md), [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md), [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md), [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md), [ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md) y [ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) · `Workforce`: `Employee`, `EmployeeRepository`, `OffboardEmployeeHandler`, `PlanEmployeeImport`, `ApplyEmployeeImport` y los casos de uso nuevos de §10 · `Identity`: la revocación de la baja y la emisión de la readmisión · `Attendance`: `EmployeeDirectory`, `ScanIntentPolicy`, `ManualEntryEligibility` · tablas nuevas `employment_periods` y `employment_period_corrections` |
@@ -126,16 +126,26 @@ Las dos funciones entran en la comprobación de existencia, activación y `SECUR
 
 ### 3. La baja programada
 
-**Una fecha de cese posterior a hoy ya no se rechaza: se programa** (RN-14, RF-GP-03). Como hasta
-ahora, «hoy» es la fecha civil del centro en el instante en que el servidor recibe la baja. La resuelve
-el caso de uso con `Clock` y `sites.timezone`, y el dominio compara fechas, nunca instantes.
+**Una fecha de cese de hoy o posterior se programa** (RN-14, RF-GP-03). Para una fecha futura, es la
+decisión D17. Para la de hoy, es la decisión del propietario del 29-10-2026: la persona puede fichar la
+salida de su último turno. Como hasta ahora, «hoy» es la fecha civil del centro en el instante en que
+el servidor recibe la baja. La resuelve el caso de uso con `Clock` y `sites.timezone`, y el dominio
+compara fechas, nunca instantes.
 
-| Fecha de cese | Efecto |
-|---|---|
-| Anterior a la fecha de alta | `422` en `terminated_at`, como hoy |
-| De la fecha de alta a hoy, ambas incluidas | **Baja en el acto**, como hoy: tarjetas revocadas, portal cerrado, asiento `employee.offboarded` |
-| Posterior a hoy | **Baja programada**: la persona sigue `active` (o `suspended`), con `terminated_at` = la fecha. Ficha, tarjetas y portal no cambian. Asiento `employee.offboarding_scheduled` |
-| Fecha de alta futura y cese igual a esa fecha | **Baja sin efectos en el acto**, como hoy: la contratación que no llegó a empezar |
+**«Aplicar ya»** es un indicador explícito de la petición, `apply_now`, que es `false` si no se envía.
+Sirve para un despido con efecto inmediato: con cese de hoy, la baja se hace efectiva en el acto.
+
+| Fecha de cese | Sin `apply_now` | Con `apply_now: true` |
+|---|---|---|
+| Anterior a la fecha de alta | `422` en `terminated_at`, como hoy | igual |
+| Anterior a hoy y no anterior al alta | **Baja en el acto**: tarjetas revocadas, portal cerrado, asiento `employee.offboarded`. No hay nada que esperar: el último día ya pasó | igual |
+| Hoy | **Baja programada**: se aplica al terminar el día, por la tarea de §4. Asiento `employee.offboarding_scheduled` | **Baja en el acto**, con asiento `employee.offboarded` y `apply_now: true` |
+| Posterior a hoy | **Baja programada**: la persona sigue `active` (o `suspended`), con `terminated_at` = la fecha. Ficha, tarjetas y portal no cambian. Asiento `employee.offboarding_scheduled` | `422` en `apply_now`: no se aplica en el acto una baja cuyo último día no ha llegado. Un despido con efecto inmediato lleva el cese de hoy |
+| Fecha de alta futura y cese igual a esa fecha | **Baja sin efectos en el acto**, como hoy: la contratación que no llegó a empezar | igual |
+
+`Employee::offboard($terminatedOn, $today, $applyNow)` decide el efecto con esta tabla. El indicador
+es un dato de la decisión, no del canal: la validación de la petición lo comprueba primero, pero lo
+garantiza el dominio.
 
 El estado «baja programada» **no es un valor nuevo de `status`**. Se deriva del par: `status <>
 'terminated' AND terminated_at IS NOT NULL`. Ningún `switch` sobre `status` tiene que aprender un
@@ -166,8 +176,9 @@ Las dos la leen de `EmployeeSnapshot`, que ya lleva `terminatedOn` (ADR-025). La
   de ADR-043).
 
 **Reprogramar** es volver a llamar a la baja con otra fecha. Si la fecha nueva es futura, se
-reprograma con asiento `employee.offboarding_scheduled` y `previous_terminated_at`. Si es hoy o
-anterior, se hace efectiva en el acto.
+reprograma con asiento `employee.offboarding_scheduled` y `previous_terminated_at`. La fecha nueva
+puede ser hoy, y entonces sigue programada. Si es anterior a hoy, o es hoy con `apply_now`, la baja se
+hace efectiva en el acto. Así «Aplicar ya» sirve también sobre una baja que ya estaba programada.
 
 **Anular** es una acción propia (§9). Solo cabe **mientras la fecha de cese no haya pasado**: con hoy
 ≤ cese, se pone `terminated_at` a nulo, con asiento `employee.offboarding_cancelled`. Pasada la fecha,
@@ -189,7 +200,9 @@ corregir la fecha (§7) cuando la baja ya sea efectiva.
 - **Qué aplica.** Cada pasada resuelve «hoy» una sola vez, con `Clock` y la zona del centro, y toma a
   las personas con `status <> 'terminated' AND terminated_at < hoy`. Compara fechas civiles, nunca
   instantes, así que el cambio de hora no la afecta. Sin centro no hay nada que aplicar: no se pudo
-  programar ninguna baja (ADR-040).
+  programar ninguna baja (ADR-040). **Una baja con cese de hoy no tiene trato aparte**: «al terminar
+  el día» es la primera pasada del día civil siguiente, salvo que haya aplazamiento. La que se aplicó
+  con `apply_now` ya está `terminated` y la tarea no la ve.
 - **Aplazamiento.** No se aplica mientras **la jornada del cese pueda seguir creciendo**, es decir, si
   la persona tiene un tramo abierto de una jornada hasta el cese, o uno cerrado en pausa dentro de su
   cota de continuación (ADR-058). Así el turno de noche y la pausa de madrugada del último día terminan
@@ -334,9 +347,9 @@ fechas e identificadores de la organización, **nunca nombre, documento ni motiv
 
 | Acción | Actor | Cuándo | *Payload* además de `employee_uuid` |
 |---|---|---|---|
-| `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja | `terminated_at`, `previous_terminated_at` (al reprogramar) |
+| `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_at`, `previous_terminated_at` (al reprogramar) |
 | `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_at` anulada |
-| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_at` y, si la aplica la tarea, `scheduled: true`, `due_on` y `days_late` |
+| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_at`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on` y `days_late` |
 | `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import` |
 | `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_at`, `terminated_at`, `correction_id` |
 
@@ -355,7 +368,7 @@ por rol (regla dura 18).
 
 | Operación | Ruta y cuerpo | Respuestas |
 |---|---|---|
-| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason? }`. **Sin cambio de cuerpo** | `200` `Employee`, que gana `offboarding: { state: "scheduled" \| "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at` |
+| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason?, apply_now?: false }`. **`apply_now` es el único campo nuevo**, opcional y `false` por omisión: con cese de hoy aplica la baja en el acto (despido con efecto inmediato) | `200` `Employee`, que gana `offboarding: { state: "scheduled" | "effective", terminated_at } | null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at`, o `apply_now` con un cese posterior a hoy || "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at` |
 | Anular la baja programada | `POST /api/v1/employees/{uuid}/offboard/cancel`, sin cuerpo | `200` `Employee`. `409` `offboarding-not-scheduled`, `offboarding-due` o `employee-terminated` |
 | Readmisión | `POST /api/v1/employees/{uuid}/rehire`, `{ hired_at, department_id?, locale?, contract?: { weekly_hours, annual_hours, schedule_type } \| null, reset_pin?: false }` | `200` `{ employee, employment_period, credential: { uuid, status: "pending_print" }, pin? }`. `pin` solo con `reset_pin`, una vez. `409` `employee-not-terminated` o `employee-record-minimised`. `422` `hired_at` |
 | Readmisión en lote | `POST /api/v1/employees/rehire`, `{ employee_uuids: [uuid, …], hired_at, reset_pin?: false }` | `200` `{ rehired: [ … como arriba ] }`. `422` con un error por posición y nada escrito |
@@ -407,6 +420,7 @@ por rol (regla dura 18).
   (§3) es de fechas, no de estados.
 - **Una tarea diaria a una hora del centro.** Exige convertir la hora a UTC con su cambio de hora y no
   recupera una pasada perdida hasta el día siguiente. Ver §4.
+- **Aplicar en el acto la baja con cese de hoy, como en la 2.2.x.** Dejaba a la persona sin fichar la salida de su último turno si RRHH la registraba antes. El propietario decidió el 29-10-2026 programarla por defecto y dejar «Aplicar ya» para el despido con efecto inmediato.
 - **Aplicar la baja al empezar el día del cese.** Dejaría a la persona sin fichar su último día, que
   es justo lo que D17 pide que no pase.
 - **Que la baja rija solo cuando la aplica la tarea.** Un `scheduler` parado dejaría fichar días
@@ -429,7 +443,8 @@ por rol (regla dura 18).
   dice.
 - **La retención de la ficha cuenta desde la última baja** (ADR-060). Los contratos y las ausencias de
   un periodo antiguo se conservan mientras la persona siga en la plantilla. Lo tiene que validar el
-  DPO del cliente, igual que el plazo de `absences` (33.11).
+  DPO del cliente, igual que el plazo de `absences` (33.11). Está en la lista de validación jurídica
+  del plan de la 2.3.0 (decisión del propietario del 29-10-2026: el diseño no cambia).
 - **Hay una tarea programada más**, con su métrica, su alerta y su comprobación en `product:doctor`.
 - **El riesgo de doc 07 §6 «días trabajados después de la fecha de cese»** queda cubierto por §7 y
   por la enmienda de ADR-043 cuando se implementen las tareas 25.4 y 25.5. No antes.
@@ -439,7 +454,7 @@ por rol (regla dura 18).
 **Unitarias** (`backend-laravel`; mutación por encima del 80 % sobre `Employee`, `EmploymentPeriod`,
 `EmploymentHistory` y `TerminationDateCorrection`):
 
-- `offboard`: pasado, hoy y futuro; la contratación que no empezó; la reprogramación a futuro y a hoy.
+- `offboard`: pasado, hoy y futuro, cada uno con y sin `apply_now` (hoy con `apply_now` es efectiva, futuro con `apply_now` es `422`); la contratación que no empezó; la reprogramación a futuro, a hoy y a hoy con `apply_now`.
 - La anulación con hoy < cese, hoy = cese y hoy > cese.
 - La aplicación, solo si está vencida.
 - `rehire`: alta el día del cese (no), el día siguiente (sí), sin baja (no) y minimizada (no).

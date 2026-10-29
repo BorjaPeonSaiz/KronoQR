@@ -347,6 +347,6 @@ orden de candados de §1, `FOR NO KEY UPDATE` de §2, la escritura por columnas 
    dentro de la propia aplicación, no cambian.
 
 La prueba funcional del punto 6 de §6, «Baja con fecha futura: `422`…», se sustituye por la de la baja
-programada de ADR-062 (fecha futura: persona en alta, tarjetas y portal sin cambios, asiento
-`employee.offboarding_scheduled`), con el mismo reloj falso, las mismas zonas y los mismos días de
+programada de ADR-062 (cese de hoy o futuro sin `apply_now`: persona en alta, tarjetas y portal sin cambios, asiento
+`employee.offboarding_scheduled`; cese de hoy con `apply_now`: baja en el acto; cese futuro con `apply_now`: `422`), con el mismo reloj falso, las mismas zonas y los mismos días de
 cambio de hora.
