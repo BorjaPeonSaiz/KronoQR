@@ -1973,7 +1973,7 @@ export interface paths {
          *     | Anterior a hoy, no anterior al alta | **Baja en el acto** | igual |
          *     | Hoy | **Baja programada**: se aplica al terminar el dia | **Baja en el acto** (despido con efecto inmediato) |
          *     | Posterior a hoy | **Baja programada** | `422` en `apply_now` |
-         *     | Alta futura y cese igual a esa fecha | **Baja sin efectos**, en el acto (la contratacion que no llego a empezar) | igual |
+         *     | Alta futura y cese igual a esa fecha | **Baja programada** (el extra de un solo dia: ficha ese dia) | **Baja sin efectos**, en el acto (la contratacion que no llego a empezar) |
          *
          *     **Baja en el acto.** `status` pasa a `terminated`, y **todas** las
          *     credenciales activas —la tarjeta en uso y la reemision pendiente de
@@ -8561,8 +8561,12 @@ export interface components {
              */
             anonymized_at: string | null;
             /**
-             * @description La baja de la persona, como en `Employee.offboarding`: se deriva de
-             *     `status` y `terminated_at`, que el responsable ya ve.
+             * @description La baja de la persona, como en `Employee.offboarding`. **Desde la
+             *     2.3.0 el responsable ve tambien los ceses programados de su
+             *     departamento**, no solo las bajas efectivas: le hacen falta para
+             *     planificar los turnos y para entender el `422 work_date_after_termination`
+             *     de un tramo posterior al cese (RN-14). Validacion pendiente del DPO
+             *     del cliente (doc 01 §7).
              */
             offboarding: components["schemas"]["EmployeeOffboarding"] | null;
         };
@@ -8665,7 +8669,8 @@ export interface components {
              *     posterior, queda programada salvo `apply_now` (RN-14). «Hoy» es la
              *     fecha civil del centro (`Site.timezone`) en el momento en que el
              *     servidor recibe la peticion. Si la fecha de alta es posterior a ese
-             *     mismo hoy, un cese igual al alta es una baja sin efectos en el acto.
+             *     mismo hoy, un cese igual al alta se programa (el extra de un solo
+             *     dia), y con `apply_now` es una baja sin efectos en el acto.
              *     Es el dato desde el que cuenta la retencion de RL-02.
              */
             terminated_at: string;
@@ -8673,7 +8678,9 @@ export interface components {
              * @description «Aplicar ya» (RN-14, ADR-062 §3), `false` si no se envía: con un cese de hoy, la baja es
              *     efectiva en el acto en lugar de programarse. Es el despido con
              *     efecto inmediato. Con un cese anterior a hoy no cambia nada (ya es
-             *     en el acto); con uno posterior responde `422` en este campo.
+             *     en el acto); con uno posterior responde `422` en este campo, salvo
+             *     con el cese en un alta que aun no ha llegado: entonces es la baja sin
+             *     efectos de la contratacion que no llego a empezar.
              */
             apply_now?: boolean;
             /**
@@ -14182,6 +14189,27 @@ export interface components {
             };
         };
         /**
+         * @description La baja no se puede registrar en el estado actual de la ficha (RN-14,
+         *     ADR-062 §3). **`type` distingue las causas**:
+         *
+         *     - `urn:kronoqr:problem:employee-terminated` — la baja ya es efectiva:
+         *       no se repite. Se recarga la ficha.
+         *     - `urn:kronoqr:problem:offboarding-due` — la ficha tiene una baja
+         *       programada cuyo cese ya ha pasado y se ha pedido **otra fecha**: la
+         *       fecha ya no cambia. Con la misma fecha, la baja se aplica en el acto.
+         *     - `urn:kronoqr:problem:conflict` — la instalacion no tiene centro.
+         *
+         *     Ninguno cambia nada ni deja asiento.
+         */
+        OffboardConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La baja programada no se puede anular en el estado actual de la ficha
          *     (RN-14, ADR-062 §3). **`type` distingue las causas**:
          *
@@ -16632,7 +16660,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["EmployeeConflict"];
+            409: components["responses"]["OffboardConflict"];
             415: components["responses"]["UnsupportedMediaType"];
             /**
              * @description La peticion no cumple el contrato. Ademas de los errores de forma,

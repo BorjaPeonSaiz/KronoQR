@@ -4042,7 +4042,7 @@ paths:
         | Anterior a hoy, no anterior al alta | **Baja en el acto** | igual |
         | Hoy | **Baja programada**: se aplica al terminar el dia | **Baja en el acto** (despido con efecto inmediato) |
         | Posterior a hoy | **Baja programada** | `422` en `apply_now` |
-        | Alta futura y cese igual a esa fecha | **Baja sin efectos**, en el acto (la contratacion que no llego a empezar) | igual |
+        | Alta futura y cese igual a esa fecha | **Baja programada** (el extra de un solo dia: ficha ese dia) | **Baja sin efectos**, en el acto (la contratacion que no llego a empezar) |
 
         **Baja en el acto.** `status` pasa a `terminated`, y **todas** las
         credenciales activas —la tarjeta en uso y la reemision pendiente de
@@ -4173,7 +4173,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/EmployeeConflict'
+          $ref: '#/components/responses/OffboardConflict'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '422':
@@ -13308,6 +13308,42 @@ components:
                 title: Conflicto con el estado actual
                 status: 409
                 detail: Ya existe otro empleado con ese correo.
+    OffboardConflict:
+      description: |
+        La baja no se puede registrar en el estado actual de la ficha (RN-14,
+        ADR-062 §3). **`type` distingue las causas**:
+
+        - `urn:kronoqr:problem:employee-terminated` — la baja ya es efectiva:
+          no se repite. Se recarga la ficha.
+        - `urn:kronoqr:problem:offboarding-due` — la ficha tiene una baja
+          programada cuyo cese ya ha pasado y se ha pedido **otra fecha**: la
+          fecha ya no cambia. Con la misma fecha, la baja se aplica en el acto.
+        - `urn:kronoqr:problem:conflict` — la instalacion no tiene centro.
+
+        Ninguno cambia nada ni deja asiento.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            ya-de-baja:
+              value:
+                type: 'urn:kronoqr:problem:employee-terminated'
+                title: La persona ya esta dada de baja
+                status: 409
+                detail: El empleado 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 ya estaba dado de baja.
+            cese-pasado:
+              value:
+                type: 'urn:kronoqr:problem:offboarding-due'
+                title: La fecha de cese ya ha pasado
+                status: 409
+                detail: La fecha de cese (2026-10-31) ya ha pasado (hoy es 2026-11-01) y ya no se puede cambiar. Con esa misma fecha, la baja se aplica en el acto.
+            sin-centro:
+              value:
+                type: 'urn:kronoqr:problem:conflict'
+                title: Conflicto con el estado actual
+                status: 409
+                detail: "La instalacion no tiene centro de trabajo: completa la puesta en marcha antes de continuar."
     ScheduledOffboardingConflict:
       description: |
         La baja programada no se puede anular en el estado actual de la ficha
@@ -16964,8 +17000,12 @@ components:
             - $ref: '#/components/schemas/EmployeeOffboarding'
             - type: 'null'
           description: |
-            La baja de la persona, como en `Employee.offboarding`: se deriva de
-            `status` y `terminated_at`, que el responsable ya ve.
+            La baja de la persona, como en `Employee.offboarding`. **Desde la
+            2.3.0 el responsable ve tambien los ceses programados de su
+            departamento**, no solo las bajas efectivas: le hacen falta para
+            planificar los turnos y para entender el `422 work_date_after_termination`
+            de un tramo posterior al cese (RN-14). Validacion pendiente del DPO
+            del cliente (doc 01 §7).
 
     ScopedEmployeeCollection:
       type: object
@@ -17120,7 +17160,8 @@ components:
             posterior, queda programada salvo `apply_now` (RN-14). «Hoy» es la
             fecha civil del centro (`Site.timezone`) en el momento en que el
             servidor recibe la peticion. Si la fecha de alta es posterior a ese
-            mismo hoy, un cese igual al alta es una baja sin efectos en el acto.
+            mismo hoy, un cese igual al alta se programa (el extra de un solo
+            dia), y con `apply_now` es una baja sin efectos en el acto.
             Es el dato desde el que cuenta la retencion de RL-02.
         apply_now:
           type: boolean
@@ -17128,7 +17169,9 @@ components:
             «Aplicar ya» (RN-14, ADR-062 §3), `false` si no se envía: con un cese de hoy, la baja es
             efectiva en el acto en lugar de programarse. Es el despido con
             efecto inmediato. Con un cese anterior a hoy no cambia nada (ya es
-            en el acto); con uno posterior responde `422` en este campo.
+            en el acto); con uno posterior responde `422` en este campo, salvo
+            con el cese en un alta que aun no ha llegado: entonces es la baja sin
+            efectos de la contratacion que no llego a empezar.
         reason:
           type: string
           minLength: 1

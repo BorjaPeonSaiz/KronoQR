@@ -715,6 +715,38 @@ describe('EmployeeDetailView', () => {
       ).toBeDefined()
     })
 
+    it.each([
+      ['el cese de hoy', '2026-08-14', '2026-10-02', true],
+      ['un cese pasado, que ya es en el acto', '2026-08-14', '2026-09-30', false],
+      ['el cese en un alta que aun no ha llegado', '2026-10-15', '2026-10-15', true],
+    ])(
+      'pide «Aplicar ya» con %s, para que la baja sea efectiva al confirmarla (RN-14)',
+      async (_caso, hiredAt, cese, aplicaYa) => {
+        vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+        const bodies: unknown[] = []
+        const wrapper = await mountDetail(employee({ hired_at: hiredAt }), (url, init) => {
+          if (url.endsWith('/offboard') && init?.method === 'POST') {
+            bodies.push(JSON.parse(String(init.body)))
+
+            return jsonResponse(employee({ hired_at: hiredAt, status: 'terminated', terminated_at: cese }))
+          }
+
+          return null
+        })
+
+        await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+        await settle(1)
+        await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+        await dateInput(wrapper).setValue(cese)
+        await settle(1)
+        await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+        await settle()
+
+        expect(bodies).toHaveLength(1)
+        expect((bodies[0] as Record<string, unknown>)['apply_now']).toBe(aplicaYa ? true : undefined)
+      },
+    )
+
     it('avisa del turno abierto con un texto fijo y dice que los dias se completan despues', async () => {
       const wrapper = await mountDetail(employee())
 
