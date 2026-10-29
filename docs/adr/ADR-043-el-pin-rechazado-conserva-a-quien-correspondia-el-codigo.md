@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Aceptada. **Enmendada el 29-10-2026** (D15 del propietario, bloque 25 de la 2.3.0): el PIN correcto de una persona de baja con fecha hasta el cese se atribuye y abre `scan_before_revocation`, sin cambio de respuesta (ver la enmienda al final; la implementa la tarea 25.5) |
 | **Fecha** | 30 de septiembre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 5 de la 2.2.0, hallazgos PIN-06 y SC7-02). Revisión pendiente de `seguridad-cumplimiento` |
 | **Afecta a** | Precisa [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md) (§«Un solo motivo de fallo donde la respuesta es una sola») · Complementa [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) y [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) · `Shared\Domain\ValueObject\PinVerification`, `CredentialResolution` · `scan_events` · Especificación `docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md` |
@@ -75,3 +75,50 @@ de datos**; sigue siéndolo para todo lo que sale de ella hacia el log, el paque
   idénticas byte a byte, también en el reenvío; solo la fila del primero tiene `claimed_employee_id`.
 - Integración: el `CHECK scan_events_chk_pin_claim` rechaza la columna fuera de su situación.
 - Arquitectura: `PersonalDataCollector` no selecciona `claimed_employee_id` ni `pin_lockout`.
+
+## Enmienda del 29-10-2026: fichaje por PIN después de la baja (D15)
+
+Decisión D15 del propietario (18-10-2026), sobre la propuesta de `seguridad-cumplimiento` del bloque 18
+de la 2.2.0. La implementa la tarea 25.5 de la 2.3.0, y la relación con los periodos de alta está en
+[ADR-062](ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md) §8.
+
+**El problema.** El punto 1 limita `PinClaim` a quien puede fichar. Un PIN tecleado en un quiosco sin
+red el último día, que llega después de que RRHH registre la baja, se rechaza sin persona y sin
+incidencia. Es el mismo hecho que RN-20 cubre para la tarjeta, una jornada que nadie ve, y para el PIN
+seguía abierto (doc 07 §6).
+
+**Lo que cambia.** Un PIN **correcto** de una persona **de baja** cuya fecha civil del `occurred_at`,
+en la zona del centro, cae entre la fecha de alta y la de cese del periodo que cerró la baja (las dos
+incluidas):
+
+1. **Se atribuye**: `scan_events.employee_id` es la persona y `flagged_for_review` queda marcado, como
+   la tarjeta auténtica de RN-20. **No es un `PinClaim`**: el PIN acertó, así que sí identifica, y
+   `claimed_employee_id` sigue nulo. El `CHECK scan_events_chk_pin_claim` no cambia.
+2. **`result` sigue siendo `rejected_unknown`.** La respuesta, el cuerpo del reenvío y el apunte del
+   log técnico (`invalid_credentials`) no cambian. El tiempo tampoco: el verificador ya compara el
+   hash real de una persona de baja (la baja se evalúa después de la comparación, `isRejected()`),
+   la fecha de alta y la de cese salen de la misma fila que ya lee y la inserción tiene la misma forma
+   con y sin persona (punto 4).
+3. **La incidencia** es `scan_before_revocation`, la de RN-20, una por persona y jornada. Para el PIN,
+   «la retirada» es la baja. La abre la revisión diaria (punto 5), que lee las filas marcadas por
+   `recorded_at` sin mirar el origen. Un mismo día con tarjeta y con PIN da una sola incidencia.
+4. **Fuera de esas fechas** (posterior al cese, anterior al alta o en el hueco de una readmisión), un
+   PIN correcto de una persona de baja sigue como hasta ahora: sin persona y sin incidencia. Es la
+   misma razón por la que RN-20 no abre nada después de la retirada. Una fecha que la tablet pone
+   donde quiere no puede sembrar incidencias.
+5. **Un PIN incorrecto** de una persona de baja sigue sin `PinClaim`. Solo el acierto atribuye.
+6. **Nada de lo que hace el acierto** en una persona que puede fichar ocurre aquí: ni se borra el
+   contador de intentos ni hay *rehash*. La persona de baja no se autentica, se identifica para la
+   revisión.
+
+**Validación jurídica.** Atribuir un fichaje rechazado a una persona de baja trata un dato suyo
+posterior a la relación laboral. Lo tienen que validar la asesoría y el DPO del cliente, y está en la
+lista de validación jurídica del plan de la 2.3.0.
+
+**Verificación añadida.**
+
+- Feature: el PIN correcto de una persona de baja dentro y fuera de las fechas, y el PIN incorrecto,
+  producen respuestas idénticas byte a byte, también al reenviarlas. Solo la primera fila tiene
+  `employee_id` y `flagged_for_review`.
+- `ConstantTimeRejectionTest` cubre el caso nuevo.
+- La revisión diaria abre una sola `scan_before_revocation` para un día con tarjeta y PIN.

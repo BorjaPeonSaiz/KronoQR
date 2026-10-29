@@ -347,7 +347,7 @@ Entregable esperado:
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
   docs/adr/ tiene 28 ficheros
   [nota de la revisión 2.2.0: el prompt es el de la Fase 0 y conserva su
-  cifra de entonces; hoy docs/adr/ tiene 61 ADR]
+  cifra de entonces; hoy docs/adr/ tiene 62 ADR]
 - openapi.yaml inicial con /health y /scan
 - docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
